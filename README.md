@@ -7,7 +7,8 @@ The repository is both an inference-engine project and an executable study of
 how decoder-only transformer inference maps onto runtime machinery, memory,
 GPU kernels, and hardware.
 
-Status: foundation only. No model inference or performance result exists yet.
+Status: foundation and reference contracts only. No model inference or
+performance result exists yet.
 
 ## Principles
 
@@ -17,7 +18,9 @@ Status: foundation only. No model inference or performance result exists yet.
 - Every optimization needs a correctness test and a benchmark.
 - Readability is a systems requirement.
 
-See [docs/project.md](docs/project.md) for the technical direction.
+See [docs/project.md](docs/project.md) for the technical direction and
+evidence-gated roadmap, and [docs/model.md](docs/model.md) for the initial model
+contract.
 
 ## Development
 
