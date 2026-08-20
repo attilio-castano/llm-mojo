@@ -78,7 +78,19 @@ same autoregressive path as any other response.
 ## Conversation semantics
 
 The model is stateless. A session consists of the canonical token history,
-generation state, and the KV entries derived from that history.
+generation state, and a KV cache with an explicit logical `cache_length`.
+`cache_length` is the number of leading history tokens whose key/value entries
+have been materialized, so the invariant is:
+
+```text
+0 <= cache_length <= len(token_history)
+```
+
+Sampling appends the selected token to canonical history before that token is
+used as the next model input. At a generation boundary, the history may
+therefore be one token longer than the cache, including when the sampled token
+is a stop ID or generation ends at a token limit. V0 derives reusable prefixes
+from `cache_length`; it does not assume that all canonical history is cached.
 
 Reference tooling owns chat-template rendering and tokenization in V0. Fixtures
 must use an explicit system message, the pinned `tokenizer_config.json` chat
@@ -87,20 +99,25 @@ not be allowed to introduce an implicit system message unnoticed.
 
 The tokenizer's chat end token is `<|im_end|>` (`151645`). The official
 generation configuration treats both `151645` and `<|endoftext|>` (`151643`) as
-stop IDs. Stop tokens remain part of the canonical token history.
+stop IDs. Stop tokens remain part of the canonical token history and become
+cached only after they have been processed as model input.
 
 For each later user turn:
 
 1. Render and tokenize the complete updated transcript with the reference
    tooling.
-2. Verify that the cached token history is an exact prefix of that transcript.
-3. Prefill only the new suffix while attending to the existing KV cache.
-4. Decode the assistant response one token at a time and extend both token
+2. Verify that canonical token history is an exact prefix of that transcript.
+3. Verify that the KV cache represents exactly the first `cache_length` tokens
+   of canonical history.
+4. Prefill the updated transcript beginning at `cache_length` while attending
+   to the existing KV cache. This includes any sampled but uncached terminal
+   token as well as the new turn suffix.
+5. Decode the assistant response one token at a time and extend both token
    history and cache.
 
-If the prefix check fails, the engine must invalidate and rebuild the cache. It
-must never assume that independently tokenizing only the new text preserves the
-same token boundary.
+If either prefix invariant fails, the engine must invalidate and rebuild the
+cache. It must never assume that independently tokenizing only the new text
+preserves the same token boundary.
 
 ## V0 correctness acceptance
 
@@ -121,13 +138,16 @@ commands and fixtures:
 4. **Cached generation:** prefill plus one-token cached decode matches full
    uncached recomputation at every generated position within the declared
    tolerance. Instrumentation must demonstrate that cached prefixes were not
-   recomputed.
+   recomputed and must cover generation ending on a stop ID and at a token
+   limit.
 5. **Multi-turn generation:** a fixture with an explicit system message and at
    least three user turns produces the same per-position logits and token
-   history through incremental prefill as full-transcript recomputation.
+   history through incremental prefill as full-transcript recomputation. At
+   least one later turn must begin with an uncached terminal token in canonical
+   history.
 6. **Cache accounting:** cache shapes, positions, logical length, allocated
-   bytes, and reset behavior agree with the documented layout and context
-   limit.
+   bytes, reset behavior, and relationship between `cache_length` and token
+   history agree with the documented layout and context limit.
 7. **Execution identity:** correctness and performance records identify the
    commit, model revision, hardware, software, dtype, tensor shapes, and actual
    runtime device and backend.
