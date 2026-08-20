@@ -17,11 +17,22 @@ indexes or prerelease flags to the default environment.
 - Python 3.12, managed automatically by `uv` when necessary
 
 Apple GPU development additionally requires a supported Apple Silicon Mac,
-current macOS, Xcode 16 or later, and the Metal toolchain. Verify the compiler
-before beginning GPU work:
+current macOS, Xcode 16 or later, and the Metal toolchain. Verify that full
+Xcode is selected and that both public Metal compiler tools resolve before
+beginning GPU work:
 
 ```bash
+xcode-select -p
 xcrun -f metal
+xcrun -f metallib
+```
+
+The selected developer directory should point inside `Xcode.app`, not the
+standalone Command Line Tools directory. On Xcode 26 or later, also verify that
+the separately managed component reports `"status" : "installed"`:
+
+```bash
+xcodebuild -showComponent MetalToolchain -json
 ```
 
 See the official [Mojo installation guide](https://mojolang.org/install/) and
