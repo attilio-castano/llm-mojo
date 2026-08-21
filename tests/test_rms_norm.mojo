@@ -18,8 +18,9 @@ from llm_mojo.rms_norm import (
     rms_norm_reference,
 )
 from max.gpu.host import DeviceContext
+from std.math import isfinite
 from std.sys.info import has_apple_gpu_accelerator
-from std.testing import TestSuite
+from std.testing import TestSuite, assert_raises
 
 
 def fill_fixture[
@@ -65,6 +66,8 @@ def assert_matches_fixture[
             )
             var actual = actual_bf16.cast[DType.float32]()
             var expected = expected_values[index]
+            if not isfinite(actual) or not isfinite(expected):
+                raise Error("RMSNorm fixture comparison requires finite values")
             var error = actual - expected
             if error < 0.0:
                 error = -error
@@ -72,7 +75,7 @@ def assert_matches_fixture[
             if expected_magnitude < 0.0:
                 expected_magnitude = -expected_magnitude
             var allowed = RMS_NORM_ATOL + RMS_NORM_RTOL * expected_magnitude
-            if error > allowed:
+            if not isfinite(error) or not isfinite(allowed) or error > allowed:
                 print(
                     "RMSNorm mismatch at flat index",
                     index,
@@ -88,6 +91,18 @@ def assert_matches_fixture[
                 raise Error(
                     "RMSNorm implementation did not match the oracle fixture"
                 )
+
+
+def test_fixture_comparison_rejects_nan() raises:
+    var context = DeviceContext()
+    var output_buffer = context.enqueue_create_host_buffer[DType.bfloat16](1)
+    var output = TileTensor(output_buffer, row_major[1, 1]())
+    var nan_value: Scalar[DType.bfloat16] = FloatLiteral.nan
+    output[0, 0] = rebind[output.ElementType](nan_value)
+    var expected_values: List[Float32] = [0.0]
+
+    with assert_raises(contains="requires finite values"):
+        assert_matches_fixture[1, 1](output, expected_values)
 
 
 def check_reference_fixture[
