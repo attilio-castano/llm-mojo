@@ -30,6 +30,10 @@ Abstractions should be peelable. A reader should be able to move from a clear
 reference operation toward the memory access, execution, and synchronization
 decisions that implement it on hardware.
 
+The project uses a small [layout language](layouts.md) to keep logical values,
+storage mappings, work partition, and reduction order explicit without
+introducing a project-specific tensor or layout algebra.
+
 ## Method
 
 The development loop is:
