@@ -23,6 +23,8 @@ See [docs/project.md](docs/project.md) for the technical direction and
 evidence-gated roadmap, and [docs/model.md](docs/model.md) for the initial model
 contract. [docs/layouts.md](docs/layouts.md) defines the concrete language used
 to distinguish logical tensors, storage, work partition, and execution order.
+[docs/experiments.md](docs/experiments.md) defines how performance experiments
+are planned, recorded, and promoted into project decisions.
 
 ## Development
 

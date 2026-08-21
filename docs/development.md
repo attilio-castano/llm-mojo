@@ -119,7 +119,8 @@ uv run --locked python benchmarks/run_rms_norm.py
 ```
 
 This is operation-level evidence only; it is not an end-to-end inference
-benchmark.
+benchmark. Use the [experimental method](experiments.md) when retaining a run or
+using benchmark and profile evidence to support an optimization.
 
 ## Dependency updates
 

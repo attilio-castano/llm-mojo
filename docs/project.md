@@ -55,7 +55,9 @@ inspect generated code when useful
 ```
 
 An optimization is incomplete without both correctness evidence and a benchmark
-showing what changed.
+showing what changed. The [experimental method](experiments.md) defines the
+shared vocabulary, measurement discipline, and evidence lifecycle used for
+performance work.
 
 ## Initial model scope
 
@@ -184,6 +186,10 @@ Use these placement rules as the project grows:
 - Add `benchmarks/` only with the first reproducible benchmark. Every benchmark
   must name the implementation and workload it measures and must retain a
   correctness gate.
+- Add `experiments/` only with the first recorded experiment. Keep reusable
+  measurement instruments under `benchmarks/`; keep the frozen protocol, raw
+  samples, provenance, and bounded conclusion together in the experiment
+  record.
 - Keep model weights, download caches, compiler output, and generated full-model
   artifacts outside the repository.
 - Update documentation when a boundary becomes real. A directory name is not
@@ -198,6 +204,7 @@ tests/
     test_<implemented behavior>.mojo
     fixtures/<case>/              # after the first external fixture
 benchmarks/                       # after the first measured implementation
+experiments/                      # after the first recorded experiment
 ```
 
 ## Runtime direction
@@ -239,6 +246,8 @@ latency, arithmetic intensity, and scaling with batch and sequence length.
 
 Results must identify the hardware, operating system, Mojo and MAX versions,
 commit, workload, dtype, warmup, repetitions, and synchronization boundaries.
+Recorded results follow the [experimental method](experiments.md), which keeps
+operation, composition, model-phase, and end-to-end claims distinct.
 
 ## Success
 
