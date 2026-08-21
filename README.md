@@ -7,8 +7,9 @@ The repository is both an inference-engine project and an executable study of
 how decoder-only transformer inference maps onto runtime machinery, memory,
 GPU kernels, and hardware.
 
-Status: foundation and reference contracts only. No model inference or
-performance result exists yet.
+Status: the first Qwen operation, RMSNorm, has a Mojo host reference and an
+Apple GPU implementation with oracle tests and a reproducible microbenchmark.
+No end-to-end model inference or model-performance result exists yet.
 
 ## Principles
 
@@ -31,10 +32,13 @@ This project uses Python 3.12 and `uv` to manage the Mojo and MAX toolchain.
 uv sync --locked
 uv run mojo --version
 uv run mojo run -I src tests/test_import.mojo
+MODULAR_DEBUG=device-sync-mode \
+  uv run mojo run -I src -I tests tests/test_rms_norm.mojo
 ```
 
 See [docs/development.md](docs/development.md) for prerequisites and the
-toolchain policy.
+toolchain policy. See [benchmarks/README.md](benchmarks/README.md) for the
+operation-level benchmark boundary and runner.
 
 ## Layout
 
@@ -42,4 +46,5 @@ toolchain policy.
 docs/   Project direction and development guidance
 src/    Mojo engine code and narrowly scoped Python support code
 tests/  Correctness and integration tests
+benchmarks/  Reproducible operation-level measurements
 ```

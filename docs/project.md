@@ -93,7 +93,7 @@ conversation semantics, and correctness criteria.
 
 Exit evidence: the machine and model documentation is internally consistent,
 the immutable upstream artifacts and checksums resolve, and no inference or
-performance claim is made. This is the current stage.
+performance claim is made.
 
 ### 2. Reference operations
 
@@ -104,7 +104,7 @@ small oracle fixtures but is not part of the inference path.
 
 Exit evidence: every implemented operation matches a provenance-bearing oracle
 fixture within a tolerance declared before comparison. An operation is not an
-optimization and needs no performance claim.
+optimization and needs no performance claim. This is the current stage.
 
 ### 3. Decoder block
 

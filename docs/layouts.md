@@ -60,9 +60,27 @@ The projected views are semantic descriptions; the reference implementation
 need not construct them as objects or allocate their repeated values.
 
 The reference work mapping is one explicit row traversal followed by one
-explicit hidden-axis traversal. A GPU implementation must separately record
-its row tile, vector width, thread or SIMD-group layout, reduction tree,
-synchronization boundaries, and actual backend identity.
+explicit hidden-axis traversal.
+
+The first Apple GPU mapping is equally concrete:
+
+| Question | Mapping |
+| --- | --- |
+| Row owner | Metal threadgroup `block_idx.x` owns one logical row |
+| Hidden owner | Thread `t` owns `h = t + k * 128` for nonnegative `k` |
+| Threadgroup | 128 threads; one-dimensional |
+| Reduction storage | FP32 shared scratch `(128) : (1)` |
+| Reduction order | Per-thread serial sums, then a `128 -> 64 -> ... -> 1` shared-memory tree |
+| Synchronization | One barrier after publishing partial sums, one per tree level, and one after thread 0 publishes inverse RMS |
+| Output | The same strided hidden ownership writes `Y` after the BF16 cast and weight multiply |
+
+The enqueue boundary is asynchronous: the kernel does not synchronize the
+device context for its caller. Correctness tests explicitly order host-to-device
+copies, the kernel, device-to-host copy, and final synchronization. The GPU
+enqueue path rejects any device API other than `metal`, while the kernel
+requires an Apple GPU compilation target. Together with a readback comparison,
+those checks prevent silent CPU execution from being counted as Apple GPU
+evidence.
 
 ## Use in code and evidence
 

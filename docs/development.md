@@ -91,13 +91,16 @@ Mojo tests use `std.testing.TestSuite` and run as Mojo programs:
 
 ```bash
 uv run mojo run -I src tests/test_import.mojo
-uv run mojo run -I src -I tests tests/test_rms_norm.mojo
+MODULAR_DEBUG=device-sync-mode \
+  uv run mojo run -I src -I tests tests/test_rms_norm.mojo
 ```
 
 The import smoke test proves that the package resolves through the configured
 source path. The RMSNorm test compares both a small diagnostic tensor and the
-model's 896-element hidden width against a committed Transformers oracle
-fixture. Regenerate that fixture, including its provenance manifest, with:
+model's 896-element hidden width through both the host reference path and the
+Apple GPU path against a committed Transformers oracle fixture. The GPU tests
+require an Apple accelerator and reject a non-Metal device context. Regenerate
+the fixture, including its provenance manifest, with:
 
 ```bash
 uv run --script tests/fixtures/rms_norm/generate.py
@@ -107,6 +110,16 @@ The generator's inline environment pins its oracle dependencies independently
 of the Mojo inference environment. Do not change a fixture tolerance after
 observing the Mojo result; update the declared numerical contract first and
 explain why it changed.
+
+Run the synchronized RMSNorm microbenchmark and its curated environment record
+with:
+
+```bash
+uv run --locked python benchmarks/run_rms_norm.py
+```
+
+This is operation-level evidence only; it is not an end-to-end inference
+benchmark.
 
 ## Dependency updates
 
