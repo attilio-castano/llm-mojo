@@ -2,30 +2,91 @@
 
 Benchmark programs are reusable measurement instruments, not experiment
 records. The project's [experimental method](../docs/experiments.md) defines how
-to declare a hypothesis, retain runs, separate profiling from timing, and bound
-the resulting claims.
+to freeze a protocol, retain raw samples, separate profiling from timing, and
+bound the resulting claims.
 
-The RMSNorm benchmark measures the supported Apple GPU enqueue path for two
-BF16 workloads: one `1 x 896` row representative of decode and `128 x 896`
-rows representative of a prefill operation. Device allocation, initialization,
-and host transfers are outside the timed region. Each workload first runs an
-untimed all-ones correctness gate.
+## RMSNorm timing instrument
 
-Run it through the metadata wrapper:
+The RMSNorm benchmark measures the supported Apple GPU enqueue path at hidden
+size 896 for row counts 1, 4, 16, 128, 512, 2048, and 4096. Those shapes cover
+batch-one decode, hypothetical batched-decode-like work, and prefill-like work;
+they do not prove that every semantic workload exists in the current engine.
+
+Each workload uses BF16 input, weight, and output buffers filled with ones and
+reused within a repetition. Allocation, initialization, compilation, and the
+untimed correctness guard are outside the measured region. The primary sample
+is milliseconds per dispatch from `bencher_iter_custom`, which measures the GPU
+launch through its device-completion boundary. Headline timing runs with
+`MODULAR_DEBUG` unset rather than globally forcing every device operation to
+synchronize.
+
+Run one exploratory ascending block:
 
 ```bash
 uv run --locked python benchmarks/run_rms_norm.py
 ```
 
-The wrapper prints the commit and dirty state, curated hardware and software
-identity, power and thermal conditions, available memory, attached display
-configuration, and then the benchmark result. It deliberately excludes serial
-numbers and hardware UUIDs. Capture the complete stdout outside the repository
-during exploration. A recorded experiment retains the compact protocol, raw
-timing samples, provenance, and conclusion as described by the experimental
-method; large generated traces remain outside Git and are referenced by
-checksum.
+The runner proves the runtime device and Metal API, records curated repository,
+hardware, software, power, thermal, memory, and display metadata, parses every
+reported repetition, and prints median and spread. Give it a new directory to
+retain full exploratory output outside the repository:
 
-The reported byte throughput is derived from logical BF16 input, weight, and
-output traffic per row. It is useful for comparing identical runs of this
-kernel; it is not a direct measurement of DRAM traffic or memory bandwidth.
+```bash
+uv run --locked python benchmarks/run_rms_norm.py \
+  --blocks 2 \
+  --experiment-id calibration \
+  --run-id calibration-001 \
+  --output-dir /absolute/external/path/calibration-001
+```
+
+For a decisive `EXP-0001` run, all four blocks use ascending, descending,
+descending, ascending workload order. The recorded-run gate rejects a dirty
+repository, non-AC power, a reported thermal or performance warning, an
+implicit run identity, or an output path inside the repository:
+
+```bash
+uv run --locked python benchmarks/run_rms_norm.py \
+  --blocks 4 \
+  --experiment-id EXP-0001 \
+  --run-id EXP-0001-RUN-001 \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-0001-RUN-001
+```
+
+The output directory contains block stdout, `metadata.json`, `samples.jsonl`,
+and `summary.json`. Review those external artifacts before promoting compact
+evidence into `experiments/`; the runner never edits an experiment record.
+
+## RMSNorm profiling instrument
+
+Build a standalone, long-running binary outside the repository so Xcode does
+not capture `uv` startup or Mojo compilation:
+
+```bash
+uv run --locked python benchmarks/run_rms_norm.py \
+  --profile-binary /absolute/external/path/rmsnorm-profile-r1 \
+  --profile-rows 1 \
+  --profile-iterations 100000 \
+  --require-clean
+```
+
+The build also writes a provenance JSON file with the commit, environment,
+binary size, and SHA-256 digest. The binary performs an untimed correctness
+gate, 1,000 warmup dispatches, and then the declared profiling iterations. A
+Metal trace is diagnostic evidence; its instrumented duration is not a headline
+benchmark result.
+
+## Memory quantities
+
+The instrument keeps these quantities separate:
+
+- allocated footprint: the live input, weight, and output buffers;
+- logical tensor traffic: BF16 input, weight, and output, or 6 bytes per
+  row-hidden element;
+- program-requested traffic for this implementation: two input reads, one
+  weight read, and one output write, or 8 bytes per element;
+- observed hardware traffic: only a named counter from a documented profiling
+  capture.
+
+The two derived byte rates in `summary.json` are source-level accounting. They
+are not measurements of cache, fabric, DRAM traffic, or physical bandwidth.

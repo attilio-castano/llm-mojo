@@ -49,4 +49,5 @@ docs/   Project direction and development guidance
 src/    Mojo engine code and narrowly scoped Python support code
 tests/  Correctness and integration tests
 benchmarks/  Reproducible operation-level measurements
+experiments/ Frozen protocols, raw evidence, and bounded findings
 ```

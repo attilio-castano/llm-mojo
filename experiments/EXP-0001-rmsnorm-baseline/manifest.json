@@ -101,6 +101,7 @@
   "measurement_protocol": {
     "benchmark": "benchmarks/rms_norm.mojo",
     "runner": "benchmarks/run_rms_norm.py",
+    "decisive_command": "uv run --locked python benchmarks/run_rms_norm.py --blocks 4 --experiment-id EXP-0001 --run-id EXP-0001-RUN-001 --recorded --output-dir <absolute-external-path>/EXP-0001-RUN-001",
     "primary_metric": "synchronized_device_execution_ms_per_dispatch",
     "timing_boundary": "One enqueue_rms_norm_apple_gpu dispatch measured through max.benchmark.bencher_iter_custom, including GPU completion required by that GPU-aware bencher.",
     "included": [
@@ -145,10 +146,23 @@
     "throughput_rule": "Recompute throughput from the retained latency sample and the exact row-by-hidden work definition; do not treat logical bytes as observed DRAM traffic."
   },
   "calibration": {
-    "status": "pending",
+    "status": "passed",
     "policy": "Run one exploratory ascending/descending pair before decisive collection. Calibration output is not retained as experiment evidence.",
     "pass_condition": "All workloads parse to the declared schema, actual iteration counts are retained, and the final five repetitions show no persistent monotonic warmup trend large enough to obscure row-count scaling.",
-    "failure_action": "Stop before decisive collection, amend the protocol in a new commit, and explain the deviation."
+    "failure_action": "Stop before decisive collection, amend the protocol in a new commit, and explain the deviation.",
+    "observed": {
+      "date": "2026-08-21",
+      "blocks": [
+        "ascending rows",
+        "descending rows"
+      ],
+      "parsed_samples": 140,
+      "actual_iterations_per_sample": 1000,
+      "runtime_device": "Apple M4 Pro",
+      "runtime_api": "metal",
+      "result": "The parser and order checks passed. Small-row half-block shifts changed direction between blocks rather than showing persistent warmup drift; rows 2048 and 4096 were stable within each block.",
+      "evidence_boundary": "Exploratory dirty-worktree, battery-powered output was intentionally not retained and supports no performance claim."
+    }
   },
   "environment_requirements": {
     "machine": "documented Apple Silicon reference machine",
