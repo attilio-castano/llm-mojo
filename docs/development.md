@@ -91,11 +91,22 @@ Mojo tests use `std.testing.TestSuite` and run as Mojo programs:
 
 ```bash
 uv run mojo run -I src tests/test_import.mojo
+uv run mojo run -I src -I tests tests/test_rms_norm.mojo
 ```
 
-The initial smoke test proves that the package resolves through the configured
-source path. Future tests should assert numerical behavior rather than merely
-exercise execution.
+The import smoke test proves that the package resolves through the configured
+source path. The RMSNorm test compares both a small diagnostic tensor and the
+model's 896-element hidden width against a committed Transformers oracle
+fixture. Regenerate that fixture, including its provenance manifest, with:
+
+```bash
+uv run --script tests/fixtures/rms_norm/generate.py
+```
+
+The generator's inline environment pins its oracle dependencies independently
+of the Mojo inference environment. Do not change a fixture tolerance after
+observing the Mojo result; update the declared numerical contract first and
+explain why it changed.
 
 ## Dependency updates
 

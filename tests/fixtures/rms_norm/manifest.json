@@ -1,0 +1,74 @@
+{
+  "cases": [
+    {
+      "input_shape": [
+        2,
+        8
+      ],
+      "name": "small",
+      "output_shape": [
+        2,
+        8
+      ],
+      "weight_shape": [
+        8
+      ]
+    },
+    {
+      "input_shape": [
+        1,
+        896
+      ],
+      "name": "qwen_hidden",
+      "output_shape": [
+        1,
+        896
+      ],
+      "weight_shape": [
+        896
+      ]
+    }
+  ],
+  "comparison": {
+    "atol": 0.0078125,
+    "declared_before_first_mojo_comparison": true,
+    "formula": "abs(actual - expected) <= atol + rtol * abs(expected)",
+    "rationale": "One BF16 machine epsilon in both absolute and relative terms permits reduction-order variation without masking large errors.",
+    "rtol": 0.0078125
+  },
+  "contract": {
+    "accumulation_dtype": "float32",
+    "cast_order": "FP32 normalization, cast normalized values to BF16, then multiply by BF16 weight",
+    "epsilon": 1e-06,
+    "input_dtype": "bfloat16",
+    "input_layout": "(rows, hidden_size):(hidden_size, 1)",
+    "output_dtype": "bfloat16",
+    "output_layout": "(rows, hidden_size):(hidden_size, 1)",
+    "weight_dtype": "bfloat16",
+    "weight_layout": "(hidden_size):(1)"
+  },
+  "generation": {
+    "command": "uv run --script tests/fixtures/rms_norm/generate.py",
+    "data_sha256": "461579d715d8cbe4ae6a54ed8dafec79b73bf977ec92250993de7ababcd94301",
+    "generator_sha256": "92906eeb42974cffe170e3ba59eea731fee1370162e380201381ec7d8929d23a"
+  },
+  "oracle": {
+    "implementation": "transformers.models.qwen2.modeling_qwen2.Qwen2RMSNorm",
+    "python": "3.12.14",
+    "source": "https://github.com/huggingface/transformers/blob/v4.43.1/src/transformers/models/qwen2/modeling_qwen2.py",
+    "torch": "2.4.0",
+    "transformers": "4.43.1"
+  },
+  "purpose": "Numerical parity for the Mojo Qwen2 BF16 RMSNorm reference path.",
+  "schema_version": 1,
+  "source_tensors": {
+    "hidden_states": "deterministic synthetic values defined in generate.py",
+    "weight": "deterministic synthetic values defined in generate.py"
+  },
+  "target_model": {
+    "artifact_used": false,
+    "id": "Qwen/Qwen2.5-0.5B-Instruct",
+    "note": "Synthetic tensors exercise the pinned model's operation and hidden width; no model weights were downloaded or extracted.",
+    "revision": "7ae557604adf67be50417f59c2c2f167def9a775"
+  }
+}
