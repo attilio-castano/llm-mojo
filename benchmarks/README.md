@@ -76,6 +76,68 @@ gate, 1,000 warmup dispatches, and then the declared profiling iterations. A
 Metal trace is diagnostic evidence; its instrumented duration is not a headline
 benchmark result.
 
+Capture a short Metal System Trace outside the repository. Keep the raw trace
+external because Instruments may record host identifiers and unrelated system
+activity:
+
+```bash
+xctrace record \
+  --template 'Metal System Trace' \
+  --time-limit 1s \
+  --output /absolute/external/path/rmsnorm-r1.trace \
+  --target-stdout - \
+  --launch -- /absolute/external/path/rmsnorm-profile-r1
+```
+
+Use `xctrace export --toc` to inspect the capture configuration, then export the
+needed tables by schema rather than by a trace-specific table index:
+
+```bash
+xctrace export \
+  --input /absolute/external/path/rmsnorm-r1.trace \
+  --toc \
+  --output /absolute/external/path/toc.xml
+
+xctrace export \
+  --input /absolute/external/path/rmsnorm-r1.trace \
+  --xpath '/trace-toc/run[@number="1"]/data/table[@schema="metal-application-command-buffer-submissions"]' \
+  --output /absolute/external/path/submissions.xml
+```
+
+Repeat the schema export for `metal-gpu-intervals`,
+`gpu-performance-state-intervals`, and `graphics-compiler-spill-events`.
+
+Reduce those external XML exports to a scrubbed summary:
+
+```bash
+uv run --locked python benchmarks/analyze_rms_norm_trace.py \
+  --submissions-xml /absolute/external/path/submissions.xml \
+  --gpu-intervals-xml /absolute/external/path/gpu-intervals.xml \
+  --toc-xml /absolute/external/path/toc.xml \
+  --performance-state-xml /absolute/external/path/performance-state.xml \
+  --spill-xml /absolute/external/path/spill-events.xml \
+  --profile-iterations 5000 \
+  --output /absolute/external/path/trace-summary.json
+```
+
+The analyzer joins GPU intervals to the target command-buffer submissions,
+validates the fixed correctness/warmup/profile sequence, strips paths and
+identifiers, and reports checksums plus diagnostic interval distributions. It
+does not turn source-level byte counts into hardware counters.
+
+For generated-code inspection, emit host assembly and the per-Metal-kernel LLVM
+sidecar outside the repository:
+
+```bash
+uv run --locked mojo build \
+  -I src \
+  -D RMS_NORM_PROFILE_ROWS=1 \
+  -D RMS_NORM_PROFILE_ITERATIONS=1 \
+  --emit asm \
+  -o /absolute/external/path/rmsnorm-profile.s \
+  benchmarks/rms_norm.mojo
+```
+
 ## Memory quantities
 
 The instrument keeps these quantities separate:
