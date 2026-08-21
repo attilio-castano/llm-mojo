@@ -71,6 +71,24 @@ payload is 12,288 bytes per token and 48 MiB at the V0 limit:
 Allocator overhead, alignment, padding, and temporary buffers must be measured
 separately rather than folded into that theoretical payload.
 
+### RMSNorm arithmetic
+
+For each hidden row, V0 follows the
+[Qwen2 reference operation from Transformers 4.43.1](https://github.com/huggingface/transformers/blob/v4.43.1/src/transformers/models/qwen2/modeling_qwen2.py)
+in this exact order:
+
+1. Promote the BF16 activation row to FP32.
+2. Compute the mean of the squared FP32 values over the hidden axis.
+3. Add epsilon `1e-6` and compute the reciprocal square root in FP32.
+4. Multiply the FP32 row by that reciprocal root.
+5. Cast the normalized row to BF16.
+6. Multiply by the BF16 RMSNorm weight, producing BF16 output.
+
+The cast before the weight multiplication is part of the reference contract.
+An implementation with a different cast point or reduction order is a distinct
+numerical path and must be compared under a predeclared tolerance. Tensor and
+execution mappings use the project's [layout language](layouts.md).
+
 V0 defines no separate reasoning channel or thinking-mode protocol. Any
 rationale the model emits is ordinary assistant-token output and follows the
 same autoregressive path as any other response.

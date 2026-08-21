@@ -30,6 +30,10 @@ Abstractions should be peelable. A reader should be able to move from a clear
 reference operation toward the memory access, execution, and synchronization
 decisions that implement it on hardware.
 
+The project uses a small [layout language](layouts.md) to keep logical values,
+storage mappings, work partition, and reduction order explicit without
+introducing a project-specific tensor or layout algebra.
+
 ## Method
 
 The development loop is:
@@ -51,7 +55,9 @@ inspect generated code when useful
 ```
 
 An optimization is incomplete without both correctness evidence and a benchmark
-showing what changed.
+showing what changed. The [experimental method](experiments.md) defines the
+shared vocabulary, measurement discipline, and evidence lifecycle used for
+performance work.
 
 ## Initial model scope
 
@@ -89,7 +95,7 @@ conversation semantics, and correctness criteria.
 
 Exit evidence: the machine and model documentation is internally consistent,
 the immutable upstream artifacts and checksums resolve, and no inference or
-performance claim is made. This is the current stage.
+performance claim is made.
 
 ### 2. Reference operations
 
@@ -100,7 +106,7 @@ small oracle fixtures but is not part of the inference path.
 
 Exit evidence: every implemented operation matches a provenance-bearing oracle
 fixture within a tolerance declared before comparison. An operation is not an
-optimization and needs no performance claim.
+optimization and needs no performance claim. This is the current stage.
 
 ### 3. Decoder block
 
@@ -180,6 +186,10 @@ Use these placement rules as the project grows:
 - Add `benchmarks/` only with the first reproducible benchmark. Every benchmark
   must name the implementation and workload it measures and must retain a
   correctness gate.
+- Add `experiments/` only with the first recorded experiment. Keep reusable
+  measurement instruments under `benchmarks/`; keep the frozen protocol, raw
+  samples, provenance, and bounded conclusion together in the experiment
+  record.
 - Keep model weights, download caches, compiler output, and generated full-model
   artifacts outside the repository.
 - Update documentation when a boundary becomes real. A directory name is not
@@ -194,6 +204,7 @@ tests/
     test_<implemented behavior>.mojo
     fixtures/<case>/              # after the first external fixture
 benchmarks/                       # after the first measured implementation
+experiments/                      # after the first recorded experiment
 ```
 
 ## Runtime direction
@@ -235,6 +246,8 @@ latency, arithmetic intensity, and scaling with batch and sequence length.
 
 Results must identify the hardware, operating system, Mojo and MAX versions,
 commit, workload, dtype, warmup, repetitions, and synchronization boundaries.
+Recorded results follow the [experimental method](experiments.md), which keeps
+operation, composition, model-phase, and end-to-end claims distinct.
 
 ## Success
 
