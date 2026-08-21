@@ -89,6 +89,41 @@ An implementation with a different cast point or reduction order is a distinct
 numerical path and must be compared under a predeclared tolerance. Tensor and
 execution mappings use the project's [layout language](layouts.md).
 
+### RoPE arithmetic
+
+V0 applies rotary position embeddings to query and key heads after their
+linear projections and before rotated keys enter the KV cache. Values do not
+receive RoPE. The operation itself owns neither the KV cache nor position
+history; its caller supplies the absolute position of the first input row.
+
+For Qwen head dimension `D = 64`, each dimension `i` in the first half pairs
+with `j = i + D / 2` in the second half. This is the half-split permutation in
+the pinned Transformers 4.43.1 `rotate_half` operation, not adjacent even/odd
+pairing. All 64 dimensions participate.
+
+The rotary table uses theta `1,000,000`. Frequencies, cosine, and sine are
+formed in FP32, the full duplicated length-`D` cosine and sine rows are cast to
+BF16, and table application follows the pinned eager BF16 operation. For input
+row `r`, absolute position `p = start_position + r`, and paired dimensions
+`i` and `j`, V0 materializes both BF16 products before the final BF16
+subtraction or addition:
+
+```text
+Y[r, n, i] = bf16(
+    bf16(X[r, n, i] * C[p, i]) - bf16(X[r, n, j] * S[p, i])
+)
+Y[r, n, j] = bf16(
+    bf16(X[r, n, j] * C[p, j]) + bf16(X[r, n, i] * S[p, j])
+)
+```
+
+The baseline interface specializes the V0 batch-one contract to contiguous
+positions through `start_position`; it does not yet accept an arbitrary
+position-ID tensor or generate the cosine/sine table. Query and key tensors
+use the same operation despite having 14 and 2 heads respectively. Tensor and
+execution mappings are recorded in the project's
+[layout language](layouts.md#rope-v0).
+
 V0 defines no separate reasoning channel or thinking-mode protocol. Any
 rationale the model emits is ordinary assistant-token output and follows the
 same autoregressive path as any other response.

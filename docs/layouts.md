@@ -82,6 +82,53 @@ requires an Apple GPU compilation target. Together with a readback comparison,
 those checks prevent silent CPU execution from being counted as Apple GPU
 evidence.
 
+## RoPE V0
+
+Let `R` be the number of contiguous token rows, `N` the number of heads,
+`D = 64` the Qwen head dimension, and `P` the number of positions represented
+by the rotary table. Query application uses `N = 14`; key application uses
+`N = 2`. The generic operation has these logical tensors:
+
+```text
+X[row, head, dimension]  BF16  input query or key values
+C[position, dimension]  BF16  full cosine table
+S[position, dimension]  BF16  full sine table
+Y[row, head, dimension]  BF16  rotated output values
+```
+
+The initial storage contract is:
+
+| View | Layout | Meaning |
+| --- | --- | --- |
+| `X` | `(R, N, D) : (N*D, D, 1)` | Contiguous dimensions within each token and head |
+| `Y` | `(R, N, D) : (N*D, D, 1)` | Same physical organization as `X` |
+| `C` | `(P, D) : (D, 1)` | One full duplicated cosine row per absolute position |
+| `S` | `(P, D) : (D, 1)` | One full duplicated sine row per absolute position |
+
+For input row `r`, the operation reads table row
+`p = start_position + r`. Within a head, dimension `i` for
+`0 <= i < D / 2` pairs with dimension `i + D / 2`. The reference work mapping
+is an explicit row, head, and first-half traversal; each iteration reads and
+writes one pair.
+
+The first Apple GPU mapping is:
+
+| Question | Mapping |
+| --- | --- |
+| Pair owner | Global thread `g` owns one `(row, head, first-half dimension)` tuple |
+| Pair index | `i = g mod (D / 2)` |
+| Head index | `n = (g / (D / 2)) mod N` |
+| Row index | `r = g / ((D / 2) * N)` |
+| Threadgroup | 128 threads; one-dimensional, with an explicit total-pair bound |
+| Storage | Direct BF16 global loads and out-of-place BF16 global writes |
+| Synchronization | None inside the kernel; pairs are independent |
+| Dispatch | The same kernel is enqueued separately for query and key tensors |
+
+As with RMSNorm, enqueue is asynchronous, the host path rejects a non-Metal
+device context, and the kernel requires an Apple GPU compilation target. This
+is a correctness mapping, not a claim that separate dispatches, out-of-place
+storage, or the 128-thread block size are optimal.
+
 ## Use in code and evidence
 
 - Name semantic axes before reducing them to integer positions.
