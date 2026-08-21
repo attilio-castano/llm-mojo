@@ -1,6 +1,6 @@
 # EXP-0001: Apple GPU RMSNorm baseline characterization
 
-Status: **planned**
+Status: **in progress**
 
 Evidence level: **operation**
 
@@ -31,11 +31,34 @@ The machine-readable protocol is in [`manifest.json`](manifest.json). It fixes:
 
 ## Results
 
-No decisive measurements have been collected.
+No decisive timing measurements have been collected. The recorded-run gate
+correctly rejected battery power while preserving the AC-power requirement.
+
+A rows=1 tooling calibration is retained in
+[`profile-calibration.json`](profile-calibration.json). It established that:
+
+- the standalone binary and scrubbed trace-analysis path reproduce the fixed
+  one-correctness, 1,000-warmup, 5,000-profile dispatch sequence;
+- the emitted Metal LLVM sidecar contains 128 FP32 shared values (512 bytes),
+  seven shared-tree reduction stages, and nine workgroup barriers;
+- the stock Metal System Trace selected no counter set and disabled the shader
+  timeline;
+- a direct `Metal GPU Counters` capture selected a counter profile that this
+  target reported as unsupported;
+- this single trace reported no target compiler-spill event, which is bounded
+  to the capture and is not a universal spill-free claim.
+
+The calibration was battery-powered and system load was uncontrolled. Its
+instrumented intervals support no latency, bandwidth, occupancy, or stall-time
+claim.
 
 ## Interpretation
 
-No finding yet.
+The shared-memory tree is now a concrete optimization hypothesis, not yet a
+causal bottleneck finding. Compiler output proves that the synchronization and
+storage exist; it does not prove that removing them will materially improve
+ordinary execution. That requires the clean AC baseline, representative
+transition and saturation profiles, and a paired variant comparison.
 
 ## Nonclaims
 
@@ -46,5 +69,6 @@ bottleneck claim.
 
 ## Decision
 
-None. The baseline implementation remains unchanged until this experiment is
-complete.
+The baseline implementation remains unchanged. Collect the four-block AC
+baseline next, then profile the measured transition and saturation workloads
+before implementing one reduction variant.

@@ -4,7 +4,7 @@
   "slug": "rmsnorm-baseline",
   "title": "Apple GPU RMSNorm baseline characterization",
   "created_date": "2026-08-21",
-  "status": "planned",
+  "status": "in_progress",
   "evidence_level": "operation",
   "question": "How does the existing Apple GPU RMSNorm implementation scale across decode, batched-decode-like, and prefill row counts, and what limits representative regimes?",
   "experiment_type": "characterization",
@@ -185,6 +185,12 @@
     "generated_code": "Retain compact compiler-output provenance and checksums when available; keep large dumps outside Git.",
     "counter_rule": "Name every counter and its capture procedure. If a required signal is unavailable, record the mechanism as unresolved instead of substituting a source-level estimate."
   },
+  "profiling_calibration": {
+    "status": "method_validated_with_limitations",
+    "artifact": "profile-calibration.json",
+    "summary": "Rows=1 generated-code and Metal trace paths were validated. The emitted kernel preserves the 512-byte shared tree and nine workgroup barriers. The stock trace had no counter set, and the direct Metal GPU Counters instrument selected a profile unsupported on this target, so hardware traffic and stall mechanisms remain unresolved.",
+    "evidence_boundary": "Battery-powered tooling calibration only; no headline timing or optimization decision."
+  },
   "completion_conditions": [
     "The full RMSNorm oracle test passes at the measurement commit.",
     "All four blocks prove the Apple GPU and Metal runtime identity.",
@@ -209,6 +215,15 @@
     "No optimization or dispatch decision."
   ],
   "runs": [],
-  "artifacts": [],
+  "artifacts": [
+    {
+      "id": "EXP-0001-PROFILE-CAL-001",
+      "kind": "profiling_calibration",
+      "path": "profile-calibration.json",
+      "profile_binary_commit": "5fdc511866b62292dbbe0e32c308fbe3aa0cad3a",
+      "trace_analyzer_commit": "2b232752b587ef797ba87df4354a8a2b23996578",
+      "evidence_use": "Method validation and structural generated-code observation only."
+    }
+  ],
   "deviations": []
 }

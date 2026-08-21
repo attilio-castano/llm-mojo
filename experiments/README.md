@@ -10,4 +10,4 @@ result. Treat only a complete experiment's bounded outcome as retained evidence.
 
 | ID | Date | Subject | Question or hypothesis | Status | Evidence level | Bounded outcome | Relevant commits | Decision |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [EXP-0001](EXP-0001-rmsnorm-baseline/report.md) | 2026-08-21 | Apple GPU RMSNorm baseline | How does the existing shared-tree implementation scale across row counts, and what limits representative regimes? | Planned | Operation | Protocol frozen; no measurements yet. | Baseline `148dbaa` | None |
+| [EXP-0001](EXP-0001-rmsnorm-baseline/report.md) | 2026-08-21 | Apple GPU RMSNorm baseline | How does the existing shared-tree implementation scale across row counts, and what limits representative regimes? | In progress | Operation | Profiling method calibrated with counters unresolved; decisive AC timing pending. | Baseline `148dbaa`; instrument `5fdc511`; analyzer `2b23275` | Baseline unchanged |
