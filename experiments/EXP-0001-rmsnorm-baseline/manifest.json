@@ -191,6 +191,16 @@
     "summary": "Rows=1 generated-code and Metal trace paths were validated. The emitted kernel preserves the 512-byte shared tree and nine workgroup barriers. The stock trace had no counter set, and the direct Metal GPU Counters instrument selected a profile unsupported on this target, so hardware traffic and stall mechanisms remain unresolved.",
     "evidence_boundary": "Battery-powered tooling calibration only; no headline timing or optimization decision."
   },
+  "baseline_measurement": {
+    "status": "passed",
+    "run_id": "EXP-0001-RUN-001",
+    "artifact": "baseline-run.json",
+    "measurement_commit": "b59717d455d1bf599827a567b407bada13024565",
+    "transition_workload": "r512-h896",
+    "saturation_observed": false,
+    "largest_measured_workload": "r4096-h896",
+    "summary": "The dispatch floor extends through r128-h896. r512-h896 is the first workload above that floor in every same-order block. Logical work throughput still increased from r2048-h896 to r4096-h896, so saturation was not observed within the frozen range."
+  },
   "completion_conditions": [
     "The full RMSNorm oracle test passes at the measurement commit.",
     "All four blocks prove the Apple GPU and Metal runtime identity.",
@@ -214,7 +224,15 @@
     "No claim that batched-decode-like workloads are implemented by V0.",
     "No optimization or dispatch decision."
   ],
-  "runs": [],
+  "runs": [
+    {
+      "run_id": "EXP-0001-RUN-001",
+      "kind": "decisive_baseline_timing",
+      "artifact": "baseline-run.json",
+      "measurement_commit": "b59717d455d1bf599827a567b407bada13024565",
+      "result": "passed"
+    }
+  ],
   "artifacts": [
     {
       "id": "EXP-0001-PROFILE-CAL-001",
@@ -223,6 +241,13 @@
       "profile_binary_commit": "5fdc511866b62292dbbe0e32c308fbe3aa0cad3a",
       "trace_analyzer_commit": "2b232752b587ef797ba87df4354a8a2b23996578",
       "evidence_use": "Method validation and structural generated-code observation only."
+    },
+    {
+      "id": "EXP-0001-RUN-001",
+      "kind": "baseline_timing_summary",
+      "path": "baseline-run.json",
+      "measurement_commit": "b59717d455d1bf599827a567b407bada13024565",
+      "evidence_use": "AC-powered operation-level scaling, noise, transition-workload selection, and saturation non-observation."
     }
   ],
   "deviations": []
