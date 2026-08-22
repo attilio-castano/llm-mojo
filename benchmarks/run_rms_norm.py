@@ -25,6 +25,7 @@ HIDDEN_SIZE = 896
 WORKLOAD_ROWS = (1, 4, 16, 128, 512, 2048, 4096)
 BLOCK_ORDERS = ("ascending", "descending", "descending", "ascending")
 EXPECTED_REPETITIONS = 10
+PROFILE_ITERATIONS_LIMIT = 5_000
 BENCHMARK_RESULTS_BEGIN = "BENCHMARK_RESULTS_BEGIN"
 BENCHMARK_RESULTS_END = "BENCHMARK_RESULTS_END"
 BENCHMARK_NAME = re.compile(
@@ -526,6 +527,11 @@ def build_profile_binary(args: argparse.Namespace) -> None:
         )
     if args.profile_iterations <= 0:
         raise RuntimeError("profile iterations must be positive")
+    if args.profile_iterations > PROFILE_ITERATIONS_LIMIT:
+        raise RuntimeError(
+            "profile iterations must not exceed "
+            f"{PROFILE_ITERATIONS_LIMIT}; use multiple short captures instead"
+        )
     output = args.profile_binary.resolve()
     if output.exists():
         raise RuntimeError(
@@ -593,7 +599,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--require-clean", action="store_true")
     parser.add_argument("--profile-binary", type=Path)
     parser.add_argument("--profile-rows", type=int)
-    parser.add_argument("--profile-iterations", type=int, default=100_000)
+    parser.add_argument(
+        "--profile-iterations",
+        type=int,
+        default=PROFILE_ITERATIONS_LIMIT,
+        help=(
+            "profile dispatch count "
+            f"(default and maximum: {PROFILE_ITERATIONS_LIMIT})"
+        ),
+    )
     return parser.parse_args()
 
 

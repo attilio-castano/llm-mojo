@@ -66,7 +66,7 @@ not capture `uv` startup or Mojo compilation:
 uv run --locked python benchmarks/run_rms_norm.py \
   --profile-binary /absolute/external/path/rmsnorm-profile-r1 \
   --profile-rows 1 \
-  --profile-iterations 100000 \
+  --profile-iterations 5000 \
   --require-clean
 ```
 
@@ -74,7 +74,9 @@ The build also writes a provenance JSON file with the commit, environment,
 binary size, and SHA-256 digest. The binary performs an untimed correctness
 gate, 1,000 warmup dispatches, and then the declared profiling iterations. A
 Metal trace is diagnostic evidence; its instrumented duration is not a headline
-benchmark result.
+benchmark result. The builder defaults to and enforces at most 5,000 profiling
+dispatches. Use multiple short captures instead of increasing that limit; fewer
+dispatches may be appropriate for larger workloads.
 
 Capture a short Metal System Trace outside the repository. Keep the raw trace
 external because Instruments may record host identifiers and unrelated system
