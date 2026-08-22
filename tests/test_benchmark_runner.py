@@ -15,10 +15,10 @@ from benchmarks.run_rms_norm import (
 
 def paired_output(*, variant_first: bool = False) -> str:
     lines = [
-        "implementation: enqueue_rms_norm_apple_gpu",
+        "implementation: enqueue_rms_norm_apple_gpu_shared_tree",
         (
             "comparison implementation: "
-            "enqueue_rms_norm_apple_gpu_simdgroup"
+            "enqueue_rms_norm_apple_gpu"
         ),
         "device: Apple Test GPU",
         "api: metal",

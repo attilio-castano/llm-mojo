@@ -4,7 +4,7 @@ from layout import TileTensor, row_major
 from llm_mojo.rms_norm import (
     RMS_NORM_APPLE_GPU_BLOCK_SIZE,
     enqueue_rms_norm_apple_gpu,
-    enqueue_rms_norm_apple_gpu_simdgroup,
+    enqueue_rms_norm_apple_gpu_shared_tree,
 )
 from max.benchmark import bencher_iter_custom
 from max.gpu.host import DeviceContext
@@ -59,9 +59,9 @@ def bench_rms_norm[
 
     # Warm the compiled path and retain a correctness gate outside timing.
     comptime if use_simdgroup:
-        enqueue_rms_norm_apple_gpu_simdgroup(context, input, weight, output)
-    else:
         enqueue_rms_norm_apple_gpu(context, input, weight, output)
+    else:
+        enqueue_rms_norm_apple_gpu_shared_tree(context, input, weight, output)
     with output_buffer.map_to_host() as mapped_output:
         var host_output = TileTensor(mapped_output, input_layout)
         comptime assert host_output.flat_rank == 2
@@ -76,11 +76,11 @@ def bench_rms_norm[
     @always_inline
     def launch(launch_context: DeviceContext) raises {imm}:
         comptime if use_simdgroup:
-            enqueue_rms_norm_apple_gpu_simdgroup(
+            enqueue_rms_norm_apple_gpu(launch_context, input, weight, output)
+        else:
+            enqueue_rms_norm_apple_gpu_shared_tree(
                 launch_context, input, weight, output
             )
-        else:
-            enqueue_rms_norm_apple_gpu(launch_context, input, weight, output)
 
     bencher_iter_custom(bencher, launch, context)
 
@@ -133,13 +133,13 @@ def run_benchmarks() raises:
     if identity.api() != "metal":
         raise Error("benchmark requires the Metal device API")
 
-    print("implementation: enqueue_rms_norm_apple_gpu")
+    print("implementation: enqueue_rms_norm_apple_gpu_shared_tree")
     comptime variant_comparison = get_defined_bool[
         "RMS_NORM_BENCH_VARIANT_COMPARISON"
     ]()
     comptime variant_first = get_defined_bool["RMS_NORM_BENCH_VARIANT_FIRST"]()
     comptime if variant_comparison:
-        print("comparison implementation: enqueue_rms_norm_apple_gpu_simdgroup")
+        print("comparison implementation: enqueue_rms_norm_apple_gpu")
     print("device:", identity.name())
     print("api:", identity.api())
     print("dtype: bfloat16; accumulation: float32")
@@ -255,9 +255,9 @@ def run_profile_workload[
     var output = TileTensor(output_buffer, input_layout)
 
     comptime if use_simdgroup:
-        enqueue_rms_norm_apple_gpu_simdgroup(context, input, weight, output)
-    else:
         enqueue_rms_norm_apple_gpu(context, input, weight, output)
+    else:
+        enqueue_rms_norm_apple_gpu_shared_tree(context, input, weight, output)
     with output_buffer.map_to_host() as mapped_output:
         var host_output = TileTensor(mapped_output, input_layout)
         comptime assert host_output.flat_rank == 2
@@ -271,16 +271,18 @@ def run_profile_workload[
 
     comptime if use_simdgroup:
         for _ in range(PROFILE_WARMUP_ITERATIONS):
-            enqueue_rms_norm_apple_gpu_simdgroup(context, input, weight, output)
+            enqueue_rms_norm_apple_gpu(context, input, weight, output)
     else:
         for _ in range(PROFILE_WARMUP_ITERATIONS):
-            enqueue_rms_norm_apple_gpu(context, input, weight, output)
+            enqueue_rms_norm_apple_gpu_shared_tree(
+                context, input, weight, output
+            )
     context.synchronize()
 
     comptime if use_simdgroup:
-        print("profile implementation: enqueue_rms_norm_apple_gpu_simdgroup")
-    else:
         print("profile implementation: enqueue_rms_norm_apple_gpu")
+    else:
+        print("profile implementation: enqueue_rms_norm_apple_gpu_shared_tree")
     print("device:", context.name())
     print("api:", context.api())
     print("rows:", rows)
@@ -290,10 +292,12 @@ def run_profile_workload[
     print("PROFILE_REGION_BEGIN")
     comptime if use_simdgroup:
         for _ in range(iterations):
-            enqueue_rms_norm_apple_gpu_simdgroup(context, input, weight, output)
+            enqueue_rms_norm_apple_gpu(context, input, weight, output)
     else:
         for _ in range(iterations):
-            enqueue_rms_norm_apple_gpu(context, input, weight, output)
+            enqueue_rms_norm_apple_gpu_shared_tree(
+                context, input, weight, output
+            )
     context.synchronize()
     print("PROFILE_REGION_END")
 

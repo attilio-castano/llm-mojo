@@ -45,11 +45,11 @@ BENCHMARK_NAME = re.compile(
 IMPLEMENTATIONS = {
     "rms_norm_apple_gpu": {
         "id": "apple_gpu_shared_tree_v0",
-        "entrypoint": "enqueue_rms_norm_apple_gpu",
+        "entrypoint": "enqueue_rms_norm_apple_gpu_shared_tree",
     },
     "rms_norm_apple_gpu_simdgroup": {
         "id": "apple_gpu_simdgroup_v1",
-        "entrypoint": "enqueue_rms_norm_apple_gpu_simdgroup",
+        "entrypoint": "enqueue_rms_norm_apple_gpu",
     },
 }
 BASELINE_IMPLEMENTATION = IMPLEMENTATIONS["rms_norm_apple_gpu"]

@@ -192,7 +192,7 @@ def _rms_norm_apple_gpu_simdgroup_kernel[
         hidden += RMS_NORM_APPLE_GPU_BLOCK_SIZE
 
 
-def enqueue_rms_norm_apple_gpu[
+def enqueue_rms_norm_apple_gpu_shared_tree[
     InputLayout: TensorLayout,
     WeightLayout: TensorLayout,
     OutputLayout: TensorLayout,
@@ -202,7 +202,7 @@ def enqueue_rms_norm_apple_gpu[
     weight: TileTensor[DType.bfloat16, WeightLayout, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OutputLayout, MutAnyOrigin],
 ) raises:
-    """Validate and enqueue RMSNorm without synchronizing the context."""
+    """Validate and enqueue the retained shared-tree benchmark baseline."""
 
     comptime assert input.flat_rank == 2, "input must have rank 2"
     comptime assert weight.flat_rank == 1, "weight must have rank 1"
@@ -232,7 +232,7 @@ def enqueue_rms_norm_apple_gpu[
     )
 
 
-def enqueue_rms_norm_apple_gpu_simdgroup[
+def enqueue_rms_norm_apple_gpu[
     InputLayout: TensorLayout,
     WeightLayout: TensorLayout,
     OutputLayout: TensorLayout,
@@ -242,7 +242,7 @@ def enqueue_rms_norm_apple_gpu_simdgroup[
     weight: TileTensor[DType.bfloat16, WeightLayout, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OutputLayout, MutAnyOrigin],
 ) raises:
-    """Validate and enqueue the experimental SIMD-group RMSNorm kernel."""
+    """Validate and enqueue the default SIMD-group RMSNorm kernel."""
 
     comptime assert input.flat_rank == 2, "input must have rank 2"
     comptime assert weight.flat_rank == 1, "weight must have rank 1"
