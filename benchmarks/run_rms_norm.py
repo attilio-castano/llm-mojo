@@ -24,13 +24,36 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 HIDDEN_SIZE = 896
 WORKLOAD_ROWS = (1, 4, 16, 128, 512, 2048, 4096)
 BLOCK_ORDERS = ("ascending", "descending", "descending", "ascending")
+BLOCK_IMPLEMENTATION_ORDERS = (
+    "baseline_then_variant",
+    "variant_then_baseline",
+    "variant_then_baseline",
+    "baseline_then_variant",
+)
 EXPECTED_REPETITIONS = 10
 PROFILE_ITERATIONS_LIMIT = 5_000
+MATERIAL_IMPROVEMENT_RATIO = 0.95
+MATERIAL_REGRESSION_RATIO = 1.05
+REQUIRED_DIRECTION_BLOCKS = 3
+RELEVANT_PRODUCTION_ROWS = (1, 128, 512, 2048, 4096)
 BENCHMARK_RESULTS_BEGIN = "BENCHMARK_RESULTS_BEGIN"
 BENCHMARK_RESULTS_END = "BENCHMARK_RESULTS_END"
 BENCHMARK_NAME = re.compile(
-    r"^rms_norm_apple_gpu/input_id:rows=(\d+) hidden=(\d+)$"
+    r"^(rms_norm_apple_gpu(?:_simdgroup)?)/input_id:"
+    r"rows=(\d+) hidden=(\d+)$"
 )
+IMPLEMENTATIONS = {
+    "rms_norm_apple_gpu": {
+        "id": "apple_gpu_shared_tree_v0",
+        "entrypoint": "enqueue_rms_norm_apple_gpu",
+    },
+    "rms_norm_apple_gpu_simdgroup": {
+        "id": "apple_gpu_simdgroup_v1",
+        "entrypoint": "enqueue_rms_norm_apple_gpu_simdgroup",
+    },
+}
+BASELINE_IMPLEMENTATION = IMPLEMENTATIONS["rms_norm_apple_gpu"]
+VARIANT_IMPLEMENTATION = IMPLEMENTATIONS["rms_norm_apple_gpu_simdgroup"]
 
 
 def command(*args: str) -> str:
@@ -215,11 +238,16 @@ def ensure_record_location(output_dir: Path) -> None:
         )
 
 
-def parse_identity(output: str) -> dict[str, str]:
+def parse_identity(
+    output: str, *, variant_comparison: bool
+) -> dict[str, str]:
     device = re.search(r"^device:\s*(.+)$", output, re.MULTILINE)
     api = re.search(r"^api:\s*(.+)$", output, re.MULTILINE)
     implementation = re.search(
         r"^implementation:\s*(.+)$", output, re.MULTILINE
+    )
+    comparison_implementation = re.search(
+        r"^comparison implementation:\s*(.+)$", output, re.MULTILINE
     )
     if not device or not api or not implementation:
         raise ValueError("benchmark output omitted runtime identity")
@@ -232,6 +260,21 @@ def parse_identity(output: str) -> dict[str, str]:
         raise ValueError(
             "benchmark did not prove an Apple device using the Metal API"
         )
+    if result["implementation"] != BASELINE_IMPLEMENTATION["entrypoint"]:
+        raise ValueError("benchmark did not identify the frozen baseline")
+    if variant_comparison:
+        if comparison_implementation is None:
+            raise ValueError("comparison benchmark omitted variant identity")
+        result["comparison_implementation"] = (
+            comparison_implementation.group(1).strip()
+        )
+        if (
+            result["comparison_implementation"]
+            != VARIANT_IMPLEMENTATION["entrypoint"]
+        ):
+            raise ValueError("benchmark did not identify the frozen variant")
+    elif comparison_implementation is not None:
+        raise ValueError("baseline-only benchmark emitted a variant identity")
     return result
 
 
@@ -255,11 +298,20 @@ def parse_samples(
     run_id: str,
     block_id: str,
     block_order: str,
+    implementation_order: str,
+    variant_comparison: bool,
 ) -> tuple[dict[str, str], list[dict[str, Any]]]:
-    identity = parse_identity(output)
+    if variant_comparison and implementation_order not in (
+        "baseline_then_variant",
+        "variant_then_baseline",
+    ):
+        raise ValueError("comparison benchmark has an invalid pair order")
+    if not variant_comparison and implementation_order != "baseline_only":
+        raise ValueError("baseline-only benchmark has an invalid pair order")
+    identity = parse_identity(output, variant_comparison=variant_comparison)
     reader = csv.DictReader(table_lines(output), skipinitialspace=True)
-    repetition_by_rows: defaultdict[int, int] = defaultdict(int)
-    observed_order: list[int] = []
+    repetition_by_key: defaultdict[tuple[str, int], int] = defaultdict(int)
+    observed_order: list[tuple[int, str]] = []
     samples: list[dict[str, Any]] = []
 
     for raw_row in reader:
@@ -271,22 +323,30 @@ def parse_samples(
         match = BENCHMARK_NAME.fullmatch(row.get("name", ""))
         if not match:
             raise ValueError(f"unrecognized benchmark row: {row!r}")
-        rows = int(match.group(1))
-        hidden_size = int(match.group(2))
+        benchmark_name = match.group(1)
+        implementation = IMPLEMENTATIONS[benchmark_name]
+        implementation_id = implementation["id"]
+        rows = int(match.group(2))
+        hidden_size = int(match.group(3))
         if rows not in WORKLOAD_ROWS or hidden_size != HIDDEN_SIZE:
             raise ValueError(
                 f"unexpected RMSNorm workload rows={rows}, hidden={hidden_size}"
             )
-        if not observed_order or observed_order[-1] != rows:
-            observed_order.append(rows)
+        if not variant_comparison and implementation_id != (
+            BASELINE_IMPLEMENTATION["id"]
+        ):
+            raise ValueError("baseline-only benchmark emitted a variant row")
+        order_key = (rows, implementation_id)
+        if not observed_order or observed_order[-1] != order_key:
+            observed_order.append(order_key)
 
         value_text = row.get("met (ms)", "")
         iterations_text = row.get("iters", "")
         value = float(value_text)
         iterations = int(iterations_text)
         valid = math.isfinite(value) and value > 0 and iterations > 0
-        repetition_by_rows[rows] += 1
-        repetition = repetition_by_rows[rows]
+        repetition_by_key[(implementation_id, rows)] += 1
+        repetition = repetition_by_key[(implementation_id, rows)]
         workload_id = f"r{rows}-h{hidden_size}"
         samples.append(
             {
@@ -295,11 +355,13 @@ def parse_samples(
                 "run_id": run_id,
                 "block_id": block_id,
                 "block_order": block_order,
+                "block_implementation_order": implementation_order,
                 "sample_id": (
-                    f"{run_id}-{block_id}-{workload_id}-rep{repetition:02d}"
+                    f"{run_id}-{block_id}-{implementation_id}-"
+                    f"{workload_id}-rep{repetition:02d}"
                 ),
-                "implementation": "apple_gpu_shared_tree_v0",
-                "implementation_entrypoint": identity["implementation"],
+                "implementation": implementation_id,
+                "implementation_entrypoint": implementation["entrypoint"],
                 "workload": workload_id,
                 "rows": rows,
                 "hidden_size": hidden_size,
@@ -316,19 +378,36 @@ def parse_samples(
             }
         )
 
-    expected_order = list(
+    row_order = list(
         WORKLOAD_ROWS if block_order == "ascending" else reversed(WORKLOAD_ROWS)
     )
+    if variant_comparison:
+        implementation_ids = (
+            [VARIANT_IMPLEMENTATION["id"], BASELINE_IMPLEMENTATION["id"]]
+            if implementation_order == "variant_then_baseline"
+            else [BASELINE_IMPLEMENTATION["id"], VARIANT_IMPLEMENTATION["id"]]
+        )
+    else:
+        implementation_ids = [BASELINE_IMPLEMENTATION["id"]]
+    expected_order = [
+        (rows, implementation_id)
+        for rows in row_order
+        for implementation_id in implementation_ids
+    ]
     if observed_order != expected_order:
         raise ValueError(
             f"workload order mismatch: expected {expected_order}, got "
             f"{observed_order}"
         )
-    expected_counts = {rows: EXPECTED_REPETITIONS for rows in WORKLOAD_ROWS}
-    if dict(repetition_by_rows) != expected_counts:
+    expected_counts = {
+        (implementation_id, rows): EXPECTED_REPETITIONS
+        for implementation_id in implementation_ids
+        for rows in WORKLOAD_ROWS
+    }
+    if dict(repetition_by_key) != expected_counts:
         raise ValueError(
             f"repetition count mismatch: expected {expected_counts}, got "
-            f"{dict(repetition_by_rows)}"
+            f"{dict(repetition_by_key)}"
         )
     if any(not sample["valid"] for sample in samples):
         raise ValueError(
@@ -350,7 +429,9 @@ def percentile(values: list[float], fraction: float) -> float:
     return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
 
 
-def summarize(samples: Iterable[dict[str, Any]]) -> dict[str, Any]:
+def summarize_implementation(
+    samples: Iterable[dict[str, Any]],
+) -> dict[str, Any]:
     grouped: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
     for sample in samples:
         if sample["valid"]:
@@ -426,7 +507,182 @@ def summarize(samples: Iterable[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def benchmark_command(reverse: bool) -> list[str]:
+def summarize_paired_workloads(
+    samples: Iterable[dict[str, Any]],
+) -> dict[str, Any]:
+    grouped: defaultdict[
+        tuple[str, str, str], list[float]
+    ] = defaultdict(list)
+    for sample in samples:
+        if sample["valid"]:
+            grouped[
+                (
+                    sample["workload"],
+                    sample["block_id"],
+                    sample["implementation"],
+                )
+            ].append(float(sample["value"]))
+
+    workloads: list[dict[str, Any]] = []
+    for rows in WORKLOAD_ROWS:
+        workload_id = f"r{rows}-h{HIDDEN_SIZE}"
+        block_ids = sorted(
+            {
+                block_id
+                for workload, block_id, _ in grouped
+                if workload == workload_id
+            }
+        )
+        block_ratios: list[dict[str, Any]] = []
+        for block_id in block_ids:
+            baseline_values = grouped[
+                (
+                    workload_id,
+                    block_id,
+                    BASELINE_IMPLEMENTATION["id"],
+                )
+            ]
+            variant_values = grouped[
+                (
+                    workload_id,
+                    block_id,
+                    VARIANT_IMPLEMENTATION["id"],
+                )
+            ]
+            if (
+                len(baseline_values) != EXPECTED_REPETITIONS
+                or len(variant_values) != EXPECTED_REPETITIONS
+            ):
+                raise ValueError(
+                    f"paired summary requires {EXPECTED_REPETITIONS} samples "
+                    f"per implementation for {workload_id} {block_id}"
+                )
+            baseline_median = statistics.median(baseline_values)
+            variant_median = statistics.median(variant_values)
+            ratio = variant_median / baseline_median
+            block_ratios.append(
+                {
+                    "block_id": block_id,
+                    "baseline_median_ms_per_dispatch": baseline_median,
+                    "variant_median_ms_per_dispatch": variant_median,
+                    "variant_to_baseline_ratio": ratio,
+                    "variant_faster": ratio < 1.0,
+                }
+            )
+
+        if len(block_ratios) != len(BLOCK_ORDERS):
+            raise ValueError(
+                f"paired summary requires {len(BLOCK_ORDERS)} blocks for "
+                f"{workload_id}; observed {len(block_ratios)}"
+            )
+        ratios = [
+            float(block["variant_to_baseline_ratio"])
+            for block in block_ratios
+        ]
+        median_ratio = statistics.median(ratios)
+        faster_blocks = sum(ratio < 1.0 for ratio in ratios)
+        slower_blocks = sum(ratio > 1.0 for ratio in ratios)
+        if (
+            median_ratio <= MATERIAL_IMPROVEMENT_RATIO
+            and faster_blocks >= REQUIRED_DIRECTION_BLOCKS
+        ):
+            classification = "material_improvement"
+        elif (
+            median_ratio >= MATERIAL_REGRESSION_RATIO
+            and slower_blocks >= REQUIRED_DIRECTION_BLOCKS
+        ):
+            classification = "material_regression"
+        else:
+            classification = "inconclusive"
+        workloads.append(
+            {
+                "workload": workload_id,
+                "rows": rows,
+                "hidden_size": HIDDEN_SIZE,
+                "median_variant_to_baseline_ratio": median_ratio,
+                "median_change_percent": (median_ratio - 1.0) * 100.0,
+                "variant_faster_blocks": faster_blocks,
+                "variant_slower_blocks": slower_blocks,
+                "classification": classification,
+                "blocks": block_ratios,
+            }
+        )
+
+    relevant = [
+        workload
+        for workload in workloads
+        if workload["rows"] in RELEVANT_PRODUCTION_ROWS
+    ]
+    relevant_improvements = [
+        workload["workload"]
+        for workload in relevant
+        if workload["classification"] == "material_improvement"
+    ]
+    relevant_regressions = [
+        workload["workload"]
+        for workload in relevant
+        if workload["classification"] == "material_regression"
+    ]
+    timing_decision = (
+        "replace_baseline"
+        if relevant_improvements and not relevant_regressions
+        else "retain_baseline"
+    )
+    return {
+        "ratio_definition": "variant_block_median / baseline_block_median",
+        "material_improvement_ratio": MATERIAL_IMPROVEMENT_RATIO,
+        "material_regression_ratio": MATERIAL_REGRESSION_RATIO,
+        "required_direction_blocks": REQUIRED_DIRECTION_BLOCKS,
+        "relevant_production_rows": list(RELEVANT_PRODUCTION_ROWS),
+        "workloads": workloads,
+        "relevant_material_improvements": relevant_improvements,
+        "relevant_material_regressions": relevant_regressions,
+        "timing_decision": timing_decision,
+    }
+
+
+def summarize(
+    samples: Iterable[dict[str, Any]], *, variant_comparison: bool = False
+) -> dict[str, Any]:
+    retained = list(samples)
+    if not variant_comparison:
+        return summarize_implementation(retained)
+
+    implementations = []
+    for implementation in (BASELINE_IMPLEMENTATION, VARIANT_IMPLEMENTATION):
+        implementation_samples = [
+            sample
+            for sample in retained
+            if sample["implementation"] == implementation["id"]
+        ]
+        implementation_summary = summarize_implementation(
+            implementation_samples
+        )
+        implementations.append(
+            {
+                "implementation": implementation["id"],
+                "entrypoint": implementation["entrypoint"],
+                "workloads": implementation_summary["workloads"],
+            }
+        )
+    return {
+        "schema_version": 2,
+        "statistics": {
+            "implementation_summaries": (
+                "median, median absolute deviation, and interquartile range"
+            ),
+            "paired_statistic": (
+                "median of four within-block variant/baseline median ratios"
+            ),
+        },
+        "implementations": implementations,
+        "paired_comparison": summarize_paired_workloads(retained),
+    }
+
+
+def benchmark_command(
+    *, reverse: bool, variant_comparison: bool, variant_first: bool
+) -> list[str]:
     args = [
         "uv",
         "run",
@@ -438,6 +694,10 @@ def benchmark_command(reverse: bool) -> list[str]:
     ]
     if reverse:
         args.extend(["-D", "RMS_NORM_BENCH_REVERSE=true"])
+    if variant_comparison:
+        args.extend(["-D", "RMS_NORM_BENCH_VARIANT_COMPARISON=true"])
+    if variant_first:
+        args.extend(["-D", "RMS_NORM_BENCH_VARIANT_FIRST=true"])
     args.append("benchmarks/rms_norm.mojo")
     return args
 
@@ -448,14 +708,22 @@ def run_block(
     run_id: str,
     block_number: int,
     block_order: str,
+    implementation_order: str,
+    variant_comparison: bool,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
     block_id = f"block-{block_number:02d}"
     before = conditions_snapshot()
-    command_args = benchmark_command(block_order == "descending")
+    variant_first = implementation_order == "variant_then_baseline"
+    command_args = benchmark_command(
+        reverse=block_order == "descending",
+        variant_comparison=variant_comparison,
+        variant_first=variant_comparison and variant_first,
+    )
     environment = os.environ.copy()
     environment.pop("MODULAR_DEBUG", None)
     print(
-        f"Running {block_id} ({block_order}) with MODULAR_DEBUG unset...",
+        f"Running {block_id} ({block_order}, {implementation_order}) "
+        "with MODULAR_DEBUG unset...",
         flush=True,
     )
     started = utc_now()
@@ -479,12 +747,15 @@ def run_block(
         run_id=run_id,
         block_id=block_id,
         block_order=block_order,
+        implementation_order=implementation_order,
+        variant_comparison=variant_comparison,
     )
     after = conditions_snapshot()
     stdout_bytes = result.stdout.encode()
     block = {
         "block_id": block_id,
         "order": block_order,
+        "implementation_order": implementation_order,
         "started_utc": started,
         "completed_utc": utc_now(),
         "command": shlex.join(command_args),
@@ -555,10 +826,15 @@ def build_profile_binary(args: argparse.Namespace) -> None:
         f"RMS_NORM_PROFILE_ROWS={args.profile_rows}",
         "-D",
         f"RMS_NORM_PROFILE_ITERATIONS={args.profile_iterations}",
-        "benchmarks/rms_norm.mojo",
-        "-o",
-        str(output),
     ]
+    profile_implementation = (
+        VARIANT_IMPLEMENTATION
+        if args.profile_implementation == "simdgroup"
+        else BASELINE_IMPLEMENTATION
+    )
+    if args.profile_implementation == "simdgroup":
+        command_args.extend(["-D", "RMS_NORM_PROFILE_SIMDGROUP=true"])
+    command_args.extend(["benchmarks/rms_norm.mojo", "-o", str(output)])
     environment = os.environ.copy()
     environment.pop("MODULAR_DEBUG", None)
     subprocess.run(command_args, cwd=REPOSITORY, check=True, env=environment)
@@ -573,6 +849,8 @@ def build_profile_binary(args: argparse.Namespace) -> None:
         "profile_rows": args.profile_rows,
         "hidden_size": HIDDEN_SIZE,
         "profile_iterations": args.profile_iterations,
+        "implementation": profile_implementation["id"],
+        "entrypoint": profile_implementation["entrypoint"],
         "binary": {
             "path_note": "External local artifact; path is intentionally omitted.",
             "bytes": output.stat().st_size,
@@ -597,8 +875,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--recorded", action="store_true")
     parser.add_argument("--require-clean", action="store_true")
+    parser.add_argument("--variant-comparison", action="store_true")
     parser.add_argument("--profile-binary", type=Path)
     parser.add_argument("--profile-rows", type=int)
+    parser.add_argument(
+        "--profile-implementation",
+        choices=("baseline", "simdgroup"),
+        default="baseline",
+    )
     parser.add_argument(
         "--profile-iterations",
         type=int,
@@ -620,6 +904,10 @@ def main() -> None:
         return
     if args.profile_rows is not None:
         raise RuntimeError("--profile-rows requires --profile-binary")
+    if args.profile_implementation != "baseline":
+        raise RuntimeError(
+            "--profile-implementation requires --profile-binary"
+        )
     if args.recorded and (
         args.output_dir is None
         or args.experiment_id == "exploration"
@@ -628,6 +916,10 @@ def main() -> None:
         raise RuntimeError(
             "--recorded requires --output-dir, an explicit --experiment-id, "
             "and an explicit --run-id"
+        )
+    if args.variant_comparison and args.blocks != 4:
+        raise RuntimeError(
+            "variant comparison requires all four paired blocks"
         )
 
     run_id = args.run_id or datetime.now(UTC).strftime(
@@ -652,7 +944,7 @@ def main() -> None:
 
     environment = stable_environment()
     metadata: dict[str, Any] = {
-        "schema_version": 2,
+        "schema_version": 3 if args.variant_comparison else 2,
         "experiment_id": args.experiment_id,
         "run_id": run_id,
         "recorded": args.recorded,
@@ -661,11 +953,20 @@ def main() -> None:
         **environment,
         "conditions_at_start": initial_conditions,
         "benchmark": {
-            "implementation": "apple_gpu_shared_tree_v0",
-            "entrypoint": "enqueue_rms_norm_apple_gpu",
+            "implementations": (
+                [BASELINE_IMPLEMENTATION, VARIANT_IMPLEMENTATION]
+                if args.variant_comparison
+                else [BASELINE_IMPLEMENTATION]
+            ),
+            "variant_comparison": args.variant_comparison,
             "workload_rows": list(WORKLOAD_ROWS),
             "hidden_size": HIDDEN_SIZE,
             "block_orders": list(BLOCK_ORDERS[: args.blocks]),
+            "block_implementation_orders": list(
+                BLOCK_IMPLEMENTATION_ORDERS[: args.blocks]
+                if args.variant_comparison
+                else ("baseline_only",) * args.blocks
+            ),
             "num_warmup_iters": 1000,
             "max_iters": 1000,
             "num_repetitions": EXPECTED_REPETITIONS,
@@ -681,6 +982,11 @@ def main() -> None:
     for block_number, block_order in enumerate(
         BLOCK_ORDERS[: args.blocks], start=1
     ):
+        implementation_order = (
+            BLOCK_IMPLEMENTATION_ORDERS[block_number - 1]
+            if args.variant_comparison
+            else "baseline_only"
+        )
         current_repository = repository_state()
         if current_repository["commit"] != initial_repository["commit"]:
             raise RuntimeError("repository commit changed during the run")
@@ -695,6 +1001,8 @@ def main() -> None:
             run_id=run_id,
             block_number=block_number,
             block_order=block_order,
+            implementation_order=implementation_order,
+            variant_comparison=args.variant_comparison,
         )
         if args.recorded:
             require_ac(block["conditions_after"])
@@ -708,8 +1016,14 @@ def main() -> None:
     if args.recorded:
         require_ac(metadata["conditions_at_end"])
         require_nominal_thermal_state(metadata["conditions_at_end"])
-    summary = summarize(samples)
-    expected_samples = args.blocks * len(WORKLOAD_ROWS) * EXPECTED_REPETITIONS
+    summary = summarize(samples, variant_comparison=args.variant_comparison)
+    implementation_count = 2 if args.variant_comparison else 1
+    expected_samples = (
+        args.blocks
+        * len(WORKLOAD_ROWS)
+        * EXPECTED_REPETITIONS
+        * implementation_count
+    )
     if len(samples) != expected_samples:
         raise RuntimeError(
             f"expected {expected_samples} samples, collected {len(samples)}"

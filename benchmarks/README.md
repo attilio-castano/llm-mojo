@@ -57,6 +57,23 @@ The output directory contains block stdout, `metadata.json`, `samples.jsonl`,
 and `summary.json`. Review those external artifacts before promoting compact
 evidence into `experiments/`; the runner never edits an experiment record.
 
+For the frozen two-implementation comparison, add `--variant-comparison`. The
+runner requires all four blocks and registers each row as a baseline/variant
+pair. Blocks one and four use baseline then variant; blocks two and three use
+variant then baseline. `summary.json` retains each block's ratio of variant
+median to baseline median and applies the preregistered 5% and three-of-four
+direction rules:
+
+```bash
+uv run --locked python benchmarks/run_rms_norm.py \
+  --blocks 4 \
+  --experiment-id EXP-0002 \
+  --run-id EXP-0002-RUN-001 \
+  --variant-comparison \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-0002-RUN-001
+```
+
 ## RMSNorm profiling instrument
 
 Build a standalone, long-running binary outside the repository so Xcode does
@@ -69,6 +86,9 @@ uv run --locked python benchmarks/run_rms_norm.py \
   --profile-iterations 5000 \
   --require-clean
 ```
+
+Add `--profile-implementation simdgroup` to build the experimental variant.
+The default remains the shared-tree baseline.
 
 The build also writes a provenance JSON file with the commit, environment,
 binary size, and SHA-256 digest. The binary performs an untimed correctness
@@ -135,10 +155,13 @@ uv run --locked mojo build \
   -I src \
   -D RMS_NORM_PROFILE_ROWS=1 \
   -D RMS_NORM_PROFILE_ITERATIONS=1 \
+  -D RMS_NORM_PROFILE_SIMDGROUP=true \
   --emit asm \
-  -o /absolute/external/path/rmsnorm-profile.s \
+  -o /absolute/external/path/rmsnorm-simdgroup-profile.s \
   benchmarks/rms_norm.mojo
 ```
+
+Omit `RMS_NORM_PROFILE_SIMDGROUP` to inspect the baseline.
 
 ## Memory quantities
 

@@ -4,6 +4,7 @@ from layout import TileTensor, row_major
 from llm_mojo.rms_norm import (
     RMS_NORM_APPLE_GPU_BLOCK_SIZE,
     enqueue_rms_norm_apple_gpu,
+    enqueue_rms_norm_apple_gpu_simdgroup,
 )
 from max.benchmark import bencher_iter_custom
 from max.gpu.host import DeviceContext
@@ -28,7 +29,9 @@ comptime PROFILE_WARMUP_ITERATIONS = 1_000
 
 
 @always_inline
-def bench_rms_norm[rows: Int](mut bencher: Bencher) raises capturing:
+def bench_rms_norm[
+    rows: Int, use_simdgroup: Bool
+](mut bencher: Bencher) raises capturing:
     comptime assert (
         has_apple_gpu_accelerator()
     ), "benchmark requires an Apple GPU"
@@ -55,7 +58,10 @@ def bench_rms_norm[rows: Int](mut bencher: Bencher) raises capturing:
     var output = TileTensor(output_buffer, input_layout)
 
     # Warm the compiled path and retain a correctness gate outside timing.
-    enqueue_rms_norm_apple_gpu(context, input, weight, output)
+    comptime if use_simdgroup:
+        enqueue_rms_norm_apple_gpu_simdgroup(context, input, weight, output)
+    else:
+        enqueue_rms_norm_apple_gpu(context, input, weight, output)
     with output_buffer.map_to_host() as mapped_output:
         var host_output = TileTensor(mapped_output, input_layout)
         comptime assert host_output.flat_rank == 2
@@ -69,23 +75,54 @@ def bench_rms_norm[rows: Int](mut bencher: Bencher) raises capturing:
 
     @always_inline
     def launch(launch_context: DeviceContext) raises {imm}:
-        enqueue_rms_norm_apple_gpu(launch_context, input, weight, output)
+        comptime if use_simdgroup:
+            enqueue_rms_norm_apple_gpu_simdgroup(
+                launch_context, input, weight, output
+            )
+        else:
+            enqueue_rms_norm_apple_gpu(launch_context, input, weight, output)
 
     bencher_iter_custom(bencher, launch, context)
 
 
-def add_benchmark[rows: Int](mut benchmark: Bench) raises:
-    comptime workload = bench_rms_norm[rows]
-    benchmark.bench_function[workload](
-        BenchId(
-            "rms_norm_apple_gpu",
-            "rows=" + String(rows) + " hidden=" + String(HIDDEN_SIZE),
-        ),
-        [
-            ThroughputMeasure(BenchMetric.elements, rows * HIDDEN_SIZE),
-            ThroughputMeasure(BenchMetric.bytes, rows * HIDDEN_SIZE * 6),
-        ],
-    )
+def add_benchmark[rows: Int, use_simdgroup: Bool](mut benchmark: Bench) raises:
+    comptime workload = bench_rms_norm[rows, use_simdgroup]
+    comptime if use_simdgroup:
+        benchmark.bench_function[workload](
+            BenchId(
+                "rms_norm_apple_gpu_simdgroup",
+                "rows=" + String(rows) + " hidden=" + String(HIDDEN_SIZE),
+            ),
+            [
+                ThroughputMeasure(BenchMetric.elements, rows * HIDDEN_SIZE),
+                ThroughputMeasure(BenchMetric.bytes, rows * HIDDEN_SIZE * 6),
+            ],
+        )
+    else:
+        benchmark.bench_function[workload](
+            BenchId(
+                "rms_norm_apple_gpu",
+                "rows=" + String(rows) + " hidden=" + String(HIDDEN_SIZE),
+            ),
+            [
+                ThroughputMeasure(BenchMetric.elements, rows * HIDDEN_SIZE),
+                ThroughputMeasure(BenchMetric.bytes, rows * HIDDEN_SIZE * 6),
+            ],
+        )
+
+
+def add_selected_benchmarks[
+    rows: Int, variant_comparison: Bool, variant_first: Bool
+](mut benchmark: Bench) raises:
+    comptime if variant_comparison:
+        comptime if variant_first:
+            add_benchmark[rows, True](benchmark)
+            add_benchmark[rows, False](benchmark)
+        else:
+            add_benchmark[rows, False](benchmark)
+            add_benchmark[rows, True](benchmark)
+    else:
+        add_benchmark[rows, False](benchmark)
 
 
 def run_benchmarks() raises:
@@ -97,6 +134,12 @@ def run_benchmarks() raises:
         raise Error("benchmark requires the Metal device API")
 
     print("implementation: enqueue_rms_norm_apple_gpu")
+    comptime variant_comparison = get_defined_bool[
+        "RMS_NORM_BENCH_VARIANT_COMPARISON"
+    ]()
+    comptime variant_first = get_defined_bool["RMS_NORM_BENCH_VARIANT_FIRST"]()
+    comptime if variant_comparison:
+        print("comparison implementation: enqueue_rms_norm_apple_gpu_simdgroup")
     print("device:", identity.name())
     print("api:", identity.api())
     print("dtype: bfloat16; accumulation: float32")
@@ -122,6 +165,13 @@ def run_benchmarks() raises:
     )
     comptime reverse_order = get_defined_bool["RMS_NORM_BENCH_REVERSE"]()
     print("workload order:", "descending" if reverse_order else "ascending")
+    comptime if variant_comparison:
+        print(
+            "implementation order:",
+            "variant then baseline" if variant_first else (
+                "baseline then variant"
+            ),
+        )
 
     var benchmark = Bench(
         BenchConfig(
@@ -131,21 +181,41 @@ def run_benchmarks() raises:
         )
     )
     comptime if reverse_order:
-        add_benchmark[4096](benchmark)
-        add_benchmark[2048](benchmark)
-        add_benchmark[512](benchmark)
-        add_benchmark[128](benchmark)
-        add_benchmark[16](benchmark)
-        add_benchmark[4](benchmark)
-        add_benchmark[1](benchmark)
+        add_selected_benchmarks[4096, variant_comparison, variant_first](
+            benchmark
+        )
+        add_selected_benchmarks[2048, variant_comparison, variant_first](
+            benchmark
+        )
+        add_selected_benchmarks[512, variant_comparison, variant_first](
+            benchmark
+        )
+        add_selected_benchmarks[128, variant_comparison, variant_first](
+            benchmark
+        )
+        add_selected_benchmarks[16, variant_comparison, variant_first](
+            benchmark
+        )
+        add_selected_benchmarks[4, variant_comparison, variant_first](benchmark)
+        add_selected_benchmarks[1, variant_comparison, variant_first](benchmark)
     else:
-        add_benchmark[1](benchmark)
-        add_benchmark[4](benchmark)
-        add_benchmark[16](benchmark)
-        add_benchmark[128](benchmark)
-        add_benchmark[512](benchmark)
-        add_benchmark[2048](benchmark)
-        add_benchmark[4096](benchmark)
+        add_selected_benchmarks[1, variant_comparison, variant_first](benchmark)
+        add_selected_benchmarks[4, variant_comparison, variant_first](benchmark)
+        add_selected_benchmarks[16, variant_comparison, variant_first](
+            benchmark
+        )
+        add_selected_benchmarks[128, variant_comparison, variant_first](
+            benchmark
+        )
+        add_selected_benchmarks[512, variant_comparison, variant_first](
+            benchmark
+        )
+        add_selected_benchmarks[2048, variant_comparison, variant_first](
+            benchmark
+        )
+        add_selected_benchmarks[4096, variant_comparison, variant_first](
+            benchmark
+        )
 
     benchmark.config.format = Format.tabular
     print("BENCHMARK_RESULTS_BEGIN")
@@ -153,7 +223,9 @@ def run_benchmarks() raises:
     print("BENCHMARK_RESULTS_END")
 
 
-def run_profile_workload[rows: Int, iterations: Int]() raises:
+def run_profile_workload[
+    rows: Int, iterations: Int, use_simdgroup: Bool
+]() raises:
     comptime assert rows > 0, "profile rows must be positive"
     comptime assert iterations > 0, "profile iterations must be positive"
     comptime assert (
@@ -182,7 +254,10 @@ def run_profile_workload[rows: Int, iterations: Int]() raises:
     var weight = TileTensor(weight_buffer, weight_layout)
     var output = TileTensor(output_buffer, input_layout)
 
-    enqueue_rms_norm_apple_gpu(context, input, weight, output)
+    comptime if use_simdgroup:
+        enqueue_rms_norm_apple_gpu_simdgroup(context, input, weight, output)
+    else:
+        enqueue_rms_norm_apple_gpu(context, input, weight, output)
     with output_buffer.map_to_host() as mapped_output:
         var host_output = TileTensor(mapped_output, input_layout)
         comptime assert host_output.flat_rank == 2
@@ -194,11 +269,18 @@ def run_profile_workload[rows: Int, iterations: Int]() raises:
                 if actual != Scalar[DType.bfloat16](1.0):
                     raise Error("RMSNorm profile correctness gate failed")
 
-    for _ in range(PROFILE_WARMUP_ITERATIONS):
-        enqueue_rms_norm_apple_gpu(context, input, weight, output)
+    comptime if use_simdgroup:
+        for _ in range(PROFILE_WARMUP_ITERATIONS):
+            enqueue_rms_norm_apple_gpu_simdgroup(context, input, weight, output)
+    else:
+        for _ in range(PROFILE_WARMUP_ITERATIONS):
+            enqueue_rms_norm_apple_gpu(context, input, weight, output)
     context.synchronize()
 
-    print("profile implementation: enqueue_rms_norm_apple_gpu")
+    comptime if use_simdgroup:
+        print("profile implementation: enqueue_rms_norm_apple_gpu_simdgroup")
+    else:
+        print("profile implementation: enqueue_rms_norm_apple_gpu")
     print("device:", context.name())
     print("api:", context.api())
     print("rows:", rows)
@@ -206,8 +288,12 @@ def run_profile_workload[rows: Int, iterations: Int]() raises:
     print("warmup iterations:", PROFILE_WARMUP_ITERATIONS)
     print("profile iterations:", iterations)
     print("PROFILE_REGION_BEGIN")
-    for _ in range(iterations):
-        enqueue_rms_norm_apple_gpu(context, input, weight, output)
+    comptime if use_simdgroup:
+        for _ in range(iterations):
+            enqueue_rms_norm_apple_gpu_simdgroup(context, input, weight, output)
+    else:
+        for _ in range(iterations):
+            enqueue_rms_norm_apple_gpu(context, input, weight, output)
     context.synchronize()
     print("PROFILE_REGION_END")
 
@@ -218,6 +304,11 @@ def main() raises:
         comptime profile_iterations = get_defined_int[
             "RMS_NORM_PROFILE_ITERATIONS"
         ]()
-        run_profile_workload[profile_rows, profile_iterations]()
+        comptime profile_simdgroup = get_defined_bool[
+            "RMS_NORM_PROFILE_SIMDGROUP"
+        ]()
+        run_profile_workload[
+            profile_rows, profile_iterations, profile_simdgroup
+        ]()
     else:
         run_benchmarks()
