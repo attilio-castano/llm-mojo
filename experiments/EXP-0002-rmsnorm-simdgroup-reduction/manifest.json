@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "experiment_id": "EXP-0002",
+  "slug": "rmsnorm-simdgroup-reduction",
+  "title": "Apple GPU RMSNorm SIMD-group reduction comparison",
+  "created_date": "2026-08-22",
+  "status": "planned",
+  "evidence_level": "operation",
+  "question": "Does one hybrid SIMD-group reduction materially reduce synchronized Apple GPU RMSNorm dispatch latency versus the shared-memory tree without a relevant workload regression?",
+  "experiment_type": "paired_optimization_comparison",
+  "hypothesis": "Replacing the 128-value shared-memory tree with four 32-lane SIMD-group reductions and one cross-group reduction will reduce shared storage and workgroup barriers enough to improve at least one real Qwen decode or prefill regime by 5% or more.",
+  "baseline": {
+    "implementation_id": "apple_gpu_shared_tree_v0",
+    "entrypoint": "llm_mojo.rms_norm.enqueue_rms_norm_apple_gpu",
+    "source_commit": "148dbaa4dd3cea91c2cb5e63b62b83dd99b5a373",
+    "threads_per_threadgroup": 128,
+    "shared_reduction_values": 128,
+    "shared_reduction_bytes": 512,
+    "workgroup_barriers": 9
+  },
+  "variant": {
+    "implementation_id": "apple_gpu_simdgroup_v1",
+    "entrypoint": "llm_mojo.rms_norm.enqueue_rms_norm_apple_gpu_simdgroup",
+    "threads_per_threadgroup": 128,
+    "local_accumulation": "Each thread accumulates the same strided BF16 values into FP32 as the baseline.",
+    "within_group_reduction": "Four 32-lane SIMD groups reduce their FP32 thread sums with warp.sum.",
+    "cross_group_reduction": "Four group leaders write FP32 partials to shared memory; the first SIMD group reduces those four values.",
+    "shared_reduction_values": 4,
+    "shared_reduction_bytes": 16,
+    "expected_workgroup_barriers": 2,
+    "scope_boundary": "One explicit kernel and enqueue entrypoint. No general reduction abstraction or runtime dispatch framework."
+  },
+  "correctness": {
+    "authority": "tests/test_rms_norm.mojo and the existing committed Transformers oracle fixtures",
+    "command": "MODULAR_DEBUG=device-sync-mode uv run --locked mojo run -I src -I tests tests/test_rms_norm.mojo",
+    "required_cases": [
+      "small: input=(2,8), weight=(8)",
+      "qwen_hidden: input=(1,896), weight=(896)"
+    ],
+    "dtype": "bfloat16",
+    "accumulation_dtype": "float32",
+    "epsilon": 0.000001,
+    "atol": 0.0078125,
+    "rtol": 0.0078125,
+    "gate": "Both baseline and variant must produce finite outputs within the frozen tolerance before performance collection."
+  },
+  "workloads": [
+    {"id": "r1-h896", "rows": 1, "semantic_role": "V0 batch-one decode"},
+    {"id": "r4-h896", "rows": 4, "semantic_role": "hypothetical batched decode"},
+    {"id": "r16-h896", "rows": 16, "semantic_role": "hypothetical batched decode"},
+    {"id": "r128-h896", "rows": 128, "semantic_role": "short first-turn prefill-like"},
+    {"id": "r512-h896", "rows": 512, "semantic_role": "EXP-0001 measured transition"},
+    {"id": "r2048-h896", "rows": 2048, "semantic_role": "long first-turn prefill-like"},
+    {"id": "r4096-h896", "rows": 4096, "semantic_role": "V0 context-boundary prefill-like; EXP-0001 largest measured"}
+  ],
+  "measurement_protocol": {
+    "benchmark": "benchmarks/rms_norm.mojo",
+    "runner": "benchmarks/run_rms_norm.py",
+    "decisive_command": "uv run --locked python benchmarks/run_rms_norm.py --blocks 4 --experiment-id EXP-0002 --run-id EXP-0002-RUN-001 --variant-comparison --recorded --output-dir <absolute-external-path>/EXP-0002-RUN-001",
+    "primary_metric": "synchronized_device_execution_ms_per_dispatch",
+    "timing_boundary": "The same GPU-aware bencher completion boundary used by EXP-0001; allocation, initialization, correctness checks, compilation, and host mapping remain excluded.",
+    "block_order": [
+      "ascending rows; baseline then variant per workload",
+      "descending rows; variant then baseline per workload",
+      "descending rows; variant then baseline per workload",
+      "ascending rows; baseline then variant per workload"
+    ],
+    "num_warmup_iters": 1000,
+    "max_iters": 1000,
+    "num_repetitions": 10,
+    "independent_blocks": 4,
+    "expected_samples_per_implementation_per_workload": 40,
+    "paired_statistic": "For each block and workload, divide the variant median by the baseline median. Summarize the four paired ratios with their median and retain every block ratio.",
+    "environment": "Clean immutable commit, AC Power, no reported thermal or performance warning, Apple GPU plus Metal identity, stable display configuration, and no deliberate competing workload."
+  },
+  "decision_rule": {
+    "material_improvement": "Median paired ratio <= 0.95 and variant faster in at least three of four blocks.",
+    "material_regression": "Median paired ratio >= 1.05 and variant slower in at least three of four blocks.",
+    "relevant_production_workloads": ["r1-h896", "r128-h896", "r512-h896", "r2048-h896", "r4096-h896"],
+    "replace_baseline": "At least one relevant workload meets material_improvement and no relevant workload meets material_regression.",
+    "retain_baseline": "No relevant workload meets material_improvement, or a relevant regression outweighs a regime-specific benefit without a justified caller-level dispatch decision.",
+    "inconclusive_band": "Effects between -5% and +5% are not optimization wins even if their point estimate favors the variant.",
+    "crossover": "A dispatch rule is outside the default scope. Consider one explicit row threshold only if opposite effects both exceed 5%, repeat in at least three blocks, and map to real V0 callers."
+  },
+  "generated_code_check": {
+    "purpose": "Confirm the variant lowers to the intended structure, not establish performance causality.",
+    "expected": [
+      "SIMD-group reduction operations appear in the Metal sidecar.",
+      "Shared reduction storage falls from 128 FP32 values to four.",
+      "Workgroup barriers fall from nine to two."
+    ]
+  },
+  "profiling_rule": "Profile the variant only after ordinary paired timing shows a material effect. Use short captures and retain unavailable counters as unresolved.",
+  "completion_conditions": [
+    "The variant passes the frozen numerical correctness cases.",
+    "Generated code is consistent with the declared structural variant.",
+    "All four paired blocks pass environment, device, parse, and sample-count gates.",
+    "Each implementation and workload has 40 valid samples and four retained paired block ratios.",
+    "The decision follows the predeclared 5% and direction-consistency rules.",
+    "The production implementation, experiment report, and nonclaims agree."
+  ],
+  "stop_conditions": [
+    "Correctness or finite-value validation fails.",
+    "The variant does not lower to the intended SIMD-group structure.",
+    "AC power, thermal, cleanliness, device identity, or parsing gates fail.",
+    "Either implementation loses a declared repetition or iteration count."
+  ],
+  "nonclaims": [
+    "No end-to-end inference, model-phase, time-to-first-token, or time-per-output-token result.",
+    "No causal attribution from timing alone.",
+    "No observed hardware bandwidth or occupancy claim without a named counter.",
+    "No general claim that SIMD-group reduction is optimal for other hidden sizes or GPUs."
+  ],
+  "implementation_commit": null,
+  "measurement_commit": null,
+  "runs": [],
+  "artifacts": [],
+  "deviations": []
+}
