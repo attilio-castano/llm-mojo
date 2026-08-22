@@ -189,6 +189,25 @@ uv run --locked python benchmarks/analyze_rms_norm_trace.py \
   --output /absolute/external/path/counter-summary.json
 ```
 
+After four valid summaries have been collected in baseline, variant, variant,
+baseline order, apply the frozen paired-direction and 5% materiality rule:
+
+```bash
+uv run --locked python benchmarks/compare_rms_norm_counters.py \
+  --baseline-first /absolute/external/path/capture-01/trace-summary.json \
+  --variant-second /absolute/external/path/capture-02/trace-summary.json \
+  --variant-third /absolute/external/path/capture-03/trace-summary.json \
+  --baseline-fourth /absolute/external/path/capture-04/trace-summary.json \
+  --warmup-iterations 100 \
+  --profile-iterations 500 \
+  --output /absolute/external/path/counter-comparison.json
+```
+
+The comparator rechecks the capture validity gates, requires positive medians
+in all four captures, and calls a difference repeatable only when both adjacent
+pair ratios move in the same direction and their median relative change is at
+least 5%.
+
 The analyzer joins GPU intervals to the target command-buffer submissions,
 validates the fixed correctness/warmup/profile sequence, strips paths and
 identifiers, and reports checksums plus diagnostic interval distributions. If
