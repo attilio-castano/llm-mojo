@@ -1,0 +1,1943 @@
+{
+  "analysis": "rmsnorm_limiter_counter_comparison",
+  "captures": [
+    {
+      "capture_id": "capture-01-baseline",
+      "counter_sample_span_fraction": 0.999475768253486,
+      "counter_timestamp_count": 926,
+      "gpu_performance_state": {
+        "duration_nanoseconds_by_state": {
+          "Medium": 4979458,
+          "Minimum": 343291831
+        },
+        "induced_intervals": {
+          "yes": 145
+        },
+        "interval_count": 145,
+        "scope": "Trace-level device condition; not target-process timing.",
+        "states": {
+          "Medium": 2,
+          "Minimum": 143
+        }
+      },
+      "instrumented_profile_duration": {
+        "count": 500,
+        "maximum": 2111125,
+        "median": 48937.5,
+        "median_absolute_deviation": 896.0,
+        "minimum": 16791,
+        "p95": 57520.84999999998,
+        "unit": "nanoseconds"
+      },
+      "profile_window_duration_nanoseconds": 24943167,
+      "role": "baseline",
+      "target_gpu_busy_fraction": 0.982378300237496,
+      "target_spill_event_count": 0,
+      "trace_duration_seconds": 1.279142
+    },
+    {
+      "capture_id": "capture-02-variant",
+      "counter_sample_span_fraction": 0.9995059636373094,
+      "counter_timestamp_count": 910,
+      "gpu_performance_state": {
+        "duration_nanoseconds_by_state": {
+          "Minimum": 261026411
+        },
+        "induced_intervals": {
+          "yes": 103
+        },
+        "interval_count": 103,
+        "scope": "Trace-level device condition; not target-process timing.",
+        "states": {
+          "Minimum": 103
+        }
+      },
+      "instrumented_profile_duration": {
+        "count": 500,
+        "maximum": 2147333,
+        "median": 45583.0,
+        "median_absolute_deviation": 667.0,
+        "minimum": 15625,
+        "p95": 55936.849999999984,
+        "unit": "nanoseconds"
+      },
+      "profile_window_duration_nanoseconds": 24530583,
+      "role": "variant",
+      "target_gpu_busy_fraction": 0.982491814401639,
+      "target_spill_event_count": 0,
+      "trace_duration_seconds": 1.061787
+    },
+    {
+      "capture_id": "capture-03-variant",
+      "counter_sample_span_fraction": 0.9992467670990705,
+      "counter_timestamp_count": 732,
+      "gpu_performance_state": {
+        "duration_nanoseconds_by_state": {
+          "Medium": 8099876,
+          "Minimum": 213922166
+        },
+        "induced_intervals": {
+          "yes": 120
+        },
+        "interval_count": 120,
+        "scope": "Trace-level device condition; not target-process timing.",
+        "states": {
+          "Medium": 4,
+          "Minimum": 116
+        }
+      },
+      "instrumented_profile_duration": {
+        "count": 500,
+        "maximum": 2102000,
+        "median": 44833.5,
+        "median_absolute_deviation": 2166.5,
+        "minimum": 15666,
+        "p95": 47000.0,
+        "unit": "nanoseconds"
+      },
+      "profile_window_duration_nanoseconds": 19748208,
+      "role": "variant",
+      "target_gpu_busy_fraction": 0.9793396950244802,
+      "target_spill_event_count": 0,
+      "trace_duration_seconds": 1.065055
+    },
+    {
+      "capture_id": "capture-04-baseline",
+      "counter_sample_span_fraction": 0.997331930227367,
+      "counter_timestamp_count": 578,
+      "gpu_performance_state": {
+        "duration_nanoseconds_by_state": {
+          "Medium": 4607959,
+          "Minimum": 238256002
+        },
+        "induced_intervals": {
+          "yes": 97
+        },
+        "interval_count": 97,
+        "scope": "Trace-level device condition; not target-process timing.",
+        "states": {
+          "Medium": 3,
+          "Minimum": 94
+        }
+      },
+      "instrumented_profile_duration": {
+        "count": 500,
+        "maximum": 785209,
+        "median": 18417.0,
+        "median_absolute_deviation": 1417.0,
+        "minimum": 16541,
+        "p95": 49791.0,
+        "unit": "nanoseconds"
+      },
+      "profile_window_duration_nanoseconds": 15679500,
+      "role": "baseline",
+      "target_gpu_busy_fraction": 0.9808224752064798,
+      "target_spill_event_count": 0,
+      "trace_duration_seconds": 1.05382
+    }
+  ],
+  "caveats": [
+    "Counters are device-wide samples inside the target profile window, not command-buffer-exclusive measurements.",
+    "The named counter set has no direct workgroup-barrier stall counter.",
+    "Instrumented command durations are diagnostic and do not replace ordinary paired timing."
+  ],
+  "comparisons": [
+    {
+      "capture_medians": {
+        "capture-01-baseline": 14.33244433,
+        "capture-02-variant": 16.47075548,
+        "capture-03-variant": 16.35230933,
+        "capture-04-baseline": 14.182378702
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 12,
+      "description": "Measures the time during which ALU work is executed as a percentage of peak ALU performance",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.1510978170134079,
+      "name": "ALU Utilization",
+      "pair_variant_over_baseline_ratios": [
+        1.1491937523541738,
+        1.153001881672642
+      ],
+      "relative_change_percent": 15.109781701340786,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 23.557943791,
+        "capture-02-variant": 23.475413912,
+        "capture-03-variant": 23.565354737,
+        "capture-04-baseline": 23.577413878
+      },
+      "classification": "below_material_threshold",
+      "counter_id": 47,
+      "description": "Percentage buffer L1 cache accesses are misses from shader",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.9979926291005541,
+      "name": "Buffer L1 Miss Rate",
+      "pair_variant_over_baseline_ratios": [
+        0.9964967282487732,
+        0.9994885299523348
+      ],
+      "relative_change_percent": -0.2007370899445915,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 58.1518659455,
+        "capture-02-variant": 74.026586876,
+        "capture-03-variant": 74.087992987,
+        "capture-04-baseline": 58.234727871
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 33,
+      "description": "Measures the buffer reads serviced by L1 as a percentage of total L1 read accesses",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.272608866398655,
+      "name": "Buffer L1 Read Accesses",
+      "pair_variant_over_baseline_ratios": [
+        1.2729873009643027,
+        1.2722304318330075
+      ],
+      "relative_change_percent": 27.2608866398655,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 52.5708895525,
+        "capture-02-variant": 55.413140644,
+        "capture-03-variant": 55.771342737,
+        "capture-04-baseline": 53.862273164
+      },
+      "classification": "below_material_threshold",
+      "counter_id": 69,
+      "description": "L1 read bandwidth that is used by buffers in GiB/s",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.0447543260092536,
+      "name": "Buffer L1 Read Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        1.0540651131394987,
+        1.0354435388790082
+      ],
+      "relative_change_percent": 4.475432600925355,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 19.010433617,
+        "capture-02-variant": 24.212667096,
+        "capture-03-variant": 24.198895701,
+        "capture-04-baseline": 19.031579223
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 40,
+      "description": "Measures the buffer writes serviced by L1 as a percentage of total L1 write accesses",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.2725821215888269,
+      "name": "Buffer L1 Write Accesses",
+      "pair_variant_over_baseline_ratios": [
+        1.273651489692898,
+        1.271512753484756
+      ],
+      "relative_change_percent": 27.25821215888269,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 17.274152202,
+        "capture-02-variant": 17.821368737,
+        "capture-03-variant": 18.019356327,
+        "capture-04-baseline": 17.633261883
+      },
+      "classification": "below_material_threshold",
+      "counter_id": 70,
+      "description": "L1 write bandwidth that is used by buffers in GiB/s",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.0267870739191864,
+      "name": "Buffer L1 Write Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        1.031678343955812,
+        1.0218958038825607
+      ],
+      "relative_change_percent": 2.6787073919186444,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 33.3886920675,
+        "capture-02-variant": 29.138550379,
+        "capture-03-variant": 29.057757962,
+        "capture-04-baseline": 32.479630026
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 54,
+      "description": "The average number of vertex simdgroups running concurrently per shader core.",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.8836763742288747,
+      "name": "Compute SIMD Groups Inflight",
+      "pair_variant_over_baseline_ratios": [
+        0.8727071524722282,
+        0.8946455959855212
+      ],
+      "relative_change_percent": -11.63236257711253,
+      "type": "Value",
+      "unit": null
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 2.9745961705,
+        "capture-02-variant": 2.544428434,
+        "capture-03-variant": 2.526741251,
+        "capture-04-baseline": 2.775362762
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 11,
+      "description": "The rate at which compute shader threads are launched into the shader cores or stalled launching by the shader core, normalized to the peak launch rate",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.8829022730476532,
+      "name": "Compute Shader Launch Limiter",
+      "pair_variant_over_baseline_ratios": [
+        0.8553861728304137,
+        0.9104183732648928
+      ],
+      "relative_change_percent": -11.709772695234676,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 2.484965066,
+        "capture-02-variant": 2.500228567,
+        "capture-03-variant": 2.505646096,
+        "capture-04-baseline": 2.449454723
+      },
+      "classification": "below_material_threshold",
+      "counter_id": 50,
+      "description": "The rate at which compute shader threads are launched into the shader cores, normalized to the peak launch rate",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.0145413501056395,
+      "name": "Compute Shader Launch Utilization",
+      "pair_variant_over_baseline_ratios": [
+        1.0061423402722396,
+        1.0229403599390394
+      ],
+      "relative_change_percent": 1.4541350105639506,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 14.211451273,
+        "capture-02-variant": 11.3037737,
+        "capture-03-variant": 11.195715896,
+        "capture-04-baseline": 14.175009248
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 19,
+      "description": "Measures the time during which Control Flow work is attempted to execute as a percentage of peak performance",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.7926098408024991,
+      "name": "Control Flow Limiter",
+      "pair_variant_over_baseline_ratios": [
+        0.7953989696658056,
+        0.7898207119391926
+      ],
+      "relative_change_percent": -20.73901591975009,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 8.363893824,
+        "capture-02-variant": 7.188988095,
+        "capture-03-variant": 7.217573572,
+        "capture-04-baseline": 8.348032184
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 20,
+      "description": "Measures the time during which Control Flow work is executed as a percentage of peak performance",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.8620551436793757,
+      "name": "Control Flow Utilization",
+      "pair_variant_over_baseline_ratios": [
+        0.8595264653373964,
+        0.8645838220213552
+      ],
+      "relative_change_percent": -13.794485632062425,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 15,
+      "description": "Measures the time during which F16 work is attempted to execute as a percentage of peak performance. A value of 100% indicates F16 execution pipeline has reached full capacity and cannot process more F16 instructions in parallel",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "F16 Limiter",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 16,
+      "description": "Measures the time during which F16 work is executed as a percentage of peak F16 performance",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "F16 Utilization",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 7.161513488500001,
+        "capture-02-variant": 9.248901333,
+        "capture-03-variant": 9.242494471,
+        "capture-04-baseline": 7.161010465
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 13,
+      "description": "Measures the time during which F32 work is attempted to execute as a percentage of peak performance. A value of 100% indicates F32 execution pipeline has reached full capacity and cannot process more F32 instructions in parallel",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.2910710194535189,
+      "name": "F32 Limiter",
+      "pair_variant_over_baseline_ratios": [
+        1.2914730032767427,
+        1.290669035630295
+      ],
+      "relative_change_percent": 29.107101945351886,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 4.2669062395,
+        "capture-02-variant": 5.734375954,
+        "capture-03-variant": 5.681852869,
+        "capture-04-baseline": 4.222371016
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 14,
+      "description": "Measures the time during which F32 work is executed as a percentage of peak F32 performance",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.3447867384511163,
+      "name": "F32 Utilization",
+      "pair_variant_over_baseline_ratios": [
+        1.3439189033298184,
+        1.345654573572414
+      ],
+      "relative_change_percent": 34.47867384511163,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 2,
+      "description": "Percentage of shader core resources that are occupied by the fragment shader",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "FS Occupancy",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 53,
+      "description": "The average number of fragment simdgroups running concurrently per shader core.",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "Fragment SIMD Groups Inflight",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Value",
+      "unit": null
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 10,
+      "description": "The rate at which fragment shader threads are launched into the shader cores or stalled launching by the shader core, normalized to the peak launch rate",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "Fragment Shader Launch Limiter",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 49,
+      "description": "The rate at which fragment shader threads are launched into the shader cores, normalized to the peak launch rate",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "Fragment Shader Launch Utilization",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 34.5948894535,
+        "capture-02-variant": 36.711536085,
+        "capture-03-variant": 37.0969058005,
+        "capture-04-baseline": 43.348436055
+      },
+      "classification": "directionally_inconsistent",
+      "counter_id": 77,
+      "description": "Measures how much memory, in gigabytes per second, are read or written by the GPU to a memory external to the GPU (potentially device memory).",
+      "direction": null,
+      "median_variant_over_baseline_ratio": 0.9584839875671618,
+      "name": "GPU Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        1.061183795206082,
+        0.8557841799282416
+      ],
+      "relative_change_percent": -4.15160124328382,
+      "type": "Value",
+      "unit": null
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 17.340444116,
+        "capture-02-variant": 19.016839407,
+        "capture-03-variant": 19.3848038175,
+        "capture-04-baseline": 19.7591853045
+      },
+      "classification": "directionally_inconsistent",
+      "counter_id": 78,
+      "description": "Measures how much memory, in gigabytes per second, are read by the GPU from a memory external to the GPU (potentially device memory)",
+      "direction": null,
+      "median_variant_over_baseline_ratio": 1.038864120168426,
+      "name": "GPU Read Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        1.0966754530498553,
+        0.9810527872869972
+      ],
+      "relative_change_percent": 3.886412016842611,
+      "type": "Value",
+      "unit": null
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 17.240780291,
+        "capture-02-variant": 17.306804656,
+        "capture-03-variant": 17.3109769815,
+        "capture-04-baseline": 17.367077236
+      },
+      "classification": "directionally_inconsistent",
+      "counter_id": 79,
+      "description": "Measures how much memory, in gigabytes per second, are written by the GPU to a memory external to the GPU (potentially device memory).",
+      "direction": null,
+      "median_variant_over_baseline_ratio": 1.0002996408188594,
+      "name": "GPU Write Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        1.0038295462203917,
+        0.9967697354173269
+      ],
+      "relative_change_percent": 0.02996408188593591,
+      "type": "Value",
+      "unit": null
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 35,
+      "description": "Measures imageblock read accesses as a percentage of total L1 read accesses",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "ImageBlock L1 Read Accesses",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 42,
+      "description": "Measures imageblock write accesses as a percentage of total L1 write accesses",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "ImageBlock L1 Write Accesses",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 59,
+      "description": "Imageblock L1 read bandwidth in GiB/s",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "Imageblock L1 Read Bandwidth",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 60,
+      "description": "Imageblock L1 write bandwidth in GiB/s",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "Imageblock L1 Write Bandwidth",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 37.0370732065,
+        "capture-02-variant": 35.41072553,
+        "capture-03-variant": 35.152447867,
+        "capture-04-baseline": 36.710247325
+      },
+      "classification": "below_material_threshold",
+      "counter_id": 7,
+      "description": "Measures the time during which shader instructions are attempted to be processed as a percentage of peak shader execution pipeline performance. If the instruction throughput limiter is low, you can push more ALU and non-ALU instructions from the sub-blocks that are not fully limited. As an example if the instruction throughput limiter is less than 100%, but 100% F16 limited but less than 100% limited by F32, Integer and Complex or Integer and Conditional, then there is an opportunity to push ALU instructions from these ALU sub-blocks to execute in parallel",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.9568268262727613,
+      "name": "Instruction Throughput Limiter",
+      "pair_variant_over_baseline_ratios": [
+        0.9560886556172432,
+        0.9575649969282793
+      ],
+      "relative_change_percent": -4.317317372723872,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 11.0872756005,
+        "capture-02-variant": 11.727611527,
+        "capture-03-variant": 11.664465604,
+        "capture-04-baseline": 10.971773583
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 8,
+      "description": "Measures the time during which shader instructions are processed as a percentage of peak shader execution pipeline performance",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.060444066733768,
+      "name": "Instruction Throughput Utilization",
+      "pair_variant_over_baseline_ratios": [
+        1.05775412730528,
+        1.063134006162256
+      ],
+      "relative_change_percent": 6.044406673376801,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.4447997905,
+        "capture-02-variant": 0.72401368,
+        "capture-03-variant": 0.720122379,
+        "capture-04-baseline": 0.441212511
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 21,
+      "description": "Measures the time during which Integer and Complex work is attemped to execute as a percentage of peak Integer and Complex performance. A value of 100% indicates Integer and Complex execution pipeline has reached full capacity and cannot process more Integer and Complex instructions in parallel",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.629936711860109,
+      "name": "Integer and Complex Limiter",
+      "pair_variant_over_baseline_ratios": [
+        1.6277293637799048,
+        1.632144059940313
+      ],
+      "relative_change_percent": 62.99367118601089,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.4294322825,
+        "capture-02-variant": 0.614542771,
+        "capture-03-variant": 0.612715004,
+        "capture-04-baseline": 0.425256288
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 22,
+      "description": "Measures the time during which Integer and Complex work is executed as a percentage of peak Integer and Complex performance",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.4359360655237077,
+      "name": "Integer and Complex Utilization",
+      "pair_variant_over_baseline_ratios": [
+        1.4310586233115812,
+        1.440813507735834
+      ],
+      "relative_change_percent": 43.593606552370765,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 32.5402503215,
+        "capture-02-variant": 36.010029309,
+        "capture-03-variant": 35.729324861,
+        "capture-04-baseline": 32.441553315
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 17,
+      "description": "Measures the time during which Integer and Conditional work is executed as a percentage of peak Integer and Conditional performance. A value of 100% indicates Integer and Conditional execution pipeline has reached full capacity and cannot process more Integer and Conditional instructions in parallel",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.1039874134493135,
+      "name": "Integer and Conditional Limiter",
+      "pair_variant_over_baseline_ratios": [
+        1.1066303717155934,
+        1.1013444551830334
+      ],
+      "relative_change_percent": 10.39874134493135,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 24.173197813,
+        "capture-02-variant": 26.587797619,
+        "capture-03-variant": 26.497970147,
+        "capture-04-baseline": 23.924414696
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 18,
+      "description": "Measures the time during which Integer and Conditional work is executed as a percentage of peak Integer and Conditional performance",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.1037288686372553,
+      "name": "Integer and Conditional Utilization",
+      "pair_variant_over_baseline_ratios": [
+        1.0998874797070275,
+        1.1075702575674833
+      ],
+      "relative_change_percent": 10.372886863725528,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 34.779887570499994,
+        "capture-02-variant": 30.352656645,
+        "capture-03-variant": 30.268497877,
+        "capture-04-baseline": 33.832947944
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 3,
+      "description": "Percentage of shader core resources that are occupied by the compute kernel",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.8836763742249806,
+      "name": "Kernel Occupancy",
+      "pair_variant_over_baseline_ratios": [
+        0.8727071524735136,
+        0.8946455959764475
+      ],
+      "relative_change_percent": -11.632362577501942,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 19.539498117,
+        "capture-02-variant": 19.46454377,
+        "capture-03-variant": 19.148307772,
+        "capture-04-baseline": 18.880469962
+      },
+      "classification": "directionally_inconsistent",
+      "counter_id": 26,
+      "description": "L1 Buffer Residency",
+      "direction": null,
+      "median_variant_over_baseline_ratio": 1.0051749644861885,
+      "name": "L1 Buffer Residency",
+      "pair_variant_over_baseline_ratios": [
+        0.9961639574081593,
+        1.0141859715642179
+      ],
+      "relative_change_percent": 0.5174964486188482,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 2.8688088755,
+        "capture-02-variant": 2.669397249,
+        "capture-03-variant": 2.654094564,
+        "capture-04-baseline": 2.841209876
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 23,
+      "description": "Measures the time during which shader core L1 cache is attempting to service read and write requests as a percentage of cache\u2019s peak performance",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.9323160657099161,
+      "name": "L1 Cache Limiter",
+      "pair_variant_over_baseline_ratios": [
+        0.9304897484795864,
+        0.9341423829402458
+      ],
+      "relative_change_percent": -6.76839342900839,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 2.8688088755,
+        "capture-02-variant": 2.669397249,
+        "capture-03-variant": 2.654094564,
+        "capture-04-baseline": 2.841209876
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 24,
+      "description": "Measures the time during which GPU\u2019s L1 cache serviced read and write requests as a percentage of cache\u2019s peak performance",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.9323160657099161,
+      "name": "L1 Cache Utilization",
+      "pair_variant_over_baseline_ratios": [
+        0.9304897484795864,
+        0.9341423829402458
+      ],
+      "relative_change_percent": -6.76839342900839,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 6,
+      "description": "A measure of the number of L1 cache lines evicted by shader core private memory accesses . The more this number approaches 100% the more that the Occupancy Manager will attempt to reduce simdgroup occupancy.",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "L1 Eviction Rate",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 27,
+      "description": "L1 Imageblock Residency",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "L1 Imageblock Residency",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.057798284,
+        "capture-02-variant": 0.057658352,
+        "capture-03-variant": 0.057108569,
+        "capture-04-baseline": 0.057173273
+      },
+      "classification": "below_material_threshold",
+      "counter_id": 32,
+      "description": "L1 Other Residency",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.9982236208262125,
+      "name": "L1 Other Residency",
+      "pair_variant_over_baseline_ratios": [
+        0.9975789592646038,
+        0.9988682823878213
+      ],
+      "relative_change_percent": -0.1776379173787479,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 28,
+      "description": "L1 RT Scratch Residency",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "L1 RT Scratch Residency",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 64.174694503,
+        "capture-02-variant": 57.679749374,
+        "capture-03-variant": 58.099399324,
+        "capture-04-baseline": 66.68764879
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 55,
+      "description": "L1 read bandwidth in GiB/s",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.8850047640264261,
+      "name": "L1 Read Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        0.8987927378649792,
+        0.8712167901878731
+      ],
+      "relative_change_percent": -11.499523597357387,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0121170265,
+        "capture-02-variant": 0.009534458,
+        "capture-03-variant": 0.009133744,
+        "capture-04-baseline": 0.010348602
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 29,
+      "description": "L1 Register Residency",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.8347355294844456,
+      "name": "L1 Register Residency",
+      "pair_variant_over_baseline_ratios": [
+        0.7868645001312823,
+        0.8826065588376091
+      ],
+      "relative_change_percent": -16.526447051555436,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 30,
+      "description": "L1 Stack Residency",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "L1 Stack Residency",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 1.0196760005,
+        "capture-02-variant": 0.087959571,
+        "capture-03-variant": 0.087946855,
+        "capture-04-baseline": 1.005778684
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 31,
+      "description": "L1 Threadgroup Residency",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.08685191615675039,
+      "name": "L1 Threadgroup Residency",
+      "pair_variant_over_baseline_ratios": [
+        0.08626227444489118,
+        0.08744155786860959
+      ],
+      "relative_change_percent": -91.31480838432496,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 20.7453896835,
+        "capture-02-variant": 19.763484159,
+        "capture-03-variant": 19.332618386,
+        "capture-04-baseline": 20.02383121
+      },
+      "classification": "below_material_threshold",
+      "counter_id": 25,
+      "description": "L1 Total Residency",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.9590746132343182,
+      "name": "L1 Total Residency",
+      "pair_variant_over_baseline_ratios": [
+        0.952668735585094,
+        0.9654804908835425
+      ],
+      "relative_change_percent": -4.09253867656818,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 27.939523485000002,
+        "capture-02-variant": 19.228812525,
+        "capture-03-variant": 19.54981733,
+        "capture-04-baseline": 28.86012294
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 56,
+      "description": "L1 write bandwidth in GiB/s",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.6828143787065364,
+      "name": "L1 Write Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        0.6882297951618053,
+        0.6773989622512675
+      ],
+      "relative_change_percent": -31.71856212934636,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 36.5438299455,
+        "capture-02-variant": 39.006471633,
+        "capture-03-variant": 39.5701919335,
+        "capture-04-baseline": 41.816987202
+      },
+      "classification": "directionally_inconsistent",
+      "counter_id": 84,
+      "description": "Measures how much memory, in gigabytes per second, are read or written by the GPU's last level cache",
+      "direction": null,
+      "median_variant_over_baseline_ratio": 1.0068297328547329,
+      "name": "Last Level Cache Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        1.067388713530374,
+        0.9462707521790918
+      ],
+      "relative_change_percent": 0.6829732854732873,
+      "type": "Value",
+      "unit": null
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 22.2360609375,
+        "capture-02-variant": 22.551966125,
+        "capture-03-variant": 22.421125488,
+        "capture-04-baseline": 19.955707067
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 82,
+      "description": "Measures the time during which GPU\u2019s last level cache is attempting to service read and write requests as a percentage of cache\u2019s peak performance",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.0688757073681652,
+      "name": "Last Level Cache Limiter",
+      "pair_variant_over_baseline_ratios": [
+        1.014206886210104,
+        1.1235445285262267
+      ],
+      "relative_change_percent": 6.887570736816517,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 11.2455953315,
+        "capture-02-variant": 11.882994788,
+        "capture-03-variant": 11.664803682999999,
+        "capture-04-baseline": 11.201587113
+      },
+      "classification": "below_material_threshold",
+      "counter_id": 83,
+      "description": "Measures the time during which GPU\u2019s last level cache serviced read and write requests as a percentage of cache\u2019s peak performance",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.0490163417499883,
+      "name": "Last Level Cache Utilization",
+      "pair_variant_over_baseline_ratios": [
+        1.0566799211345068,
+        1.04135276236547
+      ],
+      "relative_change_percent": 4.901634174998826,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 12.582538789000001,
+        "capture-02-variant": 13.027804098,
+        "capture-03-variant": 12.6180711825,
+        "capture-04-baseline": 11.9499881555
+      },
+      "classification": "below_material_threshold",
+      "counter_id": 80,
+      "description": "Measures the time during which GPU is attempting to execute read and write requests through MMU due to last level cache misses as a percentage of peak MMU performance",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.0456470709504186,
+      "name": "MMU Limiter",
+      "pair_variant_over_baseline_ratios": [
+        1.0353875570317543,
+        1.0559065848690832
+      ],
+      "relative_change_percent": 4.5647070950418644,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 10.698211536,
+        "capture-02-variant": 11.202327371,
+        "capture-03-variant": 10.897896186,
+        "capture-04-baseline": 10.6813706615
+      },
+      "classification": "below_material_threshold",
+      "counter_id": 81,
+      "description": "Measures the time during which GPU serviced read and write requests through MMU due to last level cache misses as a percentage of peak MMU performance",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.0336964147650196,
+      "name": "MMU Utilization",
+      "pair_variant_over_baseline_ratios": [
+        1.0471215056183574,
+        1.0202713239116816
+      ],
+      "relative_change_percent": 3.369641476501961,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 77.934269434,
+        "capture-02-variant": 77.33223423,
+        "capture-03-variant": 77.355782829,
+        "capture-04-baseline": 77.826078837
+      },
+      "classification": "below_material_threshold",
+      "counter_id": 5,
+      "description": "The occupancy level to which the occupancy throttler is attempting to achieve.",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.9931160899700604,
+      "name": "Occupancy Manager Target",
+      "pair_variant_over_baseline_ratios": [
+        0.9922750901705719,
+        0.993957089769549
+      ],
+      "relative_change_percent": -0.6883910029939599,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.081785039,
+        "capture-02-variant": 0.101392242,
+        "capture-03-variant": 0.101371421,
+        "capture-04-baseline": 0.081121337
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 39,
+      "description": "Measures L1 read accesses for other shader core sub-blocks  as a percentage of total L1 cache\u2019s read accesses",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.244683902423021,
+      "name": "Other L1 Read Accesses",
+      "pair_variant_over_baseline_ratios": [
+        1.239740706121079,
+        1.2496270987249631
+      ],
+      "relative_change_percent": 24.468390242302096,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.085713894,
+        "capture-02-variant": 0.104875229,
+        "capture-03-variant": 0.10475047,
+        "capture-04-baseline": 0.085133735
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 46,
+      "description": "Measures L1 write accesses for other shader core sub-blocks  as a percentage of total L1 cache\u2019s write accesses",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.2269862557785487,
+      "name": "Other L1 Write Accesses",
+      "pair_variant_over_baseline_ratios": [
+        1.2235499299565133,
+        1.230422581600584
+      ],
+      "relative_change_percent": 22.69862557785487,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 38,
+      "description": "Measures L1 ray tracing scratch read accesses as a percentage of total L1 cache\u2019s read accesses",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "RT Scratch L1 Read Accesses",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 61,
+      "description": "L1 read bandwidth that is used by ray tracing scratch in GiB/s",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "RT Scratch L1 Read Bandwidth",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 44,
+      "description": "Measures L1 ray tracing scratch write accesses as a percentage of total L1 cache\u2019s write accesses",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "RT Scratch L1 Write Accesses",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 62,
+      "description": "L1 write bandwidth that is used by ray tracing scratch in GiB/s",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "RT Scratch L1 Write Bandwidth",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 0,
+      "description": "Percentage of GPU Cores where raytracing unit is active.",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "RT Unit Active",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.12633629600000001,
+        "capture-02-variant": 0.101521021,
+        "capture-03-variant": 0.094110166,
+        "capture-04-baseline": 0.107533305
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 37,
+      "description": "Measures L1 rgeneral purpose register read accesses as a percentage of total L1 cache\u2019s read accesses",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.8393749457590411,
+      "name": "Register L1 Read Accesses",
+      "pair_variant_over_baseline_ratios": [
+        0.8035776274460349,
+        0.8751722640720473
+      ],
+      "relative_change_percent": -16.062505424095885,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.124924609,
+        "capture-02-variant": 0.079412794,
+        "capture-03-variant": 0.076415422,
+        "capture-04-baseline": 0.150733397
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 65,
+      "description": "L1 read bandwidth that is used by general purpose registers in GiB/s",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.5713216123059721,
+      "name": "Register L1 Read Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        0.6356857518761575,
+        0.5069574727357866
+      ],
+      "relative_change_percent": -42.86783876940279,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.1251226975,
+        "capture-02-variant": 0.102455179,
+        "capture-03-variant": 0.092528601,
+        "capture-04-baseline": 0.104728518
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 45,
+      "description": "Measures L1 general purpose register write accesses as a percentage of total L1 cache\u2019s write accesses",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.8511733997206073,
+      "name": "Register L1 Write Accesses",
+      "pair_variant_over_baseline_ratios": [
+        0.8188376773127034,
+        0.8835091221285113
+      ],
+      "relative_change_percent": -14.882660027939265,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.121311405,
+        "capture-02-variant": 0.08079656,
+        "capture-03-variant": 0.075416025,
+        "capture-04-baseline": 0.153124766
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 66,
+      "description": "L1 wrote bandwidth that is used by general purpose registers in GiB/s",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.5792698264150555,
+      "name": "Register L1 Write Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        0.6660260838624366,
+        0.4925135689676744
+      ],
+      "relative_change_percent": -42.07301735849445,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.006694159999999999,
+        "capture-02-variant": 0.008054423,
+        "capture-03-variant": 0.008126084,
+        "capture-04-baseline": 0.006744256
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 36,
+      "description": "Measures stack L1 read accesses  as a percentage of total L1 cache\u2019s read accesses",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.204045529981403,
+      "name": "Stack L1 Read Accesses",
+      "pair_variant_over_baseline_ratios": [
+        1.2032014472316168,
+        1.2048896127311894
+      ],
+      "relative_change_percent": 20.404552998140304,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.006150134,
+        "capture-02-variant": 0.006150071,
+        "capture-03-variant": 0.006150134,
+        "capture-04-baseline": 0.006171275
+      },
+      "classification": "below_material_threshold",
+      "counter_id": 67,
+      "description": "L1 read bandwidth that is used by stack in GiB/s",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.9982820230372473,
+      "name": "Stack L1 Read Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        0.9999897563207566,
+        0.996574289753738
+      ],
+      "relative_change_percent": -0.17179769627526653,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.006695703,
+        "capture-02-variant": 0.008054423,
+        "capture-03-variant": 0.008124508,
+        "capture-04-baseline": 0.006754451
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 43,
+      "description": "Measures stack L1 write accesses  as a percentage of total L1 cache\u2019s write accesses",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.2028809143310593,
+      "name": "Stack L1 Write Accesses",
+      "pair_variant_over_baseline_ratios": [
+        1.2029241739067578,
+        1.2028376547553608
+      ],
+      "relative_change_percent": 20.288091433105926,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.006150134,
+        "capture-02-variant": 0.006150071,
+        "capture-03-variant": 0.006150134,
+        "capture-04-baseline": 0.006171275
+      },
+      "classification": "below_material_threshold",
+      "counter_id": 68,
+      "description": "L1 write bandwidth that is used by stack in GiB/s",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.9982820230372473,
+      "name": "Stack L1 Write Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        0.9999897563207566,
+        0.996574289753738
+      ],
+      "relative_change_percent": -0.17179769627526653,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 73,
+      "description": "Measures the time during which texture cache reads are attempted to execute as a percentage of peak texture read cache performance",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "Texture Read Cache Limiter",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 74,
+      "description": "Measures the time during which texture cache reads is executed as a percentage of peak texture read cache performance",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "Texture Read Cache Utilization",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 71,
+      "description": "Measures the time during which texture reads / samples are attempted to execute as a percentage of peak texture read / sampling performance",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "Texture Read Limiter",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 72,
+      "description": "Measures the time during which texture reads / samples are executed as a percentage of peak texture read / sample performance",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "Texture Read Utilization",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.009003781,
+        "capture-02-variant": 0.0090517195,
+        "capture-03-variant": 0.009251202,
+        "capture-04-baseline": 0.009007656
+      },
+      "classification": "below_material_threshold",
+      "counter_id": 75,
+      "description": "Measures the time during which texture write are attempted to execute as a percentage of peak texture write performance",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.0161809649213942,
+      "name": "Texture Write Limiter",
+      "pair_variant_over_baseline_ratios": [
+        1.0053242632178636,
+        1.0270376666249246
+      ],
+      "relative_change_percent": 1.6180964921394203,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.009003781,
+        "capture-02-variant": 0.0090517195,
+        "capture-03-variant": 0.009251202,
+        "capture-04-baseline": 0.009007656
+      },
+      "classification": "below_material_threshold",
+      "counter_id": 76,
+      "description": "Measures the time during which texture writes are executed as a percentage of peak texture writes performance",
+      "direction": "variant_higher",
+      "median_variant_over_baseline_ratio": 1.0161809649213942,
+      "name": "Texture Write Utilization",
+      "pair_variant_over_baseline_ratios": [
+        1.0053242632178636,
+        1.0270376666249246
+      ],
+      "relative_change_percent": 1.6180964921394203,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 11.214451558,
+        "capture-02-variant": 0.645126595,
+        "capture-03-variant": 0.647309834,
+        "capture-04-baseline": 11.237406096
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 34,
+      "description": "Measures threadgroup L1 reads accesses as a percentage of peak L1 total read accesses",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.05756474888421548,
+      "name": "ThreadGroup L1 Read Accesses",
+      "pair_variant_over_baseline_ratios": [
+        0.05752636155798355,
+        0.057603136210447395
+      ],
+      "relative_change_percent": -94.24352511157845,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 10.960313001500001,
+        "capture-02-variant": 0.538016317,
+        "capture-03-variant": 0.539696454,
+        "capture-04-baseline": 10.983066421
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 41,
+      "description": "Measures threadgroup write accesses as a percentage of peak L1 write accesses",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.04911331872993063,
+      "name": "ThreadGroup L1 Write Accesses",
+      "pair_variant_over_baseline_ratios": [
+        0.049087678146269034,
+        0.049138959313592225
+      ],
+      "relative_change_percent": -95.08866812700694,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 10.207801265499999,
+        "capture-02-variant": 0.479474923,
+        "capture-03-variant": 0.490165729,
+        "capture-04-baseline": 10.39134753
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 57,
+      "description": "Threadgroup Memory L1 read bandwidth in GiB/s",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.04707099237609097,
+      "name": "Threadgroup Memory L1 Read Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        0.04697142024311485,
+        0.047170564509067085
+      ],
+      "relative_change_percent": -95.2929007623909,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 9.990201814999999,
+        "capture-02-variant": 0.399447122,
+        "capture-03-variant": 0.408368939,
+        "capture-04-baseline": 10.155219111
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 58,
+      "description": "Threadgroup Memory L1 write bandwidth in GiB/s",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.040098302428041306,
+      "name": "Threadgroup Memory L1 Write Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        0.03998388915429533,
+        0.040212715701787284
+      ],
+      "relative_change_percent": -95.99016975719586,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 35.468619608,
+        "capture-02-variant": 31.237246306,
+        "capture-03-variant": 30.951159951,
+        "capture-04-baseline": 34.549735506
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 4,
+      "description": "Sum of vertex, fragment and compute occupancy",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.8882722729141179,
+      "name": "Total Occupancy",
+      "pair_variant_over_baseline_ratios": [
+        0.8807009308858018,
+        0.895843614942434
+      ],
+      "relative_change_percent": -11.172772708588209,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 34.049874824,
+        "capture-02-variant": 29.987756454,
+        "capture-03-variant": 29.713113553,
+        "capture-04-baseline": 33.167746086
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 51,
+      "description": "The average number of all simdgroups including vertex, fragment and compute running concurrently per shader core.",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.8882722729108654,
+      "name": "Total SIMD Groups Inflight",
+      "pair_variant_over_baseline_ratios": [
+        0.8807009308845734,
+        0.8958436149371576
+      ],
+      "relative_change_percent": -11.17277270891346,
+      "type": "Value",
+      "unit": null
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.073801615,
+        "capture-02-variant": 0.074262109,
+        "capture-03-variant": 0.074570382,
+        "capture-04-baseline": 0.091489155
+      },
+      "classification": "directionally_inconsistent",
+      "counter_id": 63,
+      "description": "L1 read bandwidth that is used by unclassified shader core sub-blocks in GiB/s",
+      "direction": null,
+      "median_variant_over_baseline_ratio": 0.910656539129852,
+      "name": "Unclassified L1 Read Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        1.006239619553041,
+        0.8150734587066631
+      ],
+      "relative_change_percent": -8.934346087014799,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.076876682,
+        "capture-02-variant": 0.076875889,
+        "capture-03-variant": 0.076876682,
+        "capture-04-baseline": 0.095269061
+      },
+      "classification": "repeatable_difference",
+      "counter_id": 64,
+      "description": "L1 write bandwidth that is used by unclassified shader core sub-blocks in GiB/s",
+      "direction": "variant_lower",
+      "median_variant_over_baseline_ratio": 0.9034662379979657,
+      "name": "Unclassified L1 Write Bandwidth",
+      "pair_variant_over_baseline_ratios": [
+        0.9999896847785392,
+        0.8069427912173922
+      ],
+      "relative_change_percent": -9.653376200203434,
+      "type": "Value",
+      "unit": "GiB/s"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 1,
+      "description": "Percentage of shader core resources that are occupied by the vertex shader",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "VS Occupancy",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 52,
+      "description": "The average number of vertex simdgroups running concurrently per shader core.",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "Vertex SIMD Groups Inflight",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Value",
+      "unit": null
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 9,
+      "description": "The rate at which vertex shader threads are launched into the shader cores or stalled launching by the shader core, normalized to the peak launch rate",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "Vertex Shader Launch Limiter",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    },
+    {
+      "capture_medians": {
+        "capture-01-baseline": 0.0,
+        "capture-02-variant": 0.0,
+        "capture-03-variant": 0.0,
+        "capture-04-baseline": 0.0
+      },
+      "classification": "ineligible_nonpositive_median",
+      "counter_id": 48,
+      "description": "The rate at which vertex shader threads are launched into the shader cores, normalized to the peak launch rate",
+      "direction": null,
+      "median_variant_over_baseline_ratio": null,
+      "name": "Vertex Shader Launch Utilization",
+      "pair_variant_over_baseline_ratios": null,
+      "relative_change_percent": null,
+      "type": "Percentage",
+      "unit": "percent"
+    }
+  ],
+  "counter_summary": {
+    "compared_count": 85,
+    "eligible_positive_median_count": 58,
+    "repeatable_difference_count": 37,
+    "repeatable_difference_names": [
+      "ALU Utilization",
+      "Buffer L1 Read Accesses",
+      "Buffer L1 Write Accesses",
+      "Compute SIMD Groups Inflight",
+      "Compute Shader Launch Limiter",
+      "Control Flow Limiter",
+      "Control Flow Utilization",
+      "F32 Limiter",
+      "F32 Utilization",
+      "Instruction Throughput Utilization",
+      "Integer and Complex Limiter",
+      "Integer and Complex Utilization",
+      "Integer and Conditional Limiter",
+      "Integer and Conditional Utilization",
+      "Kernel Occupancy",
+      "L1 Cache Limiter",
+      "L1 Cache Utilization",
+      "L1 Read Bandwidth",
+      "L1 Register Residency",
+      "L1 Threadgroup Residency",
+      "L1 Write Bandwidth",
+      "Last Level Cache Limiter",
+      "Other L1 Read Accesses",
+      "Other L1 Write Accesses",
+      "Register L1 Read Accesses",
+      "Register L1 Read Bandwidth",
+      "Register L1 Write Accesses",
+      "Register L1 Write Bandwidth",
+      "Stack L1 Read Accesses",
+      "Stack L1 Write Accesses",
+      "ThreadGroup L1 Read Accesses",
+      "ThreadGroup L1 Write Accesses",
+      "Threadgroup Memory L1 Read Bandwidth",
+      "Threadgroup Memory L1 Write Bandwidth",
+      "Total Occupancy",
+      "Total SIMD Groups Inflight",
+      "Unclassified L1 Write Bandwidth"
+    ]
+  },
+  "inputs": [
+    {
+      "bytes": 44087,
+      "capture_id": "capture-01-baseline",
+      "kind": "scrubbed_trace_summary_json",
+      "path_note": "External local artifact; path intentionally omitted.",
+      "sha256": "c3a92b5348c0ed1fca0634d8a0241b5a3da3661f3bbbbcb9b6674db8d6567f7f"
+    },
+    {
+      "bytes": 43999,
+      "capture_id": "capture-02-variant",
+      "kind": "scrubbed_trace_summary_json",
+      "path_note": "External local artifact; path intentionally omitted.",
+      "sha256": "98505ed6daf9c21aee20450bd06011d8bcd2ba9209878a008ecac2b7c286bade"
+    },
+    {
+      "bytes": 44015,
+      "capture_id": "capture-03-variant",
+      "kind": "scrubbed_trace_summary_json",
+      "path_note": "External local artifact; path intentionally omitted.",
+      "sha256": "2f40d5373486400d4e22b4e63a2331d0e6be17dac1c5acf208aec194f463c9f5"
+    },
+    {
+      "bytes": 43813,
+      "capture_id": "capture-04-baseline",
+      "kind": "scrubbed_trace_summary_json",
+      "path_note": "External local artifact; path intentionally omitted.",
+      "sha256": "4ad2fab90dca67548972613c2d0f04cc5cdbf9a151e3c3f9db50d57d1387d9bf"
+    }
+  ],
+  "protocol": {
+    "capture_order": [
+      "baseline",
+      "variant",
+      "variant",
+      "baseline"
+    ],
+    "material_relative_change_threshold": 0.05,
+    "minimum_counter_sample_span_fraction": 0.8,
+    "minimum_counter_timestamps": 10,
+    "pairs": [
+      "capture-02-variant / capture-01-baseline",
+      "capture-03-variant / capture-04-baseline"
+    ],
+    "profile_dispatches": 500,
+    "repeatable_rule": "Positive medians in all captures, both pair ratios in the same direction, and median absolute relative change at or above the material threshold.",
+    "warmup_dispatches": 100
+  },
+  "schema_version": 1
+}

@@ -1,6 +1,6 @@
 # EXP-0003: Apple GPU RMSNorm limiter-counter comparison
 
-Status: **planned**
+Status: **complete**
 
 Evidence level: **operation**
 
@@ -95,10 +95,61 @@ The primary counter families are:
 Instrumented command durations remain diagnostic and are not substituted for
 the ordinary EXP-0002 benchmark.
 
-## Completion rule
+## Result
 
-Complete the experiment with either a valid matched comparison or a bounded
-tooling/coverage failure. A mechanism statement must name the observed counter,
-its unit and capture scope, and the consistent paired direction. No direct
-barrier-stall, physical-traffic, energy, or end-to-end inference claim is
-permitted without a corresponding measurement.
+`EXP-0003-RUN-002` completed the frozen baseline, SIMD-group, SIMD-group,
+baseline order from clean commit `0bc8ce9`. Every target exited normally on AC
+power, with no thermal or performance warning before or after its capture. All
+four summaries contain the exact 1/100/500 compute sequence, all 85 named
+counters, no reported target spill event, and valid profile-window coverage:
+
+| Capture | Role | Counter timestamps | Sample span | Target GPU busy |
+| --- | --- | ---: | ---: | ---: |
+| 01 | Baseline | 926 | 99.95% | 98.24% |
+| 02 | SIMD-group | 910 | 99.95% | 98.25% |
+| 03 | SIMD-group | 732 | 99.92% | 97.93% |
+| 04 | Baseline | 578 | 99.73% | 98.08% |
+
+Of the 85 counters, 58 had positive medians in every capture and 37 passed the
+frozen same-direction and 5% materiality rule. Many are correlated or derived,
+so the bounded interpretation uses the prespecified structural signals:
+
+| Named device-wide counter | Profiler unit | Pair 1 V/B | Pair 2 V/B | Median change |
+| --- | --- | ---: | ---: | ---: |
+| Threadgroup Memory L1 Write Bandwidth | GiB/s | 0.0400 | 0.0402 | -95.99% |
+| Threadgroup Memory L1 Read Bandwidth | GiB/s | 0.0470 | 0.0472 | -95.29% |
+| L1 Threadgroup Residency | percent | 0.0863 | 0.0874 | -91.31% |
+| L1 Write Bandwidth | GiB/s | 0.6882 | 0.6774 | -31.72% |
+| F32 Utilization | percent | 1.3439 | 1.3457 | +34.48% |
+| F32 Limiter | percent | 1.2915 | 1.2907 | +29.11% |
+| ALU Utilization | percent | 1.1492 | 1.1530 | +15.11% |
+| Kernel Occupancy | percent | 0.8727 | 0.8946 | -11.63% |
+| Compute Shader Launch Limiter | percent | 0.8554 | 0.9104 | -11.71% |
+
+The roughly 95% reduction in the sampled Threadgroup Memory L1 Read and Write
+Bandwidth counters, whose profiler unit is GiB/s, is consistent with replacing
+128 shared FP32 reduction partials with four. These remain device-wide samples
+inside the enclosing target profile window, not command-buffer-exclusive
+measurements. The lower threadgroup residency and total L1 write bandwidth
+reinforce the bounded mechanism: the SIMD-group kernel puts materially less
+pressure on the threadgroup-memory path. The higher F32 and ALU utilization
+show a repeatable shift in the sampled execution mix, but are not a standalone
+throughput claim.
+
+Global GPU Bandwidth moved up in pair 1 and down in pair 2; Last Level Cache
+Bandwidth was also directionally inconsistent. F16 limiter and utilization
+medians were zero. Therefore this experiment makes no global or unified-memory
+traffic claim. It also does not use the instrumented duration medians, which
+ranged from 18.42 to 48.94 microseconds across captures under the default,
+mostly minimum GPU performance state.
+
+The exact scrubbed capture gates, input hashes, medians, pair ratios, and all 85
+classifications are retained in [`counter-comparison.json`](counter-comparison.json).
+
+## Bounded conclusion
+
+The valid matched comparison supports a repeatable reduction in device-wide
+threadgroup-memory pressure inside the target profile window. It is consistent
+with the SIMD-group reduction structure and refines the EXP-0002 timing result;
+it does not isolate barrier stalls or reopen the production decision. No direct
+physical-traffic, energy, or end-to-end inference claim follows.

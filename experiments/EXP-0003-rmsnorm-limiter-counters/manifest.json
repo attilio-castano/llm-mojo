@@ -4,7 +4,7 @@
   "slug": "rmsnorm-limiter-counters",
   "title": "Apple GPU RMSNorm limiter-counter comparison",
   "created_date": "2026-08-22",
-  "status": "planned",
+  "status": "complete",
   "evidence_level": "operation",
   "question": "Do matched Performance Limiters traces show a repeatable device-counter difference between the shared-tree and SIMD-group RMSNorm implementations at rows=512?",
   "prior_evidence": {
@@ -105,8 +105,117 @@
       "target_exit": "exit(0)"
     }
   },
-  "runs": [],
-  "result": null,
+  "runs": [
+    {
+      "run_id": "EXP-0003-RUN-002",
+      "measurement_commit": "0bc8ce9a17d7455a5f71bf861ddb68538b10539a",
+      "comparison_tool_commit": "f15ce45",
+      "hardware": "Apple M4 Pro",
+      "backend": "Metal",
+      "conditions": "AC Power and no thermal or performance warning before and after every capture.",
+      "binaries": [
+        {
+          "role": "baseline",
+          "sha256": "0a6e80aedbaa80c444d9f985a9ad3ba22e58ac4e0f0e897edbac53a674e8ca78",
+          "provenance_sha256": "6f616616c46ef354b67fc57c4fb0e3cbb06ea0d019446560ee180086114fc2c2"
+        },
+        {
+          "role": "variant",
+          "sha256": "4c7a307a17db2262e354dbaf96220805d4398af1801be0a81a83fa7fa20278ca",
+          "provenance_sha256": "232086c2712dd9d3f9d187d5cdefea6a7992b0bf79522a71a5bde09b11a7f321"
+        }
+      ],
+      "captures": [
+        {
+          "capture_id": "capture-01-baseline",
+          "role": "baseline",
+          "trace_summary_sha256": "c3a92b5348c0ed1fca0634d8a0241b5a3da3661f3bbbbcb9b6674db8d6567f7f",
+          "counter_timestamp_count": 926,
+          "counter_sample_span_fraction": 0.999475768253486,
+          "target_gpu_busy_fraction": 0.982378300237496,
+          "target_spill_event_count": 0
+        },
+        {
+          "capture_id": "capture-02-variant",
+          "role": "variant",
+          "trace_summary_sha256": "98505ed6daf9c21aee20450bd06011d8bcd2ba9209878a008ecac2b7c286bade",
+          "counter_timestamp_count": 910,
+          "counter_sample_span_fraction": 0.9995059636373094,
+          "target_gpu_busy_fraction": 0.982491814401639,
+          "target_spill_event_count": 0
+        },
+        {
+          "capture_id": "capture-03-variant",
+          "role": "variant",
+          "trace_summary_sha256": "2f40d5373486400d4e22b4e63a2331d0e6be17dac1c5acf208aec194f463c9f5",
+          "counter_timestamp_count": 732,
+          "counter_sample_span_fraction": 0.9992467670990705,
+          "target_gpu_busy_fraction": 0.9793396950244802,
+          "target_spill_event_count": 0
+        },
+        {
+          "capture_id": "capture-04-baseline",
+          "role": "baseline",
+          "trace_summary_sha256": "4ad2fab90dca67548972613c2d0f04cc5cdbf9a151e3c3f9db50d57d1387d9bf",
+          "counter_timestamp_count": 578,
+          "counter_sample_span_fraction": 0.997331930227367,
+          "target_gpu_busy_fraction": 0.9808224752064798,
+          "target_spill_event_count": 0
+        }
+      ],
+      "comparison_artifact": {
+        "path": "counter-comparison.json",
+        "sha256": "518119fb40771cb8b144fd75d62a3b520d4a139b9d9b97db233a854fe63792ae"
+      }
+    }
+  ],
+  "result": {
+    "compared_counter_count": 85,
+    "eligible_positive_median_count": 58,
+    "repeatable_difference_count": 37,
+    "bounded_finding": "The SIMD-group implementation showed a repeatable reduction in device-wide threadgroup-memory pressure inside the target profile window, consistent with reducing shared FP32 partials from 128 to four.",
+    "primary_repeatable_differences": [
+      {
+        "name": "Threadgroup Memory L1 Write Bandwidth",
+        "unit": "GiB/s",
+        "pair_variant_over_baseline_ratios": [0.03998388915429533, 0.040212715701787284],
+        "relative_change_percent": -95.99016975719586
+      },
+      {
+        "name": "Threadgroup Memory L1 Read Bandwidth",
+        "unit": "GiB/s",
+        "pair_variant_over_baseline_ratios": [0.04697142024311485, 0.047170564509067085],
+        "relative_change_percent": -95.2929007623909
+      },
+      {
+        "name": "L1 Threadgroup Residency",
+        "unit": "percent",
+        "pair_variant_over_baseline_ratios": [0.08626227444489118, 0.08744155786860959],
+        "relative_change_percent": -91.31480838432496
+      },
+      {
+        "name": "L1 Write Bandwidth",
+        "unit": "GiB/s",
+        "pair_variant_over_baseline_ratios": [0.6882297951618053, 0.6773989622512675],
+        "relative_change_percent": -31.71856212934636
+      },
+      {
+        "name": "F32 Utilization",
+        "unit": "percent",
+        "pair_variant_over_baseline_ratios": [1.3439189033298184, 1.345654573572414],
+        "relative_change_percent": 34.47867384511163
+      },
+      {
+        "name": "ALU Utilization",
+        "unit": "percent",
+        "pair_variant_over_baseline_ratios": [1.1491937523541738, 1.153001881672642],
+        "relative_change_percent": 15.109781701340786
+      }
+    ],
+    "timing_decision_changed": false,
+    "global_gpu_bandwidth_claim": false,
+    "barrier_stall_claim": false
+  },
   "nonclaims": [
     "No direct barrier-stall claim without a named barrier counter.",
     "No command-buffer-exclusive interpretation of device-wide samples.",
