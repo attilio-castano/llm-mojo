@@ -113,6 +113,35 @@ def duration_summary(rows: list[dict[str, Cell]]) -> dict[str, Any]:
     }
 
 
+def segment_compute_commands(
+    compute_commands: list[dict[str, Cell]],
+    warmup_iterations: int,
+    profile_iterations: int,
+) -> tuple[
+    list[dict[str, Cell]],
+    list[dict[str, Cell]],
+    list[dict[str, Cell]],
+    list[dict[str, Cell]],
+]:
+    expected_compute_commands = 1 + warmup_iterations + profile_iterations
+    if len(compute_commands) < expected_compute_commands:
+        raise ValueError(
+            "cannot segment the fixed RMSNorm profile sequence: expected at "
+            f"least {expected_compute_commands} compute commands, observed "
+            f"{len(compute_commands)}"
+        )
+
+    setup_count = len(compute_commands) - expected_compute_commands
+    setup = compute_commands[:setup_count]
+    sequence = compute_commands[setup_count:]
+    correctness = sequence[:1]
+    warmup_start = 1
+    profile_start = warmup_start + warmup_iterations
+    warmup = sequence[warmup_start:profile_start]
+    profile = sequence[profile_start:]
+    return setup, correctness, warmup, profile
+
+
 def trace_metadata(path: Path) -> dict[str, Any]:
     root = ET.parse(path).getroot()
     summary = root.find(".//summary")
@@ -241,21 +270,15 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         for row in compute_channel
         if ":Compute Command" in row["event-label"][1]
     ]
-    expected_compute_commands = (
-        1 + args.warmup_iterations + args.profile_iterations
+    setup, correctness, warmup, profile = segment_compute_commands(
+        compute_commands,
+        args.warmup_iterations,
+        args.profile_iterations,
     )
-    if len(compute_commands) != expected_compute_commands:
-        raise ValueError(
-            "cannot segment the fixed RMSNorm profile sequence: expected "
-            f"{expected_compute_commands} compute commands, observed "
-            f"{len(compute_commands)}"
-        )
-
-    correctness = compute_commands[:1]
-    warmup_start = 1
-    profile_start = warmup_start + args.warmup_iterations
-    warmup = compute_commands[warmup_start:profile_start]
-    profile = compute_commands[profile_start:]
+    sequence_command_buffer_ids = {
+        integer(row, "cmdbuffer-id")
+        for row in correctness + warmup + profile
+    }
     command_kinds: Counter[str] = Counter()
     for row in compute_channel:
         label = row["event-label"][1]
@@ -291,12 +314,16 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
             "compute_channel_command_kinds": dict(
                 sorted(command_kinds.items())
             ),
+            "setup_compute_commands": len(setup),
             "correctness_dispatches": len(correctness),
             "warmup_dispatches": len(warmup),
             "profile_dispatches": len(profile),
             "segmentation_rule": (
-                "Fixed program order: one correctness dispatch, declared "
-                "warmup dispatches, then declared profile dispatches."
+                "Trailing fixed program sequence: one correctness dispatch, "
+                "declared warmup dispatches, then declared profile "
+                "dispatches. Earlier target compute commands are setup; the "
+                "standalone program submits no GPU work after the profile "
+                "synchronization."
             ),
         },
         "instrumented_gpu_interval_duration": {
@@ -327,7 +354,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
     if args.spill_xml is not None:
         inputs.append(artifact(args.spill_xml, "compiler_spill_events_xml"))
         result["compiler_spills"] = spill_events(
-            args.spill_xml, command_buffer_ids, target_process
+            args.spill_xml, sequence_command_buffer_ids, target_process
         )
     return result
 
