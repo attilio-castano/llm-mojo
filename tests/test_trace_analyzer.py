@@ -24,6 +24,7 @@ def counter_info(counter_id: int, name: str):
         "accelerator-id": cell(7),
         "counter-id": cell(counter_id),
         "name": cell(name),
+        "description": cell("Synthetic counter percentage"),
         "type": cell("Percentage"),
     }
 
@@ -87,6 +88,7 @@ class ProfileCounterSummaryTest(unittest.TestCase):
         self.assertEqual(result["samples"]["value_count"], 2)
         self.assertEqual(result["samples"]["timestamp_count"], 2)
         self.assertEqual(result["counters"][0]["median"], 50.0)
+        self.assertEqual(result["counters"][0]["unit"], "percent")
 
     def test_rejects_counter_window_without_profile_overlap(self):
         with self.assertRaisesRegex(ValueError, "do not overlap"):

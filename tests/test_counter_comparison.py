@@ -8,6 +8,8 @@ def counter(counter_id: int, name: str, median: float):
         "counter_id": counter_id,
         "name": name,
         "type": "Percentage",
+        "description": "Synthetic counter percentage",
+        "unit": "percent",
         "median": median,
     }
 

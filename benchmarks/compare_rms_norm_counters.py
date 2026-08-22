@@ -215,8 +215,15 @@ def compare(
         observed = [counter_map[name] for counter_map in counter_maps]
         counter_ids = {counter.get("counter_id") for counter in observed}
         counter_types = {counter.get("type") for counter in observed}
+        counter_descriptions = {
+            counter.get("description") for counter in observed
+        }
+        counter_units = {counter.get("unit") for counter in observed}
         require(
-            len(counter_ids) == 1 and len(counter_types) == 1,
+            len(counter_ids) == 1
+            and len(counter_types) == 1
+            and len(counter_descriptions) == 1
+            and len(counter_units) == 1,
             f"counter metadata changed across captures for {name!r}",
         )
         medians = [float(counter["median"]) for counter in observed]
@@ -244,6 +251,8 @@ def compare(
                 "counter_id": next(iter(counter_ids)),
                 "name": name,
                 "type": next(iter(counter_types)),
+                "description": next(iter(counter_descriptions)),
+                "unit": next(iter(counter_units)),
                 "capture_medians": {
                     capture_id: median
                     for (capture_id, _), median in zip(

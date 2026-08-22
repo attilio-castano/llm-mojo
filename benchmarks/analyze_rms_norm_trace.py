@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import statistics
 import sys
 import xml.etree.ElementTree as ET
@@ -118,6 +119,13 @@ def duration_summary(rows: list[dict[str, Cell]]) -> dict[str, Any]:
     }
 
 
+def counter_unit(counter_type: str, description: str) -> str | None:
+    if counter_type == "Percentage":
+        return "percent"
+    match = re.search(r"\bin (GiB/s)\.?$", description)
+    return match.group(1) if match else None
+
+
 def summarize_profile_counters(
     counter_info: list[dict[str, Cell]],
     counter_values: list[dict[str, Cell]],
@@ -176,11 +184,15 @@ def summarize_profile_counters(
     counters = []
     for counter_id, values in sorted(values_by_counter.items()):
         info = info_by_key[(accelerator, counter_id)]
+        counter_type = info["type"][1]
+        description = info["description"][1]
         counters.append(
             {
                 "counter_id": counter_id,
                 "name": info["name"][1],
-                "type": info["type"][1],
+                "type": counter_type,
+                "description": description,
+                "unit": counter_unit(counter_type, description),
                 "sample_count": len(values),
                 "nonzero_sample_count": sum(value != 0 for value in values),
                 "minimum": min(values),
@@ -412,7 +424,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         artifact(args.gpu_intervals_xml, "gpu_intervals_xml"),
     ]
     result: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "analysis": "rmsnorm_metal_trace",
         "inputs": inputs,
         "validated_sequence": {

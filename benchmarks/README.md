@@ -210,8 +210,9 @@ least 5%.
 
 The analyzer joins GPU intervals to the target command-buffer submissions,
 validates the fixed correctness/warmup/profile sequence, strips paths and
-identifiers, and reports checksums plus diagnostic interval distributions. If
-counter exports are supplied, it rejects a trace whose named counter samples do
+identifiers, and reports checksums plus diagnostic interval distributions. It
+retains each named counter's profiler description and explicit unit when one is
+available. If counter exports are supplied, it rejects a trace whose samples do
 not overlap the declared profile window. Those samples remain device-wide,
 rather than command-buffer-exclusive. The analyzer does not turn source-level
 byte counts into hardware counters.
