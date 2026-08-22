@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "experiment_id": "EXP-0002",
+  "run_id": "EXP-0002-RUN-001",
+  "status": "complete",
+  "evidence_use": "Decisive paired operation timing for the frozen shared-tree baseline and SIMD-group variant. This is not an end-to-end inference result.",
+  "source": {
+    "implementation_commit": "e947397dba0fa5cb30f1b3546ff6a9a3b72d0dc8",
+    "measurement_commit": "476fc29f877aa091b43584dc21f4b1e934c8b6ce",
+    "repository_clean": true,
+    "branch": "codex/rmsnorm-profiling-v1"
+  },
+  "environment": {
+    "hardware_model": "Mac16,7",
+    "chip": "Apple M4 Pro",
+    "physical_memory_bytes": 25769803776,
+    "runtime_device": "Apple M4 Pro",
+    "runtime_api": "metal",
+    "gpu_target": "metal:4-metal4",
+    "macos": "26.5.2",
+    "macos_build": "25F84",
+    "xcode": "26.6 (17F113)",
+    "metal": "32023.883",
+    "mojo": "1.0.0",
+    "max": "26.5.0",
+    "uv": "0.12.5",
+    "power_source_at_every_gate": "AC Power",
+    "reported_thermal_warning_at_any_gate": false,
+    "reported_performance_warning_at_any_gate": false,
+    "display": "LG HDR 4K; 3008 x 1692 at 60 Hz"
+  },
+  "protocol_validation": {
+    "block_orders": ["ascending", "descending", "descending", "ascending"],
+    "block_implementation_orders": [
+      "baseline_then_variant",
+      "variant_then_baseline",
+      "variant_then_baseline",
+      "baseline_then_variant"
+    ],
+    "samples_total": 560,
+    "unique_sample_ids": 560,
+    "samples_per_implementation_workload_block": 10,
+    "iterations_per_sample": 1000,
+    "all_samples_finite_positive_and_valid": true,
+    "runtime_identity_valid_in_every_block": true,
+    "repository_commit_stable": true
+  },
+  "generated_code_validation": {
+    "command": "uv run --locked mojo build -I src -D RMS_NORM_PROFILE_ROWS=4 -D RMS_NORM_PROFILE_ITERATIONS=1 -D RMS_NORM_PROFILE_SIMDGROUP=true --emit asm -o <external-output> benchmarks/rms_norm.mojo",
+    "measurement_commit": "476fc29f877aa091b43584dc21f4b1e934c8b6ce",
+    "shared_reduction_storage": "[4 x float], or 16 bytes per threadgroup",
+    "workgroup_barrier_calls": 2,
+    "simd_shuffle_calls": 10,
+    "interpretation": "Five XOR shuffles implement each of two 32-lane reductions. This validates structure, not timing causality.",
+    "external_artifacts": [
+      {
+        "kind": "host_assembly",
+        "bytes": 279743,
+        "sha256": "8a38f7382c27bc6a5286f6a2b68b16e87a21097ecd57db60cca74f0a5b604a13"
+      },
+      {
+        "kind": "metal_kernel_llvm_sidecar",
+        "bytes": 12328,
+        "sha256": "c999de40aad6b4f2fb43eabc27886ac21fb3043983242df299820b98125dffa7"
+      }
+    ]
+  },
+  "paired_statistic": {
+    "definition": "Within each block, variant median divided by baseline median; the retained workload statistic is the median of four block ratios.",
+    "material_improvement_ratio": 0.95,
+    "material_regression_ratio": 1.05,
+    "required_direction_blocks": 3
+  },
+  "results": [
+    {
+      "workload": "r1-h896",
+      "baseline_overall_median_ms": 0.0098926875,
+      "variant_overall_median_ms": 0.009694917,
+      "block_variant_to_baseline_ratios": [0.9505552193416603, 0.9509681611829621, 0.9645528262396288, 0.9384545410013574],
+      "median_paired_ratio": 0.9507616902623113,
+      "median_paired_change_percent": -4.923830973768872,
+      "variant_faster_blocks": 4,
+      "classification": "inconclusive"
+    },
+    {
+      "workload": "r4-h896",
+      "baseline_overall_median_ms": 0.009583603999999999,
+      "variant_overall_median_ms": 0.0092119165,
+      "block_variant_to_baseline_ratios": [0.9793871300156003, 0.9232652247802483, 0.952185342455073, 1.011356104568176],
+      "median_paired_ratio": 0.9657862362353367,
+      "median_paired_change_percent": -3.421376376466334,
+      "variant_faster_blocks": 3,
+      "classification": "inconclusive"
+    },
+    {
+      "workload": "r16-h896",
+      "baseline_overall_median_ms": 0.009582083500000001,
+      "variant_overall_median_ms": 0.0095815415,
+      "block_variant_to_baseline_ratios": [1.010924683080308, 1.037444022184977, 1.0287037160098338, 0.9165880780838467],
+      "median_paired_ratio": 1.019814199545071,
+      "median_paired_change_percent": 1.981419954507091,
+      "variant_faster_blocks": 1,
+      "classification": "inconclusive"
+    },
+    {
+      "workload": "r128-h896",
+      "baseline_overall_median_ms": 0.0096123335,
+      "variant_overall_median_ms": 0.009417166499999999,
+      "block_variant_to_baseline_ratios": [0.967219828006474, 1.0008210128377872, 0.9752300782971518, 0.9845728284570634],
+      "median_paired_ratio": 0.9799014533771075,
+      "median_paired_change_percent": -2.0098546622892455,
+      "variant_faster_blocks": 3,
+      "classification": "inconclusive"
+    },
+    {
+      "workload": "r512-h896",
+      "baseline_overall_median_ms": 0.0128083335,
+      "variant_overall_median_ms": 0.0121921665,
+      "block_variant_to_baseline_ratios": [0.9414673925413168, 0.9755339733402049, 0.9506976090298734, 0.9416461450516326],
+      "median_paired_ratio": 0.946171877040753,
+      "median_paired_change_percent": -5.382812295924699,
+      "variant_faster_blocks": 4,
+      "classification": "material_improvement"
+    },
+    {
+      "workload": "r2048-h896",
+      "baseline_overall_median_ms": 0.036056458,
+      "variant_overall_median_ms": 0.034457563,
+      "block_variant_to_baseline_ratios": [0.9519169038704551, 0.9577128736377137, 0.9529050319351987, 0.9564123483056567],
+      "median_paired_ratio": 0.9546586901204277,
+      "median_paired_change_percent": -4.53413098795723,
+      "variant_faster_blocks": 4,
+      "classification": "inconclusive"
+    },
+    {
+      "workload": "r4096-h896",
+      "baseline_overall_median_ms": 0.0638832705,
+      "variant_overall_median_ms": 0.062694604,
+      "block_variant_to_baseline_ratios": [0.9721625203106112, 0.980991455347112, 0.9844282504769459, 0.9782900826305316],
+      "median_paired_ratio": 0.9796407689888218,
+      "median_paired_change_percent": -2.0359231011178203,
+      "variant_faster_blocks": 4,
+      "classification": "inconclusive"
+    }
+  ],
+  "decision": {
+    "timing_rule_result": "replace_baseline",
+    "relevant_material_improvements": ["r512-h896"],
+    "relevant_material_regressions": [],
+    "dispatch_rule_justified": false,
+    "reason": "The variant materially improves one relevant workload and materially regresses none. Opposite regime effects do not meet the frozen crossover rule, so one default implementation remains simpler and evidence-consistent."
+  },
+  "raw_artifacts": [
+    {"kind": "block_stdout_01", "bytes": 27752, "sha256": "b25ba67c187d97a8b4a57d87f5b1adc7ea9eb3bea9b47005af3ee959fab3b2dd"},
+    {"kind": "block_stdout_02", "bytes": 27753, "sha256": "1c60e8070aa0b8ae6f7ca66a42698d6710529aa347c97311f7d5f4633de9573b"},
+    {"kind": "block_stdout_03", "bytes": 27753, "sha256": "04da7d651b065efeea8d9f5d8eb82ad68b39cf26177149893b89ecd0d9ed99d0"},
+    {"kind": "block_stdout_04", "bytes": 27752, "sha256": "aabf52cf98e1d07d2e575fb7105f99aefdef67ddd708809c7a785736813c953e"},
+    {"kind": "metadata", "bytes": 13459, "sha256": "c5c66422fa6ffa53d5480854f85f77b1f9fda140848104bce9e2386397bfcd8c"},
+    {"kind": "samples_jsonl", "bytes": 402962, "sha256": "fceee1837a2ce2499a83ee5bf0d31f3fc3603476b009e9571ccab766f0873d08"},
+    {"kind": "summary", "bytes": 38140, "sha256": "29b295fdcd9e3a7f5cad9b6e5799ddf179a7da4314953e40a53a634f0d059b9f"}
+  ],
+  "nonclaims": [
+    "No end-to-end inference, decoder-block, model-phase, time-to-first-token, or time-per-output-token result.",
+    "No hardware bandwidth, occupancy, cache, or barrier-stall measurement.",
+    "The timing comparison validates the candidate decision but does not by itself prove which structural change caused it.",
+    "No claim for hidden sizes other than 896 or GPUs other than the measured Apple M4 Pro."
+  ]
+}

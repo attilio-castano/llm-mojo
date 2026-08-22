@@ -4,7 +4,7 @@
   "slug": "rmsnorm-simdgroup-reduction",
   "title": "Apple GPU RMSNorm SIMD-group reduction comparison",
   "created_date": "2026-08-22",
-  "status": "planned",
+  "status": "complete",
   "evidence_level": "operation",
   "question": "Does one hybrid SIMD-group reduction materially reduce synchronized Apple GPU RMSNorm dispatch latency versus the shared-memory tree without a relevant workload regression?",
   "experiment_type": "paired_optimization_comparison",
@@ -88,9 +88,23 @@
       "SIMD-group reduction operations appear in the Metal sidecar.",
       "Shared reduction storage falls from 128 FP32 values to four.",
       "Workgroup barriers fall from nine to two."
-    ]
+    ],
+    "result": {
+      "measurement_commit": "476fc29f877aa091b43584dc21f4b1e934c8b6ce",
+      "shared_reduction_storage": "[4 x float], or 16 bytes",
+      "workgroup_barrier_calls": 2,
+      "simd_shuffle_calls": 10,
+      "status": "passed"
+    }
   },
   "profiling_rule": "Profile the variant only after ordinary paired timing shows a material effect. Use short captures and retain unavailable counters as unresolved.",
+  "profiling_result": {
+    "status": "no_valid_trace_profiler_initialization_failure",
+    "qualified_workload": "r512-h896",
+    "attempts": 2,
+    "bounded_finding": "Both xctrace attempts held the target before its first instruction. The auditable retry ended with SIGKILL and zero Metal command-buffer submissions, while the same short binary completed normally outside Instruments.",
+    "decision_effect": "No mechanism claim is available; the failed traces do not invalidate ordinary timing or clean generated-code structure."
+  },
   "completion_conditions": [
     "The variant passes the frozen numerical correctness cases.",
     "Generated code is consistent with the declared structural variant.",
@@ -111,9 +125,40 @@
     "No observed hardware bandwidth or occupancy claim without a named counter.",
     "No general claim that SIMD-group reduction is optimal for other hidden sizes or GPUs."
   ],
-  "implementation_commit": null,
-  "measurement_commit": null,
-  "runs": [],
-  "artifacts": [],
-  "deviations": []
+  "implementation_commit": "e947397dba0fa5cb30f1b3546ff6a9a3b72d0dc8",
+  "measurement_commit": "476fc29f877aa091b43584dc21f4b1e934c8b6ce",
+  "runs": [
+    {
+      "run_id": "EXP-0002-RUN-001",
+      "status": "valid",
+      "samples": 560,
+      "timing_rule_result": "replace_baseline",
+      "relevant_material_improvements": ["r512-h896"],
+      "relevant_material_regressions": []
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "comparison-run.json",
+      "kind": "compact_paired_timing_and_structure_evidence"
+    },
+    {
+      "path": "profile-attempts.json",
+      "kind": "compact_excluded_profile_attempt_record"
+    }
+  ],
+  "deviations": [
+    {
+      "stage": "post_timing_variant_profile",
+      "from_protocol": "A valid short rows=512 Metal System Trace was attempted after the material timing effect.",
+      "observed": "Instruments held both launched targets before execution; no valid trace sequence was collected.",
+      "treatment": "Exclude both captures, retain the profiler limitation, and make no trace-derived mechanism claim."
+    }
+  ],
+  "decision": {
+    "result": "replace_baseline",
+    "production_action": "Use the SIMD-group kernel as the single public Apple GPU RMSNorm default; retain the shared tree only as an explicit benchmark baseline.",
+    "runtime_dispatch_rule": false,
+    "reason": "One relevant workload materially improved, no relevant workload materially regressed, and no opposite effects met the frozen crossover rule."
+  }
 }
