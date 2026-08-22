@@ -25,7 +25,7 @@ comptime HIDDEN_SIZE = 896
 comptime BENCHMARK_WARMUP_ITERATIONS = 1_000
 comptime BENCHMARK_MAX_ITERATIONS = 1_000
 comptime BENCHMARK_REPETITIONS = 10
-comptime PROFILE_WARMUP_ITERATIONS = 1_000
+comptime DEFAULT_PROFILE_WARMUP_ITERATIONS = 1_000
 
 
 @always_inline
@@ -226,9 +226,15 @@ def run_benchmarks() raises:
 
 
 def run_profile_workload[
-    rows: Int, iterations: Int, use_simdgroup: Bool
+    rows: Int,
+    warmup_iterations: Int,
+    iterations: Int,
+    use_simdgroup: Bool,
 ]() raises:
     comptime assert rows > 0, "profile rows must be positive"
+    comptime assert (
+        warmup_iterations >= 0
+    ), "profile warmup iterations must be non-negative"
     comptime assert iterations > 0, "profile iterations must be positive"
     comptime assert (
         has_apple_gpu_accelerator()
@@ -272,10 +278,10 @@ def run_profile_workload[
                     raise Error("RMSNorm profile correctness gate failed")
 
     comptime if use_simdgroup:
-        for _ in range(PROFILE_WARMUP_ITERATIONS):
+        for _ in range(warmup_iterations):
             enqueue_rms_norm_apple_gpu(context, input, weight, output)
     else:
-        for _ in range(PROFILE_WARMUP_ITERATIONS):
+        for _ in range(warmup_iterations):
             enqueue_rms_norm_apple_gpu_shared_tree(
                 context, input, weight, output
             )
@@ -289,7 +295,7 @@ def run_profile_workload[
     print("api:", context.api())
     print("rows:", rows)
     print("hidden:", HIDDEN_SIZE)
-    print("warmup iterations:", PROFILE_WARMUP_ITERATIONS)
+    print("warmup iterations:", warmup_iterations)
     print("profile iterations:", iterations)
     print("PROFILE_REGION_BEGIN")
     comptime if use_simdgroup:
@@ -313,8 +319,22 @@ def main() raises:
         comptime profile_simdgroup = get_defined_bool[
             "RMS_NORM_PROFILE_SIMDGROUP"
         ]()
-        run_profile_workload[
-            profile_rows, profile_iterations, profile_simdgroup
-        ]()
+        comptime if is_defined["RMS_NORM_PROFILE_WARMUP_ITERATIONS"]():
+            comptime profile_warmup_iterations = get_defined_int[
+                "RMS_NORM_PROFILE_WARMUP_ITERATIONS"
+            ]()
+            run_profile_workload[
+                profile_rows,
+                profile_warmup_iterations,
+                profile_iterations,
+                profile_simdgroup,
+            ]()
+        else:
+            run_profile_workload[
+                profile_rows,
+                DEFAULT_PROFILE_WARMUP_ITERATIONS,
+                profile_iterations,
+                profile_simdgroup,
+            ]()
     else:
         run_benchmarks()

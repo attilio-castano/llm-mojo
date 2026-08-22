@@ -32,6 +32,8 @@ BLOCK_IMPLEMENTATION_ORDERS = (
 )
 EXPECTED_REPETITIONS = 10
 PROFILE_ITERATIONS_LIMIT = 5_000
+DEFAULT_PROFILE_WARMUP_ITERATIONS = 1_000
+PROFILE_WARMUP_ITERATIONS_LIMIT = 1_000
 MATERIAL_IMPROVEMENT_RATIO = 0.95
 MATERIAL_REGRESSION_RATIO = 1.05
 REQUIRED_DIRECTION_BLOCKS = 3
@@ -808,6 +810,18 @@ def build_profile_binary(args: argparse.Namespace) -> None:
             "profile iterations must not exceed "
             f"{PROFILE_ITERATIONS_LIMIT}; use multiple short captures instead"
         )
+    profile_warmup_iterations = (
+        DEFAULT_PROFILE_WARMUP_ITERATIONS
+        if args.profile_warmup_iterations is None
+        else args.profile_warmup_iterations
+    )
+    if profile_warmup_iterations < 0:
+        raise RuntimeError("profile warmup iterations must be non-negative")
+    if profile_warmup_iterations > PROFILE_WARMUP_ITERATIONS_LIMIT:
+        raise RuntimeError(
+            "profile warmup iterations must not exceed "
+            f"{PROFILE_WARMUP_ITERATIONS_LIMIT}"
+        )
     output = args.profile_binary.resolve()
     if output.exists():
         raise RuntimeError(
@@ -831,6 +845,11 @@ def build_profile_binary(args: argparse.Namespace) -> None:
         f"RMS_NORM_PROFILE_ROWS={args.profile_rows}",
         "-D",
         f"RMS_NORM_PROFILE_ITERATIONS={args.profile_iterations}",
+        "-D",
+        (
+            "RMS_NORM_PROFILE_WARMUP_ITERATIONS="
+            f"{profile_warmup_iterations}"
+        ),
     ]
     profile_choice = args.profile_implementation or "simdgroup"
     profile_implementation = (
@@ -854,6 +873,7 @@ def build_profile_binary(args: argparse.Namespace) -> None:
         "environment": {"MODULAR_DEBUG": "unset"},
         "profile_rows": args.profile_rows,
         "hidden_size": HIDDEN_SIZE,
+        "profile_warmup_iterations": profile_warmup_iterations,
         "profile_iterations": args.profile_iterations,
         "implementation": profile_implementation["id"],
         "entrypoint": profile_implementation["entrypoint"],
@@ -898,6 +918,14 @@ def parse_args() -> argparse.Namespace:
             f"(default and maximum: {PROFILE_ITERATIONS_LIMIT})"
         ),
     )
+    parser.add_argument(
+        "--profile-warmup-iterations",
+        type=int,
+        help=(
+            "warmup dispatch count for a profile binary "
+            f"(default and maximum: {DEFAULT_PROFILE_WARMUP_ITERATIONS})"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -913,6 +941,10 @@ def main() -> None:
     if args.profile_implementation is not None:
         raise RuntimeError(
             "--profile-implementation requires --profile-binary"
+        )
+    if args.profile_warmup_iterations is not None:
+        raise RuntimeError(
+            "--profile-warmup-iterations requires --profile-binary"
         )
     if args.recorded and (
         args.output_dir is None

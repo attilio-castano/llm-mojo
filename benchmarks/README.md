@@ -86,6 +86,7 @@ not capture `uv` startup or Mojo compilation:
 uv run --locked python benchmarks/run_rms_norm.py \
   --profile-binary /absolute/external/path/rmsnorm-profile-r1 \
   --profile-rows 1 \
+  --profile-warmup-iterations 1000 \
   --profile-iterations 5000 \
   --require-clean
 ```
@@ -95,12 +96,15 @@ The builder defaults to the promoted SIMD-group implementation. Add
 instead.
 
 The build also writes a provenance JSON file with the commit, environment,
-binary size, and SHA-256 digest. The binary performs an untimed correctness
-gate, 1,000 warmup dispatches, and then the declared profiling iterations. A
-Metal trace is diagnostic evidence; its instrumented duration is not a headline
-benchmark result. The builder defaults to and enforces at most 5,000 profiling
-dispatches. Use multiple short captures instead of increasing that limit; fewer
-dispatches may be appropriate for larger workloads.
+binary size, warmup and profile dispatch counts, and SHA-256 digest. The binary
+performs an untimed correctness gate, the declared warmup dispatches, and then
+the declared profiling iterations. Warmup defaults to and is bounded at 1,000;
+use a shorter explicit warmup when a finite profiler counter window would
+otherwise end before the profile region. A Metal trace is diagnostic evidence;
+its instrumented duration is not a headline benchmark result. The builder
+defaults to and enforces at most 5,000 profiling dispatches. Use multiple short
+captures instead of increasing that limit; fewer dispatches may be appropriate
+for larger workloads.
 
 Capture a short Metal System Trace outside the repository. Keep the raw trace
 external because Instruments may record host identifiers and unrelated system
@@ -131,7 +135,9 @@ xctrace export \
 ```
 
 Repeat the schema export for `metal-gpu-intervals`,
-`gpu-performance-state-intervals`, and `graphics-compiler-spill-events`.
+`gpu-performance-state-intervals`, and `graphics-compiler-spill-events`. For a
+trace configured with a named counter set, also export `gpu-counter-info` and
+`gpu-counter-value`.
 
 Reduce those external XML exports to a scrubbed summary:
 
@@ -142,14 +148,33 @@ uv run --locked python benchmarks/analyze_rms_norm_trace.py \
   --toc-xml /absolute/external/path/toc.xml \
   --performance-state-xml /absolute/external/path/performance-state.xml \
   --spill-xml /absolute/external/path/spill-events.xml \
+  --warmup-iterations 1000 \
   --profile-iterations 5000 \
   --output /absolute/external/path/trace-summary.json
 ```
 
+For a named-counter capture, use the shorter warmup and profile counts declared
+by that binary, then add both counter exports to the analyzer command:
+
+```bash
+uv run --locked python benchmarks/analyze_rms_norm_trace.py \
+  --submissions-xml /absolute/external/path/submissions.xml \
+  --gpu-intervals-xml /absolute/external/path/gpu-intervals.xml \
+  --toc-xml /absolute/external/path/toc.xml \
+  --counter-info-xml /absolute/external/path/gpu-counter-info.xml \
+  --counter-values-xml /absolute/external/path/gpu-counter-values.xml \
+  --warmup-iterations 100 \
+  --profile-iterations 500 \
+  --output /absolute/external/path/counter-summary.json
+```
+
 The analyzer joins GPU intervals to the target command-buffer submissions,
 validates the fixed correctness/warmup/profile sequence, strips paths and
-identifiers, and reports checksums plus diagnostic interval distributions. It
-does not turn source-level byte counts into hardware counters.
+identifiers, and reports checksums plus diagnostic interval distributions. If
+counter exports are supplied, it rejects a trace whose named counter samples do
+not overlap the declared profile window. Those samples remain device-wide,
+rather than command-buffer-exclusive. The analyzer does not turn source-level
+byte counts into hardware counters.
 
 For generated-code inspection, emit host assembly and the per-Metal-kernel LLVM
 sidecar outside the repository:
@@ -158,6 +183,7 @@ sidecar outside the repository:
 uv run --locked mojo build \
   -I src \
   -D RMS_NORM_PROFILE_ROWS=1 \
+  -D RMS_NORM_PROFILE_WARMUP_ITERATIONS=1000 \
   -D RMS_NORM_PROFILE_ITERATIONS=1 \
   -D RMS_NORM_PROFILE_SIMDGROUP=true \
   --emit asm \

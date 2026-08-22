@@ -9,7 +9,7 @@ import math
 import statistics
 import sys
 import xml.etree.ElementTree as ET
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -85,7 +85,12 @@ def integer(row: dict[str, Cell], column: str) -> int:
     return int(value) if value else 0
 
 
-def percentile(values: list[int], fraction: float) -> float:
+def number(row: dict[str, Cell], column: str) -> float:
+    value = row[column][0]
+    return float(value) if value else 0.0
+
+
+def percentile(values: list[int] | list[float], fraction: float) -> float:
     ordered = sorted(values)
     position = (len(ordered) - 1) * fraction
     lower = math.floor(position)
@@ -110,6 +115,115 @@ def duration_summary(rows: list[dict[str, Cell]]) -> dict[str, Any]:
         "median_absolute_deviation": statistics.median(deviations),
         "p95": percentile(durations, 0.95),
         "maximum": max(durations),
+    }
+
+
+def summarize_profile_counters(
+    counter_info: list[dict[str, Cell]],
+    counter_values: list[dict[str, Cell]],
+    profile_intervals: list[dict[str, Cell]],
+) -> dict[str, Any]:
+    if not profile_intervals:
+        raise ValueError("counter summary requires a profile interval")
+
+    profile_start = min(integer(row, "start") for row in profile_intervals)
+    profile_end = max(
+        integer(row, "start") + integer(row, "duration")
+        for row in profile_intervals
+    )
+    profile_duration = profile_end - profile_start
+    if profile_duration <= 0:
+        raise ValueError("profile counter window must have positive duration")
+
+    info_by_key: dict[tuple[int, int], dict[str, Cell]] = {}
+    for row in counter_info:
+        key = (integer(row, "accelerator-id"), integer(row, "counter-id"))
+        if key in info_by_key:
+            raise ValueError("GPU counter metadata contains a duplicate ID")
+        if not row["name"][1]:
+            raise ValueError("GPU counter metadata contains an unnamed counter")
+        info_by_key[key] = row
+
+    in_window = [
+        row
+        for row in counter_values
+        if profile_start <= integer(row, "timestamp") <= profile_end
+    ]
+    if not in_window:
+        raise ValueError(
+            "GPU counter samples do not overlap the declared profile region"
+        )
+
+    accelerators = {integer(row, "accelerator-id") for row in in_window}
+    if len(accelerators) != 1:
+        raise ValueError(
+            "profile-window counters do not identify exactly one GPU"
+        )
+    accelerator = next(iter(accelerators))
+
+    values_by_counter: defaultdict[int, list[float]] = defaultdict(list)
+    for row in in_window:
+        counter_id = integer(row, "counter-id")
+        if (accelerator, counter_id) not in info_by_key:
+            raise ValueError(
+                f"GPU counter sample has unknown counter ID {counter_id}"
+            )
+        value = number(row, "value")
+        if not math.isfinite(value):
+            raise ValueError("GPU counter sample is not finite")
+        values_by_counter[counter_id].append(value)
+
+    counters = []
+    for counter_id, values in sorted(values_by_counter.items()):
+        info = info_by_key[(accelerator, counter_id)]
+        counters.append(
+            {
+                "counter_id": counter_id,
+                "name": info["name"][1],
+                "type": info["type"][1],
+                "sample_count": len(values),
+                "nonzero_sample_count": sum(value != 0 for value in values),
+                "minimum": min(values),
+                "median": statistics.median(values),
+                "p95": percentile(values, 0.95),
+                "maximum": max(values),
+            }
+        )
+
+    timestamps = sorted(
+        {integer(row, "timestamp") for row in in_window}
+    )
+    defined_counter_count = sum(
+        key[0] == accelerator for key in info_by_key
+    )
+    target_busy_duration = sum(
+        integer(row, "duration") for row in profile_intervals
+    )
+    return {
+        "profile_window": {
+            "duration_nanoseconds": profile_duration,
+            "target_gpu_busy_nanoseconds": target_busy_duration,
+            "target_gpu_busy_fraction": target_busy_duration
+            / profile_duration,
+        },
+        "samples": {
+            "value_count": len(in_window),
+            "timestamp_count": len(timestamps),
+            "first_timestamp_offset_nanoseconds": (
+                timestamps[0] - profile_start
+            ),
+            "last_timestamp_offset_nanoseconds": timestamps[-1] - profile_start,
+            "sample_span_fraction": (
+                (timestamps[-1] - timestamps[0]) / profile_duration
+            ),
+        },
+        "defined_counter_count": defined_counter_count,
+        "sampled_counter_count": len(counters),
+        "counters": counters,
+        "scope": (
+            "Named device-wide GPU counter samples inside the enclosing "
+            "target profile window; samples are not command-buffer-exclusive."
+        ),
     }
 
 
@@ -222,6 +336,10 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("--profile-iterations must be positive")
     if args.warmup_iterations < 0:
         raise ValueError("--warmup-iterations must be non-negative")
+    if (args.counter_info_xml is None) != (args.counter_values_xml is None):
+        raise ValueError(
+            "--counter-info-xml and --counter-values-xml must be used together"
+        )
 
     submissions = read_table(args.submissions_xml)
     encoded_submissions = [
@@ -344,6 +462,20 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
     if args.toc_xml is not None:
         inputs.append(artifact(args.toc_xml, "trace_toc_xml"))
         result["trace"] = trace_metadata(args.toc_xml)
+        if args.counter_info_xml is not None:
+            counter_settings = result["trace"][
+                "metal_application_gpu_settings"
+            ]
+            has_named_counter_set = any(
+                setting.startswith("Counter Set:")
+                and not setting.endswith("(null)")
+                and not setting.endswith("None")
+                for setting in counter_settings
+            )
+            if not has_named_counter_set:
+                raise ValueError(
+                    "trace metadata does not identify a named GPU counter set"
+                )
     if args.performance_state_xml is not None:
         inputs.append(
             artifact(args.performance_state_xml, "gpu_performance_state_xml")
@@ -356,6 +488,18 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         result["compiler_spills"] = spill_events(
             args.spill_xml, sequence_command_buffer_ids, target_process
         )
+    if args.counter_info_xml is not None and args.counter_values_xml is not None:
+        inputs.extend(
+            [
+                artifact(args.counter_info_xml, "gpu_counter_info_xml"),
+                artifact(args.counter_values_xml, "gpu_counter_values_xml"),
+            ]
+        )
+        result["profile_gpu_counters"] = summarize_profile_counters(
+            read_table(args.counter_info_xml),
+            read_table(args.counter_values_xml),
+            profile,
+        )
     return result
 
 
@@ -366,6 +510,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--toc-xml", type=Path)
     parser.add_argument("--performance-state-xml", type=Path)
     parser.add_argument("--spill-xml", type=Path)
+    parser.add_argument("--counter-info-xml", type=Path)
+    parser.add_argument("--counter-values-xml", type=Path)
     parser.add_argument("--profile-iterations", type=int, required=True)
     parser.add_argument(
         "--warmup-iterations", type=int, default=PROFILE_WARMUP_ITERATIONS
