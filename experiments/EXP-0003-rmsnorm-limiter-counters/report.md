@@ -30,9 +30,12 @@ caused the timing improvement.
   thermal or performance warning.
 - Workload: BF16 `r512-h896`, one row per 128-thread threadgroup.
 - Sequence: one correctness dispatch, 100 warmup dispatches, then 500 profile
-  dispatches followed by device synchronization.
+  dispatches followed by device synchronization, `PROFILE_REGION_END`, and a
+  250 ms host-only idle with no later GPU work.
 - Implementations: retained shared-tree baseline and public SIMD-group default,
   built from the same clean commit with provenance.
+- Launch location: an unprotected scratch directory outside `Desktop`,
+  `Documents`, and `Downloads`; retained artifacts may be copied after capture.
 - Instruments template: `LLM_Mojo_Metal_Limiters`, Counter Set
   `Performance Limiters`, Performance State `Default`, Shader Timeline off.
 - Capture order: baseline, SIMD-group, SIMD-group, baseline. Each target must
@@ -45,6 +48,26 @@ set, counter samples overlapping the enclosing 500-dispatch profile window, at
 least 10 distinct counter timestamps in that window, and a counter-sample span
 covering at least 80% of the profile window. A failed gate excludes that capture
 rather than weakening the rule.
+
+## Calibration amendment
+
+The first baseline calibration was excluded because its device-counter stream
+ended 20,147,138 ns before the declared profile window. The target had exited
+immediately after its final synchronization, so shortening the warmup alone did
+not retain the counter tail.
+
+A second calibration target launched from `Documents` remained in system
+interface initialization until the 10-second guard killed it. That trace had
+one main thread, zero CPU samples, and zero Metal submissions. The identical
+binary (same SHA-256) completed normally under the same template when launched
+from `/private/tmp`, isolating the failure to the protected launch location
+rather than the RMSNorm workload.
+
+The accepted calibration therefore freezes both corrections above. With the
+250 ms post-region idle, the analyzer found 881 distinct counter timestamps
+inside the 500-dispatch profile window and a 99.84% sample-span fraction. These
+calibrations establish the collection method only and are not part of the
+four-capture comparison.
 
 ## Frozen comparison
 

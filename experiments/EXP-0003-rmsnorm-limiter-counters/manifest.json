@@ -23,7 +23,9 @@
     "threads_per_threadgroup": 128,
     "correctness_dispatches": 1,
     "warmup_dispatches": 100,
-    "profile_dispatches": 500
+    "profile_dispatches": 500,
+    "post_profile_idle_milliseconds": 250,
+    "post_profile_idle_scope": "Host-only after PROFILE_REGION_END with no later GPU work."
   },
   "implementations": [
     {
@@ -47,6 +49,7 @@
     "performance_state": "Default",
     "shader_timeline": false,
     "time_limit_seconds": 10,
+    "launch_location": "Unprotected scratch directory outside Desktop, Documents, and Downloads.",
     "order": ["baseline", "variant", "variant", "baseline"],
     "raw_artifact_policy": "External only because traces and XML exports may contain host identifiers or unrelated system activity."
   },
@@ -75,6 +78,33 @@
     "GPU and last-level-cache bandwidth and limiters"
   ],
   "profiler_gate_commit": "de6aca0",
+  "counter_tail_commit": "b0ff561",
+  "calibration": {
+    "comparison_eligible": false,
+    "excluded_attempts": [
+      {
+        "implementation": "apple_gpu_shared_tree_v0",
+        "reason": "Counter stream ended before the declared profile window when the target exited immediately after synchronization.",
+        "counter_stream_gap_to_profile_nanoseconds": 20147138
+      },
+      {
+        "implementation": "apple_gpu_simdgroup_v1",
+        "reason": "A target launched from Documents remained in system interface initialization until SIGKILL at the 10-second guard.",
+        "cpu_sample_count": 0,
+        "metal_submission_count": 0
+      }
+    ],
+    "accepted_method_check": {
+      "implementation": "apple_gpu_simdgroup_v1",
+      "binary_sha256": "72e7b17616f60547402373f60ef935cb1cb41c6f8bf40f8c5161ef7f60b2b12c",
+      "launch_location_class": "unprotected temporary directory",
+      "post_profile_idle_milliseconds": 250,
+      "profile_dispatches": 500,
+      "profile_counter_timestamp_count": 881,
+      "profile_counter_sample_span_fraction": 0.998400182278475,
+      "target_exit": "exit(0)"
+    }
+  },
   "runs": [],
   "result": null,
   "nonclaims": [
