@@ -122,7 +122,7 @@ def add_selected_benchmarks[
             add_benchmark[rows, False](benchmark)
             add_benchmark[rows, True](benchmark)
     else:
-        add_benchmark[rows, False](benchmark)
+        add_benchmark[rows, True](benchmark)
 
 
 def run_benchmarks() raises:
@@ -133,13 +133,15 @@ def run_benchmarks() raises:
     if identity.api() != "metal":
         raise Error("benchmark requires the Metal device API")
 
-    print("implementation: enqueue_rms_norm_apple_gpu_shared_tree")
     comptime variant_comparison = get_defined_bool[
         "RMS_NORM_BENCH_VARIANT_COMPARISON"
     ]()
     comptime variant_first = get_defined_bool["RMS_NORM_BENCH_VARIANT_FIRST"]()
     comptime if variant_comparison:
+        print("implementation: enqueue_rms_norm_apple_gpu_shared_tree")
         print("comparison implementation: enqueue_rms_norm_apple_gpu")
+    else:
+        print("implementation: enqueue_rms_norm_apple_gpu")
     print("device:", identity.name())
     print("api:", identity.api())
     print("dtype: bfloat16; accumulation: float32")

@@ -260,8 +260,13 @@ def parse_identity(
         raise ValueError(
             "benchmark did not prove an Apple device using the Metal API"
         )
-    if result["implementation"] != BASELINE_IMPLEMENTATION["entrypoint"]:
-        raise ValueError("benchmark did not identify the frozen baseline")
+    expected_primary = (
+        BASELINE_IMPLEMENTATION
+        if variant_comparison
+        else VARIANT_IMPLEMENTATION
+    )
+    if result["implementation"] != expected_primary["entrypoint"]:
+        raise ValueError("benchmark did not identify the expected implementation")
     if variant_comparison:
         if comparison_implementation is None:
             raise ValueError("comparison benchmark omitted variant identity")
@@ -306,8 +311,8 @@ def parse_samples(
         "variant_then_baseline",
     ):
         raise ValueError("comparison benchmark has an invalid pair order")
-    if not variant_comparison and implementation_order != "baseline_only":
-        raise ValueError("baseline-only benchmark has an invalid pair order")
+    if not variant_comparison and implementation_order != "default_only":
+        raise ValueError("default benchmark has an invalid implementation order")
     identity = parse_identity(output, variant_comparison=variant_comparison)
     reader = csv.DictReader(table_lines(output), skipinitialspace=True)
     repetition_by_key: defaultdict[tuple[str, int], int] = defaultdict(int)
@@ -333,9 +338,9 @@ def parse_samples(
                 f"unexpected RMSNorm workload rows={rows}, hidden={hidden_size}"
             )
         if not variant_comparison and implementation_id != (
-            BASELINE_IMPLEMENTATION["id"]
+            VARIANT_IMPLEMENTATION["id"]
         ):
-            raise ValueError("baseline-only benchmark emitted a variant row")
+            raise ValueError("default benchmark emitted a shared-tree row")
         order_key = (rows, implementation_id)
         if not observed_order or observed_order[-1] != order_key:
             observed_order.append(order_key)
@@ -388,7 +393,7 @@ def parse_samples(
             else [BASELINE_IMPLEMENTATION["id"], VARIANT_IMPLEMENTATION["id"]]
         )
     else:
-        implementation_ids = [BASELINE_IMPLEMENTATION["id"]]
+        implementation_ids = [VARIANT_IMPLEMENTATION["id"]]
     expected_order = [
         (rows, implementation_id)
         for rows in row_order
@@ -827,12 +832,13 @@ def build_profile_binary(args: argparse.Namespace) -> None:
         "-D",
         f"RMS_NORM_PROFILE_ITERATIONS={args.profile_iterations}",
     ]
+    profile_choice = args.profile_implementation or "simdgroup"
     profile_implementation = (
         VARIANT_IMPLEMENTATION
-        if args.profile_implementation == "simdgroup"
+        if profile_choice == "simdgroup"
         else BASELINE_IMPLEMENTATION
     )
-    if args.profile_implementation == "simdgroup":
+    if profile_choice == "simdgroup":
         command_args.extend(["-D", "RMS_NORM_PROFILE_SIMDGROUP=true"])
     command_args.extend(["benchmarks/rms_norm.mojo", "-o", str(output)])
     environment = os.environ.copy()
@@ -881,7 +887,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--profile-implementation",
         choices=("baseline", "simdgroup"),
-        default="baseline",
+        help="profile target (default: promoted simdgroup implementation)",
     )
     parser.add_argument(
         "--profile-iterations",
@@ -904,7 +910,7 @@ def main() -> None:
         return
     if args.profile_rows is not None:
         raise RuntimeError("--profile-rows requires --profile-binary")
-    if args.profile_implementation != "baseline":
+    if args.profile_implementation is not None:
         raise RuntimeError(
             "--profile-implementation requires --profile-binary"
         )
@@ -956,7 +962,7 @@ def main() -> None:
             "implementations": (
                 [BASELINE_IMPLEMENTATION, VARIANT_IMPLEMENTATION]
                 if args.variant_comparison
-                else [BASELINE_IMPLEMENTATION]
+                else [VARIANT_IMPLEMENTATION]
             ),
             "variant_comparison": args.variant_comparison,
             "workload_rows": list(WORKLOAD_ROWS),
@@ -965,7 +971,7 @@ def main() -> None:
             "block_implementation_orders": list(
                 BLOCK_IMPLEMENTATION_ORDERS[: args.blocks]
                 if args.variant_comparison
-                else ("baseline_only",) * args.blocks
+                else ("default_only",) * args.blocks
             ),
             "num_warmup_iters": 1000,
             "max_iters": 1000,
@@ -985,7 +991,7 @@ def main() -> None:
         implementation_order = (
             BLOCK_IMPLEMENTATION_ORDERS[block_number - 1]
             if args.variant_comparison
-            else "baseline_only"
+            else "default_only"
         )
         current_repository = repository_state()
         if current_repository["commit"] != initial_repository["commit"]:

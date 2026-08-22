@@ -111,4 +111,6 @@ The frozen rule selects the SIMD-group implementation: rows=512 is a relevant
 material improvement and no relevant workload is a material regression.
 Promote it as the single public Apple GPU RMSNorm default, retain the
 shared-tree implementation only as an explicit benchmark baseline, and add no
-runtime dispatch rule.
+runtime dispatch rule. Commit `9bf73f6` implements that decision:
+`enqueue_rms_norm_apple_gpu` now selects the SIMD-group kernel, and
+`enqueue_rms_norm_apple_gpu_shared_tree` names the retained comparison path.

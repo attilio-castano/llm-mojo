@@ -145,6 +145,9 @@
   ],
   "decision": {
     "timing_rule_result": "replace_baseline",
+    "production_commit": "9bf73f6dca01c3886a268f5e369544c530a131d3",
+    "default_entrypoint": "llm_mojo.rms_norm.enqueue_rms_norm_apple_gpu",
+    "retained_baseline_entrypoint": "llm_mojo.rms_norm.enqueue_rms_norm_apple_gpu_shared_tree",
     "relevant_material_improvements": ["r512-h896"],
     "relevant_material_regressions": [],
     "dispatch_rule_justified": false,

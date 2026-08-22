@@ -8,9 +8,11 @@ bound the resulting claims.
 ## RMSNorm timing instrument
 
 The RMSNorm benchmark measures the supported Apple GPU enqueue path at hidden
-size 896 for row counts 1, 4, 16, 128, 512, 2048, and 4096. Those shapes cover
-batch-one decode, hypothetical batched-decode-like work, and prefill-like work;
-they do not prove that every semantic workload exists in the current engine.
+size 896 for row counts 1, 4, 16, 128, 512, 2048, and 4096. Ordinary mode
+measures the public SIMD-group default. Comparison mode pairs that default with
+the retained shared-tree baseline. Those shapes cover batch-one decode,
+hypothetical batched-decode-like work, and prefill-like work; they do not prove
+that every semantic workload exists in the current engine.
 
 Each workload uses BF16 input, weight, and output buffers filled with ones and
 reused within a repetition. Allocation, initialization, compilation, and the
@@ -39,18 +41,19 @@ uv run --locked python benchmarks/run_rms_norm.py \
   --output-dir /absolute/external/path/calibration-001
 ```
 
-For a decisive `EXP-0001` run, all four blocks use ascending, descending,
-descending, ascending workload order. The recorded-run gate rejects a dirty
-repository, non-AC power, a reported thermal or performance warning, an
-implicit run identity, or an output path inside the repository:
+For a decisive single-implementation run, all four blocks use ascending,
+descending, descending, ascending workload order. The recorded-run gate rejects
+a dirty repository, non-AC power, a reported thermal or performance warning,
+an implicit run identity, or an output path inside the repository. Freeze a new
+experiment identifier before using this form:
 
 ```bash
 uv run --locked python benchmarks/run_rms_norm.py \
   --blocks 4 \
-  --experiment-id EXP-0001 \
-  --run-id EXP-0001-RUN-001 \
+  --experiment-id EXP-XXXX \
+  --run-id EXP-XXXX-RUN-001 \
   --recorded \
-  --output-dir /absolute/external/path/EXP-0001-RUN-001
+  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
 ```
 
 The output directory contains block stdout, `metadata.json`, `samples.jsonl`,
@@ -87,8 +90,9 @@ uv run --locked python benchmarks/run_rms_norm.py \
   --require-clean
 ```
 
-Add `--profile-implementation simdgroup` to build the experimental variant.
-The default remains the shared-tree baseline.
+The builder defaults to the promoted SIMD-group implementation. Add
+`--profile-implementation baseline` to build the retained shared-tree baseline
+instead.
 
 The build also writes a provenance JSON file with the commit, environment,
 binary size, and SHA-256 digest. The binary performs an untimed correctness

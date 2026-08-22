@@ -20,7 +20,8 @@
   },
   "variant": {
     "implementation_id": "apple_gpu_simdgroup_v1",
-    "entrypoint": "llm_mojo.rms_norm.enqueue_rms_norm_apple_gpu_simdgroup",
+    "measurement_entrypoint": "llm_mojo.rms_norm.enqueue_rms_norm_apple_gpu_simdgroup",
+    "promoted_entrypoint": "llm_mojo.rms_norm.enqueue_rms_norm_apple_gpu",
     "threads_per_threadgroup": 128,
     "local_accumulation": "Each thread accumulates the same strided BF16 values into FP32 as the baseline.",
     "within_group_reduction": "Four 32-lane SIMD groups reduce their FP32 thread sums with warp.sum.",
@@ -157,6 +158,9 @@
   ],
   "decision": {
     "result": "replace_baseline",
+    "production_commit": "9bf73f6dca01c3886a268f5e369544c530a131d3",
+    "default_entrypoint": "llm_mojo.rms_norm.enqueue_rms_norm_apple_gpu",
+    "retained_baseline_entrypoint": "llm_mojo.rms_norm.enqueue_rms_norm_apple_gpu_shared_tree",
     "production_action": "Use the SIMD-group kernel as the single public Apple GPU RMSNorm default; retain the shared tree only as an explicit benchmark baseline.",
     "runtime_dispatch_rule": false,
     "reason": "One relevant workload materially improved, no relevant workload materially regressed, and no opposite effects met the frozen crossover rule."

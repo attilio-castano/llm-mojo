@@ -41,6 +41,25 @@ def paired_output(*, variant_first: bool = False) -> str:
     return "\n".join(lines)
 
 
+def default_output() -> str:
+    lines = [
+        "implementation: enqueue_rms_norm_apple_gpu",
+        "device: Apple Test GPU",
+        "api: metal",
+        BENCHMARK_RESULTS_BEGIN,
+        "name,met (ms),iters",
+    ]
+    for rows in WORKLOAD_ROWS:
+        for repetition in range(10):
+            lines.append(
+                "rms_norm_apple_gpu_simdgroup/input_id:"
+                f"rows={rows} hidden={HIDDEN_SIZE},"
+                f"{0.01 + repetition / 1000000.0},1000"
+            )
+    lines.append(BENCHMARK_RESULTS_END)
+    return "\n".join(lines)
+
+
 def synthetic_samples() -> list[dict[str, object]]:
     samples: list[dict[str, object]] = []
     for block_number in range(1, 5):
@@ -77,6 +96,26 @@ def synthetic_samples() -> list[dict[str, object]]:
 
 
 class ParsePairedSamplesTest(unittest.TestCase):
+    def test_default_mode_records_the_promoted_implementation(self):
+        identity, samples = parse_samples(
+            default_output(),
+            experiment_id="exploration",
+            run_id="RUN-DEFAULT",
+            block_id="block-01",
+            block_order="ascending",
+            implementation_order="default_only",
+            variant_comparison=False,
+        )
+
+        self.assertEqual(identity["implementation"], "enqueue_rms_norm_apple_gpu")
+        self.assertEqual(len(samples), 70)
+        self.assertTrue(
+            all(
+                sample["implementation"] == VARIANT_IMPLEMENTATION["id"]
+                for sample in samples
+            )
+        )
+
     def test_accepts_frozen_pair_order_and_assigns_unique_ids(self):
         identity, samples = parse_samples(
             paired_output(),
