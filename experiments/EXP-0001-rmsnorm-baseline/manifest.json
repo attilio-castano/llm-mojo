@@ -4,7 +4,7 @@
   "slug": "rmsnorm-baseline",
   "title": "Apple GPU RMSNorm baseline characterization",
   "created_date": "2026-08-21",
-  "status": "in_progress",
+  "status": "complete",
   "evidence_level": "operation",
   "question": "How does the existing Apple GPU RMSNorm implementation scale across decode, batched-decode-like, and prefill row counts, and what limits representative regimes?",
   "experiment_type": "characterization",
@@ -191,6 +191,14 @@
     "summary": "Rows=1 generated-code and Metal trace paths were validated. The emitted kernel preserves the 512-byte shared tree and nine workgroup barriers. The stock trace had no counter set, and the direct Metal GPU Counters instrument selected a profile unsupported on this target, so hardware traffic and stall mechanisms remain unresolved.",
     "evidence_boundary": "Battery-powered tooling calibration only; no headline timing or optimization decision."
   },
+  "representative_profiling": {
+    "status": "complete_with_counter_limitations",
+    "artifact": "baseline-profiles.json",
+    "profile_binary_commit": "5f4c03e48ef27dbdfd47a9aa27bcaabc6bc02a61",
+    "trace_analyzer_commit": "6b7d4accad29acc7fdd8ab1291da762b45dcaa31",
+    "workloads": ["r1-h896", "r512-h896", "r4096-h896"],
+    "summary": "All fixed sequences validated. The stock trace selected no counter set and disabled the shader timeline for every workload. No sequence-scoped spill event was reported. Hardware traffic, occupancy, and stall mechanisms remain unresolved."
+  },
   "baseline_measurement": {
     "status": "passed",
     "run_id": "EXP-0001-RUN-001",
@@ -248,7 +256,26 @@
       "path": "baseline-run.json",
       "measurement_commit": "b59717d455d1bf599827a567b407bada13024565",
       "evidence_use": "AC-powered operation-level scaling, noise, transition-workload selection, and saturation non-observation."
+    },
+    {
+      "id": "EXP-0001-PROFILES-001",
+      "kind": "representative_baseline_profiles",
+      "path": "baseline-profiles.json",
+      "profile_binary_commit": "5f4c03e48ef27dbdfd47a9aa27bcaabc6bc02a61",
+      "trace_analyzer_commit": "6b7d4accad29acc7fdd8ab1291da762b45dcaa31",
+      "evidence_use": "Sequence validation, profiling-tool limitation, and bounded spill-event observations for decode, transition, and largest-measured workloads."
     }
   ],
-  "deviations": []
+  "deviations": [
+    {
+      "stage": "representative profiling",
+      "observation": "The initial rows=1 capture used a one-second time limit and Instruments terminated the target with SIGKILL before the fixed sequence finished.",
+      "action": "Excluded the bundle and replaced it with a target-exit capture."
+    },
+    {
+      "stage": "trace analysis",
+      "observation": "Rows=4096 emitted 22 target-process setup compute commands before the fixed 6,001-command RMSNorm sequence.",
+      "action": "Root-caused the prefix, updated the analyzer to segment the trailing program sequence and scope spill checks to it, added regression coverage, and reanalyzed all representative traces at commit 6b7d4ac."
+    }
+  ]
 }

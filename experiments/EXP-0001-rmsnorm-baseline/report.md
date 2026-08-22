@@ -1,6 +1,6 @@
 # EXP-0001: Apple GPU RMSNorm baseline characterization
 
-Status: **in progress**
+Status: **complete**
 
 Evidence level: **operation**
 
@@ -76,15 +76,34 @@ The calibration was battery-powered and system load was uncontrolled. Its
 instrumented intervals support no latency, bandwidth, occupancy, or stall-time
 claim.
 
+Representative AC-powered target-exit captures for rows=1, rows=512, and
+rows=4096 are retained in compact form in
+[`baseline-profiles.json`](baseline-profiles.json). Every capture contains the
+fixed one-correctness, 1,000-warmup, and 5,000-profile sequence. Rows=4096 also
+contains 22 earlier target-process compute commands from large-buffer setup;
+the analyzer reports that prefix and segments the trailing fixed sequence.
+
+| Workload | Setup compute commands | Instrumented median (ns) | Instrumented p95 (ns) | Reported spills |
+| --- | ---: | ---: | ---: | ---: |
+| r1-h896 | 0 | 6,208 | 8,208 | 0 |
+| r512-h896 | 0 | 11,250 | 12,834 | 0 |
+| r4096-h896 | 22 | 59,625 | 60,709 | 0 |
+
+These intervals are diagnostic Instruments output, not ordinary benchmark
+latency. All three traces selected a null counter set, disabled the shader
+timeline, and exposed no named occupancy, bandwidth, or barrier-stall counter.
+No sequence-scoped compiler spill event was reported; that bounded observation
+does not prove that the kernel is universally spill-free.
+
 ## Interpretation
 
 The clean timing baseline establishes where work begins to rise above fixed
-dispatch cost, but it does not identify why. The shared-memory tree remains a
-concrete optimization hypothesis, not a causal bottleneck finding. Compiler
-output proves that the synchronization and storage exist; it does not prove
-that removing them will materially improve ordinary execution. That requires
-representative rows=1, rows=512, and rows=4096 profiles followed by a paired
-variant comparison.
+dispatch cost, but the available profiler does not identify why. The
+shared-memory tree remains a concrete optimization hypothesis, not a causal
+bottleneck finding. Compiler output proves that the synchronization and storage
+exist; the representative traces prove the workloads were captured but expose
+no counter that attributes their cost. A paired variant comparison is therefore
+the next valid empirical test.
 
 ## Nonclaims
 
@@ -95,7 +114,7 @@ bottleneck claim.
 
 ## Decision
 
-The baseline implementation remains unchanged. Profile rows=1, the measured
-transition at rows=512, and the largest measured workload at rows=4096 before
-implementing one reduction variant. Do not introduce a saturation-specific or
-multi-path dispatch rule from this characterization.
+EXP-0001 is complete and the baseline implementation remains unchanged. Proceed
+to one separately frozen reduction variant and paired comparison. Do not
+introduce a saturation-specific or multi-path dispatch rule from this
+characterization.
