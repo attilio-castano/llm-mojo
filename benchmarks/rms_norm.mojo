@@ -19,6 +19,7 @@ from std.benchmark import (
 )
 from std.sys import get_defined_bool, get_defined_int, is_defined
 from std.sys.info import has_apple_gpu_accelerator
+from std.time import sleep
 
 
 comptime HIDDEN_SIZE = 896
@@ -26,6 +27,7 @@ comptime BENCHMARK_WARMUP_ITERATIONS = 1_000
 comptime BENCHMARK_MAX_ITERATIONS = 1_000
 comptime BENCHMARK_REPETITIONS = 10
 comptime DEFAULT_PROFILE_WARMUP_ITERATIONS = 1_000
+comptime DEFAULT_PROFILE_POST_IDLE_MILLISECONDS = 0
 
 
 @always_inline
@@ -230,7 +232,7 @@ def run_profile_workload[
     warmup_iterations: Int,
     iterations: Int,
     use_simdgroup: Bool,
-]() raises:
+](post_profile_idle_milliseconds: Int) raises:
     comptime assert rows > 0, "profile rows must be positive"
     comptime assert (
         warmup_iterations >= 0
@@ -239,6 +241,8 @@ def run_profile_workload[
     comptime assert (
         has_apple_gpu_accelerator()
     ), "profile workload requires an Apple GPU"
+    if post_profile_idle_milliseconds < 0:
+        raise Error("profile post-idle milliseconds must be non-negative")
 
     var context = DeviceContext()
     if context.api() != "metal":
@@ -297,6 +301,9 @@ def run_profile_workload[
     print("hidden:", HIDDEN_SIZE)
     print("warmup iterations:", warmup_iterations)
     print("profile iterations:", iterations)
+    print(
+        "post-profile idle milliseconds:", post_profile_idle_milliseconds
+    )
     print("PROFILE_REGION_BEGIN")
     comptime if use_simdgroup:
         for _ in range(iterations):
@@ -308,6 +315,8 @@ def run_profile_workload[
             )
     context.synchronize()
     print("PROFILE_REGION_END")
+    if post_profile_idle_milliseconds > 0:
+        sleep(Float64(post_profile_idle_milliseconds) / 1_000.0)
 
 
 def main() raises:
@@ -319,6 +328,15 @@ def main() raises:
         comptime profile_simdgroup = get_defined_bool[
             "RMS_NORM_PROFILE_SIMDGROUP"
         ]()
+        var post_profile_idle_milliseconds = (
+            DEFAULT_PROFILE_POST_IDLE_MILLISECONDS
+        )
+        comptime if is_defined[
+            "RMS_NORM_PROFILE_POST_IDLE_MILLISECONDS"
+        ]():
+            post_profile_idle_milliseconds = get_defined_int[
+                "RMS_NORM_PROFILE_POST_IDLE_MILLISECONDS"
+            ]()
         comptime if is_defined["RMS_NORM_PROFILE_WARMUP_ITERATIONS"]():
             comptime profile_warmup_iterations = get_defined_int[
                 "RMS_NORM_PROFILE_WARMUP_ITERATIONS"
@@ -328,13 +346,13 @@ def main() raises:
                 profile_warmup_iterations,
                 profile_iterations,
                 profile_simdgroup,
-            ]()
+            ](post_profile_idle_milliseconds)
         else:
             run_profile_workload[
                 profile_rows,
                 DEFAULT_PROFILE_WARMUP_ITERATIONS,
                 profile_iterations,
                 profile_simdgroup,
-            ]()
+            ](post_profile_idle_milliseconds)
     else:
         run_benchmarks()

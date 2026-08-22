@@ -34,6 +34,8 @@ EXPECTED_REPETITIONS = 10
 PROFILE_ITERATIONS_LIMIT = 5_000
 DEFAULT_PROFILE_WARMUP_ITERATIONS = 1_000
 PROFILE_WARMUP_ITERATIONS_LIMIT = 1_000
+DEFAULT_PROFILE_POST_IDLE_MILLISECONDS = 0
+PROFILE_POST_IDLE_MILLISECONDS_LIMIT = 1_000
 MATERIAL_IMPROVEMENT_RATIO = 0.95
 MATERIAL_REGRESSION_RATIO = 1.05
 REQUIRED_DIRECTION_BLOCKS = 3
@@ -238,6 +240,21 @@ def ensure_record_location(output_dir: Path) -> None:
             "recorded run output must be outside the repository; promote only "
             "the compact reviewed evidence afterward"
         )
+
+
+def ensure_profile_launch_location(output: Path) -> None:
+    resolved = output.resolve()
+    home = Path.home().resolve()
+    for directory in ("Desktop", "Documents", "Downloads"):
+        protected = (home / directory).resolve()
+        if resolved == protected or resolved.is_relative_to(protected):
+            raise RuntimeError(
+                "profile binary must be outside macOS privacy-protected user "
+                "folders (Desktop, Documents, Downloads); xctrace may leave "
+                "a newly generated executable suspended there. Build it under "
+                "/private/tmp, then copy the binary and provenance after the "
+                "capture if they must be retained"
+            )
 
 
 def parse_identity(
@@ -822,7 +839,22 @@ def build_profile_binary(args: argparse.Namespace) -> None:
             "profile warmup iterations must not exceed "
             f"{PROFILE_WARMUP_ITERATIONS_LIMIT}"
         )
+    profile_post_idle_milliseconds = (
+        DEFAULT_PROFILE_POST_IDLE_MILLISECONDS
+        if args.profile_post_idle_milliseconds is None
+        else args.profile_post_idle_milliseconds
+    )
+    if profile_post_idle_milliseconds < 0:
+        raise RuntimeError(
+            "profile post-idle milliseconds must be non-negative"
+        )
+    if profile_post_idle_milliseconds > PROFILE_POST_IDLE_MILLISECONDS_LIMIT:
+        raise RuntimeError(
+            "profile post-idle milliseconds must not exceed "
+            f"{PROFILE_POST_IDLE_MILLISECONDS_LIMIT}"
+        )
     output = args.profile_binary.resolve()
+    ensure_profile_launch_location(output)
     if output.exists():
         raise RuntimeError(
             f"refusing to overwrite existing profile binary: {output}"
@@ -850,6 +882,11 @@ def build_profile_binary(args: argparse.Namespace) -> None:
             "RMS_NORM_PROFILE_WARMUP_ITERATIONS="
             f"{profile_warmup_iterations}"
         ),
+        "-D",
+        (
+            "RMS_NORM_PROFILE_POST_IDLE_MILLISECONDS="
+            f"{profile_post_idle_milliseconds}"
+        ),
     ]
     profile_choice = args.profile_implementation or "simdgroup"
     profile_implementation = (
@@ -875,6 +912,7 @@ def build_profile_binary(args: argparse.Namespace) -> None:
         "hidden_size": HIDDEN_SIZE,
         "profile_warmup_iterations": profile_warmup_iterations,
         "profile_iterations": args.profile_iterations,
+        "profile_post_idle_milliseconds": profile_post_idle_milliseconds,
         "implementation": profile_implementation["id"],
         "entrypoint": profile_implementation["entrypoint"],
         "binary": {
@@ -926,6 +964,15 @@ def parse_args() -> argparse.Namespace:
             f"(default and maximum: {DEFAULT_PROFILE_WARMUP_ITERATIONS})"
         ),
     )
+    parser.add_argument(
+        "--profile-post-idle-milliseconds",
+        type=int,
+        help=(
+            "host-only idle time after the profile region so a profiler can "
+            "flush trailing samples (default: 0; maximum: "
+            f"{PROFILE_POST_IDLE_MILLISECONDS_LIMIT})"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -945,6 +992,10 @@ def main() -> None:
     if args.profile_warmup_iterations is not None:
         raise RuntimeError(
             "--profile-warmup-iterations requires --profile-binary"
+        )
+    if args.profile_post_idle_milliseconds is not None:
+        raise RuntimeError(
+            "--profile-post-idle-milliseconds requires --profile-binary"
         )
     if args.recorded and (
         args.output_dir is None

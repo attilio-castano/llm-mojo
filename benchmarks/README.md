@@ -106,6 +106,27 @@ defaults to and enforces at most 5,000 profiling dispatches. Use multiple short
 captures instead of increasing that limit; fewer dispatches may be appropriate
 for larger workloads.
 
+Counter streams may have an unflushed tail when a target exits immediately
+after its final synchronization. For a counter capture, add a bounded host-only
+idle after `PROFILE_REGION_END`; it is outside the GPU profile sequence and
+defaults to zero:
+
+Build the launch target outside macOS privacy-protected user folders. A newly
+generated ad-hoc executable under `Desktop`, `Documents`, or `Downloads` can be
+left suspended when `xctrace` launches it even though direct execution works.
+Use an unprotected scratch path such as `/private/tmp`; copy the binary and its
+provenance after capture if they need to be retained.
+
+```bash
+uv run --locked python benchmarks/run_rms_norm.py \
+  --profile-binary /private/tmp/rmsnorm-counter-profile-r512 \
+  --profile-rows 512 \
+  --profile-warmup-iterations 100 \
+  --profile-iterations 500 \
+  --profile-post-idle-milliseconds 250 \
+  --require-clean
+```
+
 Capture a short Metal System Trace outside the repository. Keep the raw trace
 external because Instruments may record host identifiers and unrelated system
 activity:
@@ -185,6 +206,7 @@ uv run --locked mojo build \
   -D RMS_NORM_PROFILE_ROWS=1 \
   -D RMS_NORM_PROFILE_WARMUP_ITERATIONS=1000 \
   -D RMS_NORM_PROFILE_ITERATIONS=1 \
+  -D RMS_NORM_PROFILE_POST_IDLE_MILLISECONDS=0 \
   -D RMS_NORM_PROFILE_SIMDGROUP=true \
   --emit asm \
   -o /absolute/external/path/rmsnorm-simdgroup-profile.s \
