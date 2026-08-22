@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "experiment_id": "EXP-0003",
+  "slug": "rmsnorm-limiter-counters",
+  "title": "Apple GPU RMSNorm limiter-counter comparison",
+  "created_date": "2026-08-22",
+  "status": "planned",
+  "evidence_level": "operation",
+  "question": "Do matched Performance Limiters traces show a repeatable device-counter difference between the shared-tree and SIMD-group RMSNorm implementations at rows=512?",
+  "prior_evidence": {
+    "experiment": "EXP-0002",
+    "workload": "r512-h896",
+    "paired_timing_change_percent": -5.38,
+    "timing_decision": "replace_baseline",
+    "decision_reopened": false
+  },
+  "hypothesis": "The SIMD-group structure may reduce observable synchronization-related pressure relative to the shared tree, but only named counters may support a bounded mechanism statement.",
+  "workload": {
+    "rows": 512,
+    "hidden_size": 896,
+    "dtype": "bfloat16",
+    "accumulation_dtype": "float32",
+    "threads_per_threadgroup": 128,
+    "correctness_dispatches": 1,
+    "warmup_dispatches": 100,
+    "profile_dispatches": 500
+  },
+  "implementations": [
+    {
+      "role": "baseline",
+      "id": "apple_gpu_shared_tree_v0",
+      "entrypoint": "enqueue_rms_norm_apple_gpu_shared_tree",
+      "shared_reduction_values": 128,
+      "workgroup_barriers": 9
+    },
+    {
+      "role": "variant",
+      "id": "apple_gpu_simdgroup_v1",
+      "entrypoint": "enqueue_rms_norm_apple_gpu",
+      "shared_reduction_values": 4,
+      "workgroup_barriers": 2
+    }
+  ],
+  "capture": {
+    "template": "LLM_Mojo_Metal_Limiters",
+    "counter_set": "Performance Limiters",
+    "performance_state": "Default",
+    "shader_timeline": false,
+    "time_limit_seconds": 10,
+    "order": ["baseline", "variant", "variant", "baseline"],
+    "raw_artifact_policy": "External only because traces and XML exports may contain host identifiers or unrelated system activity."
+  },
+  "validity_gates": [
+    "Clean immutable commit and matched binary provenance.",
+    "Apple M4 Pro and Metal runtime identity.",
+    "AC power before and after every capture with no reported thermal or performance warning.",
+    "Target exits normally and the analyzer validates one correctness, 100 warmup, and 500 profile compute dispatches.",
+    "The trace names Performance Limiters and retains named GPU counter values.",
+    "At least 10 distinct counter timestamps overlap the target profile window and their span covers at least 80% of that window."
+  ],
+  "comparison": {
+    "pairs": [
+      "capture-01 baseline / capture-02 variant",
+      "capture-04 baseline / capture-03 variant"
+    ],
+    "ratio": "variant capture median divided by adjacent baseline capture median",
+    "repeatable_difference": "Both pair ratios move in the same direction and their median relative change has magnitude at least 5%, with positive medians in all four captures.",
+    "zero_or_inconsistent_values": "Descriptive only."
+  },
+  "counter_families": [
+    "occupancy and compute SIMD groups inflight",
+    "compute launch and instruction throughput",
+    "ALU, F32, and F16 limiters and utilization",
+    "L1 cache and threadgroup-memory bandwidth",
+    "GPU and last-level-cache bandwidth and limiters"
+  ],
+  "profiler_gate_commit": "de6aca0",
+  "runs": [],
+  "result": null,
+  "nonclaims": [
+    "No direct barrier-stall claim without a named barrier counter.",
+    "No command-buffer-exclusive interpretation of device-wide samples.",
+    "No physical traffic, energy, end-to-end inference, time-to-first-token, or time-per-output-token claim.",
+    "Instrumented durations do not replace ordinary paired timing."
+  ]
+}
