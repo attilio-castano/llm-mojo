@@ -23,12 +23,24 @@ DEFAULT_PROFILE_ITERATIONS = 500
 DEFAULT_MINIMUM_TIMESTAMPS = 10
 DEFAULT_MINIMUM_SAMPLE_SPAN = 0.80
 DEFAULT_MATERIAL_CHANGE = 0.05
-CAPTURE_SPECS = (
-    ("capture-01-baseline", "baseline"),
-    ("capture-02-variant", "variant"),
-    ("capture-03-variant", "variant"),
-    ("capture-04-baseline", "baseline"),
-)
+EXPECTED_CAPTURE_ORDER = ("baseline", "variant", "variant", "baseline")
+EXPECTED_WORKLOAD = {
+    "rows": 512,
+    "hidden_size": 896,
+    "warmup_iterations": DEFAULT_WARMUP_ITERATIONS,
+    "profile_iterations": DEFAULT_PROFILE_ITERATIONS,
+    "post_profile_idle_milliseconds": 250,
+}
+IMPLEMENTATION_ROLES = {
+    (
+        "apple_gpu_shared_tree_v0",
+        "enqueue_rms_norm_apple_gpu_shared_tree",
+    ): "baseline",
+    (
+        "apple_gpu_simdgroup_v1",
+        "enqueue_rms_norm_apple_gpu",
+    ): "variant",
+}
 
 
 def sha256_file(path: Path) -> str:
@@ -54,16 +66,145 @@ def require(condition: bool, message: str) -> None:
         raise ValueError(message)
 
 
+def identity_hash(value: Any, label: str, capture_label: str) -> dict[str, Any]:
+    require(
+        isinstance(value, dict),
+        f"{capture_label} has no {label} identity",
+    )
+    size = value.get("bytes")
+    digest = value.get("sha256")
+    require(
+        isinstance(size, int)
+        and not isinstance(size, bool)
+        and size >= 0
+        and isinstance(digest, str)
+        and len(digest) == 64
+        and all(character in "0123456789abcdef" for character in digest),
+        f"{capture_label} has an invalid {label} identity",
+    )
+    return {"bytes": size, "sha256": digest}
+
+
+def verified_identity(
+    summary: dict[str, Any], capture_index: int
+) -> tuple[dict[str, Any], str, str]:
+    capture_label = f"capture {capture_index}"
+    require(
+        summary.get("schema_version") == 3,
+        f"{capture_label} does not use the verified trace-summary schema",
+    )
+    identity = summary.get("capture_identity")
+    require(
+        isinstance(identity, dict)
+        and identity.get("verification")
+        == "capture_receipt_v2_and_trace_target",
+        f"{capture_label} has no verified capture identity",
+    )
+    capture_id = identity.get("capture_id")
+    require(
+        isinstance(capture_id, str)
+        and capture_id.startswith("rmsnorm-")
+        and len(capture_id) == 40
+        and all(
+            character in "0123456789abcdef" for character in capture_id[8:]
+        ),
+        f"{capture_label} has an invalid capture ID",
+    )
+    capture_label = f"capture {capture_index} ({capture_id})"
+
+    implementation = identity.get("implementation")
+    entrypoint = identity.get("entrypoint")
+    role = IMPLEMENTATION_ROLES.get((implementation, entrypoint))
+    require(
+        role is not None,
+        f"{capture_label} has an unknown RMSNorm implementation",
+    )
+    binary = identity_hash(identity.get("binary"), "binary", capture_label)
+    provenance = identity_hash(
+        identity.get("provenance"), "provenance", capture_label
+    )
+    receipt = identity_hash(
+        identity.get("capture_receipt"), "capture receipt", capture_label
+    )
+    inputs = summary.get("inputs")
+    require(
+        isinstance(inputs, list),
+        f"{capture_label} has no analyzer input identities",
+    )
+    receipt_inputs = [
+        value
+        for value in inputs
+        if isinstance(value, dict)
+        and value.get("kind") == "capture_receipt_json"
+    ]
+    require(
+        len(receipt_inputs) == 1
+        and identity_hash(
+            receipt_inputs[0], "analyzer capture receipt", capture_label
+        )
+        == receipt,
+        f"{capture_label} is not bound to its analyzer receipt input",
+    )
+
+    repository = identity.get("repository")
+    require(
+        isinstance(repository, dict)
+        and isinstance(repository.get("commit"), str)
+        and len(repository["commit"]) == 40
+        and all(
+            character in "0123456789abcdef"
+            for character in repository["commit"]
+        )
+        and repository.get("dirty") is False,
+        f"{capture_label} was not built from a clean immutable commit",
+    )
+    runtime = identity.get("runtime")
+    require(
+        isinstance(runtime, dict)
+        and isinstance(runtime.get("device"), str)
+        and runtime["device"].startswith("Apple ")
+        and runtime.get("backend") == "metal",
+        f"{capture_label} did not verify an Apple GPU through Metal",
+    )
+    workload = identity.get("workload")
+    require(
+        workload == EXPECTED_WORKLOAD,
+        f"{capture_label} does not match the frozen RMSNorm workload",
+    )
+    trace = summary.get("trace")
+    require(isinstance(trace, dict), f"{capture_label} has no trace metadata")
+    trace_target = trace.get("target")
+    require(
+        isinstance(trace_target, dict)
+        and trace_target.get("capture_id_verified") is True,
+        f"{capture_label} is not bound to the trace target process",
+    )
+    return (
+        {
+            "capture_id": capture_id,
+            "role": role,
+            "implementation": implementation,
+            "entrypoint": entrypoint,
+            "binary": binary,
+            "provenance": provenance,
+            "capture_receipt": receipt,
+            "repository": repository,
+            "runtime": runtime,
+            "workload": workload,
+        },
+        capture_id,
+        role,
+    )
+
+
 def validate_capture(
     summary: dict[str, Any],
     *,
-    capture_id: str,
-    role: str,
-    warmup_iterations: int,
-    profile_iterations: int,
+    capture_index: int,
     minimum_timestamps: int,
     minimum_sample_span: float,
 ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    identity, capture_id, role = verified_identity(summary, capture_index)
     require(
         summary.get("analysis") == "rmsnorm_metal_trace",
         f"{capture_id} is not an RMSNorm Metal trace summary",
@@ -84,15 +225,21 @@ def validate_capture(
     )
 
     sequence = summary.get("validated_sequence", {})
-    expected_compute = 1 + warmup_iterations + profile_iterations
+    expected_compute = (
+        1
+        + EXPECTED_WORKLOAD["warmup_iterations"]
+        + EXPECTED_WORKLOAD["profile_iterations"]
+    )
     require(
         sequence.get("setup_compute_commands") == 0,
         f"{capture_id} contains unexpected setup compute commands",
     )
     require(
         sequence.get("correctness_dispatches") == 1
-        and sequence.get("warmup_dispatches") == warmup_iterations
-        and sequence.get("profile_dispatches") == profile_iterations
+        and sequence.get("warmup_dispatches")
+        == EXPECTED_WORKLOAD["warmup_iterations"]
+        and sequence.get("profile_dispatches")
+        == EXPECTED_WORKLOAD["profile_iterations"]
         and sequence.get("compute_channel_command_kinds", {}).get("compute")
         == expected_compute,
         f"{capture_id} does not contain the exact declared compute sequence",
@@ -142,8 +289,7 @@ def validate_capture(
     profile_window = profile_counters.get("profile_window", {})
     return (
         {
-            "capture_id": capture_id,
-            "role": role,
+            **identity,
             "trace_duration_seconds": trace.get(
                 "recording_duration_seconds"
             ),
@@ -170,15 +316,11 @@ def validate_capture(
 def compare(
     summaries: list[dict[str, Any]],
     *,
-    warmup_iterations: int = DEFAULT_WARMUP_ITERATIONS,
-    profile_iterations: int = DEFAULT_PROFILE_ITERATIONS,
     minimum_timestamps: int = DEFAULT_MINIMUM_TIMESTAMPS,
     minimum_sample_span: float = DEFAULT_MINIMUM_SAMPLE_SPAN,
     material_change: float = DEFAULT_MATERIAL_CHANGE,
 ) -> dict[str, Any]:
     require(len(summaries) == 4, "comparison requires exactly four captures")
-    require(warmup_iterations >= 0, "warmup iterations must be non-negative")
-    require(profile_iterations > 0, "profile iterations must be positive")
     require(minimum_timestamps > 0, "minimum timestamps must be positive")
     require(
         0.0 <= minimum_sample_span <= 1.0,
@@ -188,20 +330,65 @@ def compare(
 
     captures = []
     counter_maps = []
-    for summary, (capture_id, role) in zip(
-        summaries, CAPTURE_SPECS, strict=True
-    ):
+    for capture_index, summary in enumerate(summaries, start=1):
         capture, counters = validate_capture(
             summary,
-            capture_id=capture_id,
-            role=role,
-            warmup_iterations=warmup_iterations,
-            profile_iterations=profile_iterations,
+            capture_index=capture_index,
             minimum_timestamps=minimum_timestamps,
             minimum_sample_span=minimum_sample_span,
         )
         captures.append(capture)
         counter_maps.append(counters)
+
+    capture_ids = [capture["capture_id"] for capture in captures]
+    roles = [capture["role"] for capture in captures]
+    require(
+        len(set(capture_ids)) == len(capture_ids),
+        "comparison contains a repeated capture ID",
+    )
+    require(
+        roles == list(EXPECTED_CAPTURE_ORDER),
+        "verified capture roles are not in the frozen ABBA order",
+    )
+    receipt_hashes = [
+        capture["capture_receipt"]["sha256"] for capture in captures
+    ]
+    require(
+        len(set(receipt_hashes)) == len(receipt_hashes),
+        "comparison contains a repeated capture receipt",
+    )
+    commits = {capture["repository"]["commit"] for capture in captures}
+    require(
+        len(commits) == 1,
+        "captures were not built from the same repository commit",
+    )
+    devices = {capture["runtime"]["device"] for capture in captures}
+    backends = {capture["runtime"]["backend"] for capture in captures}
+    require(len(devices) == 1, "captures do not identify the same GPU device")
+    require(backends == {"metal"}, "captures do not share the Metal backend")
+
+    role_binary_hashes: dict[str, set[str]] = {}
+    role_provenance_hashes: dict[str, set[str]] = {}
+    for role in ("baseline", "variant"):
+        role_captures = [capture for capture in captures if capture["role"] == role]
+        role_binary_hashes[role] = {
+            capture["binary"]["sha256"] for capture in role_captures
+        }
+        role_provenance_hashes[role] = {
+            capture["provenance"]["sha256"] for capture in role_captures
+        }
+        require(
+            len(role_binary_hashes[role]) == 1,
+            f"{role} captures do not use the same binary",
+        )
+        require(
+            len(role_provenance_hashes[role]) == 1,
+            f"{role} captures do not use the same provenance",
+        )
+    require(
+        role_binary_hashes["baseline"] != role_binary_hashes["variant"],
+        "baseline and variant captures use the same binary",
+    )
 
     reference_names = set(counter_maps[0])
     for capture, counters in zip(captures[1:], counter_maps[1:], strict=True):
@@ -254,10 +441,8 @@ def compare(
                 "description": next(iter(counter_descriptions)),
                 "unit": next(iter(counter_units)),
                 "capture_medians": {
-                    capture_id: median
-                    for (capture_id, _), median in zip(
-                        CAPTURE_SPECS, medians, strict=True
-                    )
+                    capture["capture_id"]: median
+                    for capture, median in zip(captures, medians, strict=True)
                 },
                 "pair_variant_over_baseline_ratios": pair_ratios,
                 "median_variant_over_baseline_ratio": median_ratio,
@@ -273,16 +458,15 @@ def compare(
         if counter["classification"] == "repeatable_difference"
     ]
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "analysis": "rmsnorm_limiter_counter_comparison",
         "protocol": {
-            "capture_order": [role for _, role in CAPTURE_SPECS],
+            "capture_order": roles,
             "pairs": [
-                "capture-02-variant / capture-01-baseline",
-                "capture-03-variant / capture-04-baseline",
+                f"{capture_ids[1]} / {capture_ids[0]}",
+                f"{capture_ids[2]} / {capture_ids[3]}",
             ],
-            "warmup_dispatches": warmup_iterations,
-            "profile_dispatches": profile_iterations,
+            "workload": EXPECTED_WORKLOAD,
             "minimum_counter_timestamps": minimum_timestamps,
             "minimum_counter_sample_span_fraction": minimum_sample_span,
             "material_relative_change_threshold": material_change,
@@ -290,6 +474,12 @@ def compare(
                 "Positive medians in all captures, both pair ratios in the "
                 "same direction, and median absolute relative change at or "
                 "above the material threshold."
+            ),
+            "identity_rule": (
+                "Roles are derived from receipt-verified implementation and "
+                "entrypoint identity. All captures must have unique capture "
+                "receipts, the same clean commit, device, backend, and frozen "
+                "workload, with one stable binary and provenance per role."
             ),
         },
         "captures": captures,
@@ -318,19 +508,16 @@ def compare(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--baseline-first", type=Path, required=True)
-    parser.add_argument("--variant-second", type=Path, required=True)
-    parser.add_argument("--variant-third", type=Path, required=True)
-    parser.add_argument("--baseline-fourth", type=Path, required=True)
     parser.add_argument(
-        "--warmup-iterations",
-        type=int,
-        default=DEFAULT_WARMUP_ITERATIONS,
-    )
-    parser.add_argument(
-        "--profile-iterations",
-        type=int,
-        default=DEFAULT_PROFILE_ITERATIONS,
+        "--captures",
+        type=Path,
+        nargs=4,
+        required=True,
+        metavar=("CAPTURE_1", "CAPTURE_2", "CAPTURE_3", "CAPTURE_4"),
+        help=(
+            "four verified trace summaries in intended ABBA sequence; roles "
+            "are derived from capture identity"
+        ),
     )
     parser.add_argument("--output", type=Path)
     return parser.parse_args()
@@ -338,21 +525,16 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    paths = [
-        args.baseline_first,
-        args.variant_second,
-        args.variant_third,
-        args.baseline_fourth,
-    ]
-    summaries = [json.loads(path.read_text()) for path in paths]
-    result = compare(
-        summaries,
-        warmup_iterations=args.warmup_iterations,
-        profile_iterations=args.profile_iterations,
+    paths = args.captures
+    require(
+        len({path.resolve() for path in paths}) == len(paths),
+        "comparison input paths must be unique",
     )
+    summaries = [json.loads(path.read_text()) for path in paths]
+    result = compare(summaries)
     result["inputs"] = [
-        artifact(path, capture_id)
-        for path, (capture_id, _) in zip(paths, CAPTURE_SPECS, strict=True)
+        artifact(path, capture["capture_id"])
+        for path, capture in zip(paths, result["captures"], strict=True)
     ]
     payload = json.dumps(result, indent=2, sort_keys=True) + "\n"
     if args.output is not None:
