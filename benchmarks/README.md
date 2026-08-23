@@ -111,15 +111,17 @@ after its final synchronization. For a counter capture, add a bounded host-only
 idle after `PROFILE_REGION_END`; it is outside the GPU profile sequence and
 defaults to zero:
 
-Build the launch target outside macOS privacy-protected user folders. A newly
-generated ad-hoc executable under `Desktop`, `Documents`, or `Downloads` can be
-left suspended when `xctrace` launches it even though direct execution works.
-Use an unprotected scratch path such as `/private/tmp`; copy the binary and its
-provenance after capture if they need to be retained.
+The canonical binary and provenance may be stored under `Desktop`, `Documents`,
+or `Downloads`, but do not launch the generated executable there with raw
+`xctrace`. macOS privacy checks can leave that target suspended even though
+direct execution works. The capture helper below verifies the canonical binary
+against its provenance, copies only its bytes into an owner-only directory
+under `/private/tmp`, verifies the staged SHA-256, launches that copy, and
+removes it afterward.
 
 ```bash
 uv run --locked python benchmarks/run_rms_norm.py \
-  --profile-binary /private/tmp/rmsnorm-counter-profile-r512 \
+  --profile-binary /absolute/external/path/rmsnorm-counter-profile-r512 \
   --profile-rows 512 \
   --profile-warmup-iterations 100 \
   --profile-iterations 500 \
@@ -127,18 +129,25 @@ uv run --locked python benchmarks/run_rms_norm.py \
   --require-clean
 ```
 
-Capture a short Metal System Trace outside the repository. Keep the raw trace
-external because Instruments may record host identifiers and unrelated system
-activity:
+Capture a short Metal System Trace outside the repository through the staging
+helper. Keep the raw trace external because Instruments may record host
+identifiers and unrelated system activity:
 
 ```bash
-xctrace record \
+uv run --locked python benchmarks/capture_rms_norm_trace.py \
+  --profile-binary /absolute/external/path/rmsnorm-profile-r1 \
+  --output-trace /absolute/external/path/rmsnorm-r1.trace \
   --template 'Metal System Trace' \
-  --time-limit 1s \
-  --output /absolute/external/path/rmsnorm-r1.trace \
-  --target-stdout - \
-  --launch -- /absolute/external/path/rmsnorm-profile-r1
+  --time-limit 1s
 ```
+
+The helper refuses to overwrite an existing trace or receipt and requires both
+profile-region markers in the launched target's output. It writes
+`rmsnorm-r1.trace.capture.json` with the canonical and staged binary hashes,
+profile provenance identity, template identity, time limit, `xctrace` version,
+and capture result. Canonical, temporary, and trace paths are omitted from that
+receipt. A custom Instruments template can be supplied by installed name or
+absolute `.tracetemplate` path.
 
 Use `xctrace export --toc` to inspect the capture configuration, then export the
 needed tables by schema rather than by a trace-specific table index:

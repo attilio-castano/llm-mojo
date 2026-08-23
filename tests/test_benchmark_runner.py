@@ -1,5 +1,4 @@
 import unittest
-from pathlib import Path
 
 from benchmarks.run_rms_norm import (
     BASELINE_IMPLEMENTATION,
@@ -9,7 +8,6 @@ from benchmarks.run_rms_norm import (
     VARIANT_IMPLEMENTATION,
     WORKLOAD_ROWS,
     benchmark_command,
-    ensure_profile_launch_location,
     parse_samples,
     summarize,
 )
@@ -173,24 +171,6 @@ class PairedSummaryTest(unittest.TestCase):
         self.assertIn("RMS_NORM_BENCH_REVERSE=true", command)
         self.assertIn("RMS_NORM_BENCH_VARIANT_COMPARISON=true", command)
         self.assertIn("RMS_NORM_BENCH_VARIANT_FIRST=true", command)
-
-
-class ProfileLaunchLocationTest(unittest.TestCase):
-    def test_rejects_macos_privacy_protected_user_folders(self):
-        for directory in ("Desktop", "Documents", "Downloads"):
-            with self.subTest(directory=directory):
-                with self.assertRaisesRegex(
-                    RuntimeError, "privacy-protected user folders"
-                ):
-                    ensure_profile_launch_location(
-                        Path.home() / directory / "rmsnorm-profile"
-                    )
-
-    def test_accepts_private_tmp(self):
-        ensure_profile_launch_location(
-            Path("/private/tmp/llm-mojo/rmsnorm-profile")
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

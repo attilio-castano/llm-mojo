@@ -242,21 +242,6 @@ def ensure_record_location(output_dir: Path) -> None:
         )
 
 
-def ensure_profile_launch_location(output: Path) -> None:
-    resolved = output.resolve()
-    home = Path.home().resolve()
-    for directory in ("Desktop", "Documents", "Downloads"):
-        protected = (home / directory).resolve()
-        if resolved == protected or resolved.is_relative_to(protected):
-            raise RuntimeError(
-                "profile binary must be outside macOS privacy-protected user "
-                "folders (Desktop, Documents, Downloads); xctrace may leave "
-                "a newly generated executable suspended there. Build it under "
-                "/private/tmp, then copy the binary and provenance after the "
-                "capture if they must be retained"
-            )
-
-
 def parse_identity(
     output: str, *, variant_comparison: bool
 ) -> dict[str, str]:
@@ -854,7 +839,6 @@ def build_profile_binary(args: argparse.Namespace) -> None:
             f"{PROFILE_POST_IDLE_MILLISECONDS_LIMIT}"
         )
     output = args.profile_binary.resolve()
-    ensure_profile_launch_location(output)
     if output.exists():
         raise RuntimeError(
             f"refusing to overwrite existing profile binary: {output}"
