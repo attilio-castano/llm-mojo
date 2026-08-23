@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import re
+import shlex
 import statistics
 import sys
 import xml.etree.ElementTree as ET
@@ -16,7 +17,12 @@ from typing import Any
 
 
 Cell = tuple[str, str]
-PROFILE_WARMUP_ITERATIONS = 1_000
+CAPTURE_ID = re.compile(r"^rmsnorm-[0-9a-f]{32}$")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+IMPLEMENTATION_ENTRYPOINTS = {
+    "apple_gpu_shared_tree_v0": "enqueue_rms_norm_apple_gpu_shared_tree",
+    "apple_gpu_simdgroup_v1": "enqueue_rms_norm_apple_gpu",
+}
 
 
 def sha256_file(path: Path) -> str:
@@ -34,6 +40,224 @@ def artifact(path: Path, kind: str) -> dict[str, Any]:
         "sha256": sha256_file(path),
         "path_note": "External local artifact; path intentionally omitted.",
     }
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise ValueError(message)
+
+
+def mapping(value: Any, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(f"capture receipt has no valid {label}")
+    return value
+
+
+def hash_identity(value: Any, label: str) -> dict[str, Any]:
+    identity = mapping(value, label)
+    size = identity.get("bytes")
+    digest = identity.get("sha256")
+    require(
+        isinstance(size, int) and not isinstance(size, bool) and size >= 0,
+        f"capture receipt has an invalid {label} size",
+    )
+    require(
+        isinstance(digest, str) and SHA256.fullmatch(digest) is not None,
+        f"capture receipt has an invalid {label} SHA-256",
+    )
+    return {"bytes": size, "sha256": digest}
+
+
+def nonnegative_integer(value: Any, label: str, *, positive: bool = False) -> int:
+    require(
+        isinstance(value, int) and not isinstance(value, bool),
+        f"capture receipt has an invalid {label}",
+    )
+    require(
+        value > 0 if positive else value >= 0,
+        f"capture receipt has an invalid {label}",
+    )
+    return value
+
+
+def capture_identity(path: Path) -> tuple[dict[str, Any], str]:
+    try:
+        receipt = json.loads(path.read_bytes())
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as error:
+        raise ValueError("could not read the capture receipt") from error
+    require(
+        isinstance(receipt, dict) and receipt.get("schema_version") == 2,
+        "capture receipt has an unsupported schema",
+    )
+
+    capture = mapping(receipt.get("capture"), "capture result")
+    capture_id = capture.get("capture_id")
+    require(
+        isinstance(capture_id, str)
+        and CAPTURE_ID.fullmatch(capture_id) is not None,
+        "capture receipt has an invalid capture ID",
+    )
+    require(
+        capture.get("run_name") == capture_id,
+        "capture receipt run name does not match its capture ID",
+    )
+    require(
+        capture.get("status") == "complete"
+        and capture.get("xctrace_returncode") == 0
+        and capture.get("profile_region_markers_complete") is True
+        and capture.get("failures") == [],
+        "capture receipt does not describe a complete successful capture",
+    )
+    target_output = hash_identity(
+        capture.get("target_output"), "target output"
+    )
+    require(
+        target_output["bytes"] > 0,
+        "capture receipt target output is empty",
+    )
+    command = capture.get("command")
+    require(isinstance(command, str), "capture receipt has no recorded command")
+    command_args = shlex.split(command)
+    run_name_index = (
+        command_args.index("--run-name")
+        if command_args.count("--run-name") == 1
+        else -1
+    )
+    require(
+        run_name_index >= 0
+        and run_name_index + 1 < len(command_args)
+        and command_args[run_name_index + 1] == capture_id,
+        "capture receipt command is not bound to its capture ID",
+    )
+
+    target = mapping(capture.get("target_identity"), "target identity")
+    profile = mapping(receipt.get("profile"), "profile identity")
+    binary = hash_identity(profile.get("binary"), "profile binary")
+    staged_binary = hash_identity(
+        profile.get("staged_binary"), "staged profile binary"
+    )
+    require(
+        binary == staged_binary,
+        "capture receipt staged binary does not match the profile binary",
+    )
+    provenance = hash_identity(profile.get("provenance"), "profile provenance")
+    require(
+        mapping(profile.get("provenance"), "profile provenance").get(
+            "schema_version"
+        )
+        == 1,
+        "capture receipt has an unsupported profile provenance schema",
+    )
+
+    configuration = mapping(
+        profile.get("configuration"), "profile configuration"
+    )
+    workload = {
+        "rows": nonnegative_integer(
+            configuration.get("profile_rows"), "profile rows", positive=True
+        ),
+        "hidden_size": nonnegative_integer(
+            configuration.get("hidden_size"), "hidden size", positive=True
+        ),
+        "warmup_iterations": nonnegative_integer(
+            configuration.get("profile_warmup_iterations"),
+            "profile warmup iterations",
+        ),
+        "profile_iterations": nonnegative_integer(
+            configuration.get("profile_iterations"),
+            "profile iterations",
+            positive=True,
+        ),
+        "post_profile_idle_milliseconds": nonnegative_integer(
+            configuration.get("profile_post_idle_milliseconds"),
+            "post-profile idle milliseconds",
+        ),
+    }
+    implementation = configuration.get("implementation")
+    entrypoint = configuration.get("entrypoint")
+    require(
+        isinstance(implementation, str)
+        and implementation in IMPLEMENTATION_ENTRYPOINTS
+        and entrypoint == IMPLEMENTATION_ENTRYPOINTS[implementation],
+        "capture receipt has an inconsistent RMSNorm implementation",
+    )
+
+    repository = mapping(profile.get("repository"), "repository identity")
+    commit = repository.get("commit")
+    branch = repository.get("branch")
+    dirty = repository.get("dirty")
+    require(
+        isinstance(commit, str)
+        and re.fullmatch(r"[0-9a-f]{40}", commit) is not None,
+        "capture receipt has an invalid repository commit",
+    )
+    require(
+        isinstance(branch, str) and branch,
+        "capture receipt has an invalid repository branch",
+    )
+    require(
+        isinstance(dirty, bool),
+        "capture receipt has an invalid repository dirty state",
+    )
+
+    hardware = mapping(profile.get("hardware"), "hardware identity")
+    device = hardware.get("chip")
+    backend = hardware.get("gpu_api")
+    require(
+        isinstance(device, str) and device.startswith("Apple "),
+        "capture receipt has an invalid Apple GPU identity",
+    )
+    require(backend == "metal", "capture receipt does not identify Metal")
+
+    expected_target = {
+        "implementation": implementation,
+        "entrypoint": entrypoint,
+        "device": device,
+        "backend": backend,
+        **workload,
+    }
+    require(
+        target == expected_target,
+        "capture receipt target identity does not match its provenance",
+    )
+    trace = mapping(receipt.get("trace"), "trace result")
+    require(
+        trace.get("created") is True,
+        "capture receipt does not confirm trace creation",
+    )
+
+    template = mapping(capture.get("template"), "template identity")
+    template_name = template.get("name")
+    require(
+        isinstance(template_name, str) and template_name,
+        "capture receipt has an invalid template identity",
+    )
+    if template_name.endswith(".tracetemplate"):
+        template_name = template_name.removesuffix(".tracetemplate")
+
+    receipt_artifact = artifact(path, "capture_receipt_json")
+    return (
+        {
+            "verification": "capture_receipt_v2_and_trace_target",
+            "capture_id": capture_id,
+            "implementation": implementation,
+            "entrypoint": entrypoint,
+            "binary": binary,
+            "provenance": provenance,
+            "repository": {
+                "commit": commit,
+                "branch": branch,
+                "dirty": dirty,
+            },
+            "runtime": {"device": device, "backend": backend},
+            "workload": workload,
+            "capture_receipt": {
+                "bytes": receipt_artifact["bytes"],
+                "sha256": receipt_artifact["sha256"],
+            },
+        },
+        template_name,
+    )
 
 
 def read_table(path: Path) -> list[dict[str, Cell]]:
@@ -270,9 +494,22 @@ def segment_compute_commands(
 
 def trace_metadata(path: Path) -> dict[str, Any]:
     root = ET.parse(path).getroot()
+    run = root.find(".//run")
+    if run is None:
+        raise ValueError(f"{path.name} has no trace run")
     summary = root.find(".//summary")
     if summary is None:
         raise ValueError(f"{path.name} has no trace summary")
+    target = run.find("./info/target")
+    target_process = target.find("process") if target is not None else None
+    target_device = target.find("device") if target is not None else None
+    if target_process is None or target_device is None:
+        raise ValueError(f"{path.name} has no launched target identity")
+    run_name = (
+        run.attrib.get("name")
+        or summary.findtext("run-name")
+        or run.findtext("./info/run-name")
+    )
     gpu_settings: list[str] = []
     for instrument in root.findall(".//instrument"):
         if instrument.attrib.get("name") != "Metal Application":
@@ -291,12 +528,75 @@ def trace_metadata(path: Path) -> dict[str, Any]:
             if key in counter_table.attrib
         }
     return {
+        "run_name": run_name,
         "template": summary.findtext("template-name"),
         "recording_duration_seconds": float(summary.findtext("duration", "0")),
         "end_reason": summary.findtext("end-reason"),
         "instruments_version": summary.findtext("instruments-version"),
+        "target": {
+            "process_name": target_process.attrib.get("name"),
+            "return_exit_status": target_process.attrib.get(
+                "return-exit-status"
+            ),
+            "termination_reason": target_process.attrib.get(
+                "termination-reason"
+            ),
+            "device_platform": target_device.attrib.get("platform"),
+            "device_model": target_device.attrib.get("model"),
+            "device_os_version": target_device.attrib.get("os-version"),
+        },
         "metal_application_gpu_settings": gpu_settings,
         "counter_configuration": counter_configuration,
+    }
+
+
+def validate_trace_binding(
+    trace: dict[str, Any],
+    capture: dict[str, Any],
+    target_process: str,
+    receipt_template: str,
+) -> dict[str, Any]:
+    capture_id = capture["capture_id"]
+    target = mapping(trace.get("target"), "trace target identity")
+    require(
+        re.fullmatch(rf"{re.escape(capture_id)} \([0-9]+\)", target_process)
+        is not None,
+        "trace submissions do not identify the receipt-bound capture target",
+    )
+    require(
+        target.get("process_name") == capture_id,
+        "trace TOC target does not match the capture receipt",
+    )
+    run_name = trace.get("run_name")
+    require(
+        run_name is None or run_name == capture_id,
+        "trace run name does not match the capture receipt",
+    )
+    require(
+        trace.get("template") == receipt_template,
+        "trace template does not match the capture receipt",
+    )
+    require(
+        trace.get("end_reason") == "Target app exited"
+        and target.get("return_exit_status") == "0"
+        and target.get("termination_reason") == "exit(0)",
+        "trace target did not exit successfully",
+    )
+    require(
+        target.get("device_platform") == "macOS",
+        "trace target did not run on macOS",
+    )
+    return {
+        **trace,
+        "run_name": capture_id if run_name is not None else None,
+        "target": {
+            "capture_id_verified": True,
+            "return_exit_status": target["return_exit_status"],
+            "termination_reason": target["termination_reason"],
+            "device_platform": target["device_platform"],
+            "device_model": target["device_model"],
+            "device_os_version": target["device_os_version"],
+        },
     }
 
 
@@ -344,15 +644,14 @@ def spill_events(
 
 
 def analyze(args: argparse.Namespace) -> dict[str, Any]:
-    if args.profile_iterations <= 0:
-        raise ValueError("--profile-iterations must be positive")
-    if args.warmup_iterations < 0:
-        raise ValueError("--warmup-iterations must be non-negative")
     if (args.counter_info_xml is None) != (args.counter_values_xml is None):
         raise ValueError(
             "--counter-info-xml and --counter-values-xml must be used together"
         )
 
+    identity, receipt_template = capture_identity(args.capture_receipt)
+    trace = trace_metadata(args.toc_xml)
+    workload = identity["workload"]
     submissions = read_table(args.submissions_xml)
     encoded_submissions = [
         row for row in submissions if integer(row, "num-encoders") > 0
@@ -371,6 +670,9 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
             "process"
         )
     target_process = next(iter(target_processes))
+    trace = validate_trace_binding(
+        trace, identity, target_process, receipt_template
+    )
     gpu_intervals = read_table(args.gpu_intervals_xml)
     id_matched_intervals = [
         row
@@ -402,8 +704,8 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
     ]
     setup, correctness, warmup, profile = segment_compute_commands(
         compute_commands,
-        args.warmup_iterations,
-        args.profile_iterations,
+        workload["warmup_iterations"],
+        workload["profile_iterations"],
     )
     sequence_command_buffer_ids = {
         integer(row, "cmdbuffer-id")
@@ -420,13 +722,17 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
             command_kinds["other"] += 1
 
     inputs = [
+        artifact(args.capture_receipt, "capture_receipt_json"),
         artifact(args.submissions_xml, "command_buffer_submissions_xml"),
         artifact(args.gpu_intervals_xml, "gpu_intervals_xml"),
+        artifact(args.toc_xml, "trace_toc_xml"),
     ]
     result: dict[str, Any] = {
-        "schema_version": 2,
+        "schema_version": 3,
         "analysis": "rmsnorm_metal_trace",
+        "capture_identity": identity,
         "inputs": inputs,
+        "trace": trace,
         "validated_sequence": {
             "target_submissions_with_encoders": len(encoded_submissions),
             "matched_target_gpu_intervals": len(target_intervals),
@@ -471,23 +777,20 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
             "A missing profiler event is bounded to this capture and is not a universal absence claim.",
         ],
     }
-    if args.toc_xml is not None:
-        inputs.append(artifact(args.toc_xml, "trace_toc_xml"))
-        result["trace"] = trace_metadata(args.toc_xml)
-        if args.counter_info_xml is not None:
-            counter_settings = result["trace"][
-                "metal_application_gpu_settings"
-            ]
-            has_named_counter_set = any(
-                setting.startswith("Counter Set:")
-                and not setting.endswith("(null)")
-                and not setting.endswith("None")
-                for setting in counter_settings
+    if args.counter_info_xml is not None:
+        counter_settings = result["trace"][
+            "metal_application_gpu_settings"
+        ]
+        has_named_counter_set = any(
+            setting.startswith("Counter Set:")
+            and not setting.endswith("(null)")
+            and not setting.endswith("None")
+            for setting in counter_settings
+        )
+        if not has_named_counter_set:
+            raise ValueError(
+                "trace metadata does not identify a named GPU counter set"
             )
-            if not has_named_counter_set:
-                raise ValueError(
-                    "trace metadata does not identify a named GPU counter set"
-                )
     if args.performance_state_xml is not None:
         inputs.append(
             artifact(args.performance_state_xml, "gpu_performance_state_xml")
@@ -517,17 +820,14 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--capture-receipt", type=Path, required=True)
     parser.add_argument("--submissions-xml", type=Path, required=True)
     parser.add_argument("--gpu-intervals-xml", type=Path, required=True)
-    parser.add_argument("--toc-xml", type=Path)
+    parser.add_argument("--toc-xml", type=Path, required=True)
     parser.add_argument("--performance-state-xml", type=Path)
     parser.add_argument("--spill-xml", type=Path)
     parser.add_argument("--counter-info-xml", type=Path)
     parser.add_argument("--counter-values-xml", type=Path)
-    parser.add_argument("--profile-iterations", type=int, required=True)
-    parser.add_argument(
-        "--warmup-iterations", type=int, default=PROFILE_WARMUP_ITERATIONS
-    )
     parser.add_argument("--output", type=Path)
     return parser.parse_args()
 

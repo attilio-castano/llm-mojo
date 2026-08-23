@@ -1,9 +1,18 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from benchmarks.analyze_rms_norm_trace import (
+    capture_identity,
     segment_compute_commands,
     summarize_profile_counters,
+    validate_trace_binding,
 )
+
+
+CAPTURE_ID = "rmsnorm-" + "1" * 32
+SHA = "a" * 64
 
 
 def commands(count: int):
@@ -35,6 +44,82 @@ def counter_value(timestamp: int, counter_id: int, value: float):
         "counter-id": cell(counter_id),
         "timestamp": cell(timestamp),
         "value": cell(value),
+    }
+
+
+def capture_receipt(*, target_rows: int = 512):
+    target = {
+        "implementation": "apple_gpu_simdgroup_v1",
+        "entrypoint": "enqueue_rms_norm_apple_gpu",
+        "device": "Apple Test GPU",
+        "backend": "metal",
+        "rows": target_rows,
+        "hidden_size": 896,
+        "warmup_iterations": 100,
+        "profile_iterations": 500,
+        "post_profile_idle_milliseconds": 250,
+    }
+    return {
+        "schema_version": 2,
+        "capture": {
+            "capture_id": CAPTURE_ID,
+            "run_name": CAPTURE_ID,
+            "status": "complete",
+            "command": (
+                "xcrun xctrace record --run-name "
+                f"{CAPTURE_ID} --launch -- '<ephemeral-profile-binary>'"
+            ),
+            "template": {
+                "kind": "installed_name",
+                "name": "LLM_Mojo_Metal_Limiters",
+            },
+            "xctrace_returncode": 0,
+            "profile_region_markers_complete": True,
+            "target_identity": target,
+            "target_output": {"bytes": 100, "sha256": "d" * 64},
+            "failures": [],
+        },
+        "profile": {
+            "binary": {"bytes": 100, "sha256": SHA},
+            "staged_binary": {"bytes": 100, "sha256": SHA},
+            "provenance": {
+                "bytes": 200,
+                "sha256": "b" * 64,
+                "schema_version": 1,
+            },
+            "configuration": {
+                "profile_rows": 512,
+                "hidden_size": 896,
+                "profile_warmup_iterations": 100,
+                "profile_iterations": 500,
+                "profile_post_idle_milliseconds": 250,
+                "implementation": "apple_gpu_simdgroup_v1",
+                "entrypoint": "enqueue_rms_norm_apple_gpu",
+            },
+            "repository": {
+                "commit": "c" * 40,
+                "branch": "test",
+                "dirty": False,
+            },
+            "hardware": {"chip": "Apple Test GPU", "gpu_api": "metal"},
+        },
+        "trace": {"created": True},
+    }
+
+
+def trace_metadata():
+    return {
+        "run_name": CAPTURE_ID,
+        "template": "LLM_Mojo_Metal_Limiters",
+        "end_reason": "Target app exited",
+        "target": {
+            "process_name": CAPTURE_ID,
+            "return_exit_status": "0",
+            "termination_reason": "exit(0)",
+            "device_platform": "macOS",
+            "device_model": "MacBook Pro",
+            "device_os_version": "test",
+        },
     }
 
 
@@ -96,6 +181,45 @@ class ProfileCounterSummaryTest(unittest.TestCase):
                 [counter_info(3, "Kernel Occupancy")],
                 [counter_value(99, 3, 90.0)],
                 [interval(100, 20)],
+            )
+
+
+class CaptureIdentityTest(unittest.TestCase):
+    def test_receipt_identity_is_carried_into_the_summary_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "capture.json"
+            path.write_text(json.dumps(capture_receipt()) + "\n")
+
+            identity, template = capture_identity(path)
+
+        self.assertEqual(identity["capture_id"], CAPTURE_ID)
+        self.assertEqual(identity["implementation"], "apple_gpu_simdgroup_v1")
+        self.assertEqual(identity["runtime"]["device"], "Apple Test GPU")
+        self.assertEqual(identity["workload"]["profile_iterations"], 500)
+        self.assertEqual(template, "LLM_Mojo_Metal_Limiters")
+
+    def test_receipt_rejects_runtime_identity_that_disagrees_with_provenance(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "capture.json"
+            path.write_text(
+                json.dumps(capture_receipt(target_rows=4)) + "\n"
+            )
+
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                capture_identity(path)
+
+    def test_trace_process_must_match_receipt_generated_capture_id(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "capture.json"
+            path.write_text(json.dumps(capture_receipt()) + "\n")
+            identity, template = capture_identity(path)
+
+        with self.assertRaisesRegex(ValueError, "submissions"):
+            validate_trace_binding(
+                trace_metadata(),
+                identity,
+                "rmsnorm-" + "2" * 32 + " (42)",
+                template,
             )
 
 
