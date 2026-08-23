@@ -40,6 +40,11 @@ caused the timing improvement.
   `Performance Limiters`, Performance State `Default`, Shader Timeline off.
 - Capture order: baseline, SIMD-group, SIMD-group, baseline. Each target must
   exit normally under a 10-second guard.
+- Capture identity: the helper generates an opaque ID, uses it for the
+  Instruments run and ephemeral executable, verifies runtime identity against
+  binary provenance, and requires the analyzer to match that ID in the TOC and
+  command-buffer submissions. The comparator derives roles from verified
+  implementation identity rather than filenames or argument positions.
 - Raw traces and exports remain outside Git; only scrubbed summaries, checksums,
   compact comparisons, and bounded findings may be retained here.
 
@@ -69,6 +74,22 @@ inside the 500-dispatch profile window and a 99.84% sample-span fraction. These
 calibrations establish the collection method only and are not part of the
 four-capture comparison.
 
+## Identity amendment and revalidation
+
+The original `EXP-0003-RUN-002` summaries predated capture receipts. Their
+filenames and positional comparison order described baseline versus variant,
+but the analyzer could not prove which provenance-bearing binary produced each
+trace. Those observations remain historical and are not retrospectively given
+stronger identity.
+
+`EXP-0003-RUN-003` repeated the frozen ABBA protocol through the receipt-bound
+path. Each summary now carries a unique capture receipt, binary and provenance
+hash, clean commit, runtime device/backend, exact workload, and an ID verified
+against the Instruments run and launched target process. The comparator
+rejected caller-assigned roles and derived all four roles from the verified
+implementation and entrypoint. The in-repository comparison artifact now comes
+from this revalidation run.
+
 ## Frozen comparison
 
 For each capture, summarize the named counter samples whose timestamps fall
@@ -97,34 +118,35 @@ the ordinary EXP-0002 benchmark.
 
 ## Result
 
-`EXP-0003-RUN-002` completed the frozen baseline, SIMD-group, SIMD-group,
-baseline order from clean commit `0bc8ce9`. Every target exited normally on AC
+`EXP-0003-RUN-003` completed the frozen baseline, SIMD-group, SIMD-group,
+baseline order from clean commit `8a0eeeb`. Every target exited normally on AC
 power, with no thermal or performance warning before or after its capture. All
 four summaries contain the exact 1/100/500 compute sequence, all 85 named
-counters, no reported target spill event, and valid profile-window coverage:
+counters, unique receipt-bound identities, no reported target spill event, and
+valid profile-window coverage:
 
 | Capture | Role | Counter timestamps | Sample span | Target GPU busy |
 | --- | --- | ---: | ---: | ---: |
-| 01 | Baseline | 926 | 99.95% | 98.24% |
-| 02 | SIMD-group | 910 | 99.95% | 98.25% |
-| 03 | SIMD-group | 732 | 99.92% | 97.93% |
-| 04 | Baseline | 578 | 99.73% | 98.08% |
+| 01 | Baseline | 913 | 99.80% | 98.53% |
+| 02 | SIMD-group | 727 | 99.95% | 74.98% |
+| 03 | SIMD-group | 603 | 99.86% | 95.96% |
+| 04 | Baseline | 766 | 99.71% | 89.01% |
 
-Of the 85 counters, 58 had positive medians in every capture and 37 passed the
+Of the 85 counters, 58 had positive medians in every capture and 41 passed the
 frozen same-direction and 5% materiality rule. Many are correlated or derived,
-so the bounded interpretation uses the prespecified structural signals:
+and the target-busy fraction varied across traces, so the bounded interpretation
+uses the prespecified structural signals rather than the total count:
 
 | Named device-wide counter | Profiler unit | Pair 1 V/B | Pair 2 V/B | Median change |
 | --- | --- | ---: | ---: | ---: |
-| Threadgroup Memory L1 Write Bandwidth | GiB/s | 0.0400 | 0.0402 | -95.99% |
-| Threadgroup Memory L1 Read Bandwidth | GiB/s | 0.0470 | 0.0472 | -95.29% |
-| L1 Threadgroup Residency | percent | 0.0863 | 0.0874 | -91.31% |
-| L1 Write Bandwidth | GiB/s | 0.6882 | 0.6774 | -31.72% |
-| F32 Utilization | percent | 1.3439 | 1.3457 | +34.48% |
-| F32 Limiter | percent | 1.2915 | 1.2907 | +29.11% |
-| ALU Utilization | percent | 1.1492 | 1.1530 | +15.11% |
-| Kernel Occupancy | percent | 0.8727 | 0.8946 | -11.63% |
-| Compute Shader Launch Limiter | percent | 0.8554 | 0.9104 | -11.71% |
+| Threadgroup Memory L1 Write Bandwidth | GiB/s | 0.0409 | 0.0420 | -95.86% |
+| Threadgroup Memory L1 Read Bandwidth | GiB/s | 0.0480 | 0.0494 | -95.13% |
+| L1 Threadgroup Residency | percent | 0.0870 | 0.0880 | -91.25% |
+| L1 Write Bandwidth | GiB/s | 0.6869 | 0.6951 | -30.90% |
+| F32 Utilization | percent | 1.3267 | 1.3193 | +32.30% |
+| F32 Limiter | percent | 1.2800 | 1.2675 | +27.38% |
+| ALU Utilization | percent | 1.1471 | 1.1387 | +14.29% |
+| Kernel Occupancy | percent | 0.8634 | 0.8797 | -12.84% |
 
 The roughly 95% reduction in the sampled Threadgroup Memory L1 Read and Write
 Bandwidth counters, whose profiler unit is GiB/s, is consistent with replacing
@@ -136,12 +158,14 @@ pressure on the threadgroup-memory path. The higher F32 and ALU utilization
 show a repeatable shift in the sampled execution mix, but are not a standalone
 throughput claim.
 
-Global GPU Bandwidth moved up in pair 1 and down in pair 2; Last Level Cache
-Bandwidth was also directionally inconsistent. F16 limiter and utilization
-medians were zero. Therefore this experiment makes no global or unified-memory
-traffic claim. It also does not use the instrumented duration medians, which
-ranged from 18.42 to 48.94 microseconds across captures under the default,
-mostly minimum GPU performance state.
+Global GPU and last-level-cache bandwidth moved in one direction in RUN-003,
+but were directionally inconsistent in RUN-002. The samples are device-wide,
+the target-busy fraction varied, and neither run isolates unified-memory
+traffic. F16 limiter and utilization medians were zero. Therefore this
+experiment still makes no global or unified-memory traffic claim. It also does
+not use the RUN-003 instrumented duration medians, which ranged from 43.23 to
+48.71 microseconds across captures under the default minimum GPU performance
+state.
 
 The exact scrubbed capture gates, input hashes, medians, pair ratios, and all 85
 classifications are retained in [`counter-comparison.json`](counter-comparison.json).

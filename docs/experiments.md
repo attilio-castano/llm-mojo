@@ -128,6 +128,15 @@ GPU evidence must prove the selected device and backend at runtime. Silent CPU
 fallback, successful compilation, or the presence of GPU tooling is not GPU
 execution evidence.
 
+For trace comparisons, filenames, directory names, command-line positions, and
+human labels are not implementation identity. Generate a unique capture ID at
+launch, carry it through the capture receipt, profiler run name, and launched
+process name, then require the analyzer to match those observations. The
+receipt must bind the runtime entrypoint, device, backend, shape, and iteration
+counts to the binary and provenance hashes. A comparator derives semantic roles
+from that verified identity; it does not accept caller-assigned baseline or
+variant roles.
+
 ### 4. Estimate noise
 
 Warm the compiled execution path before measurement. Retain individual samples

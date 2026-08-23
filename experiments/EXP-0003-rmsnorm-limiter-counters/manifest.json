@@ -51,11 +51,13 @@
     "time_limit_seconds": 10,
     "launch_location": "Unprotected scratch directory outside Desktop, Documents, and Downloads.",
     "order": ["baseline", "variant", "variant", "baseline"],
+    "identity_binding": "A generated capture ID must match the receipt, xctrace run name, launched process, and analyzer target. Roles are derived from the receipt-verified implementation and entrypoint.",
     "raw_artifact_policy": "External only because traces and XML exports may contain host identifiers or unrelated system activity."
   },
   "validity_gates": [
     "Clean immutable commit and matched binary provenance.",
     "Apple M4 Pro and Metal runtime identity.",
+    "Unique receipt-bound capture IDs, derived roles in ABBA order, one clean commit and device, stable binary/provenance per role, and distinct baseline/variant binaries.",
     "AC power before and after every capture with no reported thermal or performance warning.",
     "Target exits normally and the analyzer validates one correctness, 100 warmup, and 500 profile compute dispatches.",
     "The trace names Performance Limiters and retains named GPU counter values.",
@@ -108,6 +110,8 @@
   "runs": [
     {
       "run_id": "EXP-0003-RUN-002",
+      "identity_gate": "legacy_unverified",
+      "exclusion_reason": "The summaries predate capture receipts and assigned roles positionally. The observations remain historical but are not the source of the current comparison artifact.",
       "measurement_commit": "0bc8ce9a17d7455a5f71bf861ddb68538b10539a",
       "comparison_tool_commit": "f15ce45",
       "hardware": "Apple M4 Pro",
@@ -164,56 +168,125 @@
         }
       ],
       "comparison_artifact": {
-        "path": "counter-comparison.json",
+        "path_note": "Historical external comparison; superseded in-repository artifact.",
         "sha256": "518119fb40771cb8b144fd75d62a3b520d4a139b9d9b97db233a854fe63792ae"
+      }
+    },
+    {
+      "run_id": "EXP-0003-RUN-003",
+      "identity_gate": "receipt_trace_target_verified",
+      "measurement_commit": "8a0eeebd3715b66ab38ef14319907622713497b2",
+      "comparison_tool_commit": "8a0eeeb",
+      "hardware": "Apple M4 Pro",
+      "backend": "Metal",
+      "conditions": "AC Power and no thermal or performance warning before and after every capture.",
+      "binaries": [
+        {
+          "role": "baseline",
+          "sha256": "62f539b73be9faf0d9ed400f47bb59a2daeda8286fb2069c2799fe3692f0b19f",
+          "provenance_sha256": "97ce501775a415418e997329da467f8a9159e79bed0ab422b6056d7e47c88234"
+        },
+        {
+          "role": "variant",
+          "sha256": "f1ff393eaeddae5d787b9b4589991becd95ae55c1fc04bccb1a6f18bceb9ebc3",
+          "provenance_sha256": "be40c8bb130e3455c7046bc04c4aa5f808f632262d3e4378e8af2de7bb863097"
+        }
+      ],
+      "captures": [
+        {
+          "capture_id": "rmsnorm-b6d085035c9b4880bb2366d20a6244a4",
+          "role": "baseline",
+          "capture_receipt_sha256": "e3382621e1ff7df1c60e74668a6b1e45a2e5bda33b6f0a39a278535506cc21ab",
+          "trace_summary_sha256": "e57a32efe7289c025eff796ce84d27daba675390f9cce11c70daac6e952dc634",
+          "counter_timestamp_count": 913,
+          "counter_sample_span_fraction": 0.9980061337613374,
+          "target_gpu_busy_fraction": 0.9852562620724273,
+          "target_spill_event_count": 0
+        },
+        {
+          "capture_id": "rmsnorm-9a26577f847d4573b4801345bdc735d5",
+          "role": "variant",
+          "capture_receipt_sha256": "d594c3057943e1b86a537a37e2fb5944c1043ffcbe52e4988f98639d7f365cc3",
+          "trace_summary_sha256": "14069ed228837df41041ae92a1f7758a731d0fcb2d93a591498d9c2734c10ac9",
+          "counter_timestamp_count": 727,
+          "counter_sample_span_fraction": 0.9995293037609992,
+          "target_gpu_busy_fraction": 0.749780707665563,
+          "target_spill_event_count": 0
+        },
+        {
+          "capture_id": "rmsnorm-9d0f728401cd4dbe82d267df2770c696",
+          "role": "variant",
+          "capture_receipt_sha256": "65e26fa23e2d22cd75cf46c39f245557619206bef54c10981b105bf16a6976a0",
+          "trace_summary_sha256": "6236afaa011730120f891618d1aa2be7bc33ce599f922f7cfa11e93425584766",
+          "counter_timestamp_count": 603,
+          "counter_sample_span_fraction": 0.9986178443583971,
+          "target_gpu_busy_fraction": 0.9595587182528366,
+          "target_spill_event_count": 0
+        },
+        {
+          "capture_id": "rmsnorm-153369a5357e408aad29267cc53b5689",
+          "role": "baseline",
+          "capture_receipt_sha256": "7f78cf4fa022512a8c435d2734743881561a98c805edda45d2b3056b6df0759b",
+          "trace_summary_sha256": "b13e2b20c0ebe1ab8657d719ed75169c6801eb8544eb433899e6a10b46deb124",
+          "counter_timestamp_count": 766,
+          "counter_sample_span_fraction": 0.997075535388191,
+          "target_gpu_busy_fraction": 0.8900977699075867,
+          "target_spill_event_count": 0
+        }
+      ],
+      "comparison_artifact": {
+        "path": "counter-comparison.json",
+        "sha256": "29214004f4fb7e7ced61651e1564fc01e4f37c23c98c6da02ffc6c65eeb5cafa"
       }
     }
   ],
   "result": {
     "compared_counter_count": 85,
     "eligible_positive_median_count": 58,
-    "repeatable_difference_count": 37,
+    "repeatable_difference_count": 41,
     "bounded_finding": "The SIMD-group implementation showed a repeatable reduction in device-wide threadgroup-memory pressure inside the target profile window, consistent with reducing shared FP32 partials from 128 to four.",
     "primary_repeatable_differences": [
       {
         "name": "Threadgroup Memory L1 Write Bandwidth",
         "unit": "GiB/s",
-        "pair_variant_over_baseline_ratios": [0.03998388915429533, 0.040212715701787284],
-        "relative_change_percent": -95.99016975719586
+        "pair_variant_over_baseline_ratios": [0.040863950052423804, 0.041960668408544954],
+        "relative_change_percent": -95.85876907695156
       },
       {
         "name": "Threadgroup Memory L1 Read Bandwidth",
         "unit": "GiB/s",
-        "pair_variant_over_baseline_ratios": [0.04697142024311485, 0.047170564509067085],
-        "relative_change_percent": -95.2929007623909
+        "pair_variant_over_baseline_ratios": [0.047969530516403916, 0.04937126523165291],
+        "relative_change_percent": -95.13296021259717
       },
       {
         "name": "L1 Threadgroup Residency",
         "unit": "percent",
-        "pair_variant_over_baseline_ratios": [0.08626227444489118, 0.08744155786860959],
-        "relative_change_percent": -91.31480838432496
+        "pair_variant_over_baseline_ratios": [0.08701512987537921, 0.08798489474713746],
+        "relative_change_percent": -91.24999876887416
       },
       {
         "name": "L1 Write Bandwidth",
         "unit": "GiB/s",
-        "pair_variant_over_baseline_ratios": [0.6882297951618053, 0.6773989622512675],
-        "relative_change_percent": -31.71856212934636
+        "pair_variant_over_baseline_ratios": [0.6869462799761199, 0.6951305866342042],
+        "relative_change_percent": -30.896156669483798
       },
       {
         "name": "F32 Utilization",
         "unit": "percent",
-        "pair_variant_over_baseline_ratios": [1.3439189033298184, 1.345654573572414],
-        "relative_change_percent": 34.47867384511163
+        "pair_variant_over_baseline_ratios": [1.3266867722669864, 1.3193135116492067],
+        "relative_change_percent": 32.30001419580966
       },
       {
         "name": "ALU Utilization",
         "unit": "percent",
-        "pair_variant_over_baseline_ratios": [1.1491937523541738, 1.153001881672642],
-        "relative_change_percent": 15.109781701340786
+        "pair_variant_over_baseline_ratios": [1.147078915343605, 1.138676528455092],
+        "relative_change_percent": 14.287772189934845
       }
     ],
+    "identity_revalidation": "EXP-0003-RUN-003 reproduced the primary threadgroup-memory signals through receipt-bound capture identity. EXP-0003-RUN-002 remains historical only.",
     "timing_decision_changed": false,
     "global_gpu_bandwidth_claim": false,
+    "global_gpu_bandwidth_nonclaim_reason": "RUN-003 moved GPU and last-level-cache bandwidth in one direction, but RUN-002 was inconsistent and neither run is command-buffer-exclusive.",
     "barrier_stall_claim": false
   },
   "nonclaims": [

@@ -145,9 +145,12 @@ The helper refuses to overwrite an existing trace or receipt and requires both
 profile-region markers in the launched target's output. It writes
 `rmsnorm-r1.trace.capture.json` with the canonical and staged binary hashes,
 profile provenance identity, template identity, time limit, `xctrace` version,
-and capture result. Canonical, temporary, and trace paths are omitted from that
-receipt. A custom Instruments template can be supplied by installed name or
-absolute `.tracetemplate` path.
+and capture result. It also generates a unique capture ID, uses that ID for the
+Instruments run and staged executable name, parses the target's runtime
+entrypoint/device/backend/workload identity, and rejects any disagreement with
+the binary provenance. Canonical, temporary, and trace paths are omitted from
+that receipt. A custom Instruments template can be supplied by installed name
+or absolute `.tracetemplate` path.
 
 Use `xctrace export --toc` to inspect the capture configuration, then export the
 needed tables by schema rather than by a trace-specific table index:
@@ -173,28 +176,27 @@ Reduce those external XML exports to a scrubbed summary:
 
 ```bash
 uv run --locked python benchmarks/analyze_rms_norm_trace.py \
+  --capture-receipt /absolute/external/path/rmsnorm-r1.trace.capture.json \
   --submissions-xml /absolute/external/path/submissions.xml \
   --gpu-intervals-xml /absolute/external/path/gpu-intervals.xml \
   --toc-xml /absolute/external/path/toc.xml \
   --performance-state-xml /absolute/external/path/performance-state.xml \
   --spill-xml /absolute/external/path/spill-events.xml \
-  --warmup-iterations 1000 \
-  --profile-iterations 5000 \
   --output /absolute/external/path/trace-summary.json
 ```
 
 For a named-counter capture, use the shorter warmup and profile counts declared
-by that binary, then add both counter exports to the analyzer command:
+by that binary, then add both counter exports to the analyzer command. The
+analyzer obtains those counts from the capture receipt:
 
 ```bash
 uv run --locked python benchmarks/analyze_rms_norm_trace.py \
+  --capture-receipt /absolute/external/path/profile.trace.capture.json \
   --submissions-xml /absolute/external/path/submissions.xml \
   --gpu-intervals-xml /absolute/external/path/gpu-intervals.xml \
   --toc-xml /absolute/external/path/toc.xml \
   --counter-info-xml /absolute/external/path/gpu-counter-info.xml \
   --counter-values-xml /absolute/external/path/gpu-counter-values.xml \
-  --warmup-iterations 100 \
-  --profile-iterations 500 \
   --output /absolute/external/path/counter-summary.json
 ```
 
@@ -203,28 +205,32 @@ baseline order, apply the frozen paired-direction and 5% materiality rule:
 
 ```bash
 uv run --locked python benchmarks/compare_rms_norm_counters.py \
-  --baseline-first /absolute/external/path/capture-01/trace-summary.json \
-  --variant-second /absolute/external/path/capture-02/trace-summary.json \
-  --variant-third /absolute/external/path/capture-03/trace-summary.json \
-  --baseline-fourth /absolute/external/path/capture-04/trace-summary.json \
-  --warmup-iterations 100 \
-  --profile-iterations 500 \
+  --captures \
+    /absolute/external/path/capture-01/trace-summary.json \
+    /absolute/external/path/capture-02/trace-summary.json \
+    /absolute/external/path/capture-03/trace-summary.json \
+    /absolute/external/path/capture-04/trace-summary.json \
   --output /absolute/external/path/counter-comparison.json
 ```
 
-The comparator rechecks the capture validity gates, requires positive medians
-in all four captures, and calls a difference repeatable only when both adjacent
-pair ratios move in the same direction and their median relative change is at
-least 5%.
+The four paths express intended sequence, not trusted roles. The comparator
+derives baseline or variant from each receipt-verified implementation and
+entrypoint, then requires ABBA order, unique capture IDs and receipts, one clean
+commit, one Apple/Metal device, the frozen workload, one binary/provenance pair
+per role, and distinct baseline and variant binaries. It also rechecks the
+capture validity gates, requires positive medians in all four captures, and
+calls a difference repeatable only when both adjacent pair ratios move in the
+same direction and their median relative change is at least 5%.
 
 The analyzer joins GPU intervals to the target command-buffer submissions,
-validates the fixed correctness/warmup/profile sequence, strips paths and
-identifiers, and reports checksums plus diagnostic interval distributions. It
-retains each named counter's profiler description and explicit unit when one is
-available. If counter exports are supplied, it rejects a trace whose samples do
-not overlap the declared profile window. Those samples remain device-wide,
-rather than command-buffer-exclusive. The analyzer does not turn source-level
-byte counts into hardware counters.
+requires the receipt ID to match the profiler run and launched process, derives
+the correctness/warmup/profile sequence from receipt-bound provenance, strips
+paths and host identifiers, and reports checksums plus diagnostic interval
+distributions. It retains each named counter's profiler description and
+explicit unit when one is available. If counter exports are supplied, it
+rejects a trace whose samples do not overlap the declared profile window. Those
+samples remain device-wide, rather than command-buffer-exclusive. The analyzer
+does not turn source-level byte counts into hardware counters.
 
 For generated-code inspection, emit host assembly and the per-Metal-kernel LLVM
 sidecar outside the repository:
