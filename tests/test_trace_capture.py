@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from benchmarks.capture_rms_norm_trace import capture_trace
+from benchmarks.capture_rms_norm_trace import capture_trace, stage_profile_binary
 
 
 PROFILE_OUTPUT = "PROFILE_REGION_BEGIN\nPROFILE_REGION_END\n"
@@ -111,6 +111,20 @@ class TraceCaptureTest(unittest.TestCase):
                     runner=lambda *_args, **_kwargs: self.fail(
                         "xctrace must not run for a mismatched binary"
                     ),
+                )
+
+    def test_staged_copy_is_bound_to_the_validated_provenance_hash(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = write_profile(root / "external" / "profiles")
+            staging_directory = root / "private-tmp" / "capture"
+            staging_directory.mkdir(parents=True)
+
+            with self.assertRaisesRegex(RuntimeError, "provenance SHA-256"):
+                stage_profile_binary(
+                    source,
+                    staging_directory,
+                    expected_hash="0" * 64,
                 )
 
     def test_incomplete_target_output_is_recorded_and_fails_closed(self):

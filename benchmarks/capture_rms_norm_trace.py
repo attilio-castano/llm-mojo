@@ -43,7 +43,9 @@ def ensure_external_path(path: Path, *, label: str) -> None:
         raise RuntimeError(f"{label} must be outside the repository")
 
 
-def profile_provenance(profile_binary: Path) -> tuple[dict[str, Any], Path]:
+def profile_provenance(
+    profile_binary: Path,
+) -> tuple[dict[str, Any], Path, dict[str, Any], dict[str, Any]]:
     if not profile_binary.is_file():
         raise RuntimeError(f"profile binary does not exist: {profile_binary}")
     if profile_binary.stat().st_mode & 0o111 == 0:
@@ -57,8 +59,9 @@ def profile_provenance(profile_binary: Path) -> tuple[dict[str, Any], Path]:
             f"profile provenance does not exist: {provenance_path}"
         )
     try:
-        provenance = json.loads(provenance_path.read_text())
-    except (json.JSONDecodeError, OSError) as error:
+        provenance_bytes = provenance_path.read_bytes()
+        provenance = json.loads(provenance_bytes)
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as error:
         raise RuntimeError(
             f"could not read profile provenance: {provenance_path}"
         ) from error
@@ -79,7 +82,15 @@ def profile_provenance(profile_binary: Path) -> tuple[dict[str, Any], Path]:
         )
     if profile_binary.stat().st_size != expected_bytes:
         raise RuntimeError("profile binary size does not match its provenance")
-    return provenance, provenance_path
+    binary_identity = {
+        "bytes": profile_binary.stat().st_size,
+        "sha256": actual_hash,
+    }
+    provenance_identity = {
+        "bytes": len(provenance_bytes),
+        "sha256": hashlib.sha256(provenance_bytes).hexdigest(),
+    }
+    return provenance, provenance_path, binary_identity, provenance_identity
 
 
 def template_identity(template: str) -> dict[str, Any]:
@@ -94,15 +105,20 @@ def template_identity(template: str) -> dict[str, Any]:
     return {"kind": "installed_name", "name": template}
 
 
-def stage_profile_binary(source: Path, directory: Path) -> Path:
+def stage_profile_binary(
+    source: Path, directory: Path, *, expected_hash: str
+) -> tuple[Path, str]:
     staged = directory / "rmsnorm-profile"
     with source.open("rb") as source_handle, staged.open("xb") as staged_handle:
         for chunk in iter(lambda: source_handle.read(1024 * 1024), b""):
             staged_handle.write(chunk)
     staged.chmod(0o700)
-    if sha256_file(staged) != sha256_file(source):
-        raise RuntimeError("staged profile binary failed SHA-256 verification")
-    return staged
+    staged_hash = sha256_file(staged)
+    if staged_hash != expected_hash:
+        raise RuntimeError(
+            "staged profile binary does not match the provenance SHA-256"
+        )
+    return staged, staged_hash
 
 
 def xctrace_version(runner: Runner) -> str:
@@ -189,9 +205,12 @@ def capture_trace(
     if not staging_root.is_dir():
         raise RuntimeError(f"staging root does not exist: {staging_root}")
 
-    provenance, provenance_path = profile_provenance(profile_binary)
-    canonical_hash = sha256_file(profile_binary)
-    canonical_bytes = profile_binary.stat().st_size
+    provenance, _, binary_identity, provenance_identity = profile_provenance(
+        profile_binary
+    )
+    canonical_hash = binary_identity["sha256"]
+    canonical_bytes = binary_identity["bytes"]
+    recorded_template = template_identity(template)
     output_trace.parent.mkdir(parents=True, exist_ok=True)
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -207,8 +226,11 @@ def capture_trace(
     ) as temporary:
         temporary_path = Path(temporary)
         temporary_path.chmod(0o700)
-        staged_binary = stage_profile_binary(profile_binary, temporary_path)
-        staged_hash = sha256_file(staged_binary)
+        staged_binary, staged_hash = stage_profile_binary(
+            profile_binary,
+            temporary_path,
+            expected_hash=canonical_hash,
+        )
         staged_bytes = staged_binary.stat().st_size
         command_args = [
             "xcrun",
@@ -267,7 +289,7 @@ def capture_trace(
         "capture": {
             "status": "complete" if not failures else "invalid",
             "command": command,
-            "template": template_identity(template),
+            "template": recorded_template,
             "time_limit": time_limit,
             "xctrace_version": xctrace_version(runner),
             "xctrace_returncode": capture_returncode,
@@ -299,8 +321,7 @@ def capture_trace(
                 ),
             },
             "provenance": {
-                "bytes": provenance_path.stat().st_size,
-                "sha256": sha256_file(provenance_path),
+                **provenance_identity,
                 "schema_version": provenance.get("schema_version"),
                 "path_note": "Canonical external artifact; path omitted.",
             },
