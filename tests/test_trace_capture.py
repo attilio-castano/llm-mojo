@@ -6,10 +6,28 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from benchmarks.capture_rms_norm_trace import capture_trace, stage_profile_binary
+from benchmarks.capture_rms_norm_trace import (
+    CAPTURE_ID,
+    capture_trace,
+    stage_profile_binary,
+)
 
 
-PROFILE_OUTPUT = "PROFILE_REGION_BEGIN\nPROFILE_REGION_END\n"
+PROFILE_OUTPUT = "\n".join(
+    [
+        "profile implementation: enqueue_rms_norm_apple_gpu",
+        "device: Apple Test GPU",
+        "api: metal",
+        "rows: 1",
+        "hidden: 896",
+        "warmup iterations: 1",
+        "profile iterations: 10",
+        "post-profile idle milliseconds: 0",
+        "PROFILE_REGION_BEGIN",
+        "PROFILE_REGION_END",
+        "",
+    ]
+)
 
 
 def write_profile(directory: Path) -> Path:
@@ -31,6 +49,10 @@ def write_profile(directory: Path) -> Path:
         "profile_post_idle_milliseconds": 0,
         "implementation": "apple_gpu_simdgroup_v1",
         "entrypoint": "enqueue_rms_norm_apple_gpu",
+        "hardware": {
+            "chip": "Apple Test GPU",
+            "gpu_api": "metal",
+        },
         "binary": {
             "bytes": binary.stat().st_size,
             "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
@@ -82,12 +104,35 @@ class TraceCaptureTest(unittest.TestCase):
             )
 
             self.assertEqual(receipt["capture"]["status"], "complete")
+            capture_id = receipt["capture"]["capture_id"]
+            self.assertIsNotNone(CAPTURE_ID.fullmatch(capture_id))
+            self.assertEqual(receipt["capture"]["run_name"], capture_id)
+            self.assertEqual(
+                receipt["capture"]["target_identity"],
+                {
+                    "implementation": "apple_gpu_simdgroup_v1",
+                    "entrypoint": "enqueue_rms_norm_apple_gpu",
+                    "device": "Apple Test GPU",
+                    "backend": "metal",
+                    "rows": 1,
+                    "hidden_size": 896,
+                    "warmup_iterations": 1,
+                    "profile_iterations": 10,
+                    "post_profile_idle_milliseconds": 0,
+                },
+            )
             self.assertEqual(
                 receipt["profile"]["binary"]["sha256"],
                 receipt["profile"]["staged_binary"]["sha256"],
             )
             self.assertEqual(len(calls), 2)
+            capture_command = calls[0]
+            self.assertEqual(
+                capture_command[capture_command.index("--run-name") + 1],
+                capture_id,
+            )
             self.assertIsNotNone(staged_path)
+            self.assertEqual(staged_path.name, capture_id)
             self.assertFalse(staged_path.exists())
             receipt_path = output.with_name(output.name + ".capture.json")
             receipt_text = receipt_path.read_text()
@@ -125,7 +170,43 @@ class TraceCaptureTest(unittest.TestCase):
                     source,
                     staging_directory,
                     expected_hash="0" * 64,
+                    capture_id="rmsnorm-" + "0" * 32,
                 )
+
+    def test_target_identity_mismatch_is_recorded_and_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = write_profile(root / "external" / "profiles")
+            staging_root = root / "private-tmp"
+            staging_root.mkdir()
+            output = root / "external" / "capture.trace"
+            mismatched = PROFILE_OUTPUT.replace("rows: 1", "rows: 4")
+
+            def runner(command: list[str], **_: object):
+                if command[-1] == "version":
+                    return subprocess.CompletedProcess(
+                        command, 0, "xctrace version test\n"
+                    )
+                output.mkdir(parents=True)
+                return subprocess.CompletedProcess(command, 0, mismatched)
+
+            with self.assertRaisesRegex(RuntimeError, "does not match provenance"):
+                capture_trace(
+                    profile_binary=source,
+                    output_trace=output,
+                    staging_root=staging_root,
+                    runner=runner,
+                )
+
+            receipt = json.loads(
+                output.with_name(output.name + ".capture.json").read_text()
+            )
+            self.assertEqual(receipt["capture"]["status"], "invalid")
+            self.assertIsNone(receipt["capture"]["target_identity"])
+            self.assertIn(
+                "target rows does not match provenance",
+                receipt["capture"]["failures"][0],
+            )
 
     def test_incomplete_target_output_is_recorded_and_fails_closed(self):
         with tempfile.TemporaryDirectory() as temporary:

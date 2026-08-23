@@ -13,6 +13,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
+from uuid import uuid4
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -22,11 +23,20 @@ DEFAULT_TIME_LIMIT = "1s"
 PROFILE_REGION_BEGIN = "PROFILE_REGION_BEGIN"
 PROFILE_REGION_END = "PROFILE_REGION_END"
 TIME_LIMIT = re.compile(r"^[1-9][0-9]*(?:ms|s|m|h)$")
+CAPTURE_ID = re.compile(r"^rmsnorm-[0-9a-f]{32}$")
+IMPLEMENTATION_ENTRYPOINTS = {
+    "apple_gpu_shared_tree_v0": "enqueue_rms_norm_apple_gpu_shared_tree",
+    "apple_gpu_simdgroup_v1": "enqueue_rms_norm_apple_gpu",
+}
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 
 def utc_now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def new_capture_id() -> str:
+    return f"rmsnorm-{uuid4().hex}"
 
 
 def sha256_file(path: Path) -> str:
@@ -93,6 +103,137 @@ def profile_provenance(
     return provenance, provenance_path, binary_identity, provenance_identity
 
 
+def profile_contract(
+    provenance: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, str]]:
+    if provenance.get("schema_version") != 1:
+        raise RuntimeError("profile provenance has an unsupported schema")
+
+    configuration: dict[str, Any] = {}
+    for key in (
+        "profile_rows",
+        "hidden_size",
+        "profile_warmup_iterations",
+        "profile_iterations",
+        "profile_post_idle_milliseconds",
+    ):
+        value = provenance.get(key)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise RuntimeError(
+                f"profile provenance has an invalid {key.replace('_', ' ')}"
+            )
+        configuration[key] = value
+    if configuration["profile_rows"] <= 0:
+        raise RuntimeError("profile provenance rows must be positive")
+    if configuration["hidden_size"] <= 0:
+        raise RuntimeError("profile provenance hidden size must be positive")
+    if configuration["profile_iterations"] <= 0:
+        raise RuntimeError("profile provenance iterations must be positive")
+
+    implementation = provenance.get("implementation")
+    entrypoint = provenance.get("entrypoint")
+    if (
+        not isinstance(implementation, str)
+        or implementation not in IMPLEMENTATION_ENTRYPOINTS
+        or entrypoint != IMPLEMENTATION_ENTRYPOINTS[implementation]
+    ):
+        raise RuntimeError(
+            "profile provenance has an inconsistent RMSNorm implementation"
+        )
+    configuration["implementation"] = implementation
+    configuration["entrypoint"] = entrypoint
+
+    repository = provenance.get("repository")
+    if not isinstance(repository, dict):
+        raise RuntimeError("profile provenance has no repository identity")
+    commit = repository.get("commit")
+    dirty = repository.get("dirty")
+    branch = repository.get("branch")
+    if (
+        not isinstance(commit, str)
+        or re.fullmatch(r"[0-9a-f]{40}", commit) is None
+    ):
+        raise RuntimeError("profile provenance has an invalid repository commit")
+    if not isinstance(dirty, bool):
+        raise RuntimeError("profile provenance has an invalid dirty state")
+    if not isinstance(branch, str) or not branch:
+        raise RuntimeError("profile provenance has an invalid repository branch")
+    repository_identity = {
+        "commit": commit,
+        "branch": branch,
+        "dirty": dirty,
+    }
+
+    hardware = provenance.get("hardware")
+    if not isinstance(hardware, dict):
+        raise RuntimeError("profile provenance has no hardware identity")
+    chip = hardware.get("chip")
+    gpu_api = hardware.get("gpu_api")
+    if not isinstance(chip, str) or not chip.startswith("Apple "):
+        raise RuntimeError("profile provenance has an invalid Apple GPU identity")
+    if gpu_api != "metal":
+        raise RuntimeError("profile provenance does not identify the Metal API")
+    hardware_identity = {"chip": chip, "gpu_api": gpu_api}
+    return configuration, repository_identity, hardware_identity
+
+
+def output_field(output: str, label: str) -> str:
+    matches = re.findall(
+        rf"^{re.escape(label)}:\s*(.*?)\s*$", output, flags=re.MULTILINE
+    )
+    if len(matches) != 1 or not matches[0]:
+        raise ValueError(f"expected exactly one {label!r} line")
+    return matches[0]
+
+
+def parse_target_identity(output: str) -> dict[str, Any]:
+    identity: dict[str, Any] = {
+        "entrypoint": output_field(output, "profile implementation"),
+        "device": output_field(output, "device"),
+        "backend": output_field(output, "api"),
+    }
+    for label, key in (
+        ("rows", "rows"),
+        ("hidden", "hidden_size"),
+        ("warmup iterations", "warmup_iterations"),
+        ("profile iterations", "profile_iterations"),
+        (
+            "post-profile idle milliseconds",
+            "post_profile_idle_milliseconds",
+        ),
+    ):
+        value = output_field(output, label)
+        if re.fullmatch(r"[0-9]+", value) is None:
+            raise ValueError(f"target {label} is not a non-negative integer")
+        identity[key] = int(value)
+    return identity
+
+
+def validate_target_identity(
+    identity: dict[str, Any],
+    configuration: dict[str, Any],
+    hardware: dict[str, str],
+) -> dict[str, Any]:
+    expected = {
+        "entrypoint": configuration["entrypoint"],
+        "device": hardware["chip"],
+        "backend": hardware["gpu_api"],
+        "rows": configuration["profile_rows"],
+        "hidden_size": configuration["hidden_size"],
+        "warmup_iterations": configuration["profile_warmup_iterations"],
+        "profile_iterations": configuration["profile_iterations"],
+        "post_profile_idle_milliseconds": configuration[
+            "profile_post_idle_milliseconds"
+        ],
+    }
+    for key, expected_value in expected.items():
+        if identity.get(key) != expected_value:
+            raise ValueError(
+                f"target {key.replace('_', ' ')} does not match provenance"
+            )
+    return {"implementation": configuration["implementation"], **identity}
+
+
 def template_identity(template: str) -> dict[str, Any]:
     candidate = Path(template).expanduser()
     if candidate.is_file():
@@ -106,9 +247,15 @@ def template_identity(template: str) -> dict[str, Any]:
 
 
 def stage_profile_binary(
-    source: Path, directory: Path, *, expected_hash: str
+    source: Path,
+    directory: Path,
+    *,
+    expected_hash: str,
+    capture_id: str,
 ) -> tuple[Path, str]:
-    staged = directory / "rmsnorm-profile"
+    if CAPTURE_ID.fullmatch(capture_id) is None:
+        raise RuntimeError("capture ID is invalid")
+    staged = directory / capture_id
     with source.open("rb") as source_handle, staged.open("xb") as staged_handle:
         for chunk in iter(lambda: source_handle.read(1024 * 1024), b""):
             staged_handle.write(chunk)
@@ -139,13 +286,15 @@ def xctrace_version(runner: Runner) -> str:
     return output
 
 
-def scrubbed_command(time_limit: str) -> str:
+def scrubbed_command(time_limit: str, capture_id: str) -> str:
     return shlex.join(
         [
             "xcrun",
             "xctrace",
             "record",
             "--no-prompt",
+            "--run-name",
+            capture_id,
             "--template",
             "<template>",
             "--time-limit",
@@ -208,6 +357,10 @@ def capture_trace(
     provenance, _, binary_identity, provenance_identity = profile_provenance(
         profile_binary
     )
+    configuration, repository, hardware = profile_contract(provenance)
+    capture_id = new_capture_id()
+    if CAPTURE_ID.fullmatch(capture_id) is None:
+        raise RuntimeError("generated capture ID is invalid")
     canonical_hash = binary_identity["sha256"]
     canonical_bytes = binary_identity["bytes"]
     recorded_template = template_identity(template)
@@ -220,6 +373,7 @@ def capture_trace(
     staged_hash = ""
     staged_bytes = 0
     command = ""
+    target_identity: dict[str, Any] | None = None
 
     with tempfile.TemporaryDirectory(
         prefix="llm-mojo-rmsnorm-", dir=staging_root
@@ -230,6 +384,7 @@ def capture_trace(
             profile_binary,
             temporary_path,
             expected_hash=canonical_hash,
+            capture_id=capture_id,
         )
         staged_bytes = staged_binary.stat().st_size
         command_args = [
@@ -237,6 +392,8 @@ def capture_trace(
             "xctrace",
             "record",
             "--no-prompt",
+            "--run-name",
+            capture_id,
             "--template",
             template,
             "--time-limit",
@@ -249,7 +406,7 @@ def capture_trace(
             "--",
             str(staged_binary),
         ]
-        command = scrubbed_command(time_limit)
+        command = scrubbed_command(time_limit, capture_id)
         print(
             "Launching a verified ephemeral profile binary "
             f"(sha256 {staged_hash})...",
@@ -274,19 +431,34 @@ def capture_trace(
                 failures.append(f"xctrace exited with {capture_returncode}")
             begin = capture_output.find(PROFILE_REGION_BEGIN)
             end = capture_output.find(PROFILE_REGION_END)
-            if begin < 0 or end <= begin:
+            markers_complete = (
+                capture_output.count(PROFILE_REGION_BEGIN) == 1
+                and capture_output.count(PROFILE_REGION_END) == 1
+                and begin >= 0
+                and end > begin
+            )
+            if not markers_complete:
                 failures.append(
                     "target output does not contain the complete profile region"
                 )
+            try:
+                parsed_identity = parse_target_identity(capture_output)
+                target_identity = validate_target_identity(
+                    parsed_identity, configuration, hardware
+                )
+            except ValueError as error:
+                failures.append(f"target output identity invalid: {error}")
 
     if not output_trace.exists():
         failures.append("xctrace did not create the requested trace")
 
     output_bytes = capture_output.encode()
     receipt = {
-        "schema_version": 1,
+        "schema_version": 2,
         "created_utc": utc_now(),
         "capture": {
+            "capture_id": capture_id,
+            "run_name": capture_id,
             "status": "complete" if not failures else "invalid",
             "command": command,
             "template": recorded_template,
@@ -294,11 +466,12 @@ def capture_trace(
             "xctrace_version": xctrace_version(runner),
             "xctrace_returncode": capture_returncode,
             "profile_region_markers_complete": (
-                PROFILE_REGION_BEGIN in capture_output
-                and PROFILE_REGION_END in capture_output
+                capture_output.count(PROFILE_REGION_BEGIN) == 1
+                and capture_output.count(PROFILE_REGION_END) == 1
                 and capture_output.find(PROFILE_REGION_BEGIN)
                 < capture_output.find(PROFILE_REGION_END)
             ),
+            "target_identity": target_identity,
             "target_output": {
                 "bytes": len(output_bytes),
                 "sha256": hashlib.sha256(output_bytes).hexdigest(),
@@ -325,19 +498,9 @@ def capture_trace(
                 "schema_version": provenance.get("schema_version"),
                 "path_note": "Canonical external artifact; path omitted.",
             },
-            "configuration": {
-                key: provenance.get(key)
-                for key in (
-                    "profile_rows",
-                    "hidden_size",
-                    "profile_warmup_iterations",
-                    "profile_iterations",
-                    "profile_post_idle_milliseconds",
-                    "implementation",
-                    "entrypoint",
-                )
-            },
-            "repository": provenance.get("repository"),
+            "configuration": configuration,
+            "repository": repository,
+            "hardware": hardware,
         },
         "trace": {
             "created": output_trace.exists(),
