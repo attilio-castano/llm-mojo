@@ -15,6 +15,7 @@ from fixtures.rms_norm.reference_data import (
 from layout import TensorLayout, TileTensor, row_major
 from llm_mojo.rms_norm import (
     enqueue_rms_norm_apple_gpu,
+    enqueue_rms_norm_apple_gpu_shared_tree,
     rms_norm_reference,
 )
 from max.gpu.host import DeviceContext
@@ -132,7 +133,7 @@ def check_reference_fixture[
 
 
 def check_apple_gpu_fixture[
-    rows: Int, hidden_size: Int
+    rows: Int, hidden_size: Int, use_shared_tree: Bool
 ](
     input_values: List[Float32],
     weight_values: List[Float32],
@@ -183,9 +184,14 @@ def check_apple_gpu_fixture[
     var device_output = TileTensor(
         device_output_buffer, row_major[rows, hidden_size]()
     )
-    enqueue_rms_norm_apple_gpu(
-        context, device_input, device_weight, device_output
-    )
+    comptime if use_shared_tree:
+        enqueue_rms_norm_apple_gpu_shared_tree(
+            context, device_input, device_weight, device_output
+        )
+    else:
+        enqueue_rms_norm_apple_gpu(
+            context, device_input, device_weight, device_output
+        )
     context.enqueue_copy(
         dst_buf=host_output_buffer, src_buf=device_output_buffer
     )
@@ -219,7 +225,7 @@ def test_apple_gpu_matches_small_oracle() raises:
     var input_values = small_input()
     var weight_values = small_weight()
     var expected_values = small_expected()
-    check_apple_gpu_fixture[SMALL_ROWS, SMALL_HIDDEN_SIZE](
+    check_apple_gpu_fixture[SMALL_ROWS, SMALL_HIDDEN_SIZE, False](
         input_values, weight_values, expected_values
     )
 
@@ -228,7 +234,25 @@ def test_apple_gpu_matches_qwen_hidden_width_oracle() raises:
     var input_values = qwen_hidden_input()
     var weight_values = qwen_hidden_weight()
     var expected_values = qwen_hidden_expected()
-    check_apple_gpu_fixture[QWEN_HIDDEN_ROWS, QWEN_HIDDEN_HIDDEN_SIZE](
+    check_apple_gpu_fixture[QWEN_HIDDEN_ROWS, QWEN_HIDDEN_HIDDEN_SIZE, False](
+        input_values, weight_values, expected_values
+    )
+
+
+def test_apple_gpu_shared_tree_matches_small_oracle() raises:
+    var input_values = small_input()
+    var weight_values = small_weight()
+    var expected_values = small_expected()
+    check_apple_gpu_fixture[SMALL_ROWS, SMALL_HIDDEN_SIZE, True](
+        input_values, weight_values, expected_values
+    )
+
+
+def test_apple_gpu_shared_tree_matches_qwen_hidden_width_oracle() raises:
+    var input_values = qwen_hidden_input()
+    var weight_values = qwen_hidden_weight()
+    var expected_values = qwen_hidden_expected()
+    check_apple_gpu_fixture[QWEN_HIDDEN_ROWS, QWEN_HIDDEN_HIDDEN_SIZE, True](
         input_values, weight_values, expected_values
     )
 

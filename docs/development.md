@@ -118,6 +118,10 @@ with:
 uv run --locked python benchmarks/run_rms_norm.py
 ```
 
+The ordinary command measures the current public SIMD-group implementation.
+Use the paired mode documented in `benchmarks/README.md` only when an experiment
+needs the retained shared-tree baseline.
+
 This is operation-level evidence only; it is not an end-to-end inference
 benchmark. Use the [experimental method](experiments.md) when retaining a run or
 using benchmark and profile evidence to support an optimization.

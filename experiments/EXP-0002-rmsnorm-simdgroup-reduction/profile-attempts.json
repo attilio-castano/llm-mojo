@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "profile_id": "EXP-0002-PROFILE-001",
+  "experiment_id": "EXP-0002",
+  "status": "no_valid_trace_profiler_initialization_failure",
+  "evidence_use": "Records the bounded failure to collect a post-timing variant trace. Neither excluded capture is kernel performance evidence.",
+  "qualification": {
+    "workload": "r512-h896",
+    "reason": "The decisive paired timing classified rows=512 as a material improvement, so the frozen profiling rule permitted one variant profile.",
+    "measurement_commit": "476fc29f877aa091b43584dc21f4b1e934c8b6ce"
+  },
+  "normal_execution_check": {
+    "profile_dispatches": 500,
+    "warmup_dispatches": 1000,
+    "correctness_dispatches": 1,
+    "runtime_device": "Apple M4 Pro",
+    "runtime_api": "metal",
+    "profile_region_completed": true,
+    "wall_seconds": 0.30,
+    "timing_boundary": "Diagnostic process wall time only; not retained as a kernel benchmark sample.",
+    "binary_bytes": 108800,
+    "binary_sha256": "e05a814cadef6132bc8a68e436ed4276d8094dc2d30df26207da6d8165fc55b1",
+    "provenance_bytes": 1485,
+    "provenance_sha256": "b670cd07a98c5ad3478aad940fc07db6984470a7f69ab280514b537d7426d7ef"
+  },
+  "capture_attempts": [
+    {
+      "attempt": 1,
+      "declared_profile_dispatches": 5000,
+      "observed_target_state": "The launched target remained suspended before its first instruction and emitted no stdout for more than seven minutes.",
+      "stop": "A graceful stop hung in Instruments finalization; the two profiler processes were terminated after the launched target exited.",
+      "trace_bundle_allocated_kibibytes": 5960388,
+      "valid": false,
+      "exclusion_reason": "No completed target sequence or exportable capture boundary was established."
+    },
+    {
+      "attempt": 2,
+      "declared_profile_dispatches": 500,
+      "normal_binary_wall_seconds": 0.30,
+      "trace_recording_duration_seconds": 73.996850,
+      "end_reason": "User pressed Stop",
+      "target_termination": "SIGKILL",
+      "target_command_buffer_submissions": 0,
+      "trace_bundle_allocated_kibibytes": 56064,
+      "trace_toc_sha256": "068eaacbcebfac668ee79fd619118f71537cfe3ca8e50d959fd3e47d3c7d1b0d",
+      "command_buffer_submissions_xml_sha256": "4cb55cf68660dbce31036b0b10491e41513424fa391e894b4a18e30eb44c11a3",
+      "valid": false,
+      "exclusion_reason": "Instruments again held the target before launch; the exported submissions table contains a schema and zero rows."
+    }
+  ],
+  "capture_conditions": {
+    "power_source_before_and_after": "AC Power",
+    "reported_thermal_warning_before_and_after": false,
+    "reported_performance_warning_before_and_after": false
+  },
+  "finding": "The failure is bounded to xctrace initialization. The same short binary completed normally outside Instruments, while both capture attempts held it at zero CPU before any Metal submission.",
+  "decision_effect": "No profiler mechanism claim is available. The clean generated-code structure and decisive ordinary timing remain valid, and the frozen replacement rule does not require a successful trace.",
+  "nonclaims": [
+    "The excluded traces do not report variant latency, spills, counters, occupancy, bandwidth, or stalls.",
+    "The large first bundle is raw system-wide profiler output, not evidence volume or useful kernel data."
+  ]
+}
