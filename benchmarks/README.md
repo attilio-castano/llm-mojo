@@ -77,6 +77,72 @@ uv run --locked python benchmarks/run_rms_norm.py \
   --output-dir /absolute/external/path/EXP-0002-RUN-001
 ```
 
+## M=1 projection timing instrument
+
+The projection benchmark is deliberately decode-only: every workload has
+`M=1`, `K=896`, row-major BF16 input and weights, BF16 output, and FP32 dot
+product accumulation. It covers one `N=896` query projection, one `N=128`
+key/value projection, one hot Q/K/V layer (three enqueues and one completion),
+and a 24-layer rotating Q/K/V proxy (72 enqueues and one completion). The last
+case owns 24 distinct sets of weights so it is the primary cache-pressure
+workload. It is not an end-to-end decoder-block benchmark.
+
+Allocation, deterministic device initialization, compilation, correctness
+checks, and host mapping are excluded. A retained sample is synchronized
+milliseconds per complete workload iteration. The runner also reports time per
+dispatch, MAC/s, and source-derived requested-byte throughput; the byte rate is
+not observed cache, fabric, or DRAM traffic.
+
+Run one exploratory block:
+
+```bash
+uv run --locked python benchmarks/run_linear.py
+```
+
+Record the four-block baseline outside the repository:
+
+```bash
+uv run --locked python benchmarks/run_linear.py \
+  --blocks 4 \
+  --experiment-id EXP-0004 \
+  --run-id EXP-0004-RUN-001 \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-0004-RUN-001
+```
+
+The candidate comparison uses the same ascending, descending, descending,
+ascending workload order and ABBA implementation order. It promotes the
+two-output kernel only if the rotating workload improves by at least 5% in at
+least three blocks and none of the three secondary workloads materially
+regresses:
+
+```bash
+uv run --locked python benchmarks/run_linear.py \
+  --blocks 4 \
+  --experiment-id EXP-0005 \
+  --run-id EXP-0005-RUN-001 \
+  --variant-comparison \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-0005-RUN-001
+```
+
+Build a short standalone profile binary outside the repository with `q`, `kv`,
+`qkv-hot`, or `qkv-ring24` as the workload. The default is the one-output
+baseline; use `--profile-implementation two-output` for the candidate:
+
+```bash
+uv run --locked python benchmarks/run_linear.py \
+  --profile-binary /absolute/external/path/linear-profile-ring24 \
+  --profile-workload qkv-ring24 \
+  --profile-warmup-iterations 100 \
+  --profile-iterations 100 \
+  --require-clean
+```
+
+The generated provenance binds the binary digest to the repository commit,
+entrypoint, workload, layer count, and dispatches per iteration. Use the same
+receipt-bound `/private/tmp` staging procedure described below for Instruments.
+
 ## RMSNorm profiling instrument
 
 Build a standalone, long-running binary outside the repository so Xcode does

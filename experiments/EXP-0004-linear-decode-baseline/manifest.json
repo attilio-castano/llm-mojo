@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "experiment_id": "EXP-0004",
+  "slug": "linear-decode-baseline",
+  "title": "Apple GPU M=1 projection baseline characterization",
+  "created_date": "2026-08-25",
+  "status": "planned",
+  "evidence_level": "operation",
+  "question": "What synchronized operation latency does the one-output-per-SIMD-group Apple GPU projection baseline establish for Q, KV, hot QKV, and rotating 24-layer QKV decode workloads?",
+  "experiment_type": "characterization",
+  "scope": {
+    "phase": "decode",
+    "rows": 1,
+    "input_features": 896,
+    "input_dtype": "bfloat16",
+    "weight_dtype": "bfloat16",
+    "output_dtype": "bfloat16",
+    "accumulation_dtype": "float32",
+    "input_layout": "[M,K] row-major",
+    "weight_layout": "[N,K] row-major",
+    "bias_layout": "[N] row-major",
+    "output_layout": "[M,N] row-major",
+    "boundary": "No M>1 prefill implementation or conclusion."
+  },
+  "baseline": {
+    "implementation_id": "apple_gpu_one_output_simdgroup_v0",
+    "entrypoint": "llm_mojo.linear.enqueue_linear_apple_gpu",
+    "kernel": "llm_mojo.linear._linear_rowwise_apple_gpu_kernel",
+    "threads_per_threadgroup": 128,
+    "simd_groups_per_threadgroup": 4,
+    "outputs_per_simd_group": 1,
+    "outputs_per_threadgroup": 4,
+    "lane_work": "Each of 32 lanes accumulates every 32nd K element in FP32.",
+    "reduction": "One warp.sum per output dot product.",
+    "shared_memory_bytes": 0,
+    "barriers": 0
+  },
+  "correctness": {
+    "authority": "tests/test_linear.mojo plus the benchmark's untimed all-one-output gate",
+    "test_command": "MODULAR_DEBUG=device-sync-mode uv run --locked mojo run -I src -I tests tests/test_linear.mojo",
+    "benchmark_input": 0.5,
+    "benchmark_weight": 0.001953125,
+    "benchmark_bias": 0.125,
+    "expected_output": 1.0,
+    "identity": "896 * 0.5 * 0.001953125 + 0.125 = 1.0",
+    "gate": "Every output in every workload must equal exact BF16 one before timing."
+  },
+  "workloads": [
+    {
+      "id": "q-m1-k896-n896",
+      "shape": {"M": 1, "K": 896, "N": 896},
+      "dispatches_per_iteration": 1,
+      "semantic_role": "single query projection"
+    },
+    {
+      "id": "kv-m1-k896-n128",
+      "shape": {"M": 1, "K": 896, "N": 128},
+      "dispatches_per_iteration": 1,
+      "semantic_role": "single key or value projection"
+    },
+    {
+      "id": "qkv3-hot-m1-k896-n1152",
+      "shape": {"M": 1, "K": 896, "N_total": 1152},
+      "dispatches_per_iteration": 3,
+      "completion_boundaries_per_iteration": 1,
+      "semantic_role": "one hot query, key, and value layer"
+    },
+    {
+      "id": "qkv3-ring24-m1-k896-n1152-layers24",
+      "shape": {"M": 1, "K": 896, "N_total_per_layer": 1152},
+      "layers": 24,
+      "distinct_weight_sets": 24,
+      "dispatches_per_iteration": 72,
+      "completion_boundaries_per_iteration": 1,
+      "semantic_role": "rotating-weight cache-pressure proxy",
+      "role": "primary optimization decision workload in EXP-0005"
+    }
+  ],
+  "measurement_protocol": {
+    "benchmark": "benchmarks/linear.mojo",
+    "runner": "benchmarks/run_linear.py",
+    "decisive_command": "uv run --locked python benchmarks/run_linear.py --blocks 4 --experiment-id EXP-0004 --run-id EXP-0004-RUN-001 --recorded --output-dir <absolute-external-path>/EXP-0004-RUN-001",
+    "primary_metric": "synchronized_device_execution_ms_per_workload_iteration",
+    "timing_boundary": "All enqueues belonging to one declared workload iteration through the GPU-aware bencher completion boundary.",
+    "excluded": [
+      "Mojo compilation and pipeline creation",
+      "device allocation",
+      "deterministic device initialization",
+      "untimed correctness checks",
+      "host mapping"
+    ],
+    "bench_config": {
+      "num_warmup_iters": 100,
+      "max_iters": 100,
+      "num_repetitions": 10
+    },
+    "independent_blocks": 4,
+    "block_order": ["ascending", "descending", "descending", "ascending"],
+    "expected_samples_per_workload": 40,
+    "environment": "Clean immutable commit, AC power, no reported thermal or performance warning, Apple GPU plus Metal runtime identity, and MODULAR_DEBUG unset."
+  },
+  "traffic_accounting": {
+    "allocated_footprint": "Exact live BF16 buffer allocation for the workload.",
+    "program_requested_traffic": "Source-level BF16 input, weight, bias, and output accesses, including repeated input reads across Q/K/V and layers.",
+    "observed_hardware_traffic": "Not inferred. Requires a named profiler counter and valid receipt-bound capture."
+  },
+  "profiling_protocol": {
+    "workloads": ["q", "qkv-ring24"],
+    "implementations": ["baseline"],
+    "binary_location": "External path with SHA-256 provenance; launch only from verified owner-only /private/tmp staging.",
+    "capture_rule": "Use short receipt-bound captures. Treat profiler failure as a tooling limitation and make no mechanism claim."
+  },
+  "completion_conditions": [
+    "All correctness and runner parser tests pass.",
+    "Four recorded blocks pass cleanliness, power, thermal, device, order, and sample-count gates.",
+    "Each workload retains 40 valid latency samples.",
+    "Baseline profile attempts are receipt-bound or explicitly recorded as unavailable."
+  ],
+  "nonclaims": [
+    "No end-to-end model, decoder-block, time-per-output-token, or tokens-per-second result.",
+    "No prefill or M>1 result.",
+    "No measured hardware bandwidth claim from source-derived bytes.",
+    "No claim that the baseline is optimal."
+  ],
+  "runs": [],
+  "artifacts": []
+}
