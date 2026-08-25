@@ -4,7 +4,7 @@
   "slug": "linear-decode-two-output",
   "title": "Apple GPU M=1 two-output projection comparison",
   "created_date": "2026-08-25",
-  "status": "planned",
+  "status": "complete",
   "evidence_level": "operation",
   "question": "Does computing two adjacent M=1 projection outputs per SIMD group materially improve the 24-layer rotating QKV workload without materially regressing Q, KV, or hot QKV?",
   "experiment_type": "paired_optimization_comparison",
@@ -109,6 +109,45 @@
     "No hardware bandwidth or cache-reuse claim from source-level accounting.",
     "No causal mechanism claim from timing alone."
   ],
-  "runs": [],
-  "artifacts": []
+  "implementation_commit": "de927506839e898d25eec147a2ccf3c0ad274f9f",
+  "measurement_commit": "de927506839e898d25eec147a2ccf3c0ad274f9f",
+  "generated_code_check_result": {
+    "status": "passed",
+    "loop_accumulators": 2,
+    "input_loads_per_loop_body": 1,
+    "weight_loads_per_full_pair_loop_body": 2,
+    "simd_shuffle_calls": 10,
+    "threadgroup_allocations": 0,
+    "workgroup_barrier_calls": 0
+  },
+  "profiling_result": {
+    "status": "not_qualified",
+    "reason": "The frozen rule profiles only a timing winner. The candidate materially regressed the primary workload and was not promoted.",
+    "mechanism": "unresolved"
+  },
+  "runs": [
+    {
+      "run_id": "EXP-0005-RUN-001",
+      "status": "valid",
+      "samples": 320,
+      "timing_decision": "retain_one_output_m1",
+      "primary_median_change_percent": 42.45558894242105,
+      "secondary_material_regressions": ["qkv3-hot-m1-k896-n1152"]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "comparison-run.json",
+      "kind": "compact_paired_timing_and_generated_code_evidence"
+    }
+  ],
+  "decision": {
+    "result": "retain_baseline",
+    "public_entrypoint": "llm_mojo.linear.enqueue_linear_apple_gpu",
+    "public_implementation": "apple_gpu_one_output_simdgroup_v0",
+    "candidate_entrypoint": "llm_mojo.linear.enqueue_linear_apple_gpu_two_output",
+    "runtime_dispatch_rule": false,
+    "q_kv_crossover_rule": false,
+    "reason": "The two-output candidate regressed rotating QKV by 42.46% and hot QKV by 21.28%, both in all four blocks."
+  }
 }
