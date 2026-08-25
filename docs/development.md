@@ -145,6 +145,17 @@ The ordinary command measures the current public SIMD-group implementation.
 Use the paired mode documented in `benchmarks/README.md` only when an experiment
 needs the retained shared-tree baseline.
 
+Run the decode-only `M=1` projection workload matrix with:
+
+```bash
+uv run --locked python benchmarks/run_linear.py
+```
+
+It measures Q, KV, hot QKV, and a 24-layer rotating-weight QKV proxy through
+explicit completion boundaries. The paired mode retains the experimental
+two-output input-reuse candidate for reproduction; the public projection path
+remains the one-output-per-SIMD-group baseline under the EXP-0005 decision.
+
 This is operation-level evidence only; it is not an end-to-end inference
 benchmark. Use the [experimental method](experiments.md) when retaining a run or
 using benchmark and profile evidence to support an optimization.

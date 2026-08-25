@@ -9,8 +9,8 @@ GPU kernels, and hardware.
 
 Status: RMSNorm, affine linear projection, and RoPE have Mojo host references
 and Apple GPU implementations with provenance-bearing oracle tests. RMSNorm
-also has a reproducible microbenchmark. No end-to-end model inference or
-model-performance result exists yet.
+and projection also have reproducible microbenchmarks. No end-to-end model
+inference or model-performance result exists yet.
 
 ## Principles
 
