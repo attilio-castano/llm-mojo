@@ -122,6 +122,20 @@
     "No measured hardware bandwidth claim from source-derived bytes.",
     "No claim that the baseline is optimal."
   ],
-  "runs": [],
-  "artifacts": []
+  "measurement_commit": "b659b7b2a58235357b9352e98457d256f3905c2d",
+  "runs": [
+    {
+      "run_id": "EXP-0004-RUN-001",
+      "status": "valid",
+      "samples": 160,
+      "runtime_device": "Apple M4 Pro",
+      "runtime_api": "metal"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "baseline-run.json",
+      "kind": "compact_timing_evidence"
+    }
+  ]
 }
