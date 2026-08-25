@@ -189,6 +189,21 @@ class SegmentComputeCommandsTest(unittest.TestCase):
             [row["index"][0] for row in profile], ["3", "4", "5"]
         )
 
+    def test_sequence_can_start_after_receipt_proven_correctness_gate(self):
+        setup, correctness, warmup, profile = segment_compute_commands(
+            commands(5),
+            warmup_iterations=2,
+            profile_iterations=3,
+            trace_correctness_dispatches=False,
+        )
+
+        self.assertEqual(setup, [])
+        self.assertEqual(correctness, [])
+        self.assertEqual([row["index"][0] for row in warmup], ["0", "1"])
+        self.assertEqual(
+            [row["index"][0] for row in profile], ["2", "3", "4"]
+        )
+
     def test_setup_compute_commands_are_a_prefix(self):
         setup, correctness, warmup, profile = segment_compute_commands(
             commands(8), warmup_iterations=2, profile_iterations=3

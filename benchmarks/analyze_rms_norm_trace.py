@@ -518,6 +518,7 @@ def segment_compute_commands(
     warmup_iterations: int,
     profile_iterations: int,
     dispatches_per_iteration: int = 1,
+    trace_correctness_dispatches: bool = True,
 ) -> tuple[
     list[dict[str, Cell]],
     list[dict[str, Cell]],
@@ -526,7 +527,9 @@ def segment_compute_commands(
 ]:
     if dispatches_per_iteration <= 0:
         raise ValueError("dispatches per iteration must be positive")
-    correctness_dispatches = dispatches_per_iteration
+    correctness_dispatches = (
+        dispatches_per_iteration if trace_correctness_dispatches else 0
+    )
     warmup_dispatches = warmup_iterations * dispatches_per_iteration
     profile_dispatches = profile_iterations * dispatches_per_iteration
     expected_compute_commands = (
@@ -765,6 +768,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         workload["warmup_iterations"],
         workload["profile_iterations"],
         workload["dispatches_per_iteration"],
+        trace_correctness_dispatches=identity["operation"] == "rms_norm",
     )
     sequence_command_buffer_ids = {
         integer(row, "cmdbuffer-id")
@@ -811,18 +815,27 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
             ),
             "setup_compute_commands": len(setup),
             "correctness_dispatches": len(correctness),
+            "correctness_dispatches_expected": workload[
+                "dispatches_per_iteration"
+            ],
+            "correctness_gate_verified_by_receipt": True,
             "warmup_dispatches": len(warmup),
             "profile_dispatches": len(profile),
             "segmentation_rule": (
-                "Trailing fixed program sequence: one correctness iteration, "
-                "declared warmup iterations, then declared profile iterations, "
-                "each expanded by dispatches_per_iteration. Earlier target "
-                "compute commands are setup; the standalone program submits "
-                "no GPU work after the profile synchronization."
+                "Trailing fixed program sequence expanded by "
+                "dispatches_per_iteration. RMSNorm traces retain one "
+                "correctness iteration before warmup; projection traces "
+                "segment declared warmup and profile iterations only because "
+                "the launch instrument can attach after the receipt-proven "
+                "correctness gate. Earlier target compute commands are an "
+                "unclassified prelude. The standalone program submits no GPU "
+                "work after the profile synchronization."
             ),
         },
         "instrumented_gpu_interval_duration": {
-            "correctness": duration_summary(correctness),
+            "correctness": duration_summary(correctness)
+            if correctness
+            else None,
             "warmup": duration_summary(warmup) if warmup else None,
             "profile": duration_summary(profile),
             "evidence_boundary": (
