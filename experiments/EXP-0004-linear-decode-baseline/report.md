@@ -1,6 +1,6 @@
 # EXP-0004: Apple GPU M=1 projection baseline
 
-Status: **planned; timing complete, profiling pending**
+Status: **complete**
 
 Evidence level: **operation**
 
@@ -51,9 +51,38 @@ amortizes one completion across three enqueues. The rotating proxy is slower per
 dispatch than the hot case while using distinct layer weights, which makes it a
 useful primary comparison workload but does not by itself prove a cache cause.
 
-Baseline Q and rotating-workload profile attempts remain pending. Timing is
-complete and sufficient to begin the separately frozen candidate comparison;
-EXP-0004 remains planned until its bounded profiling record is closed.
+## Bounded baseline profiles
+
+Two clean binaries from commit `27995e1` produced receipt-bound Performance
+Limiters captures on the same Apple M4 Pro/Metal device. The Q capture retained
+100 warmup plus 500 profile dispatches. The rotating capture retained 3,600
+warmup plus 7,200 profile dispatches. Both receipts prove the standalone
+exact-output correctness gate and complete profile markers. The Q trace does
+not include its one correctness dispatch; the rotating trace begins with 71
+earlier compute commands, consistent with attachment during its 72-dispatch
+correctness iteration. The analyzer therefore assigns the trailing declared
+warmup/profile sequence and leaves those 71 commands as an unclassified prelude.
+
+| Workload | Profile dispatches | Instrumented median | Kernel occupancy median | MMU limiter median | LLC limiter median |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Q `N=896` | 500 | 39.500 us | 25.82% | 12.76% | 14.30% |
+| Rotating QKV | 7,200 | 11.959 us/dispatch | 9.83% | 25.92% | 31.95% |
+
+The named counter samples span more than 99.8% of both profile windows. They
+are device-wide, not command-buffer-exclusive. The Q and rotating captures also
+used different GPU performance-state distributions. The higher median MMU and
+last-level-cache limiters in the rotating window are consistent with a
+different memory-system envelope, but one baseline capture per workload cannot
+establish weight-cache pressure as the cause. Instrumented intervals are
+diagnostic and do not replace the ordinary timing table above.
+
+Neither capture reported a target compiler-spill event, and both sampled zero
+threadgroup-memory L1 read/write bandwidth. Those observations agree with the
+baseline's no-shared-memory structure but remain bounded to these captures. The
+compact profile identities, selected counters, capture-boundary details, and
+checksums are retained in
+[`baseline-profiles.json`](baseline-profiles.json); raw traces and XML exports
+remain external.
 
 ## Nonclaims
 
@@ -63,5 +92,7 @@ EXP-0004 remains planned until its bounded profiling record is closed.
 
 ## Decision
 
-Retain this clean run as the candidate comparison baseline. Complete the
-receipt-bound profile attempts before marking EXP-0004 complete.
+Retain this completed characterization as the timing and diagnostic baseline.
+Make no production change from the baseline profiles. EXP-0005 separately
+applies the frozen paired rule to the two-output candidate and retains this
+one-output public path.

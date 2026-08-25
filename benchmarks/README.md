@@ -142,6 +142,12 @@ uv run --locked python benchmarks/run_linear.py \
 The generated provenance binds the binary digest to the repository commit,
 entrypoint, workload, layer count, and dispatches per iteration. Use the same
 receipt-bound `/private/tmp` staging procedure described below for Instruments.
+The trace analyzer accepts these projection receipts as well as RMSNorm
+receipts. Because a launch instrument may attach after the projection's
+one-time correctness work begins, projection segmentation takes the trailing
+declared warmup and profile dispatch counts; the receipt remains the authority
+that the exact-output correctness gate completed. Any earlier captured
+projection compute commands are reported as an unclassified prelude.
 
 ## RMSNorm profiling instrument
 

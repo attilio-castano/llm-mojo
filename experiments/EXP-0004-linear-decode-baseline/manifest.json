@@ -4,7 +4,7 @@
   "slug": "linear-decode-baseline",
   "title": "Apple GPU M=1 projection baseline characterization",
   "created_date": "2026-08-25",
-  "status": "planned",
+  "status": "complete",
   "evidence_level": "operation",
   "question": "What synchronized operation latency does the one-output-per-SIMD-group Apple GPU projection baseline establish for Q, KV, hot QKV, and rotating 24-layer QKV decode workloads?",
   "experiment_type": "characterization",
@@ -123,6 +123,8 @@
     "No claim that the baseline is optimal."
   ],
   "measurement_commit": "b659b7b2a58235357b9352e98457d256f3905c2d",
+  "profile_binary_commit": "27995e11a892f7f311fb50f8b294aa5344a990de",
+  "trace_analyzer_commit": "04cf478610ecea24f78055f6220fea3949c58177",
   "runs": [
     {
       "run_id": "EXP-0004-RUN-001",
@@ -132,10 +134,47 @@
       "runtime_api": "metal"
     }
   ],
+  "profiles": [
+    {
+      "profile_id": "EXP-0004-PROFILES-001",
+      "status": "valid",
+      "implementation": "apple_gpu_one_output_simdgroup_v0",
+      "template": "LLM_Mojo_Metal_Limiters",
+      "counter_set": "Performance Limiters",
+      "runtime_device": "Apple M4 Pro",
+      "runtime_api": "metal",
+      "captures": [
+        {
+          "capture_id": "linear-aacbe5cd33e04b5f945b5296429ec7fd",
+          "workload": "q",
+          "warmup_dispatches": 100,
+          "profile_dispatches": 500
+        },
+        {
+          "capture_id": "linear-f73c3cabe9fc473fad4561a2b8de87e4",
+          "workload": "qkv-ring24",
+          "warmup_dispatches": 3600,
+          "profile_dispatches": 7200
+        }
+      ],
+      "evidence_boundary": "Single baseline-only, device-wide counter captures. They characterize the measured windows but do not establish a candidate mechanism or a causal cache/bandwidth limiter."
+    }
+  ],
   "artifacts": [
     {
       "path": "baseline-run.json",
       "kind": "compact_timing_evidence"
+    },
+    {
+      "path": "baseline-profiles.json",
+      "kind": "compact_receipt_bound_profile_evidence"
     }
-  ]
+  ],
+  "decision": {
+    "result": "retain_baseline_characterization",
+    "public_entrypoint": "llm_mojo.linear.enqueue_linear_apple_gpu",
+    "public_implementation": "apple_gpu_one_output_simdgroup_v0",
+    "production_change": false,
+    "reason": "The baseline timing and bounded Q/ring24 profiles are complete. EXP-0005 separately rejected the two-output candidate under the preregistered primary-workload and no-regression rule."
+  }
 }
