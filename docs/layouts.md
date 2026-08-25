@@ -82,6 +82,60 @@ requires an Apple GPU compilation target. Together with a readback comparison,
 those checks prevent silent CPU execution from being counted as Apple GPU
 evidence.
 
+## Affine linear projection V0
+
+Let `R` be the number of token rows, `K` the input-feature width, and `N` the
+output-feature width. The operation has these logical tensors:
+
+```text
+X[row, input_feature]             BF16  input activations
+W[output_feature, input_feature]  BF16  learned weights
+B[output_feature]                 BF16  learned bias
+Y[row, output_feature]            BF16  output activations
+```
+
+The initial storage contract is source-compatible and output-major:
+
+| View | Layout | Meaning |
+| --- | --- | --- |
+| `X` | `(R, K) : (K, 1)` | Contiguous input features for each token row |
+| `W` | `(N, K) : (K, 1)` | One contiguous input-feature row per output feature |
+| `B` | `(N) : (1)` | One bias value per output feature |
+| `Y` | `(R, N) : (N, 1)` | Contiguous projected features for each token row |
+
+The reference work mapping traverses row, output feature, then input feature.
+Each dot product accumulates serially in FP32, adds the BF16 bias after
+promotion to FP32, then casts once to BF16.
+
+The first Apple GPU mapping is rowwise rather than a tiled matrix
+multiplication:
+
+| Question | Mapping |
+| --- | --- |
+| Dot-product owner | One 32-lane SIMD group owns one `(row, output_feature)` pair |
+| Input owner | Lane `l` owns `k = l + i * 32` for nonnegative `i` |
+| Threadgroup | 128 threads containing four independent SIMD groups |
+| Reduction | Each lane accumulates FP32 in a register; `warp.sum` combines the 32 partials |
+| Weight access | At each iteration, adjacent lanes read adjacent `W[output_feature, k]` values |
+| Synchronization | No threadgroup barrier or shared allocation; the SIMD reduction is group-local |
+| Output | Lane zero adds bias, casts once to BF16, and writes `Y` |
+| Dispatch | `ceil(R * N / 4)` one-dimensional threadgroups |
+
+For Qwen decode, `R = 1` and `K = 896`, so every lane owns exactly 28
+input-weight products. The mapping remains numerically valid for any positive
+`R`, including prefill, but it deliberately does not reuse weight tiles across
+token rows. A later tiled prefill kernel may sit behind the same operation
+boundary after a synchronized benchmark establishes its useful row-count
+range. The V0 attention path enqueues Q, K, and V separately and does not pack
+or materialize a combined weight tensor.
+
+As with RMSNorm, enqueue is asynchronous, the enqueue wrapper rejects a
+non-Metal device context, and the kernel requires an Apple GPU compilation
+target. The committed oracle tests cover a non-SIMD-aligned decode width, more
+than one input iteration, and multiple token rows. Separate host-versus-GPU
+checks cover the Qwen query and key/value shapes. This is a correctness mapping,
+not a performance claim.
+
 ## RoPE V0
 
 Let `R` be the number of contiguous token rows, `N` the number of heads,

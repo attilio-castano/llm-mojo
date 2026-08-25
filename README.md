@@ -7,9 +7,9 @@ The repository is both an inference-engine project and an executable study of
 how decoder-only transformer inference maps onto runtime machinery, memory,
 GPU kernels, and hardware.
 
-Status: RMSNorm and RoPE have Mojo host references and Apple GPU
-implementations with provenance-bearing oracle tests. RMSNorm also has a
-reproducible microbenchmark. No end-to-end model inference or
+Status: RMSNorm, affine linear projection, and RoPE have Mojo host references
+and Apple GPU implementations with provenance-bearing oracle tests. RMSNorm
+also has a reproducible microbenchmark. No end-to-end model inference or
 model-performance result exists yet.
 
 ## Principles
@@ -37,6 +37,8 @@ uv run mojo --version
 uv run mojo run -I src tests/test_import.mojo
 MODULAR_DEBUG=device-sync-mode \
   uv run mojo run -I src -I tests tests/test_rms_norm.mojo
+MODULAR_DEBUG=device-sync-mode \
+  uv run mojo run -I src -I tests tests/test_linear.mojo
 MODULAR_DEBUG=device-sync-mode \
   uv run mojo run -I src -I tests tests/test_rope.mojo
 ```

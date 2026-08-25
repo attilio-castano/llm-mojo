@@ -93,6 +93,10 @@ Mojo tests use `std.testing.TestSuite` and run as Mojo programs:
 uv run mojo run -I src tests/test_import.mojo
 MODULAR_DEBUG=device-sync-mode \
   uv run mojo run -I src -I tests tests/test_rms_norm.mojo
+MODULAR_DEBUG=device-sync-mode \
+  uv run mojo run -I src -I tests tests/test_linear.mojo
+MODULAR_DEBUG=device-sync-mode \
+  uv run mojo run -I src -I tests tests/test_rope.mojo
 ```
 
 The import smoke test proves that the package resolves through the configured
@@ -104,6 +108,25 @@ the fixture, including its provenance manifest, with:
 
 ```bash
 uv run --script tests/fixtures/rms_norm/generate.py
+```
+
+The affine linear projection test compares a one-token diagnostic case and a
+short multi-row case against a committed `torch.nn.Linear` oracle. It also
+compares the Apple GPU path with the host reference at the model's query and
+key/value projection shapes. The rowwise GPU kernel is correct for both decode
+and prefill row counts but makes no tiled-prefill or performance claim.
+Regenerate its fixture and provenance manifest with:
+
+```bash
+uv run --script tests/fixtures/linear/generate.py
+```
+
+The RoPE test covers tiny, query-decode, and incremental-key cases against the
+pinned Transformers operation. Regenerate its fixture and provenance manifest
+with:
+
+```bash
+uv run --script tests/fixtures/rope/generate.py
 ```
 
 The generator's inline environment pins its oracle dependencies independently
