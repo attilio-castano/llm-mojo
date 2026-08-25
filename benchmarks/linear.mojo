@@ -1,7 +1,10 @@
 """Reproducible Apple GPU batch-one linear projection benchmark."""
 
 from layout import TensorLayout, TileTensor, row_major
-from llm_mojo.linear import enqueue_linear_apple_gpu
+from llm_mojo.linear import (
+    enqueue_linear_apple_gpu,
+    enqueue_linear_apple_gpu_two_output,
+)
 from max.benchmark import bencher_iter_custom
 from max.gpu.host import DeviceContext
 from std.benchmark import (
@@ -36,6 +39,28 @@ comptime QKV_HOT_WORKLOAD = 2
 comptime QKV_RING24_WORKLOAD = 3
 
 
+@always_inline
+def _enqueue_projection[
+    use_two_output: Bool,
+    InputLayout: TensorLayout,
+    WeightLayout: TensorLayout,
+    BiasLayout: TensorLayout,
+    OutputLayout: TensorLayout,
+](
+    context: DeviceContext,
+    input: TileTensor[DType.bfloat16, InputLayout, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WeightLayout, MutAnyOrigin],
+    bias: TileTensor[DType.bfloat16, BiasLayout, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OutputLayout, MutAnyOrigin],
+) raises:
+    comptime if use_two_output:
+        enqueue_linear_apple_gpu_two_output(
+            context, input, weight, bias, output
+        )
+    else:
+        enqueue_linear_apple_gpu(context, input, weight, bias, output)
+
+
 def _assert_unit_output[
     OutputLayout: TensorLayout
 ](output: TileTensor[DType.bfloat16, OutputLayout, MutAnyOrigin]) raises:
@@ -50,7 +75,9 @@ def _assert_unit_output[
 
 
 @always_inline
-def bench_linear[output_features: Int](mut bencher: Bencher) raises capturing:
+def bench_linear[
+    output_features: Int, use_two_output: Bool
+](mut bencher: Bencher) raises capturing:
     comptime assert has_apple_gpu_accelerator(), "benchmark requires Apple GPU"
     var context = DeviceContext()
     if context.api() != "metal":
@@ -80,20 +107,22 @@ def bench_linear[output_features: Int](mut bencher: Bencher) raises capturing:
     weight_buffer.enqueue_fill(0.001953125)
     bias_buffer.enqueue_fill(0.125)
 
-    enqueue_linear_apple_gpu(context, input, weight, bias, output)
+    _enqueue_projection[use_two_output](context, input, weight, bias, output)
     with output_buffer.map_to_host() as mapped_output:
         var host_output = TileTensor(mapped_output, output_layout)
         _assert_unit_output(host_output)
 
     @always_inline
     def launch(launch_context: DeviceContext) raises {imm}:
-        enqueue_linear_apple_gpu(launch_context, input, weight, bias, output)
+        _enqueue_projection[use_two_output](
+            launch_context, input, weight, bias, output
+        )
 
     bencher_iter_custom(bencher, launch, context)
 
 
 @always_inline
-def bench_qkv_hot(mut bencher: Bencher) raises capturing:
+def bench_qkv_hot[use_two_output: Bool](mut bencher: Bencher) raises capturing:
     comptime assert has_apple_gpu_accelerator(), "benchmark requires Apple GPU"
     var context = DeviceContext()
     if context.api() != "metal":
@@ -157,11 +186,13 @@ def bench_qkv_hot(mut bencher: Bencher) raises capturing:
     key_bias_buffer.enqueue_fill(0.125)
     value_bias_buffer.enqueue_fill(0.125)
 
-    enqueue_linear_apple_gpu(
+    _enqueue_projection[use_two_output](
         context, input, query_weight, query_bias, query_output
     )
-    enqueue_linear_apple_gpu(context, input, key_weight, key_bias, key_output)
-    enqueue_linear_apple_gpu(
+    _enqueue_projection[use_two_output](
+        context, input, key_weight, key_bias, key_output
+    )
+    _enqueue_projection[use_two_output](
         context, input, value_weight, value_bias, value_output
     )
     with query_output_buffer.map_to_host() as mapped_query:
@@ -176,13 +207,13 @@ def bench_qkv_hot(mut bencher: Bencher) raises capturing:
 
     @always_inline
     def launch(launch_context: DeviceContext) raises {imm}:
-        enqueue_linear_apple_gpu(
+        _enqueue_projection[use_two_output](
             launch_context, input, query_weight, query_bias, query_output
         )
-        enqueue_linear_apple_gpu(
+        _enqueue_projection[use_two_output](
             launch_context, input, key_weight, key_bias, key_output
         )
-        enqueue_linear_apple_gpu(
+        _enqueue_projection[use_two_output](
             launch_context, input, value_weight, value_bias, value_output
         )
 
@@ -190,7 +221,9 @@ def bench_qkv_hot(mut bencher: Bencher) raises capturing:
 
 
 @always_inline
-def bench_qkv_ring24(mut bencher: Bencher) raises capturing:
+def bench_qkv_ring24[
+    use_two_output: Bool
+](mut bencher: Bencher) raises capturing:
     comptime assert has_apple_gpu_accelerator(), "benchmark requires Apple GPU"
     var context = DeviceContext()
     if context.api() != "metal":
@@ -266,13 +299,13 @@ def bench_qkv_ring24(mut bencher: Bencher) raises capturing:
         var value_weight = value_weights.tile[
             KV_OUTPUT_FEATURES, INPUT_FEATURES
         ](layer, 0)
-        enqueue_linear_apple_gpu(
+        _enqueue_projection[use_two_output](
             context, input, query_weight, query_bias, query_output
         )
-        enqueue_linear_apple_gpu(
+        _enqueue_projection[use_two_output](
             context, input, key_weight, key_bias, key_output
         )
-        enqueue_linear_apple_gpu(
+        _enqueue_projection[use_two_output](
             context, input, value_weight, value_bias, value_output
         )
     with query_output_buffer.map_to_host() as mapped_query:
@@ -297,13 +330,13 @@ def bench_qkv_ring24(mut bencher: Bencher) raises capturing:
             var value_weight = value_weights.tile[
                 KV_OUTPUT_FEATURES, INPUT_FEATURES
             ](layer, 0)
-            enqueue_linear_apple_gpu(
+            _enqueue_projection[use_two_output](
                 launch_context, input, query_weight, query_bias, query_output
             )
-            enqueue_linear_apple_gpu(
+            _enqueue_projection[use_two_output](
                 launch_context, input, key_weight, key_bias, key_output
             )
-            enqueue_linear_apple_gpu(
+            _enqueue_projection[use_two_output](
                 launch_context,
                 input,
                 value_weight,
@@ -315,11 +348,14 @@ def bench_qkv_ring24(mut bencher: Bencher) raises capturing:
 
 
 def _add_linear_benchmark[
-    output_features: Int
+    output_features: Int, use_two_output: Bool
 ](mut benchmark: Bench, name: String) raises:
-    comptime workload = bench_linear[output_features]
+    comptime workload = bench_linear[output_features, use_two_output]
+    comptime benchmark_name = (
+        "linear_decode_apple_gpu_two_output" if use_two_output else "linear_decode_apple_gpu"
+    )
     benchmark.bench_function[workload](
-        BenchId("linear_decode_apple_gpu", name),
+        BenchId(benchmark_name, name),
         [
             ThroughputMeasure(
                 BenchMetric.bytes,
@@ -334,9 +370,13 @@ def _add_linear_benchmark[
     )
 
 
-def _add_qkv_hot_benchmark(mut benchmark: Bench) raises:
-    benchmark.bench_function[bench_qkv_hot](
-        BenchId("linear_decode_qkv3_apple_gpu", "qkv3-hot-m1-k896-n1152"),
+def _add_qkv_hot_benchmark[use_two_output: Bool](mut benchmark: Bench) raises:
+    comptime workload = bench_qkv_hot[use_two_output]
+    comptime benchmark_name = (
+        "linear_decode_qkv3_apple_gpu_two_output" if use_two_output else "linear_decode_qkv3_apple_gpu"
+    )
+    benchmark.bench_function[workload](
+        BenchId(benchmark_name, "qkv3-hot-m1-k896-n1152"),
         [
             ThroughputMeasure(
                 BenchMetric.bytes,
@@ -351,10 +391,16 @@ def _add_qkv_hot_benchmark(mut benchmark: Bench) raises:
     )
 
 
-def _add_qkv_ring24_benchmark(mut benchmark: Bench) raises:
-    benchmark.bench_function[bench_qkv_ring24](
+def _add_qkv_ring24_benchmark[
+    use_two_output: Bool
+](mut benchmark: Bench) raises:
+    comptime workload = bench_qkv_ring24[use_two_output]
+    comptime benchmark_name = (
+        "linear_decode_qkv3_ring24_apple_gpu_two_output" if use_two_output else "linear_decode_qkv3_ring24_apple_gpu"
+    )
+    benchmark.bench_function[workload](
         BenchId(
-            "linear_decode_qkv3_ring24_apple_gpu",
+            benchmark_name,
             "qkv3-ring24-m1-k896-n1152-layers24",
         ),
         [
@@ -371,13 +417,63 @@ def _add_qkv_ring24_benchmark(mut benchmark: Bench) raises:
     )
 
 
+def _add_selected_linear_benchmarks[
+    output_features: Int,
+    variant_comparison: Bool,
+    variant_first: Bool,
+](mut benchmark: Bench, name: String) raises:
+    comptime if variant_comparison:
+        comptime if variant_first:
+            _add_linear_benchmark[output_features, True](benchmark, name)
+            _add_linear_benchmark[output_features, False](benchmark, name)
+        else:
+            _add_linear_benchmark[output_features, False](benchmark, name)
+            _add_linear_benchmark[output_features, True](benchmark, name)
+    else:
+        _add_linear_benchmark[output_features, False](benchmark, name)
+
+
+def _add_selected_qkv_hot_benchmarks[
+    variant_comparison: Bool, variant_first: Bool
+](mut benchmark: Bench) raises:
+    comptime if variant_comparison:
+        comptime if variant_first:
+            _add_qkv_hot_benchmark[True](benchmark)
+            _add_qkv_hot_benchmark[False](benchmark)
+        else:
+            _add_qkv_hot_benchmark[False](benchmark)
+            _add_qkv_hot_benchmark[True](benchmark)
+    else:
+        _add_qkv_hot_benchmark[False](benchmark)
+
+
+def _add_selected_qkv_ring24_benchmarks[
+    variant_comparison: Bool, variant_first: Bool
+](mut benchmark: Bench) raises:
+    comptime if variant_comparison:
+        comptime if variant_first:
+            _add_qkv_ring24_benchmark[True](benchmark)
+            _add_qkv_ring24_benchmark[False](benchmark)
+        else:
+            _add_qkv_ring24_benchmark[False](benchmark)
+            _add_qkv_ring24_benchmark[True](benchmark)
+    else:
+        _add_qkv_ring24_benchmark[False](benchmark)
+
+
 def run_benchmarks() raises:
     comptime assert has_apple_gpu_accelerator(), "benchmark requires Apple GPU"
     var identity = DeviceContext()
     if identity.api() != "metal":
         raise Error("benchmark requires the Metal device API")
 
+    comptime variant_comparison = get_defined_bool[
+        "LINEAR_BENCH_VARIANT_COMPARISON"
+    ]()
+    comptime variant_first = get_defined_bool["LINEAR_BENCH_VARIANT_FIRST"]()
     print("implementation: enqueue_linear_apple_gpu")
+    comptime if variant_comparison:
+        print("comparison implementation: enqueue_linear_apple_gpu_two_output")
     print("device:", identity.name())
     print("api:", identity.api())
     print("dtype: bfloat16; accumulation: float32")
@@ -397,6 +493,13 @@ def run_benchmarks() raises:
     )
     comptime reverse_order = get_defined_bool["LINEAR_BENCH_REVERSE"]()
     print("workload order:", "descending" if reverse_order else "ascending")
+    comptime if variant_comparison:
+        print(
+            "implementation order:",
+            "variant then baseline" if variant_first else (
+                "baseline then variant"
+            ),
+        )
 
     var benchmark = Bench(
         BenchConfig(
@@ -406,19 +509,31 @@ def run_benchmarks() raises:
         )
     )
     comptime if reverse_order:
-        _add_qkv_ring24_benchmark(benchmark)
-        _add_qkv_hot_benchmark(benchmark)
-        _add_linear_benchmark[QUERY_OUTPUT_FEATURES](
-            benchmark, "q-m1-k896-n896"
+        _add_selected_qkv_ring24_benchmarks[variant_comparison, variant_first](
+            benchmark
         )
-        _add_linear_benchmark[KV_OUTPUT_FEATURES](benchmark, "kv-m1-k896-n128")
+        _add_selected_qkv_hot_benchmarks[variant_comparison, variant_first](
+            benchmark
+        )
+        _add_selected_linear_benchmarks[
+            QUERY_OUTPUT_FEATURES, variant_comparison, variant_first
+        ](benchmark, "q-m1-k896-n896")
+        _add_selected_linear_benchmarks[
+            KV_OUTPUT_FEATURES, variant_comparison, variant_first
+        ](benchmark, "kv-m1-k896-n128")
     else:
-        _add_linear_benchmark[KV_OUTPUT_FEATURES](benchmark, "kv-m1-k896-n128")
-        _add_linear_benchmark[QUERY_OUTPUT_FEATURES](
-            benchmark, "q-m1-k896-n896"
+        _add_selected_linear_benchmarks[
+            KV_OUTPUT_FEATURES, variant_comparison, variant_first
+        ](benchmark, "kv-m1-k896-n128")
+        _add_selected_linear_benchmarks[
+            QUERY_OUTPUT_FEATURES, variant_comparison, variant_first
+        ](benchmark, "q-m1-k896-n896")
+        _add_selected_qkv_hot_benchmarks[variant_comparison, variant_first](
+            benchmark
         )
-        _add_qkv_hot_benchmark(benchmark)
-        _add_qkv_ring24_benchmark(benchmark)
+        _add_selected_qkv_ring24_benchmarks[variant_comparison, variant_first](
+            benchmark
+        )
 
     benchmark.config.format = Format.tabular
     print("BENCHMARK_RESULTS_BEGIN")
@@ -427,7 +542,10 @@ def run_benchmarks() raises:
 
 
 def _run_profile_linear[
-    output_features: Int, warmup_iterations: Int, iterations: Int
+    output_features: Int,
+    warmup_iterations: Int,
+    iterations: Int,
+    use_two_output: Bool,
 ](post_profile_idle_milliseconds: Int) raises:
     var context = DeviceContext()
     var input_buffer = context.enqueue_create_buffer[DType.bfloat16](
@@ -453,15 +571,20 @@ def _run_profile_linear[
     input_buffer.enqueue_fill(0.5)
     weight_buffer.enqueue_fill(0.001953125)
     bias_buffer.enqueue_fill(0.125)
-    enqueue_linear_apple_gpu(context, input, weight, bias, output)
+    _enqueue_projection[use_two_output](context, input, weight, bias, output)
     with output_buffer.map_to_host() as mapped_output:
         var host_output = TileTensor(mapped_output, output_layout)
         _assert_unit_output(host_output)
 
     for _ in range(warmup_iterations):
-        enqueue_linear_apple_gpu(context, input, weight, bias, output)
+        _enqueue_projection[use_two_output](
+            context, input, weight, bias, output
+        )
     context.synchronize()
-    print("profile implementation: enqueue_linear_apple_gpu")
+    comptime if use_two_output:
+        print("profile implementation: enqueue_linear_apple_gpu_two_output")
+    else:
+        print("profile implementation: enqueue_linear_apple_gpu")
     print("device:", context.name())
     print("api:", context.api())
     print("rows:", ROWS)
@@ -477,7 +600,9 @@ def _run_profile_linear[
     print("post-profile idle milliseconds:", post_profile_idle_milliseconds)
     print("PROFILE_REGION_BEGIN")
     for _ in range(iterations):
-        enqueue_linear_apple_gpu(context, input, weight, bias, output)
+        _enqueue_projection[use_two_output](
+            context, input, weight, bias, output
+        )
     context.synchronize()
     print("PROFILE_REGION_END")
     if post_profile_idle_milliseconds > 0:
@@ -485,7 +610,7 @@ def _run_profile_linear[
 
 
 def _run_profile_qkv_hot[
-    warmup_iterations: Int, iterations: Int
+    warmup_iterations: Int, iterations: Int, use_two_output: Bool
 ](post_profile_idle_milliseconds: Int) raises:
     var context = DeviceContext()
     var input_buffer = context.enqueue_create_buffer[DType.bfloat16](
@@ -545,11 +670,13 @@ def _run_profile_qkv_hot[
     key_bias_buffer.enqueue_fill(0.125)
     value_bias_buffer.enqueue_fill(0.125)
 
-    enqueue_linear_apple_gpu(
+    _enqueue_projection[use_two_output](
         context, input, query_weight, query_bias, query_output
     )
-    enqueue_linear_apple_gpu(context, input, key_weight, key_bias, key_output)
-    enqueue_linear_apple_gpu(
+    _enqueue_projection[use_two_output](
+        context, input, key_weight, key_bias, key_output
+    )
+    _enqueue_projection[use_two_output](
         context, input, value_weight, value_bias, value_output
     )
     with query_output_buffer.map_to_host() as mapped_query:
@@ -563,17 +690,20 @@ def _run_profile_qkv_hot[
         _assert_unit_output(host_value)
 
     for _ in range(warmup_iterations):
-        enqueue_linear_apple_gpu(
+        _enqueue_projection[use_two_output](
             context, input, query_weight, query_bias, query_output
         )
-        enqueue_linear_apple_gpu(
+        _enqueue_projection[use_two_output](
             context, input, key_weight, key_bias, key_output
         )
-        enqueue_linear_apple_gpu(
+        _enqueue_projection[use_two_output](
             context, input, value_weight, value_bias, value_output
         )
     context.synchronize()
-    print("profile implementation: enqueue_linear_apple_gpu")
+    comptime if use_two_output:
+        print("profile implementation: enqueue_linear_apple_gpu_two_output")
+    else:
+        print("profile implementation: enqueue_linear_apple_gpu")
     print("device:", context.name())
     print("api:", context.api())
     print("rows:", ROWS)
@@ -586,13 +716,13 @@ def _run_profile_qkv_hot[
     print("post-profile idle milliseconds:", post_profile_idle_milliseconds)
     print("PROFILE_REGION_BEGIN")
     for _ in range(iterations):
-        enqueue_linear_apple_gpu(
+        _enqueue_projection[use_two_output](
             context, input, query_weight, query_bias, query_output
         )
-        enqueue_linear_apple_gpu(
+        _enqueue_projection[use_two_output](
             context, input, key_weight, key_bias, key_output
         )
-        enqueue_linear_apple_gpu(
+        _enqueue_projection[use_two_output](
             context, input, value_weight, value_bias, value_output
         )
     context.synchronize()
@@ -602,7 +732,7 @@ def _run_profile_qkv_hot[
 
 
 def _run_profile_qkv_ring24[
-    warmup_iterations: Int, iterations: Int
+    warmup_iterations: Int, iterations: Int, use_two_output: Bool
 ](post_profile_idle_milliseconds: Int) raises:
     var context = DeviceContext()
     var input_buffer = context.enqueue_create_buffer[DType.bfloat16](
@@ -674,13 +804,13 @@ def _run_profile_qkv_ring24[
         var value_weight = value_weights.tile[
             KV_OUTPUT_FEATURES, INPUT_FEATURES
         ](layer, 0)
-        enqueue_linear_apple_gpu(
+        _enqueue_projection[use_two_output](
             context, input, query_weight, query_bias, query_output
         )
-        enqueue_linear_apple_gpu(
+        _enqueue_projection[use_two_output](
             context, input, key_weight, key_bias, key_output
         )
-        enqueue_linear_apple_gpu(
+        _enqueue_projection[use_two_output](
             context, input, value_weight, value_bias, value_output
         )
     with query_output_buffer.map_to_host() as mapped_query:
@@ -704,17 +834,20 @@ def _run_profile_qkv_ring24[
             var value_weight = value_weights.tile[
                 KV_OUTPUT_FEATURES, INPUT_FEATURES
             ](layer, 0)
-            enqueue_linear_apple_gpu(
+            _enqueue_projection[use_two_output](
                 context, input, query_weight, query_bias, query_output
             )
-            enqueue_linear_apple_gpu(
+            _enqueue_projection[use_two_output](
                 context, input, key_weight, key_bias, key_output
             )
-            enqueue_linear_apple_gpu(
+            _enqueue_projection[use_two_output](
                 context, input, value_weight, value_bias, value_output
             )
     context.synchronize()
-    print("profile implementation: enqueue_linear_apple_gpu")
+    comptime if use_two_output:
+        print("profile implementation: enqueue_linear_apple_gpu_two_output")
+    else:
+        print("profile implementation: enqueue_linear_apple_gpu")
     print("device:", context.name())
     print("api:", context.api())
     print("rows:", ROWS)
@@ -737,13 +870,13 @@ def _run_profile_qkv_ring24[
             var value_weight = value_weights.tile[
                 KV_OUTPUT_FEATURES, INPUT_FEATURES
             ](layer, 0)
-            enqueue_linear_apple_gpu(
+            _enqueue_projection[use_two_output](
                 context, input, query_weight, query_bias, query_output
             )
-            enqueue_linear_apple_gpu(
+            _enqueue_projection[use_two_output](
                 context, input, key_weight, key_bias, key_output
             )
-            enqueue_linear_apple_gpu(
+            _enqueue_projection[use_two_output](
                 context, input, value_weight, value_bias, value_output
             )
     context.synchronize()
@@ -762,6 +895,9 @@ def main() raises:
         comptime profile_warmup_iterations = get_defined_int[
             "LINEAR_PROFILE_WARMUP_ITERATIONS"
         ]()
+        comptime profile_two_output = get_defined_bool[
+            "LINEAR_PROFILE_TWO_OUTPUT"
+        ]()
         var post_profile_idle_milliseconds = (
             DEFAULT_PROFILE_POST_IDLE_MILLISECONDS
         )
@@ -774,20 +910,26 @@ def main() raises:
                 QUERY_OUTPUT_FEATURES,
                 profile_warmup_iterations,
                 profile_iterations,
+                profile_two_output,
             ](post_profile_idle_milliseconds)
         elif profile_workload == KV_WORKLOAD:
             _run_profile_linear[
                 KV_OUTPUT_FEATURES,
                 profile_warmup_iterations,
                 profile_iterations,
+                profile_two_output,
             ](post_profile_idle_milliseconds)
         elif profile_workload == QKV_HOT_WORKLOAD:
-            _run_profile_qkv_hot[profile_warmup_iterations, profile_iterations](
-                post_profile_idle_milliseconds
-            )
+            _run_profile_qkv_hot[
+                profile_warmup_iterations,
+                profile_iterations,
+                profile_two_output,
+            ](post_profile_idle_milliseconds)
         elif profile_workload == QKV_RING24_WORKLOAD:
             _run_profile_qkv_ring24[
-                profile_warmup_iterations, profile_iterations
+                profile_warmup_iterations,
+                profile_iterations,
+                profile_two_output,
             ](post_profile_idle_milliseconds)
         else:
             raise Error("profile workload is not implemented")

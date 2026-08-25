@@ -17,7 +17,11 @@ from fixtures.linear.reference_data import (
     tiny_decode_weight,
 )
 from layout import TensorLayout, TileTensor, row_major
-from llm_mojo.linear import enqueue_linear_apple_gpu, linear_reference
+from llm_mojo.linear import (
+    enqueue_linear_apple_gpu,
+    enqueue_linear_apple_gpu_two_output,
+    linear_reference,
+)
 from max.gpu.host import DeviceContext
 from std.math import isfinite
 from std.sys.info import has_apple_gpu_accelerator
@@ -319,7 +323,10 @@ def assert_outputs_match[
 
 
 def check_model_shape[
-    rows: Int, input_features: Int, output_features: Int
+    rows: Int,
+    input_features: Int,
+    output_features: Int,
+    use_two_output: Bool = False,
 ]() raises:
     comptime assert has_apple_gpu_accelerator(), "test requires an Apple GPU"
     var context = DeviceContext()
@@ -386,9 +393,14 @@ def check_model_shape[
     var device_output = TileTensor(
         device_output_buffer, row_major[rows, output_features]()
     )
-    enqueue_linear_apple_gpu(
-        context, device_input, device_weight, device_bias, device_output
-    )
+    comptime if use_two_output:
+        enqueue_linear_apple_gpu_two_output(
+            context, device_input, device_weight, device_bias, device_output
+        )
+    else:
+        enqueue_linear_apple_gpu(
+            context, device_input, device_weight, device_bias, device_output
+        )
     context.enqueue_copy(
         dst_buf=host_actual_buffer, src_buf=device_output_buffer
     )
@@ -500,6 +512,35 @@ def test_apple_gpu_matches_qwen_query_decode_shape() raises:
 
 def test_apple_gpu_matches_qwen_kv_incremental_shape() raises:
     check_model_shape[3, 896, 128]()
+
+
+def test_two_output_apple_gpu_matches_qwen_query_decode_shape() raises:
+    check_model_shape[1, 896, 896, True]()
+
+
+def test_two_output_apple_gpu_matches_qwen_kv_decode_shape() raises:
+    check_model_shape[1, 896, 128, True]()
+
+
+def test_two_output_apple_gpu_matches_odd_output_tail() raises:
+    check_model_shape[1, 37, 5, True]()
+
+
+def test_two_output_apple_gpu_rejects_prefill_rows() raises:
+    var context = DeviceContext()
+    var input_buffer = context.enqueue_create_buffer[DType.bfloat16](2 * 8)
+    var weight_buffer = context.enqueue_create_buffer[DType.bfloat16](3 * 8)
+    var bias_buffer = context.enqueue_create_buffer[DType.bfloat16](3)
+    var output_buffer = context.enqueue_create_buffer[DType.bfloat16](2 * 3)
+    var input = TileTensor(input_buffer, row_major[2, 8]())
+    var weight = TileTensor(weight_buffer, row_major[3, 8]())
+    var bias = TileTensor(bias_buffer, row_major[3]())
+    var output = TileTensor(output_buffer, row_major[2, 3]())
+
+    with assert_raises(contains="requires M=1"):
+        enqueue_linear_apple_gpu_two_output(
+            context, input, weight, bias, output
+        )
 
 
 def main() raises:
