@@ -79,6 +79,8 @@ BENCHMARK_RESULTS_END = "BENCHMARK_RESULTS_END"
 PROFILE_ITERATIONS_LIMIT = 5_000
 DEFAULT_PROFILE_WARMUP_ITERATIONS = 100
 PROFILE_WARMUP_ITERATIONS_LIMIT = 1_000
+DEFAULT_PROFILE_POST_IDLE_MILLISECONDS = 0
+PROFILE_POST_IDLE_MILLISECONDS_LIMIT = 1_000
 PROFILE_WORKLOADS = {"q": 0, "kv": 1, "qkv-hot": 2, "qkv-ring24": 3}
 
 BASELINE_IMPLEMENTATION = {
@@ -626,6 +628,13 @@ def build_profile_binary(args: argparse.Namespace) -> None:
     )
     if not 0 <= warmup <= PROFILE_WARMUP_ITERATIONS_LIMIT:
         raise RuntimeError("profile warmup iterations are outside the range")
+    post_idle = (
+        DEFAULT_PROFILE_POST_IDLE_MILLISECONDS
+        if args.profile_post_idle_milliseconds is None
+        else args.profile_post_idle_milliseconds
+    )
+    if not 0 <= post_idle <= PROFILE_POST_IDLE_MILLISECONDS_LIMIT:
+        raise RuntimeError("profile post-idle milliseconds are outside the range")
     output = args.profile_binary.resolve()
     if output.exists():
         raise RuntimeError(f"refusing to overwrite profile binary: {output}")
@@ -654,6 +663,8 @@ def build_profile_binary(args: argparse.Namespace) -> None:
         f"LINEAR_PROFILE_WARMUP_ITERATIONS={warmup}",
         "-D",
         f"LINEAR_PROFILE_ITERATIONS={args.profile_iterations}",
+        "-D",
+        f"LINEAR_PROFILE_POST_IDLE_MILLISECONDS={post_idle}",
     ]
     if args.profile_implementation == "two-output":
         command_args.extend(["-D", "LINEAR_PROFILE_TWO_OUTPUT=true"])
@@ -686,6 +697,7 @@ def build_profile_binary(args: argparse.Namespace) -> None:
         "dispatches_per_iteration": workload["dispatches"],
         "profile_warmup_iterations": warmup,
         "profile_iterations": args.profile_iterations,
+        "profile_post_idle_milliseconds": post_idle,
         "implementation": implementation["id"],
         "entrypoint": implementation["entrypoint"],
         "binary": {
@@ -724,6 +736,7 @@ def parse_args() -> argparse.Namespace:
         "--profile-iterations", type=int, default=PROFILE_ITERATIONS_LIMIT
     )
     parser.add_argument("--profile-warmup-iterations", type=int)
+    parser.add_argument("--profile-post-idle-milliseconds", type=int)
     return parser.parse_args()
 
 
@@ -734,6 +747,10 @@ def main() -> None:
         return
     if args.profile_workload is not None:
         raise RuntimeError("--profile-workload requires --profile-binary")
+    if args.profile_post_idle_milliseconds is not None:
+        raise RuntimeError(
+            "--profile-post-idle-milliseconds requires --profile-binary"
+        )
     if args.recorded and (
         args.output_dir is None
         or args.experiment_id == "exploration"

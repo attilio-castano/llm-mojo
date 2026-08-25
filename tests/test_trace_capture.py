@@ -29,6 +29,25 @@ PROFILE_OUTPUT = "\n".join(
     ]
 )
 
+LINEAR_PROFILE_OUTPUT = "\n".join(
+    [
+        "profile implementation: enqueue_linear_apple_gpu",
+        "device: Apple Test GPU",
+        "api: metal",
+        "rows: 1",
+        "hidden: 896",
+        "output features: 1152",
+        "profile workload: qkv-ring24",
+        "profile dispatches per iteration: 72",
+        "warmup iterations: 1",
+        "profile iterations: 2",
+        "post-profile idle milliseconds: 0",
+        "PROFILE_REGION_BEGIN",
+        "PROFILE_REGION_END",
+        "",
+    ]
+)
+
 
 def write_profile(directory: Path) -> Path:
     directory.mkdir(parents=True)
@@ -64,7 +83,82 @@ def write_profile(directory: Path) -> Path:
     return binary
 
 
+def write_linear_profile(directory: Path) -> Path:
+    directory.mkdir(parents=True)
+    binary = directory / "linear-profile"
+    binary.write_bytes(b"test linear profile binary\n")
+    binary.chmod(0o755)
+    provenance = {
+        "schema_version": 1,
+        "operation": "linear_projection",
+        "repository": {
+            "commit": "b" * 40,
+            "branch": "test",
+            "dirty": False,
+        },
+        "profile_workload": "qkv-ring24",
+        "rows": 1,
+        "input_features": 896,
+        "output_features": 1152,
+        "layers": 24,
+        "dispatches_per_iteration": 72,
+        "profile_warmup_iterations": 1,
+        "profile_iterations": 2,
+        "profile_post_idle_milliseconds": 0,
+        "implementation": "apple_gpu_one_output_simdgroup_v0",
+        "entrypoint": "enqueue_linear_apple_gpu",
+        "hardware": {"chip": "Apple Test GPU", "gpu_api": "metal"},
+        "binary": {
+            "bytes": binary.stat().st_size,
+            "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+        },
+    }
+    binary.with_name(binary.name + ".provenance.json").write_text(
+        json.dumps(provenance) + "\n"
+    )
+    return binary
+
+
 class TraceCaptureTest(unittest.TestCase):
+    def test_linear_profile_uses_linear_capture_identity_and_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = write_linear_profile(root / "external" / "profiles")
+            staging_root = root / "private-tmp"
+            staging_root.mkdir()
+            output = root / "external" / "linear.trace"
+
+            def runner(command: list[str], **_: object):
+                if command[-1] == "version":
+                    return subprocess.CompletedProcess(
+                        command, 0, "xctrace version test\n"
+                    )
+                output.mkdir(parents=True)
+                return subprocess.CompletedProcess(
+                    command, 0, LINEAR_PROFILE_OUTPUT
+                )
+
+            receipt = capture_trace(
+                profile_binary=source,
+                output_trace=output,
+                staging_root=staging_root,
+                runner=runner,
+            )
+
+            self.assertTrue(
+                receipt["capture"]["capture_id"].startswith("linear-")
+            )
+            self.assertEqual(
+                receipt["capture"]["target_identity"]["profile_workload"],
+                "qkv-ring24",
+            )
+            self.assertEqual(
+                receipt["profile"]["configuration"][
+                    "dispatches_per_iteration"
+                ],
+                72,
+            )
+
     def test_documents_artifact_is_launched_from_verified_temporary_copy(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

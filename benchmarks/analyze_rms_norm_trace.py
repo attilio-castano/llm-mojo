@@ -1,4 +1,4 @@
-"""Summarize exported RMSNorm Metal trace tables without host identifiers."""
+"""Summarize exported Mojo GPU Metal trace tables without host identifiers."""
 
 from __future__ import annotations
 
@@ -17,11 +17,15 @@ from typing import Any
 
 
 Cell = tuple[str, str]
-CAPTURE_ID = re.compile(r"^rmsnorm-[0-9a-f]{32}$")
+CAPTURE_ID = re.compile(r"^(?:rmsnorm|linear)-[0-9a-f]{32}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 IMPLEMENTATION_ENTRYPOINTS = {
     "apple_gpu_shared_tree_v0": "enqueue_rms_norm_apple_gpu_shared_tree",
     "apple_gpu_simdgroup_v1": "enqueue_rms_norm_apple_gpu",
+    "apple_gpu_one_output_simdgroup_v0": "enqueue_linear_apple_gpu",
+    "apple_gpu_two_output_simdgroup_v1": (
+        "enqueue_linear_apple_gpu_two_output"
+    ),
 }
 
 
@@ -152,7 +156,12 @@ def capture_identity(path: Path) -> tuple[dict[str, Any], str]:
     configuration = mapping(
         profile.get("configuration"), "profile configuration"
     )
-    workload = {
+    operation = configuration.get("operation", "rms_norm")
+    require(
+        operation in ("rms_norm", "linear_projection"),
+        "capture receipt has an unsupported operation",
+    )
+    workload: dict[str, Any] = {
         "rows": nonnegative_integer(
             configuration.get("profile_rows"), "profile rows", positive=True
         ),
@@ -172,14 +181,38 @@ def capture_identity(path: Path) -> tuple[dict[str, Any], str]:
             configuration.get("profile_post_idle_milliseconds"),
             "post-profile idle milliseconds",
         ),
+        "dispatches_per_iteration": nonnegative_integer(
+            configuration.get("dispatches_per_iteration", 1),
+            "dispatches per iteration",
+            positive=True,
+        ),
     }
+    if operation == "linear_projection":
+        profile_workload = configuration.get("profile_workload")
+        require(
+            isinstance(profile_workload, str) and profile_workload,
+            "capture receipt has an invalid projection workload",
+        )
+        workload.update(
+            {
+                "profile_workload": profile_workload,
+                "output_features": nonnegative_integer(
+                    configuration.get("output_features"),
+                    "output features",
+                    positive=True,
+                ),
+                "layers": nonnegative_integer(
+                    configuration.get("layers"), "layers", positive=True
+                ),
+            }
+        )
     implementation = configuration.get("implementation")
     entrypoint = configuration.get("entrypoint")
     require(
         isinstance(implementation, str)
         and implementation in IMPLEMENTATION_ENTRYPOINTS
         and entrypoint == IMPLEMENTATION_ENTRYPOINTS[implementation],
-        "capture receipt has an inconsistent RMSNorm implementation",
+        "capture receipt has an inconsistent implementation",
     )
 
     repository = mapping(profile.get("repository"), "repository identity")
@@ -209,13 +242,29 @@ def capture_identity(path: Path) -> tuple[dict[str, Any], str]:
     )
     require(backend == "metal", "capture receipt does not identify Metal")
 
-    expected_target = {
+    expected_target: dict[str, Any] = {
         "implementation": implementation,
         "entrypoint": entrypoint,
         "device": device,
         "backend": backend,
-        **workload,
+        "rows": workload["rows"],
+        "hidden_size": workload["hidden_size"],
+        "warmup_iterations": workload["warmup_iterations"],
+        "profile_iterations": workload["profile_iterations"],
+        "post_profile_idle_milliseconds": workload[
+            "post_profile_idle_milliseconds"
+        ],
     }
+    if operation == "linear_projection":
+        expected_target.update(
+            {
+                "profile_workload": workload["profile_workload"],
+                "output_features": workload["output_features"],
+                "dispatches_per_iteration": workload[
+                    "dispatches_per_iteration"
+                ],
+            }
+        )
     require(
         target == expected_target,
         "capture receipt target identity does not match its provenance",
@@ -240,6 +289,7 @@ def capture_identity(path: Path) -> tuple[dict[str, Any], str]:
         {
             "verification": "capture_receipt_v2_and_trace_target",
             "capture_id": capture_id,
+            "operation": operation,
             "implementation": implementation,
             "entrypoint": entrypoint,
             "binary": binary,
@@ -467,16 +517,24 @@ def segment_compute_commands(
     compute_commands: list[dict[str, Cell]],
     warmup_iterations: int,
     profile_iterations: int,
+    dispatches_per_iteration: int = 1,
 ) -> tuple[
     list[dict[str, Cell]],
     list[dict[str, Cell]],
     list[dict[str, Cell]],
     list[dict[str, Cell]],
 ]:
-    expected_compute_commands = 1 + warmup_iterations + profile_iterations
+    if dispatches_per_iteration <= 0:
+        raise ValueError("dispatches per iteration must be positive")
+    correctness_dispatches = dispatches_per_iteration
+    warmup_dispatches = warmup_iterations * dispatches_per_iteration
+    profile_dispatches = profile_iterations * dispatches_per_iteration
+    expected_compute_commands = (
+        correctness_dispatches + warmup_dispatches + profile_dispatches
+    )
     if len(compute_commands) < expected_compute_commands:
         raise ValueError(
-            "cannot segment the fixed RMSNorm profile sequence: expected at "
+            "cannot segment the fixed profile sequence: expected at "
             f"least {expected_compute_commands} compute commands, observed "
             f"{len(compute_commands)}"
         )
@@ -484,9 +542,9 @@ def segment_compute_commands(
     setup_count = len(compute_commands) - expected_compute_commands
     setup = compute_commands[:setup_count]
     sequence = compute_commands[setup_count:]
-    correctness = sequence[:1]
-    warmup_start = 1
-    profile_start = warmup_start + warmup_iterations
+    correctness = sequence[:correctness_dispatches]
+    warmup_start = correctness_dispatches
+    profile_start = warmup_start + warmup_dispatches
     warmup = sequence[warmup_start:profile_start]
     profile = sequence[profile_start:]
     return setup, correctness, warmup, profile
@@ -706,6 +764,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         compute_commands,
         workload["warmup_iterations"],
         workload["profile_iterations"],
+        workload["dispatches_per_iteration"],
     )
     sequence_command_buffer_ids = {
         integer(row, "cmdbuffer-id")
@@ -729,7 +788,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
     ]
     result: dict[str, Any] = {
         "schema_version": 3,
-        "analysis": "rmsnorm_metal_trace",
+        "analysis": identity["operation"] + "_metal_trace",
         "capture_identity": identity,
         "inputs": inputs,
         "trace": trace,
@@ -755,11 +814,11 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
             "warmup_dispatches": len(warmup),
             "profile_dispatches": len(profile),
             "segmentation_rule": (
-                "Trailing fixed program sequence: one correctness dispatch, "
-                "declared warmup dispatches, then declared profile "
-                "dispatches. Earlier target compute commands are setup; the "
-                "standalone program submits no GPU work after the profile "
-                "synchronization."
+                "Trailing fixed program sequence: one correctness iteration, "
+                "declared warmup iterations, then declared profile iterations, "
+                "each expanded by dispatches_per_iteration. Earlier target "
+                "compute commands are setup; the standalone program submits "
+                "no GPU work after the profile synchronization."
             ),
         },
         "instrumented_gpu_interval_duration": {
