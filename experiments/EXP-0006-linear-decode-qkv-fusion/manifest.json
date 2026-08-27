@@ -4,7 +4,7 @@
   "slug": "linear-decode-qkv-fusion",
   "title": "Apple GPU M=1 packed-QKV single-enqueue comparison",
   "created_date": "2026-08-27",
-  "status": "planned",
+  "status": "complete",
   "evidence_level": "operation",
   "question": "Does prepacking Q, K, and V weights into one M=1 projection and replacing three enqueues per layer with one materially improve rotating 24-layer QKV latency without materially regressing hot QKV?",
   "experiment_type": "paired_optimization_comparison",
@@ -145,10 +145,71 @@
     "No claim that packing can occur per token without cost.",
     "No cache, bandwidth, occupancy, or scheduling mechanism claim from timing alone."
   ],
-  "implementation_commit": null,
-  "measurement_commit": null,
-  "generated_code_check_result": null,
-  "profiling_result": null,
-  "runs": [],
-  "decision": null
+  "implementation_commit": "c7aa38e63d12d65bbdfdba6b3cc8a08200ea3fae",
+  "measurement_commit": "c7aa38e63d12d65bbdfdba6b3cc8a08200ea3fae",
+  "generated_code_check_result": {
+    "status": "passed",
+    "codegen_commit": "f41bd357f1eb4c5cf7a0106d2e72adfdca2a03f8",
+    "kernel": "llm_mojo.linear._linear_rowwise_apple_gpu_kernel",
+    "loop_accumulators": 1,
+    "input_loads_per_loop_body": 1,
+    "weight_loads_per_loop_body": 1,
+    "simd_shuffle_calls": 5,
+    "threadgroup_address_space_mentions": 0,
+    "workgroup_barrier_calls": 0,
+    "interpretation": "The packed launch reuses the one-scalar-output kernel at N=1152; arithmetic and reduction structure are unchanged."
+  },
+  "profiling_result": {
+    "status": "complete",
+    "qualification": "The frozen timing promotion rule passed.",
+    "profile_binary_and_analyzer_commit": "f41bd357f1eb4c5cf7a0106d2e72adfdca2a03f8",
+    "hot_dispatches_per_iteration": {
+      "baseline": 3,
+      "candidate": 1
+    },
+    "ring24_dispatches_per_iteration": {
+      "baseline": 72,
+      "candidate": 24
+    },
+    "binding": "All four receipts prove clean Apple M4 Pro Metal binaries, expected implementation IDs, the shared enqueue_linear_apple_gpu entrypoint, and the declared trailing dispatch sequences.",
+    "mechanism": "The intended three-to-one submission composition is verified. Single device-wide counter captures do not establish a causal cache, bandwidth, occupancy, or scheduling mechanism.",
+    "artifact": "comparison-profiles.json"
+  },
+  "runs": [
+    {
+      "run_id": "EXP-0006-RUN-001",
+      "status": "valid",
+      "samples": 160,
+      "timing_decision": "promote_packed_qkv_single_enqueue",
+      "primary_median_change_percent": -57.270167336100364,
+      "hot_qkv_median_change_percent": -71.08481814684279,
+      "candidate_faster_blocks": {
+        "primary": 4,
+        "hot_qkv": 4
+      },
+      "secondary_material_regressions": []
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "comparison-run.json",
+      "kind": "compact_paired_timing_and_generated_code_evidence"
+    },
+    {
+      "path": "comparison-profiles.json",
+      "kind": "compact_receipt_bound_profile_evidence"
+    }
+  ],
+  "decision": {
+    "result": "promote_candidate_composition",
+    "public_entrypoint": "llm_mojo.linear.enqueue_linear_apple_gpu",
+    "public_kernel_implementation": "apple_gpu_one_output_simdgroup_v0",
+    "decode_qkv_composition": "apple_gpu_packed_qkv_single_enqueue_v1",
+    "model_load_layout": "Store Q|K|V weight rows and bias values contiguously before decode.",
+    "decode_enqueues_per_layer": 1,
+    "output_regions": "Q [0:896], K [896:1024], V [1024:1152] with no split copy or kernel.",
+    "kernel_selector_added": false,
+    "integration_boundary": "No decoder or model loader exists yet; the benchmark and correctness test define the executable contract until that integration is added.",
+    "reason": "The packed composition improved rotating QKV by 57.27% and hot QKV by 71.08%, in all four paired blocks, with no secondary regression."
+  }
 }

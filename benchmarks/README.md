@@ -150,7 +150,9 @@ uv run --locked python benchmarks/run_linear.py \
 
 Build a short standalone profile binary outside the repository with `q`, `kv`,
 `qkv-hot`, or `qkv-ring24` as the workload. The default is the one-output
-baseline; use `--profile-implementation two-output` for the candidate:
+baseline. Use `--profile-implementation two-output` for the EXP-0005 kernel or
+`--profile-implementation fused-qkv` for the EXP-0006 packed composition. The
+packed option accepts only the two QKV workloads:
 
 ```bash
 uv run --locked python benchmarks/run_linear.py \
@@ -158,6 +160,20 @@ uv run --locked python benchmarks/run_linear.py \
   --profile-workload qkv-ring24 \
   --profile-warmup-iterations 100 \
   --profile-iterations 100 \
+  --require-clean
+```
+
+For example, the packed ring24 profile uses 24 dispatches per iteration rather
+than the separate baseline's 72:
+
+```bash
+uv run --locked python benchmarks/run_linear.py \
+  --profile-binary /absolute/external/path/linear-profile-packed-ring24 \
+  --profile-workload qkv-ring24 \
+  --profile-implementation fused-qkv \
+  --profile-warmup-iterations 50 \
+  --profile-iterations 100 \
+  --profile-post-idle-milliseconds 250 \
   --require-clean
 ```
 
