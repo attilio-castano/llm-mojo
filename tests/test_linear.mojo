@@ -412,6 +412,349 @@ def check_model_shape[
     assert_outputs_match[rows, output_features](host_expected, host_actual)
 
 
+def check_packed_qkv_matches_separate_projections() raises:
+    """Prove packed Q|K|V regions match three independent enqueues exactly."""
+
+    comptime rows = 1
+    comptime input_features = 896
+    comptime query_output_features = 896
+    comptime kv_output_features = 128
+    comptime qkv_output_features = 1_152
+    comptime key_offset = query_output_features
+    comptime value_offset = query_output_features + kv_output_features
+    comptime assert has_apple_gpu_accelerator(), "test requires an Apple GPU"
+
+    var context = DeviceContext()
+    if context.api() != "metal":
+        raise Error("test requires the Metal device API")
+
+    var host_input_buffer = context.enqueue_create_host_buffer[DType.bfloat16](
+        input_features
+    )
+    var host_packed_weight_buffer = context.enqueue_create_host_buffer[
+        DType.bfloat16
+    ](qkv_output_features * input_features)
+    var host_packed_bias_buffer = context.enqueue_create_host_buffer[
+        DType.bfloat16
+    ](qkv_output_features)
+    var host_expected_buffer = context.enqueue_create_host_buffer[
+        DType.bfloat16
+    ](qkv_output_features)
+    var host_fused_output_buffer = context.enqueue_create_host_buffer[
+        DType.bfloat16
+    ](qkv_output_features)
+    var host_query_weight_buffer = context.enqueue_create_host_buffer[
+        DType.bfloat16
+    ](query_output_features * input_features)
+    var host_key_weight_buffer = context.enqueue_create_host_buffer[
+        DType.bfloat16
+    ](kv_output_features * input_features)
+    var host_value_weight_buffer = context.enqueue_create_host_buffer[
+        DType.bfloat16
+    ](kv_output_features * input_features)
+    var host_query_bias_buffer = context.enqueue_create_host_buffer[
+        DType.bfloat16
+    ](query_output_features)
+    var host_key_bias_buffer = context.enqueue_create_host_buffer[
+        DType.bfloat16
+    ](kv_output_features)
+    var host_value_bias_buffer = context.enqueue_create_host_buffer[
+        DType.bfloat16
+    ](kv_output_features)
+    var host_query_output_buffer = context.enqueue_create_host_buffer[
+        DType.bfloat16
+    ](query_output_features)
+    var host_key_output_buffer = context.enqueue_create_host_buffer[
+        DType.bfloat16
+    ](kv_output_features)
+    var host_value_output_buffer = context.enqueue_create_host_buffer[
+        DType.bfloat16
+    ](kv_output_features)
+
+    var host_input = TileTensor(
+        host_input_buffer, row_major[rows, input_features]()
+    )
+    var host_packed_weight = TileTensor(
+        host_packed_weight_buffer,
+        row_major[qkv_output_features, input_features](),
+    )
+    var host_packed_bias = TileTensor(
+        host_packed_bias_buffer, row_major[qkv_output_features]()
+    )
+    var host_expected = TileTensor(
+        host_expected_buffer, row_major[rows, qkv_output_features]()
+    )
+    var host_query_weight = TileTensor(
+        host_query_weight_buffer,
+        row_major[query_output_features, input_features](),
+    )
+    var host_key_weight = TileTensor(
+        host_key_weight_buffer,
+        row_major[kv_output_features, input_features](),
+    )
+    var host_value_weight = TileTensor(
+        host_value_weight_buffer,
+        row_major[kv_output_features, input_features](),
+    )
+    var host_query_bias = TileTensor(
+        host_query_bias_buffer, row_major[query_output_features]()
+    )
+    var host_key_bias = TileTensor(
+        host_key_bias_buffer, row_major[kv_output_features]()
+    )
+    var host_value_bias = TileTensor(
+        host_value_bias_buffer, row_major[kv_output_features]()
+    )
+    comptime assert host_packed_weight.flat_rank == 2
+    comptime assert host_packed_bias.flat_rank == 1
+    comptime assert host_query_weight.flat_rank == 2
+    comptime assert host_key_weight.flat_rank == 2
+    comptime assert host_value_weight.flat_rank == 2
+    comptime assert host_query_bias.flat_rank == 1
+    comptime assert host_key_bias.flat_rank == 1
+    comptime assert host_value_bias.flat_rank == 1
+
+    fill_model_shape[rows, input_features, qkv_output_features](
+        host_input, host_packed_weight, host_packed_bias
+    )
+    for output_feature in range(query_output_features):
+        for input_feature in range(input_features):
+            var value = rebind[Scalar[DType.bfloat16]](
+                host_packed_weight[output_feature, input_feature]
+            )
+            host_query_weight[output_feature, input_feature] = rebind[
+                host_query_weight.ElementType
+            ](value)
+        var bias = rebind[Scalar[DType.bfloat16]](
+            host_packed_bias[output_feature]
+        )
+        host_query_bias[output_feature] = rebind[host_query_bias.ElementType](
+            bias
+        )
+    for output_feature in range(kv_output_features):
+        for input_feature in range(input_features):
+            var key_value = rebind[Scalar[DType.bfloat16]](
+                host_packed_weight[key_offset + output_feature, input_feature]
+            )
+            var value_value = rebind[Scalar[DType.bfloat16]](
+                host_packed_weight[value_offset + output_feature, input_feature]
+            )
+            host_key_weight[output_feature, input_feature] = rebind[
+                host_key_weight.ElementType
+            ](key_value)
+            host_value_weight[output_feature, input_feature] = rebind[
+                host_value_weight.ElementType
+            ](value_value)
+        var key_bias = rebind[Scalar[DType.bfloat16]](
+            host_packed_bias[key_offset + output_feature]
+        )
+        var value_bias = rebind[Scalar[DType.bfloat16]](
+            host_packed_bias[value_offset + output_feature]
+        )
+        host_key_bias[output_feature] = rebind[host_key_bias.ElementType](
+            key_bias
+        )
+        host_value_bias[output_feature] = rebind[host_value_bias.ElementType](
+            value_bias
+        )
+    linear_reference(
+        host_input, host_packed_weight, host_packed_bias, host_expected
+    )
+
+    var device_input_buffer = context.enqueue_create_buffer[DType.bfloat16](
+        input_features
+    )
+    var device_packed_weight_buffer = context.enqueue_create_buffer[
+        DType.bfloat16
+    ](qkv_output_features * input_features)
+    var device_packed_bias_buffer = context.enqueue_create_buffer[
+        DType.bfloat16
+    ](qkv_output_features)
+    var device_fused_output_buffer = context.enqueue_create_buffer[
+        DType.bfloat16
+    ](qkv_output_features)
+    var device_query_weight_buffer = context.enqueue_create_buffer[
+        DType.bfloat16
+    ](query_output_features * input_features)
+    var device_key_weight_buffer = context.enqueue_create_buffer[
+        DType.bfloat16
+    ](kv_output_features * input_features)
+    var device_value_weight_buffer = context.enqueue_create_buffer[
+        DType.bfloat16
+    ](kv_output_features * input_features)
+    var device_query_bias_buffer = context.enqueue_create_buffer[
+        DType.bfloat16
+    ](query_output_features)
+    var device_key_bias_buffer = context.enqueue_create_buffer[DType.bfloat16](
+        kv_output_features
+    )
+    var device_value_bias_buffer = context.enqueue_create_buffer[
+        DType.bfloat16
+    ](kv_output_features)
+    var device_query_output_buffer = context.enqueue_create_buffer[
+        DType.bfloat16
+    ](query_output_features)
+    var device_key_output_buffer = context.enqueue_create_buffer[
+        DType.bfloat16
+    ](kv_output_features)
+    var device_value_output_buffer = context.enqueue_create_buffer[
+        DType.bfloat16
+    ](kv_output_features)
+
+    context.enqueue_copy(dst_buf=device_input_buffer, src_buf=host_input_buffer)
+    context.enqueue_copy(
+        dst_buf=device_packed_weight_buffer,
+        src_buf=host_packed_weight_buffer,
+    )
+    context.enqueue_copy(
+        dst_buf=device_packed_bias_buffer, src_buf=host_packed_bias_buffer
+    )
+    context.enqueue_copy(
+        dst_buf=device_query_weight_buffer, src_buf=host_query_weight_buffer
+    )
+    context.enqueue_copy(
+        dst_buf=device_key_weight_buffer, src_buf=host_key_weight_buffer
+    )
+    context.enqueue_copy(
+        dst_buf=device_value_weight_buffer, src_buf=host_value_weight_buffer
+    )
+    context.enqueue_copy(
+        dst_buf=device_query_bias_buffer, src_buf=host_query_bias_buffer
+    )
+    context.enqueue_copy(
+        dst_buf=device_key_bias_buffer, src_buf=host_key_bias_buffer
+    )
+    context.enqueue_copy(
+        dst_buf=device_value_bias_buffer, src_buf=host_value_bias_buffer
+    )
+
+    var device_input = TileTensor(
+        device_input_buffer, row_major[rows, input_features]()
+    )
+    var device_packed_weight = TileTensor(
+        device_packed_weight_buffer,
+        row_major[qkv_output_features, input_features](),
+    )
+    var device_packed_bias = TileTensor(
+        device_packed_bias_buffer, row_major[qkv_output_features]()
+    )
+    var device_fused_output = TileTensor(
+        device_fused_output_buffer, row_major[rows, qkv_output_features]()
+    )
+    var device_query_weight = TileTensor(
+        device_query_weight_buffer,
+        row_major[query_output_features, input_features](),
+    )
+    var device_key_weight = TileTensor(
+        device_key_weight_buffer,
+        row_major[kv_output_features, input_features](),
+    )
+    var device_value_weight = TileTensor(
+        device_value_weight_buffer,
+        row_major[kv_output_features, input_features](),
+    )
+    var device_query_bias = TileTensor(
+        device_query_bias_buffer, row_major[query_output_features]()
+    )
+    var device_key_bias = TileTensor(
+        device_key_bias_buffer, row_major[kv_output_features]()
+    )
+    var device_value_bias = TileTensor(
+        device_value_bias_buffer, row_major[kv_output_features]()
+    )
+    var device_query_output = TileTensor(
+        device_query_output_buffer, row_major[rows, query_output_features]()
+    )
+    var device_key_output = TileTensor(
+        device_key_output_buffer, row_major[rows, kv_output_features]()
+    )
+    var device_value_output = TileTensor(
+        device_value_output_buffer, row_major[rows, kv_output_features]()
+    )
+
+    enqueue_linear_apple_gpu(
+        context,
+        device_input,
+        device_packed_weight,
+        device_packed_bias,
+        device_fused_output,
+    )
+    enqueue_linear_apple_gpu(
+        context,
+        device_input,
+        device_query_weight,
+        device_query_bias,
+        device_query_output,
+    )
+    enqueue_linear_apple_gpu(
+        context,
+        device_input,
+        device_key_weight,
+        device_key_bias,
+        device_key_output,
+    )
+    enqueue_linear_apple_gpu(
+        context,
+        device_input,
+        device_value_weight,
+        device_value_bias,
+        device_value_output,
+    )
+    context.enqueue_copy(
+        dst_buf=host_fused_output_buffer, src_buf=device_fused_output_buffer
+    )
+    context.enqueue_copy(
+        dst_buf=host_query_output_buffer, src_buf=device_query_output_buffer
+    )
+    context.enqueue_copy(
+        dst_buf=host_key_output_buffer, src_buf=device_key_output_buffer
+    )
+    context.enqueue_copy(
+        dst_buf=host_value_output_buffer, src_buf=device_value_output_buffer
+    )
+    context.synchronize()
+
+    var host_fused_output = TileTensor(
+        host_fused_output_buffer, row_major[rows, qkv_output_features]()
+    )
+    var host_query_output = TileTensor(
+        host_query_output_buffer, row_major[rows, query_output_features]()
+    )
+    var host_key_output = TileTensor(
+        host_key_output_buffer, row_major[rows, kv_output_features]()
+    )
+    var host_value_output = TileTensor(
+        host_value_output_buffer, row_major[rows, kv_output_features]()
+    )
+    comptime assert host_fused_output.flat_rank == 2
+    comptime assert host_query_output.flat_rank == 2
+    comptime assert host_key_output.flat_rank == 2
+    comptime assert host_value_output.flat_rank == 2
+    assert_outputs_match[rows, qkv_output_features](
+        host_expected, host_fused_output
+    )
+    for output_feature in range(qkv_output_features):
+        var fused_value = rebind[Scalar[DType.bfloat16]](
+            host_fused_output[0, output_feature]
+        )
+        var separate_value: Scalar[DType.bfloat16]
+        if output_feature < key_offset:
+            separate_value = rebind[Scalar[DType.bfloat16]](
+                host_query_output[0, output_feature]
+            )
+        elif output_feature < value_offset:
+            separate_value = rebind[Scalar[DType.bfloat16]](
+                host_key_output[0, output_feature - key_offset]
+            )
+        else:
+            separate_value = rebind[Scalar[DType.bfloat16]](
+                host_value_output[0, output_feature - value_offset]
+            )
+        if fused_value != separate_value:
+            print("packed QKV mismatch at output feature", output_feature)
+            raise Error("packed QKV output did not match separate projections")
+
+
 def test_fixture_comparison_rejects_nan() raises:
     var context = DeviceContext()
     var output_buffer = context.enqueue_create_host_buffer[DType.bfloat16](1)
@@ -512,6 +855,10 @@ def test_apple_gpu_matches_qwen_query_decode_shape() raises:
 
 def test_apple_gpu_matches_qwen_kv_incremental_shape() raises:
     check_model_shape[3, 896, 128]()
+
+
+def test_packed_qkv_apple_gpu_matches_separate_projection_regions() raises:
+    check_packed_qkv_matches_separate_projections()
 
 
 def test_two_output_apple_gpu_matches_qwen_query_decode_shape() raises:

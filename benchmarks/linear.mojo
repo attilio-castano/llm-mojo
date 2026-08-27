@@ -221,6 +221,52 @@ def bench_qkv_hot[use_two_output: Bool](mut bencher: Bencher) raises capturing:
 
 
 @always_inline
+def bench_qkv_fused_hot(mut bencher: Bencher) raises capturing:
+    """Measure one prepacked QKV projection enqueue."""
+
+    comptime assert has_apple_gpu_accelerator(), "benchmark requires Apple GPU"
+    var context = DeviceContext()
+    if context.api() != "metal":
+        raise Error("benchmark requires the Metal device API")
+
+    var input_buffer = context.enqueue_create_buffer[DType.bfloat16](
+        ROWS * INPUT_FEATURES
+    )
+    var weight_buffer = context.enqueue_create_buffer[DType.bfloat16](
+        QKV_OUTPUT_FEATURES * INPUT_FEATURES
+    )
+    var bias_buffer = context.enqueue_create_buffer[DType.bfloat16](
+        QKV_OUTPUT_FEATURES
+    )
+    var output_buffer = context.enqueue_create_buffer[DType.bfloat16](
+        ROWS * QKV_OUTPUT_FEATURES
+    )
+
+    comptime input_layout = row_major[ROWS, INPUT_FEATURES]()
+    comptime weight_layout = row_major[QKV_OUTPUT_FEATURES, INPUT_FEATURES]()
+    comptime bias_layout = row_major[QKV_OUTPUT_FEATURES]()
+    comptime output_layout = row_major[ROWS, QKV_OUTPUT_FEATURES]()
+    var input = TileTensor(input_buffer, input_layout)
+    var weight = TileTensor(weight_buffer, weight_layout)
+    var bias = TileTensor(bias_buffer, bias_layout)
+    var output = TileTensor(output_buffer, output_layout)
+    input_buffer.enqueue_fill(0.5)
+    weight_buffer.enqueue_fill(0.001953125)
+    bias_buffer.enqueue_fill(0.125)
+
+    enqueue_linear_apple_gpu(context, input, weight, bias, output)
+    with output_buffer.map_to_host() as mapped_output:
+        var host_output = TileTensor(mapped_output, output_layout)
+        _assert_unit_output(host_output)
+
+    @always_inline
+    def launch(launch_context: DeviceContext) raises {imm}:
+        enqueue_linear_apple_gpu(launch_context, input, weight, bias, output)
+
+    bencher_iter_custom(bencher, launch, context)
+
+
+@always_inline
 def bench_qkv_ring24[
     use_two_output: Bool
 ](mut bencher: Bencher) raises capturing:
@@ -347,6 +393,62 @@ def bench_qkv_ring24[
     bencher_iter_custom(bencher, launch, context)
 
 
+@always_inline
+def bench_qkv_fused_ring24(mut bencher: Bencher) raises capturing:
+    """Measure 24 prepacked QKV projection enqueues with rotating weights."""
+
+    comptime assert has_apple_gpu_accelerator(), "benchmark requires Apple GPU"
+    var context = DeviceContext()
+    if context.api() != "metal":
+        raise Error("benchmark requires the Metal device API")
+
+    var input_buffer = context.enqueue_create_buffer[DType.bfloat16](
+        ROWS * INPUT_FEATURES
+    )
+    var weights_buffer = context.enqueue_create_buffer[DType.bfloat16](
+        RING_LAYERS * QKV_OUTPUT_FEATURES * INPUT_FEATURES
+    )
+    var bias_buffer = context.enqueue_create_buffer[DType.bfloat16](
+        QKV_OUTPUT_FEATURES
+    )
+    var output_buffer = context.enqueue_create_buffer[DType.bfloat16](
+        ROWS * QKV_OUTPUT_FEATURES
+    )
+
+    comptime input_layout = row_major[ROWS, INPUT_FEATURES]()
+    comptime weights_layout = row_major[
+        RING_LAYERS * QKV_OUTPUT_FEATURES, INPUT_FEATURES
+    ]()
+    comptime bias_layout = row_major[QKV_OUTPUT_FEATURES]()
+    comptime output_layout = row_major[ROWS, QKV_OUTPUT_FEATURES]()
+    var input = TileTensor(input_buffer, input_layout)
+    var weights = TileTensor(weights_buffer, weights_layout)
+    var bias = TileTensor(bias_buffer, bias_layout)
+    var output = TileTensor(output_buffer, output_layout)
+    input_buffer.enqueue_fill(0.5)
+    weights_buffer.enqueue_fill(0.001953125)
+    bias_buffer.enqueue_fill(0.125)
+
+    comptime for layer in range(RING_LAYERS):
+        var weight = weights.tile[QKV_OUTPUT_FEATURES, INPUT_FEATURES](layer, 0)
+        enqueue_linear_apple_gpu(context, input, weight, bias, output)
+    with output_buffer.map_to_host() as mapped_output:
+        var host_output = TileTensor(mapped_output, output_layout)
+        _assert_unit_output(host_output)
+
+    @always_inline
+    def launch(launch_context: DeviceContext) raises {imm}:
+        comptime for layer in range(RING_LAYERS):
+            var weight = weights.tile[QKV_OUTPUT_FEATURES, INPUT_FEATURES](
+                layer, 0
+            )
+            enqueue_linear_apple_gpu(
+                launch_context, input, weight, bias, output
+            )
+
+    bencher_iter_custom(bencher, launch, context)
+
+
 def _add_linear_benchmark[
     output_features: Int, use_two_output: Bool
 ](mut benchmark: Bench, name: String) raises:
@@ -417,6 +519,48 @@ def _add_qkv_ring24_benchmark[
     )
 
 
+def _add_qkv_fused_hot_benchmark(mut benchmark: Bench) raises:
+    comptime workload = bench_qkv_fused_hot
+    benchmark.bench_function[workload](
+        BenchId(
+            "linear_decode_qkv3_apple_gpu_fused",
+            "qkv3-hot-m1-k896-n1152",
+        ),
+        [
+            ThroughputMeasure(
+                BenchMetric.bytes,
+                2
+                * (
+                    INPUT_FEATURES
+                    + QKV_OUTPUT_FEATURES * INPUT_FEATURES
+                    + 2 * QKV_OUTPUT_FEATURES
+                ),
+            )
+        ],
+    )
+
+
+def _add_qkv_fused_ring24_benchmark(mut benchmark: Bench) raises:
+    comptime workload = bench_qkv_fused_ring24
+    benchmark.bench_function[workload](
+        BenchId(
+            "linear_decode_qkv3_ring24_apple_gpu_fused",
+            "qkv3-ring24-m1-k896-n1152-layers24",
+        ),
+        [
+            ThroughputMeasure(
+                BenchMetric.bytes,
+                2
+                * (
+                    INPUT_FEATURES
+                    + RING_LAYERS * QKV_OUTPUT_FEATURES * INPUT_FEATURES
+                    + 2 * QKV_OUTPUT_FEATURES
+                ),
+            )
+        ],
+    )
+
+
 def _add_selected_linear_benchmarks[
     output_features: Int,
     variant_comparison: Bool,
@@ -461,6 +605,28 @@ def _add_selected_qkv_ring24_benchmarks[
         _add_qkv_ring24_benchmark[False](benchmark)
 
 
+def _add_qkv_hot_fusion_comparison[
+    candidate_first: Bool
+](mut benchmark: Bench) raises:
+    comptime if candidate_first:
+        _add_qkv_fused_hot_benchmark(benchmark)
+        _add_qkv_hot_benchmark[False](benchmark)
+    else:
+        _add_qkv_hot_benchmark[False](benchmark)
+        _add_qkv_fused_hot_benchmark(benchmark)
+
+
+def _add_qkv_ring24_fusion_comparison[
+    candidate_first: Bool
+](mut benchmark: Bench) raises:
+    comptime if candidate_first:
+        _add_qkv_fused_ring24_benchmark(benchmark)
+        _add_qkv_ring24_benchmark[False](benchmark)
+    else:
+        _add_qkv_ring24_benchmark[False](benchmark)
+        _add_qkv_fused_ring24_benchmark(benchmark)
+
+
 def run_benchmarks() raises:
     comptime assert has_apple_gpu_accelerator(), "benchmark requires Apple GPU"
     var identity = DeviceContext()
@@ -470,17 +636,27 @@ def run_benchmarks() raises:
     comptime variant_comparison = get_defined_bool[
         "LINEAR_BENCH_VARIANT_COMPARISON"
     ]()
+    comptime qkv_fusion_comparison = get_defined_bool[
+        "LINEAR_BENCH_QKV_FUSION_COMPARISON"
+    ]()
+    if variant_comparison and qkv_fusion_comparison:
+        raise Error("linear benchmark comparison modes are mutually exclusive")
     comptime variant_first = get_defined_bool["LINEAR_BENCH_VARIANT_FIRST"]()
     print("implementation: enqueue_linear_apple_gpu")
     comptime if variant_comparison:
         print("comparison implementation: enqueue_linear_apple_gpu_two_output")
+    elif qkv_fusion_comparison:
+        print("comparison implementation: enqueue_linear_apple_gpu")
     print("device:", identity.name())
     print("api:", identity.api())
     print("dtype: bfloat16; accumulation: float32")
     print("rows: 1; input features: 896")
     print("timing: enqueue through synchronized device completion")
     print("allocation, initialization, correctness, and mapping excluded")
-    print("bytes metric: source-derived unique tensor bytes")
+    comptime if qkv_fusion_comparison:
+        print("bytes metric: comparison-normalized logical QKV tensor bytes")
+    else:
+        print("bytes metric: source-derived unique tensor bytes")
     print("bytes metric is not measured hardware traffic")
     print(
         "benchmark config:",
@@ -509,31 +685,39 @@ def run_benchmarks() raises:
         )
     )
     comptime if reverse_order:
-        _add_selected_qkv_ring24_benchmarks[variant_comparison, variant_first](
-            benchmark
-        )
-        _add_selected_qkv_hot_benchmarks[variant_comparison, variant_first](
-            benchmark
-        )
-        _add_selected_linear_benchmarks[
-            QUERY_OUTPUT_FEATURES, variant_comparison, variant_first
-        ](benchmark, "q-m1-k896-n896")
-        _add_selected_linear_benchmarks[
-            KV_OUTPUT_FEATURES, variant_comparison, variant_first
-        ](benchmark, "kv-m1-k896-n128")
+        comptime if qkv_fusion_comparison:
+            _add_qkv_ring24_fusion_comparison[variant_first](benchmark)
+            _add_qkv_hot_fusion_comparison[variant_first](benchmark)
+        else:
+            _add_selected_qkv_ring24_benchmarks[
+                variant_comparison, variant_first
+            ](benchmark)
+            _add_selected_qkv_hot_benchmarks[variant_comparison, variant_first](
+                benchmark
+            )
+            _add_selected_linear_benchmarks[
+                QUERY_OUTPUT_FEATURES, variant_comparison, variant_first
+            ](benchmark, "q-m1-k896-n896")
+            _add_selected_linear_benchmarks[
+                KV_OUTPUT_FEATURES, variant_comparison, variant_first
+            ](benchmark, "kv-m1-k896-n128")
     else:
-        _add_selected_linear_benchmarks[
-            KV_OUTPUT_FEATURES, variant_comparison, variant_first
-        ](benchmark, "kv-m1-k896-n128")
-        _add_selected_linear_benchmarks[
-            QUERY_OUTPUT_FEATURES, variant_comparison, variant_first
-        ](benchmark, "q-m1-k896-n896")
-        _add_selected_qkv_hot_benchmarks[variant_comparison, variant_first](
-            benchmark
-        )
-        _add_selected_qkv_ring24_benchmarks[variant_comparison, variant_first](
-            benchmark
-        )
+        comptime if qkv_fusion_comparison:
+            _add_qkv_hot_fusion_comparison[variant_first](benchmark)
+            _add_qkv_ring24_fusion_comparison[variant_first](benchmark)
+        else:
+            _add_selected_linear_benchmarks[
+                KV_OUTPUT_FEATURES, variant_comparison, variant_first
+            ](benchmark, "kv-m1-k896-n128")
+            _add_selected_linear_benchmarks[
+                QUERY_OUTPUT_FEATURES, variant_comparison, variant_first
+            ](benchmark, "q-m1-k896-n896")
+            _add_selected_qkv_hot_benchmarks[variant_comparison, variant_first](
+                benchmark
+            )
+            _add_selected_qkv_ring24_benchmarks[
+                variant_comparison, variant_first
+            ](benchmark)
 
     benchmark.config.format = Format.tabular
     print("BENCHMARK_RESULTS_BEGIN")

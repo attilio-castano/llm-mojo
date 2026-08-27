@@ -74,6 +74,11 @@ WORKLOAD_ORDER = (
     "qkv3-hot-m1-k896-n1152",
     PRIMARY_WORKLOAD,
 )
+QKV_FUSION_SECONDARY_WORKLOADS = ("qkv3-hot-m1-k896-n1152",)
+QKV_FUSION_WORKLOAD_ORDER = (
+    "qkv3-hot-m1-k896-n1152",
+    PRIMARY_WORKLOAD,
+)
 BENCHMARK_RESULTS_BEGIN = "BENCHMARK_RESULTS_BEGIN"
 BENCHMARK_RESULTS_END = "BENCHMARK_RESULTS_END"
 PROFILE_ITERATIONS_LIMIT = 5_000
@@ -91,6 +96,11 @@ VARIANT_IMPLEMENTATION = {
     "id": "apple_gpu_two_output_simdgroup_v1",
     "entrypoint": "enqueue_linear_apple_gpu_two_output",
 }
+QKV_FUSION_IMPLEMENTATION = {
+    "id": "apple_gpu_packed_qkv_single_enqueue_v1",
+    "entrypoint": "enqueue_linear_apple_gpu",
+    "composition": "prepacked_qkv_single_enqueue",
+}
 
 BENCHMARK_NAMES = {
     "linear_decode_apple_gpu": BASELINE_IMPLEMENTATION,
@@ -99,9 +109,12 @@ BENCHMARK_NAMES = {
     "linear_decode_apple_gpu_two_output": VARIANT_IMPLEMENTATION,
     "linear_decode_qkv3_apple_gpu_two_output": VARIANT_IMPLEMENTATION,
     "linear_decode_qkv3_ring24_apple_gpu_two_output": VARIANT_IMPLEMENTATION,
+    "linear_decode_qkv3_apple_gpu_fused": QKV_FUSION_IMPLEMENTATION,
+    "linear_decode_qkv3_ring24_apple_gpu_fused": QKV_FUSION_IMPLEMENTATION,
 }
 BENCHMARK_NAME = re.compile(
-    r"^(linear_decode(?:_qkv3(?:_ring24)?)?_apple_gpu(?:_two_output)?)/"
+    r"^(linear_decode(?:_qkv3(?:_ring24)?)?_apple_gpu"
+    r"(?:_two_output|_fused)?)/"
     r"input_id:(.+)$"
 )
 
@@ -187,8 +200,13 @@ WORKLOADS: dict[str, dict[str, int | str]] = {
 
 
 def parse_identity(
-    output: str, *, variant_comparison: bool
+    output: str,
+    *,
+    variant_comparison: bool,
+    qkv_fusion_comparison: bool = False,
 ) -> dict[str, str]:
+    if variant_comparison and qkv_fusion_comparison:
+        raise ValueError("linear comparison modes are mutually exclusive")
     implementation = re.search(
         r"^implementation:\s*(.+)$", output, re.MULTILINE
     )
@@ -208,13 +226,19 @@ def parse_identity(
         raise ValueError("benchmark did not prove Apple GPU Metal execution")
     if identity["implementation"] != BASELINE_IMPLEMENTATION["entrypoint"]:
         raise ValueError("benchmark did not identify the frozen baseline")
-    if variant_comparison:
+    candidate = (
+        QKV_FUSION_IMPLEMENTATION
+        if qkv_fusion_comparison
+        else VARIANT_IMPLEMENTATION
+    )
+    comparison_requested = variant_comparison or qkv_fusion_comparison
+    if comparison_requested:
         if comparison is None:
-            raise ValueError("comparison benchmark omitted variant identity")
+            raise ValueError("comparison benchmark omitted candidate identity")
         identity["comparison_implementation"] = comparison.group(1).strip()
         if (
             identity["comparison_implementation"]
-            != VARIANT_IMPLEMENTATION["entrypoint"]
+            != candidate["entrypoint"]
         ):
             raise ValueError("benchmark did not identify the frozen candidate")
     elif comparison is not None:
@@ -244,8 +268,26 @@ def parse_samples(
     block_order: str,
     implementation_order: str,
     variant_comparison: bool,
+    qkv_fusion_comparison: bool = False,
 ) -> tuple[dict[str, str], list[dict[str, Any]]]:
-    identity = parse_identity(output, variant_comparison=variant_comparison)
+    if variant_comparison and qkv_fusion_comparison:
+        raise ValueError("linear comparison modes are mutually exclusive")
+    identity = parse_identity(
+        output,
+        variant_comparison=variant_comparison,
+        qkv_fusion_comparison=qkv_fusion_comparison,
+    )
+    candidate = (
+        QKV_FUSION_IMPLEMENTATION
+        if qkv_fusion_comparison
+        else VARIANT_IMPLEMENTATION
+    )
+    comparison_requested = variant_comparison or qkv_fusion_comparison
+    workload_order_contract = (
+        QKV_FUSION_WORKLOAD_ORDER
+        if qkv_fusion_comparison
+        else WORKLOAD_ORDER
+    )
     reader = csv.DictReader(table_lines(output), skipinitialspace=True)
     counts: defaultdict[tuple[str, str], int] = defaultdict(int)
     observed_order: list[tuple[str, str]] = []
@@ -264,8 +306,13 @@ def parse_samples(
         workload_id = match.group(2)
         if workload_id not in WORKLOADS:
             raise ValueError(f"unexpected projection workload: {workload_id}")
-        if not variant_comparison and implementation != BASELINE_IMPLEMENTATION:
-            raise ValueError("baseline run emitted a candidate sample")
+        allowed_implementations = (
+            (BASELINE_IMPLEMENTATION, candidate)
+            if comparison_requested
+            else (BASELINE_IMPLEMENTATION,)
+        )
+        if implementation not in allowed_implementations:
+            raise ValueError("benchmark emitted an implementation outside its mode")
         order_key = (workload_id, implementation_id)
         if not observed_order or observed_order[-1] != order_key:
             observed_order.append(order_key)
@@ -277,7 +324,11 @@ def parse_samples(
         counts[order_key] += 1
         repetition = counts[order_key]
         workload = WORKLOADS[workload_id]
-        dispatches = int(workload["dispatches"])
+        dispatches = (
+            int(workload["layers"])
+            if implementation == QKV_FUSION_IMPLEMENTATION
+            else int(workload["dispatches"])
+        )
         samples.append(
             {
                 "schema_version": 1,
@@ -314,15 +365,15 @@ def parse_samples(
         )
 
     workload_order = list(
-        WORKLOAD_ORDER
+        workload_order_contract
         if block_order == "ascending"
-        else reversed(WORKLOAD_ORDER)
+        else reversed(workload_order_contract)
     )
-    if variant_comparison:
+    if comparison_requested:
         implementation_ids = (
-            [VARIANT_IMPLEMENTATION["id"], BASELINE_IMPLEMENTATION["id"]]
+            [candidate["id"], BASELINE_IMPLEMENTATION["id"]]
             if implementation_order == "variant_then_baseline"
-            else [BASELINE_IMPLEMENTATION["id"], VARIANT_IMPLEMENTATION["id"]]
+            else [BASELINE_IMPLEMENTATION["id"], candidate["id"]]
         )
     else:
         if implementation_order != "baseline_only":
@@ -340,7 +391,7 @@ def parse_samples(
         )
     expected_counts = {
         (workload_id, str(implementation_id)): EXPECTED_REPETITIONS
-        for workload_id in WORKLOAD_ORDER
+        for workload_id in workload_order_contract
         for implementation_id in implementation_ids
     }
     if dict(counts) != expected_counts:
@@ -355,19 +406,32 @@ def parse_samples(
 
 def summarize_implementation(
     samples: Iterable[dict[str, Any]],
+    *,
+    workload_order: tuple[str, ...] = WORKLOAD_ORDER,
+    traffic_note: str = (
+        "Source-derived requested bytes, not measured hardware traffic."
+    ),
 ) -> dict[str, Any]:
     grouped: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
     for sample in samples:
         if sample["valid"]:
             grouped[sample["workload"]].append(sample)
     result: list[dict[str, Any]] = []
-    for workload_id in WORKLOAD_ORDER:
+    for workload_id in workload_order:
         group = grouped[workload_id]
         if not group:
             continue
         values = [float(sample["value"]) for sample in group]
         median = statistics.median(values)
         workload = WORKLOADS[workload_id]
+        dispatch_counts = {
+            int(sample["dispatches_per_iteration"]) for sample in group
+        }
+        if len(dispatch_counts) != 1:
+            raise ValueError(
+                f"implementation has inconsistent dispatch counts for {workload_id}"
+            )
+        dispatches = dispatch_counts.pop()
         deviations = [abs(value - median) for value in values]
         result.append(
             {
@@ -375,8 +439,7 @@ def summarize_implementation(
                 "semantic_role": workload["semantic_role"],
                 "count": len(values),
                 "median_ms_per_workload_iteration": median,
-                "median_ms_per_dispatch": median
-                / int(workload["dispatches"]),
+                "median_ms_per_dispatch": median / dispatches,
                 "median_absolute_deviation_ms": statistics.median(deviations),
                 "p25_ms": percentile(values, 0.25),
                 "p75_ms": percentile(values, 0.75),
@@ -387,10 +450,7 @@ def summarize_implementation(
                     workload["program_requested_bytes"]
                 )
                 / (median * 1_000_000.0),
-                "traffic_note": (
-                    "Source-derived requested bytes, not measured hardware "
-                    "traffic."
-                ),
+                "traffic_note": traffic_note,
             }
         )
     return {"schema_version": 1, "workloads": result}
@@ -398,7 +458,24 @@ def summarize_implementation(
 
 def summarize_paired_workloads(
     samples: Iterable[dict[str, Any]],
+    *,
+    qkv_fusion_comparison: bool = False,
 ) -> dict[str, Any]:
+    candidate = (
+        QKV_FUSION_IMPLEMENTATION
+        if qkv_fusion_comparison
+        else VARIANT_IMPLEMENTATION
+    )
+    workload_order = (
+        QKV_FUSION_WORKLOAD_ORDER
+        if qkv_fusion_comparison
+        else WORKLOAD_ORDER
+    )
+    secondary_workloads = (
+        QKV_FUSION_SECONDARY_WORKLOADS
+        if qkv_fusion_comparison
+        else SECONDARY_WORKLOADS
+    )
     grouped: defaultdict[tuple[str, str, str], list[float]] = defaultdict(list)
     for sample in samples:
         if sample["valid"]:
@@ -410,7 +487,7 @@ def summarize_paired_workloads(
                 )
             ].append(float(sample["value"]))
     workloads: list[dict[str, Any]] = []
-    for workload_id in WORKLOAD_ORDER:
+    for workload_id in workload_order:
         blocks: list[dict[str, Any]] = []
         for block_number in range(1, 5):
             block_id = f"block-{block_number:02d}"
@@ -418,7 +495,7 @@ def summarize_paired_workloads(
                 (workload_id, block_id, BASELINE_IMPLEMENTATION["id"])
             ]
             variant = grouped[
-                (workload_id, block_id, VARIANT_IMPLEMENTATION["id"])
+                (workload_id, block_id, candidate["id"])
             ]
             if not baseline or not variant:
                 raise ValueError(f"paired samples missing for {workload_id}")
@@ -468,7 +545,7 @@ def summarize_paired_workloads(
     )
     secondary_regressions = [
         workload_id
-        for workload_id in SECONDARY_WORKLOADS
+        for workload_id in secondary_workloads
         if by_workload[workload_id]["classification"]
         == "material_regression"
     ]
@@ -481,22 +558,58 @@ def summarize_paired_workloads(
         "workloads": workloads,
         "primary_rule_passed": primary_pass,
         "secondary_material_regressions": secondary_regressions,
+        "dispatch_metric_note": (
+            "Fused and separate dispatches contain different work; compare "
+            "complete workload latency, not milliseconds per dispatch."
+            if qkv_fusion_comparison
+            else "Dispatch work is identical across the paired implementations."
+        ),
         "timing_decision": (
-            "promote_two_output_m1"
+            (
+                "promote_packed_qkv_single_enqueue"
+                if qkv_fusion_comparison
+                else "promote_two_output_m1"
+            )
             if primary_pass and not secondary_regressions
-            else "retain_one_output_m1"
+            else (
+                "retain_separate_qkv_enqueues"
+                if qkv_fusion_comparison
+                else "retain_one_output_m1"
+            )
         ),
     }
 
 
 def summarize(
-    samples: Iterable[dict[str, Any]], *, variant_comparison: bool
+    samples: Iterable[dict[str, Any]],
+    *,
+    variant_comparison: bool,
+    qkv_fusion_comparison: bool = False,
 ) -> dict[str, Any]:
+    if variant_comparison and qkv_fusion_comparison:
+        raise ValueError("linear comparison modes are mutually exclusive")
     retained = list(samples)
-    if not variant_comparison:
+    comparison_requested = variant_comparison or qkv_fusion_comparison
+    if not comparison_requested:
         return summarize_implementation(retained)
+    candidate = (
+        QKV_FUSION_IMPLEMENTATION
+        if qkv_fusion_comparison
+        else VARIANT_IMPLEMENTATION
+    )
+    workload_order = (
+        QKV_FUSION_WORKLOAD_ORDER
+        if qkv_fusion_comparison
+        else WORKLOAD_ORDER
+    )
+    traffic_note = (
+        "Comparison-normalized logical QKV tensor bytes; the numerator is "
+        "identical across candidates and is not measured hardware traffic."
+        if qkv_fusion_comparison
+        else "Source-derived requested bytes, not measured hardware traffic."
+    )
     implementations = []
-    for implementation in (BASELINE_IMPLEMENTATION, VARIANT_IMPLEMENTATION):
+    for implementation in (BASELINE_IMPLEMENTATION, candidate):
         implementation_samples = [
             sample
             for sample in retained
@@ -506,24 +619,43 @@ def summarize(
             {
                 "implementation": implementation["id"],
                 "entrypoint": implementation["entrypoint"],
-                **summarize_implementation(implementation_samples),
+                **(
+                    {"composition": implementation["composition"]}
+                    if "composition" in implementation
+                    else {}
+                ),
+                **summarize_implementation(
+                    implementation_samples,
+                    workload_order=workload_order,
+                    traffic_note=traffic_note,
+                ),
             }
         )
     return {
         "schema_version": 2,
         "implementations": implementations,
-        "paired_comparison": summarize_paired_workloads(retained),
+        "paired_comparison": summarize_paired_workloads(
+            retained, qkv_fusion_comparison=qkv_fusion_comparison
+        ),
     }
 
 
 def benchmark_command(
-    *, reverse: bool, variant_comparison: bool, variant_first: bool
+    *,
+    reverse: bool,
+    variant_comparison: bool,
+    variant_first: bool,
+    qkv_fusion_comparison: bool = False,
 ) -> list[str]:
+    if variant_comparison and qkv_fusion_comparison:
+        raise ValueError("linear comparison modes are mutually exclusive")
     args = ["uv", "run", "--locked", "mojo", "run", "-I", "src"]
     if reverse:
         args.extend(["-D", "LINEAR_BENCH_REVERSE=true"])
     if variant_comparison:
         args.extend(["-D", "LINEAR_BENCH_VARIANT_COMPARISON=true"])
+    if qkv_fusion_comparison:
+        args.extend(["-D", "LINEAR_BENCH_QKV_FUSION_COMPARISON=true"])
     if variant_first:
         args.extend(["-D", "LINEAR_BENCH_VARIANT_FIRST=true"])
     args.append("benchmarks/linear.mojo")
@@ -538,6 +670,7 @@ def run_block(
     block_order: str,
     implementation_order: str,
     variant_comparison: bool,
+    qkv_fusion_comparison: bool = False,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
     block_id = f"block-{block_number:02d}"
     before = conditions_snapshot()
@@ -545,6 +678,7 @@ def run_block(
         reverse=block_order == "descending",
         variant_comparison=variant_comparison,
         variant_first=implementation_order == "variant_then_baseline",
+        qkv_fusion_comparison=qkv_fusion_comparison,
     )
     environment = os.environ.copy()
     environment.pop("MODULAR_DEBUG", None)
@@ -575,6 +709,7 @@ def run_block(
         block_order=block_order,
         implementation_order=implementation_order,
         variant_comparison=variant_comparison,
+        qkv_fusion_comparison=qkv_fusion_comparison,
     )
     stdout_bytes = result.stdout.encode()
     block = {
@@ -724,7 +859,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--recorded", action="store_true")
     parser.add_argument("--require-clean", action="store_true")
-    parser.add_argument("--variant-comparison", action="store_true")
+    comparison = parser.add_mutually_exclusive_group()
+    comparison.add_argument("--variant-comparison", action="store_true")
+    comparison.add_argument("--qkv-fusion-comparison", action="store_true")
     parser.add_argument("--profile-binary", type=Path)
     parser.add_argument("--profile-workload", choices=tuple(PROFILE_WORKLOADS))
     parser.add_argument(
@@ -759,7 +896,10 @@ def main() -> None:
         raise RuntimeError(
             "--recorded requires an external output directory and explicit IDs"
         )
-    if args.variant_comparison and args.blocks != 4:
+    comparison_requested = (
+        args.variant_comparison or args.qkv_fusion_comparison
+    )
+    if comparison_requested and args.blocks != 4:
         raise RuntimeError("candidate comparison requires all four ABBA blocks")
 
     run_id = args.run_id or datetime.now(UTC).strftime(
@@ -785,7 +925,7 @@ def main() -> None:
         block_order = BLOCK_ORDERS[index]
         implementation_order = (
             BLOCK_IMPLEMENTATION_ORDERS[index]
-            if args.variant_comparison
+            if comparison_requested
             else "baseline_only"
         )
         block, block_samples, output = run_block(
@@ -795,6 +935,7 @@ def main() -> None:
             block_order=block_order,
             implementation_order=implementation_order,
             variant_comparison=args.variant_comparison,
+            qkv_fusion_comparison=args.qkv_fusion_comparison,
         )
         blocks.append(block)
         samples.extend(block_samples)
@@ -807,7 +948,9 @@ def main() -> None:
             require_nominal_thermal_state(block["conditions_after"])
 
     result_summary = summarize(
-        samples, variant_comparison=args.variant_comparison
+        samples,
+        variant_comparison=args.variant_comparison,
+        qkv_fusion_comparison=args.qkv_fusion_comparison,
     )
     metadata = {
         "schema_version": 1,
@@ -819,6 +962,7 @@ def main() -> None:
         "repository": initial_repository,
         "recorded": args.recorded,
         "variant_comparison": args.variant_comparison,
+        "qkv_fusion_comparison": args.qkv_fusion_comparison,
         "blocks": blocks,
         "sample_count": len(samples),
         "environment": stable_environment(),

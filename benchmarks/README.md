@@ -126,6 +126,28 @@ uv run --locked python benchmarks/run_linear.py \
   --output-dir /absolute/external/path/EXP-0005-RUN-001
 ```
 
+The packed-QKV comparison is a separate mode so the completed EXP-0005
+protocol remains reproducible. It compares only hot QKV and the rotating
+24-layer QKV proxy. The baseline owns separate Q, K, and V buffers and submits
+three enqueues per layer. The candidate allocates weights and bias directly as
+Q|K|V, writes Q|K|V to one output buffer, and submits the same one-output
+kernel once per layer. Packing, allocation, correctness, and output mapping are
+outside timing; no per-token concatenation or output-splitting copy is allowed.
+
+The primary metric is milliseconds per complete QKV workload iteration.
+Milliseconds per dispatch must not be compared because a fused dispatch
+contains three times the scalar-output work of a baseline Q or K/V dispatch:
+
+```bash
+uv run --locked python benchmarks/run_linear.py \
+  --blocks 4 \
+  --experiment-id EXP-0006 \
+  --run-id EXP-0006-RUN-001 \
+  --qkv-fusion-comparison \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-0006-RUN-001
+```
+
 Build a short standalone profile binary outside the repository with `q`, `kv`,
 `qkv-hot`, or `qkv-ring24` as the workload. The default is the one-output
 baseline; use `--profile-implementation two-output` for the candidate:
