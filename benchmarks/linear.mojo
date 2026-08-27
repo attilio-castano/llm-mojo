@@ -793,6 +793,93 @@ def _run_profile_linear[
         sleep(Float64(post_profile_idle_milliseconds) / 1_000.0)
 
 
+def _run_profile_qkv_fused[
+    layers: Int,
+    warmup_iterations: Int,
+    iterations: Int,
+](post_profile_idle_milliseconds: Int) raises:
+    comptime assert (
+        layers == 1 or layers == RING_LAYERS
+    ), "fused QKV profile supports one or 24 layers"
+    var context = DeviceContext()
+    var input_buffer = context.enqueue_create_buffer[DType.bfloat16](
+        INPUT_FEATURES
+    )
+    var weights_buffer = context.enqueue_create_buffer[DType.bfloat16](
+        layers * QKV_OUTPUT_FEATURES * INPUT_FEATURES
+    )
+    var bias_buffer = context.enqueue_create_buffer[DType.bfloat16](
+        QKV_OUTPUT_FEATURES
+    )
+    var output_buffer = context.enqueue_create_buffer[DType.bfloat16](
+        QKV_OUTPUT_FEATURES
+    )
+    comptime input_layout = row_major[ROWS, INPUT_FEATURES]()
+    comptime weights_layout = row_major[
+        layers * QKV_OUTPUT_FEATURES, INPUT_FEATURES
+    ]()
+    comptime bias_layout = row_major[QKV_OUTPUT_FEATURES]()
+    comptime output_layout = row_major[ROWS, QKV_OUTPUT_FEATURES]()
+    var input = TileTensor(input_buffer, input_layout)
+    var weights = TileTensor(weights_buffer, weights_layout)
+    var bias = TileTensor(bias_buffer, bias_layout)
+    var output = TileTensor(output_buffer, output_layout)
+    input_buffer.enqueue_fill(0.5)
+    weights_buffer.enqueue_fill(0.001953125)
+    bias_buffer.enqueue_fill(0.125)
+
+    comptime if layers == 1:
+        enqueue_linear_apple_gpu(context, input, weights, bias, output)
+    else:
+        comptime for layer in range(layers):
+            var weight = weights.tile[QKV_OUTPUT_FEATURES, INPUT_FEATURES](
+                layer, 0
+            )
+            enqueue_linear_apple_gpu(context, input, weight, bias, output)
+    with output_buffer.map_to_host() as mapped_output:
+        var host_output = TileTensor(mapped_output, output_layout)
+        _assert_unit_output(host_output)
+
+    for _ in range(warmup_iterations):
+        comptime if layers == 1:
+            enqueue_linear_apple_gpu(context, input, weights, bias, output)
+        else:
+            comptime for layer in range(layers):
+                var weight = weights.tile[QKV_OUTPUT_FEATURES, INPUT_FEATURES](
+                    layer, 0
+                )
+                enqueue_linear_apple_gpu(context, input, weight, bias, output)
+    context.synchronize()
+    print("profile implementation: enqueue_linear_apple_gpu")
+    print("device:", context.name())
+    print("api:", context.api())
+    print("rows:", ROWS)
+    print("hidden:", INPUT_FEATURES)
+    print("output features:", QKV_OUTPUT_FEATURES)
+    comptime if layers == 1:
+        print("profile workload: qkv-hot")
+    else:
+        print("profile workload: qkv-ring24")
+    print("profile dispatches per iteration:", layers)
+    print("warmup iterations:", warmup_iterations)
+    print("profile iterations:", iterations)
+    print("post-profile idle milliseconds:", post_profile_idle_milliseconds)
+    print("PROFILE_REGION_BEGIN")
+    for _ in range(iterations):
+        comptime if layers == 1:
+            enqueue_linear_apple_gpu(context, input, weights, bias, output)
+        else:
+            comptime for layer in range(layers):
+                var weight = weights.tile[QKV_OUTPUT_FEATURES, INPUT_FEATURES](
+                    layer, 0
+                )
+                enqueue_linear_apple_gpu(context, input, weight, bias, output)
+    context.synchronize()
+    print("PROFILE_REGION_END")
+    if post_profile_idle_milliseconds > 0:
+        sleep(Float64(post_profile_idle_milliseconds) / 1_000.0)
+
+
 def _run_profile_qkv_hot[
     warmup_iterations: Int, iterations: Int, use_two_output: Bool
 ](post_profile_idle_milliseconds: Int) raises:
@@ -1082,6 +1169,11 @@ def main() raises:
         comptime profile_two_output = get_defined_bool[
             "LINEAR_PROFILE_TWO_OUTPUT"
         ]()
+        comptime profile_fused_qkv = get_defined_bool[
+            "LINEAR_PROFILE_FUSED_QKV"
+        ]()
+        if profile_two_output and profile_fused_qkv:
+            raise Error("linear profile modes are mutually exclusive")
         var post_profile_idle_milliseconds = (
             DEFAULT_PROFILE_POST_IDLE_MILLISECONDS
         )
@@ -1090,6 +1182,8 @@ def main() raises:
                 "LINEAR_PROFILE_POST_IDLE_MILLISECONDS"
             ]()
         comptime if profile_workload == QUERY_WORKLOAD:
+            comptime if profile_fused_qkv:
+                raise Error("fused QKV profile requires a QKV workload")
             _run_profile_linear[
                 QUERY_OUTPUT_FEATURES,
                 profile_warmup_iterations,
@@ -1097,6 +1191,8 @@ def main() raises:
                 profile_two_output,
             ](post_profile_idle_milliseconds)
         elif profile_workload == KV_WORKLOAD:
+            comptime if profile_fused_qkv:
+                raise Error("fused QKV profile requires a QKV workload")
             _run_profile_linear[
                 KV_OUTPUT_FEATURES,
                 profile_warmup_iterations,
@@ -1104,17 +1200,31 @@ def main() raises:
                 profile_two_output,
             ](post_profile_idle_milliseconds)
         elif profile_workload == QKV_HOT_WORKLOAD:
-            _run_profile_qkv_hot[
-                profile_warmup_iterations,
-                profile_iterations,
-                profile_two_output,
-            ](post_profile_idle_milliseconds)
+            comptime if profile_fused_qkv:
+                _run_profile_qkv_fused[
+                    1,
+                    profile_warmup_iterations,
+                    profile_iterations,
+                ](post_profile_idle_milliseconds)
+            else:
+                _run_profile_qkv_hot[
+                    profile_warmup_iterations,
+                    profile_iterations,
+                    profile_two_output,
+                ](post_profile_idle_milliseconds)
         elif profile_workload == QKV_RING24_WORKLOAD:
-            _run_profile_qkv_ring24[
-                profile_warmup_iterations,
-                profile_iterations,
-                profile_two_output,
-            ](post_profile_idle_milliseconds)
+            comptime if profile_fused_qkv:
+                _run_profile_qkv_fused[
+                    RING_LAYERS,
+                    profile_warmup_iterations,
+                    profile_iterations,
+                ](post_profile_idle_milliseconds)
+            else:
+                _run_profile_qkv_ring24[
+                    profile_warmup_iterations,
+                    profile_iterations,
+                    profile_two_output,
+                ](post_profile_idle_milliseconds)
         else:
             raise Error("profile workload is not implemented")
     else:

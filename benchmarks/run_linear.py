@@ -779,11 +779,17 @@ def build_profile_binary(args: argparse.Namespace) -> None:
         raise RuntimeError("profile build requires a clean repository")
     if args.require_clean:
         ensure_record_location(output)
-    implementation = (
-        VARIANT_IMPLEMENTATION
-        if args.profile_implementation == "two-output"
-        else BASELINE_IMPLEMENTATION
-    )
+    if (
+        args.profile_implementation == "fused-qkv"
+        and args.profile_workload not in ("qkv-hot", "qkv-ring24")
+    ):
+        raise RuntimeError("fused QKV profile requires a QKV workload")
+    if args.profile_implementation == "two-output":
+        implementation = VARIANT_IMPLEMENTATION
+    elif args.profile_implementation == "fused-qkv":
+        implementation = QKV_FUSION_IMPLEMENTATION
+    else:
+        implementation = BASELINE_IMPLEMENTATION
     command_args = [
         "uv",
         "run",
@@ -803,6 +809,8 @@ def build_profile_binary(args: argparse.Namespace) -> None:
     ]
     if args.profile_implementation == "two-output":
         command_args.extend(["-D", "LINEAR_PROFILE_TWO_OUTPUT=true"])
+    elif args.profile_implementation == "fused-qkv":
+        command_args.extend(["-D", "LINEAR_PROFILE_FUSED_QKV=true"])
     command_args.extend(["benchmarks/linear.mojo", "-o", str(output)])
     environment = os.environ.copy()
     environment.pop("MODULAR_DEBUG", None)
@@ -829,7 +837,11 @@ def build_profile_binary(args: argparse.Namespace) -> None:
         "input_features": INPUT_FEATURES,
         "output_features": workload["output_features"],
         "layers": workload["layers"],
-        "dispatches_per_iteration": workload["dispatches"],
+        "dispatches_per_iteration": (
+            workload["layers"]
+            if implementation == QKV_FUSION_IMPLEMENTATION
+            else workload["dispatches"]
+        ),
         "profile_warmup_iterations": warmup,
         "profile_iterations": args.profile_iterations,
         "profile_post_idle_milliseconds": post_idle,
@@ -866,7 +878,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--profile-workload", choices=tuple(PROFILE_WORKLOADS))
     parser.add_argument(
         "--profile-implementation",
-        choices=("baseline", "two-output"),
+        choices=("baseline", "two-output", "fused-qkv"),
         default="baseline",
     )
     parser.add_argument(

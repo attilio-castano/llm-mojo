@@ -31,6 +31,7 @@ IMPLEMENTATION_ENTRYPOINTS = {
     "apple_gpu_two_output_simdgroup_v1": (
         "enqueue_linear_apple_gpu_two_output"
     ),
+    "apple_gpu_packed_qkv_single_enqueue_v1": "enqueue_linear_apple_gpu",
 }
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 

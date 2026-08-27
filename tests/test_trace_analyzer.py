@@ -267,6 +267,32 @@ class CaptureIdentityTest(unittest.TestCase):
         )
         self.assertEqual(identity["workload"]["profile_workload"], "qkv-ring24")
 
+    def test_projection_receipt_accepts_packed_qkv_identity(self):
+        receipt = linear_capture_receipt()
+        receipt["capture"]["target_identity"].update(
+            {
+                "implementation": "apple_gpu_packed_qkv_single_enqueue_v1",
+                "dispatches_per_iteration": 24,
+            }
+        )
+        receipt["profile"]["configuration"].update(
+            {
+                "implementation": "apple_gpu_packed_qkv_single_enqueue_v1",
+                "dispatches_per_iteration": 24,
+            }
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "capture.json"
+            path.write_text(json.dumps(receipt) + "\n")
+
+            identity, _ = capture_identity(path)
+
+        self.assertEqual(
+            identity["implementation"],
+            "apple_gpu_packed_qkv_single_enqueue_v1",
+        )
+        self.assertEqual(identity["workload"]["dispatches_per_iteration"], 24)
+
     def test_receipt_identity_is_carried_into_the_summary_contract(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "capture.json"

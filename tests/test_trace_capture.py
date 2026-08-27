@@ -48,6 +48,11 @@ LINEAR_PROFILE_OUTPUT = "\n".join(
     ]
 )
 
+FUSED_LINEAR_PROFILE_OUTPUT = LINEAR_PROFILE_OUTPUT.replace(
+    "profile dispatches per iteration: 72",
+    "profile dispatches per iteration: 24",
+)
+
 
 def write_profile(directory: Path) -> Path:
     directory.mkdir(parents=True)
@@ -119,6 +124,16 @@ def write_linear_profile(directory: Path) -> Path:
     return binary
 
 
+def write_fused_linear_profile(directory: Path) -> Path:
+    binary = write_linear_profile(directory)
+    provenance_path = binary.with_name(binary.name + ".provenance.json")
+    provenance = json.loads(provenance_path.read_text())
+    provenance["dispatches_per_iteration"] = 24
+    provenance["implementation"] = "apple_gpu_packed_qkv_single_enqueue_v1"
+    provenance_path.write_text(json.dumps(provenance) + "\n")
+    return binary
+
+
 class TraceCaptureTest(unittest.TestCase):
     def test_linear_profile_uses_linear_capture_identity_and_contract(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -158,6 +173,44 @@ class TraceCaptureTest(unittest.TestCase):
                 ],
                 72,
             )
+
+    def test_fused_projection_profile_binds_single_enqueue_composition(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = write_fused_linear_profile(
+                root / "external" / "profiles"
+            )
+            staging_root = root / "private-tmp"
+            staging_root.mkdir()
+            output = root / "external" / "linear-fused.trace"
+
+            def runner(command: list[str], **_: object):
+                if command[-1] == "version":
+                    return subprocess.CompletedProcess(
+                        command, 0, "xctrace version test\n"
+                    )
+                output.mkdir(parents=True)
+                return subprocess.CompletedProcess(
+                    command, 0, FUSED_LINEAR_PROFILE_OUTPUT
+                )
+
+            receipt = capture_trace(
+                profile_binary=source,
+                output_trace=output,
+                staging_root=staging_root,
+                runner=runner,
+            )
+
+        self.assertEqual(
+            receipt["capture"]["target_identity"]["implementation"],
+            "apple_gpu_packed_qkv_single_enqueue_v1",
+        )
+        self.assertEqual(
+            receipt["profile"]["configuration"][
+                "dispatches_per_iteration"
+            ],
+            24,
+        )
 
     def test_documents_artifact_is_launched_from_verified_temporary_copy(self):
         with tempfile.TemporaryDirectory() as temporary:
