@@ -161,7 +161,7 @@ def repository_state() -> dict[str, Any]:
     status = command("git", "status", "--porcelain")
     return {
         "commit": command("git", "rev-parse", "HEAD"),
-        "branch": command("git", "branch", "--show-current"),
+        "branch": command("git", "rev-parse", "--abbrev-ref", "HEAD"),
         "dirty": bool(status),
     }
 
