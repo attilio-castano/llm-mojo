@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from benchmarks.run_rms_norm import (
     BASELINE_IMPLEMENTATION,
@@ -9,6 +10,7 @@ from benchmarks.run_rms_norm import (
     WORKLOAD_ROWS,
     benchmark_command,
     parse_samples,
+    repository_state,
     summarize,
 )
 
@@ -93,6 +95,22 @@ def synthetic_samples() -> list[dict[str, object]]:
                         }
                     )
     return samples
+
+
+class RepositoryStateTest(unittest.TestCase):
+    @patch("benchmarks.run_rms_norm.command")
+    def test_detached_head_uses_git_head_marker(self, command):
+        outputs = {
+            ("git", "status", "--porcelain"): "",
+            ("git", "rev-parse", "HEAD"): "a" * 40,
+            ("git", "rev-parse", "--abbrev-ref", "HEAD"): "HEAD",
+        }
+        command.side_effect = lambda *args: outputs[args]
+
+        self.assertEqual(
+            repository_state(),
+            {"commit": "a" * 40, "branch": "HEAD", "dirty": False},
+        )
 
 
 class ParsePairedSamplesTest(unittest.TestCase):

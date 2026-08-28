@@ -1,4 +1,4 @@
-"""Capture a standalone RMSNorm profile through a verified temporary launch."""
+"""Capture a standalone GPU profile through a verified temporary launch."""
 
 from __future__ import annotations
 
@@ -23,10 +23,15 @@ DEFAULT_TIME_LIMIT = "1s"
 PROFILE_REGION_BEGIN = "PROFILE_REGION_BEGIN"
 PROFILE_REGION_END = "PROFILE_REGION_END"
 TIME_LIMIT = re.compile(r"^[1-9][0-9]*(?:ms|s|m|h)$")
-CAPTURE_ID = re.compile(r"^rmsnorm-[0-9a-f]{32}$")
+CAPTURE_ID = re.compile(r"^(?:rmsnorm|linear)-[0-9a-f]{32}$")
 IMPLEMENTATION_ENTRYPOINTS = {
     "apple_gpu_shared_tree_v0": "enqueue_rms_norm_apple_gpu_shared_tree",
     "apple_gpu_simdgroup_v1": "enqueue_rms_norm_apple_gpu",
+    "apple_gpu_one_output_simdgroup_v0": "enqueue_linear_apple_gpu",
+    "apple_gpu_two_output_simdgroup_v1": (
+        "enqueue_linear_apple_gpu_two_output"
+    ),
+    "apple_gpu_packed_qkv_single_enqueue_v1": "enqueue_linear_apple_gpu",
 }
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 
@@ -35,8 +40,9 @@ def utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def new_capture_id() -> str:
-    return f"rmsnorm-{uuid4().hex}"
+def new_capture_id(operation: str = "rms_norm") -> str:
+    prefix = "linear" if operation == "linear_projection" else "rmsnorm"
+    return f"{prefix}-{uuid4().hex}"
 
 
 def sha256_file(path: Path) -> str:
@@ -109,10 +115,11 @@ def profile_contract(
     if provenance.get("schema_version") != 1:
         raise RuntimeError("profile provenance has an unsupported schema")
 
-    configuration: dict[str, Any] = {}
+    operation = provenance.get("operation", "rms_norm")
+    if operation not in ("rms_norm", "linear_projection"):
+        raise RuntimeError("profile provenance has an unsupported operation")
+    configuration: dict[str, Any] = {"operation": operation}
     for key in (
-        "profile_rows",
-        "hidden_size",
         "profile_warmup_iterations",
         "profile_iterations",
         "profile_post_idle_milliseconds",
@@ -123,12 +130,40 @@ def profile_contract(
                 f"profile provenance has an invalid {key.replace('_', ' ')}"
             )
         configuration[key] = value
-    if configuration["profile_rows"] <= 0:
-        raise RuntimeError("profile provenance rows must be positive")
-    if configuration["hidden_size"] <= 0:
-        raise RuntimeError("profile provenance hidden size must be positive")
     if configuration["profile_iterations"] <= 0:
         raise RuntimeError("profile provenance iterations must be positive")
+
+    if operation == "rms_norm":
+        shape_keys = ("profile_rows", "hidden_size")
+        for key in shape_keys:
+            value = provenance.get(key)
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                raise RuntimeError(
+                    f"profile provenance has an invalid {key.replace('_', ' ')}"
+                )
+            configuration[key] = value
+        configuration["dispatches_per_iteration"] = 1
+    else:
+        workload = provenance.get("profile_workload")
+        if not isinstance(workload, str) or not workload:
+            raise RuntimeError("profile provenance has an invalid workload")
+        configuration["profile_workload"] = workload
+        linear_keys = (
+            "rows",
+            "input_features",
+            "output_features",
+            "layers",
+            "dispatches_per_iteration",
+        )
+        for key in linear_keys:
+            value = provenance.get(key)
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                raise RuntimeError(
+                    f"profile provenance has an invalid {key.replace('_', ' ')}"
+                )
+            configuration[key] = value
+        configuration["profile_rows"] = configuration["rows"]
+        configuration["hidden_size"] = configuration["input_features"]
 
     implementation = provenance.get("implementation")
     entrypoint = provenance.get("entrypoint")
@@ -138,7 +173,7 @@ def profile_contract(
         or entrypoint != IMPLEMENTATION_ENTRYPOINTS[implementation]
     ):
         raise RuntimeError(
-            "profile provenance has an inconsistent RMSNorm implementation"
+            "profile provenance has an inconsistent implementation"
         )
     configuration["implementation"] = implementation
     configuration["entrypoint"] = entrypoint
@@ -206,6 +241,21 @@ def parse_target_identity(output: str) -> dict[str, Any]:
         if re.fullmatch(r"[0-9]+", value) is None:
             raise ValueError(f"target {label} is not a non-negative integer")
         identity[key] = int(value)
+    workload_matches = re.findall(
+        r"^profile workload:\s*(.*?)\s*$", output, flags=re.MULTILINE
+    )
+    if workload_matches:
+        if len(workload_matches) != 1 or not workload_matches[0]:
+            raise ValueError("expected exactly one 'profile workload' line")
+        identity["profile_workload"] = workload_matches[0]
+        for label, key in (
+            ("output features", "output_features"),
+            ("profile dispatches per iteration", "dispatches_per_iteration"),
+        ):
+            value = output_field(output, label)
+            if re.fullmatch(r"[0-9]+", value) is None or int(value) <= 0:
+                raise ValueError(f"target {label} is not a positive integer")
+            identity[key] = int(value)
     return identity
 
 
@@ -226,6 +276,16 @@ def validate_target_identity(
             "profile_post_idle_milliseconds"
         ],
     }
+    if configuration["operation"] == "linear_projection":
+        expected.update(
+            {
+                "profile_workload": configuration["profile_workload"],
+                "output_features": configuration["output_features"],
+                "dispatches_per_iteration": configuration[
+                    "dispatches_per_iteration"
+                ],
+            }
+        )
     for key, expected_value in expected.items():
         if identity.get(key) != expected_value:
             raise ValueError(
@@ -358,7 +418,7 @@ def capture_trace(
         profile_binary
     )
     configuration, repository, hardware = profile_contract(provenance)
-    capture_id = new_capture_id()
+    capture_id = new_capture_id(configuration["operation"])
     if CAPTURE_ID.fullmatch(capture_id) is None:
         raise RuntimeError("generated capture ID is invalid")
     canonical_hash = binary_identity["sha256"]
@@ -376,7 +436,12 @@ def capture_trace(
     target_identity: dict[str, Any] | None = None
 
     with tempfile.TemporaryDirectory(
-        prefix="llm-mojo-rmsnorm-", dir=staging_root
+        prefix=(
+            "llm-mojo-linear-"
+            if configuration["operation"] == "linear_projection"
+            else "llm-mojo-rmsnorm-"
+        ),
+        dir=staging_root,
     ) as temporary:
         temporary_path = Path(temporary)
         temporary_path.chmod(0o700)

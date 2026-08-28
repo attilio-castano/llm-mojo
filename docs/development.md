@@ -93,6 +93,10 @@ Mojo tests use `std.testing.TestSuite` and run as Mojo programs:
 uv run mojo run -I src tests/test_import.mojo
 MODULAR_DEBUG=device-sync-mode \
   uv run mojo run -I src -I tests tests/test_rms_norm.mojo
+MODULAR_DEBUG=device-sync-mode \
+  uv run mojo run -I src -I tests tests/test_linear.mojo
+MODULAR_DEBUG=device-sync-mode \
+  uv run mojo run -I src -I tests tests/test_rope.mojo
 ```
 
 The import smoke test proves that the package resolves through the configured
@@ -104,6 +108,25 @@ the fixture, including its provenance manifest, with:
 
 ```bash
 uv run --script tests/fixtures/rms_norm/generate.py
+```
+
+The affine linear projection test compares a one-token diagnostic case and a
+short multi-row case against a committed `torch.nn.Linear` oracle. It also
+compares the Apple GPU path with the host reference at the model's query and
+key/value projection shapes. The rowwise GPU kernel is correct for both decode
+and prefill row counts but makes no tiled-prefill or performance claim.
+Regenerate its fixture and provenance manifest with:
+
+```bash
+uv run --script tests/fixtures/linear/generate.py
+```
+
+The RoPE test covers tiny, query-decode, and incremental-key cases against the
+pinned Transformers operation. Regenerate its fixture and provenance manifest
+with:
+
+```bash
+uv run --script tests/fixtures/rope/generate.py
 ```
 
 The generator's inline environment pins its oracle dependencies independently
@@ -121,6 +144,17 @@ uv run --locked python benchmarks/run_rms_norm.py
 The ordinary command measures the current public SIMD-group implementation.
 Use the paired mode documented in `benchmarks/README.md` only when an experiment
 needs the retained shared-tree baseline.
+
+Run the decode-only `M=1` projection workload matrix with:
+
+```bash
+uv run --locked python benchmarks/run_linear.py
+```
+
+It measures Q, KV, hot QKV, and a 24-layer rotating-weight QKV proxy through
+explicit completion boundaries. The paired mode retains the experimental
+two-output input-reuse candidate for reproduction; the public projection path
+remains the one-output-per-SIMD-group baseline under the EXP-0005 decision.
 
 This is operation-level evidence only; it is not an end-to-end inference
 benchmark. Use the [experimental method](experiments.md) when retaining a run or

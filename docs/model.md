@@ -89,6 +89,42 @@ An implementation with a different cast point or reduction order is a distinct
 numerical path and must be compared under a predeclared tolerance. Tensor and
 execution mappings use the project's [layout language](layouts.md).
 
+### Attention projection arithmetic
+
+Qwen applies separate query, key, and value affine projections after the
+attention-input RMSNorm. For `R` token rows and hidden width `H = 896`, the
+pinned source operations have these shapes:
+
+```text
+Q_states = linear(X[R, 896], Wq[896, 896], Bq[896]) -> [R, 896]
+K_states = linear(X[R, 896], Wk[128, 896], Bk[128]) -> [R, 128]
+V_states = linear(X[R, 896], Wv[128, 896], Bv[128]) -> [R, 128]
+```
+
+The weight orientation is `(output_features, input_features)`, matching the
+pinned `torch.nn.Linear` tensors without a runtime transpose. Query, key, and
+value each include a BF16 bias. The V0 reference operation computes each output
+element by accumulating BF16 input and weight products in FP32 over the input
+axis, promotes and adds the BF16 bias in FP32, then casts the result once to
+BF16:
+
+```text
+acc = 0.0f32
+for k in 0 .. input_features:
+    acc += f32(X[row, k]) * f32(W[output_feature, k])
+Y[row, output_feature] = bf16(acc + f32(B[output_feature]))
+```
+
+The host reference uses the displayed serial reduction order. GPU reductions
+may use a different FP32 association and must match the pinned oracle under the
+predeclared tolerance. V0 keeps Q, K, and V as three source-compatible
+operations. Packing or fusing them is a later optimization that requires its
+own correctness and benchmark evidence. Bias-free projections, including the
+attention output projection, are added when their operation slice is
+implemented rather than represented by an implicit zero-bias allocation.
+Tensor and execution mappings use the project's
+[layout language](layouts.md#affine-linear-projection-v0).
+
 ### RoPE arithmetic
 
 V0 applies rotary position embeddings to query and key heads after their
