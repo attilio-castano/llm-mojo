@@ -4,8 +4,8 @@
   "slug": "linear-prefill-bk-sweep",
   "title": "Apple GPU prefill shared-staging BK sensitivity",
   "created_date": "2026-08-29",
-  "status": "planned",
-  "evidence_level": "none",
+  "status": "complete",
+  "evidence_level": "operation",
   "question": "With BM=8, BN=16, and one thread per output held fixed, how does BK=16, 32, 64, or 128 change rotating packed-QKV prefill timing?",
   "experiment_type": "counterbalanced_parameter_sensitivity_screen",
   "hypotheses": [
@@ -63,7 +63,8 @@
       "M=9 K=129 N=17 host-reference comparison for BK=16, 32, 64, and 128",
       "Existing decode, packed-QKV, direct-control, and rowwise tests remain passing"
     ],
-    "edge_rationale": "K=129 requires a partial final K phase for every BK and M=9, N=17 require partial output tiles."
+    "edge_rationale": "K=129 requires a partial final K phase for every BK and M=9, N=17 require partial output tiles.",
+    "result": "All 23 linear tests passed; all 57 Python protocol tests, 1 import test, 7 RMSNorm tests, and 9 RoPE tests passed before measurement."
   },
   "workload_matrix": {
     "rows": [1, 4, 8, 16, 32, 64, 128, 256],
@@ -124,8 +125,37 @@
     "A winner against BK=32 is not proven faster than the direct control or the public rowwise path.",
     "No end-to-end prompt, model, or decoder throughput result."
   ],
-  "implementation_commit": null,
-  "measurement_commit": null,
-  "runs": [],
-  "decision": null
+  "implementation_commit": "2e77bc32f79e5d1a680ef838b1f334d13ad7f56b",
+  "measurement_commit": "2e77bc32f79e5d1a680ef838b1f334d13ad7f56b",
+  "runs": [
+    {
+      "run_id": "EXP-0009-RUN-001",
+      "status": "valid",
+      "samples": 1280,
+      "timing_decision": "advance_bk16_to_direct_control_comparison",
+      "result": {
+        "BK16_material_improvement_rows": [1, 4, 8, 16, 32, 64, 128, 256],
+        "BK16_faster_blocks_per_row": 4,
+        "BK16_paired_improvement_range_percent": [21.863668235816313, 25.58034659279259],
+        "BK64_classification": "inconclusive_at_all_rows",
+        "BK128_classification": "inconclusive_at_all_rows"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "comparison-run.json",
+      "kind": "compact_counterbalanced_BK_timing_evidence"
+    }
+  ],
+  "decision": {
+    "result": "advance_bk16_to_direct_control_comparison_only",
+    "public_entrypoint": "llm_mojo.linear.enqueue_linear_apple_gpu",
+    "screened_entrypoint": "llm_mojo.linear.enqueue_linear_prefill_tiled_apple_gpu_bk",
+    "selected_followup_BK": 16,
+    "runtime_dispatch_rule": false,
+    "reason": "BK16 materially improved all eight rotating packed-QKV row counts against BK32 by 21.86% to 25.58%, with the direction repeating in all four blocks.",
+    "evidence_boundary": "The screen does not establish that BK16 beats the direct no-staging control or the public rowwise path.",
+    "next_experiment": "Pair BK16 against the direct 8x16 no-staging control while holding workload, ownership, dtype, layouts, and synchronization boundaries fixed."
+  }
 }

@@ -174,6 +174,13 @@ their two-barrier-per-phase count falls from 112 to 14. This defines the
 capacity-versus-phase tradeoff being measured; it does not predict which BK is
 fastest.
 
+[EXP-0009](../experiments/EXP-0009-linear-prefill-bk-sweep/report.md) found
+BK16 materially faster than BK32 at every tested M even though it executes
+twice as many K phases and barriers. BK64 and BK128 were inconclusive. This
+shows that barrier count alone is not a sufficient model of the kernel's cost;
+the timing does not identify which coupled capacity, scheduling, access, or
+generated-code effect caused the BK16 discontinuity.
+
 ## RoPE V0
 
 Let `R` be the number of contiguous token rows, `N` the number of heads,

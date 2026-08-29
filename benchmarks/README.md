@@ -279,6 +279,11 @@ Each non-32 BK is paired against BK=32 within the same block and M. This is a
 sensitivity screen: even a qualifying BK requires a later comparison against
 the direct no-staging control and cannot change public dispatch by itself.
 
+[EXP-0009](../experiments/EXP-0009-linear-prefill-bk-sweep/report.md) found
+that BK16 materially improved every rotating workload against BK32, while BK64
+and BK128 were inconclusive. BK16 advances only to the required direct-control
+comparison; the result does not select a public path.
+
 ## RMSNorm profiling instrument
 
 Build a standalone, long-running binary outside the repository so Xcode does
