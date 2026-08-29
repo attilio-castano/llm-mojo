@@ -181,12 +181,20 @@ shows that barrier count alone is not a sufficient model of the kernel's cost;
 the timing does not identify which coupled capacity, scheduling, access, or
 generated-code effect caused the BK16 discontinuity.
 
-The next ownership-matched control compares BK16 against the direct `8x16`
+[EXP-0010](../experiments/EXP-0010-linear-prefill-bk16-direct/report.md)
+completed the ownership-matched control between BK16 and the direct `8x16`
 kernel. Both give one scalar output and one persistent FP32 accumulator to each
 thread. Direct streams all K values from device memory with no shared storage
 or barriers; BK16 stages reusable operands in 56 phases with 768 bytes of
-threadgroup storage and 112 barriers. Their difference is the complete shared-
-staging mechanism, not output ownership.
+threadgroup storage and 112 barriers. BK16 was 24.54%–33.88% slower and lost all
+four paired blocks at every tested M, despite requesting 46.82%–90.52% fewer
+source-level bytes.
+
+That result rejects shared staging for this scalar output mapping, not tiling
+as a whole. The direct control is itself output tiled: a threadgroup owns an
+`8x16` output rectangle. A next tiled design must change arithmetic ownership
+so that threads or SIMD groups reuse operands across multiple outputs, or use a
+hardware matrix primitive, rather than merely changing BK again.
 
 ## RoPE V0
 

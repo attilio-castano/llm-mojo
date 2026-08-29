@@ -4,8 +4,8 @@
   "slug": "linear-prefill-bk16-direct",
   "title": "Apple GPU prefill BK16 shared staging versus direct control",
   "created_date": "2026-08-29",
-  "status": "planned",
-  "evidence_level": "none",
+  "status": "complete",
+  "evidence_level": "operation",
   "question": "With BM=8, BN=16, 128 threads, and one thread per output held fixed, does BK=16 shared operand staging beat direct full-K streaming on rotating packed-QKV prefill?",
   "experiment_type": "paired_attribution_control",
   "hypothesis": "BK16's source-level operand reuse may repay its shared reads, writes, loop structure, 768-byte scratch allocation, and 112 barriers as M grows.",
@@ -104,8 +104,26 @@
     "A BK16 loss would be specific to this scalar 8x16 arithmetic ownership and would not reject multi-output or hardware-matrix tiled mappings.",
     "No end-to-end prompt, model, or decoder throughput result."
   ],
-  "implementation_commit": null,
-  "measurement_commit": null,
-  "runs": [],
-  "decision": null
+  "implementation_commit": "e99262282d5850463d756dba45ad8763b77ae59f",
+  "measurement_commit": "e99262282d5850463d756dba45ad8763b77ae59f",
+  "runs": [
+    {
+      "run_id": "EXP-0010-RUN-001",
+      "recorded": true,
+      "started_utc": "2026-08-29T14:30:43.683951+00:00",
+      "ended_utc": "2026-08-29T14:34:32.114209+00:00",
+      "sample_count": 640,
+      "runtime": "Apple M4 Pro via Metal",
+      "repository_clean": true,
+      "retained_summary": "comparison-run.json",
+      "external_artifact_directory": "/tmp/llm-mojo-exp-0010-bk16-direct-run-001"
+    }
+  ],
+  "decision": {
+    "timing": "reject_bk16_shared_staging_for_scalar_output_mapping",
+    "production_dispatch": "none",
+    "finding": "BK16 materially regressed all eight row counts by 24.54% to 33.88% and was slower in all four paired blocks for every row count.",
+    "scope": "Reject shared staging and stop BK tuning only for this scalar BM=8, BN=16, one-output-per-thread mapping.",
+    "next_experiment": "Change arithmetic ownership, such as register-tiled multi-output ownership or explicit SIMD-group or hardware-matrix cooperation, before testing another K tile."
+  }
 }

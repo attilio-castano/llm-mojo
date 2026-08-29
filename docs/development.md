@@ -184,8 +184,9 @@ uv run --locked python benchmarks/run_linear_prefill_bk_sweep.py
 
 This holds output ownership fixed and compares `BK=16`, `32`, `64`, and `128`
 only on the rotating packed-QKV workloads. The four-block recorded protocol
-counterbalances BK execution position. A result from this screen still needs a
-separate direct-control comparison before it can support an optimization claim.
+counterbalances BK execution position. A qualifying result from this screen
+requires a separate direct-control comparison before it can support an
+optimization claim.
 
 [EXP-0009](../experiments/EXP-0009-linear-prefill-bk-sweep/report.md) selected
 BK16 for that follow-up after a repeatable 21.86%–25.58% improvement over BK32.
@@ -199,8 +200,12 @@ uv run --locked python benchmarks/run_linear_prefill_bk16_direct.py
 ```
 
 It compares direct full-K streaming with BK16 shared staging on only the
-rotating packed-QKV matrix. This is still an attribution experiment; even a
-BK16 win requires a final direct comparison with the public rowwise kernel.
+rotating packed-QKV matrix. [EXP-0010](../experiments/EXP-0010-linear-prefill-bk16-direct/report.md)
+found BK16 24.54%–33.88% slower across the tested M range and slower in all
+four blocks at every M. That rejects shared staging and ends BK tuning only for
+this scalar `8x16` one-output-per-thread mapping. It does not reject tiling with
+multi-output, SIMD-group, or hardware-matrix arithmetic ownership. The public
+projection path remains unchanged.
 
 This is operation-level evidence only; it is not an end-to-end inference
 benchmark. Use the [experimental method](experiments.md) when retaining a run or

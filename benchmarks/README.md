@@ -298,9 +298,11 @@ uv run --locked python benchmarks/run_linear_prefill_bk16_direct.py \
 ```
 
 BK16 uses 768 bytes of operand scratch and 112 barriers per dispatch; direct
-uses neither. A BK16 win advances only to a final comparison with the public
-rowwise kernel. A loss at all three large-M decision rows ends BK tuning for
-this scalar one-output-per-thread mapping.
+uses neither. [EXP-0010](../experiments/EXP-0010-linear-prefill-bk16-direct/report.md)
+found that BK16 materially regressed every tested M by 24.54%–33.88% and was
+slower in all four blocks for every row count. It failed all three large-M
+decision rows, so BK tuning ends for this scalar one-output-per-thread mapping;
+there is no final public-rowwise comparison or dispatch change.
 
 ## RMSNorm profiling instrument
 
