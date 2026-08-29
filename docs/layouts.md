@@ -136,6 +136,14 @@ than one input iteration, and multiple token rows. Separate host-versus-GPU
 checks cover the Qwen query and key/value shapes. This is a correctness mapping,
 not a performance claim.
 
+The experimental direct-prefill control changes only output ownership. One
+128-thread group owns an `8x16` rectangle of `Y`; each thread serially computes
+one complete dot product and handles bounds at incomplete `M` or `N` tiles.
+It still reads `X` and `W` directly from device memory, allocates no threadgroup
+storage, and executes no threadgroup barrier. This control is not the public
+dispatch path. Its purpose is to separate the cost of one-thread-per-output
+ownership from the effect of explicitly staging `BK` operand tiles.
+
 ## RoPE V0
 
 Let `R` be the number of contiguous token rows, `N` the number of heads,

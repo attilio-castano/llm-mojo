@@ -1,10 +1,11 @@
 import unittest
 
 from benchmarks.run_linear_prefill import (
+    BASELINE_IMPLEMENTATION,
     BENCHMARK_RESULTS_BEGIN,
     BENCHMARK_RESULTS_END,
+    DIRECT_IMPLEMENTATION,
     EXPECTED_REPETITIONS,
-    IMPLEMENTATION,
     INPUT_FEATURES,
     WORKLOAD_ORDER,
     WORKLOADS,
@@ -14,22 +15,36 @@ from benchmarks.run_linear_prefill import (
 )
 
 
-def synthetic_output(*, reverse: bool = False) -> str:
+def synthetic_output(
+    *,
+    reverse: bool = False,
+    direct_comparison: bool = False,
+    direct_first: bool = False,
+) -> str:
     lines = [
         "implementation: enqueue_linear_apple_gpu",
         "device: Apple Test GPU",
         "api: metal",
-        BENCHMARK_RESULTS_BEGIN,
-        "name,met (ms),iters",
     ]
+    if direct_comparison:
+        lines.insert(
+            1,
+            "comparison implementation: "
+            "enqueue_linear_prefill_direct_apple_gpu",
+        )
+    lines.extend([BENCHMARK_RESULTS_BEGIN, "name,met (ms),iters"])
     workloads = reversed(WORKLOAD_ORDER) if reverse else WORKLOAD_ORDER
+    implementations = (
+        ("direct", "rowwise") if direct_first else ("rowwise", "direct")
+    )
     for workload in workloads:
-        for repetition in range(EXPECTED_REPETITIONS):
-            value = 0.01 + repetition / 1_000_000.0
-            lines.append(
-                "linear_prefill_rowwise_apple_gpu/input_id:"
-                f"{workload},{value},20"
-            )
+        for implementation in implementations if direct_comparison else ("rowwise",):
+            for repetition in range(EXPECTED_REPETITIONS):
+                value = 0.01 + repetition / 1_000_000.0
+                lines.append(
+                    f"linear_prefill_{implementation}_apple_gpu/input_id:"
+                    f"{workload},{value},20"
+                )
     lines.append(BENCHMARK_RESULTS_END)
     return "\n".join(lines)
 
@@ -51,7 +66,7 @@ class PrefillProjectionBenchmarkParserTest(unittest.TestCase):
         self.assertEqual(len({sample["sample_id"] for sample in samples}), len(samples))
         self.assertTrue(
             all(
-                sample["implementation"] == IMPLEMENTATION["id"]
+                sample["implementation"] == BASELINE_IMPLEMENTATION["id"]
                 for sample in samples
             )
         )
@@ -104,6 +119,55 @@ class PrefillProjectionBenchmarkSummaryTest(unittest.TestCase):
         command = benchmark_command(reverse=True)
 
         self.assertIn("LINEAR_PREFILL_BENCH_REVERSE=true", command)
+
+    def test_direct_comparison_parses_abba_samples_and_reports_ratios(self):
+        samples = []
+        for block_number, (reverse, direct_first) in enumerate(
+            ((False, False), (True, True), (True, True), (False, False)),
+            start=1,
+        ):
+            _, block_samples = parse_samples(
+                synthetic_output(
+                    reverse=reverse,
+                    direct_comparison=True,
+                    direct_first=direct_first,
+                ),
+                experiment_id="EXP-0007",
+                run_id="RUN-001",
+                block_id=f"block-{block_number:02d}",
+                block_order="descending" if reverse else "ascending",
+                implementation_order=(
+                    "variant_then_baseline"
+                    if direct_first
+                    else "baseline_then_variant"
+                ),
+                direct_comparison=True,
+            )
+            samples.extend(block_samples)
+
+        result = summarize(samples, direct_comparison=True)
+        paired = result["paired_comparison"]
+        self.assertEqual(len(paired["workloads"]), len(WORKLOAD_ORDER))
+        self.assertEqual(
+            paired["timing_decision"], "control_only_no_dispatch_decision"
+        )
+        self.assertTrue(
+            all(
+                item["classification"] == "inconclusive"
+                for item in paired["workloads"]
+            )
+        )
+
+    def test_direct_comparison_command_selects_both_compile_time_modes(self):
+        command = benchmark_command(
+            reverse=True, direct_comparison=True, direct_first=True
+        )
+
+        self.assertIn("LINEAR_PREFILL_BENCH_DIRECT_COMPARISON=true", command)
+        self.assertIn("LINEAR_PREFILL_BENCH_DIRECT_FIRST=true", command)
+        self.assertEqual(
+            DIRECT_IMPLEMENTATION["id"], "apple_gpu_prefill_direct_8x16_v0"
+        )
 
 
 if __name__ == "__main__":

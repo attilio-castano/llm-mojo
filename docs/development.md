@@ -165,6 +165,9 @@ uv run --locked python benchmarks/run_linear_prefill.py
 The prefill instrument sweeps `M=1..256` at the model's `K=896` width for KV,
 query, packed-QKV, and rotating 24-layer packed-QKV workloads. It establishes a
 rowwise baseline only; it does not imply a tiled implementation or speedup.
+Its `--direct-comparison` mode pairs that baseline with the experimental
+`8x16` one-thread-per-output control. The control has no shared operand staging
+and is never selected by the public enqueue path.
 
 This is operation-level evidence only; it is not an end-to-end inference
 benchmark. Use the [experimental method](experiments.md) when retaining a run or

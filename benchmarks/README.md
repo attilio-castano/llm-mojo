@@ -220,8 +220,22 @@ uv run --locked python benchmarks/run_linear_prefill.py \
   --output-dir /absolute/external/path/EXP-XXXX-RUN-001
 ```
 
-Candidate modes are intentionally absent until a candidate kernel and its
-correctness contract exist.
+The direct-control comparison holds an `8x16` output-tile ownership mapping
+constant for the later shared-memory experiment, but streams every operand
+directly from device memory. It is an attribution control rather than a
+production candidate, so its timing summary makes no dispatch decision. The
+four-block mode uses ABBA implementation order and the same 5% plus
+three-of-four classification rule for every shape:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill.py \
+  --blocks 4 \
+  --experiment-id EXP-XXXX \
+  --run-id EXP-XXXX-RUN-001 \
+  --direct-comparison \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
+```
 
 ## RMSNorm profiling instrument
 

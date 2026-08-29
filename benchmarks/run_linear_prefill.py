@@ -20,7 +20,11 @@ try:
     from benchmarks.run_linear import (
         BENCHMARK_RESULTS_BEGIN,
         BENCHMARK_RESULTS_END,
+        BLOCK_IMPLEMENTATION_ORDERS,
         BLOCK_ORDERS,
+        MATERIAL_IMPROVEMENT_RATIO,
+        MATERIAL_REGRESSION_RATIO,
+        REQUIRED_DIRECTION_BLOCKS,
         conditions_snapshot,
         ensure_record_location,
         percentile,
@@ -36,7 +40,11 @@ except ModuleNotFoundError:
     from run_linear import (
         BENCHMARK_RESULTS_BEGIN,
         BENCHMARK_RESULTS_END,
+        BLOCK_IMPLEMENTATION_ORDERS,
         BLOCK_ORDERS,
+        MATERIAL_IMPROVEMENT_RATIO,
+        MATERIAL_REGRESSION_RATIO,
+        REQUIRED_DIRECTION_BLOCKS,
         conditions_snapshot,
         ensure_record_location,
         percentile,
@@ -60,12 +68,20 @@ WORKLOAD_SHAPES = (
     (1_152, 24, "24-layer rotating packed-QKV cache-pressure proxy"),
 )
 EXPECTED_REPETITIONS = 10
-IMPLEMENTATION = {
+BASELINE_IMPLEMENTATION = {
     "id": "apple_gpu_one_output_simdgroup_v0",
     "entrypoint": "enqueue_linear_apple_gpu",
 }
+DIRECT_IMPLEMENTATION = {
+    "id": "apple_gpu_prefill_direct_8x16_v0",
+    "entrypoint": "enqueue_linear_prefill_direct_apple_gpu",
+}
+IMPLEMENTATIONS = {
+    "linear_prefill_rowwise_apple_gpu": BASELINE_IMPLEMENTATION,
+    "linear_prefill_direct_apple_gpu": DIRECT_IMPLEMENTATION,
+}
 BENCHMARK_NAME = re.compile(
-    r"^linear_prefill_rowwise_apple_gpu/input_id:"
+    r"^(linear_prefill_(?:rowwise|direct)_apple_gpu)/input_id:"
     r"m(\d+)-k(\d+)-n(\d+)-layers(\d+)$"
 )
 
@@ -105,12 +121,17 @@ WORKLOADS = {
 }
 
 
-def parse_identity(output: str) -> dict[str, str]:
+def parse_identity(
+    output: str, *, direct_comparison: bool
+) -> dict[str, str]:
     implementation = re.search(
         r"^implementation:\s*(.+)$", output, re.MULTILINE
     )
     device = re.search(r"^device:\s*(.+)$", output, re.MULTILINE)
     api = re.search(r"^api:\s*(.+)$", output, re.MULTILINE)
+    comparison = re.search(
+        r"^comparison implementation:\s*(.+)$", output, re.MULTILINE
+    )
     if not implementation or not device or not api:
         raise ValueError("benchmark output omitted runtime identity")
     identity = {
@@ -118,12 +139,23 @@ def parse_identity(output: str) -> dict[str, str]:
         "device": device.group(1).strip(),
         "api": api.group(1).strip(),
     }
-    if identity["implementation"] != IMPLEMENTATION["entrypoint"]:
+    if identity["implementation"] != BASELINE_IMPLEMENTATION["entrypoint"]:
         raise ValueError("benchmark identified an unexpected implementation")
     if not identity["device"].startswith("Apple ") or identity["api"] != "metal":
         raise ValueError(
             "benchmark did not prove an Apple device using the Metal API"
         )
+    if direct_comparison:
+        if comparison is None:
+            raise ValueError("comparison benchmark omitted candidate identity")
+        identity["comparison_implementation"] = comparison.group(1).strip()
+        if (
+            identity["comparison_implementation"]
+            != DIRECT_IMPLEMENTATION["entrypoint"]
+        ):
+            raise ValueError("benchmark identified an unexpected candidate")
+    elif comparison is not None:
+        raise ValueError("baseline benchmark emitted a candidate identity")
     return identity
 
 
@@ -147,11 +179,20 @@ def parse_samples(
     run_id: str,
     block_id: str,
     block_order: str,
+    implementation_order: str = "baseline_only",
+    direct_comparison: bool = False,
 ) -> tuple[dict[str, str], list[dict[str, Any]]]:
-    identity = parse_identity(output)
+    if direct_comparison and implementation_order not in (
+        "baseline_then_variant",
+        "variant_then_baseline",
+    ):
+        raise ValueError("comparison benchmark has an invalid pair order")
+    if not direct_comparison and implementation_order != "baseline_only":
+        raise ValueError("baseline benchmark has an invalid implementation order")
+    identity = parse_identity(output, direct_comparison=direct_comparison)
     reader = csv.DictReader(table_lines(output), skipinitialspace=True)
-    counts: defaultdict[str, int] = defaultdict(int)
-    observed_order: list[str] = []
+    counts: defaultdict[tuple[str, str], int] = defaultdict(int)
+    observed_order: list[tuple[str, str]] = []
     samples: list[dict[str, Any]] = []
     for raw_row in reader:
         row = {
@@ -162,23 +203,28 @@ def parse_samples(
         match = BENCHMARK_NAME.fullmatch(row.get("name", ""))
         if not match:
             raise ValueError(f"unrecognized benchmark row: {row!r}")
-        rows = int(match.group(1))
-        input_features = int(match.group(2))
-        output_features = int(match.group(3))
-        layers = int(match.group(4))
+        implementation = IMPLEMENTATIONS[match.group(1)]
+        implementation_id = implementation["id"]
+        rows = int(match.group(2))
+        input_features = int(match.group(3))
+        output_features = int(match.group(4))
+        layers = int(match.group(5))
         current_workload = workload_id(rows, output_features, layers)
         if input_features != INPUT_FEATURES or current_workload not in WORKLOADS:
             raise ValueError(f"unexpected prefill workload {current_workload}")
-        if not observed_order or observed_order[-1] != current_workload:
-            observed_order.append(current_workload)
+        order_key = (current_workload, implementation_id)
+        if not observed_order or observed_order[-1] != order_key:
+            observed_order.append(order_key)
+        if not direct_comparison and implementation != BASELINE_IMPLEMENTATION:
+            raise ValueError("baseline benchmark emitted a candidate row")
 
         value_text = row.get("met (ms)", "")
         iterations_text = row.get("iters", "")
         value = float(value_text)
         iterations = int(iterations_text)
         valid = math.isfinite(value) and value > 0 and iterations > 0
-        counts[current_workload] += 1
-        repetition = counts[current_workload]
+        counts[order_key] += 1
+        repetition = counts[order_key]
         specification = WORKLOADS[current_workload]
         samples.append(
             {
@@ -188,11 +234,11 @@ def parse_samples(
                 "block_id": block_id,
                 "block_order": block_order,
                 "sample_id": (
-                    f"{run_id}-{block_id}-{IMPLEMENTATION['id']}-"
+                    f"{run_id}-{block_id}-{implementation_id}-"
                     f"{current_workload}-rep{repetition:02d}"
                 ),
-                "implementation": IMPLEMENTATION["id"],
-                "implementation_entrypoint": IMPLEMENTATION["entrypoint"],
+                "implementation": implementation_id,
+                "implementation_entrypoint": implementation["entrypoint"],
                 "workload": current_workload,
                 "semantic_role": specification["semantic_role"],
                 "rows": rows,
@@ -217,19 +263,34 @@ def parse_samples(
             }
         )
 
-    expected_order = list(
+    workload_order = list(
         WORKLOAD_ORDER
         if block_order == "ascending"
         else reversed(WORKLOAD_ORDER)
     )
+    implementation_ids = (
+        [DIRECT_IMPLEMENTATION["id"], BASELINE_IMPLEMENTATION["id"]]
+        if implementation_order == "variant_then_baseline"
+        else (
+            [BASELINE_IMPLEMENTATION["id"], DIRECT_IMPLEMENTATION["id"]]
+            if direct_comparison
+            else [BASELINE_IMPLEMENTATION["id"]]
+        )
+    )
+    expected_order = [
+        (current_workload, implementation_id)
+        for current_workload in workload_order
+        for implementation_id in implementation_ids
+    ]
     if observed_order != expected_order:
         raise ValueError(
             f"workload order mismatch: expected {expected_order}, got "
             f"{observed_order}"
         )
     expected_counts = {
-        current_workload: EXPECTED_REPETITIONS
+        (current_workload, implementation_id): EXPECTED_REPETITIONS
         for current_workload in WORKLOAD_ORDER
+        for implementation_id in implementation_ids
     }
     if dict(counts) != expected_counts:
         raise ValueError(
@@ -241,7 +302,11 @@ def parse_samples(
     return identity, samples
 
 
-def summarize(samples: Iterable[dict[str, Any]]) -> dict[str, Any]:
+def summarize_implementation(
+    samples: Iterable[dict[str, Any]],
+    *,
+    implementation: dict[str, str],
+) -> dict[str, Any]:
     grouped: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
     for sample in samples:
         if sample["valid"]:
@@ -283,8 +348,8 @@ def summarize(samples: Iterable[dict[str, Any]]) -> dict[str, Any]:
                 "program_requested_gb_per_second": requested_bytes
                 / (median * 1_000_000.0),
                 "traffic_note": (
-                    "Requested bytes are source-derived from the rowwise "
-                    "kernel and are not observed hardware traffic."
+                    "Requested bytes are source-derived logical loads and "
+                    "are not observed hardware traffic."
                 ),
             }
         )
@@ -294,15 +359,147 @@ def summarize(samples: Iterable[dict[str, Any]]) -> dict[str, Any]:
             "percentile_method": "linear interpolation at (n - 1) * p",
             "spread": "median absolute deviation and interquartile range",
         },
-        "implementation": IMPLEMENTATION,
+        "implementation": implementation,
         "workloads": workloads,
     }
 
 
-def benchmark_command(*, reverse: bool) -> list[str]:
+def summarize_paired_workloads(
+    samples: Iterable[dict[str, Any]],
+) -> dict[str, Any]:
+    grouped: defaultdict[tuple[str, str, str], list[float]] = defaultdict(list)
+    for sample in samples:
+        if sample["valid"]:
+            grouped[
+                (
+                    sample["workload"],
+                    sample["block_id"],
+                    sample["implementation"],
+                )
+            ].append(float(sample["value"]))
+
+    workloads: list[dict[str, Any]] = []
+    for current_workload in WORKLOAD_ORDER:
+        blocks: list[dict[str, Any]] = []
+        for block_number in range(1, 5):
+            block_id = f"block-{block_number:02d}"
+            baseline = grouped[
+                (
+                    current_workload,
+                    block_id,
+                    BASELINE_IMPLEMENTATION["id"],
+                )
+            ]
+            direct = grouped[
+                (
+                    current_workload,
+                    block_id,
+                    DIRECT_IMPLEMENTATION["id"],
+                )
+            ]
+            if (
+                len(baseline) != EXPECTED_REPETITIONS
+                or len(direct) != EXPECTED_REPETITIONS
+            ):
+                raise ValueError(
+                    "paired summary requires complete baseline and direct "
+                    f"samples for {current_workload} {block_id}"
+                )
+            baseline_median = statistics.median(baseline)
+            direct_median = statistics.median(direct)
+            ratio = direct_median / baseline_median
+            blocks.append(
+                {
+                    "block_id": block_id,
+                    "baseline_median_ms": baseline_median,
+                    "direct_median_ms": direct_median,
+                    "direct_to_baseline_ratio": ratio,
+                    "direct_faster": ratio < 1.0,
+                }
+            )
+
+        ratios = [float(block["direct_to_baseline_ratio"]) for block in blocks]
+        median_ratio = statistics.median(ratios)
+        faster_blocks = sum(ratio < 1.0 for ratio in ratios)
+        slower_blocks = sum(ratio > 1.0 for ratio in ratios)
+        if (
+            median_ratio <= MATERIAL_IMPROVEMENT_RATIO
+            and faster_blocks >= REQUIRED_DIRECTION_BLOCKS
+        ):
+            classification = "material_improvement"
+        elif (
+            median_ratio >= MATERIAL_REGRESSION_RATIO
+            and slower_blocks >= REQUIRED_DIRECTION_BLOCKS
+        ):
+            classification = "material_regression"
+        else:
+            classification = "inconclusive"
+        specification = WORKLOADS[current_workload]
+        workloads.append(
+            {
+                "workload": current_workload,
+                "semantic_role": specification["semantic_role"],
+                "rows": specification["rows"],
+                "output_features": specification["output_features"],
+                "layers": specification["layers"],
+                "median_direct_to_baseline_ratio": median_ratio,
+                "median_change_percent": (median_ratio - 1.0) * 100.0,
+                "direct_faster_blocks": faster_blocks,
+                "direct_slower_blocks": slower_blocks,
+                "classification": classification,
+                "blocks": blocks,
+            }
+        )
+    return {
+        "ratio_definition": "direct block median / rowwise block median",
+        "material_improvement_ratio": MATERIAL_IMPROVEMENT_RATIO,
+        "material_regression_ratio": MATERIAL_REGRESSION_RATIO,
+        "required_direction_blocks": REQUIRED_DIRECTION_BLOCKS,
+        "workloads": workloads,
+        "timing_decision": "control_only_no_dispatch_decision",
+    }
+
+
+def summarize(
+    samples: Iterable[dict[str, Any]], *, direct_comparison: bool = False
+) -> dict[str, Any]:
+    retained = list(samples)
+    if not direct_comparison:
+        return summarize_implementation(
+            retained, implementation=BASELINE_IMPLEMENTATION
+        )
+    implementations = []
+    for implementation in (BASELINE_IMPLEMENTATION, DIRECT_IMPLEMENTATION):
+        implementation_samples = [
+            sample
+            for sample in retained
+            if sample["implementation"] == implementation["id"]
+        ]
+        implementations.append(
+            summarize_implementation(
+                implementation_samples,
+                implementation=implementation,
+            )
+        )
+    return {
+        "schema_version": 2,
+        "implementations": implementations,
+        "paired_comparison": summarize_paired_workloads(retained),
+    }
+
+
+def benchmark_command(
+    *, reverse: bool, direct_comparison: bool = False, direct_first: bool = False
+) -> list[str]:
     args = ["uv", "run", "--locked", "mojo", "run", "-I", "src"]
     if reverse:
         args.extend(["-D", "LINEAR_PREFILL_BENCH_REVERSE=true"])
+    if direct_comparison:
+        args.extend(
+            ["-D", "LINEAR_PREFILL_BENCH_DIRECT_COMPARISON=true"]
+        )
+    if direct_first:
+        args.extend(["-D", "LINEAR_PREFILL_BENCH_DIRECT_FIRST=true"])
     args.append("benchmarks/linear_prefill.mojo")
     return args
 
@@ -313,10 +510,16 @@ def run_block(
     run_id: str,
     block_number: int,
     block_order: str,
+    implementation_order: str,
+    direct_comparison: bool,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
     block_id = f"block-{block_number:02d}"
     before = conditions_snapshot()
-    command_args = benchmark_command(reverse=block_order == "descending")
+    command_args = benchmark_command(
+        reverse=block_order == "descending",
+        direct_comparison=direct_comparison,
+        direct_first=implementation_order == "variant_then_baseline",
+    )
     environment = os.environ.copy()
     environment.pop("MODULAR_DEBUG", None)
     print(f"Running {block_id} ({block_order})...", flush=True)
@@ -341,11 +544,14 @@ def run_block(
         run_id=run_id,
         block_id=block_id,
         block_order=block_order,
+        implementation_order=implementation_order,
+        direct_comparison=direct_comparison,
     )
     stdout_bytes = result.stdout.encode()
     block = {
         "block_id": block_id,
         "order": block_order,
+        "implementation_order": implementation_order,
         "started_utc": started,
         "completed_utc": utc_now(),
         "command": shlex.join(command_args),
@@ -368,6 +574,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--recorded", action="store_true")
     parser.add_argument("--require-clean", action="store_true")
+    parser.add_argument("--direct-comparison", action="store_true")
     return parser.parse_args()
 
 
@@ -383,6 +590,8 @@ def main() -> None:
             "--recorded requires four blocks, an external output directory, "
             "and explicit IDs"
         )
+    if args.direct_comparison and args.blocks != 4:
+        raise RuntimeError("direct comparison requires all four ABBA blocks")
 
     run_id = args.run_id or datetime.now(UTC).strftime(
         "exploration-%Y%m%dT%H%M%SZ"
@@ -405,11 +614,18 @@ def main() -> None:
     outputs: list[str] = []
     for index in range(args.blocks):
         block_order = BLOCK_ORDERS[index]
+        implementation_order = (
+            BLOCK_IMPLEMENTATION_ORDERS[index]
+            if args.direct_comparison
+            else "baseline_only"
+        )
         block, block_samples, output = run_block(
             experiment_id=args.experiment_id,
             run_id=run_id,
             block_number=index + 1,
             block_order=block_order,
+            implementation_order=implementation_order,
+            direct_comparison=args.direct_comparison,
         )
         blocks.append(block)
         samples.extend(block_samples)
@@ -421,7 +637,9 @@ def main() -> None:
             require_ac(block["conditions_after"])
             require_nominal_thermal_state(block["conditions_after"])
 
-    result_summary = summarize(samples)
+    result_summary = summarize(
+        samples, direct_comparison=args.direct_comparison
+    )
     metadata = {
         "schema_version": 1,
         "experiment_id": args.experiment_id,
@@ -431,9 +649,11 @@ def main() -> None:
         "scope": (
             "M=1..256 BF16 prefill projection with FP32 accumulation; "
             "rowwise Apple GPU baseline"
+            + (" versus direct 8x16 control" if args.direct_comparison else "")
         ),
         "repository": initial_repository,
         "recorded": args.recorded,
+        "direct_comparison": args.direct_comparison,
         "blocks": blocks,
         "sample_count": len(samples),
         "environment": stable_environment(),
