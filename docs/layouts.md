@@ -181,6 +181,13 @@ shows that barrier count alone is not a sufficient model of the kernel's cost;
 the timing does not identify which coupled capacity, scheduling, access, or
 generated-code effect caused the BK16 discontinuity.
 
+The next ownership-matched control compares BK16 against the direct `8x16`
+kernel. Both give one scalar output and one persistent FP32 accumulator to each
+thread. Direct streams all K values from device memory with no shared storage
+or barriers; BK16 stages reusable operands in 56 phases with 768 bytes of
+threadgroup storage and 112 barriers. Their difference is the complete shared-
+staging mechanism, not output ownership.
+
 ## RoPE V0
 
 Let `R` be the number of contiguous token rows, `N` the number of heads,

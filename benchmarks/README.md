@@ -284,6 +284,24 @@ that BK16 materially improved every rotating workload against BK32, while BK64
 and BK128 were inconclusive. BK16 advances only to the required direct-control
 comparison; the result does not select a public path.
 
+The follow-up direct-control mode holds that BK16 kernel's `8x16` output
+ownership fixed and removes only the shared-staging mechanism in its control.
+It runs the same eight rotating workloads in four ABBA blocks:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill_bk16_direct.py \
+  --blocks 4 \
+  --experiment-id EXP-XXXX \
+  --run-id EXP-XXXX-RUN-001 \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
+```
+
+BK16 uses 768 bytes of operand scratch and 112 barriers per dispatch; direct
+uses neither. A BK16 win advances only to a final comparison with the public
+rowwise kernel. A loss at all three large-M decision rows ends BK tuning for
+this scalar one-output-per-thread mapping.
+
 ## RMSNorm profiling instrument
 
 Build a standalone, long-running binary outside the repository so Xcode does

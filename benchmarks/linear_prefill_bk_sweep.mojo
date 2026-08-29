@@ -1,7 +1,10 @@
 """Apple GPU prefill BK sensitivity benchmark."""
 
 from layout import TensorLayout, TileTensor, row_major
-from llm_mojo.linear import enqueue_linear_prefill_tiled_apple_gpu_bk
+from llm_mojo.linear import (
+    enqueue_linear_prefill_direct_apple_gpu,
+    enqueue_linear_prefill_tiled_apple_gpu_bk,
+)
 from max.benchmark import bencher_iter_custom
 from max.gpu.host import DeviceContext
 from std.benchmark import (
@@ -42,6 +45,7 @@ def _assert_unit_output[
 def bench_prefill_bk[
     rows: Int,
     tile_input_features: Int,
+    use_direct: Bool = False,
 ](mut bencher: Bencher) raises capturing:
     comptime assert has_apple_gpu_accelerator(), "benchmark requires Apple GPU"
     comptime assert rows > 0, "benchmark rows must be positive"
@@ -78,9 +82,14 @@ def bench_prefill_bk[
 
     comptime for layer in range(RING_LAYERS):
         var weight = weights.tile[OUTPUT_FEATURES, INPUT_FEATURES](layer, 0)
-        enqueue_linear_prefill_tiled_apple_gpu_bk[tile_input_features](
-            context, input, weight, bias, output
-        )
+        comptime if use_direct:
+            enqueue_linear_prefill_direct_apple_gpu(
+                context, input, weight, bias, output
+            )
+        else:
+            enqueue_linear_prefill_tiled_apple_gpu_bk[tile_input_features](
+                context, input, weight, bias, output
+            )
     with output_buffer.map_to_host() as mapped_output:
         var host_output = TileTensor(mapped_output, output_layout)
         _assert_unit_output(host_output)
@@ -89,9 +98,14 @@ def bench_prefill_bk[
     def launch(launch_context: DeviceContext) raises {imm}:
         comptime for layer in range(RING_LAYERS):
             var weight = weights.tile[OUTPUT_FEATURES, INPUT_FEATURES](layer, 0)
-            enqueue_linear_prefill_tiled_apple_gpu_bk[tile_input_features](
-                launch_context, input, weight, bias, output
-            )
+            comptime if use_direct:
+                enqueue_linear_prefill_direct_apple_gpu(
+                    launch_context, input, weight, bias, output
+                )
+            else:
+                enqueue_linear_prefill_tiled_apple_gpu_bk[tile_input_features](
+                    launch_context, input, weight, bias, output
+                )
 
     bencher_iter_custom(bencher, launch, context)
 
@@ -99,10 +113,15 @@ def bench_prefill_bk[
 def _add_benchmark[
     rows: Int,
     tile_input_features: Int,
+    use_direct: Bool = False,
 ](mut benchmark: Bench) raises:
-    comptime workload = bench_prefill_bk[rows, tile_input_features]
+    comptime workload = bench_prefill_bk[rows, tile_input_features, use_direct]
     comptime benchmark_name = (
-        "linear_prefill_tiled_bk" + String(tile_input_features) + "_apple_gpu"
+        "linear_prefill_direct_apple_gpu" if use_direct else (
+            "linear_prefill_tiled_bk"
+            + String(tile_input_features)
+            + "_apple_gpu"
+        )
     )
     benchmark.bench_function[workload](
         BenchId(
@@ -162,6 +181,30 @@ def _add_bk_sequence[
         _add_benchmark[rows, 32](benchmark)
 
 
+def _add_direct_comparison[
+    rows: Int,
+    candidate_first: Bool,
+](mut benchmark: Bench) raises:
+    comptime if candidate_first:
+        _add_benchmark[rows, 16](benchmark)
+        _add_benchmark[rows, 16, True](benchmark)
+    else:
+        _add_benchmark[rows, 16, True](benchmark)
+        _add_benchmark[rows, 16](benchmark)
+
+
+def _add_selected_workload[
+    rows: Int,
+    sequence: Int,
+    direct_comparison: Bool,
+    candidate_first: Bool,
+](mut benchmark: Bench) raises:
+    comptime if direct_comparison:
+        _add_direct_comparison[rows, candidate_first](benchmark)
+    else:
+        _add_bk_sequence[rows, sequence](benchmark)
+
+
 def run_benchmarks() raises:
     comptime assert has_apple_gpu_accelerator(), "benchmark requires Apple GPU"
     var identity = DeviceContext()
@@ -177,9 +220,17 @@ def run_benchmarks() raises:
     comptime sequence_4 = get_defined_bool[
         "LINEAR_PREFILL_BK_SWEEP_SEQUENCE_4"
     ]()
+    comptime direct_comparison = get_defined_bool[
+        "LINEAR_PREFILL_BK16_DIRECT_COMPARISON"
+    ]()
+    comptime candidate_first = get_defined_bool["LINEAR_PREFILL_BK16_FIRST"]()
     comptime assert not (sequence_2 and sequence_3)
     comptime assert not (sequence_2 and sequence_4)
     comptime assert not (sequence_3 and sequence_4)
+    comptime assert not candidate_first or direct_comparison
+    comptime assert not direct_comparison or not (
+        sequence_2 or sequence_3 or sequence_4
+    )
     comptime sequence = 4 if sequence_4 else (
         3 if sequence_3 else (2 if sequence_2 else 1)
     )
@@ -187,7 +238,15 @@ def run_benchmarks() raises:
         "LINEAR_PREFILL_BK_SWEEP_REVERSE"
     ]()
 
-    print("implementation: enqueue_linear_prefill_tiled_apple_gpu_bk")
+    comptime if direct_comparison:
+        print("implementation: enqueue_linear_prefill_direct_apple_gpu")
+        print(
+            "comparison implementation: "
+            "enqueue_linear_prefill_tiled_apple_gpu_bk"
+        )
+        print("comparison BK: 16")
+    else:
+        print("implementation: enqueue_linear_prefill_tiled_apple_gpu_bk")
     print("device:", identity.name())
     print("api:", identity.api())
     print("dtype: bfloat16; accumulation: float32")
@@ -196,10 +255,14 @@ def run_benchmarks() raises:
     print("output layout: (M, N):(N, 1)")
     print("mapping: BM=8; BN=16; 128 threads; one thread per output")
     print("workload: K=896; N=1152; layers=24 rotating weights")
-    print("BK=16: scratch=768 bytes; K phases=56; barriers=112")
-    print("BK=32: scratch=1536 bytes; K phases=28; barriers=56")
-    print("BK=64: scratch=3072 bytes; K phases=14; barriers=28")
-    print("BK=128: scratch=6144 bytes; K phases=7; barriers=14")
+    comptime if direct_comparison:
+        print("direct: scratch=0 bytes; shared K phases=0; barriers=0")
+        print("BK=16: scratch=768 bytes; K phases=56; barriers=112")
+    else:
+        print("BK=16: scratch=768 bytes; K phases=56; barriers=112")
+        print("BK=32: scratch=1536 bytes; K phases=28; barriers=56")
+        print("BK=64: scratch=3072 bytes; K phases=14; barriers=28")
+        print("BK=128: scratch=6144 bytes; K phases=7; barriers=14")
     print(
         "timing: kernel enqueue and synchronized device execution; transfers"
         " excluded"
@@ -216,14 +279,20 @@ def run_benchmarks() raises:
         "repetitions",
     )
     print("workload order:", "descending" if reverse_order else "ascending")
-    comptime if sequence == 1:
-        print("BK order: 16,32,128,64")
-    elif sequence == 2:
-        print("BK order: 32,64,16,128")
-    elif sequence == 3:
-        print("BK order: 64,128,32,16")
+    comptime if direct_comparison:
+        print(
+            "implementation order:",
+            "bk16,direct" if candidate_first else "direct,bk16",
+        )
     else:
-        print("BK order: 128,16,64,32")
+        comptime if sequence == 1:
+            print("BK order: 16,32,128,64")
+        elif sequence == 2:
+            print("BK order: 32,64,16,128")
+        elif sequence == 3:
+            print("BK order: 64,128,32,16")
+        else:
+            print("BK order: 128,16,64,32")
 
     var benchmark = Bench(
         BenchConfig(
@@ -233,23 +302,55 @@ def run_benchmarks() raises:
         )
     )
     comptime if reverse_order:
-        _add_bk_sequence[256, sequence](benchmark)
-        _add_bk_sequence[128, sequence](benchmark)
-        _add_bk_sequence[64, sequence](benchmark)
-        _add_bk_sequence[32, sequence](benchmark)
-        _add_bk_sequence[16, sequence](benchmark)
-        _add_bk_sequence[8, sequence](benchmark)
-        _add_bk_sequence[4, sequence](benchmark)
-        _add_bk_sequence[1, sequence](benchmark)
+        _add_selected_workload[
+            256, sequence, direct_comparison, candidate_first
+        ](benchmark)
+        _add_selected_workload[
+            128, sequence, direct_comparison, candidate_first
+        ](benchmark)
+        _add_selected_workload[
+            64, sequence, direct_comparison, candidate_first
+        ](benchmark)
+        _add_selected_workload[
+            32, sequence, direct_comparison, candidate_first
+        ](benchmark)
+        _add_selected_workload[
+            16, sequence, direct_comparison, candidate_first
+        ](benchmark)
+        _add_selected_workload[8, sequence, direct_comparison, candidate_first](
+            benchmark
+        )
+        _add_selected_workload[4, sequence, direct_comparison, candidate_first](
+            benchmark
+        )
+        _add_selected_workload[1, sequence, direct_comparison, candidate_first](
+            benchmark
+        )
     else:
-        _add_bk_sequence[1, sequence](benchmark)
-        _add_bk_sequence[4, sequence](benchmark)
-        _add_bk_sequence[8, sequence](benchmark)
-        _add_bk_sequence[16, sequence](benchmark)
-        _add_bk_sequence[32, sequence](benchmark)
-        _add_bk_sequence[64, sequence](benchmark)
-        _add_bk_sequence[128, sequence](benchmark)
-        _add_bk_sequence[256, sequence](benchmark)
+        _add_selected_workload[1, sequence, direct_comparison, candidate_first](
+            benchmark
+        )
+        _add_selected_workload[4, sequence, direct_comparison, candidate_first](
+            benchmark
+        )
+        _add_selected_workload[8, sequence, direct_comparison, candidate_first](
+            benchmark
+        )
+        _add_selected_workload[
+            16, sequence, direct_comparison, candidate_first
+        ](benchmark)
+        _add_selected_workload[
+            32, sequence, direct_comparison, candidate_first
+        ](benchmark)
+        _add_selected_workload[
+            64, sequence, direct_comparison, candidate_first
+        ](benchmark)
+        _add_selected_workload[
+            128, sequence, direct_comparison, candidate_first
+        ](benchmark)
+        _add_selected_workload[
+            256, sequence, direct_comparison, candidate_first
+        ](benchmark)
 
     benchmark.config.format = Format.tabular
     print("BENCHMARK_RESULTS_BEGIN")

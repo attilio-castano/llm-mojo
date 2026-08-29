@@ -192,6 +192,16 @@ BK16 for that follow-up after a repeatable 21.86%–25.58% improvement over BK32
 It did not compare BK16 with the direct control or alter the public projection
 path.
 
+The ownership-matched follow-up uses:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill_bk16_direct.py
+```
+
+It compares direct full-K streaming with BK16 shared staging on only the
+rotating packed-QKV matrix. This is still an attribution experiment; even a
+BK16 win requires a final direct comparison with the public rowwise kernel.
+
 This is operation-level evidence only; it is not an end-to-end inference
 benchmark. Use the [experimental method](experiments.md) when retaining a run or
 using benchmark and profile evidence to support an optimization.
