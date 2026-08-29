@@ -159,6 +159,13 @@ cover the synchronization-safe zero-fill policy. This is an explicit learning
 candidate, not the public dispatch path: timing must establish whether its
 reuse pays for its shared-memory accesses and barriers.
 
+[EXP-0008](../experiments/EXP-0008-linear-prefill-shared-staging/report.md)
+performed that ownership-matched comparison. The candidate reduced
+source-requested operand loads but materially regressed every rotating-QKV row
+count, so it remains a learning implementation and no dispatch rule selects
+it. That result is specific to this scalar `8x16x32` mapping; it is not a claim
+against other tile sizes or arithmetic mappings.
+
 ## RoPE V0
 
 Let `R` be the number of contiguous token rows, `N` the number of heads,

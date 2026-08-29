@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "experiment_id": "EXP-0008",
+  "run_id": "EXP-0008-RUN-001",
+  "implementation_commit": "0e032f9b97c6a4b9fcecedd8385a884d6805ed5e",
+  "measurement_commit": "0e032f9b97c6a4b9fcecedd8385a884d6805ed5e",
+  "started_utc": "2026-08-29T12:58:12.252820+00:00",
+  "ended_utc": "2026-08-29T13:03:09.681591+00:00",
+  "environment": {
+    "machine": "Mac16,7",
+    "chip": "Apple M4 Pro",
+    "runtime_api": "metal",
+    "runtime_target": "metal:4-metal4",
+    "physical_memory_bytes": 25769803776,
+    "mojo": "1.0.0",
+    "max": "26.5.0",
+    "macos": "26.6.2 (25G83)",
+    "xcode": "Xcode 26.6 Build version 17F113",
+    "power_source_at_all_gates": "AC Power",
+    "thermal_warning_at_all_gates": false
+  },
+  "sample_audit": {
+    "block_order": [
+      "ascending",
+      "descending",
+      "descending",
+      "ascending"
+    ],
+    "implementation_order": [
+      "baseline_then_variant",
+      "variant_then_baseline",
+      "variant_then_baseline",
+      "baseline_then_variant"
+    ],
+    "workloads": 32,
+    "implementations": 2,
+    "blocks": 4,
+    "samples_per_implementation_per_workload_per_block": 10,
+    "samples_per_implementation_per_workload": 40,
+    "total_samples": 2560,
+    "internal_iterations_per_sample": 20,
+    "repository_clean_and_fixed": true,
+    "runtime_identity_proved_in_every_block": true,
+    "all_samples_finite_positive_and_valid": true,
+    "result": "passed"
+  },
+  "correctness_validation": {
+    "command": "MODULAR_DEBUG=device-sync-mode uv run --locked mojo run -I src -I tests tests/test_linear.mojo",
+    "result": "22 passed",
+    "cases": [
+      "Committed torch.nn.Linear short-prefill oracle M=3 K=33 N=5",
+      "Exact output tile M=8 K=32 N=16",
+      "Ragged tails M=9 K=33 N=17",
+      "Qwen KV width M=8 K=896 N=128"
+    ]
+  },
+  "source_accounting": {
+    "tiled_threadgroup_operand_scratch_bytes": 1536,
+    "tiled_barriers_per_dispatch_at_k896": 56,
+    "rotating_qkv_requested_traffic_reduction_percent": {
+      "M1": 46.82274247491639,
+      "M4": 84.2809364548495,
+      "M8_and_larger": 90.52396878483835
+    },
+    "note": "Requested traffic is derived from source-level loads and stores, not measured hardware traffic."
+  },
+  "paired_comparison": {
+    "ratio_definition": "tiled block median / direct block median",
+    "material_improvement_ratio": 0.95,
+    "material_regression_ratio": 1.05,
+    "required_direction_blocks": 3,
+    "primary_workloads": [
+      {
+        "workload": "m1-k896-n1152-layers24",
+        "rows": 1,
+        "direct_median_ms": 1.3496229,
+        "tiled_median_ms": 2.354638525,
+        "median_tiled_to_direct_ratio": 1.7452813044645596,
+        "median_change_percent": 74.52813044645596,
+        "tiled_faster_blocks": 0,
+        "classification": "material_regression",
+        "block_ratios": [1.7284776603107948, 1.7468407731677051, 1.7455009243497628, 1.7450616845793567]
+      },
+      {
+        "workload": "m4-k896-n1152-layers24",
+        "rows": 4,
+        "direct_median_ms": 1.3711177,
+        "tiled_median_ms": 2.3652895750000003,
+        "median_tiled_to_direct_ratio": 1.7252719566658592,
+        "median_change_percent": 72.52719566658592,
+        "tiled_faster_blocks": 0,
+        "classification": "material_regression",
+        "block_ratios": [1.7036246851328283, 1.7342327099744297, 1.7342456933845443, 1.716311203357289]
+      },
+      {
+        "workload": "m8-k896-n1152-layers24",
+        "rows": 8,
+        "direct_median_ms": 1.41822085,
+        "tiled_median_ms": 2.4047823,
+        "median_tiled_to_direct_ratio": 1.6946838257047476,
+        "median_change_percent": 69.46838257047476,
+        "tiled_faster_blocks": 0,
+        "classification": "material_regression",
+        "block_ratios": [1.6885444560013183, 1.7008231954081772, 1.7019255029387363, 1.6877713963195182]
+      },
+      {
+        "workload": "m16-k896-n1152-layers24",
+        "rows": 16,
+        "direct_median_ms": 2.489311475,
+        "tiled_median_ms": 4.154295825,
+        "median_tiled_to_direct_ratio": 1.6678583669863045,
+        "median_change_percent": 66.78583669863045,
+        "tiled_faster_blocks": 0,
+        "classification": "material_regression",
+        "block_ratios": [1.6675687888769672, 1.6699364218600643, 1.6633850634638676, 1.6681479450956418]
+      },
+      {
+        "workload": "m32-k896-n1152-layers24",
+        "rows": 32,
+        "direct_median_ms": 4.420501025,
+        "tiled_median_ms": 7.431684375000001,
+        "median_tiled_to_direct_ratio": 1.6810132975239513,
+        "median_change_percent": 68.10132975239513,
+        "tiled_faster_blocks": 0,
+        "classification": "material_regression",
+        "block_ratios": [1.6835509796378005, 1.678475615410102, 1.685966615853894, 1.6773473960240848]
+      },
+      {
+        "workload": "m64-k896-n1152-layers24",
+        "rows": 64,
+        "direct_median_ms": 8.565060424999999,
+        "tiled_median_ms": 14.156020824999999,
+        "median_tiled_to_direct_ratio": 1.6545573043369353,
+        "median_change_percent": 65.45573043369353,
+        "tiled_faster_blocks": 0,
+        "classification": "material_regression",
+        "block_ratios": [1.6566406539673761, 1.6524739547064942, 1.6497829786089537, 1.6591009936766035]
+      },
+      {
+        "workload": "m128-k896-n1152-layers24",
+        "rows": 128,
+        "direct_median_ms": 16.722831225,
+        "tiled_median_ms": 27.838137500000002,
+        "median_tiled_to_direct_ratio": 1.6640626745500018,
+        "median_change_percent": 66.40626745500018,
+        "tiled_faster_blocks": 0,
+        "classification": "material_regression",
+        "block_ratios": [1.664137100140986, 1.6622516351920245, 1.6717583491631272, 1.6639882489590176]
+      },
+      {
+        "workload": "m256-k896-n1152-layers24",
+        "rows": 256,
+        "direct_median_ms": 33.065155175,
+        "tiled_median_ms": 55.337333349999994,
+        "median_tiled_to_direct_ratio": 1.6728035726916661,
+        "median_change_percent": 67.28035726916661,
+        "tiled_faster_blocks": 0,
+        "classification": "material_regression",
+        "block_ratios": [1.6750802358847496, 1.673335846011948, 1.671064761315532, 1.672271299371384]
+      }
+    ],
+    "all_workload_classification_counts": {
+      "material_improvement": 3,
+      "inconclusive": 19,
+      "material_regression": 10
+    },
+    "timing_decision": "shared_staging_control_only_no_dispatch_decision"
+  },
+  "decision": {
+    "result": "reject_candidate_as_optimization_retain_for_learning",
+    "public_entrypoint": "llm_mojo.linear.enqueue_linear_apple_gpu",
+    "control_entrypoint": "llm_mojo.linear.enqueue_linear_prefill_direct_apple_gpu",
+    "candidate_entrypoint": "llm_mojo.linear.enqueue_linear_prefill_tiled_apple_gpu",
+    "runtime_dispatch_rule": false,
+    "reason": "The candidate materially regressed all eight rotating packed-QKV workloads in all four blocks despite reducing source-requested operand loads."
+  },
+  "external_run_artifacts": {
+    "path_note": "Raw run artifacts are retained outside the repository; local paths are intentionally omitted.",
+    "bytes": {
+      "block-01.stdout.txt": 135492,
+      "block-02.stdout.txt": 136134,
+      "block-03.stdout.txt": 136134,
+      "block-04.stdout.txt": 136133,
+      "metadata.json": 11476,
+      "samples.jsonl": 2350982,
+      "summary.json": 110454
+    },
+    "sha256": {
+      "block-01.stdout.txt": "3192a509545b062bf179c06b60c336fb783e2e67862e1a9d12e00300e23d8d84",
+      "block-02.stdout.txt": "a09ed52195b347c00dc68206acb22d9d3b9830c3bca2f3f126eac183201ab37e",
+      "block-03.stdout.txt": "0e257f3e8faf4b9d55b5b72b3111fe89ad95ca687f1d6d1e0232462a056d4d50",
+      "block-04.stdout.txt": "374f4d6173b8af765f57a5efd304dfb25875c18373460e6ddf1c74c143817ac2",
+      "metadata.json": "4c9dc0e50014f2ffe17efda7f335254cddb1f171f3bd380544512c74dd81448c",
+      "samples.jsonl": "b8de9911d8bffa34c930e295e05984129ed93d5d38152a92dd791c6b075f57a3",
+      "summary.json": "701afd5dd93bfb1b300fafe5c5cb804e555ff8ebd57bd63c1e2b604a6e115b2b"
+    }
+  }
+}
