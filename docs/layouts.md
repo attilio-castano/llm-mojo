@@ -144,6 +144,21 @@ storage, and executes no threadgroup barrier. This control is not the public
 dispatch path. Its purpose is to separate the cost of one-thread-per-output
 ownership from the effect of explicitly staging `BK` operand tiles.
 
+The first tiled-prefill candidate preserves that exact output ownership and
+adds `BK=32` operand staging. In each K phase, all 128 threads cooperatively
+fill an `8x32` input tile and a `16x32` weight tile in threadgroup memory,
+zero-filling ragged edges. One barrier makes both tiles visible, each valid
+thread accumulates its 32 products into an FP32 register, and a second barrier
+protects the storage before the next phase overwrites it. The accumulator
+survives all `ceil(K / 32)` phases; bias and the single BF16 cast happen only
+after the full K reduction.
+
+For BF16 operands, this is 1,536 bytes of threadgroup storage and two barriers
+per K phase (56 barriers at `K=896`). Separate `M`, `N`, and `K` tail tests
+cover the synchronization-safe zero-fill policy. This is an explicit learning
+candidate, not the public dispatch path: timing must establish whether its
+reuse pays for its shared-memory accesses and barriers.
+
 ## RoPE V0
 
 Let `R` be the number of contiguous token rows, `N` the number of heads,

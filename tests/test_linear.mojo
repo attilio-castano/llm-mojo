@@ -21,6 +21,7 @@ from llm_mojo.linear import (
     enqueue_linear_apple_gpu,
     enqueue_linear_apple_gpu_two_output,
     enqueue_linear_prefill_direct_apple_gpu,
+    enqueue_linear_prefill_tiled_apple_gpu,
     linear_reference,
 )
 from max.gpu.host import DeviceContext
@@ -159,6 +160,7 @@ def check_apple_gpu_fixture[
     input_features: Int,
     output_features: Int,
     use_direct_prefill: Bool = False,
+    use_tiled_prefill: Bool = False,
 ](
     input_values: List[Float32],
     weight_values: List[Float32],
@@ -228,7 +230,14 @@ def check_apple_gpu_fixture[
     var device_output = TileTensor(
         device_output_buffer, row_major[rows, output_features]()
     )
-    comptime if use_direct_prefill:
+    comptime assert not (
+        use_direct_prefill and use_tiled_prefill
+    ), "test implementation modes are mutually exclusive"
+    comptime if use_tiled_prefill:
+        enqueue_linear_prefill_tiled_apple_gpu(
+            context, device_input, device_weight, device_bias, device_output
+        )
+    elif use_direct_prefill:
         enqueue_linear_prefill_direct_apple_gpu(
             context, device_input, device_weight, device_bias, device_output
         )
@@ -337,10 +346,13 @@ def check_model_shape[
     output_features: Int,
     use_two_output: Bool = False,
     use_direct_prefill: Bool = False,
+    use_tiled_prefill: Bool = False,
 ]() raises:
     comptime assert has_apple_gpu_accelerator(), "test requires an Apple GPU"
     comptime assert not (
-        use_two_output and use_direct_prefill
+        (use_two_output and use_direct_prefill)
+        or (use_two_output and use_tiled_prefill)
+        or (use_direct_prefill and use_tiled_prefill)
     ), "test implementation modes are mutually exclusive"
     var context = DeviceContext()
     if context.api() != "metal":
@@ -408,6 +420,10 @@ def check_model_shape[
     )
     comptime if use_two_output:
         enqueue_linear_apple_gpu_two_output(
+            context, device_input, device_weight, device_bias, device_output
+        )
+    elif use_tiled_prefill:
+        enqueue_linear_prefill_tiled_apple_gpu(
             context, device_input, device_weight, device_bias, device_output
         )
     elif use_direct_prefill:
@@ -890,6 +906,33 @@ def test_direct_prefill_apple_gpu_matches_tile_tails() raises:
 
 def test_direct_prefill_apple_gpu_matches_qwen_kv_shape() raises:
     check_model_shape[8, 896, 128, False, True]()
+
+
+def test_tiled_prefill_apple_gpu_matches_short_prefill_oracle() raises:
+    check_apple_gpu_fixture[
+        SHORT_PREFILL_ROWS,
+        SHORT_PREFILL_INPUT_FEATURES,
+        SHORT_PREFILL_OUTPUT_FEATURES,
+        False,
+        True,
+    ](
+        short_prefill_input(),
+        short_prefill_weight(),
+        short_prefill_bias(),
+        short_prefill_expected(),
+    )
+
+
+def test_tiled_prefill_apple_gpu_matches_exact_output_tile() raises:
+    check_model_shape[8, 32, 16, False, False, True]()
+
+
+def test_tiled_prefill_apple_gpu_matches_tile_tails() raises:
+    check_model_shape[9, 33, 17, False, False, True]()
+
+
+def test_tiled_prefill_apple_gpu_matches_qwen_kv_shape() raises:
+    check_model_shape[8, 896, 128, False, False, True]()
 
 
 def test_apple_gpu_matches_qwen_query_decode_shape() raises:

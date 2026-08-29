@@ -113,8 +113,11 @@ uv run --script tests/fixtures/rms_norm/generate.py
 The affine linear projection test compares a one-token diagnostic case and a
 short multi-row case against a committed `torch.nn.Linear` oracle. It also
 compares the Apple GPU path with the host reference at the model's query and
-key/value projection shapes. The rowwise GPU kernel is correct for both decode
-and prefill row counts but makes no tiled-prefill or performance claim.
+key/value projection shapes. The rowwise public kernel, the direct `8x16`
+ownership control, and the shared `8x16x32` learning candidate have separate
+coverage. Ragged `M=9, K=33, N=17` exercises all three tiled edge policies.
+Correctness does not imply that either experimental prefill entrypoint is
+faster or suitable for public dispatch.
 Regenerate its fixture and provenance manifest with:
 
 ```bash
@@ -167,7 +170,11 @@ query, packed-QKV, and rotating 24-layer packed-QKV workloads. It establishes a
 rowwise baseline only; it does not imply a tiled implementation or speedup.
 Its `--direct-comparison` mode pairs that baseline with the experimental
 `8x16` one-thread-per-output control. The control has no shared operand staging
-and is never selected by the public enqueue path.
+and is never selected by the public enqueue path. Its `--tiled-comparison`
+mode instead holds that ownership constant and compares the direct control
+with the shared `BM=8, BN=16, BK=32` candidate in four ABBA blocks. The latter
+isolates the incremental effect of explicit operand staging and barriers; it
+also makes no dispatch decision by itself.
 
 This is operation-level evidence only; it is not an end-to-end inference
 benchmark. Use the [experimental method](experiments.md) when retaining a run or

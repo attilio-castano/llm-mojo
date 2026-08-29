@@ -4,6 +4,7 @@ from layout import TensorLayout, TileTensor, row_major
 from llm_mojo.linear import (
     enqueue_linear_apple_gpu,
     enqueue_linear_prefill_direct_apple_gpu,
+    enqueue_linear_prefill_tiled_apple_gpu,
 )
 from max.benchmark import bencher_iter_custom
 from max.gpu.host import DeviceContext
@@ -33,6 +34,7 @@ comptime BENCHMARK_REPETITIONS = 10
 @always_inline
 def _enqueue_projection[
     use_direct_prefill: Bool,
+    use_tiled_prefill: Bool,
     InputLayout: TensorLayout,
     WeightLayout: TensorLayout,
     BiasLayout: TensorLayout,
@@ -44,7 +46,14 @@ def _enqueue_projection[
     bias: TileTensor[DType.bfloat16, BiasLayout, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OutputLayout, MutAnyOrigin],
 ) raises:
-    comptime if use_direct_prefill:
+    comptime assert not (
+        use_direct_prefill and use_tiled_prefill
+    ), "benchmark implementation modes are mutually exclusive"
+    comptime if use_tiled_prefill:
+        enqueue_linear_prefill_tiled_apple_gpu(
+            context, input, weight, bias, output
+        )
+    elif use_direct_prefill:
         enqueue_linear_prefill_direct_apple_gpu(
             context, input, weight, bias, output
         )
@@ -71,6 +80,7 @@ def bench_prefill_linear[
     output_features: Int,
     layers: Int,
     use_direct_prefill: Bool,
+    use_tiled_prefill: Bool,
 ](mut bencher: Bencher) raises capturing:
     comptime assert has_apple_gpu_accelerator(), "benchmark requires Apple GPU"
     comptime assert rows > 0, "benchmark rows must be positive"
@@ -108,7 +118,7 @@ def bench_prefill_linear[
 
     comptime for layer in range(layers):
         var weight = weights.tile[output_features, INPUT_FEATURES](layer, 0)
-        _enqueue_projection[use_direct_prefill](
+        _enqueue_projection[use_direct_prefill, use_tiled_prefill](
             context, input, weight, bias, output
         )
     with output_buffer.map_to_host() as mapped_output:
@@ -119,7 +129,7 @@ def bench_prefill_linear[
     def launch(launch_context: DeviceContext) raises {imm}:
         comptime for layer in range(layers):
             var weight = weights.tile[output_features, INPUT_FEATURES](layer, 0)
-            _enqueue_projection[use_direct_prefill](
+            _enqueue_projection[use_direct_prefill, use_tiled_prefill](
                 launch_context, input, weight, bias, output
             )
 
@@ -131,14 +141,19 @@ def _add_benchmark[
     output_features: Int,
     layers: Int,
     use_direct_prefill: Bool,
+    use_tiled_prefill: Bool,
 ](mut benchmark: Bench) raises:
     comptime workload = bench_prefill_linear[
-        rows, output_features, layers, use_direct_prefill
+        rows,
+        output_features,
+        layers,
+        use_direct_prefill,
+        use_tiled_prefill,
     ]
     comptime benchmark_name = (
-        "linear_prefill_direct_apple_gpu"
-        if use_direct_prefill
-        else "linear_prefill_rowwise_apple_gpu"
+        "linear_prefill_tiled_apple_gpu" if use_tiled_prefill else (
+            "linear_prefill_direct_apple_gpu" if use_direct_prefill else "linear_prefill_rowwise_apple_gpu"
+        )
     )
     benchmark.bench_function[workload](
         BenchId(
@@ -176,24 +191,52 @@ def _add_selected_benchmark[
     output_features: Int,
     layers: Int,
     direct_comparison: Bool,
-    direct_first: Bool,
+    tiled_comparison: Bool,
+    candidate_first: Bool,
 ](mut benchmark: Bench) raises:
+    comptime assert not (
+        direct_comparison and tiled_comparison
+    ), "benchmark comparisons are mutually exclusive"
     comptime if direct_comparison:
-        comptime if direct_first:
-            _add_benchmark[rows, output_features, layers, True](benchmark)
-            _add_benchmark[rows, output_features, layers, False](benchmark)
+        comptime if candidate_first:
+            _add_benchmark[rows, output_features, layers, True, False](
+                benchmark
+            )
+            _add_benchmark[rows, output_features, layers, False, False](
+                benchmark
+            )
         else:
-            _add_benchmark[rows, output_features, layers, False](benchmark)
-            _add_benchmark[rows, output_features, layers, True](benchmark)
+            _add_benchmark[rows, output_features, layers, False, False](
+                benchmark
+            )
+            _add_benchmark[rows, output_features, layers, True, False](
+                benchmark
+            )
+    elif tiled_comparison:
+        comptime if candidate_first:
+            _add_benchmark[rows, output_features, layers, False, True](
+                benchmark
+            )
+            _add_benchmark[rows, output_features, layers, True, False](
+                benchmark
+            )
+        else:
+            _add_benchmark[rows, output_features, layers, True, False](
+                benchmark
+            )
+            _add_benchmark[rows, output_features, layers, False, True](
+                benchmark
+            )
     else:
-        _add_benchmark[rows, output_features, layers, False](benchmark)
+        _add_benchmark[rows, output_features, layers, False, False](benchmark)
 
 
 def _add_row_workloads[
     rows: Int,
     reverse: Bool,
     direct_comparison: Bool,
-    direct_first: Bool,
+    tiled_comparison: Bool,
+    candidate_first: Bool,
 ](mut benchmark: Bench) raises:
     comptime if reverse:
         _add_selected_benchmark[
@@ -201,33 +244,65 @@ def _add_row_workloads[
             QKV_OUTPUT_FEATURES,
             RING_LAYERS,
             direct_comparison,
-            direct_first,
+            tiled_comparison,
+            candidate_first,
         ](benchmark)
         _add_selected_benchmark[
-            rows, QKV_OUTPUT_FEATURES, 1, direct_comparison, direct_first
+            rows,
+            QKV_OUTPUT_FEATURES,
+            1,
+            direct_comparison,
+            tiled_comparison,
+            candidate_first,
         ](benchmark)
         _add_selected_benchmark[
-            rows, QUERY_OUTPUT_FEATURES, 1, direct_comparison, direct_first
+            rows,
+            QUERY_OUTPUT_FEATURES,
+            1,
+            direct_comparison,
+            tiled_comparison,
+            candidate_first,
         ](benchmark)
         _add_selected_benchmark[
-            rows, KV_OUTPUT_FEATURES, 1, direct_comparison, direct_first
+            rows,
+            KV_OUTPUT_FEATURES,
+            1,
+            direct_comparison,
+            tiled_comparison,
+            candidate_first,
         ](benchmark)
     else:
         _add_selected_benchmark[
-            rows, KV_OUTPUT_FEATURES, 1, direct_comparison, direct_first
+            rows,
+            KV_OUTPUT_FEATURES,
+            1,
+            direct_comparison,
+            tiled_comparison,
+            candidate_first,
         ](benchmark)
         _add_selected_benchmark[
-            rows, QUERY_OUTPUT_FEATURES, 1, direct_comparison, direct_first
+            rows,
+            QUERY_OUTPUT_FEATURES,
+            1,
+            direct_comparison,
+            tiled_comparison,
+            candidate_first,
         ](benchmark)
         _add_selected_benchmark[
-            rows, QKV_OUTPUT_FEATURES, 1, direct_comparison, direct_first
+            rows,
+            QKV_OUTPUT_FEATURES,
+            1,
+            direct_comparison,
+            tiled_comparison,
+            candidate_first,
         ](benchmark)
         _add_selected_benchmark[
             rows,
             QKV_OUTPUT_FEATURES,
             RING_LAYERS,
             direct_comparison,
-            direct_first,
+            tiled_comparison,
+            candidate_first,
         ](benchmark)
 
 
@@ -243,11 +318,29 @@ def run_benchmarks() raises:
     comptime direct_first = get_defined_bool[
         "LINEAR_PREFILL_BENCH_DIRECT_FIRST"
     ]()
-    print("implementation: enqueue_linear_apple_gpu")
+    comptime tiled_comparison = get_defined_bool[
+        "LINEAR_PREFILL_BENCH_TILED_COMPARISON"
+    ]()
+    comptime tiled_first = get_defined_bool[
+        "LINEAR_PREFILL_BENCH_TILED_FIRST"
+    ]()
+    comptime assert not (
+        direct_comparison and tiled_comparison
+    ), "benchmark comparisons are mutually exclusive"
+    comptime assert not (
+        direct_first and tiled_first
+    ), "candidate-order modes are mutually exclusive"
+    comptime candidate_first = direct_first or tiled_first
+    comptime if tiled_comparison:
+        print("implementation: enqueue_linear_prefill_direct_apple_gpu")
+        print(
+            "comparison implementation: enqueue_linear_prefill_tiled_apple_gpu"
+        )
+    else:
+        print("implementation: enqueue_linear_apple_gpu")
     comptime if direct_comparison:
         print(
-            "comparison implementation: "
-            "enqueue_linear_prefill_direct_apple_gpu"
+            "comparison implementation: enqueue_linear_prefill_direct_apple_gpu"
         )
     print("device:", identity.name())
     print("api:", identity.api())
@@ -256,9 +349,18 @@ def run_benchmarks() raises:
     print("weight layout: (N, K):(K, 1)")
     print("output layout: (M, N):(N, 1)")
     print("K: 896; N: 128, 896, 1152; layers: 1 or 24")
-    print("baseline mapping: one output dot product per SIMD group")
+    comptime if tiled_comparison:
+        print("control mapping: one thread per output in an 8x16 tile")
+    else:
+        print("baseline mapping: one output dot product per SIMD group")
     comptime if direct_comparison:
         print("candidate mapping: one thread per output in an 8x16 tile")
+    elif tiled_comparison:
+        print(
+            "candidate mapping: 8x16 output tile with BK=32 shared operand "
+            "staging"
+        )
+        print("candidate synchronization: two block barriers per K phase")
     print(
         "timing: kernel enqueue and synchronized device execution; transfers"
         " excluded"
@@ -274,16 +376,12 @@ def run_benchmarks() raises:
         BENCHMARK_REPETITIONS,
         "repetitions",
     )
-    comptime reverse_order = get_defined_bool[
-        "LINEAR_PREFILL_BENCH_REVERSE"
-    ]()
+    comptime reverse_order = get_defined_bool["LINEAR_PREFILL_BENCH_REVERSE"]()
     print("workload order:", "descending" if reverse_order else "ascending")
-    comptime if direct_comparison:
+    comptime if direct_comparison or tiled_comparison:
         print(
             "implementation order:",
-            "candidate then baseline"
-            if direct_first
-            else "baseline then candidate",
+            "candidate then baseline" if candidate_first else "baseline then candidate",
         )
 
     var benchmark = Bench(
@@ -294,23 +392,55 @@ def run_benchmarks() raises:
         )
     )
     comptime if reverse_order:
-        _add_row_workloads[256, True, direct_comparison, direct_first](benchmark)
-        _add_row_workloads[128, True, direct_comparison, direct_first](benchmark)
-        _add_row_workloads[64, True, direct_comparison, direct_first](benchmark)
-        _add_row_workloads[32, True, direct_comparison, direct_first](benchmark)
-        _add_row_workloads[16, True, direct_comparison, direct_first](benchmark)
-        _add_row_workloads[8, True, direct_comparison, direct_first](benchmark)
-        _add_row_workloads[4, True, direct_comparison, direct_first](benchmark)
-        _add_row_workloads[1, True, direct_comparison, direct_first](benchmark)
+        _add_row_workloads[
+            256, True, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
+        _add_row_workloads[
+            128, True, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
+        _add_row_workloads[
+            64, True, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
+        _add_row_workloads[
+            32, True, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
+        _add_row_workloads[
+            16, True, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
+        _add_row_workloads[
+            8, True, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
+        _add_row_workloads[
+            4, True, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
+        _add_row_workloads[
+            1, True, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
     else:
-        _add_row_workloads[1, False, direct_comparison, direct_first](benchmark)
-        _add_row_workloads[4, False, direct_comparison, direct_first](benchmark)
-        _add_row_workloads[8, False, direct_comparison, direct_first](benchmark)
-        _add_row_workloads[16, False, direct_comparison, direct_first](benchmark)
-        _add_row_workloads[32, False, direct_comparison, direct_first](benchmark)
-        _add_row_workloads[64, False, direct_comparison, direct_first](benchmark)
-        _add_row_workloads[128, False, direct_comparison, direct_first](benchmark)
-        _add_row_workloads[256, False, direct_comparison, direct_first](benchmark)
+        _add_row_workloads[
+            1, False, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
+        _add_row_workloads[
+            4, False, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
+        _add_row_workloads[
+            8, False, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
+        _add_row_workloads[
+            16, False, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
+        _add_row_workloads[
+            32, False, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
+        _add_row_workloads[
+            64, False, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
+        _add_row_workloads[
+            128, False, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
+        _add_row_workloads[
+            256, False, direct_comparison, tiled_comparison, candidate_first
+        ](benchmark)
 
     benchmark.config.format = Format.tabular
     print("BENCHMARK_RESULTS_BEGIN")

@@ -1,3 +1,4 @@
+import math
 import unittest
 
 from benchmarks.run_linear_prefill import (
@@ -7,6 +8,7 @@ from benchmarks.run_linear_prefill import (
     DIRECT_IMPLEMENTATION,
     EXPECTED_REPETITIONS,
     INPUT_FEATURES,
+    TILED_IMPLEMENTATION,
     WORKLOAD_ORDER,
     WORKLOADS,
     benchmark_command,
@@ -20,25 +22,49 @@ def synthetic_output(
     reverse: bool = False,
     direct_comparison: bool = False,
     direct_first: bool = False,
+    tiled_comparison: bool = False,
+    tiled_first: bool = False,
 ) -> str:
+    if direct_comparison and tiled_comparison:
+        raise ValueError("comparison modes are mutually exclusive")
+    primary = (
+        "enqueue_linear_prefill_direct_apple_gpu"
+        if tiled_comparison
+        else "enqueue_linear_apple_gpu"
+    )
     lines = [
-        "implementation: enqueue_linear_apple_gpu",
+        f"implementation: {primary}",
         "device: Apple Test GPU",
         "api: metal",
     ]
-    if direct_comparison:
+    if direct_comparison or tiled_comparison:
+        candidate = (
+            "enqueue_linear_prefill_tiled_apple_gpu"
+            if tiled_comparison
+            else "enqueue_linear_prefill_direct_apple_gpu"
+        )
         lines.insert(
             1,
-            "comparison implementation: "
-            "enqueue_linear_prefill_direct_apple_gpu",
+            f"comparison implementation: {candidate}",
         )
     lines.extend([BENCHMARK_RESULTS_BEGIN, "name,met (ms),iters"])
     workloads = reversed(WORKLOAD_ORDER) if reverse else WORKLOAD_ORDER
-    implementations = (
-        ("direct", "rowwise") if direct_first else ("rowwise", "direct")
-    )
+    if tiled_comparison:
+        implementations = (
+            ("tiled", "direct")
+            if tiled_first
+            else ("direct", "tiled")
+        )
+    else:
+        implementations = (
+            ("direct", "rowwise") if direct_first else ("rowwise", "direct")
+        )
     for workload in workloads:
-        for implementation in implementations if direct_comparison else ("rowwise",):
+        for implementation in (
+            implementations
+            if direct_comparison or tiled_comparison
+            else ("rowwise",)
+        ):
             for repetition in range(EXPECTED_REPETITIONS):
                 value = 0.01 + repetition / 1_000_000.0
                 lines.append(
@@ -167,6 +193,88 @@ class PrefillProjectionBenchmarkSummaryTest(unittest.TestCase):
         self.assertIn("LINEAR_PREFILL_BENCH_DIRECT_FIRST=true", command)
         self.assertEqual(
             DIRECT_IMPLEMENTATION["id"], "apple_gpu_prefill_direct_8x16_v0"
+        )
+
+    def test_tiled_comparison_parses_abba_samples_and_reports_ratios(self):
+        samples = []
+        for block_number, (reverse, tiled_first) in enumerate(
+            ((False, False), (True, True), (True, True), (False, False)),
+            start=1,
+        ):
+            _, block_samples = parse_samples(
+                synthetic_output(
+                    reverse=reverse,
+                    tiled_comparison=True,
+                    tiled_first=tiled_first,
+                ),
+                experiment_id="EXP-0008",
+                run_id="RUN-001",
+                block_id=f"block-{block_number:02d}",
+                block_order="descending" if reverse else "ascending",
+                implementation_order=(
+                    "variant_then_baseline"
+                    if tiled_first
+                    else "baseline_then_variant"
+                ),
+                tiled_comparison=True,
+            )
+            samples.extend(block_samples)
+
+        result = summarize(samples, tiled_comparison=True)
+        paired = result["paired_comparison"]
+        self.assertEqual(len(paired["workloads"]), len(WORKLOAD_ORDER))
+        self.assertEqual(
+            paired["timing_decision"],
+            "shared_staging_control_only_no_dispatch_decision",
+        )
+        self.assertTrue(
+            all(
+                item["classification"] == "inconclusive"
+                for item in paired["workloads"]
+            )
+        )
+        tiled_samples = [
+            sample
+            for sample in samples
+            if sample["implementation"] == TILED_IMPLEMENTATION["id"]
+        ]
+        self.assertTrue(
+            all(
+                sample["threadgroup_operand_scratch_bytes"] == 1_536
+                for sample in tiled_samples
+            )
+        )
+        self.assertTrue(
+            all(
+                sample["barriers_per_dispatch"] == 56
+                for sample in tiled_samples
+            )
+        )
+        first = tiled_samples[0]
+        expected_requested_bytes = 2 * first["layers"] * (
+            first["rows"]
+            * math.ceil(first["output_features"] / 16)
+            * first["input_features"]
+            + math.ceil(first["rows"] / 8)
+            * first["output_features"]
+            * first["input_features"]
+            + 2 * first["rows"] * first["output_features"]
+        )
+        self.assertEqual(
+            first["program_requested_traffic_bytes"],
+            expected_requested_bytes,
+        )
+
+    def test_tiled_comparison_command_selects_both_compile_time_modes(self):
+        command = benchmark_command(
+            reverse=True, tiled_comparison=True, tiled_first=True
+        )
+
+        self.assertIn("LINEAR_PREFILL_BENCH_TILED_COMPARISON=true", command)
+        self.assertIn("LINEAR_PREFILL_BENCH_TILED_FIRST=true", command)
+        self.assertEqual(
+            TILED_IMPLEMENTATION["id"],
+            "apple_gpu_prefill_tiled_8x16x32_v0",
         )
 
 

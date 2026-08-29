@@ -237,6 +237,28 @@ uv run --locked python benchmarks/run_linear_prefill.py \
   --output-dir /absolute/external/path/EXP-XXXX-RUN-001
 ```
 
+The tiled comparison then holds output ownership constant: its baseline is the
+direct `8x16` control, while its candidate cooperatively stages `8x32` input
+and `16x32` weight tiles in 1,536 bytes of BF16 threadgroup memory. At
+`K=896`, the candidate executes 28 K phases and 56 block barriers per dispatch.
+The runner records those source-level quantities and computes separate
+requested-traffic accounting for the tiled implementation; neither quantity
+is an observed hardware counter. Run the same four-block ABBA protocol with:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill.py \
+  --blocks 4 \
+  --experiment-id EXP-XXXX \
+  --run-id EXP-XXXX-RUN-001 \
+  --tiled-comparison \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
+```
+
+This comparison isolates explicit shared staging from the already-measured
+ownership change. Its summary classifies timing direction but deliberately
+makes no public dispatch decision.
+
 ## RMSNorm profiling instrument
 
 Build a standalone, long-running binary outside the repository so Xcode does
