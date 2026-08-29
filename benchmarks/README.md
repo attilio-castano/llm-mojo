@@ -187,6 +187,42 @@ declared warmup and profile dispatch counts; the receipt remains the authority
 that the exact-output correctness gate completed. Any earlier captured
 projection compute commands are reported as an unclassified prelude.
 
+## Prefill projection timing instrument
+
+The prefill projection benchmark characterizes the existing rowwise Apple GPU
+kernel before introducing a tiled candidate. It measures `M` values 1, 4, 8,
+16, 32, 64, 128, and 256 at `K=896`. Each row count covers hot `N=128`,
+`N=896`, and packed-QKV `N=1152` projections plus a 24-layer rotating
+packed-QKV cache-pressure proxy. This is an operation-level shape sweep, not an
+end-to-end prompt benchmark.
+
+Allocation, deterministic initialization, compilation, and the exact BF16
+correctness gate remain outside timing. Samples include synchronized workload
+latency, latency per layer, rows per second, effective FLOP/s, and
+source-derived requested-byte throughput. The byte rate is not observed cache,
+fabric, or DRAM traffic.
+
+Run one exploratory ascending block:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill.py
+```
+
+Use four alternating-order blocks for a retained baseline outside the
+repository:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill.py \
+  --blocks 4 \
+  --experiment-id EXP-XXXX \
+  --run-id EXP-XXXX-RUN-001 \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
+```
+
+Candidate modes are intentionally absent until a candidate kernel and its
+correctness contract exist.
+
 ## RMSNorm profiling instrument
 
 Build a standalone, long-running binary outside the repository so Xcode does

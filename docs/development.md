@@ -156,6 +156,16 @@ explicit completion boundaries. The paired mode retains the experimental
 two-output input-reuse candidate for reproduction; the public projection path
 remains the one-output-per-SIMD-group baseline under the EXP-0005 decision.
 
+Characterize that same public projection path across prefill row counts with:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill.py
+```
+
+The prefill instrument sweeps `M=1..256` at the model's `K=896` width for KV,
+query, packed-QKV, and rotating 24-layer packed-QKV workloads. It establishes a
+rowwise baseline only; it does not imply a tiled implementation or speedup.
+
 This is operation-level evidence only; it is not an end-to-end inference
 benchmark. Use the [experimental method](experiments.md) when retaining a run or
 using benchmark and profile evidence to support an optimization.
