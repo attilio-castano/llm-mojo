@@ -22,6 +22,7 @@ from llm_mojo.linear import (
     enqueue_linear_apple_gpu_two_output,
     enqueue_linear_prefill_direct_apple_gpu,
     enqueue_linear_prefill_tiled_apple_gpu,
+    enqueue_linear_prefill_tiled_apple_gpu_bk,
     linear_reference,
 )
 from max.gpu.host import DeviceContext
@@ -347,6 +348,7 @@ def check_model_shape[
     use_two_output: Bool = False,
     use_direct_prefill: Bool = False,
     use_tiled_prefill: Bool = False,
+    tiled_input_features: Int = 32,
 ]() raises:
     comptime assert has_apple_gpu_accelerator(), "test requires an Apple GPU"
     comptime assert not (
@@ -423,7 +425,7 @@ def check_model_shape[
             context, device_input, device_weight, device_bias, device_output
         )
     elif use_tiled_prefill:
-        enqueue_linear_prefill_tiled_apple_gpu(
+        enqueue_linear_prefill_tiled_apple_gpu_bk[tiled_input_features](
             context, device_input, device_weight, device_bias, device_output
         )
     elif use_direct_prefill:
@@ -933,6 +935,13 @@ def test_tiled_prefill_apple_gpu_matches_tile_tails() raises:
 
 def test_tiled_prefill_apple_gpu_matches_qwen_kv_shape() raises:
     check_model_shape[8, 896, 128, False, False, True]()
+
+
+def test_tiled_prefill_apple_gpu_bk_sweep_matches_tail_shape() raises:
+    check_model_shape[9, 129, 17, False, False, True, 16]()
+    check_model_shape[9, 129, 17, False, False, True, 32]()
+    check_model_shape[9, 129, 17, False, False, True, 64]()
+    check_model_shape[9, 129, 17, False, False, True, 128]()
 
 
 def test_apple_gpu_matches_qwen_query_decode_shape() raises:

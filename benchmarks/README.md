@@ -259,6 +259,26 @@ This comparison isolates explicit shared staging from the already-measured
 ownership change. Its summary classifies timing direction but deliberately
 makes no public dispatch decision.
 
+The BK sensitivity instrument narrows the matrix to the 24-layer rotating
+`K=896`, `N=1152` workload and holds `BM=8`, `BN=16`, 128 threads, and one
+thread per output fixed. It compares `BK=16`, `32`, `64`, and `128`; these use
+768, 1,536, 3,072, and 6,144 bytes of BF16 threadgroup operand storage and
+execute 112, 56, 28, and 14 barriers per dispatch, respectively. Four blocks
+counterbalance BK position while alternating the M sweep direction:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill_bk_sweep.py \
+  --blocks 4 \
+  --experiment-id EXP-XXXX \
+  --run-id EXP-XXXX-RUN-001 \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
+```
+
+Each non-32 BK is paired against BK=32 within the same block and M. This is a
+sensitivity screen: even a qualifying BK requires a later comparison against
+the direct no-staging control and cannot change public dispatch by itself.
+
 ## RMSNorm profiling instrument
 
 Build a standalone, long-running binary outside the repository so Xcode does

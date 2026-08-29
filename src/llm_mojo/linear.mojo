@@ -17,7 +17,7 @@ comptime LINEAR_APPLE_GPU_SIMD_GROUPS = (
 comptime LINEAR_APPLE_GPU_TWO_OUTPUTS_PER_SIMD_GROUP = 2
 comptime LINEAR_PREFILL_TILE_ROWS = 8
 comptime LINEAR_PREFILL_TILE_OUTPUT_FEATURES = 16
-comptime LINEAR_PREFILL_TILE_INPUT_FEATURES = 32
+comptime LINEAR_PREFILL_DEFAULT_TILE_INPUT_FEATURES = 32
 comptime LINEAR_PREFILL_TILE_OUTPUTS = (
     LINEAR_PREFILL_TILE_ROWS * LINEAR_PREFILL_TILE_OUTPUT_FEATURES
 )
@@ -219,6 +219,7 @@ def _linear_prefill_direct_apple_gpu_kernel[
 
 
 def _linear_prefill_tiled_apple_gpu_kernel[
+    tile_input_features: Int,
     InputLayout: TensorLayout,
     WeightLayout: TensorLayout,
     BiasLayout: TensorLayout,
@@ -232,9 +233,10 @@ def _linear_prefill_tiled_apple_gpu_kernel[
     input_features: Int32,
     output_features: Int32,
 ):
-    """Stage 8x32 input and 16x32 weight tiles for one 8x16 output tile."""
+    """Stage 8xBK input and 16xBK weight tiles for one 8x16 output tile."""
 
     comptime assert is_apple_gpu(), "kernel requires an Apple GPU target"
+    comptime assert tile_input_features > 0, "BK must be positive"
     comptime assert input.flat_rank == 2, "input must have rank 2"
     comptime assert weight.flat_rank == 2, "weight must have rank 2"
     comptime assert bias.flat_rank == 1, "bias must have rank 1"
@@ -257,33 +259,29 @@ def _linear_prefill_tiled_apple_gpu_kernel[
     var output_count = Int(output_features)
     var input_tile = stack_allocation[
         DType.bfloat16, address_space=AddressSpace.SHARED
-    ](row_major[LINEAR_PREFILL_TILE_ROWS, LINEAR_PREFILL_TILE_INPUT_FEATURES]())
+    ](row_major[LINEAR_PREFILL_TILE_ROWS, tile_input_features]())
     var weight_tile = stack_allocation[
         DType.bfloat16, address_space=AddressSpace.SHARED
     ](
         row_major[
             LINEAR_PREFILL_TILE_OUTPUT_FEATURES,
-            LINEAR_PREFILL_TILE_INPUT_FEATURES,
+            tile_input_features,
         ]()
     )
     comptime assert input_tile.flat_rank == 2
     comptime assert weight_tile.flat_rank == 2
 
     var accumulator: Scalar[DType.float32] = 0.0
-    var input_tile_values = (
-        LINEAR_PREFILL_TILE_ROWS * LINEAR_PREFILL_TILE_INPUT_FEATURES
-    )
+    var input_tile_values = LINEAR_PREFILL_TILE_ROWS * tile_input_features
     var weight_tile_values = (
-        LINEAR_PREFILL_TILE_OUTPUT_FEATURES * LINEAR_PREFILL_TILE_INPUT_FEATURES
+        LINEAR_PREFILL_TILE_OUTPUT_FEATURES * tile_input_features
     )
     var input_tile_start = 0
     while input_tile_start < input_count:
         var load_index = local_output
         while load_index < input_tile_values:
-            var load_row = load_index // LINEAR_PREFILL_TILE_INPUT_FEATURES
-            var load_input_feature = (
-                load_index % LINEAR_PREFILL_TILE_INPUT_FEATURES
-            )
+            var load_row = load_index // tile_input_features
+            var load_input_feature = load_index % tile_input_features
             var global_row = block_idx.y * LINEAR_PREFILL_TILE_ROWS + load_row
             var global_input_feature = input_tile_start + load_input_feature
             var input_value: Scalar[DType.bfloat16] = 0.0
@@ -298,12 +296,8 @@ def _linear_prefill_tiled_apple_gpu_kernel[
 
         load_index = local_output
         while load_index < weight_tile_values:
-            var load_output_feature = (
-                load_index // LINEAR_PREFILL_TILE_INPUT_FEATURES
-            )
-            var load_input_feature = (
-                load_index % LINEAR_PREFILL_TILE_INPUT_FEATURES
-            )
+            var load_output_feature = load_index // tile_input_features
+            var load_input_feature = load_index % tile_input_features
             var global_output_feature = (
                 block_idx.x * LINEAR_PREFILL_TILE_OUTPUT_FEATURES
                 + load_output_feature
@@ -324,9 +318,7 @@ def _linear_prefill_tiled_apple_gpu_kernel[
 
         barrier()
         if row < row_count and output_feature < output_count:
-            for local_input_feature in range(
-                LINEAR_PREFILL_TILE_INPUT_FEATURES
-            ):
+            for local_input_feature in range(tile_input_features):
                 var input_value = rebind[Scalar[DType.bfloat16]](
                     input_tile[local_row, local_input_feature]
                 )
@@ -338,7 +330,7 @@ def _linear_prefill_tiled_apple_gpu_kernel[
                     * weight_value.cast[DType.float32]()
                 )
         barrier()
-        input_tile_start += LINEAR_PREFILL_TILE_INPUT_FEATURES
+        input_tile_start += tile_input_features
 
     if row < row_count and output_feature < output_count:
         var bias_value = rebind[Scalar[DType.bfloat16]](bias[output_feature])
@@ -508,7 +500,8 @@ def enqueue_linear_prefill_direct_apple_gpu[
     )
 
 
-def enqueue_linear_prefill_tiled_apple_gpu[
+def enqueue_linear_prefill_tiled_apple_gpu_bk[
+    tile_input_features: Int,
     InputLayout: TensorLayout,
     WeightLayout: TensorLayout,
     BiasLayout: TensorLayout,
@@ -520,8 +513,14 @@ def enqueue_linear_prefill_tiled_apple_gpu[
     bias: TileTensor[DType.bfloat16, BiasLayout, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OutputLayout, MutAnyOrigin],
 ) raises:
-    """Enqueue the shared-memory 8x16x32 prefill candidate."""
+    """Enqueue a shared-memory 8x16xBK prefill experiment."""
 
+    comptime assert (
+        tile_input_features == 16
+        or tile_input_features == 32
+        or tile_input_features == 64
+        or tile_input_features == 128
+    ), "BK must be one of 16, 32, 64, or 128"
     comptime assert input.flat_rank == 2, "input must have rank 2"
     comptime assert weight.flat_rank == 2, "weight must have rank 2"
     comptime assert bias.flat_rank == 1, "bias must have rank 1"
@@ -534,7 +533,7 @@ def enqueue_linear_prefill_tiled_apple_gpu[
     var input_features = Int(input.dim[1]())
     var output_features = Int(weight.dim[0]())
     comptime kernel = _linear_prefill_tiled_apple_gpu_kernel[
-        InputLayout, WeightLayout, BiasLayout, OutputLayout
+        tile_input_features, InputLayout, WeightLayout, BiasLayout, OutputLayout
     ]
     context.enqueue_function[kernel](
         input,
@@ -550,6 +549,25 @@ def enqueue_linear_prefill_tiled_apple_gpu[
         ),
         block_dim=LINEAR_APPLE_GPU_BLOCK_SIZE,
     )
+
+
+def enqueue_linear_prefill_tiled_apple_gpu[
+    InputLayout: TensorLayout,
+    WeightLayout: TensorLayout,
+    BiasLayout: TensorLayout,
+    OutputLayout: TensorLayout,
+](
+    context: DeviceContext,
+    input: TileTensor[DType.bfloat16, InputLayout, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WeightLayout, MutAnyOrigin],
+    bias: TileTensor[DType.bfloat16, BiasLayout, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OutputLayout, MutAnyOrigin],
+) raises:
+    """Enqueue the existing shared-memory 8x16x32 prefill candidate."""
+
+    enqueue_linear_prefill_tiled_apple_gpu_bk[
+        LINEAR_PREFILL_DEFAULT_TILE_INPUT_FEATURES
+    ](context, input, weight, bias, output)
 
 
 def enqueue_linear_apple_gpu_two_output[

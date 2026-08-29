@@ -176,6 +176,17 @@ with the shared `BM=8, BN=16, BK=32` candidate in four ABBA blocks. The latter
 isolates the incremental effect of explicit operand staging and barriers; it
 also makes no dispatch decision by itself.
 
+Screen the shared candidate's K-tile sensitivity with:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill_bk_sweep.py
+```
+
+This holds output ownership fixed and compares `BK=16`, `32`, `64`, and `128`
+only on the rotating packed-QKV workloads. The four-block recorded protocol
+counterbalances BK execution position. A result from this screen still needs a
+separate direct-control comparison before it can support an optimization claim.
+
 This is operation-level evidence only; it is not an end-to-end inference
 benchmark. Use the [experimental method](experiments.md) when retaining a run or
 using benchmark and profile evidence to support an optimization.

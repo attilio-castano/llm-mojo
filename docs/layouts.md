@@ -166,6 +166,14 @@ count, so it remains a learning implementation and no dispatch rule selects
 it. That result is specific to this scalar `8x16x32` mapping; it is not a claim
 against other tile sizes or arithmetic mappings.
 
+The follow-up BK sensitivity implementation makes the K tile a compile-time
+parameter while preserving the same `8x16` output ownership and synchronization
+policy. At `K=896`, `BK=16`, `32`, `64`, and `128` require 56, 28, 14, and 7 K
+phases. Their BF16 operand scratch grows linearly from 768 to 6,144 bytes while
+their two-barrier-per-phase count falls from 112 to 14. This defines the
+capacity-versus-phase tradeoff being measured; it does not predict which BK is
+fastest.
+
 ## RoPE V0
 
 Let `R` be the number of contiguous token rows, `N` the number of heads,
