@@ -228,6 +228,32 @@ threshold, not proof of one, because reuse, reductions, accumulator
 independence, scheduling, and generated code also change. Other output widths
 remain unmeasured against rowwise.
 
+EXP-0013 replaces the manual arithmetic inside the same `8x16` output tile
+with Apple's distributed 8x8 matrix operation. One 32-lane SIMD group owns two
+adjacent 8x8 output fragments. Each lane holds two FP32 values from each
+fragment, so it retains the same four output accumulators as register-2x2. At
+each `BK=8` phase, the group collectively loads one 8x8 input fragment and two
+8x8 weight fragments, then issues two matrix multiply-accumulate operations.
+At `K=896` this is 112 phases. The existing `W[N,K]` storage remains unchanged;
+the B fragments are gathered from it in the orientation required by the MMA.
+
+This is register-fragment tiling, not threadgroup-memory staging. It allocates
+no shared operand tile and executes no threadgroup barrier. Values distributed
+across the lanes are consumed collectively by the hardware operation, which
+provides cross-lane operand reuse that the manual per-lane `2x2` arithmetic
+cannot express. For complete tiles, the MMA source requests 81.06% fewer
+logical bytes than register-2x2, but this is not observed hardware traffic.
+
+On the rotating `K=896`, `N=1152` workload, MMA regressed at `M=1` and `M=4`,
+then improved every tested row count from `M=8` through `M=256` by
+33.15%–54.77% in all four blocks. At `M=1`, seven of the eight physical output
+rows are discarded; at `M=4`, half the row fragment is useful; at `M=8`, every
+row becomes useful. The measured crossover is consistent with that utilization
+change, but timing does not isolate utilization from matrix throughput,
+instruction count, scheduling, or cache behavior. This pinned M4 path uses an
+architecture-internal MAX 26.5 API, and it remains experimental until other
+model output widths are measured.
+
 ## RoPE V0
 
 Let `R` be the number of contiguous token rows, `N` the number of heads,

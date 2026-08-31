@@ -1,6 +1,7 @@
 """BF16 affine linear projection reference and Apple GPU implementations."""
 
 from layout import TensorLayout, TileTensor, row_major, stack_allocation
+from max.gpu.compute.arch.mma_apple import _mma_apple_8x8
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -31,6 +32,8 @@ comptime LINEAR_PREFILL_REGISTER_TILE_THREADS = (
     LINEAR_PREFILL_TILE_OUTPUTS
     // LINEAR_PREFILL_REGISTER_TILE_OUTPUTS_PER_THREAD
 )
+comptime LINEAR_PREFILL_MMA_DIM = 8
+comptime LINEAR_PREFILL_MMA_FRAGMENT_ELEMENTS = 2
 
 
 def _validate_linear[
@@ -372,6 +375,138 @@ def _linear_prefill_register_2x2_apple_gpu_kernel[
                 ](second_second_result)
 
 
+def _linear_prefill_mma_8x16_apple_gpu_kernel[
+    InputLayout: TensorLayout,
+    WeightLayout: TensorLayout,
+    BiasLayout: TensorLayout,
+    OutputLayout: TensorLayout,
+](
+    input: TileTensor[DType.bfloat16, InputLayout, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WeightLayout, MutAnyOrigin],
+    bias: TileTensor[DType.bfloat16, BiasLayout, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OutputLayout, MutAnyOrigin],
+    rows: Int32,
+    input_features: Int32,
+    output_features: Int32,
+):
+    """Map one 8x16 output tile to one Apple 8x8 MMA SIMD group."""
+
+    comptime assert is_apple_gpu(), "kernel requires an Apple GPU target"
+    comptime assert input.flat_rank == 2, "input must have rank 2"
+    comptime assert weight.flat_rank == 2, "weight must have rank 2"
+    comptime assert bias.flat_rank == 1, "bias must have rank 1"
+    comptime assert output.flat_rank == 2, "output must have rank 2"
+    comptime assert (
+        LINEAR_PREFILL_TILE_ROWS == LINEAR_PREFILL_MMA_DIM
+    ), "BM must equal the 8x8 MMA row dimension"
+    comptime assert (
+        LINEAR_PREFILL_TILE_OUTPUT_FEATURES == 2 * LINEAR_PREFILL_MMA_DIM
+    ), "BN must contain two adjacent 8x8 MMA tiles"
+    comptime assert (
+        WARP_SIZE * LINEAR_PREFILL_MMA_FRAGMENT_ELEMENTS
+        == LINEAR_PREFILL_MMA_DIM * LINEAR_PREFILL_MMA_DIM
+    ), "one SIMD group must collectively own each 8x8 fragment"
+
+    var lane = Int(lane_id())
+    # Apple distributes each 8x8 fragment as two adjacent columns in one row
+    # per lane. This matches apple_mma_load_8x8/thread_elements().
+    var fragment_row = ((lane & 6) >> 1) + ((lane & 16) >> 2)
+    var fragment_column = ((lane & 1) << 1) + ((lane & 8) >> 1)
+    var row = block_idx.y * LINEAR_PREFILL_TILE_ROWS + fragment_row
+    var first_output = (
+        block_idx.x * LINEAR_PREFILL_TILE_OUTPUT_FEATURES + fragment_column
+    )
+    var second_output = first_output + LINEAR_PREFILL_MMA_DIM
+    var row_count = Int(rows)
+    var input_count = Int(input_features)
+    var output_count = Int(output_features)
+    var first_accumulator = SIMD[
+        DType.float32, LINEAR_PREFILL_MMA_FRAGMENT_ELEMENTS
+    ](0)
+    var second_accumulator = SIMD[
+        DType.float32, LINEAR_PREFILL_MMA_FRAGMENT_ELEMENTS
+    ](0)
+
+    var input_tile_start = 0
+    while input_tile_start < input_count:
+        var input_fragment = SIMD[
+            DType.bfloat16, LINEAR_PREFILL_MMA_FRAGMENT_ELEMENTS
+        ](0)
+        var first_weight_fragment = SIMD[
+            DType.bfloat16, LINEAR_PREFILL_MMA_FRAGMENT_ELEMENTS
+        ](0)
+        var second_weight_fragment = SIMD[
+            DType.bfloat16, LINEAR_PREFILL_MMA_FRAGMENT_ELEMENTS
+        ](0)
+
+        comptime for element in range(LINEAR_PREFILL_MMA_FRAGMENT_ELEMENTS):
+            var input_feature = input_tile_start + fragment_column + element
+            if row < row_count and input_feature < input_count:
+                input_fragment[element] = rebind[Scalar[DType.bfloat16]](
+                    input[row, input_feature]
+                )
+
+            var weight_input_feature = input_tile_start + fragment_row
+            var first_weight_output = first_output + element
+            if (
+                weight_input_feature < input_count
+                and first_weight_output < output_count
+            ):
+                first_weight_fragment[element] = rebind[Scalar[DType.bfloat16]](
+                    weight[first_weight_output, weight_input_feature]
+                )
+
+            var second_weight_output = second_output + element
+            if (
+                weight_input_feature < input_count
+                and second_weight_output < output_count
+            ):
+                second_weight_fragment[element] = rebind[
+                    Scalar[DType.bfloat16]
+                ](weight[second_weight_output, weight_input_feature])
+
+        var previous_first = first_accumulator
+        var previous_second = second_accumulator
+        _mma_apple_8x8(
+            first_accumulator,
+            input_fragment,
+            first_weight_fragment,
+            previous_first,
+        )
+        _mma_apple_8x8(
+            second_accumulator,
+            input_fragment,
+            second_weight_fragment,
+            previous_second,
+        )
+        input_tile_start += LINEAR_PREFILL_MMA_DIM
+
+    comptime for element in range(LINEAR_PREFILL_MMA_FRAGMENT_ELEMENTS):
+        var first_output_feature = first_output + element
+        if row < row_count and first_output_feature < output_count:
+            var first_bias = rebind[Scalar[DType.bfloat16]](
+                bias[first_output_feature]
+            ).cast[DType.float32]()
+            var first_result = (first_accumulator[element] + first_bias).cast[
+                DType.bfloat16
+            ]()
+            output[row, first_output_feature] = rebind[output.ElementType](
+                first_result
+            )
+
+        var second_output_feature = second_output + element
+        if row < row_count and second_output_feature < output_count:
+            var second_bias = rebind[Scalar[DType.bfloat16]](
+                bias[second_output_feature]
+            ).cast[DType.float32]()
+            var second_result = (
+                second_accumulator[element] + second_bias
+            ).cast[DType.bfloat16]()
+            output[row, second_output_feature] = rebind[output.ElementType](
+                second_result
+            )
+
+
 def _linear_prefill_tiled_apple_gpu_kernel[
     tile_input_features: Int,
     InputLayout: TensorLayout,
@@ -695,6 +830,50 @@ def enqueue_linear_prefill_register_2x2_apple_gpu[
             ceildiv(rows, LINEAR_PREFILL_TILE_ROWS),
         ),
         block_dim=LINEAR_PREFILL_REGISTER_TILE_THREADS,
+    )
+
+
+def enqueue_linear_prefill_mma_8x16_apple_gpu[
+    InputLayout: TensorLayout,
+    WeightLayout: TensorLayout,
+    BiasLayout: TensorLayout,
+    OutputLayout: TensorLayout,
+](
+    context: DeviceContext,
+    input: TileTensor[DType.bfloat16, InputLayout, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WeightLayout, MutAnyOrigin],
+    bias: TileTensor[DType.bfloat16, BiasLayout, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OutputLayout, MutAnyOrigin],
+) raises:
+    """Enqueue the experimental Apple 8x8-MMA 8x16 linear mapping."""
+
+    comptime assert input.flat_rank == 2, "input must have rank 2"
+    comptime assert weight.flat_rank == 2, "weight must have rank 2"
+    comptime assert bias.flat_rank == 1, "bias must have rank 1"
+    comptime assert output.flat_rank == 2, "output must have rank 2"
+    _validate_linear(input, weight, bias, output)
+    if context.api() != "metal":
+        raise Error("Apple GPU linear projection requires the Metal device API")
+
+    var rows = Int(input.dim[0]())
+    var input_features = Int(input.dim[1]())
+    var output_features = Int(weight.dim[0]())
+    comptime kernel = _linear_prefill_mma_8x16_apple_gpu_kernel[
+        InputLayout, WeightLayout, BiasLayout, OutputLayout
+    ]
+    context.enqueue_function[kernel](
+        input,
+        weight,
+        bias,
+        output,
+        Int32(rows),
+        Int32(input_features),
+        Int32(output_features),
+        grid_dim=(
+            ceildiv(output_features, LINEAR_PREFILL_TILE_OUTPUT_FEATURES),
+            ceildiv(rows, LINEAR_PREFILL_TILE_ROWS),
+        ),
+        block_dim=WARP_SIZE,
     )
 
 

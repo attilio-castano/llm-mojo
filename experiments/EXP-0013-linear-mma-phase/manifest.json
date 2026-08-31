@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "experiment_id": "EXP-0013",
+  "slug": "linear-mma-phase",
+  "title": "Apple 8x8 simdgroup MMA for decode and prefill linear projection",
+  "created_date": "2026-08-31",
+  "status": "complete",
+  "evidence_level": "operation",
+  "question": "Does an ownership-matched Apple 8x8 simdgroup-MMA kernel beat the strongest previously measured linear mapping for batch-1 decode and across the measured prefill row range?",
+  "experiment_type": "paired_phase_control_hardware_matrix_comparison",
+  "hypothesis": "The MMA candidate should lose at M=1 because seven of eight hardware output rows are discarded, but should improve sufficiently large prefill once all rows are useful and the grid exposes enough independent 8x16 tiles. M=8 is deliberately unresolved because the diagnostic passes changed direction with order.",
+  "controls": {
+    "small_m": {
+      "rows": [1, 4, 8],
+      "implementation_id": "apple_gpu_one_output_simdgroup_v0",
+      "entrypoint": "llm_mojo.linear.enqueue_linear_apple_gpu",
+      "reason": "EXP-0012 established rowwise as the strongest measured mapping through M=8.",
+      "ownership": "One SIMD group owns one scalar output; its 32 lanes partition K=896 and reduce one FP32 partial accumulator per lane.",
+      "threads_per_threadgroup": 128,
+      "simd_groups_per_threadgroup": 4,
+      "outputs_per_simd_group": 1,
+      "fp32_accumulators_per_thread": 1,
+      "simd_group_reductions_per_output": 1
+    },
+    "large_m": {
+      "rows": [16, 32, 64, 128, 256],
+      "implementation_id": "apple_gpu_prefill_register_2x2_8x16_v0",
+      "entrypoint": "llm_mojo.linear.enqueue_linear_prefill_register_2x2_apple_gpu",
+      "reason": "EXP-0012 established register-2x2 as the strongest measured mapping from M=16 through M=256.",
+      "ownership": "One SIMD group owns one 8x16 output tile; each lane owns a 2x2 microtile, walks all K=896 values, and retains four FP32 accumulators.",
+      "threads_per_threadgroup": 32,
+      "simd_groups_per_threadgroup": 1,
+      "outputs_per_simd_group": 128,
+      "fp32_accumulators_per_thread": 4,
+      "simd_group_reductions_per_output": 0
+    }
+  },
+  "candidate": {
+    "implementation_id": "apple_gpu_prefill_mma_8x16_v0",
+    "entrypoint": "llm_mojo.linear.enqueue_linear_prefill_mma_8x16_apple_gpu",
+    "api": "max.gpu.compute.arch.mma_apple._mma_apple_8x8",
+    "api_stability": "architecture-internal in MAX 26.5.0; pinned-toolchain experiment only",
+    "hardware_scope": "Apple M1-M5 8x8 simdgroup_matrix float MMA; this is distinct from the M5-only 16x16 neural-accelerator path",
+    "output_tile": {
+      "BM": 8,
+      "BN": 16
+    },
+    "mma_tile": {
+      "M": 8,
+      "N": 8,
+      "K": 8
+    },
+    "ownership": "One 32-lane SIMD group owns one 8x16 output tile formed by two adjacent 8x8 output fragments. Each lane holds two FP32 values from each fragment, for four accumulators total.",
+    "k_phases_at_k896": 112,
+    "mma_operations_per_k_phase": 2,
+    "threads_per_threadgroup": 32,
+    "simd_groups_per_threadgroup": 1,
+    "outputs_per_simd_group": 128,
+    "outputs_per_thread": 4,
+    "fp32_accumulators_per_thread": 4,
+    "simd_group_reductions_per_output": 0,
+    "threadgroup_operand_scratch_bytes": 0,
+    "threadgroup_barriers_per_dispatch": 0,
+    "weight_load": "Gather the logical B[K,N] fragment from the existing row-major W[N,K] storage; no weight packing or transpose buffer."
+  },
+  "changed_mechanism": "The candidate replaces scalar BF16-to-FP32 multiply-accumulate instructions with a collective Apple 8x8 simdgroup matrix intrinsic. Against register-2x2 it preserves BM=8, BN=16, one SIMD group, four accumulators per lane, zero shared memory, and zero barriers; fragment ownership, K stepping, operand requests, and generated instructions change.",
+  "unchanged": [
+    "Y[M,N] = X[M,K] x W[N,K]^T + B[N]",
+    "BF16 input, weight, bias, and output with FP32 accumulation and one final BF16 cast",
+    "row-major X[M,K], W[N,K], and Y[M,N] layouts",
+    "zero threadgroup operand scratch and zero threadgroup barriers",
+    "one enqueue per layer and one completion boundary per measured workload",
+    "K=896, N=1152, and 24 distinct rotating weight allocations",
+    "M values 1, 4, 8, 16, 32, 64, 128, and 256",
+    "no weight packing, quantization, shared K staging, M5 neural accelerator, or public dispatch change"
+  ],
+  "correctness": {
+    "authority": "tests/test_linear.mojo plus each timed specialization's untimed exact-unit-output gate",
+    "required_cases": [
+      "Committed torch.nn.Linear short-prefill oracle",
+      "Exact M=8 K=32 N=16 output tile",
+      "Ragged M=9 K=129 N=17 M/N/K tails",
+      "Qwen-width M=8 K=896 N=128",
+      "Batch-1 M=1 K=896 N=128",
+      "Exact BF16 unit output at K=896 and N=1152 before timing every benchmark specialization",
+      "Existing rowwise, direct, register-2x2, and shared-staging tests remain passing"
+    ]
+  },
+  "workload_matrix": {
+    "rows": [1, 4, 8, 16, 32, 64, 128, 256],
+    "input_features": 896,
+    "output_features": 1152,
+    "layers": 24,
+    "weights": "24 distinct allocations rotated once per measured workload iteration",
+    "semantic_roles": {
+      "M=1": "batch-1 decode",
+      "M=4..256": "packed-QKV prefill row-count sweep"
+    },
+    "workloads": 8
+  },
+  "measurement_protocol": {
+    "benchmark": "benchmarks/linear_mma_diagnostic.mojo",
+    "runner": "benchmarks/run_linear_mma_phase.py",
+    "decisive_command": "uv run --locked python benchmarks/run_linear_mma_phase.py --blocks 4 --experiment-id EXP-0013 --run-id EXP-0013-RUN-001 --recorded --output-dir <absolute-external-path>/EXP-0013-RUN-001",
+    "primary_metric": "synchronized_device_execution_ms_per_24_layer_workload_iteration",
+    "blocks": [
+      "ascending M; phase control then MMA",
+      "descending M; MMA then phase control",
+      "descending M; MMA then phase control",
+      "ascending M; phase control then MMA"
+    ],
+    "num_warmup_iters": 10,
+    "max_iters": 20,
+    "num_repetitions": 10,
+    "expected_samples_per_candidate_per_workload": 40,
+    "expected_samples_per_phase_control_per_workload": 40,
+    "expected_total_samples": 640,
+    "paired_statistic": "Within each block and M, MMA median divided by that M's preregistered phase-control median; summarize the four ratios with their median and retain every ratio.",
+    "environment": "Clean immutable commit, AC power, no reported thermal or performance warning, Apple GPU plus Metal runtime identity, and MODULAR_DEBUG unset."
+  },
+  "classification_rule": {
+    "material_improvement": "Median paired ratio <= 0.95 and MMA faster in at least three of four blocks.",
+    "material_regression": "Median paired ratio >= 1.05 and MMA slower in at least three of four blocks.",
+    "otherwise": "Inconclusive."
+  },
+  "decision_rule": {
+    "large_prefill_advance": "Advance MMA as the large-prefill candidate only if it materially improves M=64, 128, and 256 against register-2x2.",
+    "large_prefill_reject": "Reject this 8x16 MMA mapping for large prefill if it materially regresses M=64, 128, and 256.",
+    "decode": "Reject MMA for batch-1 decode if M=1 materially regresses against rowwise; an improvement would require a dedicated decode follow-up before any dispatch claim.",
+    "crossover": "Report the smallest tested candidate M in 8, 16, 32, and 64 from which no larger measured M materially regresses; separately report the threshold from which every larger measured M materially improves.",
+    "otherwise": "Make no advance or production change; retain the result as mixed or inconclusive.",
+    "production_decision": "None. Phase controls change at the previously measured M=16 boundary, and N=128/N=896 plus model composition remain unmeasured."
+  },
+  "diagnostic_gate": {
+    "status": "passed_for_formal_measurement",
+    "runs": "Two unrecorded five-repetition passes with reversed row and implementation order.",
+    "finding": "MMA improved M=16 by approximately 43% and M=64 by approximately 52% in both orders. M=1 lost, while M=8 changed direction with order.",
+    "claim_limit": "This gate selected the formal experiment; it is not retained performance evidence."
+  },
+  "generated_code_validation": {
+    "command": "uv run --locked mojo build -I src --emit asm -o <absolute-external-path>/linear-mma-phase.s benchmarks/linear_mma_diagnostic.mojo",
+    "measurement_commit": "5aabd4036140895cbf026e21157dadf5685851c2",
+    "compiled_mma_specializations_referencing_intrinsic": 8,
+    "intrinsic": "air.simdgroup_matrix_8x8_multiply_accumulate",
+    "workgroup_barrier_intrinsic_occurrences": 0,
+    "boundary": "This validates compiled structure for the eight benchmark specializations; it does not measure MMA throughput, occupancy, stalls, cache behavior, or traffic."
+  },
+  "nonclaims": [
+    "The comparison does not isolate MMA throughput, register pressure, occupancy, cache behavior, gather cost, instruction scheduling, or compiler output individually.",
+    "Requested traffic is source-derived and is not observed hardware cache, fabric, or DRAM traffic.",
+    "The M4 8x8 simdgroup primitive is not the M5 neural accelerator and does not establish M5 performance.",
+    "A result using an architecture-internal MAX API is not a stable public API commitment.",
+    "A crossover at N=1152 does not by itself establish a production dispatch threshold for N=128, N=896, a decoder block, or a full model."
+  ],
+  "implementation_commit": "53d6786",
+  "diagnostic_commit": "d4d7f3a",
+  "measurement_commit": "5aabd4036140895cbf026e21157dadf5685851c2",
+  "runs": [
+    {
+      "run_id": "EXP-0013-RUN-001",
+      "recorded": true,
+      "started_utc": "2026-08-31T14:56:05.776374+00:00",
+      "ended_utc": "2026-08-31T14:57:22.738767+00:00",
+      "sample_count": 640,
+      "runtime": "Apple M4 Pro via Metal",
+      "repository_clean": true,
+      "retained_summary": "comparison-run.json",
+      "external_artifact_directory": "/tmp/llm-mojo-exp-0013-mma-phase-run-001"
+    }
+  ],
+  "decision": {
+    "timing": "advance_mma_as_large_prefill_candidate",
+    "decode": "reject_mma_for_batch_1_decode",
+    "production_dispatch": "none",
+    "finding": "MMA materially regressed M=1 by 79.84% and M=4 by 20.41%, then materially improved every tested M from 8 through 256 by 33.15% to 54.77%, with unanimous direction in all four blocks.",
+    "crossover": "Both preregistered crossover definitions selected M=8 for the measured K=896, N=1152 rotating workload.",
+    "scope": "Advance as the packed-QKV prefill candidate only; retain rowwise for batch-1 decode and make no public selector claim for unmeasured projection widths.",
+    "next_experiment": "Compare rowwise, manual register-2x2, and MMA at N=128, N=896, and N=1152 with rows concentrated around the M=4-to-M=8 boundary before changing public dispatch."
+  }
+}
