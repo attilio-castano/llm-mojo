@@ -187,6 +187,170 @@ declared warmup and profile dispatch counts; the receipt remains the authority
 that the exact-output correctness gate completed. Any earlier captured
 projection compute commands are reported as an unclassified prelude.
 
+## Prefill projection timing instrument
+
+The prefill projection benchmark characterizes the existing rowwise Apple GPU
+kernel before introducing a tiled candidate. It measures `M` values 1, 4, 8,
+16, 32, 64, 128, and 256 at `K=896`. Each row count covers hot `N=128`,
+`N=896`, and packed-QKV `N=1152` projections plus a 24-layer rotating
+packed-QKV cache-pressure proxy. This is an operation-level shape sweep, not an
+end-to-end prompt benchmark.
+
+Allocation, deterministic initialization, compilation, and the exact BF16
+correctness gate remain outside timing. Samples include synchronized workload
+latency, latency per layer, rows per second, effective FLOP/s, and
+source-derived requested-byte throughput. The byte rate is not observed cache,
+fabric, or DRAM traffic.
+
+Run one exploratory ascending block:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill.py
+```
+
+Use four alternating-order blocks for a retained baseline outside the
+repository:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill.py \
+  --blocks 4 \
+  --experiment-id EXP-XXXX \
+  --run-id EXP-XXXX-RUN-001 \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
+```
+
+The direct-control comparison holds an `8x16` output-tile ownership mapping
+constant for the later shared-memory experiment, but streams every operand
+directly from device memory. It is an attribution control rather than a
+production candidate, so its timing summary makes no dispatch decision. The
+four-block mode uses ABBA implementation order and the same 5% plus
+three-of-four classification rule for every shape:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill.py \
+  --blocks 4 \
+  --experiment-id EXP-XXXX \
+  --run-id EXP-XXXX-RUN-001 \
+  --direct-comparison \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
+```
+
+The tiled comparison then holds output ownership constant: its baseline is the
+direct `8x16` control, while its candidate cooperatively stages `8x32` input
+and `16x32` weight tiles in 1,536 bytes of BF16 threadgroup memory. At
+`K=896`, the candidate executes 28 K phases and 56 block barriers per dispatch.
+The runner records those source-level quantities and computes separate
+requested-traffic accounting for the tiled implementation; neither quantity
+is an observed hardware counter. Run the same four-block ABBA protocol with:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill.py \
+  --blocks 4 \
+  --experiment-id EXP-XXXX \
+  --run-id EXP-XXXX-RUN-001 \
+  --tiled-comparison \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
+```
+
+This comparison isolates explicit shared staging from the already-measured
+ownership change. Its summary classifies timing direction but deliberately
+makes no public dispatch decision.
+
+The BK sensitivity instrument narrows the matrix to the 24-layer rotating
+`K=896`, `N=1152` workload and holds `BM=8`, `BN=16`, 128 threads, and one
+thread per output fixed. It compares `BK=16`, `32`, `64`, and `128`; these use
+768, 1,536, 3,072, and 6,144 bytes of BF16 threadgroup operand storage and
+execute 112, 56, 28, and 14 barriers per dispatch, respectively. Four blocks
+counterbalance BK position while alternating the M sweep direction:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill_bk_sweep.py \
+  --blocks 4 \
+  --experiment-id EXP-XXXX \
+  --run-id EXP-XXXX-RUN-001 \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
+```
+
+Each non-32 BK is paired against BK=32 within the same block and M. This is a
+sensitivity screen: even a qualifying BK requires a later comparison against
+the direct no-staging control and cannot change public dispatch by itself.
+
+[EXP-0009](../experiments/EXP-0009-linear-prefill-bk-sweep/report.md) found
+that BK16 materially improved every rotating workload against BK32, while BK64
+and BK128 were inconclusive. BK16 advances only to the required direct-control
+comparison; the result does not select a public path.
+
+The follow-up direct-control mode holds that BK16 kernel's `8x16` output
+ownership fixed and removes only the shared-staging mechanism in its control.
+It runs the same eight rotating workloads in four ABBA blocks:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill_bk16_direct.py \
+  --blocks 4 \
+  --experiment-id EXP-XXXX \
+  --run-id EXP-XXXX-RUN-001 \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
+```
+
+BK16 uses 768 bytes of operand scratch and 112 barriers per dispatch; direct
+uses neither. [EXP-0010](../experiments/EXP-0010-linear-prefill-bk16-direct/report.md)
+found that BK16 materially regressed every tested M by 24.54%–33.88% and was
+slower in all four blocks for every row count. It failed all three large-M
+decision rows, so BK tuning ends for this scalar one-output-per-thread mapping;
+there is no final public-rowwise comparison or dispatch change.
+
+The next ownership experiment keeps the same direct full-K `8x16` output tile
+but replaces 128 scalar owners with one 32-lane SIMD group. Each lane owns a
+`2x2` output microtile, holds four FP32 accumulators, and reuses two X and two W
+values across four products without shared memory or barriers:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill_register_2x2.py \
+  --blocks 4 \
+  --experiment-id EXP-XXXX \
+  --run-id EXP-XXXX-RUN-001 \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
+```
+
+This is a manual arithmetic-ownership comparison, not an Apple matrix-operation
+benchmark. [EXP-0011](../experiments/EXP-0011-linear-prefill-register-2x2/report.md)
+found a 122.73% regression at `M=1`, inconclusive results at `M=4` and `M=8`,
+and repeatable 42.69%–62.19% improvements from `M=16` through `M=256`. It
+qualifies for a paired public-rowwise comparison but cannot change dispatch by
+itself.
+
+That final manual-kernel gate compares the frozen `2x2` mapping directly with
+the public rowwise kernel on the same eight rotating packed-QKV workloads. The
+rowwise control assigns one scalar output to a SIMD group and partitions
+`K=896` into 28 values per lane before one SIMD-group sum. The candidate assigns
+an `8x16` output tile to one SIMD group, gives each lane a `2x2` microtile, and
+makes every lane walk all K without a cross-lane reduction:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill_register_rowwise.py \
+  --blocks 4 \
+  --experiment-id EXP-0012 \
+  --run-id EXP-0012-RUN-001 \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-0012-RUN-001
+```
+
+The four-block protocol requires material improvements at `M=64`, `M=128`,
+and `M=256` to advance the manual candidate. It also reports the smallest
+tested M after which no larger measurement materially regresses, but that
+bounded crossover is evidence for a later dispatch experiment rather than a
+dispatch rule. [EXP-0012](../experiments/EXP-0012-linear-prefill-register-rowwise/report.md)
+found material regressions through `M=8`, followed by repeatable
+35.92%–67.98% improvements from `M=16` through `M=256`. The measured
+packed-QKV crossover is `M=16`; it does not yet establish the same threshold
+for the model's `N=128` or `N=896` projections.
+
 ## RMSNorm profiling instrument
 
 Build a standalone, long-running binary outside the repository so Xcode does

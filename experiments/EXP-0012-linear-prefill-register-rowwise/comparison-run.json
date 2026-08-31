@@ -1,0 +1,279 @@
+{
+  "schema_version": 1,
+  "experiment_id": "EXP-0012",
+  "run_id": "EXP-0012-RUN-001",
+  "implementation_commit": "b83bc06bea476e2a94ae1ec2e0862eb8e589b76f",
+  "measurement_commit": "b83bc06bea476e2a94ae1ec2e0862eb8e589b76f",
+  "started_utc": "2026-08-31T12:46:32.162495+00:00",
+  "ended_utc": "2026-08-31T12:49:15.431331+00:00",
+  "environment": {
+    "machine": "Mac16,7",
+    "chip": "Apple M4 Pro",
+    "runtime_api": "metal",
+    "runtime_target": "metal:4-metal4",
+    "physical_memory_bytes": 25769803776,
+    "mojo": "1.0.0",
+    "max": "26.5.0",
+    "macos": "26.6.2 (25G83)",
+    "xcode": "Xcode 26.6 Build version 17F113",
+    "power_source_at_all_gates": "AC Power",
+    "thermal_warning_at_all_gates": false
+  },
+  "external_artifacts": {
+    "directory": "/tmp/llm-mojo-exp-0012-register-rowwise-run-001",
+    "metadata": {
+      "bytes": 11716,
+      "sha256": "5516f6e7773ffc08ddaa95bfebfdc9d34e35d55ffe650412b062d846282ffb85"
+    },
+    "samples": {
+      "bytes": 865632,
+      "sha256": "630ad38a4e021cd5b08252afcc8e9816815a360ddc721beb6807a19d6fbcf239"
+    },
+    "summary": {
+      "bytes": 22020,
+      "sha256": "971342ce1040a3c115c76242e2b189419b7d142f9ba0e14508808f5aa67a314a"
+    }
+  },
+  "sample_audit": {
+    "block_order": [
+      "ascending",
+      "descending",
+      "descending",
+      "ascending"
+    ],
+    "implementation_order": [
+      "rowwise_then_register_2x2",
+      "register_2x2_then_rowwise",
+      "register_2x2_then_rowwise",
+      "rowwise_then_register_2x2"
+    ],
+    "workloads": 8,
+    "implementations": 2,
+    "blocks": 4,
+    "samples_per_implementation_per_workload_per_block": 10,
+    "samples_per_implementation_per_workload": 40,
+    "total_samples": 640,
+    "internal_iterations_per_sample": 20,
+    "repository_clean_and_fixed": true,
+    "runtime_identity_proved_in_every_block": true,
+    "all_samples_finite_positive_and_valid": true,
+    "all_sample_ids_unique": true,
+    "result": "passed"
+  },
+  "correctness_validation": {
+    "linear_command": "uv run --locked mojo run -I src -I tests tests/test_linear.mojo",
+    "linear_result": "27 passed",
+    "public_rowwise_cases": "Existing tiny oracle, short-prefill oracle, Qwen query decode, KV incremental, and packed-QKV cases passed",
+    "candidate_exact_tile_case": "M=8 K=32 N=16",
+    "candidate_tail_case": "M=9 K=129 N=17",
+    "candidate_qwen_width_case": "M=8 K=896 N=128",
+    "benchmark_exact_output_gate": "Both public-rowwise and 2x2-register implementations passed exact BF16 unit-output checks at every compiled benchmark specialization",
+    "python_protocol_result": "75 passed",
+    "other_mojo_results": "import 1 passed; RMSNorm 7 passed; RoPE 9 passed",
+    "benchmark_builds": "rowwise-first, 2x2-register-first, legacy register-direct, and legacy four-BK modes passed"
+  },
+  "mechanism": {
+    "fixed": "K=896, N=1152, BF16 storage, FP32 accumulation, rotating 24-layer weights, zero threadgroup operand scratch, and zero threadgroup barriers",
+    "public_rowwise": {
+      "threads_per_threadgroup": 128,
+      "simd_groups_per_threadgroup": 4,
+      "outputs_per_simd_group": 1,
+      "k_elements_per_lane": 28,
+      "fp32_accumulators_per_thread": 1,
+      "simd_group_reductions_per_output": 1
+    },
+    "register_2x2": {
+      "output_tile_rows": 8,
+      "output_tile_features": 16,
+      "threads_per_threadgroup": 32,
+      "simd_groups_per_threadgroup": 1,
+      "outputs_per_simd_group": 128,
+      "outputs_per_thread": 4,
+      "k_elements_per_lane": 896,
+      "fp32_accumulators_per_thread": 4,
+      "simd_group_reductions_per_output": 0,
+      "register_tile_rows": 2,
+      "register_tile_output_features": 2
+    }
+  },
+  "source_requested_traffic": [
+    {
+      "rows": 1,
+      "rowwise_bytes_per_24_layer_iteration": 99201024,
+      "register_2x2_bytes_per_24_layer_iteration": 74428416,
+      "register_2x2_source_requested_reduction_percent": 24.972129319955407
+    },
+    {
+      "rows": 4,
+      "rowwise_bytes_per_24_layer_iteration": 396804096,
+      "register_2x2_bytes_per_24_layer_iteration": 198512640,
+      "register_2x2_source_requested_reduction_percent": 49.97212931995541
+    },
+    {
+      "rows": 8,
+      "rowwise_bytes_per_24_layer_iteration": 793608192,
+      "register_2x2_bytes_per_24_layer_iteration": 397025280,
+      "register_2x2_source_requested_reduction_percent": 49.97212931995541
+    },
+    {
+      "rows": 16,
+      "rowwise_bytes_per_24_layer_iteration": 1587216384,
+      "register_2x2_bytes_per_24_layer_iteration": 794050560,
+      "register_2x2_source_requested_reduction_percent": 49.97212931995541
+    },
+    {
+      "rows": 32,
+      "rowwise_bytes_per_24_layer_iteration": 3174432768,
+      "register_2x2_bytes_per_24_layer_iteration": 1588101120,
+      "register_2x2_source_requested_reduction_percent": 49.97212931995541
+    },
+    {
+      "rows": 64,
+      "rowwise_bytes_per_24_layer_iteration": 6348865536,
+      "register_2x2_bytes_per_24_layer_iteration": 3176202240,
+      "register_2x2_source_requested_reduction_percent": 49.97212931995541
+    },
+    {
+      "rows": 128,
+      "rowwise_bytes_per_24_layer_iteration": 12697731072,
+      "register_2x2_bytes_per_24_layer_iteration": 6352404480,
+      "register_2x2_source_requested_reduction_percent": 49.97212931995541
+    },
+    {
+      "rows": 256,
+      "rowwise_bytes_per_24_layer_iteration": 25395462144,
+      "register_2x2_bytes_per_24_layer_iteration": 12704808960,
+      "register_2x2_source_requested_reduction_percent": 49.97212931995541
+    }
+  ],
+  "source_accounting_note": "Source-derived logical loads and stores; not observed hardware cache, fabric, or DRAM traffic.",
+  "implementation_medians": [
+    {
+      "implementation_id": "apple_gpu_one_output_simdgroup_v0",
+      "kind": "rowwise",
+      "workloads": [
+        {"rows": 1, "median_ms_per_24_layer_workload_iteration": 0.443223975},
+        {"rows": 4, "median_ms_per_24_layer_workload_iteration": 0.633033325},
+        {"rows": 8, "median_ms_per_24_layer_workload_iteration": 1.15867605},
+        {"rows": 16, "median_ms_per_24_layer_workload_iteration": 2.2502781499999998},
+        {"rows": 32, "median_ms_per_24_layer_workload_iteration": 4.532747925},
+        {"rows": 64, "median_ms_per_24_layer_workload_iteration": 9.443645825},
+        {"rows": 128, "median_ms_per_24_layer_workload_iteration": 19.608311475},
+        {"rows": 256, "median_ms_per_24_layer_workload_iteration": 40.604680225}
+      ]
+    },
+    {
+      "implementation_id": "apple_gpu_prefill_register_2x2_8x16_v0",
+      "kind": "register_2x2",
+      "workloads": [
+        {"rows": 1, "median_ms_per_24_layer_workload_iteration": 3.081277075},
+        {"rows": 4, "median_ms_per_24_layer_workload_iteration": 1.414595825},
+        {"rows": 8, "median_ms_per_24_layer_workload_iteration": 1.4153093499999998},
+        {"rows": 16, "median_ms_per_24_layer_workload_iteration": 1.438162475},
+        {"rows": 32, "median_ms_per_24_layer_workload_iteration": 1.7743802},
+        {"rows": 64, "median_ms_per_24_layer_workload_iteration": 3.5212270749999997},
+        {"rows": 128, "median_ms_per_24_layer_workload_iteration": 6.56838125},
+        {"rows": 256, "median_ms_per_24_layer_workload_iteration": 12.980955224999999}
+      ]
+    }
+  ],
+  "classification_rule": {
+    "material_improvement_ratio": 0.95,
+    "material_regression_ratio": 1.05,
+    "required_direction_blocks": 3
+  },
+  "paired_comparison": {
+    "ratio_definition": "2x2-register block median / public-rowwise block median",
+    "workloads": [
+      {
+        "rows": 1,
+        "workload": "m1-k896-n1152-layers24",
+        "median_register_2x2_to_rowwise_ratio": 6.97851256751121,
+        "median_change_percent": 597.851256751121,
+        "register_2x2_faster_blocks": 0,
+        "classification": "material_regression",
+        "block_ratios": [6.224195552006911, 7.7328295830155085, 7.882793230863592, 6.024438946538091]
+      },
+      {
+        "rows": 4,
+        "workload": "m4-k896-n1152-layers24",
+        "median_register_2x2_to_rowwise_ratio": 2.2325442653852203,
+        "median_change_percent": 123.25442653852204,
+        "register_2x2_faster_blocks": 0,
+        "classification": "material_regression",
+        "block_ratios": [2.248068713836679, 2.1596546871326474, 2.233619835199787, 2.231468695570654]
+      },
+      {
+        "rows": 8,
+        "workload": "m8-k896-n1152-layers24",
+        "median_register_2x2_to_rowwise_ratio": 1.2203086869611361,
+        "median_change_percent": 22.030868696113615,
+        "register_2x2_faster_blocks": 0,
+        "classification": "material_regression",
+        "block_ratios": [1.2185072576767675, 1.20997281933046, 1.2221101162455048, 1.2274929217704984]
+      },
+      {
+        "rows": 16,
+        "workload": "m16-k896-n1152-layers24",
+        "median_register_2x2_to_rowwise_ratio": 0.6408314340494943,
+        "median_change_percent": -35.916856595050575,
+        "register_2x2_faster_blocks": 4,
+        "classification": "material_improvement",
+        "block_ratios": [0.6390828766378064, 0.6353715076315768, 0.6425799914611822, 0.6458732412289022]
+      },
+      {
+        "rows": 32,
+        "workload": "m32-k896-n1152-layers24",
+        "median_register_2x2_to_rowwise_ratio": 0.3916277804889904,
+        "median_change_percent": -60.837221951100965,
+        "register_2x2_faster_blocks": 4,
+        "classification": "material_improvement",
+        "block_ratios": [0.39108802909246915, 0.385603297303786, 0.39216753188551157, 0.39658710804359415]
+      },
+      {
+        "rows": 64,
+        "workload": "m64-k896-n1152-layers24",
+        "median_register_2x2_to_rowwise_ratio": 0.37305564507966704,
+        "median_change_percent": -62.69443549203329,
+        "register_2x2_faster_blocks": 4,
+        "classification": "material_improvement",
+        "block_ratios": [0.3742923636884755, 0.3734438667644527, 0.367539097027539, 0.3726674233948814]
+      },
+      {
+        "rows": 128,
+        "workload": "m128-k896-n1152-layers24",
+        "median_register_2x2_to_rowwise_ratio": 0.33490566624257745,
+        "median_change_percent": -66.50943337574226,
+        "register_2x2_faster_blocks": 4,
+        "classification": "material_improvement",
+        "block_ratios": [0.33620696259871297, 0.3350366723613243, 0.3346281216258129, 0.33477466012383056]
+      },
+      {
+        "rows": 256,
+        "workload": "m256-k896-n1152-layers24",
+        "median_register_2x2_to_rowwise_ratio": 0.3201736131643661,
+        "median_change_percent": -67.9826386835634,
+        "register_2x2_faster_blocks": 4,
+        "classification": "material_improvement",
+        "block_ratios": [0.32028434821001595, 0.3200628781187162, 0.31834169125897493, 0.3215000484944401]
+      }
+    ]
+  },
+  "large_prefill_rule": {
+    "required_material_improvement_rows": [64, 128, 256],
+    "qualified": true,
+    "rejected_at_required_rows": false
+  },
+  "crossover": {
+    "candidate_rows": [8, 16, 32, 64],
+    "smallest_no_larger_material_regression_row": 16,
+    "smallest_all_larger_material_improvement_row": 16
+  },
+  "decision_rule": {
+    "advance": "Advance 2x2 as the manual prefill candidate only if it materially improves M=64, 128, and 256 against public rowwise.",
+    "observed": "The candidate materially improved all three required large-M rows, and M=16 was the first tested crossover from which every larger measurement also materially improved in all four blocks."
+  },
+  "timing_decision": "advance_register_2x2_as_manual_prefill_candidate",
+  "production_dispatch_decision": "none",
+  "bounded_interpretation": "For rotating K=896, N=1152 packed-QKV projection on this Apple M4 Pro, the manual 2x2 mapping is a credible prefill candidate from M=16 onward and a stronger manual control for later Apple-matrix work. The result does not establish a threshold for N=128 or N=896, change public dispatch, or isolate one causal mechanism."
+}

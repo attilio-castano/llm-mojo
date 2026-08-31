@@ -1,0 +1,669 @@
+{
+  "schema_version": 1,
+  "experiment_id": "EXP-0009",
+  "run_id": "EXP-0009-RUN-001",
+  "implementation_commit": "2e77bc32f79e5d1a680ef838b1f334d13ad7f56b",
+  "measurement_commit": "2e77bc32f79e5d1a680ef838b1f334d13ad7f56b",
+  "started_utc": "2026-08-29T13:58:04.899807+00:00",
+  "ended_utc": "2026-08-29T14:08:32.524106+00:00",
+  "environment": {
+    "machine": "Mac16,7",
+    "chip": "Apple M4 Pro",
+    "runtime_api": "metal",
+    "runtime_target": "metal:4-metal4",
+    "physical_memory_bytes": 25769803776,
+    "mojo": "1.0.0",
+    "max": "26.5.0",
+    "macos": "26.6.2 (25G83)",
+    "xcode": "Xcode 26.6 Build version 17F113",
+    "power_source_at_all_gates": "AC Power",
+    "thermal_warning_at_all_gates": false
+  },
+  "sample_audit": {
+    "block_order": [
+      "ascending",
+      "descending",
+      "descending",
+      "ascending"
+    ],
+    "bk_order": [
+      [
+        16,
+        32,
+        128,
+        64
+      ],
+      [
+        32,
+        64,
+        16,
+        128
+      ],
+      [
+        64,
+        128,
+        32,
+        16
+      ],
+      [
+        128,
+        16,
+        64,
+        32
+      ]
+    ],
+    "bk_position_counterbalanced": true,
+    "workloads": 8,
+    "implementations": 4,
+    "blocks": 4,
+    "samples_per_implementation_per_workload_per_block": 10,
+    "samples_per_implementation_per_workload": 40,
+    "total_samples": 1280,
+    "internal_iterations_per_sample": 20,
+    "repository_clean_and_fixed": true,
+    "runtime_identity_proved_in_every_block": true,
+    "all_samples_finite_positive_and_valid": true,
+    "result": "passed"
+  },
+  "correctness_validation": {
+    "linear_command": "MODULAR_DEBUG=device-sync-mode uv run --locked mojo run -I src -I tests tests/test_linear.mojo",
+    "linear_result": "23 passed",
+    "bk_tail_case": "M=9 K=129 N=17 through BK=16, 32, 64, and 128",
+    "python_protocol_result": "57 passed",
+    "other_mojo_results": "import 1 passed; RMSNorm 7 passed; RoPE 9 passed",
+    "benchmark_builds": "default sequence and sequence 4 passed"
+  },
+  "source_tradeoff": [
+    {
+      "bk": 16,
+      "threadgroup_operand_scratch_bytes": 768,
+      "k_phases_per_dispatch": 56,
+      "barriers_per_dispatch": 112
+    },
+    {
+      "bk": 32,
+      "threadgroup_operand_scratch_bytes": 1536,
+      "k_phases_per_dispatch": 28,
+      "barriers_per_dispatch": 56
+    },
+    {
+      "bk": 64,
+      "threadgroup_operand_scratch_bytes": 3072,
+      "k_phases_per_dispatch": 14,
+      "barriers_per_dispatch": 28
+    },
+    {
+      "bk": 128,
+      "threadgroup_operand_scratch_bytes": 6144,
+      "k_phases_per_dispatch": 7,
+      "barriers_per_dispatch": 14
+    }
+  ],
+  "source_accounting_note": "At K=896 every BK divides K, so all variants request the same source-level global operand traffic for a given M. This is not observed hardware traffic.",
+  "implementation_medians": [
+    {
+      "bk": 16,
+      "implementation_id": "apple_gpu_prefill_tiled_8x16x16_v0",
+      "workloads": [
+        {
+          "rows": 1,
+          "median_ms_per_24_layer_workload_iteration": 1.809391675
+        },
+        {
+          "rows": 4,
+          "median_ms_per_24_layer_workload_iteration": 1.8305969
+        },
+        {
+          "rows": 8,
+          "median_ms_per_24_layer_workload_iteration": 1.8699906250000002
+        },
+        {
+          "rows": 16,
+          "median_ms_per_24_layer_workload_iteration": 3.125325025
+        },
+        {
+          "rows": 32,
+          "median_ms_per_24_layer_workload_iteration": 5.617742725
+        },
+        {
+          "rows": 64,
+          "median_ms_per_24_layer_workload_iteration": 10.687477075
+        },
+        {
+          "rows": 128,
+          "median_ms_per_24_layer_workload_iteration": 20.94159895
+        },
+        {
+          "rows": 256,
+          "median_ms_per_24_layer_workload_iteration": 42.13678125
+        }
+      ]
+    },
+    {
+      "bk": 32,
+      "implementation_id": "apple_gpu_prefill_tiled_8x16x32_v0",
+      "workloads": [
+        {
+          "rows": 1,
+          "median_ms_per_24_layer_workload_iteration": 2.364420825
+        },
+        {
+          "rows": 4,
+          "median_ms_per_24_layer_workload_iteration": 2.3702302
+        },
+        {
+          "rows": 8,
+          "median_ms_per_24_layer_workload_iteration": 2.3998448000000003
+        },
+        {
+          "rows": 16,
+          "median_ms_per_24_layer_workload_iteration": 4.138230225
+        },
+        {
+          "rows": 32,
+          "median_ms_per_24_layer_workload_iteration": 7.44895105
+        },
+        {
+          "rows": 64,
+          "median_ms_per_24_layer_workload_iteration": 14.161200025000001
+        },
+        {
+          "rows": 128,
+          "median_ms_per_24_layer_workload_iteration": 28.044316674999997
+        },
+        {
+          "rows": 256,
+          "median_ms_per_24_layer_workload_iteration": 56.865459375
+        }
+      ]
+    },
+    {
+      "bk": 64,
+      "implementation_id": "apple_gpu_prefill_tiled_8x16x64_v0",
+      "workloads": [
+        {
+          "rows": 1,
+          "median_ms_per_24_layer_workload_iteration": 2.2832729
+        },
+        {
+          "rows": 4,
+          "median_ms_per_24_layer_workload_iteration": 2.33562395
+        },
+        {
+          "rows": 8,
+          "median_ms_per_24_layer_workload_iteration": 2.3497801750000002
+        },
+        {
+          "rows": 16,
+          "median_ms_per_24_layer_workload_iteration": 4.088071875
+        },
+        {
+          "rows": 32,
+          "median_ms_per_24_layer_workload_iteration": 7.366983325
+        },
+        {
+          "rows": 64,
+          "median_ms_per_24_layer_workload_iteration": 14.019525
+        },
+        {
+          "rows": 128,
+          "median_ms_per_24_layer_workload_iteration": 27.732545825
+        },
+        {
+          "rows": 256,
+          "median_ms_per_24_layer_workload_iteration": 55.883502074999996
+        }
+      ]
+    },
+    {
+      "bk": 128,
+      "implementation_id": "apple_gpu_prefill_tiled_8x16x128_v0",
+      "workloads": [
+        {
+          "rows": 1,
+          "median_ms_per_24_layer_workload_iteration": 2.269562475
+        },
+        {
+          "rows": 4,
+          "median_ms_per_24_layer_workload_iteration": 2.29677395
+        },
+        {
+          "rows": 8,
+          "median_ms_per_24_layer_workload_iteration": 2.38013125
+        },
+        {
+          "rows": 16,
+          "median_ms_per_24_layer_workload_iteration": 4.1055448000000005
+        },
+        {
+          "rows": 32,
+          "median_ms_per_24_layer_workload_iteration": 7.3167083250000005
+        },
+        {
+          "rows": 64,
+          "median_ms_per_24_layer_workload_iteration": 14.0613375
+        },
+        {
+          "rows": 128,
+          "median_ms_per_24_layer_workload_iteration": 27.53701145
+        },
+        {
+          "rows": 256,
+          "median_ms_per_24_layer_workload_iteration": 56.279157299999994
+        }
+      ]
+    }
+  ],
+  "paired_comparison": {
+    "control_bk": 32,
+    "ratio_definition": "candidate block median / BK32 block median",
+    "material_improvement_ratio": 0.95,
+    "material_regression_ratio": 1.05,
+    "required_direction_blocks": 3,
+    "candidates": [
+      {
+        "candidate_bk": 16,
+        "workloads": [
+          {
+            "rows": 1,
+            "median_candidate_to_bk32_ratio": 0.7615719255433407,
+            "median_change_percent": -23.842807445665926,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "material_improvement",
+            "block_ratios": [
+              0.769482874318392,
+              0.7592539155571872,
+              0.7616242794926369,
+              0.7615195715940446
+            ]
+          },
+          {
+            "rows": 4,
+            "median_candidate_to_bk32_ratio": 0.780561276798073,
+            "median_change_percent": -21.943872320192703,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "material_improvement",
+            "block_ratios": [
+              0.7909380805324772,
+              0.7798581146476804,
+              0.7812644389484655,
+              0.7431927694269774
+            ]
+          },
+          {
+            "rows": 8,
+            "median_candidate_to_bk32_ratio": 0.7813633176418369,
+            "median_change_percent": -21.863668235816313,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "material_improvement",
+            "block_ratios": [
+              0.7740104278867919,
+              0.7887162073968818,
+              0.7738121794671744,
+              0.8015815793065592
+            ]
+          },
+          {
+            "rows": 16,
+            "median_candidate_to_bk32_ratio": 0.75566072711743,
+            "median_change_percent": -24.433927288256996,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "material_improvement",
+            "block_ratios": [
+              0.7532084267446517,
+              0.7592148049469242,
+              0.7568893689995791,
+              0.754432085235281
+            ]
+          },
+          {
+            "rows": 32,
+            "median_candidate_to_bk32_ratio": 0.7536800509660424,
+            "median_change_percent": -24.63199490339576,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "material_improvement",
+            "block_ratios": [
+              0.7557930110858573,
+              0.7470329675005247,
+              0.7535236829039326,
+              0.7538364190281523
+            ]
+          },
+          {
+            "rows": 64,
+            "median_candidate_to_bk32_ratio": 0.7546409539142673,
+            "median_change_percent": -24.53590460857327,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "material_improvement",
+            "block_ratios": [
+              0.7557730353158696,
+              0.7647577208490914,
+              0.7535088725126652,
+              0.7530243073701768
+            ]
+          },
+          {
+            "rows": 128,
+            "median_candidate_to_bk32_ratio": 0.7441965340720741,
+            "median_change_percent": -25.58034659279259,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "material_improvement",
+            "block_ratios": [
+              0.7458338258833687,
+              0.7425592422607795,
+              0.7491443075445888,
+              0.7360224275186703
+            ]
+          },
+          {
+            "rows": 256,
+            "median_candidate_to_bk32_ratio": 0.746500775100184,
+            "median_change_percent": -25.3499224899816,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "material_improvement",
+            "block_ratios": [
+              0.7494677699223814,
+              0.7435337802779864,
+              0.730696182864778,
+              0.7530673206745992
+            ]
+          }
+        ]
+      },
+      {
+        "candidate_bk": 64,
+        "workloads": [
+          {
+            "rows": 1,
+            "median_candidate_to_bk32_ratio": 0.9714336099904332,
+            "median_change_percent": -2.8566390009566844,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "inconclusive",
+            "block_ratios": [
+              0.9690295964679749,
+              0.9738376235128914,
+              0.9493617455849995,
+              0.973934986434095
+            ]
+          },
+          {
+            "rows": 4,
+            "median_candidate_to_bk32_ratio": 0.9858284386368777,
+            "median_change_percent": -1.4171561363122254,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "inconclusive",
+            "block_ratios": [
+              0.9727610241709169,
+              0.9915753540725571,
+              0.9947071649199521,
+              0.9800815232011983
+            ]
+          },
+          {
+            "rows": 8,
+            "median_candidate_to_bk32_ratio": 0.9829232296782829,
+            "median_change_percent": -1.707677032171706,
+            "candidate_faster_blocks": 3,
+            "candidate_slower_blocks": 1,
+            "classification": "inconclusive",
+            "block_ratios": [
+              0.9704096536005872,
+              0.9868698654046887,
+              0.9789765939518772,
+              1.0262310623862556
+            ]
+          },
+          {
+            "rows": 16,
+            "median_candidate_to_bk32_ratio": 0.9871855765136324,
+            "median_change_percent": -1.2814423486367632,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "inconclusive",
+            "block_ratios": [
+              0.9877630026865597,
+              0.9920000763868931,
+              0.986608150340705,
+              0.9812960566873962
+            ]
+          },
+          {
+            "rows": 32,
+            "median_candidate_to_bk32_ratio": 0.9879194096374027,
+            "median_change_percent": -1.2080590362597343,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "inconclusive",
+            "block_ratios": [
+              0.9929214178846695,
+              0.9884310112290599,
+              0.9777827016640019,
+              0.9874078080457455
+            ]
+          },
+          {
+            "rows": 64,
+            "median_candidate_to_bk32_ratio": 0.989505762563804,
+            "median_change_percent": -1.049423743619604,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "inconclusive",
+            "block_ratios": [
+              0.990908729259589,
+              0.9890436305697573,
+              0.9893039258169863,
+              0.9897075993106216
+            ]
+          },
+          {
+            "rows": 128,
+            "median_candidate_to_bk32_ratio": 0.9877380641165276,
+            "median_change_percent": -1.2261935883472352,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "inconclusive",
+            "block_ratios": [
+              0.9886571260164249,
+              0.9868190022166305,
+              0.9922201052328875,
+              0.9705945323957482
+            ]
+          },
+          {
+            "rows": 256,
+            "median_candidate_to_bk32_ratio": 0.9853458621809481,
+            "median_change_percent": -1.4654137819051893,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "inconclusive",
+            "block_ratios": [
+              0.9942227834355989,
+              0.9790713498334108,
+              0.9647933978613504,
+              0.9916203745284855
+            ]
+          }
+        ]
+      },
+      {
+        "candidate_bk": 128,
+        "workloads": [
+          {
+            "rows": 1,
+            "median_candidate_to_bk32_ratio": 0.9623901286879183,
+            "median_change_percent": -3.760987131208171,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "inconclusive",
+            "block_ratios": [
+              0.9617596743253155,
+              0.9512995153560035,
+              0.9660636787279624,
+              0.9630205830505211
+            ]
+          },
+          {
+            "rows": 4,
+            "median_candidate_to_bk32_ratio": 0.970019950145437,
+            "median_change_percent": -2.998004985456304,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "inconclusive",
+            "block_ratios": [
+              0.9717081053549406,
+              0.9789499552433191,
+              0.9683317949359332,
+              0.9401813418454072
+            ]
+          },
+          {
+            "rows": 8,
+            "median_candidate_to_bk32_ratio": 0.9967509250477214,
+            "median_change_percent": -0.3249074952278552,
+            "candidate_faster_blocks": 3,
+            "candidate_slower_blocks": 1,
+            "classification": "inconclusive",
+            "block_ratios": [
+              0.9726380784381065,
+              0.9970482928962626,
+              0.9964535571991803,
+              1.0029675639749656
+            ]
+          },
+          {
+            "rows": 16,
+            "median_candidate_to_bk32_ratio": 0.9923850311368805,
+            "median_change_percent": -0.761496886311952,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "inconclusive",
+            "block_ratios": [
+              0.9914656070144379,
+              0.9843337124908978,
+              0.993304455259323,
+              0.995524931021849
+            ]
+          },
+          {
+            "rows": 32,
+            "median_candidate_to_bk32_ratio": 0.9796189991967686,
+            "median_change_percent": -2.0381000803231353,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "inconclusive",
+            "block_ratios": [
+              0.9878158263355882,
+              0.9731149771001543,
+              0.9655801501262339,
+              0.986123021293383
+            ]
+          },
+          {
+            "rows": 64,
+            "median_candidate_to_bk32_ratio": 0.9914721609088182,
+            "median_change_percent": -0.8527839091181821,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "inconclusive",
+            "block_ratios": [
+              0.9928650107864837,
+              0.985485119004936,
+              0.9999134799078115,
+              0.9900793110311528
+            ]
+          },
+          {
+            "rows": 128,
+            "median_candidate_to_bk32_ratio": 0.9809509233595698,
+            "median_change_percent": -1.9049076640430207,
+            "candidate_faster_blocks": 4,
+            "candidate_slower_blocks": 0,
+            "classification": "inconclusive",
+            "block_ratios": [
+              0.980450732447736,
+              0.9814511142714036,
+              0.9877300337961381,
+              0.9649722368705477
+            ]
+          },
+          {
+            "rows": 256,
+            "median_candidate_to_bk32_ratio": 0.9922973139365092,
+            "median_change_percent": -0.7702686063490782,
+            "candidate_faster_blocks": 3,
+            "candidate_slower_blocks": 1,
+            "classification": "inconclusive",
+            "block_ratios": [
+              1.0159519914917674,
+              0.9770090103032893,
+              0.985297297518138,
+              0.9992973303548803
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "advance_rule": {
+    "eligible_candidates": [
+      16
+    ],
+    "no_material_regression_rows": [
+      8,
+      16,
+      32,
+      64,
+      128,
+      256
+    ],
+    "required_material_improvement_rows": [
+      64,
+      128,
+      256
+    ],
+    "selected_candidate_bk": 16
+  },
+  "timing_decision": "advance_bk16_to_direct_control_comparison",
+  "production_dispatch_decision": "none",
+  "decision": {
+    "result": "advance_bk16_to_direct_control_comparison_only",
+    "public_entrypoint": "llm_mojo.linear.enqueue_linear_apple_gpu",
+    "retained_bk32_entrypoint": "llm_mojo.linear.enqueue_linear_prefill_tiled_apple_gpu",
+    "screened_entrypoint": "llm_mojo.linear.enqueue_linear_prefill_tiled_apple_gpu_bk",
+    "selected_followup_bk": 16,
+    "runtime_dispatch_rule": false,
+    "reason": "BK16 materially improved all eight rotating workloads against BK32 in all four blocks and was the only variant to satisfy the predeclared large-M advance rule.",
+    "evidence_boundary": "The screen does not establish that BK16 beats the direct no-staging control or public rowwise path."
+  },
+  "external_run_artifacts": {
+    "path_note": "Raw run artifacts are retained outside the repository; local paths are intentionally omitted.",
+    "bytes": {
+      "block-01.stdout.txt": 71139,
+      "block-02.stdout.txt": 71140,
+      "block-03.stdout.txt": 71140,
+      "block-04.stdout.txt": 71139,
+      "metadata.json": 11243,
+      "samples.jsonl": 1446011,
+      "summary.json": 55137
+    },
+    "sha256": {
+      "block-01.stdout.txt": "8876f6627a3ff3a8298ee6006d24f2f136eac495fce8aebdd7ae650a42567593",
+      "block-02.stdout.txt": "7d6e76fe7ea0b0234377a67a94fac10dce158a4147923ea1fa03fe150f4a0395",
+      "block-03.stdout.txt": "6a334b256c667f6c469ffb0e2ba24d7579a20972505c56a3fb78d1ee940b3e09",
+      "block-04.stdout.txt": "2ce2803802f1a23772a1584e1fbe9aac1ed4d2d92f54aac4ea17771cdc673db9",
+      "metadata.json": "064addf198c3c8f655dd1d32bcfe6237785d0a2b994e8ec9c7c66f7825d4d5e5",
+      "samples.jsonl": "129fd95381d4ca9b87ca7ac16aa12aa5e4fb64a4d7df756f3349c8fa42641210",
+      "summary.json": "70956644a50dd4b028bcc9479dee226a51c9dbdb973b3899ccac63488a1a94f9"
+    }
+  }
+}

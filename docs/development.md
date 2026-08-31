@@ -113,8 +113,11 @@ uv run --script tests/fixtures/rms_norm/generate.py
 The affine linear projection test compares a one-token diagnostic case and a
 short multi-row case against a committed `torch.nn.Linear` oracle. It also
 compares the Apple GPU path with the host reference at the model's query and
-key/value projection shapes. The rowwise GPU kernel is correct for both decode
-and prefill row counts but makes no tiled-prefill or performance claim.
+key/value projection shapes. The rowwise public kernel, the direct `8x16`
+ownership control, and the shared `8x16x32` learning candidate have separate
+coverage. Ragged `M=9, K=33, N=17` exercises all three tiled edge policies.
+Correctness does not imply that either experimental prefill entrypoint is
+faster or suitable for public dispatch.
 Regenerate its fixture and provenance manifest with:
 
 ```bash
@@ -155,6 +158,82 @@ It measures Q, KV, hot QKV, and a 24-layer rotating-weight QKV proxy through
 explicit completion boundaries. The paired mode retains the experimental
 two-output input-reuse candidate for reproduction; the public projection path
 remains the one-output-per-SIMD-group baseline under the EXP-0005 decision.
+
+Characterize that same public projection path across prefill row counts with:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill.py
+```
+
+The prefill instrument sweeps `M=1..256` at the model's `K=896` width for KV,
+query, packed-QKV, and rotating 24-layer packed-QKV workloads. It establishes a
+rowwise baseline only; it does not imply a tiled implementation or speedup.
+Its `--direct-comparison` mode pairs that baseline with the experimental
+`8x16` one-thread-per-output control. The control has no shared operand staging
+and is never selected by the public enqueue path. Its `--tiled-comparison`
+mode instead holds that ownership constant and compares the direct control
+with the shared `BM=8, BN=16, BK=32` candidate in four ABBA blocks. The latter
+isolates the incremental effect of explicit operand staging and barriers; it
+also makes no dispatch decision by itself.
+
+Screen the shared candidate's K-tile sensitivity with:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill_bk_sweep.py
+```
+
+This holds output ownership fixed and compares `BK=16`, `32`, `64`, and `128`
+only on the rotating packed-QKV workloads. The four-block recorded protocol
+counterbalances BK execution position. A qualifying result from this screen
+requires a separate direct-control comparison before it can support an
+optimization claim.
+
+[EXP-0009](../experiments/EXP-0009-linear-prefill-bk-sweep/report.md) selected
+BK16 for that follow-up after a repeatable 21.86%–25.58% improvement over BK32.
+It did not compare BK16 with the direct control or alter the public projection
+path.
+
+The ownership-matched follow-up uses:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill_bk16_direct.py
+```
+
+It compares direct full-K streaming with BK16 shared staging on only the
+rotating packed-QKV matrix. [EXP-0010](../experiments/EXP-0010-linear-prefill-bk16-direct/report.md)
+found BK16 24.54%–33.88% slower across the tested M range and slower in all
+four blocks at every M. That rejects shared staging and ends BK tuning only for
+this scalar `8x16` one-output-per-thread mapping. It does not reject tiling with
+multi-output, SIMD-group, or hardware-matrix arithmetic ownership. The public
+projection path remains unchanged.
+
+[EXP-0011](../experiments/EXP-0011-linear-prefill-register-2x2/report.md)
+tested the next manual ownership change before introducing an Apple matrix
+primitive. The control gives each of 128 threads one output in the `8x16` tile;
+the candidate gives each lane of one 32-lane SIMD group a `2x2` microtile and
+four FP32 accumulators. Both stream the full K dimension directly and use no
+threadgroup operand storage or barriers. The candidate materially regressed
+`M=1`, was inconclusive at `M=4` and `M=8`, and materially improved every tested
+row count from `M=16` through `M=256` by 42.69%–62.19%. It advances to a paired
+public-rowwise comparison and does not yet select a public path.
+
+Run that paired public-rowwise comparison with:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill_register_rowwise.py
+```
+
+[EXP-0012](../experiments/EXP-0012-linear-prefill-register-rowwise/report.md)
+holds the rotating `K=896`, `N=1152`, 24-layer workload fixed. Its control is
+the public mapping in which one SIMD group owns one scalar output and its lanes
+partition K. Its candidate is the frozen EXP-0011 mapping in which one SIMD
+group owns an `8x16` output tile and each lane walks all K for a `2x2`
+microtile. The candidate materially regressed `M=1`, `4`, and `8`, then
+materially improved every tested row count from `M=16` through `M=256` by
+35.92%–67.98% in all four blocks. Both crossover definitions selected `M=16`
+for this packed-QKV workload. It advances as the manual prefill candidate, but
+`N=128` and `N=896` still require paired timing before any public dispatch
+threshold is selected.
 
 This is operation-level evidence only; it is not an end-to-end inference
 benchmark. Use the [experimental method](experiments.md) when retaining a run or

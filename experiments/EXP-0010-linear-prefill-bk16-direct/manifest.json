@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "experiment_id": "EXP-0010",
+  "slug": "linear-prefill-bk16-direct",
+  "title": "Apple GPU prefill BK16 shared staging versus direct control",
+  "created_date": "2026-08-29",
+  "status": "complete",
+  "evidence_level": "operation",
+  "question": "With BM=8, BN=16, 128 threads, and one thread per output held fixed, does BK=16 shared operand staging beat direct full-K streaming on rotating packed-QKV prefill?",
+  "experiment_type": "paired_attribution_control",
+  "hypothesis": "BK16's source-level operand reuse may repay its shared reads, writes, loop structure, 768-byte scratch allocation, and 112 barriers as M grows.",
+  "control": {
+    "implementation_id": "apple_gpu_prefill_direct_8x16_v0",
+    "entrypoint": "llm_mojo.linear.enqueue_linear_prefill_direct_apple_gpu",
+    "output_tile": {
+      "BM": 8,
+      "BN": 16
+    },
+    "ownership": "One 128-thread group owns one 8x16 output rectangle; one thread owns one scalar output and one persistent FP32 accumulator.",
+    "k_mapping": "Each valid thread walks all K=896 values serially and loads X and W directly from device memory.",
+    "threadgroup_operand_scratch_bytes": 0,
+    "threadgroup_barriers_per_dispatch": 0
+  },
+  "candidate": {
+    "implementation_id": "apple_gpu_prefill_tiled_8x16x16_v0",
+    "entrypoint": "llm_mojo.linear.enqueue_linear_prefill_tiled_apple_gpu_bk[16]",
+    "output_tile": {
+      "BM": 8,
+      "BN": 16
+    },
+    "k_tile": {
+      "BK": 16,
+      "phases_at_k896": 56
+    },
+    "ownership": "The same 128-thread group owns the same 8x16 output rectangle; one thread owns one scalar output and one persistent FP32 accumulator.",
+    "cooperative_load": "Each phase stages an 8x16 X tile and a 16x16 W tile with zero fill at M, N, and K tails.",
+    "threadgroup_operand_scratch_bytes": 768,
+    "threadgroup_barriers_per_k_phase": 2,
+    "threadgroup_barriers_per_dispatch_at_k896": 112
+  },
+  "changed_mechanism": "The candidate replaces repeated per-output device loads with cooperative shared operand staging and reuse. This necessarily also changes shared accesses, phase loops, bounds work, barriers, and generated code.",
+  "unchanged": [
+    "Y[M,N] = X[M,K] x W[N,K]^T + B[N]",
+    "BF16 input, weight, bias, and output with FP32 accumulation and one final BF16 cast",
+    "row-major X[M,K], W[N,K], and Y[M,N] layouts",
+    "BM=8 and BN=16 output ownership",
+    "128 threads and 128 output owners per complete output tile",
+    "one enqueue per layer and one completion boundary per measured workload",
+    "K=896, N=1152, and 24 distinct rotating weight allocations",
+    "no weight packing, quantization, or public dispatch change"
+  ],
+  "correctness": {
+    "authority": "tests/test_linear.mojo plus each benchmark implementation's untimed exact-unit-output gate",
+    "required_cases": [
+      "Existing direct-control oracle, exact-tile, ragged-tail, and Qwen-width cases",
+      "BK16 host-reference comparison at M=9 K=129 N=17",
+      "Exact BF16 unit output at K=896 and N=1152 before timing every benchmark specialization",
+      "Existing rowwise, BK32, BK64, BK128, decode, and packed-QKV tests remain passing"
+    ]
+  },
+  "workload_matrix": {
+    "rows": [1, 4, 8, 16, 32, 64, 128, 256],
+    "input_features": 896,
+    "output_features": 1152,
+    "layers": 24,
+    "weights": "24 distinct allocations rotated once per measured workload iteration",
+    "semantic_role": "packed-QKV cache-pressure proxy",
+    "workloads": 8
+  },
+  "measurement_protocol": {
+    "benchmark": "benchmarks/linear_prefill_bk_sweep.mojo",
+    "runner": "benchmarks/run_linear_prefill_bk16_direct.py",
+    "decisive_command": "uv run --locked python benchmarks/run_linear_prefill_bk16_direct.py --blocks 4 --experiment-id EXP-0010 --run-id EXP-0010-RUN-001 --recorded --output-dir <absolute-external-path>/EXP-0010-RUN-001",
+    "primary_metric": "synchronized_device_execution_ms_per_24_layer_workload_iteration",
+    "blocks": [
+      "ascending M; direct then BK16",
+      "descending M; BK16 then direct",
+      "descending M; BK16 then direct",
+      "ascending M; direct then BK16"
+    ],
+    "num_warmup_iters": 10,
+    "max_iters": 20,
+    "num_repetitions": 10,
+    "expected_samples_per_implementation_per_workload": 40,
+    "expected_total_samples": 640,
+    "paired_statistic": "Within each block and M, BK16 median divided by direct median; summarize the four ratios with their median and retain every ratio.",
+    "environment": "Clean immutable commit, AC power, no reported thermal or performance warning, Apple GPU plus Metal runtime identity, and MODULAR_DEBUG unset."
+  },
+  "classification_rule": {
+    "material_improvement": "Median paired ratio <= 0.95 and BK16 faster in at least three of four blocks.",
+    "material_regression": "Median paired ratio >= 1.05 and BK16 slower in at least three of four blocks.",
+    "otherwise": "Inconclusive."
+  },
+  "decision_rule": {
+    "advance": "Advance BK16 to a final public-rowwise comparison only if it materially improves M=64, 128, and 256 and does not materially regress any tested M>=8.",
+    "reject": "If BK16 materially regresses M=64, 128, and 256, reject shared staging as an optimization for this scalar one-output-per-thread mapping and stop BK tuning.",
+    "otherwise": "Make no advance or production change; retain the result as mixed or inconclusive before designing another experiment.",
+    "production_decision": "None. Even an advancing result cannot select a public dispatch path."
+  },
+  "nonclaims": [
+    "The comparison isolates the complete shared-staging mechanism, not an individual barrier, cache, occupancy, shared-memory, instruction, or compiler effect.",
+    "Requested traffic is source-derived and is not observed hardware cache, fabric, or DRAM traffic.",
+    "A BK16 win against direct would not establish a win against the public SIMD-group rowwise kernel.",
+    "A BK16 loss would be specific to this scalar 8x16 arithmetic ownership and would not reject multi-output or hardware-matrix tiled mappings.",
+    "No end-to-end prompt, model, or decoder throughput result."
+  ],
+  "implementation_commit": "e99262282d5850463d756dba45ad8763b77ae59f",
+  "measurement_commit": "e99262282d5850463d756dba45ad8763b77ae59f",
+  "runs": [
+    {
+      "run_id": "EXP-0010-RUN-001",
+      "recorded": true,
+      "started_utc": "2026-08-29T14:30:43.683951+00:00",
+      "ended_utc": "2026-08-29T14:34:32.114209+00:00",
+      "sample_count": 640,
+      "runtime": "Apple M4 Pro via Metal",
+      "repository_clean": true,
+      "retained_summary": "comparison-run.json",
+      "external_artifact_directory": "/tmp/llm-mojo-exp-0010-bk16-direct-run-001"
+    }
+  ],
+  "decision": {
+    "timing": "reject_bk16_shared_staging_for_scalar_output_mapping",
+    "production_dispatch": "none",
+    "finding": "BK16 materially regressed all eight row counts by 24.54% to 33.88% and was slower in all four paired blocks for every row count.",
+    "scope": "Reject shared staging and stop BK tuning only for this scalar BM=8, BN=16, one-output-per-thread mapping.",
+    "next_experiment": "Change arithmetic ownership, such as register-tiled multi-output ownership or explicit SIMD-group or hardware-matrix cooperation, before testing another K tile."
+  }
+}
