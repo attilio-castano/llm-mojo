@@ -325,6 +325,28 @@ and repeatable 42.69%–62.19% improvements from `M=16` through `M=256`. It
 qualifies for a paired public-rowwise comparison but cannot change dispatch by
 itself.
 
+That final manual-kernel gate compares the frozen `2x2` mapping directly with
+the public rowwise kernel on the same eight rotating packed-QKV workloads. The
+rowwise control assigns one scalar output to a SIMD group and partitions
+`K=896` into 28 values per lane before one SIMD-group sum. The candidate assigns
+an `8x16` output tile to one SIMD group, gives each lane a `2x2` microtile, and
+makes every lane walk all K without a cross-lane reduction:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill_register_rowwise.py \
+  --blocks 4 \
+  --experiment-id EXP-0012 \
+  --run-id EXP-0012-RUN-001 \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-0012-RUN-001
+```
+
+The four-block protocol requires material improvements at `M=64`, `M=128`,
+and `M=256` to advance the manual candidate. It also reports the smallest
+tested M after which no larger measurement materially regresses, but that
+bounded crossover is evidence for a later dispatch experiment rather than a
+dispatch rule.
+
 ## RMSNorm profiling instrument
 
 Build a standalone, long-running binary outside the repository so Xcode does

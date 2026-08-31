@@ -217,6 +217,21 @@ threadgroup operand storage or barriers. The candidate materially regressed
 row count from `M=16` through `M=256` by 42.69%–62.19%. It advances to a paired
 public-rowwise comparison and does not yet select a public path.
 
+Run that paired public-rowwise comparison with:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill_register_rowwise.py
+```
+
+[EXP-0012](../experiments/EXP-0012-linear-prefill-register-rowwise/manifest.json)
+holds the rotating `K=896`, `N=1152`, 24-layer workload fixed. Its control is
+the public mapping in which one SIMD group owns one scalar output and its lanes
+partition K. Its candidate is the frozen EXP-0011 mapping in which one SIMD
+group owns an `8x16` output tile and each lane walks all K for a `2x2`
+microtile. The recorded protocol reports both a large-M viability decision and
+the first tested non-regression crossover; it cannot select a public dispatch
+threshold by itself.
+
 This is operation-level evidence only; it is not an end-to-end inference
 benchmark. Use the [experimental method](experiments.md) when retaining a run or
 using benchmark and profile evidence to support an optimization.

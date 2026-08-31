@@ -211,6 +211,15 @@ each lane retains register reuse. Timing does not prove that explanation or
 isolate it from the simultaneously changed accumulator independence,
 instruction organization, scheduling, caches, or compiler output.
 
+EXP-0012 is the required production-baseline gate for that manual candidate.
+The public rowwise mapping gives one scalar output to a whole SIMD group and
+splits K across its 32 lanes, followed by a SIMD-group sum. The `2x2` mapping
+instead gives one complete `8x16` output tile to a SIMD group, makes every lane
+walk all K, and needs no cross-lane reduction. Because output ownership, K
+ownership, grid shape, accumulator count, operand reuse, and reduction work all
+change together, the paired timing can rank the complete mappings and locate a
+bounded crossover, but cannot attribute a win to any one of those mechanisms.
+
 ## RoPE V0
 
 Let `R` be the number of contiguous token rows, `N` the number of heads,
