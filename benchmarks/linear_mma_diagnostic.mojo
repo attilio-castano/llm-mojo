@@ -1,4 +1,4 @@
-"""Diagnostic Apple 8x8-MMA linear benchmark against phase-best controls."""
+"""Apple 8x8-MMA linear benchmark against phase-best controls."""
 
 from layout import TensorLayout, TileTensor, row_major
 from llm_mojo.linear import (
@@ -24,9 +24,9 @@ from std.sys.info import has_apple_gpu_accelerator
 comptime INPUT_FEATURES = 896
 comptime OUTPUT_FEATURES = 1_152
 comptime RING_LAYERS = 24
-comptime BENCHMARK_WARMUP_ITERATIONS = 5
-comptime BENCHMARK_MAX_ITERATIONS = 10
-comptime BENCHMARK_REPETITIONS = 5
+comptime BENCHMARK_WARMUP_ITERATIONS = 10
+comptime BENCHMARK_MAX_ITERATIONS = 20
+comptime BENCHMARK_REPETITIONS = 10
 
 
 def _assert_unit_output[
@@ -186,7 +186,7 @@ def run_benchmarks() raises:
 
     print("implementation: enqueue_linear_prefill_mma_8x16_apple_gpu")
     print("M=1,8 control: enqueue_linear_apple_gpu")
-    print("M=16,64 control: enqueue_linear_prefill_register_2x2_apple_gpu")
+    print("M>=16 control: enqueue_linear_prefill_register_2x2_apple_gpu")
     print("device:", identity.name())
     print("api:", identity.api())
     print("dtype: bfloat16; accumulation: float32")
@@ -227,15 +227,23 @@ def run_benchmarks() raises:
         )
     )
     comptime if reverse_order:
+        _add_pair[256, True, mma_first](benchmark)
+        _add_pair[128, True, mma_first](benchmark)
         _add_pair[64, True, mma_first](benchmark)
+        _add_pair[32, True, mma_first](benchmark)
         _add_pair[16, True, mma_first](benchmark)
         _add_pair[8, False, mma_first](benchmark)
+        _add_pair[4, False, mma_first](benchmark)
         _add_pair[1, False, mma_first](benchmark)
     else:
         _add_pair[1, False, mma_first](benchmark)
+        _add_pair[4, False, mma_first](benchmark)
         _add_pair[8, False, mma_first](benchmark)
         _add_pair[16, True, mma_first](benchmark)
+        _add_pair[32, True, mma_first](benchmark)
         _add_pair[64, True, mma_first](benchmark)
+        _add_pair[128, True, mma_first](benchmark)
+        _add_pair[256, True, mma_first](benchmark)
 
     benchmark.config.format = Format.tabular
     print("BENCHMARK_RESULTS_BEGIN")
