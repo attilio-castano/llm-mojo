@@ -223,14 +223,17 @@ Run that paired public-rowwise comparison with:
 uv run --locked python benchmarks/run_linear_prefill_register_rowwise.py
 ```
 
-[EXP-0012](../experiments/EXP-0012-linear-prefill-register-rowwise/manifest.json)
+[EXP-0012](../experiments/EXP-0012-linear-prefill-register-rowwise/report.md)
 holds the rotating `K=896`, `N=1152`, 24-layer workload fixed. Its control is
 the public mapping in which one SIMD group owns one scalar output and its lanes
 partition K. Its candidate is the frozen EXP-0011 mapping in which one SIMD
 group owns an `8x16` output tile and each lane walks all K for a `2x2`
-microtile. The recorded protocol reports both a large-M viability decision and
-the first tested non-regression crossover; it cannot select a public dispatch
-threshold by itself.
+microtile. The candidate materially regressed `M=1`, `4`, and `8`, then
+materially improved every tested row count from `M=16` through `M=256` by
+35.92%–67.98% in all four blocks. Both crossover definitions selected `M=16`
+for this packed-QKV workload. It advances as the manual prefill candidate, but
+`N=128` and `N=896` still require paired timing before any public dispatch
+threshold is selected.
 
 This is operation-level evidence only; it is not an end-to-end inference
 benchmark. Use the [experimental method](experiments.md) when retaining a run or

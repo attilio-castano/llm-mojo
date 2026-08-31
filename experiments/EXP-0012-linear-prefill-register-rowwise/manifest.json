@@ -4,7 +4,7 @@
   "slug": "linear-prefill-register-rowwise",
   "title": "Apple GPU prefill 2x2 register ownership versus public rowwise",
   "created_date": "2026-08-31",
-  "status": "ready",
+  "status": "complete",
   "evidence_level": "operation",
   "question": "Does the EXP-0011 2x2 register mapping beat the public K-parallel rowwise kernel on the same rotating packed-QKV prefill workload, and where does their measured crossover begin?",
   "experiment_type": "paired_arithmetic_ownership_comparison",
@@ -115,8 +115,27 @@
     "A loss rejects this 2x2 shape for this workload, not all manual register tiles or hardware-matrix mappings.",
     "No Apple matrix primitive, Neural Engine, tensor-core analog, end-to-end prompt, model, or decoder throughput result."
   ],
-  "implementation_commit": null,
-  "measurement_commit": null,
-  "runs": [],
-  "decision": null
+  "implementation_commit": "b83bc06bea476e2a94ae1ec2e0862eb8e589b76f",
+  "measurement_commit": "b83bc06bea476e2a94ae1ec2e0862eb8e589b76f",
+  "runs": [
+    {
+      "run_id": "EXP-0012-RUN-001",
+      "recorded": true,
+      "started_utc": "2026-08-31T12:46:32.162495+00:00",
+      "ended_utc": "2026-08-31T12:49:15.431331+00:00",
+      "sample_count": 640,
+      "runtime": "Apple M4 Pro via Metal",
+      "repository_clean": true,
+      "retained_summary": "comparison-run.json",
+      "external_artifact_directory": "/tmp/llm-mojo-exp-0012-register-rowwise-run-001"
+    }
+  ],
+  "decision": {
+    "timing": "advance_register_2x2_as_manual_prefill_candidate",
+    "production_dispatch": "none",
+    "finding": "The 2x2 candidate materially regressed M=1, M=4, and M=8, then materially improved every tested M from 16 through 256 by 35.92% to 67.98%, with unanimous direction in all four blocks.",
+    "crossover": "Both the non-regression and all-material-improvement definitions selected M=16 for the measured K=896, N=1152 rotating workload.",
+    "scope": "Advance as the manual packed-QKV prefill candidate and strongest manual control for later Apple matrix work; do not infer a public selector for unmeasured projection widths.",
+    "next_experiment": "Compare public rowwise and 2x2 ownership at N=128, N=896, and N=1152 with extra M values around the observed boundary before changing public dispatch."
+  }
 }

@@ -345,7 +345,11 @@ The four-block protocol requires material improvements at `M=64`, `M=128`,
 and `M=256` to advance the manual candidate. It also reports the smallest
 tested M after which no larger measurement materially regresses, but that
 bounded crossover is evidence for a later dispatch experiment rather than a
-dispatch rule.
+dispatch rule. [EXP-0012](../experiments/EXP-0012-linear-prefill-register-rowwise/report.md)
+found material regressions through `M=8`, followed by repeatable
+35.92%–67.98% improvements from `M=16` through `M=256`. The measured
+packed-QKV crossover is `M=16`; it does not yet establish the same threshold
+for the model's `N=128` or `N=896` projections.
 
 ## RMSNorm profiling instrument
 

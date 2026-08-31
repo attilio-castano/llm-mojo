@@ -219,6 +219,14 @@ walk all K, and needs no cross-lane reduction. Because output ownership, K
 ownership, grid shape, accumulator count, operand reuse, and reduction work all
 change together, the paired timing can rank the complete mappings and locate a
 bounded crossover, but cannot attribute a win to any one of those mechanisms.
+On the rotating `K=896`, `N=1152` workload, EXP-0012 found that rowwise won
+decisively through `M=8`, while `2x2` improved every tested M from 16 through
+256 by 35.92%–67.98% in all four blocks. At `M=8` the candidate has all 32
+lanes active but only 72 independent output-tile groups; at `M=16` the grid
+doubles to 144 groups and crosses over. That is consistent with a parallelism
+threshold, not proof of one, because reuse, reductions, accumulator
+independence, scheduling, and generated code also change. Other output widths
+remain unmeasured against rowwise.
 
 ## RoPE V0
 
