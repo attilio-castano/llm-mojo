@@ -4,7 +4,7 @@
   "slug": "linear-mma-phase",
   "title": "Apple 8x8 simdgroup MMA for decode and prefill linear projection",
   "created_date": "2026-08-31",
-  "status": "planned",
+  "status": "complete",
   "evidence_level": "operation",
   "question": "Does an ownership-matched Apple 8x8 simdgroup-MMA kernel beat the strongest previously measured linear mapping for batch-1 decode and across the measured prefill row range?",
   "experiment_type": "paired_phase_control_hardware_matrix_comparison",
@@ -137,6 +137,14 @@
     "finding": "MMA improved M=16 by approximately 43% and M=64 by approximately 52% in both orders. M=1 lost, while M=8 changed direction with order.",
     "claim_limit": "This gate selected the formal experiment; it is not retained performance evidence."
   },
+  "generated_code_validation": {
+    "command": "uv run --locked mojo build -I src --emit asm -o <absolute-external-path>/linear-mma-phase.s benchmarks/linear_mma_diagnostic.mojo",
+    "measurement_commit": "5aabd4036140895cbf026e21157dadf5685851c2",
+    "compiled_mma_specializations_referencing_intrinsic": 8,
+    "intrinsic": "air.simdgroup_matrix_8x8_multiply_accumulate",
+    "workgroup_barrier_intrinsic_occurrences": 0,
+    "boundary": "This validates compiled structure for the eight benchmark specializations; it does not measure MMA throughput, occupancy, stalls, cache behavior, or traffic."
+  },
   "nonclaims": [
     "The comparison does not isolate MMA throughput, register pressure, occupancy, cache behavior, gather cost, instruction scheduling, or compiler output individually.",
     "Requested traffic is source-derived and is not observed hardware cache, fabric, or DRAM traffic.",
@@ -146,7 +154,27 @@
   ],
   "implementation_commit": "53d6786",
   "diagnostic_commit": "d4d7f3a",
-  "measurement_commit": null,
-  "runs": [],
-  "decision": null
+  "measurement_commit": "5aabd4036140895cbf026e21157dadf5685851c2",
+  "runs": [
+    {
+      "run_id": "EXP-0013-RUN-001",
+      "recorded": true,
+      "started_utc": "2026-08-31T14:56:05.776374+00:00",
+      "ended_utc": "2026-08-31T14:57:22.738767+00:00",
+      "sample_count": 640,
+      "runtime": "Apple M4 Pro via Metal",
+      "repository_clean": true,
+      "retained_summary": "comparison-run.json",
+      "external_artifact_directory": "/tmp/llm-mojo-exp-0013-mma-phase-run-001"
+    }
+  ],
+  "decision": {
+    "timing": "advance_mma_as_large_prefill_candidate",
+    "decode": "reject_mma_for_batch_1_decode",
+    "production_dispatch": "none",
+    "finding": "MMA materially regressed M=1 by 79.84% and M=4 by 20.41%, then materially improved every tested M from 8 through 256 by 33.15% to 54.77%, with unanimous direction in all four blocks.",
+    "crossover": "Both preregistered crossover definitions selected M=8 for the measured K=896, N=1152 rotating workload.",
+    "scope": "Advance as the packed-QKV prefill candidate only; retain rowwise for batch-1 decode and make no public selector claim for unmeasured projection widths.",
+    "next_experiment": "Compare rowwise, manual register-2x2, and MMA at N=128, N=896, and N=1152 with rows concentrated around the M=4-to-M=8 boundary before changing public dispatch."
+  }
 }

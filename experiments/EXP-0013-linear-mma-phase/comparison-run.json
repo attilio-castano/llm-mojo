@@ -1,0 +1,303 @@
+{
+  "schema_version": 1,
+  "experiment_id": "EXP-0013",
+  "run_id": "EXP-0013-RUN-001",
+  "implementation_commit": "53d6786f2d3be7f2eb22166d7fb23cf36178dfa9",
+  "measurement_commit": "5aabd4036140895cbf026e21157dadf5685851c2",
+  "started_utc": "2026-08-31T14:56:05.776374+00:00",
+  "ended_utc": "2026-08-31T14:57:22.738767+00:00",
+  "environment": {
+    "machine": "Mac16,7",
+    "chip": "Apple M4 Pro",
+    "runtime_api": "metal",
+    "runtime_target": "metal:4-metal4",
+    "physical_memory_bytes": 25769803776,
+    "mojo": "1.0.0",
+    "max": "26.5.0",
+    "uv": "0.12.5",
+    "macos": "26.6.2 (25G83)",
+    "darwin": "25.6.0",
+    "xcode": "Xcode 26.6 Build version 17F113",
+    "metal": "32023.883",
+    "power_source_at_all_gates": "AC Power",
+    "thermal_warning_at_all_gates": false,
+    "performance_warning_at_all_gates": false
+  },
+  "external_run_artifacts": {
+    "directory": "/tmp/llm-mojo-exp-0013-mma-phase-run-001",
+    "metadata": {
+      "bytes": 11833,
+      "sha256": "0f9dad580032b357912d1d82681a9b077d3502246ed91adb1533f027aabcab98"
+    },
+    "samples": {
+      "bytes": 929405,
+      "sha256": "1a2e4b2e95e97c099a97ed44046d3b391f832dd4f5799bbc43a38bc5180df663"
+    },
+    "summary": {
+      "bytes": 24856,
+      "sha256": "a08f313c32731bab38c842207461ab6a13e1bcb6818d07294472872f0a4a8435"
+    },
+    "block_stdout": [
+      {
+        "block_id": "block-01",
+        "bytes": 36337,
+        "sha256": "f0de2735eeb048e85529ff8fc455efea7be047ea96bba44c3da0d606f33ae744"
+      },
+      {
+        "block_id": "block-02",
+        "bytes": 36338,
+        "sha256": "d53da0d40fc3b3b3423d3e3c23f417779a72bfb3ff27398bd001719df3d48530"
+      },
+      {
+        "block_id": "block-03",
+        "bytes": 36338,
+        "sha256": "82fbf658a97d64d8a88863df27b71da73858a272e3d1c3c540fb692c5c620697"
+      },
+      {
+        "block_id": "block-04",
+        "bytes": 36337,
+        "sha256": "a650f8d3571ce6f3390a037f1a76565db13b7577cba1ab63d06fce6b584ddfa9"
+      }
+    ]
+  },
+  "generated_code_validation": {
+    "command": "uv run --locked mojo build -I src --emit asm -o <absolute-external-path>/linear-mma-phase.s benchmarks/linear_mma_diagnostic.mojo",
+    "measurement_commit": "5aabd4036140895cbf026e21157dadf5685851c2",
+    "artifact": {
+      "kind": "host_assembly_with_embedded_metallibs",
+      "bytes": 5986755,
+      "sha256": "a6b7e66c28986e661f9740681c5d0f38cd919f45b6f455354cbe33942f530674"
+    },
+    "compiled_mma_specializations_referencing_intrinsic": 8,
+    "intrinsic": "air.simdgroup_matrix_8x8_multiply_accumulate.f.f.v64f32.v64bf16.v64bf16.v64f32",
+    "workgroup_barrier_intrinsic_occurrences": 0,
+    "interpretation": "All eight timed M specializations compile through the Apple 8x8 matrix intrinsic. This validates generated structure, not timing causality."
+  },
+  "sample_audit": {
+    "block_order": [
+      "ascending",
+      "descending",
+      "descending",
+      "ascending"
+    ],
+    "implementation_order": [
+      "control_then_mma",
+      "mma_then_control",
+      "mma_then_control",
+      "control_then_mma"
+    ],
+    "workloads": 8,
+    "implementations_per_workload": 2,
+    "blocks": 4,
+    "samples_per_implementation_per_workload_per_block": 10,
+    "samples_per_implementation_per_workload": 40,
+    "total_samples": 640,
+    "internal_iterations_per_sample": 20,
+    "repository_clean_and_fixed": true,
+    "runtime_identity_proved_in_every_block": true,
+    "all_samples_finite_positive_and_valid": true,
+    "all_sample_ids_unique": true,
+    "result": "passed"
+  },
+  "correctness_validation": {
+    "linear_result": "32 passed",
+    "mma_cases": [
+      "Committed torch.nn.Linear short-prefill oracle",
+      "Exact M=8 K=32 N=16 output tile",
+      "Ragged M=9 K=129 N=17 M/N/K tails",
+      "Qwen-width M=8 K=896 N=128",
+      "Batch-1 M=1 K=896 N=128"
+    ],
+    "benchmark_exact_output_gate": "Every timed control and MMA specialization passed an untimed exact-BF16 unit-output check at K=896 and N=1152",
+    "python_protocol_result": "81 passed",
+    "other_mojo_results": "import 1 passed; RMSNorm 7 passed; RoPE 9 passed"
+  },
+  "mechanism": {
+    "fixed": "K=896, N=1152, BF16 storage, FP32 accumulation, 24 rotating weight allocations, one enqueue per layer, one completion boundary per workload, zero threadgroup operand scratch, and zero threadgroup barriers",
+    "small_m_control": {
+      "rows": [1, 4, 8],
+      "implementation": "apple_gpu_one_output_simdgroup_v0",
+      "ownership": "One 32-lane SIMD group owns one scalar output and partitions K across lanes"
+    },
+    "large_m_control": {
+      "rows": [16, 32, 64, 128, 256],
+      "implementation": "apple_gpu_prefill_register_2x2_8x16_v0",
+      "ownership": "One 32-lane SIMD group owns one 8x16 tile; each lane walks K and owns one 2x2 microtile"
+    },
+    "mma": {
+      "implementation": "apple_gpu_prefill_mma_8x16_v0",
+      "output_tile": "8x16",
+      "mma_tile": "8x8x8",
+      "ownership": "One 32-lane SIMD group owns two adjacent distributed 8x8 output fragments",
+      "k_phases": 112,
+      "mma_operations_per_k_phase": 2,
+      "fp32_accumulators_per_lane": 4,
+      "threadgroup_operand_scratch_bytes": 0,
+      "threadgroup_barriers_per_dispatch": 0,
+      "api": "max.gpu.compute.arch.mma_apple._mma_apple_8x8",
+      "api_stability": "architecture-internal in MAX 26.5.0"
+    }
+  },
+  "source_requested_traffic": [
+    {
+      "rows": 1,
+      "control_bytes_per_24_layer_iteration": 99201024,
+      "mma_bytes_per_24_layer_iteration": 52752384,
+      "mma_source_requested_reduction_percent": 46.82274247491639
+    },
+    {
+      "rows": 4,
+      "control_bytes_per_24_layer_iteration": 396804096,
+      "mma_bytes_per_24_layer_iteration": 62373888,
+      "mma_source_requested_reduction_percent": 84.2809364548495
+    },
+    {
+      "rows": 8,
+      "control_bytes_per_24_layer_iteration": 793608192,
+      "mma_bytes_per_24_layer_iteration": 75202560,
+      "mma_source_requested_reduction_percent": 90.52396878483835
+    },
+    {
+      "rows": 16,
+      "control_bytes_per_24_layer_iteration": 794050560,
+      "mma_bytes_per_24_layer_iteration": 150405120,
+      "mma_source_requested_reduction_percent": 81.05849582172702
+    },
+    {
+      "rows": 32,
+      "control_bytes_per_24_layer_iteration": 1588101120,
+      "mma_bytes_per_24_layer_iteration": 300810240,
+      "mma_source_requested_reduction_percent": 81.05849582172702
+    },
+    {
+      "rows": 64,
+      "control_bytes_per_24_layer_iteration": 3176202240,
+      "mma_bytes_per_24_layer_iteration": 601620480,
+      "mma_source_requested_reduction_percent": 81.05849582172702
+    },
+    {
+      "rows": 128,
+      "control_bytes_per_24_layer_iteration": 6352404480,
+      "mma_bytes_per_24_layer_iteration": 1203240960,
+      "mma_source_requested_reduction_percent": 81.05849582172702
+    },
+    {
+      "rows": 256,
+      "control_bytes_per_24_layer_iteration": 12704808960,
+      "mma_bytes_per_24_layer_iteration": 2406481920,
+      "mma_source_requested_reduction_percent": 81.05849582172702
+    }
+  ],
+  "paired_statistic": {
+    "definition": "Within each block and M, MMA median divided by that M's preregistered phase-control median; the retained workload statistic is the median of four block ratios",
+    "material_improvement_ratio": 0.95,
+    "material_regression_ratio": 1.05,
+    "required_direction_blocks": 3
+  },
+  "results": [
+    {
+      "rows": 1,
+      "control": "apple_gpu_one_output_simdgroup_v0",
+      "control_overall_median_ms": 0.415412475,
+      "mma_overall_median_ms": 0.7961083250000001,
+      "block_mma_to_control_ratios": [1.6127274819921387, 2.0184256658460056, 1.9750121075471012, 1.6217309510938003],
+      "median_paired_ratio": 1.7983715293204507,
+      "median_paired_change_percent": 79.83715293204507,
+      "mma_faster_blocks": 0,
+      "classification": "material_regression"
+    },
+    {
+      "rows": 4,
+      "control": "apple_gpu_one_output_simdgroup_v0",
+      "control_overall_median_ms": 0.65910625,
+      "mma_overall_median_ms": 0.791913525,
+      "block_mma_to_control_ratios": [1.2087481662356176, 1.200685628650032, 1.1978370513792926, 1.2075514685244166],
+      "median_paired_ratio": 1.2041185485872243,
+      "median_paired_change_percent": 20.411854858722435,
+      "mma_faster_blocks": 0,
+      "classification": "material_regression"
+    },
+    {
+      "rows": 8,
+      "control": "apple_gpu_one_output_simdgroup_v0",
+      "control_overall_median_ms": 1.154623975,
+      "mma_overall_median_ms": 0.77333645,
+      "block_mma_to_control_ratios": [0.6675020410913878, 0.663430922532095, 0.6694891732696626, 0.6721594815991359],
+      "median_paired_ratio": 0.6684956071805253,
+      "median_paired_change_percent": -33.15043928194748,
+      "mma_faster_blocks": 4,
+      "classification": "material_improvement"
+    },
+    {
+      "rows": 16,
+      "control": "apple_gpu_prefill_register_2x2_8x16_v0",
+      "control_overall_median_ms": 1.4532021,
+      "mma_overall_median_ms": 0.7882364749999999,
+      "block_mma_to_control_ratios": [0.5385697243801254, 0.5451927288992812, 0.5379759703293359, 0.5444422120081799],
+      "median_paired_ratio": 0.5415059681941526,
+      "median_paired_change_percent": -45.84940318058474,
+      "mma_faster_blocks": 4,
+      "classification": "material_improvement"
+    },
+    {
+      "rows": 32,
+      "control": "apple_gpu_prefill_register_2x2_8x16_v0",
+      "control_overall_median_ms": 1.7903364750000001,
+      "mma_overall_median_ms": 0.965428125,
+      "block_mma_to_control_ratios": [0.542773027721006, 0.5374595920313139, 0.5378100316439755, 0.5299077155165293],
+      "median_paired_ratio": 0.5376348118376446,
+      "median_paired_change_percent": -46.23651881623554,
+      "mma_faster_blocks": 4,
+      "classification": "material_improvement"
+    },
+    {
+      "rows": 64,
+      "control": "apple_gpu_prefill_register_2x2_8x16_v0",
+      "control_overall_median_ms": 3.5196218750000003,
+      "mma_overall_median_ms": 1.669402075,
+      "block_mma_to_control_ratios": [0.46421675161088577, 0.47922305593696113, 0.48086128185311283, 0.475648021971024],
+      "median_paired_ratio": 0.4774355389539926,
+      "median_paired_change_percent": -52.25644610460074,
+      "mma_faster_blocks": 4,
+      "classification": "material_improvement"
+    },
+    {
+      "rows": 128,
+      "control": "apple_gpu_prefill_register_2x2_8x16_v0",
+      "control_overall_median_ms": 6.538825,
+      "mma_overall_median_ms": 3.008397925,
+      "block_mma_to_control_ratios": [0.4596853776205781, 0.46119662747341716, 0.45840580259320063, 0.4611157755770668],
+      "median_paired_ratio": 0.46040057659882244,
+      "median_paired_change_percent": -53.95994234011776,
+      "mma_faster_blocks": 4,
+      "classification": "material_improvement"
+    },
+    {
+      "rows": 256,
+      "control": "apple_gpu_prefill_register_2x2_8x16_v0",
+      "control_overall_median_ms": 12.964769800000001,
+      "mma_overall_median_ms": 5.866653124999999,
+      "block_mma_to_control_ratios": [0.44878134790155483, 0.45279742121974254, 0.4551294654058853, 0.4518693171101175],
+      "median_paired_ratio": 0.45233336916493005,
+      "median_paired_change_percent": -54.766663083507,
+      "mma_faster_blocks": 4,
+      "classification": "material_improvement"
+    }
+  ],
+  "decision": {
+    "timing": "advance_mma_as_large_prefill_candidate",
+    "large_prefill_rule_qualified": true,
+    "decode": "reject_mma_for_batch_1_decode",
+    "smallest_all_larger_material_improvement_row": 8,
+    "smallest_no_larger_material_regression_row": 8,
+    "production_dispatch": "none",
+    "next_experiment": "Measure N=128, N=896, and N=1152 with additional rows around M=4 to M=8 before selecting a public path"
+  },
+  "nonclaims": [
+    "This is synchronized operation timing, not end-to-end inference timing.",
+    "Timing ranks the complete mappings and does not isolate matrix-unit throughput, instruction count, occupancy, register pressure, cache behavior, or scheduling.",
+    "Source-requested traffic is derived from source expressions and is not observed cache, fabric, or DRAM traffic.",
+    "The architecture-internal MAX API is pinned-toolchain evidence, not a stable public API commitment.",
+    "The N=1152 crossover does not establish a selector for N=128, N=896, a decoder block, or a full model."
+  ]
+}

@@ -113,10 +113,11 @@ uv run --script tests/fixtures/rms_norm/generate.py
 The affine linear projection test compares a one-token diagnostic case and a
 short multi-row case against a committed `torch.nn.Linear` oracle. It also
 compares the Apple GPU path with the host reference at the model's query and
-key/value projection shapes. The rowwise public kernel, the direct `8x16`
-ownership control, and the shared `8x16x32` learning candidate have separate
-coverage. Ragged `M=9, K=33, N=17` exercises all three tiled edge policies.
-Correctness does not imply that either experimental prefill entrypoint is
+key/value projection shapes. The rowwise public kernel and the experimental
+direct, shared-staging, register-2x2, and Apple-MMA prefill mappings have
+separate coverage. Their exact-tile and ragged cases exercise M, N, and K edge
+policies, including synchronization-safe shared staging and collective-safe
+MMA zero fill. Correctness does not imply that an experimental entrypoint is
 faster or suitable for public dispatch.
 Regenerate its fixture and provenance manifest with:
 
@@ -234,6 +235,22 @@ materially improved every tested row count from `M=16` through `M=256` by
 for this packed-QKV workload. It advances as the manual prefill candidate, but
 `N=128` and `N=896` still require paired timing before any public dispatch
 threshold is selected.
+
+Run the phase-controlled Apple 8x8 matrix experiment with:
+
+```bash
+uv run --locked python benchmarks/run_linear_mma_phase.py
+```
+
+[EXP-0013](../experiments/EXP-0013-linear-mma-phase/report.md) compares one
+`8x16` MMA tile with the strongest previously measured control for each row
+regime: public rowwise at `M=1,4,8`, and register-2x2 at `M=16..256`. The MMA
+mapping materially regressed `M=1` by 79.84% and `M=4` by 20.41%, then
+materially improved every tested row count from `M=8` through `M=256` by
+33.15%–54.77% in all four blocks. It advances as the packed-QKV prefill
+candidate and is rejected for batch-1 decode. The implementation uses MAX
+26.5's architecture-internal Apple 8x8 primitive, and `N=128` plus `N=896`
+remain unmeasured, so no public dispatch rule changes.
 
 This is operation-level evidence only; it is not an end-to-end inference
 benchmark. Use the [experimental method](experiments.md) when retaining a run or
