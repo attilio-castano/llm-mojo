@@ -3,6 +3,7 @@
 from layout import TensorLayout, TileTensor, row_major
 from llm_mojo.linear import (
     enqueue_linear_prefill_direct_apple_gpu,
+    enqueue_linear_prefill_register_2x2_apple_gpu,
     enqueue_linear_prefill_tiled_apple_gpu_bk,
 )
 from max.benchmark import bencher_iter_custom
@@ -46,9 +47,13 @@ def bench_prefill_bk[
     rows: Int,
     tile_input_features: Int,
     use_direct: Bool = False,
+    use_register_2x2: Bool = False,
 ](mut bencher: Bencher) raises capturing:
     comptime assert has_apple_gpu_accelerator(), "benchmark requires Apple GPU"
     comptime assert rows > 0, "benchmark rows must be positive"
+    comptime assert not (
+        use_direct and use_register_2x2
+    ), "benchmark implementation modes are mutually exclusive"
     var context = DeviceContext()
     if context.api() != "metal":
         raise Error("benchmark requires the Metal device API")
@@ -82,7 +87,11 @@ def bench_prefill_bk[
 
     comptime for layer in range(RING_LAYERS):
         var weight = weights.tile[OUTPUT_FEATURES, INPUT_FEATURES](layer, 0)
-        comptime if use_direct:
+        comptime if use_register_2x2:
+            enqueue_linear_prefill_register_2x2_apple_gpu(
+                context, input, weight, bias, output
+            )
+        elif use_direct:
             enqueue_linear_prefill_direct_apple_gpu(
                 context, input, weight, bias, output
             )
@@ -98,7 +107,11 @@ def bench_prefill_bk[
     def launch(launch_context: DeviceContext) raises {imm}:
         comptime for layer in range(RING_LAYERS):
             var weight = weights.tile[OUTPUT_FEATURES, INPUT_FEATURES](layer, 0)
-            comptime if use_direct:
+            comptime if use_register_2x2:
+                enqueue_linear_prefill_register_2x2_apple_gpu(
+                    launch_context, input, weight, bias, output
+                )
+            elif use_direct:
                 enqueue_linear_prefill_direct_apple_gpu(
                     launch_context, input, weight, bias, output
                 )
@@ -114,13 +127,18 @@ def _add_benchmark[
     rows: Int,
     tile_input_features: Int,
     use_direct: Bool = False,
+    use_register_2x2: Bool = False,
 ](mut benchmark: Bench) raises:
-    comptime workload = bench_prefill_bk[rows, tile_input_features, use_direct]
+    comptime workload = bench_prefill_bk[
+        rows, tile_input_features, use_direct, use_register_2x2
+    ]
     comptime benchmark_name = (
-        "linear_prefill_direct_apple_gpu" if use_direct else (
-            "linear_prefill_tiled_bk"
-            + String(tile_input_features)
-            + "_apple_gpu"
+        "linear_prefill_register_2x2_apple_gpu" if use_register_2x2 else (
+            "linear_prefill_direct_apple_gpu" if use_direct else (
+                "linear_prefill_tiled_bk"
+                + String(tile_input_features)
+                + "_apple_gpu"
+            )
         )
     )
     benchmark.bench_function[workload](
@@ -193,13 +211,28 @@ def _add_direct_comparison[
         _add_benchmark[rows, 16](benchmark)
 
 
+def _add_register_comparison[
+    rows: Int,
+    candidate_first: Bool,
+](mut benchmark: Bench) raises:
+    comptime if candidate_first:
+        _add_benchmark[rows, 16, False, True](benchmark)
+        _add_benchmark[rows, 16, True](benchmark)
+    else:
+        _add_benchmark[rows, 16, True](benchmark)
+        _add_benchmark[rows, 16, False, True](benchmark)
+
+
 def _add_selected_workload[
     rows: Int,
     sequence: Int,
     direct_comparison: Bool,
+    register_comparison: Bool,
     candidate_first: Bool,
 ](mut benchmark: Bench) raises:
-    comptime if direct_comparison:
+    comptime if register_comparison:
+        _add_register_comparison[rows, candidate_first](benchmark)
+    elif direct_comparison:
         _add_direct_comparison[rows, candidate_first](benchmark)
     else:
         _add_bk_sequence[rows, sequence](benchmark)
@@ -224,12 +257,26 @@ def run_benchmarks() raises:
         "LINEAR_PREFILL_BK16_DIRECT_COMPARISON"
     ]()
     comptime candidate_first = get_defined_bool["LINEAR_PREFILL_BK16_FIRST"]()
+    comptime register_comparison = get_defined_bool[
+        "LINEAR_PREFILL_REGISTER_DIRECT_COMPARISON"
+    ]()
+    comptime register_first = get_defined_bool[
+        "LINEAR_PREFILL_REGISTER_FIRST"
+    ]()
     comptime assert not (sequence_2 and sequence_3)
     comptime assert not (sequence_2 and sequence_4)
     comptime assert not (sequence_3 and sequence_4)
     comptime assert not candidate_first or direct_comparison
+    comptime assert not register_first or register_comparison
+    comptime assert not (direct_comparison and register_comparison)
     comptime assert not direct_comparison or not (
         sequence_2 or sequence_3 or sequence_4
+    )
+    comptime assert not register_comparison or not (
+        sequence_2 or sequence_3 or sequence_4
+    )
+    comptime selected_candidate_first = (
+        register_first if register_comparison else candidate_first
     )
     comptime sequence = 4 if sequence_4 else (
         3 if sequence_3 else (2 if sequence_2 else 1)
@@ -238,7 +285,13 @@ def run_benchmarks() raises:
         "LINEAR_PREFILL_BK_SWEEP_REVERSE"
     ]()
 
-    comptime if direct_comparison:
+    comptime if register_comparison:
+        print("implementation: enqueue_linear_prefill_direct_apple_gpu")
+        print(
+            "comparison implementation: "
+            "enqueue_linear_prefill_register_2x2_apple_gpu"
+        )
+    elif direct_comparison:
         print("implementation: enqueue_linear_prefill_direct_apple_gpu")
         print(
             "comparison implementation: "
@@ -253,9 +306,22 @@ def run_benchmarks() raises:
     print("input layout: (M, K):(K, 1)")
     print("weight layout: (N, K):(K, 1)")
     print("output layout: (M, N):(N, 1)")
-    print("mapping: BM=8; BN=16; 128 threads; one thread per output")
+    comptime if register_comparison:
+        print(
+            "control mapping: BM=8; BN=16; 128 threads; one output per thread"
+        )
+        print(
+            "candidate mapping: BM=8; BN=16; 32 threads; one 2x2 output "
+            "microtile per thread"
+        )
+    else:
+        print("mapping: BM=8; BN=16; 128 threads; one thread per output")
     print("workload: K=896; N=1152; layers=24 rotating weights")
-    comptime if direct_comparison:
+    comptime if register_comparison:
+        print("direct: four SIMD groups; one FP32 accumulator per thread")
+        print("register 2x2: one SIMD group; four FP32 accumulators per thread")
+        print("both: full-K streaming; scratch=0 bytes; barriers=0")
+    elif direct_comparison:
         print("direct: scratch=0 bytes; shared K phases=0; barriers=0")
         print("BK=16: scratch=768 bytes; K phases=56; barriers=112")
     else:
@@ -279,7 +345,12 @@ def run_benchmarks() raises:
         "repetitions",
     )
     print("workload order:", "descending" if reverse_order else "ascending")
-    comptime if direct_comparison:
+    comptime if register_comparison:
+        print(
+            "implementation order:",
+            "register_2x2,direct" if register_first else "direct,register_2x2",
+        )
+    elif direct_comparison:
         print(
             "implementation order:",
             "bk16,direct" if candidate_first else "direct,bk16",
@@ -303,53 +374,117 @@ def run_benchmarks() raises:
     )
     comptime if reverse_order:
         _add_selected_workload[
-            256, sequence, direct_comparison, candidate_first
+            256,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
         ](benchmark)
         _add_selected_workload[
-            128, sequence, direct_comparison, candidate_first
+            128,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
         ](benchmark)
         _add_selected_workload[
-            64, sequence, direct_comparison, candidate_first
+            64,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
         ](benchmark)
         _add_selected_workload[
-            32, sequence, direct_comparison, candidate_first
+            32,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
         ](benchmark)
         _add_selected_workload[
-            16, sequence, direct_comparison, candidate_first
+            16,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
         ](benchmark)
-        _add_selected_workload[8, sequence, direct_comparison, candidate_first](
-            benchmark
-        )
-        _add_selected_workload[4, sequence, direct_comparison, candidate_first](
-            benchmark
-        )
-        _add_selected_workload[1, sequence, direct_comparison, candidate_first](
-            benchmark
-        )
+        _add_selected_workload[
+            8,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
+        ](benchmark)
+        _add_selected_workload[
+            4,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
+        ](benchmark)
+        _add_selected_workload[
+            1,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
+        ](benchmark)
     else:
-        _add_selected_workload[1, sequence, direct_comparison, candidate_first](
-            benchmark
-        )
-        _add_selected_workload[4, sequence, direct_comparison, candidate_first](
-            benchmark
-        )
-        _add_selected_workload[8, sequence, direct_comparison, candidate_first](
-            benchmark
-        )
         _add_selected_workload[
-            16, sequence, direct_comparison, candidate_first
+            1,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
         ](benchmark)
         _add_selected_workload[
-            32, sequence, direct_comparison, candidate_first
+            4,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
         ](benchmark)
         _add_selected_workload[
-            64, sequence, direct_comparison, candidate_first
+            8,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
         ](benchmark)
         _add_selected_workload[
-            128, sequence, direct_comparison, candidate_first
+            16,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
         ](benchmark)
         _add_selected_workload[
-            256, sequence, direct_comparison, candidate_first
+            32,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
+        ](benchmark)
+        _add_selected_workload[
+            64,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
+        ](benchmark)
+        _add_selected_workload[
+            128,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
+        ](benchmark)
+        _add_selected_workload[
+            256,
+            sequence,
+            direct_comparison,
+            register_comparison,
+            selected_candidate_first,
         ](benchmark)
 
     benchmark.config.format = Format.tabular

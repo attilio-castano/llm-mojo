@@ -196,6 +196,16 @@ as a whole. The direct control is itself output tiled: a threadgroup owns an
 so that threads or SIMD groups reuse operands across multiple outputs, or use a
 hardware matrix primitive, rather than merely changing BK again.
 
+EXP-0011 makes the smallest such manual ownership change while retaining the
+same `8x16` output rectangle. One 32-lane SIMD group covers the 32 `2x2`
+microtiles in that rectangle. At each K value, a lane loads two X values and two
+W values and forms four products, so a complete tile requests half as many
+source-level X and W loads as the scalar mapping. The exchange is four live
+FP32 accumulators per lane and one quarter as many lanes per output tile. It
+still uses no K tile, threadgroup operand storage, barrier, or Apple matrix
+primitive; its performance remains an empirical question until EXP-0011 is
+recorded.
+
 ## RoPE V0
 
 Let `R` be the number of contiguous token rows, `N` the number of heads,

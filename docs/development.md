@@ -207,6 +207,14 @@ this scalar `8x16` one-output-per-thread mapping. It does not reject tiling with
 multi-output, SIMD-group, or hardware-matrix arithmetic ownership. The public
 projection path remains unchanged.
 
+[EXP-0011](../experiments/EXP-0011-linear-prefill-register-2x2/manifest.json)
+tests the next manual ownership change before introducing an Apple matrix
+primitive. The control gives each of 128 threads one output in the `8x16` tile;
+the candidate gives each lane of one 32-lane SIMD group a `2x2` microtile and
+four FP32 accumulators. Both stream the full K dimension directly and use no
+threadgroup operand storage or barriers. The planned run has no retained timing
+result yet and cannot select a public path.
+
 This is operation-level evidence only; it is not an end-to-end inference
 benchmark. Use the [experimental method](experiments.md) when retaining a run or
 using benchmark and profile evidence to support an optimization.

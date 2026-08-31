@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "experiment_id": "EXP-0011",
+  "slug": "linear-prefill-register-2x2",
+  "title": "Apple GPU prefill 2x2 register ownership versus scalar direct control",
+  "created_date": "2026-08-31",
+  "status": "planned",
+  "evidence_level": "none",
+  "question": "With the same BM=8, BN=16 output tile and direct full-K streaming, does assigning each lane a 2x2 output microtile improve rotating packed-QKV prefill over assigning each thread one scalar output?",
+  "experiment_type": "paired_arithmetic_ownership_comparison",
+  "hypothesis": "For a complete output tile, 2x2 ownership halves source-requested X and W operand loads by reusing two X values across two columns and two W values across two rows. That reuse may repay four live FP32 accumulators per lane and the reduction from a 128-thread group to one 32-lane SIMD group.",
+  "control": {
+    "implementation_id": "apple_gpu_prefill_direct_8x16_v0",
+    "entrypoint": "llm_mojo.linear.enqueue_linear_prefill_direct_apple_gpu",
+    "output_tile": {
+      "BM": 8,
+      "BN": 16
+    },
+    "ownership": "One 128-thread group owns one 8x16 output rectangle; one thread owns one scalar output and one persistent FP32 accumulator.",
+    "threads_per_threadgroup": 128,
+    "outputs_per_thread": 1,
+    "fp32_accumulators_per_thread": 1,
+    "k_mapping": "Each valid thread walks all K=896 values serially and loads X and W directly from device memory.",
+    "threadgroup_operand_scratch_bytes": 0,
+    "threadgroup_barriers_per_dispatch": 0
+  },
+  "candidate": {
+    "implementation_id": "apple_gpu_prefill_register_2x2_8x16_v0",
+    "entrypoint": "llm_mojo.linear.enqueue_linear_prefill_register_2x2_apple_gpu",
+    "output_tile": {
+      "BM": 8,
+      "BN": 16
+    },
+    "register_tile": {
+      "TM": 2,
+      "TN": 2
+    },
+    "ownership": "One 32-thread SIMD group owns the same 8x16 output rectangle; each lane owns a 2x2 microtile and four persistent FP32 accumulators.",
+    "threads_per_threadgroup": 32,
+    "outputs_per_thread": 4,
+    "fp32_accumulators_per_thread": 4,
+    "k_mapping": "Each valid lane walks all K=896 values serially, loading up to two X values and two W values per K step and forming four products.",
+    "threadgroup_operand_scratch_bytes": 0,
+    "threadgroup_barriers_per_dispatch": 0
+  },
+  "changed_mechanism": "The candidate changes arithmetic ownership, threadgroup width, live accumulator count, source-requested operand loads, and generated code. It does not introduce shared operand staging, K blocking, barriers, or Apple matrix operations.",
+  "unchanged": [
+    "Y[M,N] = X[M,K] x W[N,K]^T + B[N]",
+    "BF16 input, weight, bias, and output with FP32 accumulation and one final BF16 cast",
+    "row-major X[M,K], W[N,K], and Y[M,N] layouts",
+    "BM=8 and BN=16 output tile",
+    "full-K direct streaming with no BK phases",
+    "zero threadgroup operand scratch and zero threadgroup barriers",
+    "one enqueue per layer and one completion boundary per measured workload",
+    "K=896, N=1152, and 24 distinct rotating weight allocations",
+    "no weight packing, quantization, Apple matrix primitive, or public dispatch change"
+  ],
+  "correctness": {
+    "authority": "tests/test_linear.mojo plus each timed specialization's untimed exact-unit-output gate",
+    "required_cases": [
+      "Existing scalar direct-control oracle, exact-tile, ragged-tail, and Qwen-width cases",
+      "2x2 candidate short host oracle",
+      "2x2 candidate exact M=8 K=32 N=16 tile",
+      "2x2 candidate ragged M=9 K=129 N=17 tails",
+      "2x2 candidate Qwen-width M=8 K=896 N=128",
+      "Exact BF16 unit output at K=896 and N=1152 before timing every benchmark specialization",
+      "Existing rowwise, shared-staging, decode, and packed-QKV tests remain passing"
+    ]
+  },
+  "workload_matrix": {
+    "rows": [1, 4, 8, 16, 32, 64, 128, 256],
+    "input_features": 896,
+    "output_features": 1152,
+    "layers": 24,
+    "weights": "24 distinct allocations rotated once per measured workload iteration",
+    "semantic_role": "packed-QKV cache-pressure proxy",
+    "workloads": 8
+  },
+  "measurement_protocol": {
+    "benchmark": "benchmarks/linear_prefill_bk_sweep.mojo",
+    "runner": "benchmarks/run_linear_prefill_register_2x2.py",
+    "decisive_command": "uv run --locked python benchmarks/run_linear_prefill_register_2x2.py --blocks 4 --experiment-id EXP-0011 --run-id EXP-0011-RUN-001 --recorded --output-dir <absolute-external-path>/EXP-0011-RUN-001",
+    "primary_metric": "synchronized_device_execution_ms_per_24_layer_workload_iteration",
+    "blocks": [
+      "ascending M; direct then register 2x2",
+      "descending M; register 2x2 then direct",
+      "descending M; register 2x2 then direct",
+      "ascending M; direct then register 2x2"
+    ],
+    "num_warmup_iters": 10,
+    "max_iters": 20,
+    "num_repetitions": 10,
+    "expected_samples_per_implementation_per_workload": 40,
+    "expected_total_samples": 640,
+    "paired_statistic": "Within each block and M, 2x2-register median divided by direct median; summarize the four ratios with their median and retain every ratio.",
+    "environment": "Clean immutable commit, AC power, no reported thermal or performance warning, Apple GPU plus Metal runtime identity, and MODULAR_DEBUG unset."
+  },
+  "classification_rule": {
+    "material_improvement": "Median paired ratio <= 0.95 and 2x2-register faster in at least three of four blocks.",
+    "material_regression": "Median paired ratio >= 1.05 and 2x2-register slower in at least three of four blocks.",
+    "otherwise": "Inconclusive."
+  },
+  "decision_rule": {
+    "advance": "Advance the 2x2 register candidate to a final public-rowwise comparison only if it materially improves M=64, 128, and 256 and does not materially regress any tested M>=8.",
+    "reject": "If the candidate materially regresses M=64, 128, and 256, stop manual register-tile shape search and move to a hardware-matrix experiment.",
+    "otherwise": "Make no advance or production change; retain the result as mixed or inconclusive before designing another experiment.",
+    "production_decision": "None. Even an advancing result cannot select a public dispatch path."
+  },
+  "nonclaims": [
+    "The comparison isolates the complete arithmetic-ownership change, not an individual occupancy, register, cache, instruction, scheduling, or compiler effect.",
+    "Requested traffic is source-derived and is not observed hardware cache, fabric, or DRAM traffic.",
+    "A win against direct would not establish a win against the public SIMD-group rowwise kernel.",
+    "A loss would reject this 2x2 shape for this workload, not all manual register tiling or hardware-matrix mappings.",
+    "No Apple matrix primitive, Neural Engine, tensor-core analog, end-to-end prompt, model, or decoder throughput result."
+  ],
+  "implementation_commit": null,
+  "measurement_commit": null,
+  "runs": [],
+  "decision": null
+}

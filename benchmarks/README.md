@@ -304,6 +304,24 @@ slower in all four blocks for every row count. It failed all three large-M
 decision rows, so BK tuning ends for this scalar one-output-per-thread mapping;
 there is no final public-rowwise comparison or dispatch change.
 
+The next ownership experiment keeps the same direct full-K `8x16` output tile
+but replaces 128 scalar owners with one 32-lane SIMD group. Each lane owns a
+`2x2` output microtile, holds four FP32 accumulators, and reuses two X and two W
+values across four products without shared memory or barriers:
+
+```bash
+uv run --locked python benchmarks/run_linear_prefill_register_2x2.py \
+  --blocks 4 \
+  --experiment-id EXP-XXXX \
+  --run-id EXP-XXXX-RUN-001 \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
+```
+
+This is a manual arithmetic-ownership comparison, not an Apple matrix-operation
+benchmark. A candidate win still requires a public-rowwise comparison and
+cannot change dispatch by itself.
+
 ## RMSNorm profiling instrument
 
 Build a standalone, long-running binary outside the repository so Xcode does
