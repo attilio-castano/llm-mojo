@@ -203,8 +203,13 @@ W values and forms four products, so a complete tile requests half as many
 source-level X and W loads as the scalar mapping. The exchange is four live
 FP32 accumulators per lane and one quarter as many lanes per output tile. It
 still uses no K tile, threadgroup operand storage, barrier, or Apple matrix
-primitive; its performance remains an empirical question until EXP-0011 is
-recorded.
+primitive. EXP-0011 found a clear parallelism/reuse crossover: the mapping
+materially regressed `M=1`, was near parity at `M=4` and `M=8`, then improved
+`M=16` through `M=256` by 42.69%–62.19% in all four blocks. The pattern is
+consistent with a large-M grid supplying enough independent output tiles while
+each lane retains register reuse. Timing does not prove that explanation or
+isolate it from the simultaneously changed accumulator independence,
+instruction organization, scheduling, caches, or compiler output.
 
 ## RoPE V0
 

@@ -319,8 +319,11 @@ uv run --locked python benchmarks/run_linear_prefill_register_2x2.py \
 ```
 
 This is a manual arithmetic-ownership comparison, not an Apple matrix-operation
-benchmark. A candidate win still requires a public-rowwise comparison and
-cannot change dispatch by itself.
+benchmark. [EXP-0011](../experiments/EXP-0011-linear-prefill-register-2x2/report.md)
+found a 122.73% regression at `M=1`, inconclusive results at `M=4` and `M=8`,
+and repeatable 42.69%–62.19% improvements from `M=16` through `M=256`. It
+qualifies for a paired public-rowwise comparison but cannot change dispatch by
+itself.
 
 ## RMSNorm profiling instrument
 

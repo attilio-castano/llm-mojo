@@ -4,8 +4,8 @@
   "slug": "linear-prefill-register-2x2",
   "title": "Apple GPU prefill 2x2 register ownership versus scalar direct control",
   "created_date": "2026-08-31",
-  "status": "planned",
-  "evidence_level": "none",
+  "status": "complete",
+  "evidence_level": "operation",
   "question": "With the same BM=8, BN=16 output tile and direct full-K streaming, does assigning each lane a 2x2 output microtile improve rotating packed-QKV prefill over assigning each thread one scalar output?",
   "experiment_type": "paired_arithmetic_ownership_comparison",
   "hypothesis": "For a complete output tile, 2x2 ownership halves source-requested X and W operand loads by reusing two X values across two columns and two W values across two rows. That reuse may repay four live FP32 accumulators per lane and the reduction from a 128-thread group to one 32-lane SIMD group.",
@@ -113,8 +113,27 @@
     "A loss would reject this 2x2 shape for this workload, not all manual register tiling or hardware-matrix mappings.",
     "No Apple matrix primitive, Neural Engine, tensor-core analog, end-to-end prompt, model, or decoder throughput result."
   ],
-  "implementation_commit": null,
-  "measurement_commit": null,
-  "runs": [],
-  "decision": null
+  "implementation_commit": "882eed04c24ca7dd88d2e1c1af9ab67347790db4",
+  "measurement_commit": "882eed04c24ca7dd88d2e1c1af9ab67347790db4",
+  "runs": [
+    {
+      "run_id": "EXP-0011-RUN-001",
+      "recorded": true,
+      "started_utc": "2026-08-31T12:02:47.635782+00:00",
+      "ended_utc": "2026-08-31T12:05:21.977652+00:00",
+      "sample_count": 640,
+      "runtime": "Apple M4 Pro via Metal",
+      "repository_clean": true,
+      "retained_summary": "comparison-run.json",
+      "external_artifact_directory": "/tmp/llm-mojo-exp-0011-register-2x2-run-001"
+    }
+  ],
+  "decision": {
+    "timing": "advance_register_2x2_to_public_rowwise_comparison",
+    "production_dispatch": "none",
+    "finding": "The 2x2 register mapping materially improved M=16 through M=256, including 60.65%, 62.06%, and 62.19% improvements at the decisive M=64, 128, and 256 rows, and was faster in all four blocks at every M>=8.",
+    "small_m_boundary": "M=1 materially regressed by 122.73%, M=4 was inconclusive at +1.12%, and M=8 was inconclusive at -3.66% despite being faster in four of four blocks.",
+    "scope": "Advance only to a paired public-rowwise comparison; the result does not select a public dispatch path and does not evaluate an Apple matrix primitive.",
+    "next_experiment": "Compare the 2x2 register mapping directly with enqueue_linear_apple_gpu across the same prefill row range before deciding whether to pursue public dispatch or Apple matrix operations."
+  }
 }
