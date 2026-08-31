@@ -96,6 +96,33 @@ The manual `2x2` mapping is not merely better than the scalar direct control.
 For this packed-QKV workload it also beats the public K-parallel kernel by a
 large margin once `M` reaches 16.
 
+### Retrospective: the result was already predictable
+
+EXP-0007 measured direct/rowwise ratios, and EXP-0011 measured
+`2x2`/direct ratios on the same rotating shape matrix. Multiplying those two
+retained median ratios gives a derived expectation for `2x2`/rowwise. That
+expectation predicted every EXP-0012 classification and the exact `M=16`
+crossover. For example:
+
+```text
+M=16: 0.5731 x 1.1439 = 0.6556 predicted; 0.6408 measured
+M=256: 0.3781 x 0.8458 = 0.3198 predicted; 0.3202 measured
+```
+
+From `M=8` upward, every prediction was within 1.47 percentage points of the
+paired measurement. EXP-0012 should therefore be understood as a confirmatory
+promotion gate, not a high-information discovery experiment.
+
+The derived comparison was not a substitute for paired evidence: its two
+ratios came from different recorded runs and commits, so drift, ordering, and
+run-specific conditions were not controlled across the complete chain. The
+direct comparison established the candidate against the public path under one
+counterbalanced protocol. Nevertheless, future experiment ladders should
+compute transitive expectations before scheduling another link. A direct run
+is worth retaining when promotion requires it, the prediction is near a
+decision boundary, or environment drift is plausible; otherwise the existing
+evidence may already answer the question.
+
 The small-M loss is equally clear. At `M=1`, a candidate tile has only eight of
 its 32 lanes doing useful work and launches 72 SIMD groups across N. The public
 kernel launches one K-parallel SIMD group for each of the 1,152 scalar outputs.
