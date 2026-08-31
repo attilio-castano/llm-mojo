@@ -21,6 +21,7 @@ from llm_mojo.linear import (
     enqueue_linear_apple_gpu,
     enqueue_linear_apple_gpu_two_output,
     enqueue_linear_prefill_direct_apple_gpu,
+    enqueue_linear_prefill_mma_8x16_apple_gpu,
     enqueue_linear_prefill_register_2x2_apple_gpu,
     enqueue_linear_prefill_tiled_apple_gpu,
     enqueue_linear_prefill_tiled_apple_gpu_bk,
@@ -164,6 +165,7 @@ def check_apple_gpu_fixture[
     use_direct_prefill: Bool = False,
     use_tiled_prefill: Bool = False,
     use_register_prefill: Bool = False,
+    use_mma_prefill: Bool = False,
 ](
     input_values: List[Float32],
     weight_values: List[Float32],
@@ -236,9 +238,16 @@ def check_apple_gpu_fixture[
     comptime assert not (
         (use_direct_prefill and use_tiled_prefill)
         or (use_direct_prefill and use_register_prefill)
+        or (use_direct_prefill and use_mma_prefill)
         or (use_tiled_prefill and use_register_prefill)
+        or (use_tiled_prefill and use_mma_prefill)
+        or (use_register_prefill and use_mma_prefill)
     ), "test implementation modes are mutually exclusive"
-    comptime if use_register_prefill:
+    comptime if use_mma_prefill:
+        enqueue_linear_prefill_mma_8x16_apple_gpu(
+            context, device_input, device_weight, device_bias, device_output
+        )
+    elif use_register_prefill:
         enqueue_linear_prefill_register_2x2_apple_gpu(
             context, device_input, device_weight, device_bias, device_output
         )
@@ -358,15 +367,20 @@ def check_model_shape[
     use_tiled_prefill: Bool = False,
     tiled_input_features: Int = 32,
     use_register_prefill: Bool = False,
+    use_mma_prefill: Bool = False,
 ]() raises:
     comptime assert has_apple_gpu_accelerator(), "test requires an Apple GPU"
     comptime assert not (
         (use_two_output and use_direct_prefill)
         or (use_two_output and use_tiled_prefill)
         or (use_two_output and use_register_prefill)
+        or (use_two_output and use_mma_prefill)
         or (use_direct_prefill and use_tiled_prefill)
         or (use_direct_prefill and use_register_prefill)
+        or (use_direct_prefill and use_mma_prefill)
         or (use_tiled_prefill and use_register_prefill)
+        or (use_tiled_prefill and use_mma_prefill)
+        or (use_register_prefill and use_mma_prefill)
     ), "test implementation modes are mutually exclusive"
     var context = DeviceContext()
     if context.api() != "metal":
@@ -434,6 +448,10 @@ def check_model_shape[
     )
     comptime if use_two_output:
         enqueue_linear_apple_gpu_two_output(
+            context, device_input, device_weight, device_bias, device_output
+        )
+    elif use_mma_prefill:
+        enqueue_linear_prefill_mma_8x16_apple_gpu(
             context, device_input, device_weight, device_bias, device_output
         )
     elif use_register_prefill:
@@ -952,6 +970,39 @@ def test_register_2x2_prefill_apple_gpu_matches_tile_tails() raises:
 
 def test_register_2x2_prefill_apple_gpu_matches_qwen_kv_shape() raises:
     check_model_shape[8, 896, 128, False, False, False, 32, True]()
+
+
+def test_mma_8x16_prefill_apple_gpu_matches_short_prefill_oracle() raises:
+    check_apple_gpu_fixture[
+        SHORT_PREFILL_ROWS,
+        SHORT_PREFILL_INPUT_FEATURES,
+        SHORT_PREFILL_OUTPUT_FEATURES,
+        False,
+        False,
+        False,
+        True,
+    ](
+        short_prefill_input(),
+        short_prefill_weight(),
+        short_prefill_bias(),
+        short_prefill_expected(),
+    )
+
+
+def test_mma_8x16_prefill_apple_gpu_matches_exact_output_tile() raises:
+    check_model_shape[8, 32, 16, False, False, False, 32, False, True]()
+
+
+def test_mma_8x16_prefill_apple_gpu_matches_tile_tails() raises:
+    check_model_shape[9, 129, 17, False, False, False, 32, False, True]()
+
+
+def test_mma_8x16_prefill_apple_gpu_matches_qwen_kv_shape() raises:
+    check_model_shape[8, 896, 128, False, False, False, 32, False, True]()
+
+
+def test_mma_8x16_prefill_apple_gpu_matches_qwen_kv_decode_shape() raises:
+    check_model_shape[1, 896, 128, False, False, False, 32, False, True]()
 
 
 def test_tiled_prefill_apple_gpu_matches_short_prefill_oracle() raises:
