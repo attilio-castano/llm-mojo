@@ -97,6 +97,8 @@ MODULAR_DEBUG=device-sync-mode \
   uv run mojo run -I src -I tests tests/test_linear.mojo
 MODULAR_DEBUG=device-sync-mode \
   uv run mojo run -I src -I tests tests/test_rope.mojo
+MODULAR_DEBUG=device-sync-mode \
+  uv run mojo run -I src -I tests tests/test_attention.mojo
 ```
 
 The import smoke test proves that the package resolves through the configured
@@ -131,6 +133,17 @@ with:
 
 ```bash
 uv run --script tests/fixtures/rope/generate.py
+```
+
+The grouped-query attention test covers full prefill, incremental prefill,
+stable softmax, and the model's `Q[1,14,64]`/`K,V[7,2,64]` decode shape. It
+compares both final output and the materialized BF16 probability scratch
+against a pinned Qwen2 oracle. GPU readback occurs only after all three Metal
+stages have been enqueued, copied back, and explicitly synchronized. Regenerate
+its fixture and provenance manifest with:
+
+```bash
+uv run --script tests/fixtures/attention/generate.py
 ```
 
 The generator's inline environment pins its oracle dependencies independently
