@@ -151,6 +151,20 @@ of the Mojo inference environment. Do not change a fixture tolerance after
 observing the Mojo result; update the declared numerical contract first and
 explain why it changed.
 
+Run the materialized grouped-query attention workload matrix with:
+
+```bash
+uv run --locked python benchmarks/run_attention.py
+```
+
+The instrument measures the complete three-dispatch Apple GPU baseline across
+decode, incremental-prefill, and full-prefill shapes. It keeps allocation,
+initialization, and correctness readback outside timing, proves the Metal
+runtime identity, and reports synchronized milliseconds per attention call.
+It is the control for later attention optimizations, not an end-to-end model
+benchmark. See `benchmarks/README.md` for the exact shape sweep and retained-run
+protocol.
+
 Run the synchronized RMSNorm microbenchmark and its curated environment record
 with:
 

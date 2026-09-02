@@ -351,6 +351,55 @@ found material regressions through `M=8`, followed by repeatable
 packed-QKV crossover is `M=16`; it does not yet establish the same threshold
 for the model's `N=128` or `N=896` projections.
 
+## Grouped-query attention timing instrument
+
+The attention benchmark measures the public materialized Apple GPU baseline at
+the model's fixed `query_heads=14`, `key_value_heads=2`, and `head_dim=64`.
+Each operation consumes BF16 `Q[R,14,64]` and `K,V[T,2,64]`, overwrites caller-
+owned BF16 scratch `[R,14,T]` from scores to probabilities, and produces BF16
+`O[R,14,64]`. QK, stable causal softmax, and probability-times-V remain three
+separate Metal dispatches with FP32 arithmetic. The benchmark does not repeat
+K or V across the seven query heads in each group.
+
+The sweep covers decode at `R=1` and `T=1,16,64,256,1024,4096`, incremental
+prefill at `(R,T)=(4,128),(16,512),(16,4096)`, and full prefill at
+`R=T=4,32,128,256`. Allocation, initialization, compilation, and the untimed
+output/probability correctness gates are outside timing. A sample is
+synchronized milliseconds per complete attention call, including all three
+enqueues through device completion. This is one hot operation: it does not
+model 24-layer KV-cache pressure or end-to-end inference.
+
+Run one exploratory ascending block:
+
+```bash
+uv run --locked python benchmarks/run_attention.py
+```
+
+The runner rejects any execution that does not identify an Apple GPU and the
+Metal API. It records shape, dtype, layout, dispatch count, synchronization
+boundary, repository identity, and current machine conditions. It also reports
+scratch size, visible versus materialized score counts, effective MAC/s, and a
+source-derived requested-byte rate. That byte rate follows the accesses in the
+baseline source; it is not observed cache, fabric, or DRAM traffic.
+
+For a retained baseline, use four alternating-order blocks and write the full
+record outside the repository:
+
+```bash
+uv run --locked python benchmarks/run_attention.py \
+  --blocks 4 \
+  --experiment-id EXP-XXXX \
+  --run-id EXP-XXXX-RUN-001 \
+  --recorded \
+  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
+```
+
+Recorded mode requires a clean repository, AC power, no reported thermal or
+performance warning, explicit run identity, and a new external output
+directory. It writes raw block output, metadata, parsed samples, and a summary.
+This instrument establishes the simple three-stage control; it contains no
+optimized candidate and makes no dispatch decision.
+
 ## RMSNorm profiling instrument
 
 Build a standalone, long-running binary outside the repository so Xcode does

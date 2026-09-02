@@ -9,9 +9,9 @@ GPU kernels, and hardware.
 
 Status: RMSNorm, affine linear projection, RoPE, and grouped-query attention
 have Mojo host references and Apple GPU implementations with
-provenance-bearing oracle tests. RMSNorm and projection also have reproducible
-microbenchmarks. No end-to-end model inference or model-performance result
-exists yet.
+provenance-bearing oracle tests. RMSNorm, projection, and grouped-query
+attention also have reproducible microbenchmarks. No end-to-end model inference
+or model-performance result exists yet.
 
 ## Principles
 
