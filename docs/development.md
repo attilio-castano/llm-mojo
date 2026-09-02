@@ -97,6 +97,8 @@ MODULAR_DEBUG=device-sync-mode \
   uv run mojo run -I src -I tests tests/test_linear.mojo
 MODULAR_DEBUG=device-sync-mode \
   uv run mojo run -I src -I tests tests/test_rope.mojo
+MODULAR_DEBUG=device-sync-mode \
+  uv run mojo run -I src -I tests tests/test_attention.mojo
 ```
 
 The import smoke test proves that the package resolves through the configured
@@ -133,10 +135,40 @@ with:
 uv run --script tests/fixtures/rope/generate.py
 ```
 
+The grouped-query attention test covers full prefill, incremental prefill,
+stable softmax, and the model's `Q[1,14,64]`/`K,V[7,2,64]` decode shape. It
+compares both final output and the materialized BF16 probability scratch
+against a pinned Qwen2 oracle. GPU readback occurs only after all three Metal
+stages have been enqueued, copied back, and explicitly synchronized. Regenerate
+its fixture and provenance manifest with:
+
+```bash
+uv run --script tests/fixtures/attention/generate.py
+```
+
 The generator's inline environment pins its oracle dependencies independently
 of the Mojo inference environment. Do not change a fixture tolerance after
 observing the Mojo result; update the declared numerical contract first and
 explain why it changed.
+
+Run the materialized grouped-query attention workload matrix with:
+
+```bash
+uv run --locked python benchmarks/run_attention.py
+```
+
+The instrument measures the complete three-dispatch Apple GPU baseline across
+decode, incremental-prefill, and full-prefill shapes. It keeps allocation,
+initialization, and correctness readback outside timing, proves the Metal
+runtime identity, and reports synchronized milliseconds per attention call.
+It is the control for later attention optimizations, not an end-to-end model
+benchmark. See `benchmarks/README.md` for the exact shape sweep and retained-run
+protocol.
+
+Use `--stage-attribution` to time the exact QK, softmax, and
+probability-times-V kernels independently beside the end-to-end control. The
+reported stage fractions use the isolated-stage sum; they are diagnostic and
+must not be presented as an exact decomposition of end-to-end latency.
 
 Run the synchronized RMSNorm microbenchmark and its curated environment record
 with:

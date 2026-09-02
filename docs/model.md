@@ -160,6 +160,64 @@ use the same operation despite having 14 and 2 heads respectively. Tensor and
 execution mappings are recorded in the project's
 [layout language](layouts.md#rope-v0).
 
+### Grouped-query attention arithmetic
+
+The initial attention operation begins after RoPE. Its caller supplies rotated
+queries and the full active key/value prefix, including the `R` positions being
+processed now:
+
+```text
+Q[R, Nq, D]  BF16
+K[T, Nkv, D] BF16
+V[T, Nkv, D] BF16
+O[R, Nq, D]  BF16
+```
+
+Here `T` is the active key/value length and `R` is the suffix of query rows, so
+`1 <= R <= T` and `past = T - R`. Full prefill has `R = T`, incremental
+prefill has `1 < R < T`, and one-token decode has `R = 1`. For Qwen,
+`Nq = 14`, `Nkv = 2`, and `D = 64`. Seven consecutive query heads share each
+key/value head without physically repeating K or V:
+
+```text
+group_size = Nq / Nkv = 7
+kv_head(query_head) = query_head / group_size
+```
+
+Query row `r` represents active position `past + r`, so its inclusive causal
+key range is `0 .. past + r`. Within that range, V0 performs:
+
+```text
+score[r, qh, k] = bf16(
+    sum_d(f32(Q[r, qh, d]) * f32(K[k, kv_head(qh), d]))
+    / sqrt(D)
+)
+probability[r, qh, :] = bf16(
+    stable_softmax_f32(score[r, qh, 0 .. past + r])
+)
+O[r, qh, d] = bf16(
+    sum_k(
+        f32(probability[r, qh, k])
+        * f32(V[k, kv_head(qh), d])
+    )
+)
+```
+
+For `D = 64`, the scale is `1 / 8`. Stable softmax subtracts the maximum
+visible BF16 score before exponentiation, accumulates its denominator in FP32,
+and writes exact zero to causally masked positions. The initial implementation
+materializes scores and then probabilities in the same caller-owned BF16
+scratch tensor `[R, Nq, T]`; the cast points on either side of softmax are part
+of this baseline's numerical contract.
+
+This operation owns no projections, RoPE application, KV-cache mutation,
+attention output projection, padding mask, dropout, or sliding-window policy.
+The caller owns Q, K, V, scratch, and output storage. In particular, an
+asynchronous GPU caller must retain those allocations until the enqueued work
+has completed, and the five tensor views must not overlap. Storage and
+execution mappings are recorded in the project's
+[layout language](layouts.md#grouped-query-attention-v0).
+
 V0 defines no separate reasoning channel or thinking-mode protocol. Any
 rationale the model emits is ordinary assistant-token output and follows the
 same autoregressive path as any other response.

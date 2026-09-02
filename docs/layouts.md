@@ -301,6 +301,73 @@ device context, and the kernel requires an Apple GPU compilation target. This
 is a correctness mapping, not a claim that separate dispatches, out-of-place
 storage, or the 128-thread block size are optimal.
 
+## Grouped-query attention V0
+
+Let `R` be the current query-row count, `T` the full active key/value-row
+count, `Nq` the query-head count, `Nkv` the key/value-head count, and `D` the
+head dimension. The initial operation has these logical tensors:
+
+```text
+Q[query_row, query_head, dimension]       BF16  rotated queries
+K[key_position, key_value_head, dimension] BF16 rotated active keys
+V[key_position, key_value_head, dimension] BF16 active values
+S[query_row, query_head, key_position]    BF16  scores, then probabilities
+O[query_row, query_head, dimension]       BF16  attention output
+```
+
+Its row-major storage contract is:
+
+| View | Layout | Meaning |
+| --- | --- | --- |
+| `Q` | `(R, Nq, D) : (Nq*D, D, 1)` | One contiguous dimension vector per query head |
+| `K` | `(T, Nkv, D) : (Nkv*D, D, 1)` | One contiguous dimension vector per active key head |
+| `V` | `(T, Nkv, D) : (Nkv*D, D, 1)` | One contiguous dimension vector per active value head |
+| `S` | `(R, Nq, T) : (Nq*T, T, 1)` | Caller-owned materialized scores, overwritten by probabilities |
+| `O` | `(R, Nq, D) : (Nq*D, D, 1)` | One contiguous output vector per query head |
+
+The contract requires `R <= T` and `Nq` divisible by `Nkv`. It maps
+`query_head` to `key_value_head` with
+`query_head / (Nq / Nkv)`, without creating repeated K or V storage. Query row
+`r` sees the inclusive key range `0 .. T - R + r`; later slots in `S` are
+written as zero.
+
+The serial host reference traverses query row, query head, and key position for
+QK, then each query row/head for stable softmax, then query row, query head,
+and output dimension for probability-times-V. QK and probability-times-V
+reductions accumulate in FP32 and materialize BF16 at the stage boundaries.
+
+The first Apple GPU mapping preserves those three materialized stages:
+
+| Stage | Global-thread owner | Serial work owned by that thread |
+| --- | --- | --- |
+| scaled QK | One `(query_row, query_head, key_position)` score | `D` BF16 operand pairs accumulated in FP32, scaled, then cast to BF16 |
+| stable causal softmax | One `(query_row, query_head)` row | Maximum, exponential sum, and normalization over visible keys in FP32; probabilities cast to BF16 |
+| probability times V | One `(query_row, query_head, dimension)` output | Visible key positions accumulated in FP32, then cast to BF16 |
+
+Every stage uses a one-dimensional grid of 128-thread groups with a total-work
+bound. No stage uses threadgroup storage or a barrier. The separate dispatches
+are enqueued in dependency order on one `DeviceContext`; the enqueue function
+does not synchronize for the caller.
+
+`S` contains `R * Nq * T` BF16 values. For Qwen this is `28 * R * T` bytes:
+linear in `T` for decode (`R = 1`) and quadratic in `T` for full prefill
+(`R = T`). At the V0 `T = 4,096` limit, that is 112 KiB for decode or 448 MiB
+for full prefill. It is a Metal device allocation from the runtime's
+perspective. Apple Silicon provides unified physical memory, but this interface
+does not make the device buffer a host tensor; tests use explicit
+device-to-host copies.
+
+The caller supplies five non-overlapping tensor views and must keep their
+device-buffer handles alive through the last queued use. A later reuse enqueued
+on the same ordered context is safe without a host synchronization.
+Deallocation, host mutation, or reuse from an unordered execution context must
+wait for an explicit completion boundary.
+
+This is a deliberately inspectable correctness baseline, not a performance
+claim. It establishes the oracle, cast points, masking, head mapping, and
+asynchronous ownership boundary before an online-softmax, tiled, fused, or
+explicit multi-query-reuse implementation is considered.
+
 ## Use in code and evidence
 
 - Name semantic axes before reducing them to integer positions.
