@@ -1,7 +1,13 @@
 """Reproducible materialized Apple GPU GQA baseline benchmark."""
 
 from layout import TensorLayout, TileTensor, row_major
-from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
+from llm_mojo.attention import (
+    ATTENTION_APPLE_GPU_BLOCK_SIZE,
+    _grouped_query_attention_pv_apple_gpu_kernel,
+    _grouped_query_attention_qk_apple_gpu_kernel,
+    _grouped_query_attention_softmax_apple_gpu_kernel,
+    enqueue_grouped_query_attention_apple_gpu,
+)
 from max.benchmark import bencher_iter_custom
 from max.gpu.host import DeviceContext
 from std.benchmark import (
@@ -13,7 +19,7 @@ from std.benchmark import (
     Format,
     ThroughputMeasure,
 )
-from std.math import isfinite
+from std.math import ceildiv, isfinite
 from std.sys import get_defined_bool
 from std.sys.info import has_apple_gpu_accelerator
 
@@ -25,6 +31,10 @@ comptime BENCHMARK_WARMUP_ITERATIONS = 20
 comptime BENCHMARK_MAX_ITERATIONS = 100
 comptime BENCHMARK_REPETITIONS = 10
 comptime PROBABILITY_SUM_TOLERANCE: Float32 = 0.015625
+comptime STAGE_END_TO_END = 0
+comptime STAGE_QK = 1
+comptime STAGE_SOFTMAX = 2
+comptime STAGE_PV = 3
 
 
 def _assert_unit_output[
@@ -45,6 +55,32 @@ def _assert_unit_output[
                     error = -error
                 if not isfinite(actual) or error > PROBABILITY_SUM_TOLERANCE:
                     raise Error("attention benchmark output gate failed")
+
+
+def _assert_unit_qk_scores[
+    ScratchLayout: TensorLayout,
+    //,
+    query_rows: Int,
+    key_value_rows: Int,
+](scratch: TileTensor[DType.bfloat16, ScratchLayout, MutAnyOrigin],) raises:
+    comptime assert scratch.flat_rank == 3, "expected rank-3 scratch"
+    var past = key_value_rows - query_rows
+    for row in range(query_rows):
+        var visible_key_count = past + row + 1
+        for head in range(QUERY_HEADS):
+            for key_position in range(key_value_rows):
+                var score_bf16 = rebind[Scalar[DType.bfloat16]](
+                    scratch[row, head, key_position]
+                )
+                var score = score_bf16.cast[DType.float32]()
+                var expected: Scalar[DType.float32] = 0.0
+                if key_position < visible_key_count:
+                    expected = 1.0
+                var error = score - expected
+                if error < 0.0:
+                    error = -error
+                if not isfinite(score) or error > PROBABILITY_SUM_TOLERANCE:
+                    raise Error("attention benchmark QK score gate failed")
 
 
 def _assert_causal_probabilities[
@@ -80,15 +116,115 @@ def _assert_causal_probabilities[
                 raise Error("attention benchmark softmax gate failed")
 
 
+def _enqueue_qk_stage[
+    QueryLayout: TensorLayout,
+    KeyLayout: TensorLayout,
+    ScratchLayout: TensorLayout,
+](
+    context: DeviceContext,
+    query: TileTensor[DType.bfloat16, QueryLayout, MutAnyOrigin],
+    key: TileTensor[DType.bfloat16, KeyLayout, MutAnyOrigin],
+    scratch: TileTensor[DType.bfloat16, ScratchLayout, MutAnyOrigin],
+) raises:
+    comptime assert query.flat_rank == 3, "query must have rank 3"
+    comptime assert key.flat_rank == 3, "key must have rank 3"
+    comptime assert scratch.flat_rank == 3, "scratch must have rank 3"
+    var query_rows = Int(query.dim[0]())
+    var query_heads = Int(query.dim[1]())
+    var head_dim = Int(query.dim[2]())
+    var key_value_rows = Int(key.dim[0]())
+    var key_value_heads = Int(key.dim[1]())
+    var score_count = query_rows * query_heads * key_value_rows
+    comptime kernel = _grouped_query_attention_qk_apple_gpu_kernel[
+        QueryLayout, KeyLayout, ScratchLayout
+    ]
+    context.enqueue_function[kernel](
+        query,
+        key,
+        scratch,
+        Int32(query_rows),
+        Int32(key_value_rows),
+        Int32(query_heads),
+        Int32(key_value_heads),
+        Int32(head_dim),
+        grid_dim=ceildiv(score_count, ATTENTION_APPLE_GPU_BLOCK_SIZE),
+        block_dim=ATTENTION_APPLE_GPU_BLOCK_SIZE,
+    )
+
+
+def _enqueue_softmax_stage[
+    ScratchLayout: TensorLayout,
+](
+    context: DeviceContext,
+    scratch: TileTensor[DType.bfloat16, ScratchLayout, MutAnyOrigin],
+) raises:
+    comptime assert scratch.flat_rank == 3, "scratch must have rank 3"
+    var query_rows = Int(scratch.dim[0]())
+    var query_heads = Int(scratch.dim[1]())
+    var key_value_rows = Int(scratch.dim[2]())
+    var row_head_count = query_rows * query_heads
+    comptime kernel = _grouped_query_attention_softmax_apple_gpu_kernel[
+        ScratchLayout
+    ]
+    context.enqueue_function[kernel](
+        scratch,
+        Int32(query_rows),
+        Int32(key_value_rows),
+        Int32(query_heads),
+        grid_dim=ceildiv(row_head_count, ATTENTION_APPLE_GPU_BLOCK_SIZE),
+        block_dim=ATTENTION_APPLE_GPU_BLOCK_SIZE,
+    )
+
+
+def _enqueue_pv_stage[
+    ValueLayout: TensorLayout,
+    ScratchLayout: TensorLayout,
+    OutputLayout: TensorLayout,
+](
+    context: DeviceContext,
+    value: TileTensor[DType.bfloat16, ValueLayout, MutAnyOrigin],
+    scratch: TileTensor[DType.bfloat16, ScratchLayout, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OutputLayout, MutAnyOrigin],
+) raises:
+    comptime assert value.flat_rank == 3, "value must have rank 3"
+    comptime assert scratch.flat_rank == 3, "scratch must have rank 3"
+    comptime assert output.flat_rank == 3, "output must have rank 3"
+    var query_rows = Int(output.dim[0]())
+    var query_heads = Int(output.dim[1]())
+    var head_dim = Int(output.dim[2]())
+    var key_value_rows = Int(value.dim[0]())
+    var key_value_heads = Int(value.dim[1]())
+    var output_count = query_rows * query_heads * head_dim
+    comptime kernel = _grouped_query_attention_pv_apple_gpu_kernel[
+        ValueLayout, ScratchLayout, OutputLayout
+    ]
+    context.enqueue_function[kernel](
+        value,
+        scratch,
+        output,
+        Int32(query_rows),
+        Int32(key_value_rows),
+        Int32(query_heads),
+        Int32(key_value_heads),
+        Int32(head_dim),
+        grid_dim=ceildiv(output_count, ATTENTION_APPLE_GPU_BLOCK_SIZE),
+        block_dim=ATTENTION_APPLE_GPU_BLOCK_SIZE,
+    )
+
+
 @always_inline
-def bench_attention[
+def bench_attention_stage[
     query_rows: Int,
     key_value_rows: Int,
+    stage: Int,
 ](mut bencher: Bencher) raises capturing:
     comptime assert query_rows > 0, "query rows must be positive"
     comptime assert (
         query_rows <= key_value_rows
     ), "query rows must not exceed key/value rows"
+    comptime assert (
+        stage >= STAGE_END_TO_END and stage <= STAGE_PV
+    ), "unknown attention benchmark stage"
     comptime assert has_apple_gpu_accelerator(), "benchmark requires Apple GPU"
     var context = DeviceContext()
     if context.api() != "metal":
@@ -126,48 +262,100 @@ def bench_attention[
     var scratch = TileTensor(scratch_buffer, scratch_layout)
     var output = TileTensor(output_buffer, query_layout)
 
-    # Warm the compiled path and retain shape-specific correctness gates outside
-    # the timed region. Mapping establishes completion for the initial launch.
-    enqueue_grouped_query_attention_apple_gpu(
-        context, query, key, value, scratch, output
-    )
-    with output_buffer.map_to_host() as mapped_output:
-        var host_output = TileTensor(mapped_output, query_layout)
-        _assert_unit_output[query_rows](host_output)
-    with scratch_buffer.map_to_host() as mapped_scratch:
-        var host_scratch = TileTensor(mapped_scratch, scratch_layout)
-        _assert_causal_probabilities[query_rows, key_value_rows](host_scratch)
+    # Prepare and validate each exact production kernel outside timing. Uniform
+    # visible inputs make softmax a fixed point, so repeated in-place softmax
+    # iterations retain valid probabilities without a timed reset operation.
+    comptime if stage == STAGE_END_TO_END:
+        enqueue_grouped_query_attention_apple_gpu(
+            context, query, key, value, scratch, output
+        )
+        with output_buffer.map_to_host() as mapped_output:
+            var host_output = TileTensor(mapped_output, query_layout)
+            _assert_unit_output[query_rows](host_output)
+        with scratch_buffer.map_to_host() as mapped_scratch:
+            var host_scratch = TileTensor(mapped_scratch, scratch_layout)
+            _assert_causal_probabilities[query_rows, key_value_rows](
+                host_scratch
+            )
+    elif stage == STAGE_QK:
+        _enqueue_qk_stage(context, query, key, scratch)
+        with scratch_buffer.map_to_host() as mapped_scratch:
+            var host_scratch = TileTensor(mapped_scratch, scratch_layout)
+            _assert_unit_qk_scores[query_rows, key_value_rows](host_scratch)
+    elif stage == STAGE_SOFTMAX:
+        _enqueue_qk_stage(context, query, key, scratch)
+        _enqueue_softmax_stage(context, scratch)
+        with scratch_buffer.map_to_host() as mapped_scratch:
+            var host_scratch = TileTensor(mapped_scratch, scratch_layout)
+            _assert_causal_probabilities[query_rows, key_value_rows](
+                host_scratch
+            )
+    else:
+        _enqueue_qk_stage(context, query, key, scratch)
+        _enqueue_softmax_stage(context, scratch)
+        _enqueue_pv_stage(context, value, scratch, output)
+        with output_buffer.map_to_host() as mapped_output:
+            var host_output = TileTensor(mapped_output, query_layout)
+            _assert_unit_output[query_rows](host_output)
+        with scratch_buffer.map_to_host() as mapped_scratch:
+            var host_scratch = TileTensor(mapped_scratch, scratch_layout)
+            _assert_causal_probabilities[query_rows, key_value_rows](
+                host_scratch
+            )
 
     @always_inline
     def launch(launch_context: DeviceContext) raises {imm}:
-        enqueue_grouped_query_attention_apple_gpu(
-            launch_context, query, key, value, scratch, output
-        )
+        comptime if stage == STAGE_END_TO_END:
+            enqueue_grouped_query_attention_apple_gpu(
+                launch_context, query, key, value, scratch, output
+            )
+        elif stage == STAGE_QK:
+            _enqueue_qk_stage(launch_context, query, key, scratch)
+        elif stage == STAGE_SOFTMAX:
+            _enqueue_softmax_stage(launch_context, scratch)
+        else:
+            _enqueue_pv_stage(launch_context, value, scratch, output)
 
     bencher_iter_custom(bencher, launch, context)
 
 
-def _add_benchmark[
+def _add_stage_benchmark[
     query_rows: Int,
     key_value_rows: Int,
-](mut benchmark: Bench, regime: String) raises:
-    comptime workload = bench_attention[query_rows, key_value_rows]
+    stage: Int,
+](mut benchmark: Bench, regime: String, benchmark_name: String) raises:
+    comptime workload = bench_attention_stage[query_rows, key_value_rows, stage]
     comptime visible_positions_per_head = (
         query_rows * (2 * key_value_rows - query_rows + 1) // 2
     )
     comptime visible_scores = QUERY_HEADS * visible_positions_per_head
     comptime materialized_scores = query_rows * QUERY_HEADS * key_value_rows
     comptime output_elements = query_rows * QUERY_HEADS * HEAD_DIM
-    comptime program_requested_bytes = (
-        # QK plus probability-times-V each read two BF16 operands.
-        8 * visible_scores * HEAD_DIM
-        # Stable softmax reads each visible BF16 score three times.
-        + 6 * visible_scores
-        # QK and softmax each write every materialized BF16 score slot.
-        + 4 * materialized_scores
-        # The final stage writes each BF16 output once.
-        + 2 * output_elements
+    comptime qk_requested_bytes = (
+        4 * visible_scores * HEAD_DIM + 2 * materialized_scores
     )
+    comptime softmax_requested_bytes = (
+        6 * visible_scores + 2 * materialized_scores
+    )
+    comptime pv_requested_bytes = (
+        4 * visible_scores * HEAD_DIM + 2 * output_elements
+    )
+    var stage_elements: Int
+    var program_requested_bytes: Int
+    comptime if stage == STAGE_END_TO_END:
+        stage_elements = output_elements
+        program_requested_bytes = (
+            qk_requested_bytes + softmax_requested_bytes + pv_requested_bytes
+        )
+    elif stage == STAGE_QK:
+        stage_elements = materialized_scores
+        program_requested_bytes = qk_requested_bytes
+    elif stage == STAGE_SOFTMAX:
+        stage_elements = materialized_scores
+        program_requested_bytes = softmax_requested_bytes
+    else:
+        stage_elements = output_elements
+        program_requested_bytes = pv_requested_bytes
     var workload_id = (
         regime
         + "-r"
@@ -177,43 +365,156 @@ def _add_benchmark[
         + "-qh14-kvh2-d64"
     )
     benchmark.bench_function[workload](
-        BenchId("grouped_query_attention_apple_gpu_materialized", workload_id),
+        BenchId(benchmark_name, workload_id),
         [
-            ThroughputMeasure(BenchMetric.elements, output_elements),
+            ThroughputMeasure(BenchMetric.elements, stage_elements),
             ThroughputMeasure(BenchMetric.bytes, program_requested_bytes),
         ],
     )
 
 
-def _add_workloads[reverse: Bool](mut benchmark: Bench) raises:
-    comptime if reverse:
-        _add_benchmark[256, 256](benchmark, "full-prefill")
-        _add_benchmark[128, 128](benchmark, "full-prefill")
-        _add_benchmark[32, 32](benchmark, "full-prefill")
-        _add_benchmark[4, 4](benchmark, "full-prefill")
-        _add_benchmark[16, 4096](benchmark, "incremental-prefill")
-        _add_benchmark[16, 512](benchmark, "incremental-prefill")
-        _add_benchmark[4, 128](benchmark, "incremental-prefill")
-        _add_benchmark[1, 4096](benchmark, "decode")
-        _add_benchmark[1, 1024](benchmark, "decode")
-        _add_benchmark[1, 256](benchmark, "decode")
-        _add_benchmark[1, 64](benchmark, "decode")
-        _add_benchmark[1, 16](benchmark, "decode")
-        _add_benchmark[1, 1](benchmark, "decode")
+def _add_stage_group[
+    query_rows: Int,
+    key_value_rows: Int,
+    reverse_stages: Bool,
+](mut benchmark: Bench, regime: String) raises:
+    comptime if reverse_stages:
+        _add_stage_benchmark[query_rows, key_value_rows, STAGE_PV](
+            benchmark,
+            regime,
+            "grouped_query_attention_pv_apple_gpu_materialized",
+        )
+        _add_stage_benchmark[query_rows, key_value_rows, STAGE_SOFTMAX](
+            benchmark,
+            regime,
+            "grouped_query_attention_softmax_apple_gpu_materialized",
+        )
+        _add_stage_benchmark[query_rows, key_value_rows, STAGE_QK](
+            benchmark,
+            regime,
+            "grouped_query_attention_qk_apple_gpu_materialized",
+        )
+        _add_stage_benchmark[query_rows, key_value_rows, STAGE_END_TO_END](
+            benchmark, regime, "grouped_query_attention_apple_gpu_materialized"
+        )
     else:
-        _add_benchmark[1, 1](benchmark, "decode")
-        _add_benchmark[1, 16](benchmark, "decode")
-        _add_benchmark[1, 64](benchmark, "decode")
-        _add_benchmark[1, 256](benchmark, "decode")
-        _add_benchmark[1, 1024](benchmark, "decode")
-        _add_benchmark[1, 4096](benchmark, "decode")
-        _add_benchmark[4, 128](benchmark, "incremental-prefill")
-        _add_benchmark[16, 512](benchmark, "incremental-prefill")
-        _add_benchmark[16, 4096](benchmark, "incremental-prefill")
-        _add_benchmark[4, 4](benchmark, "full-prefill")
-        _add_benchmark[32, 32](benchmark, "full-prefill")
-        _add_benchmark[128, 128](benchmark, "full-prefill")
-        _add_benchmark[256, 256](benchmark, "full-prefill")
+        _add_stage_benchmark[query_rows, key_value_rows, STAGE_END_TO_END](
+            benchmark, regime, "grouped_query_attention_apple_gpu_materialized"
+        )
+        _add_stage_benchmark[query_rows, key_value_rows, STAGE_QK](
+            benchmark,
+            regime,
+            "grouped_query_attention_qk_apple_gpu_materialized",
+        )
+        _add_stage_benchmark[query_rows, key_value_rows, STAGE_SOFTMAX](
+            benchmark,
+            regime,
+            "grouped_query_attention_softmax_apple_gpu_materialized",
+        )
+        _add_stage_benchmark[query_rows, key_value_rows, STAGE_PV](
+            benchmark,
+            regime,
+            "grouped_query_attention_pv_apple_gpu_materialized",
+        )
+
+
+def _add_shape[
+    query_rows: Int,
+    key_value_rows: Int,
+    stage_attribution: Bool,
+    reverse_stages: Bool,
+](mut benchmark: Bench, regime: String) raises:
+    comptime if stage_attribution:
+        _add_stage_group[query_rows, key_value_rows, reverse_stages](
+            benchmark, regime
+        )
+    else:
+        _add_stage_benchmark[query_rows, key_value_rows, STAGE_END_TO_END](
+            benchmark, regime, "grouped_query_attention_apple_gpu_materialized"
+        )
+
+
+def _add_workloads[
+    reverse: Bool,
+    stage_attribution: Bool,
+    reverse_stages: Bool,
+](mut benchmark: Bench) raises:
+    comptime if reverse:
+        _add_shape[256, 256, stage_attribution, reverse_stages](
+            benchmark, "full-prefill"
+        )
+        _add_shape[128, 128, stage_attribution, reverse_stages](
+            benchmark, "full-prefill"
+        )
+        _add_shape[32, 32, stage_attribution, reverse_stages](
+            benchmark, "full-prefill"
+        )
+        _add_shape[4, 4, stage_attribution, reverse_stages](
+            benchmark, "full-prefill"
+        )
+        _add_shape[16, 4096, stage_attribution, reverse_stages](
+            benchmark, "incremental-prefill"
+        )
+        _add_shape[16, 512, stage_attribution, reverse_stages](
+            benchmark, "incremental-prefill"
+        )
+        _add_shape[4, 128, stage_attribution, reverse_stages](
+            benchmark, "incremental-prefill"
+        )
+        _add_shape[1, 4096, stage_attribution, reverse_stages](
+            benchmark, "decode"
+        )
+        _add_shape[1, 1024, stage_attribution, reverse_stages](
+            benchmark, "decode"
+        )
+        _add_shape[1, 256, stage_attribution, reverse_stages](
+            benchmark, "decode"
+        )
+        _add_shape[1, 64, stage_attribution, reverse_stages](
+            benchmark, "decode"
+        )
+        _add_shape[1, 16, stage_attribution, reverse_stages](
+            benchmark, "decode"
+        )
+        _add_shape[1, 1, stage_attribution, reverse_stages](benchmark, "decode")
+    else:
+        _add_shape[1, 1, stage_attribution, reverse_stages](benchmark, "decode")
+        _add_shape[1, 16, stage_attribution, reverse_stages](
+            benchmark, "decode"
+        )
+        _add_shape[1, 64, stage_attribution, reverse_stages](
+            benchmark, "decode"
+        )
+        _add_shape[1, 256, stage_attribution, reverse_stages](
+            benchmark, "decode"
+        )
+        _add_shape[1, 1024, stage_attribution, reverse_stages](
+            benchmark, "decode"
+        )
+        _add_shape[1, 4096, stage_attribution, reverse_stages](
+            benchmark, "decode"
+        )
+        _add_shape[4, 128, stage_attribution, reverse_stages](
+            benchmark, "incremental-prefill"
+        )
+        _add_shape[16, 512, stage_attribution, reverse_stages](
+            benchmark, "incremental-prefill"
+        )
+        _add_shape[16, 4096, stage_attribution, reverse_stages](
+            benchmark, "incremental-prefill"
+        )
+        _add_shape[4, 4, stage_attribution, reverse_stages](
+            benchmark, "full-prefill"
+        )
+        _add_shape[32, 32, stage_attribution, reverse_stages](
+            benchmark, "full-prefill"
+        )
+        _add_shape[128, 128, stage_attribution, reverse_stages](
+            benchmark, "full-prefill"
+        )
+        _add_shape[256, 256, stage_attribution, reverse_stages](
+            benchmark, "full-prefill"
+        )
 
 
 def main() raises:
@@ -225,10 +526,27 @@ def main() raises:
     print("implementation: enqueue_grouped_query_attention_apple_gpu")
     print("device:", identity.name())
     print("api:", identity.api())
+    comptime stage_attribution = get_defined_bool[
+        "ATTENTION_BENCH_STAGE_ATTRIBUTION"
+    ]()
+    comptime reverse_stages = get_defined_bool[
+        "ATTENTION_BENCH_REVERSE_STAGES"
+    ]()
+    comptime assert (
+        stage_attribution or not reverse_stages
+    ), "reverse stage order requires stage-attribution mode"
+    comptime if stage_attribution:
+        print("mode: stage-attribution")
+        print("workload: one end-to-end call plus three isolated stages")
+        print("isolated stage timing: one Metal dispatch through completion")
+        print("softmax input: uniform causal probabilities at a fixed point")
+        print("stage order:", "reverse" if reverse_stages else "forward")
+    else:
+        print("mode: end-to-end")
+        print("workload: one hot attention operation; three Metal dispatches")
     print("dtype: BF16 inputs, scores, probabilities, and output")
     print("accumulation: FP32 QK, softmax, and probability-times-V")
     print("shape constants: query_heads=14 key_value_heads=2 head_dim=64")
-    print("workload: one hot attention operation; three Metal dispatches")
     print("timing: enqueue through synchronized device completion")
     print("allocation, initialization, correctness, and mapping excluded")
     print("bytes metric: source-derived requests by this materialized baseline")
@@ -252,7 +570,7 @@ def main() raises:
             num_repetitions=BENCHMARK_REPETITIONS,
         )
     )
-    _add_workloads[reverse](benchmark)
+    _add_workloads[reverse, stage_attribution, reverse_stages](benchmark)
     benchmark.config.format = Format.tabular
     print("BENCHMARK_RESULTS_BEGIN")
     print(benchmark)

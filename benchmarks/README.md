@@ -375,6 +375,26 @@ Run one exploratory ascending block:
 uv run --locked python benchmarks/run_attention.py
 ```
 
+Add `--stage-attribution` to measure the same end-to-end operation beside its
+three exact internal kernels:
+
+```bash
+uv run --locked python benchmarks/run_attention.py --stage-attribution
+```
+
+Each isolated QK, softmax, or probability-times-V row times one dispatch. Its
+setup and correctness readback remain outside timing. QK repeatedly writes the
+same scores, and probability-times-V reads stable probabilities. Softmax is
+in-place, so its setup uses uniform scores and performs one untimed softmax;
+the resulting uniform causal probabilities are a fixed point under subsequent
+softmax calls. This avoids including a reset dispatch in the timed operation.
+
+The attribution summary divides each isolated-stage median by the sum of the
+three isolated medians. It also retains the independently measured end-to-end
+median and reports the ratio between that median and the isolated sum. Do not
+treat the three isolated measurements as an exact decomposition of the queued
+end-to-end call: their scheduling and completion boundaries differ.
+
 The runner rejects any execution that does not identify an Apple GPU and the
 Metal API. It records shape, dtype, layout, dispatch count, synchronization
 boundary, repository identity, and current machine conditions. It also reports
@@ -399,6 +419,10 @@ performance warning, explicit run identity, and a new external output
 directory. It writes raw block output, metadata, parsed samples, and a summary.
 This instrument establishes the simple three-stage control; it contains no
 optimized candidate and makes no dispatch decision.
+
+For retained stage attribution, add `--stage-attribution` to that four-block
+command. Blocks one and four use end-to-end, QK, softmax, PV order within each
+shape; blocks two and three reverse both the workload sweep and stage order.
 
 ## RMSNorm profiling instrument
 

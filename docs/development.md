@@ -165,6 +165,11 @@ It is the control for later attention optimizations, not an end-to-end model
 benchmark. See `benchmarks/README.md` for the exact shape sweep and retained-run
 protocol.
 
+Use `--stage-attribution` to time the exact QK, softmax, and
+probability-times-V kernels independently beside the end-to-end control. The
+reported stage fractions use the isolated-stage sum; they are diagnostic and
+must not be presented as an exact decomposition of end-to-end latency.
+
 Run the synchronized RMSNorm microbenchmark and its curated environment record
 with:
 

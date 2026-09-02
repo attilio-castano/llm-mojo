@@ -26,12 +26,44 @@ HEAD_DIM = 64
 DISPATCHES_PER_ITERATION = 3
 EXPECTED_REPETITIONS = 10
 BLOCK_ORDERS = ("ascending", "descending", "descending", "ascending")
+BLOCK_STAGE_ORDERS = ("forward", "reverse", "reverse", "forward")
 BENCHMARK_RESULTS_BEGIN = "BENCHMARK_RESULTS_BEGIN"
 BENCHMARK_RESULTS_END = "BENCHMARK_RESULTS_END"
 IMPLEMENTATION = {
     "id": "apple_gpu_materialized_three_stage_v0",
     "entrypoint": "enqueue_grouped_query_attention_apple_gpu",
     "benchmark_name": "grouped_query_attention_apple_gpu_materialized",
+    "stage": "end-to-end",
+    "dispatches": 3,
+}
+STAGE_ORDER = ("end-to-end", "qk", "softmax", "pv")
+STAGE_IMPLEMENTATIONS = {
+    "end-to-end": IMPLEMENTATION,
+    "qk": {
+        "id": "apple_gpu_materialized_qk_stage_v0",
+        "entrypoint": "_grouped_query_attention_qk_apple_gpu_kernel",
+        "benchmark_name": "grouped_query_attention_qk_apple_gpu_materialized",
+        "stage": "qk",
+        "dispatches": 1,
+    },
+    "softmax": {
+        "id": "apple_gpu_materialized_softmax_stage_v0",
+        "entrypoint": "_grouped_query_attention_softmax_apple_gpu_kernel",
+        "benchmark_name": ("grouped_query_attention_softmax_apple_gpu_materialized"),
+        "stage": "softmax",
+        "dispatches": 1,
+    },
+    "pv": {
+        "id": "apple_gpu_materialized_pv_stage_v0",
+        "entrypoint": "_grouped_query_attention_pv_apple_gpu_kernel",
+        "benchmark_name": "grouped_query_attention_pv_apple_gpu_materialized",
+        "stage": "pv",
+        "dispatches": 1,
+    },
+}
+IMPLEMENTATION_BY_BENCHMARK = {
+    str(implementation["benchmark_name"]): implementation
+    for implementation in STAGE_IMPLEMENTATIONS.values()
 }
 WORKLOAD_ORDER = (
     "decode-r1-t1-qh14-kvh2-d64",
@@ -49,7 +81,8 @@ WORKLOAD_ORDER = (
     "full-prefill-r256-t256-qh14-kvh2-d64",
 )
 BENCHMARK_NAME = re.compile(
-    r"^grouped_query_attention_apple_gpu_materialized/input_id:"
+    r"^(grouped_query_attention_(?:(?:qk|softmax|pv)_)?"
+    r"apple_gpu_materialized)/input_id:"
     r"((decode|incremental-prefill|full-prefill)-r(\d+)-t(\d+)"
     r"-qh(\d+)-kvh(\d+)-d(\d+))$"
 )
@@ -69,11 +102,13 @@ def workload_metrics(query_rows: int, key_value_rows: int) -> dict[str, int]:
     )
     qk_macs = visible_scores * HEAD_DIM
     probability_value_macs = visible_scores * HEAD_DIM
+    qk_requested_bytes = 4 * visible_scores * HEAD_DIM + 2 * materialized_scores
+    softmax_requested_bytes = 6 * visible_scores + 2 * materialized_scores
+    probability_value_requested_bytes = (
+        4 * visible_scores * HEAD_DIM + 2 * output_elements
+    )
     program_requested_bytes = (
-        8 * visible_scores * HEAD_DIM
-        + 6 * visible_scores
-        + 4 * materialized_scores
-        + 2 * output_elements
+        qk_requested_bytes + softmax_requested_bytes + probability_value_requested_bytes
     )
     return {
         "visible_scores": visible_scores,
@@ -82,6 +117,13 @@ def workload_metrics(query_rows: int, key_value_rows: int) -> dict[str, int]:
         "qk_macs": qk_macs,
         "probability_value_macs": probability_value_macs,
         "total_macs": qk_macs + probability_value_macs,
+        "softmax_exp_evaluations": 2 * visible_scores,
+        "softmax_divisions": visible_scores,
+        "qk_requested_traffic_bytes": qk_requested_bytes,
+        "softmax_requested_traffic_bytes": softmax_requested_bytes,
+        "probability_value_requested_traffic_bytes": (
+            probability_value_requested_bytes
+        ),
         "scratch_bytes": 2 * materialized_scores,
         "allocated_footprint_bytes": 2 * allocated_elements,
         "program_requested_traffic_bytes": program_requested_bytes,
@@ -96,9 +138,9 @@ def build_workloads() -> dict[str, dict[str, int | str]]:
         )
         if match is None:
             raise ValueError(f"invalid configured workload {workload_id!r}")
-        regime = match.group(2)
-        query_rows = int(match.group(3))
-        key_value_rows = int(match.group(4))
+        regime = match.group(3)
+        query_rows = int(match.group(4))
+        key_value_rows = int(match.group(5))
         metrics = workload_metrics(query_rows, key_value_rows)
         workloads[workload_id] = {
             "regime": regime,
@@ -110,6 +152,46 @@ def build_workloads() -> dict[str, dict[str, int | str]]:
 
 
 WORKLOADS = build_workloads()
+
+
+def stage_metrics(workload: dict[str, int | str], stage: str) -> dict[str, int]:
+    if stage == "end-to-end":
+        return {
+            "dispatches": DISPATCHES_PER_ITERATION,
+            "elements": int(workload["output_elements"]),
+            "macs": int(workload["total_macs"]),
+            "program_requested_traffic_bytes": int(
+                workload["program_requested_traffic_bytes"]
+            ),
+        }
+    if stage == "qk":
+        return {
+            "dispatches": 1,
+            "elements": int(workload["materialized_scores"]),
+            "macs": int(workload["qk_macs"]),
+            "program_requested_traffic_bytes": int(
+                workload["qk_requested_traffic_bytes"]
+            ),
+        }
+    if stage == "softmax":
+        return {
+            "dispatches": 1,
+            "elements": int(workload["materialized_scores"]),
+            "macs": 0,
+            "program_requested_traffic_bytes": int(
+                workload["softmax_requested_traffic_bytes"]
+            ),
+        }
+    if stage == "pv":
+        return {
+            "dispatches": 1,
+            "elements": int(workload["output_elements"]),
+            "macs": int(workload["probability_value_macs"]),
+            "program_requested_traffic_bytes": int(
+                workload["probability_value_requested_traffic_bytes"]
+            ),
+        }
+    raise ValueError(f"unknown attention stage {stage!r}")
 
 
 def command(*args: str) -> str:
@@ -274,21 +356,29 @@ def ensure_record_location(output_dir: Path) -> None:
         )
 
 
-def parse_identity(output: str) -> dict[str, str]:
+def parse_identity(output: str, *, stage_attribution: bool = False) -> dict[str, str]:
     implementation = re.search(r"^implementation:\s*(.+)$", output, re.MULTILINE)
     device = re.search(r"^device:\s*(.+)$", output, re.MULTILINE)
     api = re.search(r"^api:\s*(.+)$", output, re.MULTILINE)
-    if implementation is None or device is None or api is None:
+    mode = re.search(r"^mode:\s*(.+)$", output, re.MULTILINE)
+    if implementation is None or device is None or api is None or mode is None:
         raise ValueError("benchmark output omitted runtime identity")
     identity = {
         "implementation": implementation.group(1).strip(),
         "device": device.group(1).strip(),
         "api": api.group(1).strip(),
+        "mode": mode.group(1).strip(),
     }
     if identity["implementation"] != IMPLEMENTATION["entrypoint"]:
         raise ValueError("benchmark did not identify the frozen baseline")
     if not identity["device"].startswith("Apple ") or identity["api"] != "metal":
         raise ValueError("benchmark did not prove Apple GPU Metal execution")
+    expected_mode = "stage-attribution" if stage_attribution else "end-to-end"
+    if identity["mode"] != expected_mode:
+        raise ValueError(
+            f"benchmark mode mismatch: expected {expected_mode!r}, "
+            f"got {identity['mode']!r}"
+        )
     return identity
 
 
@@ -312,13 +402,24 @@ def parse_samples(
     run_id: str,
     block_id: str,
     block_order: str,
+    stage_attribution: bool = False,
+    block_stage_order: str = "forward",
 ) -> tuple[dict[str, str], list[dict[str, Any]]]:
     if block_order not in ("ascending", "descending"):
         raise ValueError("invalid attention workload order")
-    identity = parse_identity(output)
+    if block_stage_order not in ("forward", "reverse"):
+        raise ValueError("invalid attention stage order")
+    identity = parse_identity(output, stage_attribution=stage_attribution)
+    if stage_attribution:
+        stage_order_match = re.search(r"^stage order:\s*(.+)$", output, re.MULTILINE)
+        if (
+            stage_order_match is None
+            or stage_order_match.group(1).strip() != block_stage_order
+        ):
+            raise ValueError("benchmark stage order mismatch")
     reader = csv.DictReader(table_lines(output), skipinitialspace=True)
-    repetition_by_workload: defaultdict[str, int] = defaultdict(int)
-    observed_order: list[str] = []
+    repetition_by_operation: defaultdict[tuple[str, str], int] = defaultdict(int)
+    observed_order: list[tuple[str, str]] = []
     samples: list[dict[str, Any]] = []
 
     for raw_row in reader:
@@ -330,28 +431,35 @@ def parse_samples(
         match = BENCHMARK_NAME.fullmatch(row.get("name", ""))
         if match is None:
             raise ValueError(f"unrecognized benchmark row: {row!r}")
-        workload_id = match.group(1)
+        benchmark_name = match.group(1)
+        implementation_spec = IMPLEMENTATION_BY_BENCHMARK[benchmark_name]
+        stage = str(implementation_spec["stage"])
+        if not stage_attribution and stage != "end-to-end":
+            raise ValueError("end-to-end benchmark emitted an isolated stage")
+        workload_id = match.group(2)
         if workload_id not in WORKLOADS:
             raise ValueError(f"unexpected attention workload: {workload_id}")
         workload = WORKLOADS[workload_id]
         if (
-            int(match.group(3)) != workload["query_rows"]
-            or int(match.group(4)) != workload["key_value_rows"]
-            or int(match.group(5)) != QUERY_HEADS
-            or int(match.group(6)) != KEY_VALUE_HEADS
-            or int(match.group(7)) != HEAD_DIM
+            int(match.group(4)) != workload["query_rows"]
+            or int(match.group(5)) != workload["key_value_rows"]
+            or int(match.group(6)) != QUERY_HEADS
+            or int(match.group(7)) != KEY_VALUE_HEADS
+            or int(match.group(8)) != HEAD_DIM
         ):
             raise ValueError("attention benchmark row disagrees with its workload")
-        if not observed_order or observed_order[-1] != workload_id:
-            observed_order.append(workload_id)
+        operation = (workload_id, stage)
+        if not observed_order or observed_order[-1] != operation:
+            observed_order.append(operation)
 
         value_text = row.get("met (ms)", "")
         iterations_text = row.get("iters", "")
         value = float(value_text)
         iterations = int(iterations_text)
         valid = math.isfinite(value) and value > 0.0 and iterations > 0
-        repetition_by_workload[workload_id] += 1
-        repetition = repetition_by_workload[workload_id]
+        repetition_by_operation[operation] += 1
+        repetition = repetition_by_operation[operation]
+        measured = stage_metrics(workload, stage)
         samples.append(
             {
                 "schema_version": 1,
@@ -359,21 +467,35 @@ def parse_samples(
                 "run_id": run_id,
                 "block_id": block_id,
                 "block_order": block_order,
-                "sample_id": (f"{run_id}-{block_id}-{workload_id}-rep{repetition:02d}"),
-                "implementation": IMPLEMENTATION["id"],
-                "implementation_entrypoint": IMPLEMENTATION["entrypoint"],
+                "block_stage_order": block_stage_order,
+                "sample_id": (
+                    f"{run_id}-{block_id}-{workload_id}-{stage}-rep{repetition:02d}"
+                ),
+                "implementation": implementation_spec["id"],
+                "implementation_entrypoint": implementation_spec["entrypoint"],
+                "attention_implementation": IMPLEMENTATION["id"],
                 "workload": workload_id,
                 "regime": workload["regime"],
+                "stage": stage,
                 "query_rows": workload["query_rows"],
                 "key_value_rows": workload["key_value_rows"],
                 "query_heads": QUERY_HEADS,
                 "key_value_heads": KEY_VALUE_HEADS,
                 "head_dim": HEAD_DIM,
-                "dispatches_per_iteration": DISPATCHES_PER_ITERATION,
+                "dispatches_per_iteration": measured["dispatches"],
+                "stage_elements": measured["elements"],
+                "stage_macs": measured["macs"],
+                "stage_program_requested_traffic_bytes": measured[
+                    "program_requested_traffic_bytes"
+                ],
                 "repetition": repetition,
                 "value": value,
                 "source_value": value_text,
-                "unit": "ms_per_attention_call",
+                "unit": (
+                    "ms_per_attention_call"
+                    if stage == "end-to-end"
+                    else "ms_per_isolated_stage_dispatch"
+                ),
                 "iterations": iterations,
                 "valid": valid,
                 **{
@@ -384,20 +506,29 @@ def parse_samples(
             }
         )
 
-    expected_order = list(
+    workload_order = list(
         WORKLOAD_ORDER if block_order == "ascending" else reversed(WORKLOAD_ORDER)
     )
+    stage_order = list(
+        STAGE_ORDER if block_stage_order == "forward" else reversed(STAGE_ORDER)
+    )
+    if stage_attribution:
+        expected_order = [
+            (workload_id, stage)
+            for workload_id in workload_order
+            for stage in stage_order
+        ]
+    else:
+        expected_order = [(workload_id, "end-to-end") for workload_id in workload_order]
     if observed_order != expected_order:
         raise ValueError(
             f"workload order mismatch: expected {expected_order}, got {observed_order}"
         )
-    expected_counts = {
-        workload_id: EXPECTED_REPETITIONS for workload_id in WORKLOAD_ORDER
-    }
-    if dict(repetition_by_workload) != expected_counts:
+    expected_counts = {operation: EXPECTED_REPETITIONS for operation in expected_order}
+    if dict(repetition_by_operation) != expected_counts:
         raise ValueError(
             f"repetition count mismatch: expected {expected_counts}, got "
-            f"{dict(repetition_by_workload)}"
+            f"{dict(repetition_by_operation)}"
         )
     if any(not sample["valid"] for sample in samples):
         raise ValueError("benchmark emitted a non-finite or non-positive sample")
@@ -417,9 +548,14 @@ def percentile(values: list[float], fraction: float) -> float:
     return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
 
 
-def summarize(samples: Iterable[dict[str, Any]]) -> dict[str, Any]:
+def summarize(
+    samples: Iterable[dict[str, Any]], *, stage_attribution: bool = False
+) -> dict[str, Any]:
+    sample_list = list(samples)
+    if stage_attribution:
+        return summarize_stage_attribution(sample_list)
     grouped: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
-    for sample in samples:
+    for sample in sample_list:
         if sample["valid"]:
             grouped[str(sample["workload"])].append(sample)
 
@@ -504,10 +640,149 @@ def summarize(samples: Iterable[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def benchmark_command(*, reverse: bool) -> list[str]:
+def stage_distribution(group: list[dict[str, Any]]) -> dict[str, Any]:
+    values = [float(sample["value"]) for sample in group if sample["valid"]]
+    if not values:
+        raise ValueError("stage summary requires valid samples")
+    median = statistics.median(values)
+    deviations = [abs(value - median) for value in values]
+    block_values: defaultdict[str, list[float]] = defaultdict(list)
+    for sample in group:
+        if sample["valid"]:
+            block_values[str(sample["block_id"])].append(float(sample["value"]))
+    blocks: list[dict[str, Any]] = []
+    for block_id, values_in_block in block_values.items():
+        midpoint = len(values_in_block) // 2
+        first_median = statistics.median(values_in_block[:midpoint])
+        second_median = statistics.median(values_in_block[midpoint:])
+        blocks.append(
+            {
+                "block_id": block_id,
+                "median_ms": statistics.median(values_in_block),
+                "first_half_median_ms": first_median,
+                "second_half_median_ms": second_median,
+                "half_shift_fraction": ((second_median - first_median) / first_median),
+            }
+        )
+    return {
+        "count": len(values),
+        "median_ms": median,
+        "median_absolute_deviation_ms": statistics.median(deviations),
+        "p25_ms": percentile(values, 0.25),
+        "p75_ms": percentile(values, 0.75),
+        "min_ms": min(values),
+        "max_ms": max(values),
+        "blocks": blocks,
+    }
+
+
+def summarize_stage_attribution(
+    samples: Iterable[dict[str, Any]],
+) -> dict[str, Any]:
+    grouped: defaultdict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for sample in samples:
+        if sample["valid"]:
+            grouped[(str(sample["workload"]), str(sample["stage"]))].append(sample)
+
+    workloads: list[dict[str, Any]] = []
+    for workload_id in WORKLOAD_ORDER:
+        workload = WORKLOADS[workload_id]
+        stages: dict[str, dict[str, Any]] = {}
+        for stage in STAGE_ORDER:
+            group = grouped[(workload_id, stage)]
+            if not group:
+                raise ValueError(
+                    f"stage attribution omitted {stage!r} for {workload_id!r}"
+                )
+            distribution = stage_distribution(group)
+            measured = stage_metrics(workload, stage)
+            median = float(distribution["median_ms"])
+            macs = measured["macs"]
+            requested_bytes = measured["program_requested_traffic_bytes"]
+            stages[stage] = {
+                "implementation": STAGE_IMPLEMENTATIONS[stage],
+                "dispatches_per_iteration": measured["dispatches"],
+                "elements": measured["elements"],
+                "macs": macs,
+                "program_requested_traffic_bytes": requested_bytes,
+                "effective_gmac_per_second": (
+                    macs / (median * 1_000_000.0) if macs else None
+                ),
+                "program_requested_gb_per_second": requested_bytes
+                / (median * 1_000_000.0),
+                **distribution,
+            }
+        isolated_sum = sum(
+            float(stages[stage]["median_ms"]) for stage in ("qk", "softmax", "pv")
+        )
+        end_to_end = float(stages["end-to-end"]["median_ms"])
+        workloads.append(
+            {
+                "workload": workload_id,
+                "regime": workload["regime"],
+                "query_rows": workload["query_rows"],
+                "key_value_rows": workload["key_value_rows"],
+                "query_heads": QUERY_HEADS,
+                "key_value_heads": KEY_VALUE_HEADS,
+                "head_dim": HEAD_DIM,
+                "visible_scores": workload["visible_scores"],
+                "materialized_scores": workload["materialized_scores"],
+                "scratch_bytes": workload["scratch_bytes"],
+                "softmax_exp_evaluations": workload["softmax_exp_evaluations"],
+                "softmax_divisions": workload["softmax_divisions"],
+                "stages": stages,
+                "isolated_stage_sum_ms": isolated_sum,
+                "isolated_stage_fractions": {
+                    stage: float(stages[stage]["median_ms"]) / isolated_sum
+                    for stage in ("qk", "softmax", "pv")
+                },
+                "isolated_sum_over_end_to_end_ratio": (isolated_sum / end_to_end),
+                "end_to_end_minus_isolated_sum_ms": (end_to_end - isolated_sum),
+            }
+        )
+    return {
+        "schema_version": 1,
+        "implementation": IMPLEMENTATION,
+        "stage_implementations": STAGE_IMPLEMENTATIONS,
+        "statistics": {
+            "primary_metric": (
+                "synchronized milliseconds per timed stage or attention call"
+            ),
+            "percentile_method": "linear interpolation at (n - 1) * p",
+            "spread": "median absolute deviation and interquartile range",
+            "attribution_basis": (
+                "Stage fractions use the sum of independently timed stage "
+                "medians, not the end-to-end median."
+            ),
+        },
+        "scope": (
+            "Diagnostic attribution of one hot materialized attention "
+            "operation; isolated timing boundaries can differ from queued "
+            "end-to-end execution."
+        ),
+        "traffic_note": (
+            "Requested bytes are derived from source-level tensor accesses "
+            "and are not observed hardware traffic."
+        ),
+        "workloads": workloads,
+    }
+
+
+def benchmark_command(
+    *,
+    reverse: bool,
+    stage_attribution: bool = False,
+    reverse_stages: bool = False,
+) -> list[str]:
+    if reverse_stages and not stage_attribution:
+        raise ValueError("reverse stage order requires stage attribution")
     args = ["uv", "run", "--locked", "mojo", "run", "-I", "src"]
     if reverse:
         args.extend(["-D", "ATTENTION_BENCH_REVERSE=true"])
+    if stage_attribution:
+        args.extend(["-D", "ATTENTION_BENCH_STAGE_ATTRIBUTION=true"])
+    if reverse_stages:
+        args.extend(["-D", "ATTENTION_BENCH_REVERSE_STAGES=true"])
     args.append("benchmarks/attention.mojo")
     return args
 
@@ -518,13 +793,22 @@ def run_block(
     run_id: str,
     block_number: int,
     block_order: str,
+    stage_attribution: bool,
+    block_stage_order: str,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
     block_id = f"block-{block_number:02d}"
     before = conditions_snapshot()
-    command_args = benchmark_command(reverse=block_order == "descending")
+    command_args = benchmark_command(
+        reverse=block_order == "descending",
+        stage_attribution=stage_attribution,
+        reverse_stages=stage_attribution and block_stage_order == "reverse",
+    )
     environment = os.environ.copy()
     environment.pop("MODULAR_DEBUG", None)
-    print(f"Running {block_id} ({block_order})...", flush=True)
+    label = block_order
+    if stage_attribution:
+        label += f", stages {block_stage_order}"
+    print(f"Running {block_id} ({label})...", flush=True)
     started = utc_now()
     result = subprocess.run(
         command_args,
@@ -546,11 +830,14 @@ def run_block(
         run_id=run_id,
         block_id=block_id,
         block_order=block_order,
+        stage_attribution=stage_attribution,
+        block_stage_order=block_stage_order,
     )
     stdout_bytes = result.stdout.encode()
     block = {
         "block_id": block_id,
         "order": block_order,
+        "stage_order": block_stage_order if stage_attribution else None,
         "started_utc": started,
         "completed_utc": utc_now(),
         "command": shlex.join(command_args),
@@ -594,6 +881,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--recorded", action="store_true")
     parser.add_argument("--require-clean", action="store_true")
+    parser.add_argument("--stage-attribution", action="store_true")
     return parser.parse_args()
 
 
@@ -629,11 +917,14 @@ def main() -> None:
     outputs: list[str] = []
     for index in range(args.blocks):
         block_order = BLOCK_ORDERS[index]
+        block_stage_order = BLOCK_STAGE_ORDERS[index]
         block, block_samples, output = run_block(
             experiment_id=args.experiment_id,
             run_id=run_id,
             block_number=index + 1,
             block_order=block_order,
+            stage_attribution=args.stage_attribution,
+            block_stage_order=block_stage_order,
         )
         blocks.append(block)
         samples.extend(block_samples)
@@ -645,14 +936,40 @@ def main() -> None:
             require_ac(block["conditions_after"])
             require_nominal_thermal_state(block["conditions_after"])
 
-    result_summary = summarize(samples)
+    result_summary = summarize(samples, stage_attribution=args.stage_attribution)
     metadata = {
         "schema_version": 1,
         "experiment_id": args.experiment_id,
         "run_id": run_id,
         "created_utc": utc_now(),
         "operation": "grouped_query_attention",
-        "scope": ("BF16 Qwen-shaped materialized three-stage Apple GPU baseline"),
+        "mode": ("stage-attribution" if args.stage_attribution else "end-to-end"),
+        "scope": (
+            "BF16 Qwen-shaped materialized Apple GPU stage attribution"
+            if args.stage_attribution
+            else "BF16 Qwen-shaped materialized three-stage Apple GPU baseline"
+        ),
+        "measurement_contract": {
+            "dtype": "BF16 inputs, scores, probabilities, and output",
+            "accumulation": "FP32",
+            "layouts": {
+                "query": "row-major [R,14,64]",
+                "key": "row-major [T,2,64]",
+                "value": "row-major [T,2,64]",
+                "scratch": "row-major [R,14,T]",
+                "output": "row-major [R,14,64]",
+            },
+            "timing": "enqueue through synchronized device completion",
+            "excluded": ("allocation, initialization, setup, correctness, and mapping"),
+            "stage_order_protocol": (
+                BLOCK_STAGE_ORDERS if args.stage_attribution else None
+            ),
+            "softmax_timed_input": (
+                "uniform causal probabilities at an in-place fixed point"
+                if args.stage_attribution
+                else None
+            ),
+        },
         "repository": initial_repository,
         "recorded": args.recorded,
         "blocks": blocks,
