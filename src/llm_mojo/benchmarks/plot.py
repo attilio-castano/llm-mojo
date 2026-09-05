@@ -30,9 +30,9 @@ def prefill_style():
                          'savefig.facecolor': '#fcfcfa', 'figure.facecolor': '#fcfcfa'})
 
 
-def prefill_screen(directory, record, samples, summary):
-    # Contract: eleven routes x six workload/mode cells. A ratio matrix shows
-    # stage selection without connecting different rectangular workloads.
+def prefill_screen(directory, record, samples, summary, prefix='screen_', resources=False):
+    # A ratio matrix shows the frozen screen without connecting different
+    # rectangular workloads. Each cell has its own paired control.
     # Static report PNG; blue/orange plus numbers and ? for inconclusive cells.
     import numpy as np
     from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
@@ -41,27 +41,69 @@ def prefill_screen(directory, record, samples, summary):
     candidates = spec['candidates']
     lookup = {(s['query_rows'],s['rows'],s['layers'],s['candidate']):s for s in summary}
     values = np.array([[lookup[(*case,c)]['ratio'] for case in cases] for c in candidates])
-    scale = max(1,float(np.max(np.abs(np.log2(values)))))
+    scale = max(.15 if resources else 1,float(np.max(np.abs(np.log2(values)))))
     cmap = LinearSegmentedColormap.from_list('paired',['#a9c8dc','#fcfcfa','#e8b88a'])
-    fig, ax = plt.subplots(figsize=(10.5,7.4))
+    fig, ax = plt.subplots(figsize=(14,6.3) if resources else (10.5,7.4))
     ax.imshow(np.log2(values),cmap=cmap,norm=TwoSlopeNorm(vmin=-scale,vcenter=0,vmax=scale),aspect='auto')
     names = {int(k):v for k,v in spec['names'].items()}
     ax.set_yticks(range(len(candidates)),[names[c] for c in candidates])
-    ax.set_xticks(range(len(cases)),[f'R={r}, T={t}\n'+('Hot' if l==1 else 'Ring24') for r,t,l in cases])
+    ax.set_xticks(range(len(cases)),[(f'R={r}\nT={t}\n' if resources else f'R={r}, T={t}\n')+('Hot' if l==1 else 'Ring24') for r,t,l in cases])
     for i,c in enumerate(candidates):
         for j,case in enumerate(cases):
             s = lookup[(*case,c)]
             text = f'{s["ratio"]:.2f}×' + (' ?' if s['decision']=='inconclusive' else '')
             ax.text(j,i,text,ha='center',va='center',color='#222222',fontsize=10)
-    ax.axvline(2.5,color='#777777',linewidth=1)
+    ax.axvline(len(cases)/2-.5,color='#777777',linewidth=1)
     ax.tick_params(length=0,pad=10)
-    fig.suptitle('GQA prefill · bounded candidate screen',fontsize=17,fontweight='bold',y=.97)
-    fig.text(.5,.918,f'Time / paired materialized control · lower is faster · {record["runtime"]["device"]} / Metal / BF16',ha='center',fontsize=10)
+    fig.suptitle('GQA prefill · compiler and synchronization ablations' if resources else 'GQA prefill · bounded candidate screen',fontsize=17,fontweight='bold',y=.97)
+    fig.text(.5,.918,f'Time / paired {names[spec["control"]]} control · lower is faster · {record["runtime"]["device"]} / Metal / BF16',ha='center',fontsize=10)
     fig.text(.04,.035,f'{len(samples):,} observations · four paired blocks · ? = inconclusive under the measured noise rule.\n'
              'Each cell uses its own paired control. First row is self-pair calibration; colors are centered on equal time.\n'
-             f'Source {record["repository"]["commit"][:7]}. Exact ratios, block ranges and decisions: screen_summary.csv.',fontsize=9,color='#555555')
+             f'Source {record["repository"]["commit"][:7]}. Exact ratios, block ranges and decisions: {prefix}summary.csv.',fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.12,1,.88))
-    fig.savefig(directory/'screen.png',dpi=160)
+    fig.savefig(directory/(prefix.rstrip('_')+'.png'),dpi=160)
+    plt.close(fig)
+
+
+def prefill_comparisons(directory, record, samples, summary, prefix='', resources=False):
+    spec = record['specification']
+    names = {int(k):v for k,v in spec['names'].items()}
+    candidates = spec['candidates']
+    colors = dict(zip(candidates,['#6b7280','#c75b39','#167d9a','#579059','#c17b9a']))
+    markers = dict(zip(candidates,['o','s','D','^','v']))
+    fig, axes = plt.subplots(1,2,figsize=(12,8.3),sharey=True,sharex=True)
+    rivals = [c for c in candidates if c != spec['control']]
+    paired = [s for s in summary if s['candidate'] in rivals]
+    ratio_limits = (min(1,*(s['ratio_min'] for s in paired))/1.15,
+                    max(1,*(s['ratio_max'] for s in paired))*1.15)
+    for ax,layers in zip(axes,(1,24)):
+        for i,c in enumerate(rivals):
+            data=[s for s in summary if s['layers']==layers and s['candidate']==c]
+            for j,s in enumerate(data):
+                y=j+(i-(len(rivals)-1)/2)*.2
+                ax.errorbar(s['ratio'],y,xerr=[[s['ratio']-s['ratio_min']],[s['ratio_max']-s['ratio']]],
+                            color=colors[c],fmt=markers[c],capsize=3,markersize=5,
+                            markerfacecolor='white' if s['decision']=='inconclusive' else colors[c],
+                            label=names[c] if j==0 else None)
+        ax.axvline(1,color='#333333',linewidth=1)
+        if not resources:
+            ax.set_xscale('log',base=2)
+        ax.set_xlim(*ratio_limits)
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda value,_: f'{value:g}×'))
+        ax.grid(axis='x',alpha=.18)
+        ax.set_xlabel(f'Time / paired {names[spec["control"]]} · lower is faster')
+        ax.set_title('Hot call' if layers==1 else 'Ring24 per call')
+    labels=[f'Full {w["rows"]}' if w['query_rows']==w['rows'] else f'R={w["query_rows"]}, T={w["rows"]}' for w in spec['workloads']]
+    axes[0].set_yticks(range(len(labels)),labels)
+    axes[0].invert_yaxis()
+    handles,labels=axes[0].get_legend_handles_labels()
+    fig.legend(handles,labels,loc='upper center',bbox_to_anchor=(.5,.955),ncol=len(rivals),frameon=False)
+    fig.suptitle('GQA prefill · rolled QK against original MMA' if resources else 'GQA prefill · direct paired comparisons',fontsize=17,fontweight='bold',y=.995)
+    fig.text(.04,.025,'Whiskers: range of four paired block ratios, not confidence intervals. Open marks: inconclusive.\n'
+             'A gain needs all blocks faster and a median reduction exceeding both 5% and the matching control self-pair deviation.\n'
+             f'{len(samples):,} observations · {record["runtime"]["device"]} / Metal / BF16 · source {record["repository"]["commit"][:7]}.',fontsize=9,color='#555555')
+    fig.tight_layout(rect=(0,.12,1,.91))
+    fig.savefig(directory/(prefix+'comparisons.png'),dpi=160)
     plt.close(fig)
 
 
@@ -109,39 +151,7 @@ def render_prefill(directory, record, samples, summary):
     fig.savefig(directory/'latency.png',dpi=160)
     plt.close(fig)
 
-    fig, axes = plt.subplots(1,2,figsize=(12,8.3),sharey=True,sharex=True)
-    rivals = [c for c in candidates if c != spec['control']]
-    paired = [s for s in summary if s['candidate'] in rivals]
-    ratio_limits = (min(1,*(s['ratio_min'] for s in paired))/1.15,
-                    max(1,*(s['ratio_max'] for s in paired))*1.15)
-    for ax,layers in zip(axes,(1,24)):
-        for i,c in enumerate(rivals):
-            data=[s for s in summary if s['layers']==layers and s['candidate']==c]
-            for j,s in enumerate(data):
-                y=j+(i-(len(rivals)-1)/2)*.2
-                ax.errorbar(s['ratio'],y,xerr=[[s['ratio']-s['ratio_min']],[s['ratio_max']-s['ratio']]],
-                            color=colors[c],fmt=markers[c],capsize=3,markersize=5,
-                            markerfacecolor='white' if s['decision']=='inconclusive' else colors[c],
-                            label=names[c] if j==0 else None)
-        ax.axvline(1,color='#333333',linewidth=1)
-        ax.set_xscale('log',base=2)
-        ax.set_xlim(*ratio_limits)
-        ax.xaxis.set_major_formatter(FuncFormatter(lambda value,_: f'{value:g}×'))
-        ax.grid(axis='x',alpha=.18)
-        ax.set_xlabel(f'Time / paired {names[spec["control"]]} · lower is faster')
-        ax.set_title('Hot call' if layers==1 else 'Ring24 per call')
-    labels=[f'Full {w["rows"]}' if w['query_rows']==w['rows'] else f'R={w["query_rows"]}, T={w["rows"]}' for w in spec['workloads']]
-    axes[0].set_yticks(range(len(labels)),labels)
-    axes[0].invert_yaxis()
-    handles,labels=axes[0].get_legend_handles_labels()
-    fig.legend(handles,labels,loc='upper center',bbox_to_anchor=(.5,.955),ncol=len(rivals),frameon=False)
-    fig.suptitle('GQA prefill · direct paired comparisons',fontsize=17,fontweight='bold',y=.995)
-    fig.text(.04,.025,'Whiskers: range of four paired block ratios, not confidence intervals. Open marks: inconclusive.\n'
-             'A gain needs all blocks faster and a median reduction exceeding both 5% and the matching control self-pair deviation.\n'
-             f'{len(samples):,} observations · {record["runtime"]["device"]} / Metal / BF16 · source {record["repository"]["commit"][:7]}.',fontsize=9,color='#555555')
-    fig.tight_layout(rect=(0,.12,1,.91))
-    fig.savefig(directory/'comparisons.png',dpi=160)
-    plt.close(fig)
+    prefill_comparisons(directory,record,samples,summary)
     if (directory/'screen_run.json').exists():
         screen_record,screen_samples,screen_summary=load_run(directory,'screen_')
         table(directory,'screen_summary.csv',screen_summary)
@@ -169,16 +179,27 @@ def render_prefill(directory, record, samples, summary):
         fig.tight_layout(rect=(0,.2,1,.9))
         fig.savefig(directory/'profile.png',dpi=160)
         plt.close(fig)
-    print(directory.name,len(samples),'observations verified; prefill figures regenerated')
+    if (directory/'resources_screen_run.json').exists():
+        resource_record,resource_samples,resource_summary=load_run(directory,'resources_screen_')
+        table(directory,'resources_screen_summary.csv',resource_summary)
+        prefill_screen(directory,resource_record,resource_samples,resource_summary,'resources_screen_',True)
+    if (directory/'resources_run.json').exists():
+        resource_record,resource_samples,resource_summary=load_run(directory,'resources_')
+        table(directory,'resources_summary.csv',resource_summary)
+        prefill_comparisons(directory,resource_record,resource_samples,resource_summary,'resources_',True)
+    if (directory/'resources_profiles.json').exists():
+        table(directory,'resources_profile_summary.csv',load_profile(directory,'resources_'))
+    print(directory.name,len(samples),'primary observations verified; prefill figures and retained follow-ups regenerated')
 
 
 def render(directory):
     record, samples, summary = load_run(directory)
     spec = record['specification']
-    if record['study'] == 'gqa_prefill_screen':
+    if record['study'] in ('gqa_prefill_screen','gqa_prefill_resources_screen'):
         prefill_style()
-        table(directory,'summary.csv',summary)
-        return prefill_screen(directory,record,samples,summary)
+        table(directory,'screen_summary.csv',summary)
+        return prefill_screen(directory,record,samples,summary,
+                              resources=record['study']=='gqa_prefill_resources_screen')
     if spec['operation'] == 'gqa_prefill':
         return render_prefill(directory,record,samples,summary)
     names = {int(k): v for k, v in spec['names'].items()}

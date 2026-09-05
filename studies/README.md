@@ -14,8 +14,8 @@ operation-level; a working decoder block and full-model generation remain next.
 | [GQA decode](gqa_decode/README.md) | How do fusion, sequence parallelism and shared KV heads interact? |
 | [GQA prefill](gqa_prefill/README.md) | How do query tiling, online softmax and Apple matrix instructions interact? |
 
-The six topics retain **22,880 latency observations**, nine report figures,
-and nine focused GQA profiles containing 7,800 measured dispatch durations.
+The six topics retain **31,200 latency observations**, eleven report figures,
+and fifteen focused GQA profiles containing 10,200 measured dispatch durations.
 Full validation passes 71 Mojo tests and 36 Python tooling/evidence checks,
 including every prefill measurement route in hot and ring24 modes.
 
@@ -32,6 +32,10 @@ larger sampled row counts; and RoPE has baseline characterization. GQA decode
 benefits from fusion and parallelism. GQA prefill's 32x32 MMA path is about
 11.2× faster than materialized attention at full 4,096-token prefill, while
 sharing four query heads demonstrates no gain over that optimized control.
+The resource follow-up finds six confirmed gains from rolled QK, sixteen
+inconclusive comparisons and no demonstrated regressions. It also reduces
+the maximum compiler-reported spill size per event from 144 to 48 bytes in
+all three diagnostic workloads.
 Read each study's limits alongside its plot.
 
 The matrices use selected sizes, hot and ring24 timing, four paired blocks,
@@ -40,7 +44,8 @@ and matching self-pair calibration. See the
 
 Each finished study keeps `run.json`, all observations in `samples.csv.gz`, a
 small `summary.csv`, and the PNGs used in its explanation. GQA prefill retains
-its screen with a `screen_` filename prefix in the same topic folder. GQA
+its original screen with a `screen_` filename prefix and the bounded resource
+follow-up with `resources_screen_` and `resources_` prefixes in the same folder. GQA
 decode and prefill also retain compact profile records and dispatch samples.
 Rebuild every table and figure without a GPU:
 

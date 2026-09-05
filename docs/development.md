@@ -100,8 +100,10 @@ Python tooling tests, and runs every Mojo correctness suite on Metal with
 `MODULAR_DEBUG=device-sync-mode`. The frozen tolerances, diagnostic tensors,
 ragged tiles, full and incremental prefill, and all 24 decode cases remain.
 Prefill adds 29 Qwen-shape cases and full-versus-suffix, causal-independence and
-extreme-score regression checks across eleven routes. Its generated NumPy
+extreme-score regression checks across sixteen routes, including the five resource ablations. Its generated NumPy
 arrays are loaded only by tests; inference and timed paths remain Mojo.
+Normal-mode stress for the new schedules uses `-D PREFILL_REPEAT=12` on
+`tests/test_attention_prefill.mojo`, with `MODULAR_DEBUG` unset.
 Generation uses pinned Torch/Transformers script environments and locked NumPy;
 the first run may download those dependencies. No model weights are required.
 

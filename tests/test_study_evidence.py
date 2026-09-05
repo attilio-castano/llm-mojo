@@ -73,16 +73,16 @@ class EvidenceTests(unittest.TestCase):
     def test_retained_studies_are_complete(self):
         count = 0
         for directory in (ROOT / 'studies').glob('*/'):
-            _, samples, _ = load_run(directory)
-            count += len(samples)
-            if (directory/'screen_run.json').exists():
-                _, samples, _ = load_run(directory,'screen_')
+            for record in directory.glob('*run.json'):
+                _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
-        self.assertEqual(count, 22880)
+        self.assertEqual(count, 31200)
         profile = load_profile(ROOT / 'studies/gqa_decode')
         self.assertEqual(sum(row['count'] for row in profile), 3000)
         profile = load_profile(ROOT / 'studies/gqa_prefill')
         self.assertEqual(sum(row['count'] for row in profile), 4800)
+        profile = load_profile(ROOT / 'studies/gqa_prefill','resources_')
+        self.assertEqual(sum(row['count'] for row in profile), 2400)
 
     def test_profile_corruption_and_duplicate_dispatch_rejected(self):
         source = ROOT / 'studies/gqa_decode'

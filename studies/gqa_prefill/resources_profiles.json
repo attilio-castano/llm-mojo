@@ -1,0 +1,1259 @@
+{
+  "schema": 2,
+  "specification": {
+    "workloads": [
+      [
+        16,
+        16
+      ],
+      [
+        1024,
+        1024
+      ],
+      [
+        64,
+        4096
+      ]
+    ],
+    "variants": [
+      8,
+      12
+    ]
+  },
+  "common": {
+    "repository": {
+      "commit": "d4ef642829fb307def6448f8768b23a8fbd694dc",
+      "branch": "codex/gqa-prefill-study",
+      "dirty": false
+    },
+    "hardware": {
+      "model": "Mac16,7",
+      "chip": "Apple M4 Pro",
+      "logical_cpu_count": "14",
+      "gpu_api": "metal",
+      "gpu_target": "metal:4-metal4",
+      "physical_memory_bytes": 25769803776
+    },
+    "software": {
+      "macos": "26.6.2",
+      "macos_build": "25G83",
+      "darwin": "25.6.0",
+      "xcode": [
+        "Xcode 26.6",
+        "Build version 17F113"
+      ],
+      "metal": [
+        "Apple metal version 32023.883 (metalfe-32023.883)",
+        "Target: air64-apple-darwin25.6.0",
+        "Thread model: posix"
+      ],
+      "uv": "uv 0.12.5 (210d1f678 2026-08-14 aarch64-apple-darwin)",
+      "mojo": "1.0.0",
+      "max": "26.5.0"
+    },
+    "source_sha256": {
+      "pyproject.toml": "d31b8de28d1284f4bc247cdd306f3078dbf94b67c17d67ff9eae9752e611bc9d",
+      "src/llm_mojo/__init__.mojo": "54ca844ca97d5f13084dae07021cbe9535b95cf3414d5133daec18787507d905",
+      "src/llm_mojo/__init__.py": "d45f08c560f8a501262a3c17663244a1a74fb76658d746e99a430dbc1f9935b7",
+      "src/llm_mojo/_repository.py": "900f133c6c5a89b14884e2353e882d1bae589cd0280f726cc7df990b5ab9eefe",
+      "src/llm_mojo/attention.mojo": "ea24655495210711e958b0f2fec1eb10b4f7a5a9cbd3214378e22e57cabce8b8",
+      "src/llm_mojo/attention_decode.mojo": "d217c580b3f8183b3d80a6400a751058b32052d15106e11caf21a85dc167a4c9",
+      "src/llm_mojo/attention_prefill.mojo": "fe058c6ba5026985f5b8be707738e66f41cc104197069ec32f83f94dfbbd22e5",
+      "src/llm_mojo/benchmarks/__init__.mojo": "b8a8f32ace824dd687bc6b2f87afeb3180f7b5ac78684ecefd669201a1e9801c",
+      "src/llm_mojo/benchmarks/__init__.py": "11fddc93cafb04100810b633bfea5b41fb2ba60a48383c9fecb3fdd1ae9cd00c",
+      "src/llm_mojo/benchmarks/analyze_trace.py": "a01eb2641a4adbf18d0ddd228dbc98c1051426d64bc0427b061fb193c83db5b9",
+      "src/llm_mojo/benchmarks/attention_contract.py": "137c88f598753a492452e7da81e4639e4ac315c420d8778ff2cc75e28c9d92d6",
+      "src/llm_mojo/benchmarks/attention_decode.mojo": "983f00a4a01396cfa46f5064098b6155a893c0aa4c66d197f65d91b38bc6a76d",
+      "src/llm_mojo/benchmarks/attention_decode_contract.py": "36b34c75a5186931331d6ae9bab8da6e493e55f6c8a612614c26a6c613dbd201",
+      "src/llm_mojo/benchmarks/attention_decode_support.mojo": "55ad60c4cbf1379adfb0575e840db8726d8d64103d6d973c20d71366c32a9968",
+      "src/llm_mojo/benchmarks/attention_prefill.mojo": "9edb4b4761b99993ba3175e9dfc4f526f9c0820dad5badc5b7cf820aed322b06",
+      "src/llm_mojo/benchmarks/attention_prefill_contract.py": "8cd0df325ea4cbab884b3205e50832a0dc289d1d18194375bdd9f90ef8ac2578",
+      "src/llm_mojo/benchmarks/attention_prefill_support.mojo": "85fea01a59589c62513221d2840610750a20f51977a775a0c99574c49df8aceb",
+      "src/llm_mojo/benchmarks/capture_trace.py": "7772fd1494fea652126996067c8dabea11eb854016515a68411d3e1d15b1f73a",
+      "src/llm_mojo/benchmarks/environment.py": "03688054b017b428a2c4c6f3be10f5be702fcf76e4e8585a02d613cbbf0fe3f7",
+      "src/llm_mojo/benchmarks/operations.mojo": "3d3a96985d42cfbb314cda9fd7d4318a11e9fe841b3f52347b6402309d071561",
+      "src/llm_mojo/benchmarks/plot.py": "4c1bb2bcd776bfd508dd1155c1eb4921509573ab7161f88bd8e32942b432dff6",
+      "src/llm_mojo/benchmarks/profile.py": "3d468f87042c8b82d2a2d3dc250bb2d6c5b342cb805e1675d9ed13fc8ea2afbf",
+      "src/llm_mojo/benchmarks/profile_summary.py": "d9e056aff7afa7a0b1c00e992141640bca9b60c99aae4d7cb1f31fa1312dc9d8",
+      "src/llm_mojo/benchmarks/run.py": "b66745463408e15fbcece05d5edba4b6b5b0c270e390d9c7fe9b0e07ee717e7c",
+      "src/llm_mojo/benchmarks/smoke.py": "2c465b2451ace9dfe251b7624ccbaa51faeb40b77b4df73731df9fdcbd40c0a2",
+      "src/llm_mojo/benchmarks/study.py": "ee6c9321fec35b4e0325d6a5de6eda48d40e2a9d11cccb5b703c3a9ed4a138d6",
+      "src/llm_mojo/linear.mojo": "a0b0b5d09fa5f2c83abe2d91e10dd1066fefb26c0985e682850c45717bd26607",
+      "src/llm_mojo/rms_norm.mojo": "a555c33f86c6f893b780beab8033a9495ad62e502d0670753e7639850fba0f56",
+      "src/llm_mojo/rope.mojo": "939df2ea49af9f711879d1525a212c4b6f73df86dda166681a633dd7f26996a8",
+      "src/llm_mojo/validate.py": "ff40cfcecf98bb7751d8aeb6b826eeebc32e312200af7e9639c54a3e094c706f",
+      "tests/fixtures/attention/generate.py": "b69d61c30f796e107b2e857d4f79df3488592dfe708c4178753db374cc9951a0",
+      "tests/fixtures/attention/generate_decode.py": "dd82f833f9507cd54edfaf95c5b2ade7381fefb6f612547b8849711be503861a",
+      "tests/fixtures/attention/generate_prefill.py": "35193674d82c1b5ca18a642b452de298ad58dcc2a609396c895f8b2819a3f54e",
+      "tests/fixtures/checksums.json": "becd13cec305f11367f5523d4c80732052215f7862070c6635ad4b7cb59ab51b",
+      "tests/fixtures/linear/generate.py": "b87b5841c1dba556750dbf53de3bcf078a4f2d70538bac0db563c1304c0ca951",
+      "tests/fixtures/rms_norm/generate.py": "e01e8e2bd0f6723921a8f3c65803c87c3aa89818569a9a62b5794e381892389e",
+      "tests/fixtures/rope/generate.py": "7c616a7d991876d176e4b9808257b3c2c4c43641b5b51bae693eb1a20769eda5",
+      "uv.lock": "a96fdc1a706203ed10ae74d7d1afd69c99e335068fe8dd0f184e67789559cca2"
+    },
+    "analysis_source_sha256": {
+      "analyze_trace.py": "a01eb2641a4adbf18d0ddd228dbc98c1051426d64bc0427b061fb193c83db5b9",
+      "attention_contract.py": "137c88f598753a492452e7da81e4639e4ac315c420d8778ff2cc75e28c9d92d6",
+      "attention_decode_contract.py": "36b34c75a5186931331d6ae9bab8da6e493e55f6c8a612614c26a6c613dbd201",
+      "attention_prefill_contract.py": "8cd0df325ea4cbab884b3205e50832a0dc289d1d18194375bdd9f90ef8ac2578"
+    },
+    "curation_source_sha256": "d9e056aff7afa7a0b1c00e992141640bca9b60c99aae4d7cb1f31fa1312dc9d8"
+  },
+  "captures": [
+    {
+      "query_rows": 16,
+      "rows": 16,
+      "variant": 8,
+      "capture": {
+        "binary": {
+          "bytes": 516440,
+          "sha256": "cfd39247f0a17c4e2c52af8fbeaa2537915568d20bf64f5df7cf4115dc64c58c"
+        },
+        "capture_id": "attention-764272485a014d82a9bb1d52d3ffb9da",
+        "capture_receipt": {
+          "bytes": 3259,
+          "sha256": "41cddb2ceedcc032a3aec1621407e8137d647c364ca9fd583fbccc98ce2bca94"
+        },
+        "entrypoint": "enqueue_grouped_query_attention_prefill_apple_gpu",
+        "implementation": "gqa_prefill_8",
+        "operation": "grouped_query_attention_prefill",
+        "provenance": {
+          "bytes": 6109,
+          "sha256": "e084603fc37c0a41b623ac48fe3de2fbb0ca1529e1037bff62481395a914acb3"
+        },
+        "repository": {
+          "branch": "codex/gqa-prefill-study",
+          "commit": "d4ef642829fb307def6448f8768b23a8fbd694dc",
+          "dirty": false
+        },
+        "runtime": {
+          "backend": "metal",
+          "device": "Apple M4 Pro"
+        },
+        "verification": "capture_receipt_v2_and_trace_target",
+        "workload": {
+          "dispatches_per_iteration": 1,
+          "heads": 1,
+          "hidden_size": 64,
+          "key_tile": 32,
+          "key_value_heads": 2,
+          "key_value_rows": 16,
+          "post_profile_idle_milliseconds": 250,
+          "profile_iterations": 1000,
+          "profile_rows": 16,
+          "profile_workload": "prefill-r16-t16-v8",
+          "query_heads": 14,
+          "query_tile": 32,
+          "rows": 16,
+          "warmup_iterations": 10
+        }
+      },
+      "trace": {
+        "counter_configuration": {
+          "counter-device": "4294968575",
+          "counter-profile": "13",
+          "shader-profiler": "0"
+        },
+        "end_reason": "Target app exited",
+        "instruments_version": "16.0 (17F113)",
+        "metal_application_gpu_settings": [
+          "Counter Set: Performance Limiters",
+          "Shader Timeline: Disabled",
+          "Induced GPU Performance State: Default"
+        ],
+        "recording_duration_seconds": 1.195776,
+        "run_name": "attention-764272485a014d82a9bb1d52d3ffb9da",
+        "target": {
+          "capture_id_verified": true,
+          "device_model": "MacBook Pro",
+          "device_os_version": "26.6.2 (25G83)",
+          "device_platform": "macOS",
+          "return_exit_status": "0",
+          "termination_reason": "exit(0)"
+        },
+        "template": "LLM_Mojo_Metal_Limiters"
+      },
+      "interval_coalescing": {
+        "active_intervals": 1017,
+        "dispatches": 1017,
+        "fragmented_dispatches": 0,
+        "verified_trailing_submissions": 1010,
+        "duration_rule": "Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end."
+      },
+      "fragmented_profile_dispatches": 0,
+      "conditions": {
+        "before": {
+          "timestamp_utc": "2026-09-05T21:50:28.922331+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 51
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        },
+        "after": {
+          "timestamp_utc": "2026-09-05T21:50:42.900945+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 44
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        }
+      },
+      "counters_scope": "Named device-wide GPU counter samples inside the enclosing target profile window; samples are not command-buffer-exclusive.",
+      "counters": [
+        {
+          "counter_id": 3,
+          "description": "Percentage of shader core resources that are occupied by the compute kernel",
+          "maximum": 3.651188017,
+          "median": 2.436013875,
+          "minimum": 0.0,
+          "name": "Kernel Occupancy",
+          "nonzero_sample_count": 1017,
+          "p95": 2.5482006067,
+          "sample_count": 1032,
+          "type": "Percentage",
+          "unit": "percent"
+        },
+        {
+          "counter_id": 7,
+          "description": "Measures the time during which shader instructions are attempted to be processed as a percentage of peak shader execution pipeline performance. If the instruction throughput limiter is low, you can push more ALU and non-ALU instructions from the sub-blocks that are not fully limited. As an example if the instruction throughput limiter is less than 100%, but 100% F16 limited but less than 100% limited by F32, Integer and Complex or Integer and Conditional, then there is an opportunity to push ALU instructions from these ALU sub-blocks to execute in parallel",
+          "maximum": 84.209431108,
+          "median": 6.950221813,
+          "minimum": 0.0,
+          "name": "Instruction Throughput Limiter",
+          "nonzero_sample_count": 1020,
+          "p95": 17.612857047899997,
+          "sample_count": 1032,
+          "type": "Percentage",
+          "unit": "percent"
+        },
+        {
+          "counter_id": 82,
+          "description": "Measures the time during which GPU\u2019s last level cache is attempting to service read and write requests as a percentage of cache\u2019s peak performance",
+          "maximum": 100.0,
+          "median": 1.4540952355,
+          "minimum": 0.014805164,
+          "name": "Last Level Cache Limiter",
+          "nonzero_sample_count": 932,
+          "p95": 13.028248488449975,
+          "sample_count": 932,
+          "type": "Percentage",
+          "unit": "percent"
+        }
+      ],
+      "spills": {
+        "interpretation": "The trace reported target spill events; inspect before use.",
+        "target_event_count": 1010,
+        "target_spilled_bytes_maximum_event": 144,
+        "target_spilled_bytes_total": 145440
+      }
+    },
+    {
+      "query_rows": 16,
+      "rows": 16,
+      "variant": 12,
+      "capture": {
+        "binary": {
+          "bytes": 516440,
+          "sha256": "a513c4df2c76c6f96072150c342406d3870604d4ea33249bbfbfa353140f8814"
+        },
+        "capture_id": "attention-8a5181247b124cda95fd355edb764d52",
+        "capture_receipt": {
+          "bytes": 3263,
+          "sha256": "7a25b98d7561f11992d2dc008b4af527efddca95cc738088d178178479ac66c6"
+        },
+        "entrypoint": "enqueue_grouped_query_attention_prefill_apple_gpu",
+        "implementation": "gqa_prefill_12",
+        "operation": "grouped_query_attention_prefill",
+        "provenance": {
+          "bytes": 6112,
+          "sha256": "de5a9f3359dc7d38811ea3ea6ee2d32f56f0471a846945688aa911350cff73fe"
+        },
+        "repository": {
+          "branch": "codex/gqa-prefill-study",
+          "commit": "d4ef642829fb307def6448f8768b23a8fbd694dc",
+          "dirty": false
+        },
+        "runtime": {
+          "backend": "metal",
+          "device": "Apple M4 Pro"
+        },
+        "verification": "capture_receipt_v2_and_trace_target",
+        "workload": {
+          "dispatches_per_iteration": 1,
+          "heads": 1,
+          "hidden_size": 64,
+          "key_tile": 32,
+          "key_value_heads": 2,
+          "key_value_rows": 16,
+          "post_profile_idle_milliseconds": 250,
+          "profile_iterations": 1000,
+          "profile_rows": 16,
+          "profile_workload": "prefill-r16-t16-v12",
+          "query_heads": 14,
+          "query_tile": 32,
+          "rows": 16,
+          "warmup_iterations": 10
+        }
+      },
+      "trace": {
+        "counter_configuration": {
+          "counter-device": "4294968575",
+          "counter-profile": "13",
+          "shader-profiler": "0"
+        },
+        "end_reason": "Target app exited",
+        "instruments_version": "16.0 (17F113)",
+        "metal_application_gpu_settings": [
+          "Counter Set: Performance Limiters",
+          "Shader Timeline: Disabled",
+          "Induced GPU Performance State: Default"
+        ],
+        "recording_duration_seconds": 1.154036,
+        "run_name": "attention-8a5181247b124cda95fd355edb764d52",
+        "target": {
+          "capture_id_verified": true,
+          "device_model": "MacBook Pro",
+          "device_os_version": "26.6.2 (25G83)",
+          "device_platform": "macOS",
+          "return_exit_status": "0",
+          "termination_reason": "exit(0)"
+        },
+        "template": "LLM_Mojo_Metal_Limiters"
+      },
+      "interval_coalescing": {
+        "active_intervals": 1016,
+        "dispatches": 1016,
+        "fragmented_dispatches": 0,
+        "verified_trailing_submissions": 1010,
+        "duration_rule": "Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end."
+      },
+      "fragmented_profile_dispatches": 0,
+      "conditions": {
+        "before": {
+          "timestamp_utc": "2026-09-05T21:51:39.674139+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 47
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        },
+        "after": {
+          "timestamp_utc": "2026-09-05T21:51:52.439116+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 48
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        }
+      },
+      "counters_scope": "Named device-wide GPU counter samples inside the enclosing target profile window; samples are not command-buffer-exclusive.",
+      "counters": [
+        {
+          "counter_id": 3,
+          "description": "Percentage of shader core resources that are occupied by the compute kernel",
+          "maximum": 3.602134627,
+          "median": 2.4294156485,
+          "minimum": 0.0,
+          "name": "Kernel Occupancy",
+          "nonzero_sample_count": 1321,
+          "p95": 2.54951208095,
+          "sample_count": 1330,
+          "type": "Percentage",
+          "unit": "percent"
+        },
+        {
+          "counter_id": 7,
+          "description": "Measures the time during which shader instructions are attempted to be processed as a percentage of peak shader execution pipeline performance. If the instruction throughput limiter is low, you can push more ALU and non-ALU instructions from the sub-blocks that are not fully limited. As an example if the instruction throughput limiter is less than 100%, but 100% F16 limited but less than 100% limited by F32, Integer and Complex or Integer and Conditional, then there is an opportunity to push ALU instructions from these ALU sub-blocks to execute in parallel",
+          "maximum": 88.795124009,
+          "median": 7.3506486535,
+          "minimum": 0.0,
+          "name": "Instruction Throughput Limiter",
+          "nonzero_sample_count": 1328,
+          "p95": 25.916684287299937,
+          "sample_count": 1330,
+          "type": "Percentage",
+          "unit": "percent"
+        },
+        {
+          "counter_id": 82,
+          "description": "Measures the time during which GPU\u2019s last level cache is attempting to service read and write requests as a percentage of cache\u2019s peak performance",
+          "maximum": 40.32408504,
+          "median": 1.46126969,
+          "minimum": 0.025853545,
+          "name": "Last Level Cache Limiter",
+          "nonzero_sample_count": 939,
+          "p95": 12.657699482299963,
+          "sample_count": 939,
+          "type": "Percentage",
+          "unit": "percent"
+        }
+      ],
+      "spills": {
+        "interpretation": "The trace reported target spill events; inspect before use.",
+        "target_event_count": 1010,
+        "target_spilled_bytes_maximum_event": 48,
+        "target_spilled_bytes_total": 48480
+      }
+    },
+    {
+      "query_rows": 1024,
+      "rows": 1024,
+      "variant": 8,
+      "capture": {
+        "binary": {
+          "bytes": 516440,
+          "sha256": "06756a744921a85c1c300ae2121d88283bb69d0eca04228940047e90572fbdcf"
+        },
+        "capture_id": "attention-5e0e7928110444d9b3bb88026a32233f",
+        "capture_receipt": {
+          "bytes": 3273,
+          "sha256": "f1abb8c7bdb41d0d05905cf542ecdb5c9468aaabb397f76ff99b3840ef7eab1b"
+        },
+        "entrypoint": "enqueue_grouped_query_attention_prefill_apple_gpu",
+        "implementation": "gqa_prefill_8",
+        "operation": "grouped_query_attention_prefill",
+        "provenance": {
+          "bytes": 6119,
+          "sha256": "d57836c33a5bef1e0f5f77921ec51f2770004a24a2d99fb43505cb9fa27df4e3"
+        },
+        "repository": {
+          "branch": "codex/gqa-prefill-study",
+          "commit": "d4ef642829fb307def6448f8768b23a8fbd694dc",
+          "dirty": false
+        },
+        "runtime": {
+          "backend": "metal",
+          "device": "Apple M4 Pro"
+        },
+        "verification": "capture_receipt_v2_and_trace_target",
+        "workload": {
+          "dispatches_per_iteration": 1,
+          "heads": 1,
+          "hidden_size": 64,
+          "key_tile": 32,
+          "key_value_heads": 2,
+          "key_value_rows": 1024,
+          "post_profile_idle_milliseconds": 250,
+          "profile_iterations": 100,
+          "profile_rows": 1024,
+          "profile_workload": "prefill-r1024-t1024-v8",
+          "query_heads": 14,
+          "query_tile": 32,
+          "rows": 1024,
+          "warmup_iterations": 10
+        }
+      },
+      "trace": {
+        "counter_configuration": {
+          "counter-device": "4294968575",
+          "counter-profile": "13",
+          "shader-profiler": "0"
+        },
+        "end_reason": "Target app exited",
+        "instruments_version": "16.0 (17F113)",
+        "metal_application_gpu_settings": [
+          "Counter Set: Performance Limiters",
+          "Shader Timeline: Disabled",
+          "Induced GPU Performance State: Default"
+        ],
+        "recording_duration_seconds": 1.429134,
+        "run_name": "attention-5e0e7928110444d9b3bb88026a32233f",
+        "target": {
+          "capture_id_verified": true,
+          "device_model": "MacBook Pro",
+          "device_os_version": "26.6.2 (25G83)",
+          "device_platform": "macOS",
+          "return_exit_status": "0",
+          "termination_reason": "exit(0)"
+        },
+        "template": "LLM_Mojo_Metal_Limiters"
+      },
+      "interval_coalescing": {
+        "active_intervals": 189,
+        "dispatches": 117,
+        "fragmented_dispatches": 47,
+        "verified_trailing_submissions": 110,
+        "duration_rule": "Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end."
+      },
+      "fragmented_profile_dispatches": 39,
+      "conditions": {
+        "before": {
+          "timestamp_utc": "2026-09-05T21:52:51.755411+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 48
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        },
+        "after": {
+          "timestamp_utc": "2026-09-05T21:53:07.602715+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 48
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        }
+      },
+      "counters_scope": "Named device-wide GPU counter samples inside the enclosing target profile window; samples are not command-buffer-exclusive.",
+      "counters": [
+        {
+          "counter_id": 3,
+          "description": "Percentage of shader core resources that are occupied by the compute kernel",
+          "maximum": 27.624255228,
+          "median": 20.617574179000002,
+          "minimum": 0.0,
+          "name": "Kernel Occupancy",
+          "nonzero_sample_count": 8398,
+          "p95": 20.831209519650002,
+          "sample_count": 8994,
+          "type": "Percentage",
+          "unit": "percent"
+        },
+        {
+          "counter_id": 7,
+          "description": "Measures the time during which shader instructions are attempted to be processed as a percentage of peak shader execution pipeline performance. If the instruction throughput limiter is low, you can push more ALU and non-ALU instructions from the sub-blocks that are not fully limited. As an example if the instruction throughput limiter is less than 100%, but 100% F16 limited but less than 100% limited by F32, Integer and Complex or Integer and Conditional, then there is an opportunity to push ALU instructions from these ALU sub-blocks to execute in parallel",
+          "maximum": 86.312206947,
+          "median": 74.39488261049999,
+          "minimum": 0.0,
+          "name": "Instruction Throughput Limiter",
+          "nonzero_sample_count": 8612,
+          "p95": 77.17766177325001,
+          "sample_count": 8994,
+          "type": "Percentage",
+          "unit": "percent"
+        },
+        {
+          "counter_id": 82,
+          "description": "Measures the time during which GPU\u2019s last level cache is attempting to service read and write requests as a percentage of cache\u2019s peak performance",
+          "maximum": 100.0,
+          "median": 100.0,
+          "minimum": 0.230425693,
+          "name": "Last Level Cache Limiter",
+          "nonzero_sample_count": 3739,
+          "p95": 100.0,
+          "sample_count": 3739,
+          "type": "Percentage",
+          "unit": "percent"
+        }
+      ],
+      "spills": {
+        "interpretation": "The trace reported target spill events; inspect before use.",
+        "target_event_count": 110,
+        "target_spilled_bytes_maximum_event": 144,
+        "target_spilled_bytes_total": 15840
+      }
+    },
+    {
+      "query_rows": 1024,
+      "rows": 1024,
+      "variant": 12,
+      "capture": {
+        "binary": {
+          "bytes": 516440,
+          "sha256": "c1a930f78e4443a7f345c1713d3fcbdc2674ec2e969c76111a19e67bbfa4a18f"
+        },
+        "capture_id": "attention-199148264cee4dc6bd3a5ce559d2dc09",
+        "capture_receipt": {
+          "bytes": 3277,
+          "sha256": "f38d075c7ff59c9c47aaaa15ca371659400140530d3815154840628a26c9c563"
+        },
+        "entrypoint": "enqueue_grouped_query_attention_prefill_apple_gpu",
+        "implementation": "gqa_prefill_12",
+        "operation": "grouped_query_attention_prefill",
+        "provenance": {
+          "bytes": 6122,
+          "sha256": "e81507535278f9a2ec181f0e5805d160c82b11e22d4cbcfb8be5d247d68738b4"
+        },
+        "repository": {
+          "branch": "codex/gqa-prefill-study",
+          "commit": "d4ef642829fb307def6448f8768b23a8fbd694dc",
+          "dirty": false
+        },
+        "runtime": {
+          "backend": "metal",
+          "device": "Apple M4 Pro"
+        },
+        "verification": "capture_receipt_v2_and_trace_target",
+        "workload": {
+          "dispatches_per_iteration": 1,
+          "heads": 1,
+          "hidden_size": 64,
+          "key_tile": 32,
+          "key_value_heads": 2,
+          "key_value_rows": 1024,
+          "post_profile_idle_milliseconds": 250,
+          "profile_iterations": 100,
+          "profile_rows": 1024,
+          "profile_workload": "prefill-r1024-t1024-v12",
+          "query_heads": 14,
+          "query_tile": 32,
+          "rows": 1024,
+          "warmup_iterations": 10
+        }
+      },
+      "trace": {
+        "counter_configuration": {
+          "counter-device": "4294968575",
+          "counter-profile": "13",
+          "shader-profiler": "0"
+        },
+        "end_reason": "Target app exited",
+        "instruments_version": "16.0 (17F113)",
+        "metal_application_gpu_settings": [
+          "Counter Set: Performance Limiters",
+          "Shader Timeline: Disabled",
+          "Induced GPU Performance State: Default"
+        ],
+        "recording_duration_seconds": 1.676399,
+        "run_name": "attention-199148264cee4dc6bd3a5ce559d2dc09",
+        "target": {
+          "capture_id_verified": true,
+          "device_model": "MacBook Pro",
+          "device_os_version": "26.6.2 (25G83)",
+          "device_platform": "macOS",
+          "return_exit_status": "0",
+          "termination_reason": "exit(0)"
+        },
+        "template": "LLM_Mojo_Metal_Limiters"
+      },
+      "interval_coalescing": {
+        "active_intervals": 181,
+        "dispatches": 117,
+        "fragmented_dispatches": 42,
+        "verified_trailing_submissions": 110,
+        "duration_rule": "Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end."
+      },
+      "fragmented_profile_dispatches": 34,
+      "conditions": {
+        "before": {
+          "timestamp_utc": "2026-09-05T21:54:46.998675+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 45
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        },
+        "after": {
+          "timestamp_utc": "2026-09-05T21:55:04.285850+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 47
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        }
+      },
+      "counters_scope": "Named device-wide GPU counter samples inside the enclosing target profile window; samples are not command-buffer-exclusive.",
+      "counters": [
+        {
+          "counter_id": 3,
+          "description": "Percentage of shader core resources that are occupied by the compute kernel",
+          "maximum": 27.447348784,
+          "median": 20.4216019465,
+          "minimum": 0.0,
+          "name": "Kernel Occupancy",
+          "nonzero_sample_count": 8129,
+          "p95": 20.831899352,
+          "sample_count": 8818,
+          "type": "Percentage",
+          "unit": "percent"
+        },
+        {
+          "counter_id": 7,
+          "description": "Measures the time during which shader instructions are attempted to be processed as a percentage of peak shader execution pipeline performance. If the instruction throughput limiter is low, you can push more ALU and non-ALU instructions from the sub-blocks that are not fully limited. As an example if the instruction throughput limiter is less than 100%, but 100% F16 limited but less than 100% limited by F32, Integer and Complex or Integer and Conditional, then there is an opportunity to push ALU instructions from these ALU sub-blocks to execute in parallel",
+          "maximum": 87.225555403,
+          "median": 82.1529403525,
+          "minimum": 0.0,
+          "name": "Instruction Throughput Limiter",
+          "nonzero_sample_count": 8388,
+          "p95": 85.20094187020001,
+          "sample_count": 8818,
+          "type": "Percentage",
+          "unit": "percent"
+        },
+        {
+          "counter_id": 82,
+          "description": "Measures the time during which GPU\u2019s last level cache is attempting to service read and write requests as a percentage of cache\u2019s peak performance",
+          "maximum": 100.0,
+          "median": 49.965956158,
+          "minimum": 0.231979984,
+          "name": "Last Level Cache Limiter",
+          "nonzero_sample_count": 3668,
+          "p95": 93.7706519281499,
+          "sample_count": 3668,
+          "type": "Percentage",
+          "unit": "percent"
+        }
+      ],
+      "spills": {
+        "interpretation": "The trace reported target spill events; inspect before use.",
+        "target_event_count": 110,
+        "target_spilled_bytes_maximum_event": 48,
+        "target_spilled_bytes_total": 5280
+      }
+    },
+    {
+      "query_rows": 64,
+      "rows": 4096,
+      "variant": 8,
+      "capture": {
+        "binary": {
+          "bytes": 516440,
+          "sha256": "8f993866838dc336653865d269bcd2b285e2b75468d4b7301d82ce1e2417be04"
+        },
+        "capture_id": "attention-74d0e512da24467caf2b4098e2147e9f",
+        "capture_receipt": {
+          "bytes": 3265,
+          "sha256": "889dc7b5e1c95cfbf6ed6cfaed0087a861729aac47c0335811be6a9a29b75384"
+        },
+        "entrypoint": "enqueue_grouped_query_attention_prefill_apple_gpu",
+        "implementation": "gqa_prefill_8",
+        "operation": "grouped_query_attention_prefill",
+        "provenance": {
+          "bytes": 6113,
+          "sha256": "2761ea5be88bcb87212f380ed7e3e96fb98f0b05bfa12675636963a65a9f89be"
+        },
+        "repository": {
+          "branch": "codex/gqa-prefill-study",
+          "commit": "d4ef642829fb307def6448f8768b23a8fbd694dc",
+          "dirty": false
+        },
+        "runtime": {
+          "backend": "metal",
+          "device": "Apple M4 Pro"
+        },
+        "verification": "capture_receipt_v2_and_trace_target",
+        "workload": {
+          "dispatches_per_iteration": 1,
+          "heads": 1,
+          "hidden_size": 64,
+          "key_tile": 32,
+          "key_value_heads": 2,
+          "key_value_rows": 4096,
+          "post_profile_idle_milliseconds": 250,
+          "profile_iterations": 100,
+          "profile_rows": 64,
+          "profile_workload": "prefill-r64-t4096-v8",
+          "query_heads": 14,
+          "query_tile": 32,
+          "rows": 64,
+          "warmup_iterations": 10
+        }
+      },
+      "trace": {
+        "counter_configuration": {
+          "counter-device": "4294968575",
+          "counter-profile": "13",
+          "shader-profiler": "0"
+        },
+        "end_reason": "Target app exited",
+        "instruments_version": "16.0 (17F113)",
+        "metal_application_gpu_settings": [
+          "Counter Set: Performance Limiters",
+          "Shader Timeline: Disabled",
+          "Induced GPU Performance State: Default"
+        ],
+        "recording_duration_seconds": 1.307989,
+        "run_name": "attention-74d0e512da24467caf2b4098e2147e9f",
+        "target": {
+          "capture_id_verified": true,
+          "device_model": "MacBook Pro",
+          "device_os_version": "26.6.2 (25G83)",
+          "device_platform": "macOS",
+          "return_exit_status": "0",
+          "termination_reason": "exit(0)"
+        },
+        "template": "LLM_Mojo_Metal_Limiters"
+      },
+      "interval_coalescing": {
+        "active_intervals": 140,
+        "dispatches": 117,
+        "fragmented_dispatches": 12,
+        "verified_trailing_submissions": 110,
+        "duration_rule": "Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end."
+      },
+      "fragmented_profile_dispatches": 7,
+      "conditions": {
+        "before": {
+          "timestamp_utc": "2026-09-05T21:56:41.333214+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 45
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        },
+        "after": {
+          "timestamp_utc": "2026-09-05T21:56:55.889194+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 48
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        }
+      },
+      "counters_scope": "Named device-wide GPU counter samples inside the enclosing target profile window; samples are not command-buffer-exclusive.",
+      "counters": [
+        {
+          "counter_id": 3,
+          "description": "Percentage of shader core resources that are occupied by the compute kernel",
+          "maximum": 95.424035349,
+          "median": 5.833396783,
+          "minimum": 0.0,
+          "name": "Kernel Occupancy",
+          "nonzero_sample_count": 8271,
+          "p95": 5.83408396185,
+          "sample_count": 8354,
+          "type": "Percentage",
+          "unit": "percent"
+        },
+        {
+          "counter_id": 7,
+          "description": "Measures the time during which shader instructions are attempted to be processed as a percentage of peak shader execution pipeline performance. If the instruction throughput limiter is low, you can push more ALU and non-ALU instructions from the sub-blocks that are not fully limited. As an example if the instruction throughput limiter is less than 100%, but 100% F16 limited but less than 100% limited by F32, Integer and Complex or Integer and Conditional, then there is an opportunity to push ALU instructions from these ALU sub-blocks to execute in parallel",
+          "maximum": 88.098507257,
+          "median": 21.194902990000003,
+          "minimum": 0.0,
+          "name": "Instruction Throughput Limiter",
+          "nonzero_sample_count": 8292,
+          "p95": 30.52360424379994,
+          "sample_count": 8354,
+          "type": "Percentage",
+          "unit": "percent"
+        },
+        {
+          "counter_id": 82,
+          "description": "Measures the time during which GPU\u2019s last level cache is attempting to service read and write requests as a percentage of cache\u2019s peak performance",
+          "maximum": 100.0,
+          "median": 10.626741829,
+          "minimum": 0.245408486,
+          "name": "Last Level Cache Limiter",
+          "nonzero_sample_count": 3473,
+          "p95": 46.84949949279972,
+          "sample_count": 3473,
+          "type": "Percentage",
+          "unit": "percent"
+        }
+      ],
+      "spills": {
+        "interpretation": "The trace reported target spill events; inspect before use.",
+        "target_event_count": 110,
+        "target_spilled_bytes_maximum_event": 144,
+        "target_spilled_bytes_total": 15840
+      }
+    },
+    {
+      "query_rows": 64,
+      "rows": 4096,
+      "variant": 12,
+      "capture": {
+        "binary": {
+          "bytes": 516440,
+          "sha256": "78d84a3446b09933f955a28079d1c4ab3f78fe297f927984f9f6b3673d176183"
+        },
+        "capture_id": "attention-abe3f8509c5349d3beb0b11a94700229",
+        "capture_receipt": {
+          "bytes": 3269,
+          "sha256": "4c5f92a2affbb1c1c4f8988d18d55f415f1900ea1e827e301dd1fcbb5cd450b6"
+        },
+        "entrypoint": "enqueue_grouped_query_attention_prefill_apple_gpu",
+        "implementation": "gqa_prefill_12",
+        "operation": "grouped_query_attention_prefill",
+        "provenance": {
+          "bytes": 6116,
+          "sha256": "0e4621f461c9ff5c37661f7b6adc9c6d3fa8a2f028d3c4755f1fe29b30b4d7dc"
+        },
+        "repository": {
+          "branch": "codex/gqa-prefill-study",
+          "commit": "d4ef642829fb307def6448f8768b23a8fbd694dc",
+          "dirty": false
+        },
+        "runtime": {
+          "backend": "metal",
+          "device": "Apple M4 Pro"
+        },
+        "verification": "capture_receipt_v2_and_trace_target",
+        "workload": {
+          "dispatches_per_iteration": 1,
+          "heads": 1,
+          "hidden_size": 64,
+          "key_tile": 32,
+          "key_value_heads": 2,
+          "key_value_rows": 4096,
+          "post_profile_idle_milliseconds": 250,
+          "profile_iterations": 100,
+          "profile_rows": 64,
+          "profile_workload": "prefill-r64-t4096-v12",
+          "query_heads": 14,
+          "query_tile": 32,
+          "rows": 64,
+          "warmup_iterations": 10
+        }
+      },
+      "trace": {
+        "counter_configuration": {
+          "counter-device": "4294968575",
+          "counter-profile": "13",
+          "shader-profiler": "0"
+        },
+        "end_reason": "Target app exited",
+        "instruments_version": "16.0 (17F113)",
+        "metal_application_gpu_settings": [
+          "Counter Set: Performance Limiters",
+          "Shader Timeline: Disabled",
+          "Induced GPU Performance State: Default"
+        ],
+        "recording_duration_seconds": 1.306037,
+        "run_name": "attention-abe3f8509c5349d3beb0b11a94700229",
+        "target": {
+          "capture_id_verified": true,
+          "device_model": "MacBook Pro",
+          "device_os_version": "26.6.2 (25G83)",
+          "device_platform": "macOS",
+          "return_exit_status": "0",
+          "termination_reason": "exit(0)"
+        },
+        "template": "LLM_Mojo_Metal_Limiters"
+      },
+      "interval_coalescing": {
+        "active_intervals": 125,
+        "dispatches": 117,
+        "fragmented_dispatches": 5,
+        "verified_trailing_submissions": 110,
+        "duration_rule": "Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end."
+      },
+      "fragmented_profile_dispatches": 2,
+      "conditions": {
+        "before": {
+          "timestamp_utc": "2026-09-05T21:58:23.625131+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 47
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        },
+        "after": {
+          "timestamp_utc": "2026-09-05T21:58:35.877276+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 48
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        }
+      },
+      "counters_scope": "Named device-wide GPU counter samples inside the enclosing target profile window; samples are not command-buffer-exclusive.",
+      "counters": [
+        {
+          "counter_id": 3,
+          "description": "Percentage of shader core resources that are occupied by the compute kernel",
+          "maximum": 7.382186006,
+          "median": 5.833409575499999,
+          "minimum": 0.0,
+          "name": "Kernel Occupancy",
+          "nonzero_sample_count": 7588,
+          "p95": 5.8341351260500005,
+          "sample_count": 7632,
+          "type": "Percentage",
+          "unit": "percent"
+        },
+        {
+          "counter_id": 7,
+          "description": "Measures the time during which shader instructions are attempted to be processed as a percentage of peak shader execution pipeline performance. If the instruction throughput limiter is low, you can push more ALU and non-ALU instructions from the sub-blocks that are not fully limited. As an example if the instruction throughput limiter is less than 100%, but 100% F16 limited but less than 100% limited by F32, Integer and Complex or Integer and Conditional, then there is an opportunity to push ALU instructions from these ALU sub-blocks to execute in parallel",
+          "maximum": 87.381353477,
+          "median": 22.6628893805,
+          "minimum": 0.0,
+          "name": "Instruction Throughput Limiter",
+          "nonzero_sample_count": 7616,
+          "p95": 24.354651058199998,
+          "sample_count": 7632,
+          "type": "Percentage",
+          "unit": "percent"
+        },
+        {
+          "counter_id": 82,
+          "description": "Measures the time during which GPU\u2019s last level cache is attempting to service read and write requests as a percentage of cache\u2019s peak performance",
+          "maximum": 100.0,
+          "median": 11.2043022175,
+          "minimum": 0.242272612,
+          "name": "Last Level Cache Limiter",
+          "nonzero_sample_count": 3172,
+          "p95": 20.83631526975,
+          "sample_count": 3172,
+          "type": "Percentage",
+          "unit": "percent"
+        }
+      ],
+      "spills": {
+        "interpretation": "The trace reported target spill events; inspect before use.",
+        "target_event_count": 110,
+        "target_spilled_bytes_maximum_event": 48,
+        "target_spilled_bytes_total": 5280
+      }
+    }
+  ],
+  "samples_sha256": "934eb872b967aa105ee1ad68e101ffbffd41993123b40fe80d4978bf40c520b4",
+  "boundary": "Instrumented GPU active dispatch durations (non-overlapping segments summed, preemption gaps excluded); 6 single captures, not paired latency trials. Counter statistics are device-wide within each target window. Stage labels follow the validated source enqueue order.",
+  "retention": "All target dispatch durations retained. Three named counter summaries retained; full trace/XML exports and other counters remain external."
+}

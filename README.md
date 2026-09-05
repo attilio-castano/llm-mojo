@@ -35,6 +35,9 @@ query tiling, matrix instructions and head reuse, including direct comparisons
 against a strong optimized control. Hot and ring24 measurements have different
 synchronization boundaries. The [prefill study](studies/gqa_prefill/README.md)
 explains the mappings, calibration, compiler spills and profile evidence.
+A bounded follow-up isolates accumulator representation, QK loop scheduling,
+barriers and score storage; rolled QK reduces reported spills and demonstrates
+modest gains on part of the full workload matrix.
 See the [study index](studies/README.md) for retained
 measurements and the command to regenerate every graph.
 

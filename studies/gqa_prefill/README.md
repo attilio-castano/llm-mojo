@@ -1,6 +1,6 @@
 # GQA prefill: query ownership and KV reuse
 
-**MMA 32x32 is the strongest simple design in this study.** At 4,096-token
+**The 32x32 MMA family is the strongest design in this study.** At 4,096-token
 full prefill, materialized attention takes 247.16 ms versus 22.08 ms for its
 paired MMA control: **11.20× hot speedup**. Ring24 gives 246.99 → 21.88 ms per
 attention, or **11.29× paired speedup**.
@@ -10,6 +10,10 @@ hot workload, R=T=16, remains inconclusive with a 29.2% noise floor. MMA 16x32
 is slower than 32x32 in 20 comparisons and inconclusive in two. H4 demonstrates
 no gain: 17 comparisons are inconclusive and five are slower, including about
 12% higher time at full R=T=4096. All observations remain in the report.
+
+A [resource follow-up](#compiler-resources-and-synchronization) below tests
+five compiler and synchronization changes. Rolled QK reduces reported spills
+and demonstrates six further gains against the original MMA control.
 
 The study compares this repository's implementations on Apple M4 Pro / Metal.
 It does not measure a complete decoder block or model. The result remains an
@@ -98,8 +102,8 @@ oracles at the unchanged `atol=rtol=0.015625` output tolerance.
 
 The 29 oracle cases cover small/ragged tiles, full prefill through 4096,
 incremental queries through T=4096, multiple seeds, tied/large scores,
-cancellation, and extreme negative finite scores. Every one of the eleven
-routes is tested. Additional tests verify exact causal independence from
+cancellation, and extreme negative finite scores. Every one of the original eleven
+routes is tested; the resource follow-up adds five ablations under the same gate. Additional tests verify exact causal independence from
 future K/V perturbations, full-versus-suffix agreement, probability scratch,
 output overwrites, unsupported shapes and invalid route IDs. Every benchmark
 process also checks its actual control and candidate before timing, for each
@@ -224,37 +228,161 @@ attention scratch and eliminating compiler spills are different optimizations.
 The lower reported occupancy of the faster MMA path also shows why occupancy
 alone is not the objective.
 
+## Compiler resources and synchronization
+
+The follow-up holds the original 32x32/BK32/H1 MMA kernel (route 8) fixed and
+changes one implementation detail at a time. All five new routes pass the
+same 29 independent oracle cases and unchanged tolerance. Normal execution
+also repeats each new route twelve times per oracle case, poisoning output
+before every launch: 1740 additional candidate/oracle checks. The original
+`_mma` body remains unchanged; the ablations use `_mma_tuned`.
+
+| Route | Isolated change | IR lines | IR alloca sites | Barriers/tile | Shared allocation |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 8 | Original control | 4239 | 30 | 4 | 14 KiB |
+| 11 | Eight two-value output fragments | 4006 | 6 | 4 | 14 KiB |
+| 12 | Rolled inner QK reduction | 2967 | 30 | 4 | 14 KiB |
+| 13 | Remove score barrier | 4238 | 30 | 3 | 14 KiB |
+| 14 | Remove probability barrier | 4238 | 30 | 3 | 14 KiB |
+| 15 | Keep scores in lane-owned registers | 4102 | 30 | 4 | 10 KiB |
+
+These are counts from the pinned compiler's intermediate Metal LLVM output
+at R=T=1024, not physical register allocation or measured memory traffic.
+The control carries sixteen FP32 output values per lane. Route 11 expresses
+them as eight two-value fragments, while route 15 adds eight live FP32 scores
+per lane to eliminate the shared score tile. Route 12 rolls only QK's
+head-dimension reduction; its key-fragment loop and the PV loops remain
+unrolled. [resources_ir.json](resources_ir.json) binds the source and IR hashes.
+
+Each barrier ablation differs from normalized control IR by exactly one
+removed barrier instruction. The ownership argument is stronger than a
+passing numerical test: each lane reads the same score and probability
+addresses that it wrote. Row exchanges are explicit register shuffles;
+MMA exchanges already-loaded fragments. There is no cross-thread handoff
+through these two shared arrays. K/V staging crosses SIMD groups, so its
+publication barrier and final reuse barrier remain in every candidate.
+
+The screen retains all 4800 observations across five workloads and both
+modes. Rolled QK has two faster and eight inconclusive comparisons. Fragmented
+accumulators and each barrier removal have one slower and nine inconclusive
+comparisons; lane-owned scores are inconclusive throughout. Small R=T=16 is
+noisy: its self-pair floors are 69.96% hot and 30.40% ring24. The reported
+short-ring regression for fragments therefore comes from a noisy setting;
+it still crosses the predeclared decision rule. No observations were discarded.
+
+![Compiler and synchronization ablations](resources_screen.png)
+
+Only route 12 qualified for the full matrix. No second demonstrated
+improvement justified a combination. The finalist was frozen before its
+3520-observation comparison against route 8 across all eleven workloads.
+
+The final matrix demonstrates six faster comparisons, sixteen inconclusive
+comparisons, and no regressions under the decision rule. Full 4096 prefill
+improves by about 6%; the largest confirmed reduction is 8.31% for the
+256-query suffix over 4096 KV rows in ring24. The 16-query suffix over 4096
+KV rows, which barely qualified in hot screening, is inconclusive in the
+final run. Selection evidence does not replace the final comparison.
+
+| R, T | Mode | Paired control (ms) | Rolled QK (ms) | Paired time reduction |
+| --- | --- | ---: | ---: | ---: |
+| 256, 256 | Ring24 | 0.183 | 0.173 | 5.12% |
+| 4096, 4096 | Hot | 23.993 | 22.542 | 6.15% |
+| 4096, 4096 | Ring24 | 23.799 | 22.395 | 5.84% |
+| 64, 4096 | Hot | 1.765 | 1.681 | 5.40% |
+| 256, 4096 | Hot | 3.665 | 3.457 | 5.74% |
+| 256, 4096 | Ring24 | 3.654 | 3.356 | 8.31% |
+
+Only confirmed gains appear in this compact table; every comparison and every
+block range remains in [resources_summary.csv](resources_summary.csv) and the
+figure. Displayed times are medians of block medians; reductions use the median
+of paired block ratios. They need not equal a ratio of the displayed times.
+Absolute times from the earlier campaign are not controls for this new run.
+
+Route 12 is available as explicit `SCHEDULE=2` with `MMA=True, BQ=BK=32,
+HEADS=1`. It is supported by the sampled gains and absence of demonstrated
+regressions, while sixteen inconclusive cells limit claims of general benefit.
+The existing default and original control remain available; no automatic
+shape crossover was added.
+
+![Rolled QK against original MMA](resources_comparisons.png)
+
+Six separate captures retain 2400 measured dispatch durations: 1000 each for
+control and finalist at R=T=16, and 100 each at (1024,1024) and (64,4096),
+all with ten warmups. All three workload pairs report a maximum spill size
+per event of **144 bytes for control and 48 bytes for rolled QK**. Each short
+capture has 1010 target spill events; each larger capture has 110, including
+warmups. Spills are reduced, not eliminated.
+
+| R, T | Control active GPU time (µs) | Rolled QK active GPU time (µs) | Control / rolled spill maximum (bytes/event) |
+| --- | ---: | ---: | ---: |
+| 16, 16 | 30.584 | 29.792 | 144 / 48 |
+| 1024, 1024 | 1703.458 | 1658.480 | 144 / 48 |
+| 64, 4096 | 1698.688 | 1527.479 | 144 / 48 |
+
+These are median active dispatch durations from separate single captures,
+not paired speed estimates. The retained [profile record](resources_profiles.json)
+and [dispatch table](resources_profile_summary.csv) preserve the capture
+identities, counters, conditions and exact dispatch counts. Preempted segments
+are joined using the same validated analyzer as the original study.
+
+At R=T=1024, median Kernel Occupancy is 20.62% → 20.42%, Instruction Throughput
+Limiter is 74.39% → 82.15%, and Last Level Cache Limiter is 100.00% → 49.97%.
+These device-wide samples suggest changed resource pressure without an
+occupancy increase. They cannot establish exclusive kernel traffic or a DRAM
+bandwidth reduction. The spill maximum and the sum of compiler events are
+not measurements of bytes transferred at runtime.
+
+The evidence supports shorter QK scheduling as a useful compiler target:
+about 30% fewer IR lines, unchanged IR alloca count, unchanged shared storage
+and barriers, lower reported spills, and modest paired gains. Exact attribution
+of spills to particular source values remains unknown. Fragment accumulators
+were not profiled, so their lower alloca count cannot be claimed to change
+physical spills.
+
+The smaller intermediate program and any physical spill statistic answer
+different questions. The screen already rejects the idea that fewer IR
+allocations, fewer barriers, or less shared storage alone guarantee a speedup.
+
 ## Reproduce and continue
 
-The retained files are two compact latency records/sample tables (screen and
-final), one compact profile record/sample table, their derived CSV summaries,
-and four PNGs used above. Full Instruments traces/XML, compiled binaries and
-oracle arrays stay outside Git. No per-variant experiment directories or
-duplicate image formats were added.
+The original screen/final latency pairs and profiles remain unchanged. The
+follow-up adds `resources_screen_` and `resources_` latency pairs, one
+`resources_` profile pair, their small CSV summaries, two PNGs and one compact
+IR record. The six report PNGs answer different study questions. Full traces,
+XML, IR dumps, compiled binaries and oracle arrays remain outside Git.
 
 Use [the package commands](../../src/llm_mojo/benchmarks/README.md) to validate,
-build, measure and profile. Regenerate all tables and figures without GPU work:
+build, measure, inspect compiler IR and profile. Regenerate all tables and
+figures without GPU work:
 
 ```bash
 uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.plot
 ```
 
-The measured commits are preserved by local tags `study/gqa-prefill-screen-v1`
-(`fe418cc`) and `study/gqa-prefill-v1` (`bf4277c`) so a future squash merge need
-not erase their identity. Publish those tags alongside the branch when sharing
-this study. The full matrix and six GPU captures use the latter source;
-trace reanalysis uses the coalescing fix at `a07a581`, with exact analysis and
-curation source hashes recorded independently from the captured kernel source.
-Use the current analyzer to process exports from either measured checkout.
+Local tags preserve the measured source identities across a future squash merge:
 
-Full validation passed 71 Mojo tests and 36 Python tooling/evidence checks,
-including every prefill measurement route in hot and ring24 modes. The locked
-Mojo 1.0.0, MAX 26.5.0 and numerical tolerances are unchanged. The run records
-preserve software versions, build commands, source/binary hashes, Metal device
-identity and all block conditions.
+| Stage | Commit | Tag |
+| --- | --- | --- |
+| Original candidate screen | `fe418cc` | `study/gqa-prefill-screen-v1` |
+| Original final matrix / profiles | `bf4277c` | `study/gqa-prefill-v1` |
+| Five resource ablations | `9a8bc10` | `study/gqa-prefill-resources-screen-v1` |
+| Rolled QK final matrix / profiles | `d4ef642` | `study/gqa-prefill-resources-v1` |
 
-The bounded loop stops here. A useful next experiment is reducing the
-profiler-reported spills or the four barriers per KV tile, with a direct
-comparison against the current MMA control. Decoder-block composition remains
-a separate numerical milestone: projection, positions, cache mutation,
+Publish these tags alongside the branch when sharing the study. Original trace
+reanalysis uses the dispatch-coalescing fix at `a07a581`; every profile record
+binds analysis and curation source hashes independently from captured kernel
+source. Use the current analyzer for exports from either measured checkout.
+
+Full numerical validation passed 71 Mojo tests and 36 Python checks. All sixteen
+prefill measurement routes passed in hot and ring24 modes. The five new
+schedules additionally passed 1740 normal-mode poisoned-output oracle checks.
+The finalist changes only the QK loop schedule; the frozen Mojo 1.0.0 / MAX
+26.5.0 toolchain, BF16/FP32 contract and numerical tolerances are unchanged.
+Both latency runs and all six new captures passed the AC/thermal conditions.
+
+The bounded follow-up stops with five individual ablations, no combination,
+one finalist, 8320 latency observations and six of the permitted twelve
+captures. The rolled path is an explicit optimized option; sixteen inconclusive
+comparisons and remaining reported spills limit the result. Decoder-block
+composition remains a separate milestone: projection, positions, cache mutation,
 residual paths and the MLP are not proved by an attention-kernel speedup.
