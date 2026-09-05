@@ -32,7 +32,7 @@ def values(n, seed, kind, operand):
     if kind == 2 and operand < 2:
         x[:] = 8
     if kind == 3 and operand == 2:
-        x = np.where(i % 2 == 0, 1, -1) * (1 + (i % 7) / 64.0)
+        x = np.where((i // 128) % 2 == 0, 1, -1) * (1 + (i % 7) / 64.0)
     return bf16(x).astype(np.float64)
 
 

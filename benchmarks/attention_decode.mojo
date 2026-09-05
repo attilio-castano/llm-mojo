@@ -70,6 +70,14 @@ def enqueue_variant[
         enqueue_grouped_query_attention_decode_apple_gpu[1, 7, 64](
             ctx, query, key, value, output, workspace
         )
+    elif variant == 11:
+        enqueue_grouped_query_attention_decode_apple_gpu[
+            32, 1, 1, conditional_rescale=True
+        ](ctx, query, key, value, output, workspace)
+    elif variant == 12:
+        enqueue_grouped_query_attention_decode_apple_gpu[
+            1, 1, 64, conditional_rescale=True
+        ](ctx, query, key, value, output, workspace)
     else:
         raise Error("unknown decode variant")
 
@@ -79,7 +87,7 @@ def variant_splits(variant: Int) -> Int:
         return 4
     if variant == 6:
         return 16
-    if variant >= 7:
+    if variant >= 7 and variant != 11:
         return 64
     return 1
 
@@ -121,9 +129,9 @@ def main() raises:
         or rows > 4096
         or (layers != 1 and layers != 24)
         or candidate < 0
-        or candidate > 10
+        or candidate > 12
         or control < 0
-        or control > 10
+        or control > 12
         or repetitions < 1
         or warmup < 0
     ):
@@ -211,7 +219,8 @@ def main() raises:
             == 0 else (
                 2 if candidate
                 == 2 else (
-                    8 if candidate == 3 else (32 if candidate == 4 else 1)
+                    8 if candidate
+                    == 3 else (32 if (candidate == 4 or candidate == 11) else 1)
                 )
             ),
         )

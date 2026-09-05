@@ -53,7 +53,10 @@ def sha(path):
 
 
 def name(variant):
-    return "materialized" if variant == 0 else "g%d-h%d-s%d" % VARIANTS[variant]
+    return "materialized" if variant == 0 else (
+        ("g%d-h%d-s%d" % VARIANTS[variant])
+        + ("-conditional" if variant in (11, 12) else "")
+    )
 
 
 def specification(variant, rows):
@@ -62,6 +65,7 @@ def specification(variant, rows):
         "id": variant,
         "name": name(variant),
         "groups": g,
+        "conditional_rescale": variant in (11, 12),
         "heads": h,
         "splits": s,
         "dispatches": 3 if variant == 0 else (2 if s > 1 else 1),
@@ -162,6 +166,7 @@ def build_profile(args):
         "groups": spec["groups"],
         "heads": spec["heads"],
         "splits": spec["splits"],
+        "conditional_rescale": spec["conditional_rescale"],
         "profile_workload": f'decode-t{args.profile_rows}-v{args.profile_variant}',
         "dispatches_per_iteration": spec["dispatches"],
         "profile_warmup_iterations": 100,
@@ -176,7 +181,17 @@ def build_profile(args):
     )
 
 
-def parse_output(output, control, candidate, first, repetitions=10):
+def parse_output(
+    output,
+    control,
+    candidate,
+    first,
+    repetitions=10,
+    *,
+    rows=None,
+    layers=None,
+    seed=None,
+):
     fields = {}
     samples = []
     for line in output.splitlines():
@@ -208,6 +223,18 @@ def parse_output(output, control, candidate, first, repetitions=10):
         raise ValueError("unexpected sample order, count or implementation")
     if not output.rstrip().endswith("BENCHMARK_COMPLETE"):
         raise ValueError("benchmark did not complete")
+    if rows is not None:
+        lines = output.splitlines()
+        if (
+            lines.count(f"shape: {rows} {layers} seed: {seed}") != 1
+            or lines.count(
+                f"variants: {control} {candidate} candidate-first: {int(first)}"
+            )
+            != 1
+        ):
+            raise ValueError(
+                "runtime workload identity disagrees with requested pair"
+            )
     return fields, samples
 
 
@@ -350,7 +377,13 @@ def run(args):
                 )
                 process.check_returncode()
                 identity, samples = parse_output(
-                    process.stdout, args.control, candidate, first
+                    process.stdout,
+                    args.control,
+                    candidate,
+                    first,
+                    rows=rows,
+                    layers=layers,
+                    seed=args.seed,
                 )
                 if "runtime" in metadata and metadata["runtime"] != identity:
                     raise RuntimeError("runtime identity changed during run")

@@ -1,12 +1,12 @@
 """Bounded output-only Qwen decode experiments; no automatic dispatch policy."""
 
-from layout import Idx, TensorLayout, TileTensor, row_major, stack_allocation
+from layout import TensorLayout, TileTensor, row_major, stack_allocation
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.gpu import block_idx, thread_idx
 from std.gpu.primitives import warp
-from std.math import ceildiv, exp, max
+from std.math import exp, max
 from std.sys.info import is_apple_gpu
 
 
@@ -14,6 +14,7 @@ def _decode_kernel[
     groups: Int,
     heads: Int,
     splits: Int,
+    conditional_rescale: Bool,
     QL: TensorLayout,
     KL: TensorLayout,
     VL: TensorLayout,
@@ -75,13 +76,28 @@ def _decode_kernel[
             # All lanes participate, including an unused final head slot.
             var score = warp.sum(q0[h] * k0 + q1[h] * k1) * 0.125
             score = score.cast[DType.bfloat16]().cast[DType.float32]()
-            var new_m = max(m[h], score)
-            var alpha = exp(m[h] - new_m)
-            var beta = exp(score - new_m)
-            z[h] = alpha * z[h] + beta
-            u0[h] = alpha * u0[h] + beta * v0
-            u1[h] = alpha * u1[h] + beta * v1
-            m[h] = new_m
+            comptime if conditional_rescale:
+                # score is SIMD-group uniform after warp.sum. Only a new
+                # maximum changes the scale of the already accumulated state.
+                if score > m[h]:
+                    var alpha = exp(m[h] - score)
+                    z[h] = alpha * z[h] + 1.0
+                    u0[h] = alpha * u0[h] + v0
+                    u1[h] = alpha * u1[h] + v1
+                    m[h] = score
+                else:
+                    var beta = exp(score - m[h])
+                    z[h] += beta
+                    u0[h] += beta * v0
+                    u1[h] += beta * v1
+            else:
+                var new_m = max(m[h], score)
+                var alpha = exp(m[h] - new_m)
+                var beta = exp(score - new_m)
+                z[h] = alpha * z[h] + beta
+                u0[h] = alpha * u0[h] + beta * v0
+                u1[h] = alpha * u1[h] + beta * v1
+                m[h] = new_m
 
     comptime if groups > 1:
         var partial = stack_allocation[
@@ -169,6 +185,7 @@ def enqueue_grouped_query_attention_decode_apple_gpu[
     VL: TensorLayout,
     OL: TensorLayout,
     WL: TensorLayout,
+    conditional_rescale: Bool = False,
 ](
     context: DeviceContext,
     query: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
@@ -229,7 +246,9 @@ def enqueue_grouped_query_attention_decode_apple_gpu[
             or Int(workspace.dim[2]()) != 66
         ):
             raise Error("split decode requires FP32 workspace [14,splits,66]")
-    comptime kernel = _decode_kernel[groups, heads, splits, QL, KL, VL, OL, WL]
+    comptime kernel = _decode_kernel[
+        groups, heads, splits, conditional_rescale, QL, KL, VL, OL, WL
+    ]
     context.enqueue_function[kernel](
         query,
         key,

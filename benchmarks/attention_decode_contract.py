@@ -12,6 +12,8 @@ VARIANTS = {
     8: (1, 2, 64),
     9: (1, 4, 64),
     10: (1, 7, 64),
+    11: (32, 1, 1),
+    12: (1, 1, 64),
 }
 OPERATION = "grouped_query_attention_decode"
 ENTRYPOINTS = {
@@ -76,4 +78,13 @@ def configuration(data):
         raise ValueError("attention profile exceeds dispatch budget")
     if type(warmup) is not int or not 0 <= warmup <= 100:
         raise ValueError("attention profile warmup is outside bounds")
+    conditional = variant in (11, 12)
+    if "conditional_rescale" in data and (
+        type(data["conditional_rescale"]) is not bool
+        or data["conditional_rescale"] != conditional
+    ):
+        raise ValueError(
+            "attention softmax update disagrees with implementation"
+        )
+    expected["conditional_rescale"] = conditional
     return expected

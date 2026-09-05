@@ -14,7 +14,7 @@ def decode_input(index: Int, seed: Int, kind: Int, operand: Int) -> Float32:
     if kind == 2 and operand < 2:
         x = 8.0
     if kind == 3 and operand == 2:
-        x = Float32(1 if index % 2 == 0 else -1) * (
+        x = Float32(1 if (index // 128) % 2 == 0 else -1) * (
             1.0 + Float32(index % 7) / 64.0
         )
     return x

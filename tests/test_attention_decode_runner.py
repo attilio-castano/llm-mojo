@@ -16,6 +16,15 @@ from benchmarks.analyze_rms_norm_trace import segment_compute_commands
 
 
 class DecodeRunnerTests(unittest.TestCase):
+    def test_runtime_shape_and_seed_must_match_requested_pair(self):
+        text = (
+            "shape: 64 24 seed: 17\nvariants: 0 1 candidate-first: 0\n"
+            + self.output()
+        )
+        parse_output(text, 0, 1, False, rows=64, layers=24, seed=17)
+        with self.assertRaises(ValueError):
+            parse_output(text, 0, 1, False, rows=64, layers=24, seed=37)
+
     def output(self, first=False):
         arms = [("control", 0), ("candidate", 1)]
         if first:
@@ -95,7 +104,7 @@ class DecodeRunnerTests(unittest.TestCase):
         }
 
     def test_profile_runtime_matches_shape_parameters_and_dispatches(self):
-        for variant in (0, 1, 7):
+        for variant in (0, 1, 7, 8, 9, 10, 11, 12):
             p = self.profile(variant)
             cfg, _, hardware = profile_contract(p)
             text = "\n".join(

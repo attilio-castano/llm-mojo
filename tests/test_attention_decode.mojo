@@ -13,7 +13,7 @@ from fixtures.attention.reference_data import (
     qwen_decode_expected,
 )
 from test_attention import fill_fixture
-from layout import Idx, TileTensor, row_major
+from layout import TileTensor, row_major
 from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
 from llm_mojo.attention_decode import (
     enqueue_grouped_query_attention_decode_apple_gpu,
@@ -23,7 +23,7 @@ from std.testing import TestSuite, assert_raises
 
 
 def check_case[
-    groups: Int, heads: Int, splits: Int
+    groups: Int, heads: Int, splits: Int, conditional_rescale: Bool = False
 ](
     ctx: DeviceContext,
     rows: Int,
@@ -81,7 +81,7 @@ def check_case[
             )
         else:
             enqueue_grouped_query_attention_decode_apple_gpu[
-                groups, heads, splits
+                groups, heads, splits, conditional_rescale=conditional_rescale
             ](ctx, query, key, value, output, workspace)
         ctx.synchronize()
         with ob.map_to_host() as mapped:
@@ -90,10 +90,12 @@ def check_case[
             _ = assert_decode_close(result, diagnostic)
 
 
-def check_variant[groups: Int, heads: Int, splits: Int]() raises:
+def check_variant[
+    groups: Int, heads: Int, splits: Int, conditional_rescale: Bool = False
+]() raises:
     var ctx = DeviceContext()
     for case_id in range(DECODE_CASE_COUNT):
-        check_case[groups, heads, splits](
+        check_case[groups, heads, splits, conditional_rescale](
             ctx,
             decode_case_rows(case_id),
             decode_case_seed(case_id),
@@ -101,7 +103,7 @@ def check_variant[groups: Int, heads: Int, splits: Int]() raises:
             decode_case_expected(case_id),
             decode_case_expected(case_id, True),
         )
-    check_case[groups, heads, splits](
+    check_case[groups, heads, splits, conditional_rescale](
         ctx, 7, 0, 0, qwen_decode_expected(), qwen_decode_expected(), True
     )
     print(
@@ -177,6 +179,11 @@ def test_decode_grouped_head_reuse() raises:
     check_variant[1, 2, 64]()
     check_variant[1, 4, 64]()
     check_variant[1, 7, 64]()
+
+
+def test_decode_conditional_rescale() raises:
+    check_variant[32, 1, 1, True]()
+    check_variant[1, 1, 64, True]()
 
 
 def main() raises:
