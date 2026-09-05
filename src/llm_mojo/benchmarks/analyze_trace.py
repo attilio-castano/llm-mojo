@@ -423,7 +423,7 @@ def summarize_profile_counters(
 
     profile_start = min(integer(row, "start") for row in profile_intervals)
     profile_end = max(
-        integer(row, "start") + integer(row, "duration")
+        (integer(row, "end") if "end" in row else integer(row, "start") + integer(row, "duration"))
         for row in profile_intervals
     )
     profile_duration = profile_end - profile_start
@@ -717,6 +717,56 @@ def spill_events(
     }
 
 
+def coalesce_compute_commands(rows, submissions, required_tail):
+    """Join preempted dispatch segments; verify every trailing submission.
+
+    Instruments can emit several non-overlapping active intervals for one
+    command/encoder/GPU submission. Their active durations add; the elapsed
+    end timestamp separately preserves the enclosing counter window.
+    """
+    if required_tail < 1 or len(submissions) < required_tail:
+        raise ValueError('insufficient target submissions for declared profile')
+    ordered_submissions = sorted(submissions,key=lambda r:integer(r,'start'))
+    ids = [integer(r,'cmdbuffer-id') for r in ordered_submissions]
+    id_set = set(ids)
+    if len(id_set) != len(ids):
+        raise ValueError('duplicate target command-buffer submission')
+    grouped = {}
+    for row in rows:
+        key = tuple(integer(row,k) for k in ('cmdbuffer-id','encoder-id','gpu-submission-id'))
+        if key[0] not in id_set:
+            raise ValueError('compute interval lacks a target submission')
+        grouped.setdefault(key,[]).append(row)
+    by_buffer = {}
+    fragmented = 0
+    for key,segments in grouped.items():
+        segments.sort(key=lambda r:integer(r,'start'))
+        total = 0
+        end = -1
+        for row in segments:
+            start,duration = integer(row,'start'),integer(row,'duration')
+            if duration <= 0 or start < end:
+                raise ValueError('overlapping or invalid active dispatch segments')
+            end = start+duration
+            total += duration
+        joined = dict(segments[0])
+        joined['duration'] = (str(total),str(total))
+        joined['end'] = (str(end),str(end))
+        joined['active-segments'] = (str(len(segments)),str(len(segments)))
+        by_buffer.setdefault(key[0],[]).append(joined)
+        fragmented += len(segments)>1
+    # These instruments submit one compute encoder per dispatch and no GPU
+    # work after the profile synchronization. A missing tail interval must not
+    # silently shift the stage labels onto earlier setup/warmup commands.
+    for row in ordered_submissions[-required_tail:]:
+        if integer(row,'num-encoders') != 1 or len(by_buffer.get(integer(row,'cmdbuffer-id'),[])) != 1:
+            raise ValueError('incomplete or ambiguous trailing compute submission coverage')
+    ordered = [r for cb in ids for r in sorted(by_buffer.get(cb,[]),key=lambda r:integer(r,'start'))]
+    return ordered, dict(active_intervals=len(rows),dispatches=len(ordered),
+                         fragmented_dispatches=fragmented,verified_trailing_submissions=required_tail,
+                         duration_rule='Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end.')
+
+
 def analyze(args: argparse.Namespace) -> dict[str, Any]:
     if (args.counter_info_xml is None) != (args.counter_values_xml is None):
         raise ValueError(
@@ -776,6 +826,10 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         for row in compute_channel
         if ":Compute Command" in row["event-label"][1]
     ]
+    required_tail = (workload["warmup_iterations"] + workload["profile_iterations"] +
+                     (1 if identity["operation"] == "rms_norm" else 0)) * workload["dispatches_per_iteration"]
+    compute_commands, coalescing = coalesce_compute_commands(
+        compute_commands, encoded_submissions, required_tail)
     setup, correctness, warmup, profile = segment_compute_commands(
         compute_commands,
         workload["warmup_iterations"],
@@ -805,10 +859,14 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
     result: dict[str, Any] = {
         "schema_version": 3,
         "analysis": identity["operation"] + "_metal_trace",
+        "analysis_source_sha256": {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
+            for name in ("analyze_trace.py", "attention_contract.py", "attention_decode_contract.py", "attention_prefill_contract.py")},
         "capture_identity": identity,
         "inputs": inputs,
         "trace": trace,
         "validated_sequence": {
+            "interval_coalescing": coalescing,
+            "fragmented_profile_dispatches": sum(integer(r,"active-segments")>1 for r in profile),
             "target_submissions_with_encoders": len(encoded_submissions),
             "matched_target_gpu_intervals": len(target_intervals),
             "duplicate_command_buffer_interval_groups": duplicate_interval_groups,
@@ -851,7 +909,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
             "warmup": duration_summary(warmup) if warmup else None,
             "profile": duration_summary(profile),
             "evidence_boundary": (
-                "Diagnostic Instruments intervals, not headline benchmark "
+                "Diagnostic Instruments active dispatch durations (sum of execution segments, excluding preemption gaps), not headline benchmark "
                 "latency."
             ),
         },

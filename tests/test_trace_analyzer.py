@@ -5,6 +5,8 @@ from pathlib import Path
 
 from llm_mojo.benchmarks.analyze_trace import (
     capture_identity,
+    coalesce_compute_commands,
+    integer,
     segment_compute_commands,
     summarize_profile_counters,
     validate_trace_binding,
@@ -161,6 +163,47 @@ def trace_metadata():
             "device_os_version": "test",
         },
     }
+
+
+class CoalescedDispatchTest(unittest.TestCase):
+    def fixture(self):
+        submissions = [dict(start=cell(i), **{'cmdbuffer-id':cell(i),'num-encoders':cell(1)}) for i in range(5)]
+        rows=[]
+        for cb,start,duration in [(1,100,10),(1,120,20),(2,141,5),(3,150,50),(4,201,10)]:
+            rows.append(dict(start=cell(start),duration=cell(duration),
+                             **{'cmdbuffer-id':cell(cb),'encoder-id':cell(cb+10),'gpu-submission-id':cell(cb+20)}))
+        return submissions,rows
+
+    def test_preempted_dispatch_preserves_stage_order_and_active_time(self):
+        submissions,rows=self.fixture()
+        joined,metadata=coalesce_compute_commands(rows,submissions,4)
+        self.assertEqual([integer(r,'duration') for r in joined],[30,5,50,10])
+        self.assertEqual(integer(joined[0],'end'),140)
+        self.assertEqual(metadata['fragmented_dispatches'],1)
+        *_,profile=segment_compute_commands(joined,0,2,2,False)
+        self.assertEqual([integer(r,'cmdbuffer-id') for r in profile],[1,2,3,4])
+        counter=summarize_profile_counters([counter_info(3,'Kernel Occupancy')],
+            [counter_value(105,3,25),counter_value(135,3,75)],[joined[0]])
+        self.assertEqual(counter['samples']['value_count'],2)
+        self.assertEqual(counter['profile_window']['duration_nanoseconds'],40)
+        self.assertEqual(counter['profile_window']['target_gpu_busy_nanoseconds'],30)
+
+    def test_extra_segment_cannot_hide_a_missing_submission(self):
+        submissions,rows=self.fixture()
+        missing=[r for r in rows if integer(r,'cmdbuffer-id')!=2]
+        self.assertEqual(len(missing),4)  # Enough raw intervals, one dispatch missing.
+        with self.assertRaisesRegex(ValueError,'coverage'):
+            coalesce_compute_commands(missing,submissions,4)
+
+    def test_overlapping_segments_and_ambiguous_encoders_are_rejected(self):
+        submissions,rows=self.fixture()
+        rows[1]['start']=cell(105)
+        with self.assertRaisesRegex(ValueError,'overlapping'):
+            coalesce_compute_commands(rows,submissions,4)
+        submissions,rows=self.fixture()
+        rows[1]['encoder-id']=cell(999)
+        with self.assertRaisesRegex(ValueError,'ambiguous'):
+            coalesce_compute_commands(rows,submissions,4)
 
 
 class SegmentComputeCommandsTest(unittest.TestCase):

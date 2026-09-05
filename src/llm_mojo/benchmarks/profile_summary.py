@@ -6,7 +6,7 @@ import io
 import json
 from pathlib import Path
 
-from .analyze_trace import (integer, read_table, segment_compute_commands, duration_summary)
+from .analyze_trace import (integer, read_table, segment_compute_commands, duration_summary, coalesce_compute_commands)
 from .study import sha, write_json, PREFILL_PROFILE_WORKLOADS
 
 STAGES = {0: ['QK', 'softmax', 'PV'], 4: ['fused'], 9: ['decode', 'merge']}
@@ -31,6 +31,10 @@ def collect(source, output, prefill_variant=None):
         if identity['provenance']['sha256'] != sha(directory / 'profile.provenance.json'):
             raise ValueError('profile provenance changed')
         current = {k: provenance[k] for k in ('repository', 'hardware', 'software', 'source_sha256')}
+        if 'analysis_source_sha256' not in report:
+            raise ValueError('profile must be reanalyzed with dispatch coalescing')
+        current['analysis_source_sha256'] = report['analysis_source_sha256']
+        current['curation_source_sha256'] = sha(Path(__file__))
         if common is not None and current != common:
             raise ValueError('captures must share source and environment')
         common = current
@@ -56,6 +60,10 @@ def collect(source, output, prefill_variant=None):
             identity['implementation'] != f'gqa_prefill_{variant}'
         ):
             raise ValueError('prefill capture differs from requested comparison')
+        intervals, coalescing = coalesce_compute_commands(intervals,submissions,
+            (workload['warmup_iterations']+workload['profile_iterations'])*len(stages))
+        if coalescing != report['validated_sequence']['interval_coalescing']:
+            raise ValueError('dispatch coalescing differs from validated analysis')
         *_, profile = segment_compute_commands(intervals, workload['warmup_iterations'],
                                                workload['profile_iterations'], len(stages), False)
         if duration_summary(profile) != report['instrumented_gpu_interval_duration']['profile']:
@@ -64,6 +72,7 @@ def collect(source, output, prefill_variant=None):
             samples.append(dict(**shape,variant=variant, iteration=i // len(stages), stage=stages[i % len(stages)],
                                 duration_ns=integer(row, 'duration')))
         records.append(dict(**shape,variant=variant, capture=identity, trace=report['trace'],
+                            interval_coalescing=coalescing,fragmented_profile_dispatches=report['validated_sequence']['fragmented_profile_dispatches'],
                             conditions=json.loads((directory / 'conditions.json').read_text()),
                             counters_scope=report['profile_gpu_counters']['scope'],
                             counters=[c for c in report['profile_gpu_counters']['counters'] if c['name'] in COUNTERS],
@@ -76,7 +85,7 @@ def collect(source, output, prefill_variant=None):
     spec = {} if prefill_variant is None else dict(specification=dict(workloads=PREFILL_PROFILE_WORKLOADS,variants=[0,prefill_variant]))
     write_json(output / 'profiles.json', dict(schema=1 if prefill_variant is None else 2, **spec, common=common, captures=records,
                 samples_sha256=sha(raw),
-                boundary=f'Instrumented GPU dispatch durations; {len(captures)} single captures, not paired latency trials. Counter statistics are device-wide within each target window. Stage labels follow the validated source enqueue order.',
+                boundary=f'Instrumented GPU active dispatch durations (non-overlapping segments summed, preemption gaps excluded); {len(captures)} single captures, not paired latency trials. Counter statistics are device-wide within each target window. Stage labels follow the validated source enqueue order.',
                 retention='All target dispatch durations retained. Three named counter summaries retained; full trace/XML exports and other counters remain external.'))
 
 
