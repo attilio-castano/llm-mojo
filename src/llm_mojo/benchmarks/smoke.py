@@ -3,6 +3,7 @@ import os
 import subprocess
 
 from .._repository import repository_root
+from .attention_prefill_contract import VARIANTS as PREFILL_VARIANTS
 
 
 def main():
@@ -30,7 +31,7 @@ def main():
     subprocess.run(['uv','run','--locked','mojo','build','-I','src',
                     'src/llm_mojo/benchmarks/attention_prefill.mojo','-o',str(target)],
                    cwd=repository_root(),check=True)
-    for variant in range(11):
+    for variant in PREFILL_VARIANTS:
         for layers in (1,24):
             result = subprocess.run(list(map(str,[target,7,33,layers,variant,0,1,53,'bench',1,0])),
                                     text=True,capture_output=True,env=env,check=True)
@@ -44,7 +45,7 @@ def main():
                                 capture_output=True,env=env)
         if result.returncode == 0:
             raise RuntimeError('invalid prefill benchmark accepted')
-    print('prefill all eleven measurement routes passed in both modes',flush=True)
+    print('prefill all',len(PREFILL_VARIANTS),'measurement routes passed in both modes',flush=True)
 
 
 if __name__ == '__main__':

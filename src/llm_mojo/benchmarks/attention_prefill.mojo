@@ -4,6 +4,7 @@ from llm_mojo.benchmarks.attention_prefill_support import (
     fill_prefill,
     assert_prefill_close,
     enqueue_variant,
+    PREFILL_VARIANT_COUNT,
 )
 from layout import TensorLayout, TileTensor, row_major
 from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
@@ -53,9 +54,9 @@ def main() raises:
         or rows > 4096
         or (layers != 1 and layers != 24)
         or candidate < 0
-        or candidate > 10
+        or candidate >= PREFILL_VARIANT_COUNT
         or control < 0
-        or control > 10
+        or control >= PREFILL_VARIANT_COUNT
         or (first != 0 and first != 1)
         or (mode != "bench" and mode != "profile")
         or (mode == "profile" and layers != 1)
@@ -153,7 +154,11 @@ def main() raises:
                 == 2 else (
                     8 if candidate == 3
                     or candidate
-                    == 10 else (32 if candidate == 5 or candidate == 8 else 16)
+                    == 10 else (
+                        32 if candidate == 5
+                        or candidate == 8
+                        or candidate >= 11 else 16
+                    )
                 )
             ),
         )

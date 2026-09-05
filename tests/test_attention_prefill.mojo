@@ -1,8 +1,10 @@
 from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext
 from std.testing import TestSuite, assert_equal, assert_raises
+from std.sys import get_defined_int
 from llm_mojo.benchmarks.attention_prefill_support import (
     enqueue_variant,
+    PREFILL_VARIANT_COUNT,
     fill_prefill,
     assert_prefill_close,
 )
@@ -47,18 +49,34 @@ def test_all_prefill_routes_against_independent_oracles() raises:
         var scratch = TileTensor(sb, row_major(r, 14, t))
         var eager = prefill_case_expected(case_id)
         var online = prefill_case_expected(case_id, True)
-        for variant in range(11):
-            ob.enqueue_fill(123.0)
-            assert_equal(
-                enqueue_variant(variant, ctx, q, k, v, output, scratch), variant
+        for variant in range(PREFILL_VARIANT_COUNT):
+            # Normal-mode repeated launches exercise the same shared-memory
+            # handoffs with fresh poisoned outputs; the oracle is unchanged.
+            var repetitions = (
+                get_defined_int["PREFILL_REPEAT", default=1]() if variant
+                >= 11 else 1
             )
-            with ob.map_to_host() as mapped:
-                assert_prefill_close(TileTensor(mapped, ql), eager)
-                if variant >= 2:
-                    assert_prefill_close(TileTensor(mapped, ql), online)
+            for _ in range(repetitions):
+                ob.enqueue_fill(123.0)
+                assert_equal(
+                    enqueue_variant(variant, ctx, q, k, v, output, scratch),
+                    variant,
+                )
+                with ob.map_to_host() as mapped:
+                    assert_prefill_close(TileTensor(mapped, ql), eager)
+                    if variant >= 2:
+                        assert_prefill_close(TileTensor(mapped, ql), online)
         with assert_raises(contains="unknown prefill variant"):
             _ = enqueue_variant(99, ctx, q, k, v, output, scratch)
-        print("prefill case", case_id, r, t, "all 11 routes passed")
+        print(
+            "prefill case",
+            case_id,
+            r,
+            t,
+            "all",
+            PREFILL_VARIANT_COUNT,
+            "routes passed",
+        )
 
 
 def _result(
@@ -130,7 +148,7 @@ def _result(
 
 
 def test_causality_and_full_versus_suffix_prefill() raises:
-    for variant in range(11):
+    for variant in range(PREFILL_VARIANT_COUNT):
         var full = _result(33, 33, variant)
         var suffix = _result(17, 33, variant)
         var perturbed = _result(33, 33, variant, True)

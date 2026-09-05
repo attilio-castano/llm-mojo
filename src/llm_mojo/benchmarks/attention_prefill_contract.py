@@ -1,6 +1,7 @@
 """Prefill profile identity, including the rectangular causal workload."""
 VARIANTS = {0:(0,0,0),1:(0,0,0),2:(4,32,1),3:(8,32,1),4:(16,32,1),
             5:(32,32,1),6:(16,64,1),7:(16,32,1),8:(32,32,1),9:(16,32,2),10:(8,32,4)}
+VARIANTS.update({v:(32,32,1) for v in range(11,16)})
 OPERATION = 'grouped_query_attention_prefill'
 ENTRYPOINTS = {f'gqa_prefill_{v}': ('enqueue_grouped_query_attention_apple_gpu' if v==0 else
                'enqueue_grouped_query_attention_prefill_materialized_apple_gpu' if v==1 else

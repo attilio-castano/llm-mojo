@@ -389,6 +389,225 @@ def _mma[
             ]()
 
 
+# Fixed 32x32 / one-head ablations. The original _mma remains the control.
+def _mma_tuned[
+    SCHEDULE: Int, QL: TensorLayout, KL: TensorLayout
+](
+    q: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    k: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
+    v: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    rows: Int32,
+    tokens: Int32,
+):
+    comptime assert is_apple_gpu()
+    comptime assert q.flat_rank == 3
+    comptime assert k.flat_rank == 3
+    comptime assert v.flat_rank == 3
+    comptime assert output.flat_rank == 3
+    comptime BQ = 32
+    comptime BK = 32
+    comptime HEADS = 1
+    comptime W = 4
+    # Apple's 8x8 fragment assigns two adjacent columns to each lane. Four
+    # lanes share one row; XOR 1 and XOR 8 reduce that row without a block sum.
+    var tid = thread_idx.x
+    var lane = Int(lane_id())
+    var fr = ((lane & 6) >> 1) + ((lane & 16) >> 2)
+    var fc = ((lane & 1) << 1) + ((lane & 8) >> 1)
+    var local_r = (tid // 32) * 8 + fr
+    var kh = block_idx.x // ceildiv(7, HEADS)
+    var head0 = kh * 7 + (block_idx.x % ceildiv(7, HEADS)) * HEADS
+    var h = head0 + local_r // BQ
+    # Concatenate HEADS query tiles inside one block. Groups never cross the
+    # seven query heads belonging to a KV head; the last group can be partial.
+    var r = block_idx.y * BQ + local_r % BQ
+    var valid = r < Int(rows) and h < kh * 7 + 7
+    var past = Int(tokens) - Int(rows)
+    var end = min(Int(tokens), past + block_idx.y * BQ + BQ)
+    var ks = stack_allocation[
+        DType.bfloat16, address_space=AddressSpace.SHARED
+    ](row_major[BK, 64]())
+    comptime assert ks.flat_rank == 2
+    var vs = stack_allocation[
+        DType.bfloat16, address_space=AddressSpace.SHARED
+    ](row_major[BK, 64]())
+    comptime assert vs.flat_rank == 2
+    var scores = stack_allocation[
+        DType.float32, address_space=AddressSpace.SHARED
+    ](row_major[BQ * HEADS, BK]())
+    comptime assert scores.flat_rank == 2
+    var probs = stack_allocation[
+        DType.bfloat16, address_space=AddressSpace.SHARED
+    ](row_major[BQ * HEADS, BK]())
+    comptime assert probs.flat_rank == 2
+    var u = SIMD[DType.float32, 16](0)
+    var fragments = (
+        SIMD[DType.float32, 2](0),
+        SIMD[DType.float32, 2](0),
+        SIMD[DType.float32, 2](0),
+        SIMD[DType.float32, 2](0),
+        SIMD[DType.float32, 2](0),
+        SIMD[DType.float32, 2](0),
+        SIMD[DType.float32, 2](0),
+        SIMD[DType.float32, 2](0),
+    )
+    var m: Float32 = neg_inf[DType.float32]()
+    var z: Float32 = 0
+    for base in range(0, end, BK):
+        var lane_scores = SIMD[DType.float32, 8](0)
+        for index in range(tid, BK * 64, W * 32):
+            var t = base + index // 64
+            var d = index % 64
+            var kval: Scalar[DType.bfloat16] = 0
+            var vval: Scalar[DType.bfloat16] = 0
+            if t < end:
+                kval = rebind[Scalar[DType.bfloat16]](k[t, kh, d])
+                vval = rebind[Scalar[DType.bfloat16]](v[t, kh, d])
+            ks[index // 64, d] = kval
+            vs[index // 64, d] = vval
+        barrier()
+        comptime for j in range(BK // 8):
+            var acc = SIMD[DType.float32, 2](0)
+            comptime if SCHEDULE == 2:
+                for ds in range(8):
+                    var a = SIMD[DType.bfloat16, 2](0)
+                    if valid:
+                        a[0] = rebind[Scalar[DType.bfloat16]](
+                            q[r, h, ds * 8 + fc]
+                        )
+                        a[1] = rebind[Scalar[DType.bfloat16]](
+                            q[r, h, ds * 8 + fc + 1]
+                        )
+                    var b = SIMD[DType.bfloat16, 2](0)
+                    b[0] = rebind[Scalar[DType.bfloat16]](
+                        ks[j * 8 + fc, ds * 8 + fr]
+                    )
+                    b[1] = rebind[Scalar[DType.bfloat16]](
+                        ks[j * 8 + fc + 1, ds * 8 + fr]
+                    )
+                    var previous = acc
+                    _mma_apple_8x8(acc, a, b, previous)
+            else:
+                comptime for ds in range(8):
+                    var a = SIMD[DType.bfloat16, 2](0)
+                    if valid:
+                        a[0] = rebind[Scalar[DType.bfloat16]](
+                            q[r, h, ds * 8 + fc]
+                        )
+                        a[1] = rebind[Scalar[DType.bfloat16]](
+                            q[r, h, ds * 8 + fc + 1]
+                        )
+                    var b = SIMD[DType.bfloat16, 2](0)
+                    b[0] = rebind[Scalar[DType.bfloat16]](
+                        ks[j * 8 + fc, ds * 8 + fr]
+                    )
+                    b[1] = rebind[Scalar[DType.bfloat16]](
+                        ks[j * 8 + fc + 1, ds * 8 + fr]
+                    )
+                    var previous = acc
+                    _mma_apple_8x8(acc, a, b, previous)
+            comptime for c in range(2):
+                var t = base + j * 8 + fc + c
+                var s: Float32 = neg_inf[DType.float32]()
+                if valid and t < end and t <= past + r:
+                    s = (
+                        (acc[c] * 0.125)
+                        .cast[DType.bfloat16]()
+                        .cast[DType.float32]()
+                    )
+                comptime if SCHEDULE == 5:
+                    lane_scores[j * 2 + c] = s
+                else:
+                    scores[local_r, j * 8 + fc + c] = s
+        # Each lane reads precisely the score addresses it wrote. There is
+        # no cross-thread score-memory handoff; row reduction uses shuffles.
+        comptime if SCHEDULE != 3:
+            barrier()
+        var tile_m: Float32 = neg_inf[DType.float32]()
+        comptime for j in range(BK // 8):
+            comptime for c in range(2):
+                comptime if SCHEDULE == 5:
+                    tile_m = max(tile_m, lane_scores[j * 2 + c])
+                else:
+                    tile_m = max(
+                        tile_m, rebind[Float32](scores[local_r, j * 8 + fc + c])
+                    )
+        tile_m = max(tile_m, warp.shuffle_xor(tile_m, UInt32(1)))
+        tile_m = max(tile_m, warp.shuffle_xor(tile_m, UInt32(8)))
+        var new_m = max(m, tile_m)
+        # Rescale the old unnormalized output once per KV tile. Probabilities
+        # round to BF16 for matrix multiplication; m and z remain FP32.
+        var alpha = exp(m - new_m)
+        var tile_z: Float32 = 0
+        comptime for j in range(BK // 8):
+            comptime for c in range(2):
+                var t = base + j * 8 + fc + c
+                var p: Float32 = 0
+                if valid and t < end and t <= past + r:
+                    comptime if SCHEDULE == 5:
+                        p = exp(lane_scores[j * 2 + c] - new_m)
+                    else:
+                        p = exp(
+                            rebind[Float32](scores[local_r, j * 8 + fc + c])
+                            - new_m
+                        )
+                tile_z += p
+                probs[local_r, j * 8 + fc + c] = p.cast[DType.bfloat16]()
+        tile_z += warp.shuffle_xor(tile_z, UInt32(1))
+        tile_z += warp.shuffle_xor(tile_z, UInt32(8))
+        z = z * alpha + tile_z
+        m = new_m
+        comptime if SCHEDULE == 1:
+            comptime for ds in range(8):
+                fragments[ds] *= alpha
+        else:
+            u *= alpha
+        # PV loads the same lane-owned probability addresses just written.
+        # The MMA collective exchanges loaded register fragments. Shared K/V
+        # publication and reuse still require the outer block barriers.
+        comptime if SCHEDULE != 4:
+            barrier()
+        comptime for ds in range(8):
+            var acc: SIMD[DType.float32, 2]
+            comptime if SCHEDULE == 1:
+                acc = fragments[ds]
+            else:
+                acc = SIMD[DType.float32, 2](u[ds * 2], u[ds * 2 + 1])
+            comptime for j in range(BK // 8):
+                var a = SIMD[DType.bfloat16, 2](0)
+                var b = SIMD[DType.bfloat16, 2](0)
+                a[0] = rebind[Scalar[DType.bfloat16]](
+                    probs[local_r, j * 8 + fc]
+                )
+                a[1] = rebind[Scalar[DType.bfloat16]](
+                    probs[local_r, j * 8 + fc + 1]
+                )
+                b[0] = rebind[Scalar[DType.bfloat16]](
+                    vs[j * 8 + fr, ds * 8 + fc]
+                )
+                b[1] = rebind[Scalar[DType.bfloat16]](
+                    vs[j * 8 + fr, ds * 8 + fc + 1]
+                )
+                var previous = acc
+                _mma_apple_8x8(acc, a, b, previous)
+            comptime if SCHEDULE == 1:
+                fragments[ds] = acc
+            else:
+                u[ds * 2] = acc[0]
+                u[ds * 2 + 1] = acc[1]
+        barrier()
+    if valid:
+        comptime for ds in range(8):
+            comptime if SCHEDULE == 1:
+                u[ds * 2] = fragments[ds][0]
+                u[ds * 2 + 1] = fragments[ds][1]
+            output[r, h, ds * 8 + fc] = (u[ds * 2] / z).cast[DType.bfloat16]()
+            output[r, h, ds * 8 + fc + 1] = (u[ds * 2 + 1] / z).cast[
+                DType.bfloat16
+            ]()
+
+
 def enqueue_grouped_query_attention_prefill_apple_gpu[
     BQ: Int,
     BK: Int,
@@ -397,6 +616,7 @@ def enqueue_grouped_query_attention_prefill_apple_gpu[
     MMA: Bool = False,
     HEADS: Int = 1,
     SHARED: Bool = True,
+    SCHEDULE: Int = 0,
 ](
     ctx: DeviceContext,
     q: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
@@ -416,11 +636,18 @@ def enqueue_grouped_query_attention_prefill_apple_gpu[
     comptime assert HEADS == 1 or HEADS == 2 or HEADS == 4
     comptime assert MMA or HEADS == 1
     comptime assert not MMA or BQ >= 8
+    comptime assert 0 <= SCHEDULE <= 5
+    comptime assert SCHEDULE == 0 or (
+        MMA and BQ == 32 and BK == 32 and HEADS == 1
+    )
     _validate_prefill(ctx, q, k, v, output)
     var r = Int(q.dim[0]())
     var t = Int(k.dim[0]())
     comptime if MMA:
-        comptime kernel = _mma[BQ, BK, HEADS, QL, KL]
+        comptime kernel = (
+            _mma[BQ, BK, HEADS, QL, KL] if SCHEDULE
+            == 0 else _mma_tuned[SCHEDULE, QL, KL]
+        )
         ctx.enqueue_function[kernel](
             q,
             k,

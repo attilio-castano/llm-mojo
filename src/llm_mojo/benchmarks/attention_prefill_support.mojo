@@ -9,6 +9,8 @@ from llm_mojo.attention_prefill import (
 from max.gpu.host import DeviceContext
 from std.math import isfinite
 
+comptime PREFILL_VARIANT_COUNT = 16
+
 
 def enqueue_variant[
     QL: TensorLayout, KL: TensorLayout, SL: TensorLayout
@@ -74,6 +76,31 @@ def enqueue_variant[
             8, 32, MMA=True, HEADS=4, SHARED=True
         ](ctx, q, k, v, output)
         return 10
+    elif variant == 11:
+        enqueue_grouped_query_attention_prefill_apple_gpu[
+            32, 32, MMA=True, SCHEDULE=1
+        ](ctx, q, k, v, output)
+        return 11
+    elif variant == 12:
+        enqueue_grouped_query_attention_prefill_apple_gpu[
+            32, 32, MMA=True, SCHEDULE=2
+        ](ctx, q, k, v, output)
+        return 12
+    elif variant == 13:
+        enqueue_grouped_query_attention_prefill_apple_gpu[
+            32, 32, MMA=True, SCHEDULE=3
+        ](ctx, q, k, v, output)
+        return 13
+    elif variant == 14:
+        enqueue_grouped_query_attention_prefill_apple_gpu[
+            32, 32, MMA=True, SCHEDULE=4
+        ](ctx, q, k, v, output)
+        return 14
+    elif variant == 15:
+        enqueue_grouped_query_attention_prefill_apple_gpu[
+            32, 32, MMA=True, SCHEDULE=5
+        ](ctx, q, k, v, output)
+        return 15
     raise Error("unknown prefill variant")
 
 

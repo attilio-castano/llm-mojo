@@ -44,6 +44,14 @@ STUDIES['gqa_prefill_screen'] = dict(
     **{k: v for k,v in STUDIES['gqa_prefill'].items() if k not in ('workloads','candidates','control')},
     workloads=[dict(query_rows=r,rows=t) for r,t in ((256,256),(1024,1024),(64,4096))],
     control=0, candidates=list(PREFILL_NAMES))
+RESOURCE_NAMES = {8: 'MMA 32x32', 11: 'fragment accumulators',
+                  12: 'rolled QK reduction', 13: 'score barrier removed',
+                  14: 'probability barrier removed', 15: 'lane-owned scores'}
+STUDIES['gqa_prefill_resources_screen'] = dict(
+    **{k:v for k,v in STUDIES['gqa_prefill'].items() if k not in ('workloads','candidates','names')},
+    workloads=[dict(query_rows=r,rows=t) for r,t in
+               [(16,16),(1024,1024),(4096,4096),(16,4096),(64,4096)]],
+    candidates=list(RESOURCE_NAMES), names=RESOURCE_NAMES)
 PREFILL_PROFILE_WORKLOADS = [(16,16),(1024,1024),(64,4096)]
 
 

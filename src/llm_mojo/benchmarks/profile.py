@@ -43,6 +43,9 @@ def build_profile(args):
     query_rows = getattr(args,'profile_query_rows',1)
     is_prefill = operation=='gqa_prefill'
     warmup = getattr(args,'profile_warmup',100)
+    allowed = prefill.VARIANTS if is_prefill else VARIANTS
+    if args.profile_variant not in allowed:
+        raise RuntimeError('unknown profile variant for operation')
     spec = (dict(dispatches=3 if args.profile_variant<=1 else 1) if is_prefill
             else specification(args.profile_variant, args.profile_rows))
     if (
@@ -123,7 +126,7 @@ if __name__ == '__main__':
     p.add_argument('--profile-query-rows', type=int, default=1)
     p.add_argument('--profile-warmup', type=int, default=100)
     p.add_argument('--build-profile-binary', type=Path, required=True)
-    p.add_argument('--profile-variant', type=int, choices=list(VARIANTS), default=9)
+    p.add_argument('--profile-variant', type=int, choices=sorted(set(VARIANTS)|set(prefill.VARIANTS)), default=9)
     p.add_argument('--profile-rows', type=int, default=4096)
     p.add_argument('--profile-iterations', type=int, default=500)
     build_profile(p.parse_args())
