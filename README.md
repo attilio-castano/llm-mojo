@@ -60,20 +60,19 @@ Python and resolves the locked Mojo and MAX toolchain.
 ```bash
 uv sync --locked
 uv run --locked mojo --version
-uv run --locked python tools/test.py
+uv run --locked python -m llm_mojo.validate
 ```
 
 See [docs/development.md](docs/development.md) for prerequisites and the
-toolchain policy. See [benchmarks/README.md](benchmarks/README.md) for the
+toolchain policy. See [src/llm_mojo/benchmarks/README.md](src/llm_mojo/benchmarks/README.md) for the
 operation-level benchmark boundary and runner.
 
 ## Layout
 
 ```text
-docs/   Project direction and development guidance
-src/    Mojo engine code and narrowly scoped Python support code
-tests/  Correctness and integration tests
-benchmarks/  Reproducible operation-level measurements
-studies/     Topic explanations, compact measurements, and graphs
-tools/       Test and fixture preparation commands
+src/llm_mojo/             Inference operations and development commands
+src/llm_mojo/benchmarks/  Measurement, profiling, and report generation
+tests/                   Correctness tests and independent oracle generators
+docs/                    Project direction and development guidance
+studies/                 Topic explanations, compact measurements, and graphs
 ```

@@ -16,20 +16,12 @@ from pathlib import Path
 from typing import Any
 
 
-try:
-    from benchmarks.attention_decode_contract import (
-        OPERATION as ATTENTION_OPERATION,
-        ENTRYPOINTS as ATTENTION_ENTRYPOINTS,
-        TARGET_FIELDS as ATTENTION_TARGET_FIELDS,
-        configuration as attention_configuration,
-    )
-except ModuleNotFoundError:
-    from attention_decode_contract import (
-        OPERATION as ATTENTION_OPERATION,
-        ENTRYPOINTS as ATTENTION_ENTRYPOINTS,
-        TARGET_FIELDS as ATTENTION_TARGET_FIELDS,
-        configuration as attention_configuration,
-    )
+from .attention_decode_contract import (
+    OPERATION as ATTENTION_OPERATION,
+    ENTRYPOINTS as ATTENTION_ENTRYPOINTS,
+    TARGET_FIELDS as ATTENTION_TARGET_FIELDS,
+    configuration as attention_configuration,
+)
 
 
 Cell = tuple[str, str]

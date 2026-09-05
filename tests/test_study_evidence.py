@@ -8,8 +8,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from benchmarks import run as runner
-from benchmarks.study import load_run, load_profile, sha, write_json
+from llm_mojo.benchmarks import run as runner
+from llm_mojo.benchmarks.study import load_run, load_profile, sha, write_json
 
 ROOT = Path(__file__).resolve().parents[1]
 

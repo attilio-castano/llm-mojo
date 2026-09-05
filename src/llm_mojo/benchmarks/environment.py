@@ -8,12 +8,12 @@ from pathlib import Path
 from datetime import UTC, datetime
 from typing import Any
 
-REPOSITORY = Path(__file__).resolve().parents[1]
+from .._repository import repository_root
 
 def command(*args: str) -> str:
     result = subprocess.run(
         args,
-        cwd=REPOSITORY,
+        cwd=repository_root(),
         check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -185,7 +185,7 @@ def require_nominal_thermal_state(conditions: dict[str, Any]) -> None:
 
 def ensure_record_location(output_dir: Path) -> None:
     resolved = output_dir.resolve()
-    if resolved == REPOSITORY or resolved.is_relative_to(REPOSITORY):
+    if resolved == repository_root() or resolved.is_relative_to(repository_root()):
         raise RuntimeError(
             "recorded run output must be outside the repository; promote only "
             "the compact reviewed evidence afterward"

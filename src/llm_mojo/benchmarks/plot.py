@@ -1,6 +1,6 @@
 """Recompute tables and figures from retained raw samples; no GPU needed.
 
-Run with: uv run --no-project --with matplotlib==3.10.8 python benchmarks/plot.py
+Run with: uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.plot
 """
 import argparse
 import csv
@@ -10,9 +10,9 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-from study import load_run, load_profile
+from .study import load_run, load_profile
 
-ROOT = Path(__file__).resolve().parents[1]
+from .._repository import repository_root
 COLORS = ['#6b7280', '#167d9a', '#c75b39', '#8064a2', '#579059']
 
 
@@ -97,7 +97,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directories', nargs='*', type=Path)
     args = parser.parse_args()
-    directories = args.directories or sorted((ROOT / 'studies').glob('*/'))
+    directories = args.directories or sorted((repository_root() / 'studies').glob('*/'))
     for directory in directories:
         render(directory)
 

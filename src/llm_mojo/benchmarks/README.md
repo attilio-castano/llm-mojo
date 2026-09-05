@@ -5,11 +5,17 @@ visible. Python builds them once, alternates paired measurements, checks the
 runtime identity, and saves a compact record. Kernel implementations live in
 `src/llm_mojo`; instruments never substitute Python computation for GPU work.
 
-From a clean commit, after `uv run --locked python tools/test.py` passes:
+Run the commands below as package modules from the source checkout. Building,
+validation, and trace capture need that checkout for source identity and the
+locked toolchain. Offline analysis and plotting also work from an installed
+package when given explicit data directories. Plotting adds pinned Matplotlib
+only to the command environment.
+
+From a clean commit, after `uv run --locked python -m llm_mojo.validate` passes:
 
 ```bash
-uv run --locked python benchmarks/run.py build --build-dir /private/tmp/mojo-study-build
-uv run --locked python benchmarks/run.py run --build-dir /private/tmp/mojo-study-build --output /private/tmp/mojo-study-run
+uv run --locked python -m llm_mojo.benchmarks.run build --build-dir /private/tmp/mojo-study-build
+uv run --locked python -m llm_mojo.benchmarks.run run --build-dir /private/tmp/mojo-study-build --output /private/tmp/mojo-study-run
 ```
 
 Both destinations must be new directories outside the checkout. Use
@@ -30,7 +36,7 @@ nonfinite samples, changed identity, and missing completion markers fail.
 `attention_decode.mojo` retains all thirteen GQA routes; the maintained matrix
 compares the materialized control, simple fusion, parallel fusion, and split
 head reuse. The full numerical suites still test every original GQA candidate.
-`tools/smoke.py` exercises the other measurement routes and output gates.
+`src/llm_mojo/benchmarks/smoke.py` exercises the other measurement routes and output gates.
 
 Hot measures one operation through completion. Ring24 measures 24 distinct
 input buffers (RMSNorm/RoPE/GQA) or weight buffers (linear), one synchronization,
@@ -42,13 +48,13 @@ Copy only `run.json` and `samples.csv.gz` into the relevant `studies/` folder
 after checking completion. Generate the small derived summary and report image:
 
 ```bash
-uv run --no-project --with matplotlib==3.10.8 python benchmarks/plot.py
+uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.plot
 ```
 
 That command checks the raw hash and complete observation grid before plotting.
 No GPU execution or external temporary files are needed. PNG is the single
 committed image format; extra exports are disposable. See
-[the method](../docs/experiments.md) for interpreting evidence.
+[the method](../../../docs/experiments.md) for interpreting evidence.
 
 ## Focused Metal profiling
 
@@ -58,8 +64,8 @@ RMSNorm/linear schema support is retained for reading older captures. The
 maintained standalone builder currently targets GQA decode:
 
 ```bash
-uv run --locked python benchmarks/profile.py --build-profile-binary /private/tmp/gqa-profile --profile-variant 9 --profile-rows 4096
-uv run --locked python benchmarks/capture_trace.py --profile-binary /private/tmp/gqa-profile --output-trace /private/tmp/gqa-profile.trace --time-limit 2s
+uv run --locked python -m llm_mojo.benchmarks.profile --build-profile-binary /private/tmp/gqa-profile --profile-variant 9 --profile-rows 4096
+uv run --locked python -m llm_mojo.benchmarks.capture_trace --profile-binary /private/tmp/gqa-profile --output-trace /private/tmp/gqa-profile.trace --time-limit 2s
 ```
 
 Use `capture_trace.py --help` and `analyze_trace.py --help` for receipt and XML

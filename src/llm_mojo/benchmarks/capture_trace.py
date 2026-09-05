@@ -16,23 +16,15 @@ from typing import Any, Callable
 from uuid import uuid4
 
 
-try:
-    from benchmarks.attention_decode_contract import (
-        OPERATION as ATTENTION_OPERATION,
-        ENTRYPOINTS as ATTENTION_ENTRYPOINTS,
-        TARGET_FIELDS as ATTENTION_TARGET_FIELDS,
-        configuration as attention_configuration,
-    )
-except ModuleNotFoundError:
-    from attention_decode_contract import (
-        OPERATION as ATTENTION_OPERATION,
-        ENTRYPOINTS as ATTENTION_ENTRYPOINTS,
-        TARGET_FIELDS as ATTENTION_TARGET_FIELDS,
-        configuration as attention_configuration,
-    )
+from .attention_decode_contract import (
+    OPERATION as ATTENTION_OPERATION,
+    ENTRYPOINTS as ATTENTION_ENTRYPOINTS,
+    TARGET_FIELDS as ATTENTION_TARGET_FIELDS,
+    configuration as attention_configuration,
+)
 
 
-REPOSITORY = Path(__file__).resolve().parents[1]
+from .._repository import repository_root
 STAGING_ROOT = Path("/private/tmp")
 DEFAULT_TEMPLATE = "Metal System Trace"
 DEFAULT_TIME_LIMIT = "1s"
@@ -74,7 +66,7 @@ def sha256_file(path: Path) -> str:
 
 def ensure_external_path(path: Path, *, label: str) -> None:
     resolved = path.resolve()
-    if resolved == REPOSITORY or resolved.is_relative_to(REPOSITORY):
+    if resolved == repository_root() or resolved.is_relative_to(repository_root()):
         raise RuntimeError(f"{label} must be outside the repository")
 
 
@@ -378,7 +370,7 @@ def xctrace_version(runner: Runner) -> str:
     try:
         result = runner(
             ["xcrun", "xctrace", "version"],
-            cwd=REPOSITORY,
+            cwd=repository_root(),
             check=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -531,7 +523,7 @@ def capture_trace(
         try:
             result = runner(
                 command_args,
-                cwd=REPOSITORY,
+                cwd=repository_root(),
                 check=False,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,

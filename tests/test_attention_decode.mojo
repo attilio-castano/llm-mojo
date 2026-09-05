@@ -1,4 +1,4 @@
-from attention_decode_support import fill_decode, assert_decode_close
+from llm_mojo.benchmarks.attention_decode_support import fill_decode, assert_decode_close
 from oracle_data.attention.decode_data import (
     DECODE_CASE_COUNT,
     decode_case_rows,

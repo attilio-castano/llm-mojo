@@ -1,15 +1,15 @@
 """Exercise every maintained measurement route, output gate, and invalid selector."""
 import os
-from pathlib import Path
 import subprocess
 
-ROOT = Path(__file__).resolve().parents[1]
+from .._repository import repository_root
 
 
 def main():
-    target = ROOT / 'build/operations-smoke'
+    target = repository_root() / 'build/operations-smoke'
+    target.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(['uv', 'run', '--locked', 'mojo', 'build', '-I', 'src',
-                    'benchmarks/operations.mojo', '-o', str(target)], cwd=ROOT, check=True)
+                    'src/llm_mojo/benchmarks/operations.mojo', '-o', str(target)], cwd=repository_root(), check=True)
     env = {**os.environ, 'MODULAR_DEBUG': 'device-sync-mode'}
     for operation, variants in [('linear', range(7)), ('rms_norm', range(2)), ('rope', range(1))]:
         for variant in variants:

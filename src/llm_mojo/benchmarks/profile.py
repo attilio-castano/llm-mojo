@@ -4,11 +4,11 @@ import json
 import os
 from pathlib import Path
 import subprocess
-from attention_decode_contract import VARIANTS
-from environment import REPOSITORY, ensure_record_location, repository_state, stable_environment, utc_now
-from study import sha
-from run import source_hashes
-SOURCES = tuple(source_hashes())
+from .._repository import repository_root
+from .attention_decode_contract import VARIANTS
+from .environment import ensure_record_location, repository_state, stable_environment, utc_now
+from .study import sha
+from .run import source_hashes
 
 def name(variant):
     return "materialized" if variant == 0 else (
@@ -56,21 +56,19 @@ def build_profile(args):
         "build",
         "-I",
         "src",
-        "-I",
-        "tests",
         "-D",
         f'GQA_PROFILE_ROWS={args.profile_rows}',
         "-D",
         f'GQA_PROFILE_VARIANT={args.profile_variant}',
         "-D",
         f'GQA_PROFILE_ITERATIONS={args.profile_iterations}',
-        "benchmarks/attention_decode.mojo",
+        "src/llm_mojo/benchmarks/attention_decode.mojo",
         "-o",
         str(binary),
     ]
     environment = os.environ.copy()
     environment.pop("MODULAR_DEBUG", None)
-    subprocess.run(command, cwd=REPOSITORY, check=True, env=environment)
+    subprocess.run(command, cwd=repository_root(), check=True, env=environment)
     record = {
         "schema_version": 1,
         "operation": "grouped_query_attention_decode",
@@ -94,7 +92,7 @@ def build_profile(args):
         "profile_warmup_iterations": 100,
         "profile_iterations": args.profile_iterations,
         "profile_post_idle_milliseconds": 250,
-        "source_sha256": {p: sha(REPOSITORY / p) for p in SOURCES},
+        "source_sha256": source_hashes(),
         "binary": {"bytes": binary.stat().st_size, "sha256": sha(binary)},
         "command": command[:-1] + ["<external-profile-binary>"],
     }

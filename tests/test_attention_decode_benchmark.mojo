@@ -1,6 +1,6 @@
 """Exercise the actual benchmark routing, independently of kernel parity."""
 
-from attention_decode import enqueue_variant, variant_splits
+from llm_mojo.benchmarks.attention_decode import enqueue_variant, variant_splits
 from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext
 from std.testing import TestSuite, assert_equal

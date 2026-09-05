@@ -26,7 +26,7 @@ head merge, residual connections and the MLP introduce separate failure modes.
 
 ## Current measurement contract
 
-The explicit matrix is in `benchmarks/study.py`. Every study uses the same
+The explicit matrix is in `src/llm_mojo/benchmarks/study.py`. Every study uses the same
 four-block paired procedure; blocks 2 and 3 reverse workload and arm order.
 Each arm has ten warmups followed by ten samples. We keep all observations,
 including slow ones, and use each block's median rather than treating every

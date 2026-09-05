@@ -1,8 +1,8 @@
 import copy
 import unittest
-from benchmarks.attention_decode_contract import configuration, ENTRYPOINTS, VARIANTS
-from benchmarks.capture_trace import profile_contract, parse_target_identity, validate_target_identity
-from benchmarks.analyze_trace import segment_compute_commands
+from llm_mojo.benchmarks.attention_decode_contract import configuration, ENTRYPOINTS, VARIANTS
+from llm_mojo.benchmarks.capture_trace import profile_contract, parse_target_identity, validate_target_identity
+from llm_mojo.benchmarks.analyze_trace import segment_compute_commands
 
 class AttentionProfileTests(unittest.TestCase):
     def profile(self, variant=7):

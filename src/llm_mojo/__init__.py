@@ -1,1 +1,1 @@
-"""Python support package for reference and tooling code."""
+"""LLM inference study: Mojo operations and Python development tools."""

@@ -172,7 +172,7 @@ ownership boundaries justify a subpackage. Tests stay under `tests/`, with
 independent oracle generators and frozen hashes under `tests/fixtures/`.
 Generated arrays and manifests go into ignored `build/oracle_data/`.
 
-Reusable measurement instruments live under `benchmarks/`. The five current
+Reusable measurement instruments live under `src/llm_mojo/benchmarks/`. The five current
 `studies/` folders collect readable explanations and compact evidence by topic;
 a parameter choice is a matrix row, not a new runner or campaign directory.
 `docs/model.md` owns numerical/model contracts, `docs/layouts.md` owns storage

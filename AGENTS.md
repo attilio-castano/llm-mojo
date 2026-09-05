@@ -24,8 +24,10 @@ with Apple Silicon as the initial hardware target.
 ## Project map
 
 - `docs/`: project direction and development guidance.
-- `src/llm_mojo/`: Mojo engine code and narrowly scoped Python support code.
-- `tests/`: correctness and integration evidence.
+- `src/llm_mojo/`: Mojo inference operations and Python development commands.
+- `src/llm_mojo/benchmarks/`: measurement, profiling, and report generation.
+- `tests/`: correctness tests and independent oracle generators.
+- `studies/`: topic explanations, compact measurements, and graphs.
 
 Add structure only when real code needs it. Do not create speculative runtime,
 kernel, benchmark, or experiment hierarchies in advance.

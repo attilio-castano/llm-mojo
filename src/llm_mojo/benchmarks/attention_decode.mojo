@@ -1,6 +1,6 @@
 """Paired synchronized decode latency; compilation and gates precede timing."""
 
-from attention_decode_support import fill_decode, assert_decode_close
+from llm_mojo.benchmarks.attention_decode_support import fill_decode, assert_decode_close
 from layout import TensorLayout, TileTensor, row_major
 from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
 from llm_mojo.attention_decode import (

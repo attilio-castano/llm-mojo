@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from benchmarks.study import (parse_output, summarize, encode_samples, read_samples,
+from llm_mojo.benchmarks.study import (parse_output, summarize, encode_samples, read_samples,
                               load_run, sha, write_json, REPETITIONS)
 
 

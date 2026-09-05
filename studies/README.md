@@ -27,13 +27,13 @@ and parallelism gains remain clear. Read each study's limits alongside its plot.
 The matrix is deliberately bounded: existing implementations, selected sizes,
 hot and ring24 timing, four blocks, and self-pair calibration. We are refreshing
 characterization, not searching a new tuning space. See the
-[measurement command](../benchmarks/README.md) and [decision rule](../docs/experiments.md).
+[measurement command](../src/llm_mojo/benchmarks/README.md) and [decision rule](../docs/experiments.md).
 
 Each finished study keeps `run.json`, all observations in `samples.csv.gz`, a
 small `summary.csv`, and one report image. Rebuild every figure without a GPU:
 
 ```bash
-uv run --no-project --with matplotlib==3.10.8 python benchmarks/plot.py
+uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.plot
 ```
 
 The project reset starts from merged PR #11 at

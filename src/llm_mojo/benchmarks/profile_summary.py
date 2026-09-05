@@ -6,8 +6,8 @@ import io
 import json
 from pathlib import Path
 
-from analyze_trace import (integer, read_table, segment_compute_commands, duration_summary)
-from study import sha, write_json
+from .analyze_trace import (integer, read_table, segment_compute_commands, duration_summary)
+from .study import sha, write_json
 
 STAGES = {0: ['QK', 'softmax', 'PV'], 4: ['fused'], 9: ['decode', 'merge']}
 COUNTERS = {'Kernel Occupancy', 'Instruction Throughput Limiter', 'Last Level Cache Limiter'}

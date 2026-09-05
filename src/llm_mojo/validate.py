@@ -4,28 +4,27 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 
-ROOT = Path(__file__).resolve().parents[1]
+from ._repository import repository_root
 
 
 def run(*args):
     print("+", *args, flush=True)
-    subprocess.run(args, cwd=ROOT, check=True,
+    subprocess.run(args, cwd=repository_root(), check=True,
                    env={**os.environ, "MODULAR_DEBUG": "device-sync-mode"})
 
 
 def prepare():
-    fixtures = ROOT / "build/oracle_data"
+    fixtures = repository_root() / "build/oracle_data"
     fixtures.mkdir(parents=True, exist_ok=True)
     (fixtures / "__init__.mojo").touch()
     for name in ("rms_norm", "linear", "rope", "attention"):
         run("uv", "run", "--script", f"tests/fixtures/{name}/generate.py")
         (fixtures / name / "__init__.mojo").touch()
     run("uv", "run", "--locked", "python", "tests/fixtures/attention/generate_decode.py")
-    anchors = json.loads((ROOT / "tests/fixtures/checksums.json").read_text())
+    anchors = json.loads((repository_root() / "tests/fixtures/checksums.json").read_text())
     for name, expected in anchors["sha256"].items():
         actual = hashlib.sha256((fixtures / name).read_bytes()).hexdigest()
         if actual != expected:
@@ -40,11 +39,11 @@ def main():
     prepare()
     if not args.prepare_only:
         run(sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py")
-        for test in sorted((ROOT / "tests").glob("test_*.mojo")):
+        for test in sorted((repository_root() / "tests").glob("test_*.mojo")):
             run("uv", "run", "--locked", "mojo", "run", "-I", "src", "-I", "build",
-                "-I", "tests", "-I", "benchmarks", str(test.relative_to(ROOT)))
+                "-I", "tests", str(test.relative_to(repository_root())))
 
-        run(sys.executable, "tools/smoke.py")
+        run(sys.executable, "-m", "llm_mojo.benchmarks.smoke")
 
 
 if __name__ == "__main__":

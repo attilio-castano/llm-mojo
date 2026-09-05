@@ -90,7 +90,7 @@ environment.
 Run the complete validation workflow from a clean checkout:
 
 ```bash
-uv run --locked python tools/test.py
+uv run --locked python -m llm_mojo.validate
 ```
 
 This regenerates every independent oracle into ignored `build/oracle_data/`,
@@ -102,14 +102,14 @@ Generation uses pinned Torch/Transformers script environments and locked NumPy;
 the first run may download those dependencies. No model weights are required.
 
 Use `--prepare-only` to generate fixtures without running tests. For an individual
-Mojo suite, include `-I src -I build -I tests -I benchmarks`. Generators and the
+Mojo suite, include `-I src -I build -I tests`. Generators and the
 small checksum record are versioned; large generated arrays and manifests are
 build outputs. A changed checksum requires reviewing the oracle and numerical
 contract, never relaxing tolerances to fit a kernel.
 
 ## Measurements and studies
 
-See [benchmarks/README.md](../benchmarks/README.md) for the shared build/run
+See [src/llm_mojo/benchmarks/README.md](../src/llm_mojo/benchmarks/README.md) for the shared build/run
 workflow and [studies/README.md](../studies/README.md) for the maintained
 explanations and figures. Measurement requires AC power, Low Power Mode off,
 and no reported thermal warning. Correctness testing uses device-sync-mode;

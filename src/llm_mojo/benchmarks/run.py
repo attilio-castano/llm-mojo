@@ -4,27 +4,22 @@ import json
 import os
 from pathlib import Path
 import subprocess
+from .._repository import repository_root
 
-try:
-    from benchmarks.environment import (REPOSITORY, conditions_snapshot, ensure_record_location,
-                             repository_state, require_ac, require_nominal_thermal_state,
-                             stable_environment, utc_now)
-    from benchmarks.study import (STUDIES, BLOCKS, REPETITIONS, WARMUP, sha, write_json,
-                       encode_samples, parse_output, summarize)
-except ModuleNotFoundError:
-    from environment import (REPOSITORY, conditions_snapshot, ensure_record_location,
-                             repository_state, require_ac, require_nominal_thermal_state,
-                             stable_environment, utc_now)
-    from study import (STUDIES, BLOCKS, REPETITIONS, WARMUP, sha, write_json,
-                       encode_samples, parse_output, summarize)
+from .environment import (conditions_snapshot, ensure_record_location,
+                         repository_state, require_ac, require_nominal_thermal_state,
+                         stable_environment, utc_now)
+from .study import (STUDIES, BLOCKS, REPETITIONS, WARMUP, sha, write_json,
+                   encode_samples, parse_output, summarize)
 
 
 
 def source_hashes():
-    paths = [*REPOSITORY.glob('src/**/*.mojo'), *REPOSITORY.glob('benchmarks/*.mojo'),
-             *REPOSITORY.glob('benchmarks/*.py'), REPOSITORY / 'tests/attention_decode_support.mojo',
-             REPOSITORY / 'tests/fixtures/checksums.json', REPOSITORY / 'uv.lock']
-    return {str(p.relative_to(REPOSITORY)): sha(p) for p in sorted(paths)}
+    root = repository_root()
+    paths = [*root.glob('src/**/*.mojo'), *root.glob('src/**/*.py'),
+             root / 'tests/fixtures/checksums.json', root / 'pyproject.toml', root / 'uv.lock']
+    return {str(p.relative_to(root)): sha(p) for p in sorted(paths)}
+
 
 
 def build(directory):
@@ -37,9 +32,9 @@ def build(directory):
     commands, binaries = {}, {}
     env = {k: v for k, v in os.environ.items() if k != 'MODULAR_DEBUG'}
     for name, source in [('operations', 'operations.mojo'), ('gqa_decode', 'attention_decode.mojo')]:
-        command = ['uv', 'run', '--locked', 'mojo', 'build', '-I', 'src', '-I', 'build', '-I', 'tests',
-                   f'benchmarks/{source}', '-o', str(directory / name)]
-        subprocess.run(command, cwd=REPOSITORY, env=env, check=True)
+        command = ['uv', 'run', '--locked', 'mojo', 'build', '-I', 'src',
+                   f'src/llm_mojo/benchmarks/{source}', '-o', str(directory / name)]
+        subprocess.run(command, cwd=repository_root(), env=env, check=True)
         binaries[name] = sha(directory / name)
         commands[name] = command[:-1] + ['<binary>']
     if repository_state() != repo or source_hashes() != sources:
