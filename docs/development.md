@@ -99,6 +99,8 @@ MODULAR_DEBUG=device-sync-mode \
   uv run mojo run -I src -I tests tests/test_rope.mojo
 MODULAR_DEBUG=device-sync-mode \
   uv run mojo run -I src -I tests tests/test_attention.mojo
+MODULAR_DEBUG=device-sync-mode \
+  uv run --locked mojo run -I src -I tests tests/test_attention_decode.mojo
 ```
 
 The import smoke test proves that the package resolves through the configured
@@ -150,6 +152,14 @@ The generator's inline environment pins its oracle dependencies independently
 of the Mojo inference environment. Do not change a fixture tolerance after
 observing the Mojo result; update the declared numerical contract first and
 explain why it changed.
+
+The separate output-only decode suite covers the bounded Qwen D=64 ownership
+experiments against the pinned Qwen fixture and an independent NumPy FP64
+materialized oracle. Generate its deterministic, weight-free fixtures with
+`uv run --locked python tests/fixtures/attention/generate_decode.py`.
+Its manifest binds data, generator, NumPy version and frozen tolerances.
+Run all Python benchmark/profiler validation with
+`uv run --locked python -m unittest discover -s tests -p 'test_*.py'`.
 
 Run the materialized grouped-query attention workload matrix with:
 
