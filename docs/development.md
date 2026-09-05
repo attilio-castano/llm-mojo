@@ -101,6 +101,8 @@ MODULAR_DEBUG=device-sync-mode \
   uv run mojo run -I src -I tests tests/test_attention.mojo
 MODULAR_DEBUG=device-sync-mode \
   uv run --locked mojo run -I src -I tests tests/test_attention_decode.mojo
+MODULAR_DEBUG=device-sync-mode \
+  uv run --locked mojo run -I src -I tests -I benchmarks tests/test_attention_decode_benchmark.mojo
 ```
 
 The import smoke test proves that the package resolves through the configured

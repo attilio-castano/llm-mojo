@@ -26,9 +26,8 @@ Compact retained evidence and final decisions follow after the campaign.
 
 ## 2026-09-05: final two configurations
 
-All three grouped-head reuse candidates passed correctness but failed to
-establish a consistent >=5% gain over g1-h1-s64 at T=4096. Ring24 medians were
-essentially unchanged. Keep h=1 and reject head reuse as a performance change.
+The first grouped-head timing conclusion was invalidated below. Kernel
+correctness passed; those timing runs cannot decide whether head reuse helps.
 
 Receipt-bound profiles of source `f1f23af` at T=4096 measured instrumented
 median intervals of 47.417us for split decode and 10.250us for its merge;
@@ -49,3 +48,20 @@ Validation correction before these trials: the explicit cancellation fixture
 now alternates V's sign across KV positions, rather than only across dimensions.
 Regenerate its independent oracle and rerun every candidate. This strengthens
 coverage; it changes neither benchmark inputs (kind=0) nor tolerance.
+
+## 2026-09-05: invalidate misrouted head-reuse timings and repair harness
+
+The first configuration-11 benchmark failed its workspace-shape gate before
+timing. Investigation found that the harness's variant-7 branch used `>= 7`,
+shadowing variants 8-12. Consequently `reuse-split-control` and `reuse-baseline`
+actually timed variant 7 under incorrect labels. Invalidate both runs and the
+earlier head-reuse rejection; retain their artifacts only to explain the error.
+The baseline, configurations 1-7, and profiles of 0/4/7 were correctly routed.
+The separate numerical suite called every kernel directly, so its passes remain
+valid. `conditional-fused-control` contains no accepted timing samples.
+
+Repair the branch to `== 7`. Each launch branch now returns its own constant ID;
+the untimed benchmark gate verifies that ID against the request. An executable
+Mojo test traverses all 13 routes and would catch the shadowing. Rerun head reuse
+and both conditional candidates from the corrected clean commit. This is a
+harness repair, not an additional candidate configuration. The budget remains 12.

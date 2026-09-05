@@ -25,59 +25,72 @@ def enqueue_variant[
     output: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
     scratch: TileTensor[DType.bfloat16, SL, MutAnyOrigin],
     workspace: TileTensor[DType.float32, WL, MutAnyOrigin],
-) raises:
+) raises -> Int:
     if variant == 0:
         enqueue_grouped_query_attention_apple_gpu(
             ctx, query, key, value, scratch, output
         )
+        return 0
     elif variant == 1:
         enqueue_grouped_query_attention_decode_apple_gpu[1, 1, 1](
             ctx, query, key, value, output, workspace
         )
+        return 1
     elif variant == 2:
         enqueue_grouped_query_attention_decode_apple_gpu[2, 1, 1](
             ctx, query, key, value, output, workspace
         )
+        return 2
     elif variant == 3:
         enqueue_grouped_query_attention_decode_apple_gpu[8, 1, 1](
             ctx, query, key, value, output, workspace
         )
+        return 3
     elif variant == 4:
         enqueue_grouped_query_attention_decode_apple_gpu[32, 1, 1](
             ctx, query, key, value, output, workspace
         )
+        return 4
     elif variant == 5:
         enqueue_grouped_query_attention_decode_apple_gpu[1, 1, 4](
             ctx, query, key, value, output, workspace
         )
+        return 5
     elif variant == 6:
         enqueue_grouped_query_attention_decode_apple_gpu[1, 1, 16](
             ctx, query, key, value, output, workspace
         )
-    elif variant >= 7:
+        return 6
+    elif variant == 7:
         enqueue_grouped_query_attention_decode_apple_gpu[1, 1, 64](
             ctx, query, key, value, output, workspace
         )
+        return 7
     elif variant == 8:
         enqueue_grouped_query_attention_decode_apple_gpu[1, 2, 64](
             ctx, query, key, value, output, workspace
         )
+        return 8
     elif variant == 9:
         enqueue_grouped_query_attention_decode_apple_gpu[1, 4, 64](
             ctx, query, key, value, output, workspace
         )
+        return 9
     elif variant == 10:
         enqueue_grouped_query_attention_decode_apple_gpu[1, 7, 64](
             ctx, query, key, value, output, workspace
         )
+        return 10
     elif variant == 11:
         enqueue_grouped_query_attention_decode_apple_gpu[
             32, 1, 1, conditional_rescale=True
         ](ctx, query, key, value, output, workspace)
+        return 11
     elif variant == 12:
         enqueue_grouped_query_attention_decode_apple_gpu[
             1, 1, 64, conditional_rescale=True
         ](ctx, query, key, value, output, workspace)
+        return 12
     else:
         raise Error("unknown decode variant")
 
@@ -183,7 +196,11 @@ def main() raises:
             var workspace = TileTensor(
                 wb, row_major(14, variant_splits(variant), 66)
             )
-            enqueue_variant(variant, ctx, q, k, v, output, scratch, workspace)
+            var launched = enqueue_variant(
+                variant, ctx, q, k, v, output, scratch, workspace
+            )
+            if launched != variant:
+                raise Error("benchmark routed to the wrong implementation")
             ctx.synchronize()
             with ob.map_to_host() as mapped:
                 _ = assert_decode_close(TileTensor(mapped, ql), expected)
