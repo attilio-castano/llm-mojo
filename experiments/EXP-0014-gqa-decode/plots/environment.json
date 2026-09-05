@@ -1,0 +1,9 @@
+{
+  "python": "3.12.14",
+  "matplotlib": "3.10.8",
+  "data": [
+    "confirmation-baseline",
+    "confirmation-crossover"
+  ],
+  "scope": "Derived figures; no new GPU measurements"
+}

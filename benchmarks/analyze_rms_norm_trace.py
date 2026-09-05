@@ -16,8 +16,24 @@ from pathlib import Path
 from typing import Any
 
 
+try:
+    from benchmarks.attention_decode_contract import (
+        OPERATION as ATTENTION_OPERATION,
+        ENTRYPOINTS as ATTENTION_ENTRYPOINTS,
+        TARGET_FIELDS as ATTENTION_TARGET_FIELDS,
+        configuration as attention_configuration,
+    )
+except ModuleNotFoundError:
+    from attention_decode_contract import (
+        OPERATION as ATTENTION_OPERATION,
+        ENTRYPOINTS as ATTENTION_ENTRYPOINTS,
+        TARGET_FIELDS as ATTENTION_TARGET_FIELDS,
+        configuration as attention_configuration,
+    )
+
+
 Cell = tuple[str, str]
-CAPTURE_ID = re.compile(r"^(?:rmsnorm|linear)-[0-9a-f]{32}$")
+CAPTURE_ID = re.compile(r"^(?:rmsnorm|linear|attention)-[0-9a-f]{32}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 IMPLEMENTATION_ENTRYPOINTS = {
     "apple_gpu_shared_tree_v0": "enqueue_rms_norm_apple_gpu_shared_tree",
@@ -28,6 +44,7 @@ IMPLEMENTATION_ENTRYPOINTS = {
     ),
     "apple_gpu_packed_qkv_single_enqueue_v1": "enqueue_linear_apple_gpu",
 }
+IMPLEMENTATION_ENTRYPOINTS.update(ATTENTION_ENTRYPOINTS)
 
 
 def sha256_file(path: Path) -> str:
@@ -113,9 +130,7 @@ def capture_identity(path: Path) -> tuple[dict[str, Any], str]:
         and capture.get("failures") == [],
         "capture receipt does not describe a complete successful capture",
     )
-    target_output = hash_identity(
-        capture.get("target_output"), "target output"
-    )
+    target_output = hash_identity(capture.get("target_output"), "target output")
     require(
         target_output["bytes"] > 0,
         "capture receipt target output is empty",
@@ -124,9 +139,8 @@ def capture_identity(path: Path) -> tuple[dict[str, Any], str]:
     require(isinstance(command, str), "capture receipt has no recorded command")
     command_args = shlex.split(command)
     run_name_index = (
-        command_args.index("--run-name")
-        if command_args.count("--run-name") == 1
-        else -1
+        command_args.index("--run-name") if command_args.count("--run-name")
+        == 1 else -1
     )
     require(
         run_name_index >= 0
@@ -159,7 +173,7 @@ def capture_identity(path: Path) -> tuple[dict[str, Any], str]:
     )
     operation = configuration.get("operation", "rms_norm")
     require(
-        operation in ("rms_norm", "linear_projection"),
+        operation in ("rms_norm", "linear_projection", ATTENTION_OPERATION),
         "capture receipt has an unsupported operation",
     )
     workload: dict[str, Any] = {
@@ -207,6 +221,8 @@ def capture_identity(path: Path) -> tuple[dict[str, Any], str]:
                 ),
             }
         )
+    if operation == ATTENTION_OPERATION:
+        workload.update(attention_configuration(configuration))
     implementation = configuration.get("implementation")
     entrypoint = configuration.get("entrypoint")
     require(
@@ -265,6 +281,10 @@ def capture_identity(path: Path) -> tuple[dict[str, Any], str]:
                     "dispatches_per_iteration"
                 ],
             }
+        )
+    if operation == ATTENTION_OPERATION:
+        expected_target.update(
+            {k: workload[k] for k in ATTENTION_TARGET_FIELDS}
         )
     require(
         target == expected_target,
@@ -772,8 +792,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         trace_correctness_dispatches=identity["operation"] == "rms_norm",
     )
     sequence_command_buffer_ids = {
-        integer(row, "cmdbuffer-id")
-        for row in correctness + warmup + profile
+        integer(row, "cmdbuffer-id") for row in correctness + warmup + profile
     }
     command_kinds: Counter[str] = Counter()
     for row in compute_channel:
@@ -825,7 +844,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
             "segmentation_rule": (
                 "Trailing fixed program sequence expanded by "
                 "dispatches_per_iteration. RMSNorm traces retain one "
-                "correctness iteration before warmup; projection traces "
+                "correctness iteration before warmup; projection and attention traces "
                 "segment declared warmup and profile iterations only because "
                 "the launch instrument can attach after the receipt-proven "
                 "correctness gate. Earlier target compute commands are an "
@@ -834,9 +853,9 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
             ),
         },
         "instrumented_gpu_interval_duration": {
-            "correctness": duration_summary(correctness)
-            if correctness
-            else None,
+            "correctness": duration_summary(
+                correctness
+            ) if correctness else None,
             "warmup": duration_summary(warmup) if warmup else None,
             "profile": duration_summary(profile),
             "evidence_boundary": (
@@ -851,9 +870,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         ],
     }
     if args.counter_info_xml is not None:
-        counter_settings = result["trace"][
-            "metal_application_gpu_settings"
-        ]
+        counter_settings = result["trace"]["metal_application_gpu_settings"]
         has_named_counter_set = any(
             setting.startswith("Counter Set:")
             and not setting.endswith("(null)")
@@ -876,7 +893,10 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         result["compiler_spills"] = spill_events(
             args.spill_xml, sequence_command_buffer_ids, target_process
         )
-    if args.counter_info_xml is not None and args.counter_values_xml is not None:
+    if (
+        args.counter_info_xml is not None
+        and args.counter_values_xml is not None
+    ):
         inputs.extend(
             [
                 artifact(args.counter_info_xml, "gpu_counter_info_xml"),

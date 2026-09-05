@@ -16,6 +16,22 @@ from typing import Any, Callable
 from uuid import uuid4
 
 
+try:
+    from benchmarks.attention_decode_contract import (
+        OPERATION as ATTENTION_OPERATION,
+        ENTRYPOINTS as ATTENTION_ENTRYPOINTS,
+        TARGET_FIELDS as ATTENTION_TARGET_FIELDS,
+        configuration as attention_configuration,
+    )
+except ModuleNotFoundError:
+    from attention_decode_contract import (
+        OPERATION as ATTENTION_OPERATION,
+        ENTRYPOINTS as ATTENTION_ENTRYPOINTS,
+        TARGET_FIELDS as ATTENTION_TARGET_FIELDS,
+        configuration as attention_configuration,
+    )
+
+
 REPOSITORY = Path(__file__).resolve().parents[1]
 STAGING_ROOT = Path("/private/tmp")
 DEFAULT_TEMPLATE = "Metal System Trace"
@@ -23,7 +39,7 @@ DEFAULT_TIME_LIMIT = "1s"
 PROFILE_REGION_BEGIN = "PROFILE_REGION_BEGIN"
 PROFILE_REGION_END = "PROFILE_REGION_END"
 TIME_LIMIT = re.compile(r"^[1-9][0-9]*(?:ms|s|m|h)$")
-CAPTURE_ID = re.compile(r"^(?:rmsnorm|linear)-[0-9a-f]{32}$")
+CAPTURE_ID = re.compile(r"^(?:rmsnorm|linear|attention)-[0-9a-f]{32}$")
 IMPLEMENTATION_ENTRYPOINTS = {
     "apple_gpu_shared_tree_v0": "enqueue_rms_norm_apple_gpu_shared_tree",
     "apple_gpu_simdgroup_v1": "enqueue_rms_norm_apple_gpu",
@@ -33,6 +49,7 @@ IMPLEMENTATION_ENTRYPOINTS = {
     ),
     "apple_gpu_packed_qkv_single_enqueue_v1": "enqueue_linear_apple_gpu",
 }
+IMPLEMENTATION_ENTRYPOINTS.update(ATTENTION_ENTRYPOINTS)
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 
@@ -41,7 +58,9 @@ def utc_now() -> str:
 
 
 def new_capture_id(operation: str = "rms_norm") -> str:
-    prefix = "linear" if operation == "linear_projection" else "rmsnorm"
+    prefix = "attention" if operation == ATTENTION_OPERATION else (
+        "linear" if operation == "linear_projection" else "rmsnorm"
+    )
     return f"{prefix}-{uuid4().hex}"
 
 
@@ -116,7 +135,7 @@ def profile_contract(
         raise RuntimeError("profile provenance has an unsupported schema")
 
     operation = provenance.get("operation", "rms_norm")
-    if operation not in ("rms_norm", "linear_projection"):
+    if operation not in ("rms_norm", "linear_projection", ATTENTION_OPERATION):
         raise RuntimeError("profile provenance has an unsupported operation")
     configuration: dict[str, Any] = {"operation": operation}
     for key in (
@@ -137,12 +156,18 @@ def profile_contract(
         shape_keys = ("profile_rows", "hidden_size")
         for key in shape_keys:
             value = provenance.get(key)
-            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value <= 0
+            ):
                 raise RuntimeError(
                     f"profile provenance has an invalid {key.replace('_', ' ')}"
                 )
             configuration[key] = value
         configuration["dispatches_per_iteration"] = 1
+    elif operation == ATTENTION_OPERATION:
+        configuration.update(attention_configuration(provenance))
     else:
         workload = provenance.get("profile_workload")
         if not isinstance(workload, str) or not workload:
@@ -157,7 +182,11 @@ def profile_contract(
         )
         for key in linear_keys:
             value = provenance.get(key)
-            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value <= 0
+            ):
                 raise RuntimeError(
                     f"profile provenance has an invalid {key.replace('_', ' ')}"
                 )
@@ -188,11 +217,15 @@ def profile_contract(
         not isinstance(commit, str)
         or re.fullmatch(r"[0-9a-f]{40}", commit) is None
     ):
-        raise RuntimeError("profile provenance has an invalid repository commit")
+        raise RuntimeError(
+            "profile provenance has an invalid repository commit"
+        )
     if not isinstance(dirty, bool):
         raise RuntimeError("profile provenance has an invalid dirty state")
     if not isinstance(branch, str) or not branch:
-        raise RuntimeError("profile provenance has an invalid repository branch")
+        raise RuntimeError(
+            "profile provenance has an invalid repository branch"
+        )
     repository_identity = {
         "commit": commit,
         "branch": branch,
@@ -205,7 +238,9 @@ def profile_contract(
     chip = hardware.get("chip")
     gpu_api = hardware.get("gpu_api")
     if not isinstance(chip, str) or not chip.startswith("Apple "):
-        raise RuntimeError("profile provenance has an invalid Apple GPU identity")
+        raise RuntimeError(
+            "profile provenance has an invalid Apple GPU identity"
+        )
     if gpu_api != "metal":
         raise RuntimeError("profile provenance does not identify the Metal API")
     hardware_identity = {"chip": chip, "gpu_api": gpu_api}
@@ -248,12 +283,21 @@ def parse_target_identity(output: str) -> dict[str, Any]:
         if len(workload_matches) != 1 or not workload_matches[0]:
             raise ValueError("expected exactly one 'profile workload' line")
         identity["profile_workload"] = workload_matches[0]
+        extra_fields = (("output features", "output_features"),)
+        if workload_matches[0].startswith("decode-"):
+            extra_fields = tuple(
+                (k.replace("_", " "), k)
+                for k in ATTENTION_TARGET_FIELDS
+                if k not in ("profile_workload", "dispatches_per_iteration")
+            )
         for label, key in (
-            ("output features", "output_features"),
+            *extra_fields,
             ("profile dispatches per iteration", "dispatches_per_iteration"),
         ):
             value = output_field(output, label)
-            if re.fullmatch(r"[0-9]+", value) is None or int(value) <= 0:
+            if re.fullmatch(r"[0-9]+", value) is None or (
+                int(value) <= 0 and key not in ("groups", "heads", "splits")
+            ):
                 raise ValueError(f"target {label} is not a positive integer")
             identity[key] = int(value)
     return identity
@@ -286,6 +330,8 @@ def validate_target_identity(
                 ],
             }
         )
+    if configuration["operation"] == ATTENTION_OPERATION:
+        expected.update({k: configuration[k] for k in ATTENTION_TARGET_FIELDS})
     for key, expected_value in expected.items():
         if identity.get(key) != expected_value:
             raise ValueError(
@@ -396,9 +442,10 @@ def capture_trace(
     profile_binary = profile_binary.expanduser().resolve()
     output_trace = output_trace.expanduser().resolve()
     receipt_path = (
-        receipt_path.expanduser().resolve()
-        if receipt_path is not None
-        else output_trace.with_name(output_trace.name + ".capture.json")
+        receipt_path.expanduser().resolve() if receipt_path
+        is not None else output_trace.with_name(
+            output_trace.name + ".capture.json"
+        )
     )
     staging_root = staging_root.expanduser().resolve()
 
@@ -406,7 +453,9 @@ def capture_trace(
     ensure_external_path(output_trace, label="raw trace")
     ensure_external_path(receipt_path, label="capture receipt")
     if output_trace.exists():
-        raise RuntimeError(f"refusing to overwrite existing trace: {output_trace}")
+        raise RuntimeError(
+            f"refusing to overwrite existing trace: {output_trace}"
+        )
     if receipt_path.exists():
         raise RuntimeError(
             f"refusing to overwrite existing capture receipt: {receipt_path}"
@@ -437,9 +486,11 @@ def capture_trace(
 
     with tempfile.TemporaryDirectory(
         prefix=(
-            "llm-mojo-linear-"
-            if configuration["operation"] == "linear_projection"
-            else "llm-mojo-rmsnorm-"
+            "llm-mojo-attention-" if configuration["operation"]
+            == ATTENTION_OPERATION else "llm-mojo-linear-" if configuration[
+                "operation"
+            ]
+            == "linear_projection" else "llm-mojo-rmsnorm-"
         ),
         dir=staging_root,
     ) as temporary:

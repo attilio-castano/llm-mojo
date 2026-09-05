@@ -1,0 +1,14 @@
+{
+  "stage_order_basis": "source-bound enqueue sequence and validated chronological trace; instrumented durations",
+  "stages": {
+    "decode": {
+      "count": 500,
+      "unit": "nanoseconds",
+      "minimum": 69500,
+      "median": 70083.0,
+      "median_absolute_deviation": 167.0,
+      "p95": 97167.0,
+      "maximum": 110750
+    }
+  }
+}

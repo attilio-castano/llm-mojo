@@ -1,0 +1,15 @@
+
+Running 11 tests for <repository>/tests/test_attention.mojo
+    PASS [ 1.087 ] test_reference_rejects_query_longer_than_key_value
+    PASS [ 0.119 ] test_reference_rejects_nondivisible_head_groups
+    PASS [ 0.083 ] test_reference_rejects_wrong_scratch_shape
+    PASS [ 0.094 ] test_reference_matches_tiny_full_prefill_oracle
+    PASS [ 0.081 ] test_reference_matches_tiny_incremental_prefill_oracle
+    PASS [ 0.063 ] test_reference_matches_stable_softmax_decode_oracle
+    PASS [ 0.230 ] test_reference_matches_qwen_decode_oracle
+    PASS [ 3.205 ] test_apple_gpu_matches_tiny_full_prefill_oracle
+    PASS [ 0.788 ] test_apple_gpu_matches_tiny_incremental_prefill_oracle
+    PASS [ 0.431 ] test_apple_gpu_matches_stable_softmax_decode_oracle
+    PASS [ 0.485 ] test_apple_gpu_matches_qwen_decode_oracle
+--------
+Summary [ 6.666 ] 11 tests run: 11 passed , 0 failed , 0 skipped

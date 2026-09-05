@@ -1,0 +1,93 @@
+{
+  "capture": {
+    "capture_id": "attention-931148983b6c45f5a297517aeeb745e7",
+    "command": "xcrun xctrace record --no-prompt --run-name attention-931148983b6c45f5a297517aeeb745e7 --template '<template>' --time-limit 5s --output '<external-trace>' --target-stdout - --launch -- '<ephemeral-profile-binary>'",
+    "failures": [],
+    "profile_region_markers_complete": true,
+    "run_name": "attention-931148983b6c45f5a297517aeeb745e7",
+    "status": "complete",
+    "target_identity": {
+      "backend": "metal",
+      "device": "Apple M4 Pro",
+      "dispatches_per_iteration": 2,
+      "entrypoint": "enqueue_grouped_query_attention_decode_apple_gpu",
+      "groups": 1,
+      "heads": 4,
+      "hidden_size": 64,
+      "implementation": "gqa_decode_9",
+      "key_value_heads": 2,
+      "key_value_rows": 4096,
+      "post_profile_idle_milliseconds": 250,
+      "profile_iterations": 500,
+      "profile_workload": "decode-t4096-v9",
+      "query_heads": 14,
+      "rows": 1,
+      "splits": 64,
+      "warmup_iterations": 100
+    },
+    "target_output": {
+      "bytes": 779,
+      "content_note": "Output omitted from the receipt.",
+      "sha256": "adaa866e98953784da52e07b63388cc01a223e73664837fc83e9905452da82b9"
+    },
+    "template": {
+      "kind": "installed_name",
+      "name": "LLM_Mojo_Metal_Limiters"
+    },
+    "time_limit": "5s",
+    "xctrace_returncode": 0,
+    "xctrace_version": "xctrace version 16.0 (17F113)"
+  },
+  "created_utc": "2026-09-05T12:24:35.293976+00:00",
+  "profile": {
+    "binary": {
+      "bytes": 410344,
+      "path_note": "Canonical external artifact; path omitted.",
+      "sha256": "64f2d324a7b5993d9cca12a4ea6c80844fb0c3d40fa8037c0bcbee4fc997d4e8"
+    },
+    "configuration": {
+      "conditional_rescale": false,
+      "dispatches_per_iteration": 2,
+      "entrypoint": "enqueue_grouped_query_attention_decode_apple_gpu",
+      "groups": 1,
+      "heads": 4,
+      "hidden_size": 64,
+      "implementation": "gqa_decode_9",
+      "key_value_heads": 2,
+      "key_value_rows": 4096,
+      "operation": "grouped_query_attention_decode",
+      "profile_iterations": 500,
+      "profile_post_idle_milliseconds": 250,
+      "profile_rows": 1,
+      "profile_warmup_iterations": 100,
+      "profile_workload": "decode-t4096-v9",
+      "query_heads": 14,
+      "splits": 64
+    },
+    "hardware": {
+      "chip": "Apple M4 Pro",
+      "gpu_api": "metal"
+    },
+    "provenance": {
+      "bytes": 2482,
+      "path_note": "Canonical external artifact; path omitted.",
+      "schema_version": 1,
+      "sha256": "8f499a58b5b4d5eaddd811cf3a56942f671b956be7261d4602d280de70521502"
+    },
+    "repository": {
+      "branch": "codex/gqa-decode-campaign",
+      "commit": "6902c949c6717f359ed5cb55ee45c850fa82b06d",
+      "dirty": false
+    },
+    "staged_binary": {
+      "bytes": 410344,
+      "path_note": "Byte-identical ephemeral launch copy under /private/tmp; removed after capture.",
+      "sha256": "64f2d324a7b5993d9cca12a4ea6c80844fb0c3d40fa8037c0bcbee4fc997d4e8"
+    }
+  },
+  "schema_version": 2,
+  "trace": {
+    "created": true,
+    "path_note": "External raw Instruments trace; path intentionally omitted."
+  }
+}

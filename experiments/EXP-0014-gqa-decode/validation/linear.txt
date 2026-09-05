@@ -1,0 +1,36 @@
+
+Running 32 tests for <repository>/tests/test_linear.mojo
+    PASS [ 1.054 ] test_fixture_comparison_rejects_nan
+    PASS [ 0.145 ] test_reference_rejects_weight_input_mismatch
+    PASS [ 0.078 ] test_reference_rejects_bias_mismatch
+    PASS [ 0.065 ] test_reference_matches_tiny_decode_oracle
+    PASS [ 0.068 ] test_reference_matches_short_prefill_oracle
+    PASS [ 3.287 ] test_apple_gpu_matches_tiny_decode_oracle
+    PASS [ 0.480 ] test_apple_gpu_matches_short_prefill_oracle
+    PASS [ 0.345 ] test_direct_prefill_apple_gpu_matches_short_prefill_oracle
+    PASS [ 0.438 ] test_direct_prefill_apple_gpu_matches_exact_output_tile
+    PASS [ 0.439 ] test_direct_prefill_apple_gpu_matches_tile_tails
+    PASS [ 6.568 ] test_direct_prefill_apple_gpu_matches_qwen_kv_shape
+    PASS [ 0.411 ] test_register_2x2_prefill_apple_gpu_matches_short_prefill_oracle
+    PASS [ 0.434 ] test_register_2x2_prefill_apple_gpu_matches_exact_output_tile
+    PASS [ 0.643 ] test_register_2x2_prefill_apple_gpu_matches_tile_tails
+    PASS [ 6.576 ] test_register_2x2_prefill_apple_gpu_matches_qwen_kv_shape
+    PASS [ 0.350 ] test_mma_8x16_prefill_apple_gpu_matches_short_prefill_oracle
+    PASS [ 0.430 ] test_mma_8x16_prefill_apple_gpu_matches_exact_output_tile
+    PASS [ 0.556 ] test_mma_8x16_prefill_apple_gpu_matches_tile_tails
+    PASS [ 6.505 ] test_mma_8x16_prefill_apple_gpu_matches_qwen_kv_shape
+    PASS [ 1.404 ] test_mma_8x16_prefill_apple_gpu_matches_qwen_kv_decode_shape
+    PASS [ 0.394 ] test_tiled_prefill_apple_gpu_matches_short_prefill_oracle
+    PASS [ 0.492 ] test_tiled_prefill_apple_gpu_matches_exact_output_tile
+    PASS [ 0.434 ] test_tiled_prefill_apple_gpu_matches_tile_tails
+    PASS [ 6.668 ] test_tiled_prefill_apple_gpu_matches_qwen_kv_shape
+    PASS [ 2.247 ] test_tiled_prefill_apple_gpu_bk_sweep_matches_tail_shape
+    PASS [ 6.357 ] test_apple_gpu_matches_qwen_query_decode_shape
+    PASS [ 2.778 ] test_apple_gpu_matches_qwen_kv_incremental_shape
+    PASS [ 12.562 ] test_packed_qkv_apple_gpu_matches_separate_projection_regions
+    PASS [ 6.483 ] test_two_output_apple_gpu_matches_qwen_query_decode_shape
+    PASS [ 1.200 ] test_two_output_apple_gpu_matches_qwen_kv_decode_shape
+    PASS [ 0.377 ] test_two_output_apple_gpu_matches_odd_output_tail
+    PASS [ 0.121 ] test_two_output_apple_gpu_rejects_prefill_rows
+--------
+Summary [ 70.389 ] 32 tests run: 32 passed , 0 failed , 0 skipped

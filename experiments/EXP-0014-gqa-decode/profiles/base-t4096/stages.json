@@ -1,0 +1,32 @@
+{
+  "stage_order_basis": "source-bound enqueue sequence and validated chronological trace; instrumented durations",
+  "stages": {
+    "qk": {
+      "count": 500,
+      "unit": "nanoseconds",
+      "minimum": 49666,
+      "median": 50084.0,
+      "median_absolute_deviation": 209.0,
+      "p95": 52709.0,
+      "maximum": 55042
+    },
+    "softmax": {
+      "count": 500,
+      "unit": "nanoseconds",
+      "minimum": 1037209,
+      "median": 1038292.0,
+      "median_absolute_deviation": 291.0,
+      "p95": 1041002.05,
+      "maximum": 1043167
+    },
+    "pv": {
+      "count": 500,
+      "unit": "nanoseconds",
+      "minimum": 1043708,
+      "median": 1052604.5,
+      "median_absolute_deviation": 2938.5,
+      "p95": 1438154.15,
+      "maximum": 1477583
+    }
+  }
+}

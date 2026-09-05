@@ -611,3 +611,60 @@ The instrument keeps these quantities separate:
 
 The two derived byte rates in `summary.json` are source-level accounting. They
 are not measurements of cache, fabric, DRAM traffic, or physical bandwidth.
+# Output-only GQA decode campaign
+
+`attention_decode.mojo` and `run_attention_decode.py` implement the bounded
+[EXP-0014 protocol](../experiments/EXP-0014-gqa-decode/protocol.md). Inputs are
+nonuniform BF16 Q/O `[1,14,64]`, K/V `[T,2,64]`. Runtime context length varies
+without specializing T; ownership configurations are compiler specializations.
+The existing materialized attention API and stage-attribution runner remain the
+probability-returning control. No public shape selector is inferred here.
+
+The [completed report](../experiments/EXP-0014-gqa-decode/report.md) retains
+12 configurations, raw samples and profiles. Finalists are variant 4
+(`g32-h1-s1`, one dispatch) and variant 9 (`g1-h4-s64`, two dispatches).
+Their direct crossover is confirmed at T=4095/4096 in both hot and ring24;
+T=2048 remains inconclusive for ring24. Reproduce the paired comparison with
+`--candidates 9 --control 4`, or compare both against the original with
+`--candidates 4,9 --control 0`. Use a matching self-pair noise run.
+
+After validation and a local commit, build a binary with source provenance:
+
+```bash
+uv run --locked python benchmarks/run_attention_decode.py \
+  --build-binary /absolute/external/path/decode
+uv run --locked python benchmarks/run_attention_decode.py \
+  --binary /absolute/external/path/decode --candidates 0 --recorded \
+  --output-dir /absolute/external/path/noise
+uv run --locked python benchmarks/run_attention_decode.py \
+  --binary /absolute/external/path/decode --candidates 1,2,3,4 --recorded \
+  --noise /absolute/external/path/noise/summary.json \
+  --output-dir /absolute/external/path/fused
+```
+
+The runner retains four counterbalanced blocks, ten warmup and ten measured
+samples per arm. Timing includes enqueue through completion. Hot synchronizes
+one call; ring24 synchronizes a sequential 24-buffer sweep and divides by 24.
+Thus the modes also differ in synchronization amortization. Allocations,
+compilation, initialization and the per-layer numerical gate are outside timing.
+Pairs reserve both baseline scratch and maximum candidate workspace identically;
+reported workspace bytes describe each algorithm's requirement, not that common
+benchmark allocation. No measured-DRAM or full-decoder claim follows from this.
+
+Profile an exact implementation with the existing receipt-bound capture tools:
+
+```bash
+uv run --locked python benchmarks/run_attention_decode.py \
+  --build-profile-binary /absolute/external/path/decode-profile \
+  --profile-variant 0 --profile-rows 256 --profile-iterations 500
+uv run --locked python benchmarks/capture_rms_norm_trace.py \
+  --profile-binary /absolute/external/path/decode-profile \
+  --output-trace /absolute/external/path/decode.trace --time-limit 5s
+```
+
+The trace helper also supports attention despite its historical filename.
+Attention provenance validates shape, ownership parameters and one/two/three
+dispatches per call. Standalone profiles run an untimed numerical gate, 100
+warmup calls, a marked profile region, final synchronization and 250ms host idle.
+Export/analyze the same tables documented for RMSNorm above. The trailing
+declared attention sequence excludes the earlier correctness/setup prelude.
