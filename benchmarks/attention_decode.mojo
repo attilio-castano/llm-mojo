@@ -218,7 +218,7 @@ def main() raises:
         var k = TileTensor(keys[0], kl)
         var v = TileTensor(values[0], kl)
         for _ in range(warmup):
-            enqueue_variant(candidate, ctx, q, k, v, output, scratch, workspace)
+            _ = enqueue_variant(candidate, ctx, q, k, v, output, scratch, workspace)
         ctx.synchronize()
         print(
             "profile implementation:",
@@ -266,7 +266,7 @@ def main() raises:
         print("post-profile idle milliseconds: 250")
         print("PROFILE_REGION_BEGIN")
         for _ in range(repetitions):
-            enqueue_variant(candidate, ctx, q, k, v, output, scratch, workspace)
+            _ = enqueue_variant(candidate, ctx, q, k, v, output, scratch, workspace)
         ctx.synchronize()
         print("PROFILE_REGION_END")
         sleep(0.25)
@@ -284,7 +284,7 @@ def main() raises:
                 var q = TileTensor(queries[layer], ql)
                 var k = TileTensor(keys[layer], kl)
                 var v = TileTensor(values[layer], kl)
-                enqueue_variant(
+                _ = enqueue_variant(
                     variant, ctx, q, k, v, output, scratch, workspace
                 )
             ctx.synchronize()
