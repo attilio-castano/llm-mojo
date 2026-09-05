@@ -1,4 +1,4 @@
-from fixtures.rms_norm.reference_data import (
+from oracle_data.rms_norm.reference_data import (
     QWEN_HIDDEN_HIDDEN_SIZE,
     QWEN_HIDDEN_ROWS,
     RMS_NORM_ATOL,

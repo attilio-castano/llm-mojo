@@ -1,12 +1,12 @@
 from attention_decode_support import fill_decode, assert_decode_close
-from fixtures.attention.decode_data import (
+from oracle_data.attention.decode_data import (
     DECODE_CASE_COUNT,
     decode_case_rows,
     decode_case_seed,
     decode_case_kind,
     decode_case_expected,
 )
-from fixtures.attention.reference_data import (
+from oracle_data.attention.reference_data import (
     qwen_decode_query,
     qwen_decode_key,
     qwen_decode_value,

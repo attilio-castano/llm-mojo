@@ -11,7 +11,8 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).resolve().parents[3] / "build/oracle_data/attention"
+ROOT.mkdir(parents=True, exist_ok=True)
 CASES = [
     (t, 17, 0)
     for t in (1, 7, 16, 31, 32, 33, 63, 64, 65, 255, 256, 257, 1024, 4095, 4096)

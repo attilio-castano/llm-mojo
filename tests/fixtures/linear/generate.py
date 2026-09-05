@@ -20,7 +20,8 @@ import torch
 import transformers
 
 
-FIXTURE_DIR = Path(__file__).resolve().parent
+FIXTURE_DIR = Path(__file__).resolve().parents[3] / "build/oracle_data" / Path(__file__).parent.name
+FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
 DATA_PATH = FIXTURE_DIR / "reference_data.mojo"
 MANIFEST_PATH = FIXTURE_DIR / "manifest.json"
 MODEL_ID = "Qwen/Qwen2.5-0.5B-Instruct"

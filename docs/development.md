@@ -87,81 +87,25 @@ environment.
 
 ## Tests
 
-Mojo tests use `std.testing.TestSuite` and run as Mojo programs:
+Run the complete validation workflow from a clean checkout:
 
 ```bash
-uv run mojo run -I src tests/test_import.mojo
-MODULAR_DEBUG=device-sync-mode \
-  uv run mojo run -I src -I tests tests/test_rms_norm.mojo
-MODULAR_DEBUG=device-sync-mode \
-  uv run mojo run -I src -I tests tests/test_linear.mojo
-MODULAR_DEBUG=device-sync-mode \
-  uv run mojo run -I src -I tests tests/test_rope.mojo
-MODULAR_DEBUG=device-sync-mode \
-  uv run mojo run -I src -I tests tests/test_attention.mojo
-MODULAR_DEBUG=device-sync-mode \
-  uv run --locked mojo run -I src -I tests tests/test_attention_decode.mojo
-MODULAR_DEBUG=device-sync-mode \
-  uv run --locked mojo run -I src -I tests -I benchmarks tests/test_attention_decode_benchmark.mojo
+uv run --locked python tools/test.py
 ```
 
-The import smoke test proves that the package resolves through the configured
-source path. The RMSNorm test compares both a small diagnostic tensor and the
-model's 896-element hidden width through both the host reference path and the
-Apple GPU path against a committed Transformers oracle fixture. The GPU tests
-require an Apple accelerator and reject a non-Metal device context. Regenerate
-the fixture, including its provenance manifest, with:
+This regenerates every independent oracle into ignored `build/oracle_data/`,
+checks its SHA-256 against the fixtures at merged revision `a86f4db`, runs
+Python tooling tests, and runs every Mojo correctness suite on Metal with
+`MODULAR_DEBUG=device-sync-mode`. The frozen tolerances, diagnostic tensors,
+ragged tiles, full and incremental prefill, and all 24 decode cases remain.
+Generation uses pinned Torch/Transformers script environments and locked NumPy;
+the first run may download those dependencies. No model weights are required.
 
-```bash
-uv run --script tests/fixtures/rms_norm/generate.py
-```
-
-The affine linear projection test compares a one-token diagnostic case and a
-short multi-row case against a committed `torch.nn.Linear` oracle. It also
-compares the Apple GPU path with the host reference at the model's query and
-key/value projection shapes. The rowwise public kernel and the experimental
-direct, shared-staging, register-2x2, and Apple-MMA prefill mappings have
-separate coverage. Their exact-tile and ragged cases exercise M, N, and K edge
-policies, including synchronization-safe shared staging and collective-safe
-MMA zero fill. Correctness does not imply that an experimental entrypoint is
-faster or suitable for public dispatch.
-Regenerate its fixture and provenance manifest with:
-
-```bash
-uv run --script tests/fixtures/linear/generate.py
-```
-
-The RoPE test covers tiny, query-decode, and incremental-key cases against the
-pinned Transformers operation. Regenerate its fixture and provenance manifest
-with:
-
-```bash
-uv run --script tests/fixtures/rope/generate.py
-```
-
-The grouped-query attention test covers full prefill, incremental prefill,
-stable softmax, and the model's `Q[1,14,64]`/`K,V[7,2,64]` decode shape. It
-compares both final output and the materialized BF16 probability scratch
-against a pinned Qwen2 oracle. GPU readback occurs only after all three Metal
-stages have been enqueued, copied back, and explicitly synchronized. Regenerate
-its fixture and provenance manifest with:
-
-```bash
-uv run --script tests/fixtures/attention/generate.py
-```
-
-The generator's inline environment pins its oracle dependencies independently
-of the Mojo inference environment. Do not change a fixture tolerance after
-observing the Mojo result; update the declared numerical contract first and
-explain why it changed.
-
-The separate output-only decode suite covers the bounded Qwen D=64 ownership
-experiments against the pinned Qwen fixture and an independent NumPy FP64
-materialized oracle. Generate its deterministic, weight-free fixtures with
-`uv run --locked python tests/fixtures/attention/generate_decode.py`.
-Its manifest binds data, generator, NumPy version and frozen tolerances.
-Run all Python benchmark/profiler validation with
-`uv run --locked python -m unittest discover -s tests -p 'test_*.py'`.
+Use `--prepare-only` to generate fixtures without running tests. For an individual
+Mojo suite, include `-I src -I build -I tests -I benchmarks`. Generators and the
+small checksum record are versioned; large generated arrays and manifests are
+build outputs. A changed checksum requires reviewing the oracle and numerical
+contract, never relaxing tolerances to fit a kernel.
 
 Recorded GQA decode comparisons require `--noise /path/to/noise/summary.json`
 and its adjacent `metadata.json`. First record a materialized self-pair
