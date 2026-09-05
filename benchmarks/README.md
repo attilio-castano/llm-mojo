@@ -1,670 +1,72 @@
-# Benchmarks
+# Measure an operation
 
-Benchmark programs are reusable measurement instruments, not experiment
-records. The project's [experimental method](../docs/experiments.md) defines how
-to freeze a protocol, retain raw samples, separate profiling from timing, and
-bound the resulting claims.
+The Mojo instruments keep allocations, launches, checks, and synchronization
+visible. Python builds them once, alternates paired measurements, checks the
+runtime identity, and saves a compact record. Kernel implementations live in
+`src/llm_mojo`; instruments never substitute Python computation for GPU work.
 
-## RMSNorm timing instrument
-
-The RMSNorm benchmark measures the supported Apple GPU enqueue path at hidden
-size 896 for row counts 1, 4, 16, 128, 512, 2048, and 4096. Ordinary mode
-measures the public SIMD-group default. Comparison mode pairs that default with
-the retained shared-tree baseline. Those shapes cover batch-one decode,
-hypothetical batched-decode-like work, and prefill-like work; they do not prove
-that every semantic workload exists in the current engine.
-
-Each workload uses BF16 input, weight, and output buffers filled with ones and
-reused within a repetition. Allocation, initialization, compilation, and the
-untimed correctness guard are outside the measured region. The primary sample
-is milliseconds per dispatch from `bencher_iter_custom`, which measures the GPU
-launch through its device-completion boundary. Headline timing runs with
-`MODULAR_DEBUG` unset rather than globally forcing every device operation to
-synchronize.
-
-Run one exploratory ascending block:
+From a clean commit, after `uv run --locked python tools/test.py` passes:
 
 ```bash
-uv run --locked python benchmarks/run_rms_norm.py
+uv run --locked python benchmarks/run.py build --build-dir /private/tmp/mojo-study-build
+uv run --locked python benchmarks/run.py run --build-dir /private/tmp/mojo-study-build --output /private/tmp/mojo-study-run
 ```
 
-The runner proves the runtime device and Metal API, records curated repository,
-hardware, software, power, thermal, memory, and display metadata, parses every
-reported repetition, and prints median and spread. Give it a new directory to
-retain full exploratory output outside the repository:
+Both destinations must be new directories outside the checkout. Use
+`--studies gqa_decode` (or any combination of the five study names) for a
+bounded subset. The matrix and named implementations are in `study.py`.
+The runner requires AC power, Low Power Mode off, no reported thermal warning,
+a clean matching source commit, unchanged hardware/software, and the exact
+built binary. Runtime output must identify an Apple device with the Metal API.
+
+Every study includes its control paired with itself. Four blocks reverse
+workload and arm order in blocks 2 and 3; each arm has ten warmups and ten
+measured samples. The noise floor comes from that study's own raw self-pair
+samples. A gain needs a median improvement exceeding both 5% and the largest
+self-pair deviation, with all four blocks faster. Partial grids, wrong routes,
+nonfinite samples, changed identity, and missing completion markers fail.
+
+`operations.mojo` covers RMSNorm, linear decode/prefill and RoPE.
+`attention_decode.mojo` retains all thirteen GQA routes; the maintained matrix
+compares the materialized control, simple fusion, parallel fusion, and split
+head reuse. The full numerical suites still test every original GQA candidate.
+`tools/smoke.py` exercises the other measurement routes and output gates.
+
+Hot measures one operation through completion. Ring24 measures 24 distinct
+input buffers (RMSNorm/RoPE/GQA) or weight buffers (linear), one synchronization,
+and divides by 24. Output and scratch are reused. These modes have different
+synchronization amortization; their difference is not a pure cache effect.
+Unit is microseconds per operation, never end-to-end tokens/second.
+
+Copy only `run.json` and `samples.csv.gz` into the relevant `studies/` folder
+after checking completion. Generate the small derived summary and report image:
 
 ```bash
-uv run --locked python benchmarks/run_rms_norm.py \
-  --blocks 2 \
-  --experiment-id calibration \
-  --run-id calibration-001 \
-  --output-dir /absolute/external/path/calibration-001
+uv run --no-project --with matplotlib==3.10.8 python benchmarks/plot.py
 ```
 
-For a decisive single-implementation run, all four blocks use ascending,
-descending, descending, ascending workload order. The recorded-run gate rejects
-a dirty repository, non-AC power, a reported thermal or performance warning,
-an implicit run identity, or an output path inside the repository. Freeze a new
-experiment identifier before using this form:
+That command checks the raw hash and complete observation grid before plotting.
+No GPU execution or external temporary files are needed. PNG is the single
+committed image format; extra exports are disposable. See
+[the method](../docs/experiments.md) for interpreting evidence.
+
+## Focused Metal profiling
+
+The capture/analyzer pair retains binary hashes, verified launch receipts,
+workload identity, dispatch segmentation and named counters. Its historical
+RMSNorm/linear schema support is retained for reading older captures. The
+maintained standalone builder currently targets GQA decode:
 
 ```bash
-uv run --locked python benchmarks/run_rms_norm.py \
-  --blocks 4 \
-  --experiment-id EXP-XXXX \
-  --run-id EXP-XXXX-RUN-001 \
-  --recorded \
-  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
+uv run --locked python benchmarks/profile.py --build-profile-binary /private/tmp/gqa-profile --profile-variant 9 --profile-rows 4096
+uv run --locked python benchmarks/capture_trace.py --profile-binary /private/tmp/gqa-profile --output-trace /private/tmp/gqa-profile.trace --time-limit 2s
 ```
 
-The output directory contains block stdout, `metadata.json`, `samples.jsonl`,
-and `summary.json`. Review those external artifacts before promoting compact
-evidence into `experiments/`; the runner never edits an experiment record.
-
-For the frozen two-implementation comparison, add `--variant-comparison`. The
-runner requires all four blocks and registers each row as a baseline/variant
-pair. Blocks one and four use baseline then variant; blocks two and three use
-variant then baseline. `summary.json` retains each block's ratio of variant
-median to baseline median and applies the preregistered 5% and three-of-four
-direction rules:
-
-```bash
-uv run --locked python benchmarks/run_rms_norm.py \
-  --blocks 4 \
-  --experiment-id EXP-0002 \
-  --run-id EXP-0002-RUN-001 \
-  --variant-comparison \
-  --recorded \
-  --output-dir /absolute/external/path/EXP-0002-RUN-001
-```
-
-## M=1 projection timing instrument
-
-The projection benchmark is deliberately decode-only: every workload has
-`M=1`, `K=896`, row-major BF16 input and weights, BF16 output, and FP32 dot
-product accumulation. It covers one `N=896` query projection, one `N=128`
-key/value projection, one hot Q/K/V layer (three enqueues and one completion),
-and a 24-layer rotating Q/K/V proxy (72 enqueues and one completion). The last
-case owns 24 distinct sets of weights so it is the primary cache-pressure
-workload. It is not an end-to-end decoder-block benchmark.
-
-Allocation, deterministic device initialization, compilation, correctness
-checks, and host mapping are excluded. A retained sample is synchronized
-milliseconds per complete workload iteration. The runner also reports time per
-dispatch, MAC/s, and source-derived requested-byte throughput; the byte rate is
-not observed cache, fabric, or DRAM traffic.
-
-Run one exploratory block:
-
-```bash
-uv run --locked python benchmarks/run_linear.py
-```
-
-Record the four-block baseline outside the repository:
-
-```bash
-uv run --locked python benchmarks/run_linear.py \
-  --blocks 4 \
-  --experiment-id EXP-0004 \
-  --run-id EXP-0004-RUN-001 \
-  --recorded \
-  --output-dir /absolute/external/path/EXP-0004-RUN-001
-```
-
-The candidate comparison uses the same ascending, descending, descending,
-ascending workload order and ABBA implementation order. It promotes the
-two-output kernel only if the rotating workload improves by at least 5% in at
-least three blocks and none of the three secondary workloads materially
-regresses:
-
-```bash
-uv run --locked python benchmarks/run_linear.py \
-  --blocks 4 \
-  --experiment-id EXP-0005 \
-  --run-id EXP-0005-RUN-001 \
-  --variant-comparison \
-  --recorded \
-  --output-dir /absolute/external/path/EXP-0005-RUN-001
-```
-
-The packed-QKV comparison is a separate mode so the completed EXP-0005
-protocol remains reproducible. It compares only hot QKV and the rotating
-24-layer QKV proxy. The baseline owns separate Q, K, and V buffers and submits
-three enqueues per layer. The candidate allocates weights and bias directly as
-Q|K|V, writes Q|K|V to one output buffer, and submits the same one-output
-kernel once per layer. Packing, allocation, correctness, and output mapping are
-outside timing; no per-token concatenation or output-splitting copy is allowed.
-
-The primary metric is milliseconds per complete QKV workload iteration.
-Milliseconds per dispatch must not be compared because a fused dispatch
-contains three times the scalar-output work of a baseline Q or K/V dispatch:
-
-```bash
-uv run --locked python benchmarks/run_linear.py \
-  --blocks 4 \
-  --experiment-id EXP-0006 \
-  --run-id EXP-0006-RUN-001 \
-  --qkv-fusion-comparison \
-  --recorded \
-  --output-dir /absolute/external/path/EXP-0006-RUN-001
-```
-
-Build a short standalone profile binary outside the repository with `q`, `kv`,
-`qkv-hot`, or `qkv-ring24` as the workload. The default is the one-output
-baseline. Use `--profile-implementation two-output` for the EXP-0005 kernel or
-`--profile-implementation fused-qkv` for the EXP-0006 packed composition. The
-packed option accepts only the two QKV workloads:
-
-```bash
-uv run --locked python benchmarks/run_linear.py \
-  --profile-binary /absolute/external/path/linear-profile-ring24 \
-  --profile-workload qkv-ring24 \
-  --profile-warmup-iterations 100 \
-  --profile-iterations 100 \
-  --require-clean
-```
-
-For example, the packed ring24 profile uses 24 dispatches per iteration rather
-than the separate baseline's 72:
-
-```bash
-uv run --locked python benchmarks/run_linear.py \
-  --profile-binary /absolute/external/path/linear-profile-packed-ring24 \
-  --profile-workload qkv-ring24 \
-  --profile-implementation fused-qkv \
-  --profile-warmup-iterations 50 \
-  --profile-iterations 100 \
-  --profile-post-idle-milliseconds 250 \
-  --require-clean
-```
-
-The generated provenance binds the binary digest to the repository commit,
-entrypoint, workload, layer count, and dispatches per iteration. Use the same
-receipt-bound `/private/tmp` staging procedure described below for Instruments.
-The trace analyzer accepts these projection receipts as well as RMSNorm
-receipts. Because a launch instrument may attach after the projection's
-one-time correctness work begins, projection segmentation takes the trailing
-declared warmup and profile dispatch counts; the receipt remains the authority
-that the exact-output correctness gate completed. Any earlier captured
-projection compute commands are reported as an unclassified prelude.
-
-## Prefill projection timing instrument
-
-The prefill projection benchmark characterizes the existing rowwise Apple GPU
-kernel before introducing a tiled candidate. It measures `M` values 1, 4, 8,
-16, 32, 64, 128, and 256 at `K=896`. Each row count covers hot `N=128`,
-`N=896`, and packed-QKV `N=1152` projections plus a 24-layer rotating
-packed-QKV cache-pressure proxy. This is an operation-level shape sweep, not an
-end-to-end prompt benchmark.
-
-Allocation, deterministic initialization, compilation, and the exact BF16
-correctness gate remain outside timing. Samples include synchronized workload
-latency, latency per layer, rows per second, effective FLOP/s, and
-source-derived requested-byte throughput. The byte rate is not observed cache,
-fabric, or DRAM traffic.
-
-Run one exploratory ascending block:
-
-```bash
-uv run --locked python benchmarks/run_linear_prefill.py
-```
-
-Use four alternating-order blocks for a retained baseline outside the
-repository:
-
-```bash
-uv run --locked python benchmarks/run_linear_prefill.py \
-  --blocks 4 \
-  --experiment-id EXP-XXXX \
-  --run-id EXP-XXXX-RUN-001 \
-  --recorded \
-  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
-```
-
-The direct-control comparison holds an `8x16` output-tile ownership mapping
-constant for the later shared-memory experiment, but streams every operand
-directly from device memory. It is an attribution control rather than a
-production candidate, so its timing summary makes no dispatch decision. The
-four-block mode uses ABBA implementation order and the same 5% plus
-three-of-four classification rule for every shape:
-
-```bash
-uv run --locked python benchmarks/run_linear_prefill.py \
-  --blocks 4 \
-  --experiment-id EXP-XXXX \
-  --run-id EXP-XXXX-RUN-001 \
-  --direct-comparison \
-  --recorded \
-  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
-```
-
-The tiled comparison then holds output ownership constant: its baseline is the
-direct `8x16` control, while its candidate cooperatively stages `8x32` input
-and `16x32` weight tiles in 1,536 bytes of BF16 threadgroup memory. At
-`K=896`, the candidate executes 28 K phases and 56 block barriers per dispatch.
-The runner records those source-level quantities and computes separate
-requested-traffic accounting for the tiled implementation; neither quantity
-is an observed hardware counter. Run the same four-block ABBA protocol with:
-
-```bash
-uv run --locked python benchmarks/run_linear_prefill.py \
-  --blocks 4 \
-  --experiment-id EXP-XXXX \
-  --run-id EXP-XXXX-RUN-001 \
-  --tiled-comparison \
-  --recorded \
-  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
-```
-
-This comparison isolates explicit shared staging from the already-measured
-ownership change. Its summary classifies timing direction but deliberately
-makes no public dispatch decision.
-
-The BK sensitivity instrument narrows the matrix to the 24-layer rotating
-`K=896`, `N=1152` workload and holds `BM=8`, `BN=16`, 128 threads, and one
-thread per output fixed. It compares `BK=16`, `32`, `64`, and `128`; these use
-768, 1,536, 3,072, and 6,144 bytes of BF16 threadgroup operand storage and
-execute 112, 56, 28, and 14 barriers per dispatch, respectively. Four blocks
-counterbalance BK position while alternating the M sweep direction:
-
-```bash
-uv run --locked python benchmarks/run_linear_prefill_bk_sweep.py \
-  --blocks 4 \
-  --experiment-id EXP-XXXX \
-  --run-id EXP-XXXX-RUN-001 \
-  --recorded \
-  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
-```
-
-Each non-32 BK is paired against BK=32 within the same block and M. This is a
-sensitivity screen: even a qualifying BK requires a later comparison against
-the direct no-staging control and cannot change public dispatch by itself.
-
-[EXP-0009](../experiments/EXP-0009-linear-prefill-bk-sweep/report.md) found
-that BK16 materially improved every rotating workload against BK32, while BK64
-and BK128 were inconclusive. BK16 advances only to the required direct-control
-comparison; the result does not select a public path.
-
-The follow-up direct-control mode holds that BK16 kernel's `8x16` output
-ownership fixed and removes only the shared-staging mechanism in its control.
-It runs the same eight rotating workloads in four ABBA blocks:
-
-```bash
-uv run --locked python benchmarks/run_linear_prefill_bk16_direct.py \
-  --blocks 4 \
-  --experiment-id EXP-XXXX \
-  --run-id EXP-XXXX-RUN-001 \
-  --recorded \
-  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
-```
-
-BK16 uses 768 bytes of operand scratch and 112 barriers per dispatch; direct
-uses neither. [EXP-0010](../experiments/EXP-0010-linear-prefill-bk16-direct/report.md)
-found that BK16 materially regressed every tested M by 24.54%–33.88% and was
-slower in all four blocks for every row count. It failed all three large-M
-decision rows, so BK tuning ends for this scalar one-output-per-thread mapping;
-there is no final public-rowwise comparison or dispatch change.
-
-The next ownership experiment keeps the same direct full-K `8x16` output tile
-but replaces 128 scalar owners with one 32-lane SIMD group. Each lane owns a
-`2x2` output microtile, holds four FP32 accumulators, and reuses two X and two W
-values across four products without shared memory or barriers:
-
-```bash
-uv run --locked python benchmarks/run_linear_prefill_register_2x2.py \
-  --blocks 4 \
-  --experiment-id EXP-XXXX \
-  --run-id EXP-XXXX-RUN-001 \
-  --recorded \
-  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
-```
-
-This is a manual arithmetic-ownership comparison, not an Apple matrix-operation
-benchmark. [EXP-0011](../experiments/EXP-0011-linear-prefill-register-2x2/report.md)
-found a 122.73% regression at `M=1`, inconclusive results at `M=4` and `M=8`,
-and repeatable 42.69%–62.19% improvements from `M=16` through `M=256`. It
-qualifies for a paired public-rowwise comparison but cannot change dispatch by
-itself.
-
-That final manual-kernel gate compares the frozen `2x2` mapping directly with
-the public rowwise kernel on the same eight rotating packed-QKV workloads. The
-rowwise control assigns one scalar output to a SIMD group and partitions
-`K=896` into 28 values per lane before one SIMD-group sum. The candidate assigns
-an `8x16` output tile to one SIMD group, gives each lane a `2x2` microtile, and
-makes every lane walk all K without a cross-lane reduction:
-
-```bash
-uv run --locked python benchmarks/run_linear_prefill_register_rowwise.py \
-  --blocks 4 \
-  --experiment-id EXP-0012 \
-  --run-id EXP-0012-RUN-001 \
-  --recorded \
-  --output-dir /absolute/external/path/EXP-0012-RUN-001
-```
-
-The four-block protocol requires material improvements at `M=64`, `M=128`,
-and `M=256` to advance the manual candidate. It also reports the smallest
-tested M after which no larger measurement materially regresses, but that
-bounded crossover is evidence for a later dispatch experiment rather than a
-dispatch rule. [EXP-0012](../experiments/EXP-0012-linear-prefill-register-rowwise/report.md)
-found material regressions through `M=8`, followed by repeatable
-35.92%–67.98% improvements from `M=16` through `M=256`. The measured
-packed-QKV crossover is `M=16`; it does not yet establish the same threshold
-for the model's `N=128` or `N=896` projections.
-
-## Grouped-query attention timing instrument
-
-The attention benchmark measures the public materialized Apple GPU baseline at
-the model's fixed `query_heads=14`, `key_value_heads=2`, and `head_dim=64`.
-Each operation consumes BF16 `Q[R,14,64]` and `K,V[T,2,64]`, overwrites caller-
-owned BF16 scratch `[R,14,T]` from scores to probabilities, and produces BF16
-`O[R,14,64]`. QK, stable causal softmax, and probability-times-V remain three
-separate Metal dispatches with FP32 arithmetic. The benchmark does not repeat
-K or V across the seven query heads in each group.
-
-The sweep covers decode at `R=1` and `T=1,16,64,256,1024,4096`, incremental
-prefill at `(R,T)=(4,128),(16,512),(16,4096)`, and full prefill at
-`R=T=4,32,128,256`. Allocation, initialization, compilation, and the untimed
-output/probability correctness gates are outside timing. A sample is
-synchronized milliseconds per complete attention call, including all three
-enqueues through device completion. This is one hot operation: it does not
-model 24-layer KV-cache pressure or end-to-end inference.
-
-Run one exploratory ascending block:
-
-```bash
-uv run --locked python benchmarks/run_attention.py
-```
-
-Add `--stage-attribution` to measure the same end-to-end operation beside its
-three exact internal kernels:
-
-```bash
-uv run --locked python benchmarks/run_attention.py --stage-attribution
-```
-
-Each isolated QK, softmax, or probability-times-V row times one dispatch. Its
-setup and correctness readback remain outside timing. QK repeatedly writes the
-same scores, and probability-times-V reads stable probabilities. Softmax is
-in-place, so its setup uses uniform scores and performs one untimed softmax;
-the resulting uniform causal probabilities are a fixed point under subsequent
-softmax calls. This avoids including a reset dispatch in the timed operation.
-
-The attribution summary divides each isolated-stage median by the sum of the
-three isolated medians. It also retains the independently measured end-to-end
-median and reports the ratio between that median and the isolated sum. Do not
-treat the three isolated measurements as an exact decomposition of the queued
-end-to-end call: their scheduling and completion boundaries differ.
-
-The runner rejects any execution that does not identify an Apple GPU and the
-Metal API. It records shape, dtype, layout, dispatch count, synchronization
-boundary, repository identity, and current machine conditions. It also reports
-scratch size, visible versus materialized score counts, effective MAC/s, and a
-source-derived requested-byte rate. That byte rate follows the accesses in the
-baseline source; it is not observed cache, fabric, or DRAM traffic.
-
-For a retained baseline, use four alternating-order blocks and write the full
-record outside the repository:
-
-```bash
-uv run --locked python benchmarks/run_attention.py \
-  --blocks 4 \
-  --experiment-id EXP-XXXX \
-  --run-id EXP-XXXX-RUN-001 \
-  --recorded \
-  --output-dir /absolute/external/path/EXP-XXXX-RUN-001
-```
-
-Recorded mode requires a clean repository, AC power, no reported thermal or
-performance warning, explicit run identity, and a new external output
-directory. It writes raw block output, metadata, parsed samples, and a summary.
-This instrument establishes the simple three-stage control; it contains no
-optimized candidate and makes no dispatch decision.
-
-For retained stage attribution, add `--stage-attribution` to that four-block
-command. Blocks one and four use end-to-end, QK, softmax, PV order within each
-shape; blocks two and three reverse both the workload sweep and stage order.
-
-## RMSNorm profiling instrument
-
-Build a standalone, long-running binary outside the repository so Xcode does
-not capture `uv` startup or Mojo compilation:
-
-```bash
-uv run --locked python benchmarks/run_rms_norm.py \
-  --profile-binary /absolute/external/path/rmsnorm-profile-r1 \
-  --profile-rows 1 \
-  --profile-warmup-iterations 1000 \
-  --profile-iterations 5000 \
-  --require-clean
-```
-
-The builder defaults to the promoted SIMD-group implementation. Add
-`--profile-implementation baseline` to build the retained shared-tree baseline
-instead.
-
-The build also writes a provenance JSON file with the commit, environment,
-binary size, warmup and profile dispatch counts, and SHA-256 digest. The binary
-performs an untimed correctness gate, the declared warmup dispatches, and then
-the declared profiling iterations. Warmup defaults to and is bounded at 1,000;
-use a shorter explicit warmup when a finite profiler counter window would
-otherwise end before the profile region. A Metal trace is diagnostic evidence;
-its instrumented duration is not a headline benchmark result. The builder
-defaults to and enforces at most 5,000 profiling dispatches. Use multiple short
-captures instead of increasing that limit; fewer dispatches may be appropriate
-for larger workloads.
-
-Counter streams may have an unflushed tail when a target exits immediately
-after its final synchronization. For a counter capture, add a bounded host-only
-idle after `PROFILE_REGION_END`; it is outside the GPU profile sequence and
-defaults to zero:
-
-The canonical binary and provenance may be stored under `Desktop`, `Documents`,
-or `Downloads`, but do not launch the generated executable there with raw
-`xctrace`. macOS privacy checks can leave that target suspended even though
-direct execution works. The capture helper below verifies the canonical binary
-against its provenance, copies only its bytes into an owner-only directory
-under `/private/tmp`, verifies the staged SHA-256, launches that copy, and
-removes it afterward.
-
-```bash
-uv run --locked python benchmarks/run_rms_norm.py \
-  --profile-binary /absolute/external/path/rmsnorm-counter-profile-r512 \
-  --profile-rows 512 \
-  --profile-warmup-iterations 100 \
-  --profile-iterations 500 \
-  --profile-post-idle-milliseconds 250 \
-  --require-clean
-```
-
-Capture a short Metal System Trace outside the repository through the staging
-helper. Keep the raw trace external because Instruments may record host
-identifiers and unrelated system activity:
-
-```bash
-uv run --locked python benchmarks/capture_rms_norm_trace.py \
-  --profile-binary /absolute/external/path/rmsnorm-profile-r1 \
-  --output-trace /absolute/external/path/rmsnorm-r1.trace \
-  --template 'Metal System Trace' \
-  --time-limit 1s
-```
-
-The helper refuses to overwrite an existing trace or receipt and requires both
-profile-region markers in the launched target's output. It writes
-`rmsnorm-r1.trace.capture.json` with the canonical and staged binary hashes,
-profile provenance identity, template identity, time limit, `xctrace` version,
-and capture result. It also generates a unique capture ID, uses that ID for the
-Instruments run and staged executable name, parses the target's runtime
-entrypoint/device/backend/workload identity, and rejects any disagreement with
-the binary provenance. Canonical, temporary, and trace paths are omitted from
-that receipt. A custom Instruments template can be supplied by installed name
-or absolute `.tracetemplate` path.
-
-Use `xctrace export --toc` to inspect the capture configuration, then export the
-needed tables by schema rather than by a trace-specific table index:
-
-```bash
-xctrace export \
-  --input /absolute/external/path/rmsnorm-r1.trace \
-  --toc \
-  --output /absolute/external/path/toc.xml
-
-xctrace export \
-  --input /absolute/external/path/rmsnorm-r1.trace \
-  --xpath '/trace-toc/run[@number="1"]/data/table[@schema="metal-application-command-buffer-submissions"]' \
-  --output /absolute/external/path/submissions.xml
-```
-
-Repeat the schema export for `metal-gpu-intervals`,
-`gpu-performance-state-intervals`, and `graphics-compiler-spill-events`. For a
-trace configured with a named counter set, also export `gpu-counter-info` and
-`gpu-counter-value`.
-
-Reduce those external XML exports to a scrubbed summary:
-
-```bash
-uv run --locked python benchmarks/analyze_rms_norm_trace.py \
-  --capture-receipt /absolute/external/path/rmsnorm-r1.trace.capture.json \
-  --submissions-xml /absolute/external/path/submissions.xml \
-  --gpu-intervals-xml /absolute/external/path/gpu-intervals.xml \
-  --toc-xml /absolute/external/path/toc.xml \
-  --performance-state-xml /absolute/external/path/performance-state.xml \
-  --spill-xml /absolute/external/path/spill-events.xml \
-  --output /absolute/external/path/trace-summary.json
-```
-
-For a named-counter capture, use the shorter warmup and profile counts declared
-by that binary, then add both counter exports to the analyzer command. The
-analyzer obtains those counts from the capture receipt:
-
-```bash
-uv run --locked python benchmarks/analyze_rms_norm_trace.py \
-  --capture-receipt /absolute/external/path/profile.trace.capture.json \
-  --submissions-xml /absolute/external/path/submissions.xml \
-  --gpu-intervals-xml /absolute/external/path/gpu-intervals.xml \
-  --toc-xml /absolute/external/path/toc.xml \
-  --counter-info-xml /absolute/external/path/gpu-counter-info.xml \
-  --counter-values-xml /absolute/external/path/gpu-counter-values.xml \
-  --output /absolute/external/path/counter-summary.json
-```
-
-After four valid summaries have been collected in baseline, variant, variant,
-baseline order, apply the frozen paired-direction and 5% materiality rule:
-
-```bash
-uv run --locked python benchmarks/compare_rms_norm_counters.py \
-  --captures \
-    /absolute/external/path/capture-01/trace-summary.json \
-    /absolute/external/path/capture-02/trace-summary.json \
-    /absolute/external/path/capture-03/trace-summary.json \
-    /absolute/external/path/capture-04/trace-summary.json \
-  --output /absolute/external/path/counter-comparison.json
-```
-
-The four paths express intended sequence, not trusted roles. The comparator
-derives baseline or variant from each receipt-verified implementation and
-entrypoint, then requires ABBA order, unique capture IDs and receipts, one clean
-commit, one Apple/Metal device, the frozen workload, one binary/provenance pair
-per role, and distinct baseline and variant binaries. It also rechecks the
-capture validity gates, requires positive medians in all four captures, and
-calls a difference repeatable only when both adjacent pair ratios move in the
-same direction and their median relative change is at least 5%.
-
-The analyzer joins GPU intervals to the target command-buffer submissions,
-requires the receipt ID to match the profiler run and launched process, derives
-the correctness/warmup/profile sequence from receipt-bound provenance, strips
-paths and host identifiers, and reports checksums plus diagnostic interval
-distributions. It retains each named counter's profiler description and
-explicit unit when one is available. If counter exports are supplied, it
-rejects a trace whose samples do not overlap the declared profile window. Those
-samples remain device-wide, rather than command-buffer-exclusive. The analyzer
-does not turn source-level byte counts into hardware counters.
-
-For generated-code inspection, emit host assembly and the per-Metal-kernel LLVM
-sidecar outside the repository:
-
-```bash
-uv run --locked mojo build \
-  -I src \
-  -D RMS_NORM_PROFILE_ROWS=1 \
-  -D RMS_NORM_PROFILE_WARMUP_ITERATIONS=1000 \
-  -D RMS_NORM_PROFILE_ITERATIONS=1 \
-  -D RMS_NORM_PROFILE_POST_IDLE_MILLISECONDS=0 \
-  -D RMS_NORM_PROFILE_SIMDGROUP=true \
-  --emit asm \
-  -o /absolute/external/path/rmsnorm-simdgroup-profile.s \
-  benchmarks/rms_norm.mojo
-```
-
-Omit `RMS_NORM_PROFILE_SIMDGROUP` to inspect the baseline.
-
-## Memory quantities
-
-The instrument keeps these quantities separate:
-
-- allocated footprint: the live input, weight, and output buffers;
-- logical tensor traffic: BF16 input, weight, and output, or 6 bytes per
-  row-hidden element;
-- program-requested traffic for this implementation: two input reads, one
-  weight read, and one output write, or 8 bytes per element;
-- observed hardware traffic: only a named counter from a documented profiling
-  capture.
-
-The two derived byte rates in `summary.json` are source-level accounting. They
-are not measurements of cache, fabric, DRAM traffic, or physical bandwidth.
-# Output-only GQA decode campaign
-
-`attention_decode.mojo` and `run_attention_decode.py` implement the bounded
-[EXP-0014 protocol](../experiments/EXP-0014-gqa-decode/protocol.md). Inputs are
-nonuniform BF16 Q/O `[1,14,64]`, K/V `[T,2,64]`. Runtime context length varies
-without specializing T; ownership configurations are compiler specializations.
-The existing materialized attention API and stage-attribution runner remain the
-probability-returning control. No public shape selector is inferred here.
-
-The [completed report](../experiments/EXP-0014-gqa-decode/report.md) retains
-12 configurations, raw samples and profiles. Finalists are variant 4
-(`g32-h1-s1`, one dispatch) and variant 9 (`g1-h4-s64`, two dispatches).
-Their direct crossover is confirmed at T=4095/4096 in both hot and ring24;
-T=2048 remains inconclusive for ring24. Reproduce the paired comparison with
-`--candidates 9 --control 4`, or compare both against the original with
-`--candidates 4,9 --control 0`. Use a matching self-pair noise run.
-
-After validation and a local commit, build a binary with source provenance:
-
-```bash
-uv run --locked python benchmarks/run_attention_decode.py \
-  --build-binary /absolute/external/path/decode
-uv run --locked python benchmarks/run_attention_decode.py \
-  --binary /absolute/external/path/decode --candidates 0 --recorded \
-  --output-dir /absolute/external/path/noise
-uv run --locked python benchmarks/run_attention_decode.py \
-  --binary /absolute/external/path/decode --candidates 1,2,3,4 --recorded \
-  --noise /absolute/external/path/noise/summary.json \
-  --output-dir /absolute/external/path/fused
-```
-
-The runner retains four counterbalanced blocks, ten warmup and ten measured
-samples per arm. Timing includes enqueue through completion. Hot synchronizes
-one call; ring24 synchronizes a sequential 24-buffer sweep and divides by 24.
-Thus the modes also differ in synchronization amortization. Allocations,
-compilation, initialization and the per-layer numerical gate are outside timing.
-Pairs reserve both baseline scratch and maximum candidate workspace identically;
-reported workspace bytes describe each algorithm's requirement, not that common
-benchmark allocation. No measured-DRAM or full-decoder claim follows from this.
-
-Profile an exact implementation with the existing receipt-bound capture tools:
-
-```bash
-uv run --locked python benchmarks/run_attention_decode.py \
-  --build-profile-binary /absolute/external/path/decode-profile \
-  --profile-variant 0 --profile-rows 256 --profile-iterations 500
-uv run --locked python benchmarks/capture_rms_norm_trace.py \
-  --profile-binary /absolute/external/path/decode-profile \
-  --output-trace /absolute/external/path/decode.trace --time-limit 5s
-```
-
-The trace helper also supports attention despite its historical filename.
-Attention provenance validates shape, ownership parameters and one/two/three
-dispatches per call. Standalone profiles run an untimed numerical gate, 100
-warmup calls, a marked profile region, final synchronization and 250ms host idle.
-Export/analyze the same tables documented for RMSNorm above. The trailing
-declared attention sequence excludes the earlier correctness/setup prelude.
+Use `capture_trace.py --help` and `analyze_trace.py --help` for receipt and XML
+export inputs. Default Metal System Trace gives dispatch timing; performance
+limiter counters require a separately configured Instruments template. Never
+interpret missing counters as zero. Profile separately from latency runs, keep
+captures short (at most 5,000 measured dispatches), and retain compact relevant
+counter observations only when the report uses them. Raw traces and binaries
+stay outside Git. A profile is diagnostic; source-requested bytes are not
+measured DRAM traffic and zero observed spills is limited to that capture.

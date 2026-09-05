@@ -44,6 +44,8 @@ def main():
             run("uv", "run", "--locked", "mojo", "run", "-I", "src", "-I", "build",
                 "-I", "tests", "-I", "benchmarks", str(test.relative_to(ROOT)))
 
+        run(sys.executable, "tools/smoke.py")
+
 
 if __name__ == "__main__":
     main()

@@ -9,8 +9,8 @@ GPU kernels, and hardware.
 
 Status: RMSNorm, affine linear projection, RoPE, and grouped-query attention
 have Mojo host references and Apple GPU implementations with
-provenance-bearing oracle tests. RMSNorm, projection, and grouped-query
-attention also have reproducible microbenchmarks. No end-to-end model inference
+provenance-bearing oracle tests. The operations have reproducible microbenchmarks and
+[readable studies with graphs](studies/README.md). No end-to-end model inference
 or model-performance result exists yet.
 
 ## Target and reference platform
@@ -59,16 +59,8 @@ Python and resolves the locked Mojo and MAX toolchain.
 
 ```bash
 uv sync --locked
-uv run mojo --version
-uv run mojo run -I src tests/test_import.mojo
-MODULAR_DEBUG=device-sync-mode \
-  uv run mojo run -I src -I tests tests/test_rms_norm.mojo
-MODULAR_DEBUG=device-sync-mode \
-  uv run mojo run -I src -I tests tests/test_linear.mojo
-MODULAR_DEBUG=device-sync-mode \
-  uv run mojo run -I src -I tests tests/test_rope.mojo
-MODULAR_DEBUG=device-sync-mode \
-  uv run mojo run -I src -I tests tests/test_attention.mojo
+uv run --locked mojo --version
+uv run --locked python tools/test.py
 ```
 
 See [docs/development.md](docs/development.md) for prerequisites and the
@@ -82,5 +74,6 @@ docs/   Project direction and development guidance
 src/    Mojo engine code and narrowly scoped Python support code
 tests/  Correctness and integration tests
 benchmarks/  Reproducible operation-level measurements
-experiments/ Frozen protocols, raw evidence, and bounded findings
+studies/     Topic explanations, compact measurements, and graphs
+tools/       Test and fixture preparation commands
 ```

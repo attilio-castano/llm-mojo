@@ -159,100 +159,10 @@ cover the synchronization-safe zero-fill policy. This is an explicit learning
 candidate, not the public dispatch path: timing must establish whether its
 reuse pays for its shared-memory accesses and barriers.
 
-[EXP-0008](../experiments/EXP-0008-linear-prefill-shared-staging/report.md)
-performed that ownership-matched comparison. The candidate reduced
-source-requested operand loads but materially regressed every rotating-QKV row
-count, so it remains a learning implementation and no dispatch rule selects
-it. That result is specific to this scalar `8x16x32` mapping; it is not a claim
-against other tile sizes or arithmetic mappings.
-
-The follow-up BK sensitivity implementation makes the K tile a compile-time
-parameter while preserving the same `8x16` output ownership and synchronization
-policy. At `K=896`, `BK=16`, `32`, `64`, and `128` require 56, 28, 14, and 7 K
-phases. Their BF16 operand scratch grows linearly from 768 to 6,144 bytes while
-their two-barrier-per-phase count falls from 112 to 14. This defines the
-capacity-versus-phase tradeoff being measured; it does not predict which BK is
-fastest.
-
-[EXP-0009](../experiments/EXP-0009-linear-prefill-bk-sweep/report.md) found
-BK16 materially faster than BK32 at every tested M even though it executes
-twice as many K phases and barriers. BK64 and BK128 were inconclusive. This
-shows that barrier count alone is not a sufficient model of the kernel's cost;
-the timing does not identify which coupled capacity, scheduling, access, or
-generated-code effect caused the BK16 discontinuity.
-
-[EXP-0010](../experiments/EXP-0010-linear-prefill-bk16-direct/report.md)
-completed the ownership-matched control between BK16 and the direct `8x16`
-kernel. Both give one scalar output and one persistent FP32 accumulator to each
-thread. Direct streams all K values from device memory with no shared storage
-or barriers; BK16 stages reusable operands in 56 phases with 768 bytes of
-threadgroup storage and 112 barriers. BK16 was 24.54%–33.88% slower and lost all
-four paired blocks at every tested M, despite requesting 46.82%–90.52% fewer
-source-level bytes.
-
-That result rejects shared staging for this scalar output mapping, not tiling
-as a whole. The direct control is itself output tiled: a threadgroup owns an
-`8x16` output rectangle. A next tiled design must change arithmetic ownership
-so that threads or SIMD groups reuse operands across multiple outputs, or use a
-hardware matrix primitive, rather than merely changing BK again.
-
-EXP-0011 makes the smallest such manual ownership change while retaining the
-same `8x16` output rectangle. One 32-lane SIMD group covers the 32 `2x2`
-microtiles in that rectangle. At each K value, a lane loads two X values and two
-W values and forms four products, so a complete tile requests half as many
-source-level X and W loads as the scalar mapping. The exchange is four live
-FP32 accumulators per lane and one quarter as many lanes per output tile. It
-still uses no K tile, threadgroup operand storage, barrier, or Apple matrix
-primitive. EXP-0011 found a clear parallelism/reuse crossover: the mapping
-materially regressed `M=1`, was near parity at `M=4` and `M=8`, then improved
-`M=16` through `M=256` by 42.69%–62.19% in all four blocks. The pattern is
-consistent with a large-M grid supplying enough independent output tiles while
-each lane retains register reuse. Timing does not prove that explanation or
-isolate it from the simultaneously changed accumulator independence,
-instruction organization, scheduling, caches, or compiler output.
-
-EXP-0012 is the required production-baseline gate for that manual candidate.
-The public rowwise mapping gives one scalar output to a whole SIMD group and
-splits K across its 32 lanes, followed by a SIMD-group sum. The `2x2` mapping
-instead gives one complete `8x16` output tile to a SIMD group, makes every lane
-walk all K, and needs no cross-lane reduction. Because output ownership, K
-ownership, grid shape, accumulator count, operand reuse, and reduction work all
-change together, the paired timing can rank the complete mappings and locate a
-bounded crossover, but cannot attribute a win to any one of those mechanisms.
-On the rotating `K=896`, `N=1152` workload, EXP-0012 found that rowwise won
-decisively through `M=8`, while `2x2` improved every tested M from 16 through
-256 by 35.92%–67.98% in all four blocks. At `M=8` the candidate has all 32
-lanes active but only 72 independent output-tile groups; at `M=16` the grid
-doubles to 144 groups and crosses over. That is consistent with a parallelism
-threshold, not proof of one, because reuse, reductions, accumulator
-independence, scheduling, and generated code also change. Other output widths
-remain unmeasured against rowwise.
-
-EXP-0013 replaces the manual arithmetic inside the same `8x16` output tile
-with Apple's distributed 8x8 matrix operation. One 32-lane SIMD group owns two
-adjacent 8x8 output fragments. Each lane holds two FP32 values from each
-fragment, so it retains the same four output accumulators as register-2x2. At
-each `BK=8` phase, the group collectively loads one 8x8 input fragment and two
-8x8 weight fragments, then issues two matrix multiply-accumulate operations.
-At `K=896` this is 112 phases. The existing `W[N,K]` storage remains unchanged;
-the B fragments are gathered from it in the orientation required by the MMA.
-
-This is register-fragment tiling, not threadgroup-memory staging. It allocates
-no shared operand tile and executes no threadgroup barrier. Values distributed
-across the lanes are consumed collectively by the hardware operation, which
-provides cross-lane operand reuse that the manual per-lane `2x2` arithmetic
-cannot express. For complete tiles, the MMA source requests 81.06% fewer
-logical bytes than register-2x2, but this is not observed hardware traffic.
-
-On the rotating `K=896`, `N=1152` workload, MMA regressed at `M=1` and `M=4`,
-then improved every tested row count from `M=8` through `M=256` by
-33.15%–54.77% in all four blocks. At `M=1`, seven of the eight physical output
-rows are discarded; at `M=4`, half the row fragment is useful; at `M=8`, every
-row becomes useful. The measured crossover is consistent with that utilization
-change, but timing does not isolate utilization from matrix throughput,
-instruction count, scheduling, or cache behavior. This pinned M4 path uses an
-architecture-internal MAX 26.5 API, and it remains experimental until other
-model output widths are measured.
+The measured ownership comparisons now live in
+[linear prefill](../studies/linear_prefill/README.md). That study covers direct,
+shared BK16, register 2x2, rowwise, and Apple MMA mappings. The engine keeps
+these explicit choices; a historical crossover is not an automatic selector.
 
 ## RoPE V0
 
