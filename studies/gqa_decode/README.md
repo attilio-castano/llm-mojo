@@ -1,5 +1,36 @@
 # GQA decode: fusion, parallelism and KV reuse
 
+## Fresh result
+
+At T=4096, split64 H4 passes the gain rule with **93.7% lower paired hot
+latency and 97.9% lower ring24 latency** versus the materialized control:
+2441.50 → 153.75 µs hot and 2585.49 → 53.99 µs per ring attention. That is
+about 15.9× and 47.5× paired speedup against this repository's baseline.
+
+Simple fusion helps, but parallel fusion delivers a much larger improvement.
+G32 has lower observed latency than split64 H4 at short contexts, while H4
+has lower observed latency at T=4096. Each is paired with the materialized
+control here; this refreshed matrix does **not** establish a new direct
+G32-versus-H4 crossover. The prior campaign's direct comparison remains a
+historical result. The three optimized hot comparisons at T=1 are inconclusive;
+all other optimized comparisons in this matrix pass the gain rule.
+
+Measured on Apple M4 Pro / Metal from clean source `1267a7a`,
+with 3,840 retained timing observations, four blocks, ten samples per
+arm and ten warmups. AC power, power mode 0 and no reported thermal/performance
+warnings were recorded. Software and block conditions are in [run.json](run.json).
+All observations, including calibration, are in [samples.csv.gz](samples.csv.gz);
+[summary.csv](summary.csv) contains the derived decisions.
+
+![Latency and paired comparisons](latency.png)
+
+Gray absolute latency is the control's self-pair measurement; each colored
+ratio uses its own paired control. In a noisy run these need not agree with a
+ratio formed from the absolute curves. Shading/whiskers show the range of four
+block ratios, not confidence intervals. See the [method](../../docs/experiments.md).
+
+## Operation and ownership
+
 One query token has 14 heads of 64 BF16 values. K and V each hold T×2×64
 values: seven query heads share one KV head. Query head h uses KV head h//7,
 attends to all T visible tokens, and scales its dot product by 1/8. The caller
@@ -56,3 +87,41 @@ They are algorithm references, not performance controls. These results compare
 with this repository's materialized baseline. They do not establish MLX parity,
 a universal crossover, decoder-block correctness or prefill performance. The
 new measurements leave both optimized finalists as explicit choices.
+
+## Focused profile: where the time went
+
+Three separate T=4096 captures each contain 100 warmup iterations and 500
+measured iterations. Receipt and trace validation identify the source binary,
+Metal device, workload and trailing dispatch sequence. Stage labels follow
+that verified source enqueue order. All 3,000 measured dispatch durations are
+retained in [profile_samples.csv.gz](profile_samples.csv.gz); the plotting
+command regenerates [profile_summary.csv](profile_summary.csv).
+
+| Design | Stage | Median instrumented GPU interval (µs) |
+| --- | --- | ---: |
+| Materialized | QK | 50.00 |
+| Materialized | softmax | 1038.12 |
+| Materialized | PV | 1052.08 |
+| G32 | fused | 70.25 |
+| Split64 H4 | decode | 29.75 |
+| Split64 H4 | merge | 10.42 |
+
+The merge is visible work: about 10.4 µs beside 29.8 µs for the split decode
+stage in this capture. These are instrumented GPU intervals, not the hot/ring
+latency boundary; summing medians is not an exact end-to-end decomposition.
+
+All captures exposed 85 named counters. The compact [profile record](profiles.json)
+keeps three complementary diagnostics, with units, descriptions, sample counts
+and spread.
+Median Kernel Occupancy was 1.46% for the materialized path, 21.58% for G32 and
+7.80% for H4. Last Level Cache Limiter was 2.20%, 100.00% and 75.17%, respectively.
+Instruction Throughput Limiter was 1.28%, 43.48% and 28.27%.
+These device-wide samples cover each enclosing target window, not exclusive
+per-kernel activity. They do not measure achieved DRAM bandwidth or prove a
+causal bottleneck. The faster H4 design has lower reported occupancy than G32,
+which illustrates why maximizing an occupancy number is not the objective.
+
+No target compiler spill event was reported in these captures. That observation
+is bounded to the captures, not proof that every shape or execution is spill-free.
+Full traces/XML and binaries remain external; compact timing observations and
+selected counter summaries are the retained profile evidence.

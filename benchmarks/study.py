@@ -145,3 +145,39 @@ def load_run(directory):
     # Use the frozen run specification: later matrix changes cannot reinterpret evidence.
     summary = summarize(samples, record['specification'])
     return record, samples, summary
+
+
+def load_profile(directory):
+    directory = Path(directory)
+    record = json.loads((directory / 'profiles.json').read_text())
+    path = directory / 'profile_samples.csv.gz'
+    if record.get('schema') != 1 or record['samples_sha256'] != sha(path):
+        raise ValueError('profile sample hash/schema mismatch')
+    stages = {0: ['QK', 'softmax', 'PV'], 4: ['fused'], 9: ['decode', 'merge']}
+    if len(record['captures']) != 3 or {c['variant'] for c in record['captures']} != set(stages):
+        raise ValueError('missing or duplicate profile capture')
+    expected = set()
+    for capture in record['captures']:
+        variant = capture['variant']
+        identity = capture['capture']
+        if identity['repository'] != record['common']['repository'] or identity['repository']['dirty']:
+            raise ValueError('profile source mismatch')
+        if identity['runtime']['backend'] != 'metal' or not identity['runtime']['device'].startswith('Apple '):
+            raise ValueError('profile runtime mismatch')
+        expected.update((variant, iteration, stage)
+                        for iteration in range(identity['workload']['profile_iterations'])
+                        for stage in stages[variant])
+    observed, grouped = set(), defaultdict(list)
+    with gzip.open(path, 'rt', newline='') as stream:
+        for row in csv.DictReader(stream):
+            key = (int(row['variant']), int(row['iteration']), row['stage'])
+            duration = int(row['duration_ns'])
+            if key in observed or duration <= 0:
+                raise ValueError('invalid/duplicate profile dispatch')
+            observed.add(key)
+            grouped[(key[0], key[2])].append(duration / 1000)
+    if observed != expected:
+        raise ValueError('incomplete profile dispatch sequence')
+    return [dict(variant=variant, stage=stage, count=len(values),
+                 median_us=statistics.median(values), minimum_us=min(values), maximum_us=max(values))
+            for (variant, stage), values in grouped.items()]

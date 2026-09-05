@@ -1,5 +1,30 @@
 # RMSNorm: reduce a row
 
+## Fresh result
+
+The fresh run does **not establish a speed difference** under the frozen
+noise/direction rule: all ten SIMD comparisons are inconclusive. Some medians
+are lower, but short-workload self-pairs vary substantially and some larger
+workloads disagree across blocks. This retains a useful implementation lesson
+without presenting the existing SIMD default as newly reconfirmed by these
+measurements. No dispatch change follows from this run.
+
+Measured on Apple M4 Pro / Metal from clean source `1267a7a`,
+with 1,600 retained timing observations, four blocks, ten samples per
+arm and ten warmups. AC power, power mode 0 and no reported thermal/performance
+warnings were recorded. Software and block conditions are in [run.json](run.json).
+All observations, including calibration, are in [samples.csv.gz](samples.csv.gz);
+[summary.csv](summary.csv) contains the derived decisions.
+
+![Latency and paired comparisons](latency.png)
+
+Gray absolute latency is the control's self-pair measurement; each colored
+ratio uses its own paired control. In a noisy run these need not agree with a
+ratio formed from the absolute curves. Shading/whiskers show the range of four
+block ratios, not confidence intervals. See the [method](../../docs/experiments.md).
+
+## Operation and ownership
+
 For each token row of width 896, compute the FP32 mean square, its inverse
 square root with epsilon, then normalize and multiply by learned BF16 weights.
 The precise cast order is in the [model contract](../../docs/model.md);

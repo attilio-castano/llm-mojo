@@ -13,6 +13,17 @@ operation-level; a working decoder block and full-model generation remain next.
 | [RoPE](rope/README.md) | How much work and data movement does rotating a dimension pair require? |
 | [GQA decode](gqa_decode/README.md) | How do fusion, sequence parallelism and shared KV heads interact? |
 
+Fresh characterization is complete at measured source `1267a7a`: **10,560
+latency observations**, five report figures, and three focused GQA profiles.
+The full fixture migration passed 68 Mojo tests. The 29 shared tooling, trace and evidence checks, all retained operation benchmark routes and all thirteen GQA routes
+were validated separately. No engine code, numerical tolerances or dependency
+lock changed during the reset.
+
+The results are deliberately mixed: RMSNorm remains inconclusive in this run;
+packed QKV improves the ring sweep; prefill benefits from register/MMA reuse at
+larger sampled row counts; RoPE has baseline characterization; and GQA's fusion
+and parallelism gains remain clear. Read each study's limits alongside its plot.
+
 The matrix is deliberately bounded: existing implementations, selected sizes,
 hot and ring24 timing, four blocks, and self-pair calibration. We are refreshing
 characterization, not searching a new tuning space. See the

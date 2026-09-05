@@ -5,11 +5,19 @@ import os
 from pathlib import Path
 import subprocess
 
-from environment import (REPOSITORY, conditions_snapshot, ensure_record_location,
-                         repository_state, require_ac, require_nominal_thermal_state,
-                         stable_environment, utc_now)
-from study import (STUDIES, BLOCKS, REPETITIONS, WARMUP, sha, write_json,
-                   encode_samples, parse_output, summarize)
+try:
+    from benchmarks.environment import (REPOSITORY, conditions_snapshot, ensure_record_location,
+                             repository_state, require_ac, require_nominal_thermal_state,
+                             stable_environment, utc_now)
+    from benchmarks.study import (STUDIES, BLOCKS, REPETITIONS, WARMUP, sha, write_json,
+                       encode_samples, parse_output, summarize)
+except ModuleNotFoundError:
+    from environment import (REPOSITORY, conditions_snapshot, ensure_record_location,
+                             repository_state, require_ac, require_nominal_thermal_state,
+                             stable_environment, utc_now)
+    from study import (STUDIES, BLOCKS, REPETITIONS, WARMUP, sha, write_json,
+                       encode_samples, parse_output, summarize)
+
 
 
 def source_hashes():

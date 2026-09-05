@@ -70,3 +70,12 @@ captures short (at most 5,000 measured dispatches), and retain compact relevant
 counter observations only when the report uses them. Raw traces and binaries
 stay outside Git. A profile is diagnostic; source-requested bytes are not
 measured DRAM traffic and zero observed spills is limited to that capture.
+
+To curate a validated GQA profile set, `profile_summary.py` accepts a source
+directory containing variant folders `0/`, `4/`, `9/`, each with `summary.json`,
+`capture.json`, `profile.provenance.json`, `conditions.json`, `submissions.xml`
+and `gpu-intervals.xml`. It verifies identities/export hashes and preserves all
+target dispatch durations plus selected named counter summaries. `plot.py`
+then checks those retained samples and regenerates `profile_summary.csv`.
+Full traces/XML are needed to redo trace analysis; they are not needed to
+rebuild the report's tables or figures.
