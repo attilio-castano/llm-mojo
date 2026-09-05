@@ -1,10 +1,59 @@
 import copy
+import json
+from pathlib import Path
+import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
+from llm_mojo.benchmarks import profile as builder
 from llm_mojo.benchmarks.attention_decode_contract import configuration, ENTRYPOINTS, VARIANTS
 from llm_mojo.benchmarks.capture_trace import profile_contract, parse_target_identity, validate_target_identity
 from llm_mojo.benchmarks.analyze_trace import segment_compute_commands
 
 class AttentionProfileTests(unittest.TestCase):
+    def test_profile_build_requires_unchanged_source_and_repository(self):
+        for change in (None, "source", "commit", "dirty"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as tmp:
+                directory = Path(tmp)
+                source = directory / "kernel.mojo"
+                source.write_text("original source")
+                binary = directory / "profile"
+                provenance = directory / "profile.provenance.json"
+                repo = {"commit": "a" * 40, "branch": "codex/test", "dirty": False}
+                expected_repo = repo.copy()
+                expected_sources = {source.name: builder.sha(source)}
+                args = SimpleNamespace(
+                    build_profile_binary=binary, profile_variant=9,
+                    profile_rows=4096, profile_iterations=500,
+                )
+
+                def compile_binary(*args, **kwargs):
+                    binary.write_bytes(b"compiled from original source")
+                    if change == "source":
+                        source.write_text("edited during compilation")
+                    elif change == "commit":
+                        repo["commit"] = "b" * 40
+                    elif change == "dirty":
+                        repo["dirty"] = True
+
+                with patch.object(builder, "repository_state", side_effect=lambda: repo.copy()), \
+                     patch.object(builder, "source_hashes", side_effect=lambda: {source.name: builder.sha(source)}), \
+                     patch.object(builder, "stable_environment", return_value={
+                         "hardware": {"chip": "Apple Test GPU", "gpu_api": "metal"}
+                     }), \
+                     patch.object(builder.subprocess, "run", side_effect=compile_binary):
+                    if change is None:
+                        builder.build_profile(args)
+                        record = json.loads(provenance.read_text())
+                        self.assertEqual(record["repository"], expected_repo)
+                        self.assertEqual(record["source_sha256"], expected_sources)
+                        self.assertEqual(record["binary"]["sha256"], builder.sha(binary))
+                        profile_contract(record)
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, "source changed during profile build"):
+                            builder.build_profile(args)
+                        self.assertFalse(provenance.exists())
+
     def profile(self, variant=7):
         g, h, s = VARIANTS[variant]
         return {
@@ -93,4 +142,3 @@ class AttentionProfileTests(unittest.TestCase):
             (len(setup), len(correctness), len(warmup), len(profile)),
             (3, 0, 4, 10),
         )
-

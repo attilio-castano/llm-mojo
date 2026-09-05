@@ -47,6 +47,7 @@ def build_profile(args):
         raise RuntimeError(
             "profile requires clean source, bounded shape and dispatch count"
         )
+    sources = source_hashes()
     binary.parent.mkdir(parents=True, exist_ok=True)
     command = [
         "uv",
@@ -69,6 +70,8 @@ def build_profile(args):
     environment = os.environ.copy()
     environment.pop("MODULAR_DEBUG", None)
     subprocess.run(command, cwd=repository_root(), check=True, env=environment)
+    if repository_state() != repo or source_hashes() != sources:
+        raise RuntimeError("source changed during profile build")
     record = {
         "schema_version": 1,
         "operation": "grouped_query_attention_decode",
@@ -92,7 +95,7 @@ def build_profile(args):
         "profile_warmup_iterations": 100,
         "profile_iterations": args.profile_iterations,
         "profile_post_idle_milliseconds": 250,
-        "source_sha256": source_hashes(),
+        "source_sha256": sources,
         "binary": {"bytes": binary.stat().st_size, "sha256": sha(binary)},
         "command": command[:-1] + ["<external-profile-binary>"],
     }
