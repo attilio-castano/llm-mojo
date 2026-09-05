@@ -283,6 +283,73 @@ def summarize(samples, noise=None):
     return report
 
 
+def load_noise(path, current):
+    """Bind a complete baseline self-pair from the same measured build."""
+    summary_bytes = path.read_bytes()
+    metadata_bytes = path.with_name("metadata.json").read_bytes()
+    rows = json.loads(summary_bytes)
+    meta = json.loads(metadata_bytes)
+    identity_fields = (
+        "seed", "hardware", "software", "timing", "dtype", "layout",
+        "warmup", "repetitions",
+    )
+    if (
+        not meta.get("recorded")
+        or not meta.get("completed_utc")
+        or meta.get("control") != 0
+        or meta.get("candidates") != [0]
+        or meta.get("repository", {}).get("dirty") is not False
+        or meta["repository"].get("commit") != current["repository"]["commit"]
+    ):
+        raise ValueError("noise requires a completed clean baseline self-pair at the current commit")
+    for field in identity_fields:
+        if field not in meta or meta[field] != current[field]:
+            raise ValueError(f"noise identity mismatch: {field}")
+    for field in ("binary_sha256", "source_sha256"):
+        if field not in meta.get("build", {}) or meta["build"][field] != current["build"][field]:
+            raise ValueError(f"noise build mismatch: {field}")
+    runtime = meta.get("runtime", {})
+    if (
+        runtime.get("api") != "metal"
+        or not runtime.get("device", "").startswith("Apple ")
+        or runtime.get("correctness") != "passed"
+    ):
+        raise ValueError("noise requires verified Apple GPU/Metal execution")
+    ratios = {}
+    for row in rows:
+        key = f"{row['rows']}/{row['layers']}"
+        values = row["block_ratios"]
+        if (
+            row["candidate"] != 0
+            or type(row["rows"]) is not int
+            or row["rows"] not in meta["lengths"]
+            or type(row["layers"]) is not int
+            or row["layers"] not in (1, 24)
+            or key in ratios
+            or len(values) != 4
+            or any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0 for v in values)
+        ):
+            raise ValueError("noise requires unique baseline workloads with four finite positive ratios")
+        ratios[key] = values
+    required = {f"{t}/{layers}" for t in current["lengths"] for layers in (1, 24)}
+    if not required.issubset(ratios):
+        raise ValueError("noise is missing requested workloads")
+    floors = {key: max(abs(1 - r) for r in values) for key, values in ratios.items()}
+    # Retain the inputs to the floor calculation, not just an external path.
+    record = {
+        "summary_path": str(path.resolve()),
+        "summary_sha256": hashlib.sha256(summary_bytes).hexdigest(),
+        "metadata_sha256": hashlib.sha256(metadata_bytes).hexdigest(),
+        "identity": {field: meta[field] for field in (
+            *identity_fields, "repository", "build", "runtime", "control",
+            "candidates", "lengths", "completed_utc",
+        )},
+        "block_ratios": ratios,
+        "floors": floors,
+    }
+    return floors, record
+
+
 def run(args):
     output = args.output_dir.resolve()
     ensure_record_location(output)
@@ -317,12 +384,6 @@ def run(args):
         or any(t < 1 or t > 4096 for t in lengths)
     ):
         raise ValueError("invalid lengths")
-    noise = {}
-    if args.noise:
-        for row in json.loads(args.noise.read_text()):
-            noise[f"{row['rows']}/{row['layers']}"] = max(
-                abs(1 - r) for r in row["block_ratios"]
-            )
     metadata = {
         "schema_version": 1,
         "experiment": "EXP-0014",
@@ -342,6 +403,11 @@ def run(args):
         "conditions": [],
         "started_utc": utc_now(),
     }
+    noise = {}
+    if args.noise:
+        noise, metadata["noise"] = load_noise(args.noise, metadata)
+    elif args.recorded and (args.control != 0 or candidates != [0]):
+        raise ValueError("recorded comparisons require --noise baseline calibration")
     all_samples = []
     for block in range(args.blocks):
         before = conditions_snapshot()
@@ -385,6 +451,8 @@ def run(args):
                     layers=layers,
                     seed=args.seed,
                 )
+                if args.noise and identity != metadata["noise"]["identity"]["runtime"]:
+                    raise RuntimeError("runtime identity differs from noise calibration")
                 if "runtime" in metadata and metadata["runtime"] != identity:
                     raise RuntimeError("runtime identity changed during run")
                 metadata["runtime"] = identity

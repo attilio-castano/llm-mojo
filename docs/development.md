@@ -163,6 +163,16 @@ Its manifest binds data, generator, NumPy version and frozen tolerances.
 Run all Python benchmark/profiler validation with
 `uv run --locked python -m unittest discover -s tests -p 'test_*.py'`.
 
+Recorded GQA decode comparisons require `--noise /path/to/noise/summary.json`
+and its adjacent `metadata.json`. First record a materialized self-pair
+(`--control 0 --candidates 0`) with the same binary, clean commit, seed,
+hardware/software, timing settings and all comparison workloads. This baseline
+calibration also applies when comparing two optimized candidates. The runner
+rejects incompatible or incomplete calibration and records its hashes, identity
+and block ratios in the comparison metadata so the noise floors can be reproduced.
+This stricter requirement applies to new runs; retained EXP-0014 evidence records
+its original calibration relationships in the experiment manifest.
+
 Run the materialized grouped-query attention workload matrix with:
 
 ```bash
