@@ -17,45 +17,58 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class EvidenceTests(unittest.TestCase):
     def test_prefill_profiles_require_each_shape_and_exact_dispatch_sequence(self):
-        workloads = [(16,16),(1024,1024),(64,4096)]
-        repo = dict(commit='a'*40,dirty=False)
-        records, samples = [], []
-        for r,t in workloads:
-            for v in (0,8):
-                workload = dict(**prefill.specification(v,r,t),rows=r,warmup_iterations=1,profile_iterations=2)
-                identity = dict(operation=prefill.OPERATION,implementation=f'gqa_prefill_{v}',
-                                entrypoint=prefill.ENTRYPOINTS[f'gqa_prefill_{v}'],
-                                repository=repo,runtime=dict(device='Apple Test GPU',backend='metal'),workload=workload)
-                records.append(dict(query_rows=r,rows=t,variant=v,capture=identity))
-                for i in range(2):
-                    for stage in (['QK','softmax','PV'] if v==0 else ['fused']):
-                        samples.append(dict(query_rows=r,rows=t,variant=v,iteration=i,stage=stage,duration_ns=1000))
-        with tempfile.TemporaryDirectory() as tmp:
-            directory = Path(tmp)
-            path = directory/'profile_samples.csv.gz'
-            stream=io.StringIO(newline='')
-            writer=csv.DictWriter(stream,fieldnames=list(samples[0]),lineterminator='\n')
-            writer.writeheader();writer.writerows(samples)
-            path.write_bytes(gzip.compress(stream.getvalue().encode()))
-            record = dict(schema=2,specification=dict(workloads=workloads,variants=[0,8]),
-                          common=dict(repository=repo),captures=records,samples_sha256=sha(path))
-            write_json(directory/'profiles.json',record)
-            self.assertEqual(sum(s['count'] for s in load_profile(directory)),24)
-            bad=copy.deepcopy(record)
-            bad['captures'][-1]['capture']['workload']['profile_rows']=16
-            write_json(directory/'profiles.json',bad)
-            with self.assertRaises(ValueError):
-                load_profile(directory)
-            bad=copy.deepcopy(record)
-            bad['captures'].pop()
-            write_json(directory/'profiles.json',bad)
-            with self.assertRaisesRegex(ValueError,'capture'):
-                load_profile(directory)
-            path.write_bytes(gzip.compress(('\n'.join(stream.getvalue().splitlines()[:-1])+'\n').encode()))
-            record['samples_sha256']=sha(path)
-            write_json(directory/'profiles.json',record)
-            with self.assertRaisesRegex(ValueError,'incomplete'):
-                load_profile(directory)
+        for variants,prefix in (([0,8],''),([8,12],'resources_'),([8,11,12],'resources_')):
+            with self.subTest(variants=variants):
+                workloads = [(16,16),(1024,1024),(64,4096)]
+                repo = dict(commit='a'*40,dirty=False)
+                records, samples = [], []
+                for r,t in workloads:
+                    for v in variants:
+                        workload = dict(**prefill.specification(v,r,t),rows=r,warmup_iterations=1,profile_iterations=2)
+                        identity = dict(operation=prefill.OPERATION,implementation=f'gqa_prefill_{v}',
+                                        entrypoint=prefill.ENTRYPOINTS[f'gqa_prefill_{v}'],
+                                        repository=repo,runtime=dict(device='Apple Test GPU',backend='metal'),workload=workload)
+                        records.append(dict(query_rows=r,rows=t,variant=v,capture=identity))
+                        for i in range(2):
+                            for stage in (['QK','softmax','PV'] if v==0 else ['fused']):
+                                samples.append(dict(query_rows=r,rows=t,variant=v,iteration=i,stage=stage,duration_ns=1000))
+                with tempfile.TemporaryDirectory() as tmp:
+                    directory = Path(tmp)
+                    path = directory/(prefix+'profile_samples.csv.gz')
+                    stream=io.StringIO(newline='')
+                    writer=csv.DictWriter(stream,fieldnames=list(samples[0]),lineterminator='\n')
+                    writer.writeheader();writer.writerows(samples)
+                    path.write_bytes(gzip.compress(stream.getvalue().encode()))
+                    record = dict(schema=2,specification=dict(workloads=workloads,variants=variants),
+                                  common=dict(repository=repo),captures=records,samples_sha256=sha(path))
+                    write_json(directory/(prefix+'profiles.json'),record)
+                    self.assertEqual(sum(s['count'] for s in load_profile(directory,prefix)),
+                                     6 * sum(3 if v==0 else 1 for v in variants))
+                    bad=copy.deepcopy(record)
+                    bad['captures'][-1]['capture']['workload']['profile_rows']=16
+                    write_json(directory/(prefix+'profiles.json'),bad)
+                    with self.assertRaises(ValueError):
+                        load_profile(directory,prefix)
+                    bad=copy.deepcopy(record)
+                    bad['captures'].pop()
+                    write_json(directory/(prefix+'profiles.json'),bad)
+                    with self.assertRaisesRegex(ValueError,'capture'):
+                        load_profile(directory,prefix)
+                    bad=copy.deepcopy(record)
+                    bad['specification']['variants'][-1]=variants[0]
+                    write_json(directory/(prefix+'profiles.json'),bad)
+                    with self.assertRaisesRegex(ValueError,'variants'):
+                        load_profile(directory,prefix)
+                    bad=copy.deepcopy(record)
+                    bad['specification']['workloads'][-1]=(64,1024)
+                    write_json(directory/(prefix+'profiles.json'),bad)
+                    with self.assertRaisesRegex(ValueError,'grid'):
+                        load_profile(directory,prefix)
+                    path.write_bytes(gzip.compress(('\n'.join(stream.getvalue().splitlines()[:-1])+'\n').encode()))
+                    record['samples_sha256']=sha(path)
+                    write_json(directory/(prefix+'profiles.json'),record)
+                    with self.assertRaisesRegex(ValueError,'incomplete'):
+                        load_profile(directory,prefix)
 
     def test_retained_studies_are_complete(self):
         count = 0

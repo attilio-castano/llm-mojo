@@ -7,21 +7,25 @@ import json
 from pathlib import Path
 
 from .analyze_trace import (integer, read_table, segment_compute_commands, duration_summary, coalesce_compute_commands)
-from .study import sha, write_json, PREFILL_PROFILE_WORKLOADS
+from .study import sha, write_json, PREFILL_PROFILE_WORKLOADS, prefill_profile_grid
 
 STAGES = {0: ['QK', 'softmax', 'PV'], 4: ['fused'], 9: ['decode', 'merge']}
 COUNTERS = {'Kernel Occupancy', 'Instruction Throughput Limiter', 'Last Level Cache Limiter'}
 
 
-def collect(source, output, prefill_variant=None):
+def collect(source, output, prefill_variant=None, *, prefill_variants=None, prefix=''):
     records, samples = [], []
     common = None
-    captures = [(None,None,v,str(v)) for v in STAGES] if prefill_variant is None else [
-        (r,t,v,f'r{r}-t{t}-v{v}') for r,t in PREFILL_PROFILE_WORKLOADS for v in (0,prefill_variant)]
-    if prefill_variant is not None and prefill_variant not in range(2,11):
-        raise ValueError('prefill finalist must be a fused candidate')
+    if prefill_variant is not None and prefill_variants is not None:
+        raise ValueError('choose one prefill comparison')
+    variants = [0,prefill_variant] if prefill_variant is not None else prefill_variants
+    prefill = variants is not None
+    spec = dict(workloads=PREFILL_PROFILE_WORKLOADS,variants=list(variants)) if prefill else {}
+    stage_map, _ = prefill_profile_grid(spec) if prefill else (STAGES, None)
+    captures = [(r,t,v,f'r{r}-t{t}-v{v}') for r,t in PREFILL_PROFILE_WORKLOADS for v in variants] if prefill else [
+        (None,None,v,str(v)) for v in STAGES]
     for r,t,variant,folder in captures:
-        stages = STAGES[variant] if prefill_variant is None else (['QK','softmax','PV'] if variant==0 else ['fused'])
+        stages = stage_map[variant]
         directory = source / folder
         report = json.loads((directory / 'summary.json').read_text())
         provenance = json.loads((directory / 'profile.provenance.json').read_text())
@@ -54,8 +58,8 @@ def collect(source, output, prefill_variant=None):
                      and r['channel-name'][0] == 'Compute' and ':Compute Command' in r['event-label'][1]]
         intervals.sort(key=lambda r: integer(r, 'start'))
         workload = identity['workload']
-        shape = {} if prefill_variant is None else dict(query_rows=r,rows=t)
-        if prefill_variant is not None and (
+        shape = dict(query_rows=r,rows=t) if prefill else {}
+        if prefill and (
             workload['profile_rows'] != r or workload['key_value_rows'] != t or
             identity['implementation'] != f'gqa_prefill_{variant}'
         ):
@@ -80,10 +84,10 @@ def collect(source, output, prefill_variant=None):
     stream = io.StringIO(newline='')
     writer = csv.DictWriter(stream, fieldnames=list(samples[0]), lineterminator='\n')
     writer.writeheader(); writer.writerows(samples)
-    raw = output / 'profile_samples.csv.gz'
+    raw = output / (prefix+'profile_samples.csv.gz')
     raw.write_bytes(gzip.compress(stream.getvalue().encode(), mtime=0))
-    spec = {} if prefill_variant is None else dict(specification=dict(workloads=PREFILL_PROFILE_WORKLOADS,variants=[0,prefill_variant]))
-    write_json(output / 'profiles.json', dict(schema=1 if prefill_variant is None else 2, **spec, common=common, captures=records,
+    write_json(output / (prefix+'profiles.json'), dict(schema=2 if prefill else 1,
+                **(dict(specification=spec) if prefill else {}), common=common, captures=records,
                 samples_sha256=sha(raw),
                 boundary=f'Instrumented GPU active dispatch durations (non-overlapping segments summed, preemption gaps excluded); {len(captures)} single captures, not paired latency trials. Counter statistics are device-wide within each target window. Stage labels follow the validated source enqueue order.',
                 retention='All target dispatch durations retained. Three named counter summaries retained; full trace/XML exports and other counters remain external.'))
@@ -93,6 +97,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source', type=Path)
     parser.add_argument('output', type=Path)
-    parser.add_argument('--prefill-variant',type=int)
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--prefill-variant',type=int)
+    group.add_argument('--prefill-variants',type=int,nargs='+')
+    parser.add_argument('--prefix',default='')
     args = parser.parse_args()
-    collect(args.source, args.output, args.prefill_variant)
+    collect(args.source, args.output, args.prefill_variant,
+            prefill_variants=args.prefill_variants, prefix=args.prefix)

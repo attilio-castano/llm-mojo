@@ -73,3 +73,18 @@ fragments expose eight two-value loop-carried accumulators and reduce IR
 `alloca` sites from 30 to 6. The rolled QK reduction emits 2967 lines, while
 lane-owned scores remove the 4 KiB shared score allocation. These counts
 confirm implementation differences; none is a performance verdict.
+
+## Frozen selection
+
+The completed screen at `9a8bc10` retained all 4800 observations. Route 12
+(rolled QK reduction) alone demonstrated gains: 2 faster and 8 inconclusive
+workload/mode comparisons. Route 11 had 1 slower and 9 inconclusive; routes
+13 and 14 each had 1 slower and 9 inconclusive; route 15 was inconclusive in
+all 10. Small R=T=16 calibration was noisy (69.96% hot, 30.40% ring24).
+No observation was discarded and no screening run was repeated.
+
+Freeze route 12 as the sole finalist against route 8 on the existing eleven
+workloads, retaining 3520 observations. No combined design is justified by
+this screen. Six separate profiles will compare routes 8 and 12 at the
+three fixed diagnostic workloads. There is no general-replacement decision
+until the complete final matrix is analyzed.

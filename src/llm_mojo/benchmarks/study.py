@@ -52,6 +52,8 @@ STUDIES['gqa_prefill_resources_screen'] = dict(
     workloads=[dict(query_rows=r,rows=t) for r,t in
                [(16,16),(1024,1024),(4096,4096),(16,4096),(64,4096)]],
     candidates=list(RESOURCE_NAMES), names=RESOURCE_NAMES)
+# Frozen after the five-ablation screen: only the rolled reduction qualified.
+STUDIES['gqa_prefill'].update(candidates=[8,12],names={v:RESOURCE_NAMES[v] for v in (8,12)})
 PREFILL_PROFILE_WORKLOADS = [(16,16),(1024,1024),(64,4096)]
 
 
@@ -184,22 +186,30 @@ def load_run(directory, prefix=''):
     return record, samples, summary
 
 
-def load_profile(directory):
+def prefill_profile_grid(spec):
+    """Validate the fixed diagnostic shapes and an explicit bounded comparison."""
+    from .attention_prefill_contract import VARIANTS
+    variants = spec['variants']
+    original = len(variants) == 2 and variants[0] == 0 and variants[1] in range(2,11)
+    resources = (len(variants) in (2,3) and variants[0] == 8
+                 and all(v >= 11 and v in VARIANTS for v in variants[1:]))
+    if not (original or resources) or len(set(variants)) != len(variants):
+        raise ValueError('invalid prefill profile variants')
+    if [tuple(w) for w in spec['workloads']] != PREFILL_PROFILE_WORKLOADS:
+        raise ValueError('invalid prefill profile grid')
+    stages = {v: (['QK','softmax','PV'] if v == 0 else ['fused']) for v in variants}
+    return stages, {(r,t,v) for r,t in spec['workloads'] for v in variants}
+
+
+def load_profile(directory, prefix=''):
     directory = Path(directory)
-    record = json.loads((directory / 'profiles.json').read_text())
-    path = directory / 'profile_samples.csv.gz'
+    record = json.loads((directory / (prefix+'profiles.json')).read_text())
+    path = directory / (prefix+'profile_samples.csv.gz')
     if record.get('schema') not in (1,2) or record['samples_sha256'] != sha(path):
         raise ValueError('profile sample hash/schema mismatch')
     prefill = record['schema'] == 2
     if prefill:
-        spec = record['specification']
-        variants = spec['variants']
-        if len(variants)!=2 or variants[0]!=0 or variants[1] not in range(2,11):
-            raise ValueError('invalid prefill profile variants')
-        stages = {0:['QK','softmax','PV'],variants[1]:['fused']}
-        grid = {(r,t,v) for r,t in spec['workloads'] for v in variants}
-        if len(grid)!=6 or any(not 1<=r<=t<=4096 for r,t,_ in grid):
-            raise ValueError('invalid prefill profile grid')
+        stages, grid = prefill_profile_grid(record['specification'])
     else:
         stages = {0: ['QK', 'softmax', 'PV'], 4: ['fused'], 9: ['decode', 'merge']}
         grid = {(0,0,v) for v in stages}
