@@ -16,10 +16,10 @@ from typing import Any, Callable
 from uuid import uuid4
 
 
-from .attention_decode_contract import (
-    OPERATION as ATTENTION_OPERATION,
+from .attention_contract import (
+    OPERATIONS as ATTENTION_OPERATIONS,
     ENTRYPOINTS as ATTENTION_ENTRYPOINTS,
-    TARGET_FIELDS as ATTENTION_TARGET_FIELDS,
+    target_fields as attention_target_fields,
     configuration as attention_configuration,
 )
 
@@ -50,7 +50,7 @@ def utc_now() -> str:
 
 
 def new_capture_id(operation: str = "rms_norm") -> str:
-    prefix = "attention" if operation == ATTENTION_OPERATION else (
+    prefix = "attention" if operation in ATTENTION_OPERATIONS else (
         "linear" if operation == "linear_projection" else "rmsnorm"
     )
     return f"{prefix}-{uuid4().hex}"
@@ -127,7 +127,7 @@ def profile_contract(
         raise RuntimeError("profile provenance has an unsupported schema")
 
     operation = provenance.get("operation", "rms_norm")
-    if operation not in ("rms_norm", "linear_projection", ATTENTION_OPERATION):
+    if operation not in ("rms_norm", "linear_projection", *ATTENTION_OPERATIONS):
         raise RuntimeError("profile provenance has an unsupported operation")
     configuration: dict[str, Any] = {"operation": operation}
     for key in (
@@ -158,7 +158,7 @@ def profile_contract(
                 )
             configuration[key] = value
         configuration["dispatches_per_iteration"] = 1
-    elif operation == ATTENTION_OPERATION:
+    elif operation in ATTENTION_OPERATIONS:
         configuration.update(attention_configuration(provenance))
     else:
         workload = provenance.get("profile_workload")
@@ -276,10 +276,10 @@ def parse_target_identity(output: str) -> dict[str, Any]:
             raise ValueError("expected exactly one 'profile workload' line")
         identity["profile_workload"] = workload_matches[0]
         extra_fields = (("output features", "output_features"),)
-        if workload_matches[0].startswith("decode-"):
+        if workload_matches[0].startswith(("decode-", "prefill-")):
             extra_fields = tuple(
                 (k.replace("_", " "), k)
-                for k in ATTENTION_TARGET_FIELDS
+                for k in attention_target_fields("grouped_query_attention_prefill" if workload_matches[0].startswith("prefill-") else "grouped_query_attention_decode")
                 if k not in ("profile_workload", "dispatches_per_iteration")
             )
         for label, key in (
@@ -288,7 +288,7 @@ def parse_target_identity(output: str) -> dict[str, Any]:
         ):
             value = output_field(output, label)
             if re.fullmatch(r"[0-9]+", value) is None or (
-                int(value) <= 0 and key not in ("groups", "heads", "splits")
+                int(value) <= 0 and key not in ("groups", "heads", "splits", "query_tile", "key_tile")
             ):
                 raise ValueError(f"target {label} is not a positive integer")
             identity[key] = int(value)
@@ -322,8 +322,8 @@ def validate_target_identity(
                 ],
             }
         )
-    if configuration["operation"] == ATTENTION_OPERATION:
-        expected.update({k: configuration[k] for k in ATTENTION_TARGET_FIELDS})
+    if configuration["operation"] in ATTENTION_OPERATIONS:
+        expected.update({k: configuration[k] for k in attention_target_fields(configuration["operation"])})
     for key, expected_value in expected.items():
         if identity.get(key) != expected_value:
             raise ValueError(
@@ -479,7 +479,7 @@ def capture_trace(
     with tempfile.TemporaryDirectory(
         prefix=(
             "llm-mojo-attention-" if configuration["operation"]
-            == ATTENTION_OPERATION else "llm-mojo-linear-" if configuration[
+            in ATTENTION_OPERATIONS else "llm-mojo-linear-" if configuration[
                 "operation"
             ]
             == "linear_projection" else "llm-mojo-rmsnorm-"

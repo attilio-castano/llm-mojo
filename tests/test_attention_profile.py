@@ -9,8 +9,37 @@ from llm_mojo.benchmarks import profile as builder
 from llm_mojo.benchmarks.attention_decode_contract import configuration, ENTRYPOINTS, VARIANTS
 from llm_mojo.benchmarks.capture_trace import profile_contract, parse_target_identity, validate_target_identity
 from llm_mojo.benchmarks.analyze_trace import segment_compute_commands
+from llm_mojo.benchmarks import attention_prefill_contract as prefill
 
 class AttentionProfileTests(unittest.TestCase):
+    def test_prefill_profile_binds_rectangular_shape_and_tile_ownership(self):
+        for variant in prefill.VARIANTS:
+            p = self.profile()
+            p.update(operation=prefill.OPERATION, implementation=f'gqa_prefill_{variant}',
+                     entrypoint=prefill.ENTRYPOINTS[f'gqa_prefill_{variant}'],
+                     **prefill.specification(variant,64,4096))
+            cfg, _, hardware = profile_contract(p)
+            text = '\n'.join([
+                f'profile implementation: {p["entrypoint"]}', 'device: Apple Test GPU',
+                'api: metal', 'rows: 64', 'hidden: 64', 'warmup iterations: 100',
+                'profile iterations: 500', 'post-profile idle milliseconds: 250',
+                *[f'{label}: {p[k]}' for label,k in (
+                    ('profile workload','profile_workload'),('profile dispatches per iteration','dispatches_per_iteration'),
+                    ('key value rows','key_value_rows'),('query heads','query_heads'),
+                    ('key value heads','key_value_heads'),('query tile','query_tile'),
+                    ('key tile','key_tile'),('heads','heads'))]])
+            target = parse_target_identity(text)
+            validate_target_identity(target,cfg,hardware)
+            for field in ('key_value_rows','query_tile','heads'):
+                wrong = dict(target)
+                wrong[field] += 1
+                with self.assertRaises(ValueError):
+                    validate_target_identity(wrong,cfg,hardware)
+            for field,value in [('profile_rows',1),('key_value_rows',63),('query_tile',True),
+                                ('profile_iterations',5001),('profile_warmup_iterations',101)]:
+                with self.assertRaises(ValueError):
+                    prefill.configuration({**p,field:value})
+
     def test_profile_build_requires_unchanged_source_and_repository(self):
         for change in (None, "source", "commit", "dirty"):
             with self.subTest(change=change), tempfile.TemporaryDirectory() as tmp:

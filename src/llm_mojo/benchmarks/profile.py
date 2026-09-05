@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 from .._repository import repository_root
 from .attention_decode_contract import VARIANTS
+from . import attention_prefill_contract as prefill
 from .environment import ensure_record_location, repository_state, stable_environment, utc_now
 from .study import sha
 from .run import source_hashes
@@ -38,9 +39,18 @@ def build_profile(args):
     if binary.exists() or Path(str(binary) + ".provenance.json").exists():
         raise RuntimeError("refusing to overwrite profile artifacts")
     repo = repository_state()
-    spec = specification(args.profile_variant, args.profile_rows)
+    operation = getattr(args,'operation','gqa_decode')
+    query_rows = getattr(args,'profile_query_rows',1)
+    is_prefill = operation=='gqa_prefill'
+    warmup = getattr(args,'profile_warmup',100)
+    spec = (dict(dispatches=3 if args.profile_variant<=1 else 1) if is_prefill
+            else specification(args.profile_variant, args.profile_rows))
     if (
         repo["dirty"]
+        or not 0 <= warmup <= 100
+        or not 1 <= query_rows <= args.profile_rows
+        or (not is_prefill and query_rows != 1)
+        or (is_prefill and args.profile_variant not in prefill.VARIANTS)
         or not 1 <= args.profile_rows <= 4096
         or not 1 <= args.profile_iterations * spec["dispatches"] <= 5000
     ):
@@ -63,7 +73,11 @@ def build_profile(args):
         f'GQA_PROFILE_VARIANT={args.profile_variant}',
         "-D",
         f'GQA_PROFILE_ITERATIONS={args.profile_iterations}',
-        "src/llm_mojo/benchmarks/attention_decode.mojo",
+        "-D",
+        f'GQA_PROFILE_QUERY_ROWS={query_rows}',
+        "-D",
+        f'GQA_PROFILE_WARMUP={warmup}',
+        "src/llm_mojo/benchmarks/attention_prefill.mojo" if is_prefill else "src/llm_mojo/benchmarks/attention_decode.mojo",
         "-o",
         str(binary),
     ]
@@ -72,29 +86,29 @@ def build_profile(args):
     subprocess.run(command, cwd=repository_root(), check=True, env=environment)
     if repository_state() != repo or source_hashes() != sources:
         raise RuntimeError("source changed during profile build")
+    workload = (prefill.specification(args.profile_variant,query_rows,args.profile_rows) if is_prefill else {
+        "groups": spec["groups"], "heads": spec["heads"], "splits": spec["splits"],
+        "conditional_rescale": spec["conditional_rescale"]})
     record = {
         "schema_version": 1,
-        "operation": "grouped_query_attention_decode",
+        "operation": prefill.OPERATION if is_prefill else "grouped_query_attention_decode",
         "repository": repo,
         **stable_environment(),
         "created_utc": utc_now(),
-        "implementation": f'gqa_decode_{args.profile_variant}',
-        "entrypoint": "enqueue_grouped_query_attention_apple_gpu" if args.profile_variant
-        == 0 else "enqueue_grouped_query_attention_decode_apple_gpu",
+        "implementation": f'{operation}_{args.profile_variant}',
+        "entrypoint": prefill.ENTRYPOINTS[f'gqa_prefill_{args.profile_variant}'] if is_prefill else (
+            "enqueue_grouped_query_attention_apple_gpu" if args.profile_variant==0 else "enqueue_grouped_query_attention_decode_apple_gpu"),
         "profile_rows": 1,
         "hidden_size": 64,
         "key_value_rows": args.profile_rows,
         "query_heads": 14,
         "key_value_heads": 2,
-        "groups": spec["groups"],
-        "heads": spec["heads"],
-        "splits": spec["splits"],
-        "conditional_rescale": spec["conditional_rescale"],
         "profile_workload": f'decode-t{args.profile_rows}-v{args.profile_variant}',
         "dispatches_per_iteration": spec["dispatches"],
-        "profile_warmup_iterations": 100,
+        "profile_warmup_iterations": warmup,
         "profile_iterations": args.profile_iterations,
         "profile_post_idle_milliseconds": 250,
+        **workload,
         "source_sha256": sources,
         "binary": {"bytes": binary.stat().st_size, "sha256": sha(binary)},
         "command": command[:-1] + ["<external-profile-binary>"],
@@ -105,6 +119,9 @@ def build_profile(args):
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--operation', choices=['gqa_decode','gqa_prefill'], default='gqa_decode')
+    p.add_argument('--profile-query-rows', type=int, default=1)
+    p.add_argument('--profile-warmup', type=int, default=100)
     p.add_argument('--build-profile-binary', type=Path, required=True)
     p.add_argument('--profile-variant', type=int, choices=list(VARIANTS), default=9)
     p.add_argument('--profile-rows', type=int, default=4096)

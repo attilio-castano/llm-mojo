@@ -19,7 +19,7 @@ uv run --locked python -m llm_mojo.benchmarks.run run --build-dir /private/tmp/m
 ```
 
 Both destinations must be new directories outside the checkout. Use
-`--studies gqa_decode` (or any combination of the five study names) for a
+`--studies gqa_decode` (or any combination of the maintained study names) for a
 bounded subset. The matrix and named implementations are in `study.py`.
 The runner requires AC power, Low Power Mode off, no reported thermal warning,
 a clean matching source commit, unchanged hardware/software, and the exact
@@ -36,6 +36,11 @@ nonfinite samples, changed identity, and missing completion markers fail.
 `attention_decode.mojo` retains all thirteen GQA routes; the maintained matrix
 compares the materialized control, simple fusion, parallel fusion, and split
 head reuse. The full numerical suites still test every original GQA candidate.
+`attention_prefill.mojo` records both query rows R and KV rows T. Its eleven
+routes cover materialized/cooperative softmax, streaming, query tiling, Apple
+MMA and related-head reuse. Run `--studies gqa_prefill_screen` explicitly for
+the three-workload screen; it is excluded from the default run. The maintained
+full/incremental matrix is `--studies gqa_prefill`.
 `src/llm_mojo/benchmarks/smoke.py` exercises the other measurement routes and output gates.
 
 Hot measures one operation through completion. Ring24 measures 24 distinct
@@ -61,12 +66,17 @@ committed image format; extra exports are disposable. See
 The capture/analyzer pair retains binary hashes, verified launch receipts,
 workload identity, dispatch segmentation and named counters. Its historical
 RMSNorm/linear schema support is retained for reading older captures. The
-maintained standalone builder currently targets GQA decode:
+maintained standalone builder supports GQA decode and prefill:
 
 ```bash
 uv run --locked python -m llm_mojo.benchmarks.profile --build-profile-binary /private/tmp/gqa-profile --profile-variant 9 --profile-rows 4096
 uv run --locked python -m llm_mojo.benchmarks.capture_trace --profile-binary /private/tmp/gqa-profile --output-trace /private/tmp/gqa-profile.trace --time-limit 2s
 ```
+
+For prefill, add `--operation gqa_prefill --profile-query-rows R` to the builder;
+`--profile-rows T` remains the KV length. `--profile-warmup` and
+`--profile-iterations` bound the capture independently of the latency protocol.
+The receipt binds R, T, tile sizes, head sharing and exact dispatch count.
 
 Use `capture_trace.py --help` and `analyze_trace.py --help` for receipt and XML
 export inputs. Default Metal System Trace gives dispatch timing; performance

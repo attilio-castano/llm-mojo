@@ -118,7 +118,7 @@ def main() raises:
             "17",
             "profile",
             String(get_defined_int["GQA_PROFILE_ITERATIONS"]()),
-            "100",
+            String(get_defined_int["GQA_PROFILE_WARMUP", default=100]()),
         ]
     else:
         for arg in argv():

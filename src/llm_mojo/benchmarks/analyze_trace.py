@@ -16,10 +16,10 @@ from pathlib import Path
 from typing import Any
 
 
-from .attention_decode_contract import (
-    OPERATION as ATTENTION_OPERATION,
+from .attention_contract import (
+    OPERATIONS as ATTENTION_OPERATIONS,
     ENTRYPOINTS as ATTENTION_ENTRYPOINTS,
-    TARGET_FIELDS as ATTENTION_TARGET_FIELDS,
+    target_fields as attention_target_fields,
     configuration as attention_configuration,
 )
 
@@ -165,7 +165,7 @@ def capture_identity(path: Path) -> tuple[dict[str, Any], str]:
     )
     operation = configuration.get("operation", "rms_norm")
     require(
-        operation in ("rms_norm", "linear_projection", ATTENTION_OPERATION),
+        operation in ("rms_norm", "linear_projection", *ATTENTION_OPERATIONS),
         "capture receipt has an unsupported operation",
     )
     workload: dict[str, Any] = {
@@ -213,7 +213,7 @@ def capture_identity(path: Path) -> tuple[dict[str, Any], str]:
                 ),
             }
         )
-    if operation == ATTENTION_OPERATION:
+    if operation in ATTENTION_OPERATIONS:
         workload.update(attention_configuration(configuration))
     implementation = configuration.get("implementation")
     entrypoint = configuration.get("entrypoint")
@@ -274,9 +274,9 @@ def capture_identity(path: Path) -> tuple[dict[str, Any], str]:
                 ],
             }
         )
-    if operation == ATTENTION_OPERATION:
+    if operation in ATTENTION_OPERATIONS:
         expected_target.update(
-            {k: workload[k] for k in ATTENTION_TARGET_FIELDS}
+            {k: workload[k] for k in attention_target_fields(operation)}
         )
     require(
         target == expected_target,
