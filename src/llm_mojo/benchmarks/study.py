@@ -33,7 +33,7 @@ PREFILL_NAMES = {0: 'materialized', 1: 'cooperative softmax', 2: 'streaming',
                  3: 'tile 8x32', 4: 'tile 16x32', 5: 'tile 32x32', 6: 'tile 16x64',
                  7: 'MMA 16x32', 8: 'MMA 32x32', 9: 'MMA H2', 10: 'MMA H4'}
 STUDIES['gqa_prefill'] = dict(
-    operation='gqa_prefill', control=0, candidates=[0, 1, 2, 7],
+    operation='gqa_prefill', control=8, candidates=[0, 7, 8, 10],
     workloads=[dict(query_rows=r, rows=t) for r,t in
                [(n,n) for n in (16,64,256,1024,4096)] +
                [(16,256),(16,1024),(16,4096),(64,1024),(64,4096),(256,4096)]],
@@ -41,9 +41,9 @@ STUDIES['gqa_prefill'] = dict(
     layout='Q/O[R,14,64], K/V[T,2,64]; contiguous row major; query position T-R+r',
     arithmetic='BF16 scaled scores; FP32 online states for fused paths; MMA rounds unnormalized tile weights to BF16 before PV; output BF16')
 STUDIES['gqa_prefill_screen'] = dict(
-    **{k: v for k,v in STUDIES['gqa_prefill'].items() if k not in ('workloads','candidates')},
+    **{k: v for k,v in STUDIES['gqa_prefill'].items() if k not in ('workloads','candidates','control')},
     workloads=[dict(query_rows=r,rows=t) for r,t in ((256,256),(1024,1024),(64,4096))],
-    candidates=list(PREFILL_NAMES))
+    control=0, candidates=list(PREFILL_NAMES))
 PREFILL_PROFILE_WORKLOADS = [(16,16),(1024,1024),(64,4096)]
 
 
@@ -207,6 +207,13 @@ def load_profile(directory):
         if identity['runtime']['backend'] != 'metal' or not identity['runtime']['device'].startswith('Apple '):
             raise ValueError('profile runtime mismatch')
         r,t = capture.get('query_rows',0),capture.get('rows',0)
+        if prefill:
+            from .attention_prefill_contract import configuration, OPERATION
+            workload = identity['workload']
+            configuration({**identity,**workload,
+                           'profile_warmup_iterations':workload['warmup_iterations']})
+            if identity['operation'] != OPERATION or workload['rows'] != r:
+                raise ValueError('prefill profile operation or rows mismatch')
         if prefill and (identity['implementation'] != f'gqa_prefill_{variant}' or
                         identity['workload']['profile_rows'] != r or identity['workload']['key_value_rows'] != t):
             raise ValueError('prefill profile shape or implementation mismatch')

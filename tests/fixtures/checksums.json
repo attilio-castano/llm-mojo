@@ -6,7 +6,7 @@
     "rms_norm/reference_data.mojo": "461579d715d8cbe4ae6a54ed8dafec79b73bf977ec92250993de7ababcd94301",
     "linear/reference_data.mojo": "27b422ff3c88b12d5e892ecfe437046aa3b7223268ece066b85748f1fa1b1549",
     "rope/reference_data.mojo": "4f6d27139977d243bf659cc48d1df4b42fcb478fb7c60ae49924992ad7384e11",
-    "attention/prefill_manifest.json": "f59001578c35f096d6dddfdf766314dc06d4fad8a54edd3ea002fc7b732236d8"
+    "attention/prefill_manifest.json": "125f8d9f8cceb8499dbfca9737edb8909ca9c066514022a0184c8c6a961d18b5"
   },
   "prefill_anchor_origin": "Independent FP64 NumPy oracle added in the GQA prefill study; existing anchors unchanged."
 }

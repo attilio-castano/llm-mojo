@@ -18,6 +18,7 @@ from std.gpu import block_idx, thread_idx, lane_id
 from std.gpu.primitives import warp
 from std.math import exp, max, min, ceildiv
 from std.sys.info import is_apple_gpu
+from std.utils.numerics import neg_inf
 
 
 def _softmax[
@@ -34,7 +35,7 @@ def _softmax[
     var h = row_head % 14
     if r < Int(rows):
         var visible = Int(tokens) - Int(rows) + r + 1
-        var m: Float32 = -1.0e30
+        var m: Float32 = neg_inf[DType.float32]()
         for t in range(lane, visible, 32):
             m = max(m, rebind[Float32](scratch[r, h, t].cast[DType.float32]()))
         m = warp.max(m)
@@ -169,7 +170,7 @@ def _stream[
     var q1 = SIMD[DType.float32, N](0)
     var u0 = SIMD[DType.float32, N](0)
     var u1 = SIMD[DType.float32, N](0)
-    var m = SIMD[DType.float32, N](-1.0e30)
+    var m = SIMD[DType.float32, N](neg_inf[DType.float32]())
     var z = SIMD[DType.float32, N](0)
     comptime for i in range(N):
         if r0 + i * 4 < Int(rows):
@@ -286,7 +287,7 @@ def _mma[
     ](row_major[BQ * HEADS, BK]())
     comptime assert probs.flat_rank == 2
     var u = SIMD[DType.float32, 16](0)
-    var m: Float32 = -1.0e30
+    var m: Float32 = neg_inf[DType.float32]()
     var z: Float32 = 0
     for base in range(0, end, BK):
         for index in range(tid, BK * 64, W * 32):
@@ -320,7 +321,7 @@ def _mma[
                 _mma_apple_8x8(acc, a, b, previous)
             comptime for c in range(2):
                 var t = base + j * 8 + fc + c
-                var s: Float32 = -1.0e30
+                var s: Float32 = neg_inf[DType.float32]()
                 if valid and t < end and t <= past + r:
                     s = (
                         (acc[c] * 0.125)
@@ -329,7 +330,7 @@ def _mma[
                     )
                 scores[local_r, j * 8 + fc + c] = s
         barrier()
-        var tile_m: Float32 = -1.0e30
+        var tile_m: Float32 = neg_inf[DType.float32]()
         comptime for j in range(BK // 8):
             comptime for c in range(2):
                 tile_m = max(

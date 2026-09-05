@@ -96,6 +96,8 @@ def fill_prefill[
                 q[r, h, d] = decode_input(
                     (past + r) * 896 + h * 64 + d, seed, kind, 0
                 ).cast[DType.bfloat16]()
+                if kind == 4:
+                    q[r, h, d] = Float32(1e16).cast[DType.bfloat16]()
     for t in range(Int(k.dim[0]())):
         for h in range(2):
             for d in range(64):
@@ -103,6 +105,8 @@ def fill_prefill[
                 k[t, h, d] = decode_input(i, seed + 3, kind, 1).cast[
                     DType.bfloat16
                 ]()
+                if kind == 4:
+                    k[t, h, d] = Float32(-1e16).cast[DType.bfloat16]()
                 v[t, h, d] = decode_input(i, seed + 7, kind, 2).cast[
                     DType.bfloat16
                 ]()

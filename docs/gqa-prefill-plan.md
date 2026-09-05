@@ -18,7 +18,7 @@ MMA path additionally rounds unnormalized tile weights to BF16 before PV.
 These paths have separate independent FP64 materialized oracles and must all
 satisfy the existing `atol=rtol=0.015625` output gate. Tolerance is frozen.
 
-Tests cover 28 cases, including all full-prefill sizes through 4096, ragged
+Tests cover 29 cases, including full-prefill sizes through 4096, ragged
 tiles, incremental positions, tied/large scores and cancellation. Additional
 tests perturb future K/V values, compare full and suffix prefill, verify the
 cooperative probability scratch and reject unsupported shapes. Generated
@@ -44,6 +44,24 @@ Compare final candidates directly with the strongest previous design as well
 as the materialized control. Use the existing four-block paired protocol,
 hot and ring24 modes, ten warmups and ten samples per arm, and matching
 self-pair calibration. No dispatch threshold is promoted from screening alone.
+
+The completed screen at `fe418cc` retained 5,280 observations. Cooperative
+softmax was inconclusive at both square workloads and faster for `(64,4096)`.
+Fusion helped throughout. MMA 32x32 was the leading simple design, while
+head-sharing routes had similar observed times. These comparisons each use
+the materialized baseline; they do not establish direct differences between
+optimized candidates.
+
+The full matrix therefore pairs **0, 7, 8 and 10 with control 8**: materialized,
+MMA 16x32, MMA 32x32 and MMA H4. It directly tests the tile-size change and H4
+against the strongest simple design. All eleven routes remain in correctness
+tests; the screen is retained with its original source identity.
+
+A post-screen adversarial check found that initializing the maximum to `-1e30`
+fails when all valid finite scores are smaller. The final source uses negative
+infinity for initial maxima and masked scores. The new case fails on the
+screening source and passes after this fix; ordinary screening inputs are
+unchanged. The full matrix is measured afresh after this correctness repair.
 
 Profile the baseline and finalist separately at `(16,16)`, `(1024,1024)` and
 `(64,4096)`. Retain dispatch durations and named diagnostic counters; keep full

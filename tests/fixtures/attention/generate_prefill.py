@@ -8,7 +8,7 @@ from generate_decode import bf16, values
 ROOT = Path(__file__).resolve().parents[3] / 'build/oracle_data/attention'
 CASES = [(r,r,17,0) for r in (1,2,7,8,9,15,16,17,31,32,33,63,64,65)]
 CASES += [(r,t,17,0) for r,t in ((2,7),(7,33),(16,256),(17,257),(16,1024),(16,4095),(16,4096))]
-CASES += [(7,33,37,kind) for kind in (1,2,3)]
+CASES += [(7,33,37,kind) for kind in (1,2,3,4)]
 CASES += [(33,65,53,0)]
 CASES += [(r,r,53,0) for r in (256,1024,4096)]
 
@@ -17,6 +17,10 @@ def oracle(r,t,seed,kind):
     q = values(t*896,seed,kind,0).reshape(t,14,64)[t-r:]
     k = values(t*128,seed+3,kind,1).reshape(t,2,64)
     v = values(t*128,seed+7,kind,2).reshape(t,2,64)
+    if kind == 4:
+        # Uniform, finite scaled scores below -1e30 expose finite sentinels.
+        q[:] = bf16(1e16)
+        k[:] = bf16(-1e16)
     eager,online = np.empty((r,14,64),np.float32),np.empty((r,14,64),np.float32)
     # Chunk query rows to bound oracle scratch; never stream an online recurrence.
     for h in range(14):
