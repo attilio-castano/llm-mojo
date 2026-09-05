@@ -12,25 +12,37 @@ operation-level; a working decoder block and full-model generation remain next.
 | [Linear prefill](linear_prefill/README.md) | How should more token rows change tile and lane ownership? |
 | [RoPE](rope/README.md) | How much work and data movement does rotating a dimension pair require? |
 | [GQA decode](gqa_decode/README.md) | How do fusion, sequence parallelism and shared KV heads interact? |
+| [GQA prefill](gqa_prefill/README.md) | How do query tiling, online softmax and Apple matrix instructions interact? |
 
-Fresh characterization is complete at measured source `1267a7a`: **10,560
-latency observations**, five report figures, and three focused GQA profiles.
-The full fixture migration passed 68 Mojo tests. The 29 shared tooling, trace and evidence checks, all retained operation benchmark routes and all thirteen GQA routes
-were validated separately. No engine code, numerical tolerances or dependency
-lock changed during the reset.
+The six topics retain **22,880 latency observations**, nine report figures,
+and nine focused GQA profiles containing 7,800 measured dispatch durations.
+Full validation passes 71 Mojo tests and 36 Python tooling/evidence checks,
+including every prefill measurement route in hot and ring24 modes.
 
-The results are deliberately mixed: RMSNorm remains inconclusive in this run;
-packed QKV improves the ring sweep; prefill benefits from register/MMA reuse at
-larger sampled row counts; RoPE has baseline characterization; and GQA's fusion
-and parallelism gains remain clear. Read each study's limits alongside its plot.
+The original five topics characterize existing implementations at source
+`1267a7a`. GQA prefill adds a bounded optimization screen at `fe418cc` and a
+direct comparison of finalists at corrected source `bf4277c`. That study also
+found a trace-analysis defect: Instruments may split a preempted dispatch into
+several active intervals. All nine original GQA captures were reanalyzed with
+the segment-joining fix; the separate latency observations are unchanged.
 
-The matrix is deliberately bounded: existing implementations, selected sizes,
-hot and ring24 timing, four blocks, and self-pair calibration. We are refreshing
-characterization, not searching a new tuning space. See the
+The results are deliberately mixed: RMSNorm remains inconclusive; packed QKV
+improves the ring sweep; linear prefill benefits from register/MMA reuse at
+larger sampled row counts; and RoPE has baseline characterization. GQA decode
+benefits from fusion and parallelism. GQA prefill's 32x32 MMA path is about
+11.2× faster than materialized attention at full 4,096-token prefill, while
+sharing four query heads demonstrates no gain over that optimized control.
+Read each study's limits alongside its plot.
+
+The matrices use selected sizes, hot and ring24 timing, four paired blocks,
+and matching self-pair calibration. See the
 [measurement command](../src/llm_mojo/benchmarks/README.md) and [decision rule](../docs/experiments.md).
 
 Each finished study keeps `run.json`, all observations in `samples.csv.gz`, a
-small `summary.csv`, and one report image. Rebuild every figure without a GPU:
+small `summary.csv`, and the PNGs used in its explanation. GQA prefill retains
+its screen with a `screen_` filename prefix in the same topic folder. GQA
+decode and prefill also retain compact profile records and dispatch samples.
+Rebuild every table and figure without a GPU:
 
 ```bash
 uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.plot

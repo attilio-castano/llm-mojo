@@ -71,11 +71,19 @@ when using profiler evidence. Counter absence is not zero; device-wide
 measurements cannot automatically be assigned to one kernel. Isolated stage
 times need not sum to end-to-end time.
 
+Instruments can split a single preempted dispatch into several active
+intervals. Join these by command buffer, encoder and GPU submission before
+assigning stage names. Sum active durations while excluding preemption gaps;
+retain the true end timestamp for the enclosing counter window. Require every
+declared trailing submission to have unambiguous compute coverage. Counting
+interval rows alone can shift stage labels or conceal a missing dispatch.
+
 ## What belongs in Git
 
 Each topic has an explanation, a compact `run.json`, `samples.csv.gz`, derived
-`summary.csv`, and a PNG used by its report. One plotting command reconstructs
-the summary and image from retained samples without GPU execution. Add a
+`summary.csv`, and PNGs used by its report. One plotting command reconstructs
+the summaries and images from retained samples without GPU execution. A bounded
+screen can use a `screen_` filename prefix within the same topic folder. Add a
 compact profile table only when it substantiates a report's explanation.
 Avoid repeated metadata per sample, hash lists of disposable logs, duplicate
 image formats, and a new runner or directory for each parameter choice.

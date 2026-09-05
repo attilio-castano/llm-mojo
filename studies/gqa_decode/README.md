@@ -101,7 +101,7 @@ command regenerates [profile_summary.csv](profile_summary.csv).
 | --- | --- | ---: |
 | Materialized | QK | 50.00 |
 | Materialized | softmax | 1038.12 |
-| Materialized | PV | 1052.08 |
+| Materialized | PV | 1052.29 |
 | G32 | fused | 70.25 |
 | Split64 H4 | decode | 29.75 |
 | Split64 H4 | merge | 10.42 |
@@ -115,7 +115,7 @@ keeps three complementary diagnostics, with units, descriptions, sample counts
 and spread.
 Median Kernel Occupancy was 1.46% for the materialized path, 21.58% for G32 and
 7.80% for H4. Last Level Cache Limiter was 2.20%, 100.00% and 75.17%, respectively.
-Instruction Throughput Limiter was 1.28%, 43.48% and 28.27%.
+Instruction Throughput Limiter was 1.28%, 43.46% and 28.27%.
 These device-wide samples cover each enclosing target window, not exclusive
 per-kernel activity. They do not measure achieved DRAM bandwidth or prove a
 causal bottleneck. The faster H4 design has lower reported occupancy than G32,
@@ -125,3 +125,11 @@ No target compiler spill event was reported in these captures. That observation
 is bounded to the captures, not proof that every shape or execution is spill-free.
 Full traces/XML and binaries remain external; compact timing observations and
 selected counter summaries are the retained profile evidence.
+
+The prefill study uncovered split execution intervals for preempted dispatches
+in Instruments. Reanalysis of these original decode exports now joins segments
+by command buffer, encoder and GPU submission and verifies trailing submission
+coverage before assigning stage names. Three measured materialized dispatches
+and three G32 dispatches were split. Their active times are summed, excluding
+preemption gaps. The corrected profile samples and analysis hashes are retained;
+the separate latency observations and headline conclusions are unchanged.

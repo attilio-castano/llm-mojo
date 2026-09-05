@@ -275,8 +275,10 @@ wait for an explicit completion boundary.
 
 This is a deliberately inspectable correctness baseline, not a performance
 claim. It establishes the oracle, cast points, masking, head mapping, and
-asynchronous ownership boundary before an online-softmax, tiled, fused, or
-explicit multi-query-reuse implementation is considered.
+asynchronous ownership boundary. The [GQA decode](../studies/gqa_decode/README.md)
+and [GQA prefill](../studies/gqa_prefill/README.md) studies explain the fused
+implementations' sequence/query ownership, shared K/V tiles, accumulator
+state, workspace and synchronization, alongside their measurements.
 
 ## Use in code and evidence
 

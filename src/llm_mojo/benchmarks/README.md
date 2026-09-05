@@ -77,6 +77,9 @@ For prefill, add `--operation gqa_prefill --profile-query-rows R` to the builder
 `--profile-rows T` remains the KV length. `--profile-warmup` and
 `--profile-iterations` bound the capture independently of the latency protocol.
 The receipt binds R, T, tile sizes, head sharing and exact dispatch count.
+The prefill comparison profiles variants 0 and 8 at `(R,T)=(16,16)`,
+`(1024,1024)` and `(64,4096)`, with ten warmups and respectively 1000, 100 and
+100 measured iterations. Each capture stays below 5,000 dispatches.
 
 Use `capture_trace.py --help` and `analyze_trace.py --help` for receipt and XML
 export inputs. Default Metal System Trace gives dispatch timing; performance
@@ -95,3 +98,16 @@ target dispatch durations plus selected named counter summaries. `plot.py`
 then checks those retained samples and regenerates `profile_summary.csv`.
 Full traces/XML are needed to redo trace analysis; they are not needed to
 rebuild the report's tables or figures.
+
+For the prefill set, use folders `rR-tT-vV` for those six captures and pass
+`--prefill-variant 8` to `profile_summary.py`. Instruments can split one dispatch
+into several active intervals. The analyzer joins non-overlapping segments by
+command buffer, encoder and GPU submission, sums active time, and preserves
+the final segment end for the counter window. Every trailing submission must
+be covered once before stages are assigned. The curator checks that same join
+against the analysis and records both analysis and curation source hashes.
+
+In `studies/gqa_prefill/`, `screen_run.json` and `screen_samples.csv.gz` retain
+the bounded screen alongside the final `run.json` and `samples.csv.gz`.
+The frozen specifications preserve their different controls and source
+commits. One plot command rebuilds both summaries and the four report figures.

@@ -218,6 +218,11 @@ has completed, and the five tensor views must not overlap. Storage and
 execution mappings are recorded in the project's
 [layout language](layouts.md#grouped-query-attention-v0).
 
+Explicit optimized Qwen implementations and their intermediate rounding and
+workspace contracts are documented in the [GQA decode](../studies/gqa_decode/README.md)
+and [GQA prefill](../studies/gqa_prefill/README.md) studies. The materialized
+baseline above remains the inspectable reference path.
+
 V0 defines no separate reasoning channel or thinking-mode protocol. Any
 rationale the model emits is ordinary assistant-token output and follows the
 same autoregressive path as any other response.

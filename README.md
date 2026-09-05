@@ -26,14 +26,16 @@ limits of the result. Start with a question:
 | [Linear prefill](studies/linear_prefill/README.md) | How does processing more token rows change useful tiling? |
 | [RoPE](studies/rope/README.md) | What does rotating dimension pairs cost? |
 | [GQA decode](studies/gqa_decode/README.md) | How do fusion, sequence parallelism, and shared KV heads interact? |
+| [GQA prefill](studies/gqa_prefill/README.md) | How do query tiling, online softmax and Apple matrix instructions interact? |
 
-![GQA decode latency and paired comparisons on Apple M4 Pro](studies/gqa_decode/latency.png)
+![Full and incremental GQA prefill latency on Apple M4 Pro](studies/gqa_prefill/latency.png)
 
-GQA decode illustrates how different work partitions behave across context
-lengths. Comparisons use this repository's materialized baseline; hot and
-ring24 measurements have different synchronization boundaries. The
-[GQA study](studies/gqa_decode/README.md) explains the mappings, calibration,
-and profile evidence. See the [study index](studies/README.md) for retained
+GQA prefill tracks both query rows and KV context length. It compares fusion,
+query tiling, matrix instructions and head reuse, including direct comparisons
+against a strong optimized control. Hot and ring24 measurements have different
+synchronization boundaries. The [prefill study](studies/gqa_prefill/README.md)
+explains the mappings, calibration, compiler spills and profile evidence.
+See the [study index](studies/README.md) for retained
 measurements and the command to regenerate every graph.
 
 ## Target and reference platform

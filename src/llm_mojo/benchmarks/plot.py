@@ -9,6 +9,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 
 from .study import load_run, load_profile
 
@@ -76,7 +77,7 @@ def render_prefill(directory, record, samples, summary):
     colors = dict(zip(candidates,['#6b7280','#c75b39','#167d9a','#579059','#c17b9a']))
     markers = dict(zip(candidates,['o','s','D','^','v']))
     table(directory,'summary.csv',summary)
-    fig, axes = plt.subplots(2,2,figsize=(12,8.4))
+    fig, axes = plt.subplots(2,2,figsize=(12,8.4),sharey='row')
     for col,layers in enumerate((1,24)):
         for row,full in enumerate((True,False)):
             ax = axes[row,col]
@@ -85,7 +86,7 @@ def render_prefill(directory, record, samples, summary):
                 data = [s for s in summary if s['layers']==layers and s['candidate']==c
                         and (s['query_rows']==s['rows'])==full]
                 x = [s['rows'] for s in data] if full else [j+(i-(len(candidates)-1)/2)*.12 for j in range(len(data))]
-                ax.plot(x,[s['candidate_us'] for s in data],'-' if full else 'none',
+                ax.plot(x,[s['candidate_us'] for s in data],linestyle='-' if full else 'none',
                         marker=markers[c],markersize=5,color=colors[c],label=names[c])
             ax.set_yscale('log')
             ax.set_ylabel('Latency (µs / attention) · log scale')
@@ -95,8 +96,8 @@ def render_prefill(directory, record, samples, summary):
                 ax.set_xticks([w['rows'] for w in workloads],[str(w['rows']) for w in workloads])
                 ax.set_xlabel('Full prefill · R = T')
             else:
-                ax.set_xticks(range(len(workloads)),[f'{w["query_rows"]}\n{w["rows"]}' for w in workloads])
-                ax.set_xlabel('Incremental prefill · query rows R (top), KV rows T (bottom)')
+                ax.set_xticks(range(len(workloads)),[f'R={w["query_rows"]}\nT={w["rows"]}' for w in workloads])
+                ax.set_xlabel('Incremental prefill · query rows R, total KV rows T')
         axes[0,col].set_title('Hot · one call through completion' if layers==1 else 'Ring24 · one synchronization per sweep')
     handles,labels=axes[0,0].get_legend_handles_labels()
     fig.legend(handles,labels,loc='upper center',bbox_to_anchor=(.5,.95),ncol=len(candidates),frameon=False)
@@ -108,8 +109,11 @@ def render_prefill(directory, record, samples, summary):
     fig.savefig(directory/'latency.png',dpi=160)
     plt.close(fig)
 
-    fig, axes = plt.subplots(1,2,figsize=(12,8.3),sharey=True)
+    fig, axes = plt.subplots(1,2,figsize=(12,8.3),sharey=True,sharex=True)
     rivals = [c for c in candidates if c != spec['control']]
+    paired = [s for s in summary if s['candidate'] in rivals]
+    ratio_limits = (min(1,*(s['ratio_min'] for s in paired))/1.15,
+                    max(1,*(s['ratio_max'] for s in paired))*1.15)
     for ax,layers in zip(axes,(1,24)):
         for i,c in enumerate(rivals):
             data=[s for s in summary if s['layers']==layers and s['candidate']==c]
@@ -121,6 +125,8 @@ def render_prefill(directory, record, samples, summary):
                             label=names[c] if j==0 else None)
         ax.axvline(1,color='#333333',linewidth=1)
         ax.set_xscale('log',base=2)
+        ax.set_xlim(*ratio_limits)
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda value,_: f'{value:g}×'))
         ax.grid(axis='x',alpha=.18)
         ax.set_xlabel(f'Time / paired {names[spec["control"]]} · lower is faster')
         ax.set_title('Hot call' if layers==1 else 'Ring24 per call')
@@ -151,14 +157,14 @@ def render_prefill(directory, record, samples, summary):
             ax.set_yticks(range(len(data)),[s['stage'] for s in data])
             ax.invert_yaxis()
             ax.set_title(f'R={r}, T={t}')
-            ax.set_xlabel('Median GPU dispatch interval (µs)')
+            ax.set_xlabel('Median active GPU time (µs)')
             ax.set_xlim(0,max(s['median_us'] for s in data)*1.25)
             for j,s in enumerate(data):
                 ax.text(s['median_us'],j,f' {s["median_us"]:.1f}',va='center',fontsize=9)
             ax.grid(axis='x',alpha=.18)
-        fig.suptitle('GQA prefill · instrumented dispatch durations',fontsize=16,fontweight='bold',y=.98)
+        fig.suptitle('GQA prefill · active time per GPU dispatch',fontsize=16,fontweight='bold',y=.98)
         fig.text(.04,.032,'Gray: materialized QK, softmax and PV. Blue: fused finalist. Separate captures from paired latency runs.\n'
-                 'Stage labels follow verified source enqueue order. These GPU intervals exclude host gaps and are not model latency.\n'
+                 'Preempted segments are joined by dispatch identity; durations exclude preemption gaps and host gaps.\n'
                  f'{sum(s["count"] for s in rows):,} target dispatch durations retained; see profiles.json and profile_summary.csv.',fontsize=9,color='#555555')
         fig.tight_layout(rect=(0,.2,1,.9))
         fig.savefig(directory/'profile.png',dpi=160)

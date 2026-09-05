@@ -62,9 +62,14 @@ class EvidenceTests(unittest.TestCase):
         for directory in (ROOT / 'studies').glob('*/'):
             _, samples, _ = load_run(directory)
             count += len(samples)
-        self.assertEqual(count, 10560)
+            if (directory/'screen_run.json').exists():
+                _, samples, _ = load_run(directory,'screen_')
+                count += len(samples)
+        self.assertEqual(count, 22880)
         profile = load_profile(ROOT / 'studies/gqa_decode')
         self.assertEqual(sum(row['count'] for row in profile), 3000)
+        profile = load_profile(ROOT / 'studies/gqa_prefill')
+        self.assertEqual(sum(row['count'] for row in profile), 4800)
 
     def test_profile_corruption_and_duplicate_dispatch_rejected(self):
         source = ROOT / 'studies/gqa_decode'

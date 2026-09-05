@@ -34,7 +34,7 @@ def prepare():
     for name, expected in manifest['array_sha256'].items():
         if hashlib.sha256((fixtures / 'attention' / name).read_bytes()).hexdigest() != expected:
             raise RuntimeError(f'prefill oracle array changed: {name}')
-    print("All generated oracles match the landed fixtures.", flush=True)
+    print("All generated oracles match the frozen anchors.", flush=True)
 
 
 def main():
