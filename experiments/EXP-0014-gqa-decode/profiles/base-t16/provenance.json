@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "operation": "grouped_query_attention_decode",
+  "repository": {
+    "commit": "1b03ddc844317d01febb003ce023f0fd9d9f7e71",
+    "branch": "codex/gqa-decode-campaign",
+    "dirty": false
+  },
+  "hardware": {
+    "model": "Mac16,7",
+    "chip": "Apple M4 Pro",
+    "logical_cpu_count": "14",
+    "gpu_api": "metal",
+    "gpu_target": "metal:4-metal4",
+    "physical_memory_bytes": 25769803776
+  },
+  "software": {
+    "macos": "26.6.2",
+    "macos_build": "25G83",
+    "darwin": "25.6.0",
+    "xcode": [
+      "Xcode 26.6",
+      "Build version 17F113"
+    ],
+    "metal": [
+      "Apple metal version 32023.883 (metalfe-32023.883)",
+      "Target: air64-apple-darwin25.6.0",
+      "Thread model: posix"
+    ],
+    "uv": "uv 0.12.5 (210d1f678 2026-08-14 aarch64-apple-darwin)",
+    "mojo": "1.0.0",
+    "max": "26.5.0"
+  },
+  "created_utc": "2026-09-05T11:35:10.765093+00:00",
+  "implementation": "gqa_decode_0",
+  "entrypoint": "enqueue_grouped_query_attention_apple_gpu",
+  "profile_rows": 1,
+  "hidden_size": 64,
+  "key_value_rows": 16,
+  "query_heads": 14,
+  "key_value_heads": 2,
+  "groups": 0,
+  "heads": 0,
+  "splits": 0,
+  "profile_workload": "decode-t16-v0",
+  "dispatches_per_iteration": 3,
+  "profile_warmup_iterations": 100,
+  "profile_iterations": 500,
+  "profile_post_idle_milliseconds": 250,
+  "source_sha256": {
+    "benchmarks/attention_decode.mojo": "e39127d8701c4ee2e21510181dd7e631048d8b9feeed1bd7ed37bb799e7e5c30",
+    "tests/attention_decode_support.mojo": "cdc376c64e6b1279443331360458983d27c53e87020043cf59df4124ec37e049",
+    "benchmarks/attention_decode_contract.py": "848113a77156f8ff4274beb03a7fe67fc621466dfb1f4955fd5e71ca22fa1088",
+    "src/llm_mojo/attention.mojo": "ea24655495210711e958b0f2fec1eb10b4f7a5a9cbd3214378e22e57cabce8b8",
+    "src/llm_mojo/attention_decode.mojo": "f474d1c538071bd8b5d7353c53f697c1cb19d8fe46b25e6095a85a6d3b8ec96a",
+    "uv.lock": "a96fdc1a706203ed10ae74d7d1afd69c99e335068fe8dd0f184e67789559cca2"
+  },
+  "binary": {
+    "bytes": 320480,
+    "sha256": "4656421347945cc33e84053624d119b8ad9516fc569a906c54893db1657e17b8"
+  },
+  "command": [
+    "uv",
+    "run",
+    "--locked",
+    "mojo",
+    "build",
+    "-I",
+    "src",
+    "-I",
+    "tests",
+    "-D",
+    "GQA_PROFILE_ROWS=16",
+    "-D",
+    "GQA_PROFILE_VARIANT=0",
+    "-D",
+    "GQA_PROFILE_ITERATIONS=500",
+    "benchmarks/attention_decode.mojo",
+    "-o",
+    "<external-profile-binary>"
+  ]
+}

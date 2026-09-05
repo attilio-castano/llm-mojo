@@ -1,0 +1,25 @@
+decode test device: Apple M4 Pro api: metal
+decode variant passed: 1 1 1 cases: 25
+decode variant passed: 0 1 1 cases: 25
+decode variant passed: 2 1 1 cases: 25
+decode variant passed: 8 1 1 cases: 25
+decode variant passed: 32 1 1 cases: 25
+decode variant passed: 1 1 4 cases: 25
+decode variant passed: 1 1 16 cases: 25
+decode variant passed: 1 1 64 cases: 25
+decode variant passed: 1 2 64 cases: 25
+decode variant passed: 1 4 64 cases: 25
+decode variant passed: 1 7 64 cases: 25
+decode variant passed: 32 1 1 cases: 25
+decode variant passed: 1 1 64 cases: 25
+
+Running 7 tests for <repository>/tests/test_attention_decode.mojo
+    PASS [ 84.621 ] test_decode_fused
+    PASS [ 81.254 ] test_decode_materialized_oracle
+    PASS [ 0.173 ] test_decode_rejects_unsupported_shapes
+    PASS [ 153.960 ] test_decode_context_parallel
+    PASS [ 143.184 ] test_decode_split_context
+    PASS [ 140.052 ] test_decode_grouped_head_reuse
+    PASS [ 94.138 ] test_decode_conditional_rescale
+--------
+Summary [ 697.382 ] 7 tests run: 7 passed , 0 failed , 0 skipped

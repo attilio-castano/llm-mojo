@@ -1,0 +1,56 @@
+{
+  "before": {
+    "timestamp_utc": "2026-09-05T12:23:31.162652+00:00",
+    "battery": {
+      "power_source": "AC Power",
+      "charge": "80%",
+      "state": "AC attached",
+      "estimate": "not charging present: true"
+    },
+    "power_mode_raw": "0",
+    "thermal": [
+      "Note: No thermal warning level has been recorded",
+      "Note: No performance warning level has been recorded",
+      "Note: No CPU power status has been recorded"
+    ],
+    "memory": {
+      "physical_bytes": 25769803776,
+      "free_percent": 59
+    },
+    "displays": [
+      {
+        "name": "LG HDR 4K",
+        "connection": "unknown",
+        "resolution": "3008 x 1692 @ 60.00Hz",
+        "online": "spdisplays_yes"
+      }
+    ]
+  },
+  "after": {
+    "timestamp_utc": "2026-09-05T12:23:56.990972+00:00",
+    "battery": {
+      "power_source": "AC Power",
+      "charge": "80%",
+      "state": "AC attached",
+      "estimate": "not charging present: true"
+    },
+    "power_mode_raw": "0",
+    "thermal": [
+      "Note: No thermal warning level has been recorded",
+      "Note: No performance warning level has been recorded",
+      "Note: No CPU power status has been recorded"
+    ],
+    "memory": {
+      "physical_bytes": 25769803776,
+      "free_percent": 58
+    },
+    "displays": [
+      {
+        "name": "LG HDR 4K",
+        "connection": "unknown",
+        "resolution": "3008 x 1692 @ 60.00Hz",
+        "online": "spdisplays_yes"
+      }
+    ]
+  }
+}

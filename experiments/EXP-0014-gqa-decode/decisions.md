@@ -65,3 +65,34 @@ the untimed benchmark gate verifies that ID against the request. An executable
 Mojo test traverses all 13 routes and would catch the shadowing. Rerun head reuse
 and both conditional candidates from the corrected clean commit. This is a
 harness repair, not an additional candidate configuration. The budget remains 12.
+
+## 2026-09-05: freeze finalists and finish fresh-input confirmation
+
+Corrected source `6902c94` completed all `verified-*` head-reuse and conditional
+trials. At T=4096, four-head reuse (9) improves against the one-head 64-split
+control (7) by 13.8% hot and 17.8% ring24 in four of four blocks. Two-head reuse
+has a ring24 gain but an inconclusive hot result; seven-head reuse improves
+both modes with lower median gains than four heads in these trials. This
+replaces the invalid head-reuse rejection, not the underlying numerical passes.
+
+Conditional rescaling fails to improve either strong control consistently:
+configuration 11 regresses ring24 at T=4096 by 11.7%; configuration 12 regresses
+hot by 6.0%. Reject both instruction changes. All 12 configurations are now
+tested, and the tuning budget is exhausted.
+
+Finalists 4 and 9 were selected before the seed-101 confirmation commands.
+Confirmation repeats training lengths and adds 7,32,128,512,2048,4095, with a
+fresh baseline self-pair noise run. The local `finalists.json` is a retrospective
+summary written after those commands; it is not a pre-run timestamped record.
+
+Direct confirmation accepts finalist 9 over 4 at T=4095 and 4096 in both modes,
+by approximately 24–25%. At T=2048, hot improves 15.3%, while ring24's 10.1%
+median gain has only three of four faster blocks and remains inconclusive.
+Short-context ring24 strongly favors the one-kernel finalist 4. Retain both
+explicit experimental choices without an automatic shape selector.
+
+Finalist profiles completed at T=16,256,4096 with 85 named device-wide counters
+and verified 500/1000 profile dispatches. Baseline profiles have 1500 dispatches.
+Their instrumented stage durations support diagnosis only; no causal DRAM or
+full-decoder performance claim is inferred. Complete findings, retained samples,
+provenance and reproduction steps are in [report.md](report.md).

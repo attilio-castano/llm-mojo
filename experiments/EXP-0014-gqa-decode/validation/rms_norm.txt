@@ -1,0 +1,11 @@
+
+Running 7 tests for <repository>/tests/test_rms_norm.mojo
+    PASS [ 0.936 ] test_fixture_comparison_rejects_nan
+    PASS [ 0.111 ] test_reference_matches_small_oracle
+    PASS [ 0.112 ] test_reference_matches_qwen_hidden_width_oracle
+    PASS [ 3.809 ] test_apple_gpu_matches_small_oracle
+    PASS [ 0.515 ] test_apple_gpu_matches_qwen_hidden_width_oracle
+    PASS [ 0.448 ] test_apple_gpu_shared_tree_matches_small_oracle
+    PASS [ 0.512 ] test_apple_gpu_shared_tree_matches_qwen_hidden_width_oracle
+--------
+Summary [ 6.443 ] 7 tests run: 7 passed , 0 failed , 0 skipped

@@ -1,0 +1,57 @@
+Launching a verified ephemeral profile binary (sha256 8c664d3d44255e403a77bb093ebe9e2d66b137304942ec30190464829124a161)...
+profile implementation: enqueue_rms_norm_apple_gpu
+device: Apple Test GPU
+api: metal
+rows: 1
+hidden: 896
+warmup iterations: 1
+profile iterations: 10
+post-profile idle milliseconds: 0
+PROFILE_REGION_BEGIN
+PROFILE_REGION_END
+Launching a verified ephemeral profile binary (sha256 0ec4976431daccd792c8e5e7a093c3a9aeeced1edc99264af1157b1c18b11dfb)...
+profile implementation: enqueue_linear_apple_gpu
+device: Apple Test GPU
+api: metal
+rows: 1
+hidden: 896
+output features: 1152
+profile workload: qkv-ring24
+profile dispatches per iteration: 24
+warmup iterations: 1
+profile iterations: 2
+post-profile idle milliseconds: 0
+PROFILE_REGION_BEGIN
+PROFILE_REGION_END
+Launching a verified ephemeral profile binary (sha256 8c664d3d44255e403a77bb093ebe9e2d66b137304942ec30190464829124a161)...
+recorded
+Launching a verified ephemeral profile binary (sha256 0ec4976431daccd792c8e5e7a093c3a9aeeced1edc99264af1157b1c18b11dfb)...
+profile implementation: enqueue_linear_apple_gpu
+device: Apple Test GPU
+api: metal
+rows: 1
+hidden: 896
+output features: 1152
+profile workload: qkv-ring24
+profile dispatches per iteration: 72
+warmup iterations: 1
+profile iterations: 2
+post-profile idle milliseconds: 0
+PROFILE_REGION_BEGIN
+PROFILE_REGION_END
+Launching a verified ephemeral profile binary (sha256 8c664d3d44255e403a77bb093ebe9e2d66b137304942ec30190464829124a161)...
+profile implementation: enqueue_rms_norm_apple_gpu
+device: Apple Test GPU
+api: metal
+rows: 4
+hidden: 896
+warmup iterations: 1
+profile iterations: 10
+post-profile idle milliseconds: 0
+PROFILE_REGION_BEGIN
+PROFILE_REGION_END
+...................................................................................................
+----------------------------------------------------------------------
+Ran 99 tests in 0.076s
+
+OK

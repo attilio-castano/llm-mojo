@@ -1,0 +1,5 @@
+
+Running 1 tests for <repository>/tests/test_import.mojo
+    PASS [ 0.001 ] test_package_import
+--------
+Summary [ 0.001 ] 1 tests run: 1 passed , 0 failed , 0 skipped

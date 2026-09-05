@@ -620,6 +620,14 @@ without specializing T; ownership configurations are compiler specializations.
 The existing materialized attention API and stage-attribution runner remain the
 probability-returning control. No public shape selector is inferred here.
 
+The [completed report](../experiments/EXP-0014-gqa-decode/report.md) retains
+12 configurations, raw samples and profiles. Finalists are variant 4
+(`g32-h1-s1`, one dispatch) and variant 9 (`g1-h4-s64`, two dispatches).
+Their direct crossover is confirmed at T=4095/4096 in both hot and ring24;
+T=2048 remains inconclusive for ring24. Reproduce the paired comparison with
+`--candidates 9 --control 4`, or compare both against the original with
+`--candidates 4,9 --control 0`. Use a matching self-pair noise run.
+
 After validation and a local commit, build a binary with source provenance:
 
 ```bash
@@ -658,5 +666,5 @@ The trace helper also supports attention despite its historical filename.
 Attention provenance validates shape, ownership parameters and one/two/three
 dispatches per call. Standalone profiles run an untimed numerical gate, 100
 warmup calls, a marked profile region, final synchronization and 250ms host idle.
-Export/analyze the same tables documented for RMSNorm below. The trailing
+Export/analyze the same tables documented for RMSNorm above. The trailing
 declared attention sequence excludes the earlier correctness/setup prelude.

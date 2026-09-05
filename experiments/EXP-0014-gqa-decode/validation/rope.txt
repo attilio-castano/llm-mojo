@@ -1,0 +1,13 @@
+
+Running 9 tests for <repository>/tests/test_rope.mojo
+    PASS [ 0.943 ] test_fixture_comparison_rejects_nan
+    PASS [ 0.131 ] test_reference_rejects_odd_head_dimension
+    PASS [ 0.101 ] test_reference_rejects_uncovered_position
+    PASS [ 0.071 ] test_reference_matches_tiny_oracle
+    PASS [ 0.120 ] test_reference_matches_qwen_query_decode_oracle
+    PASS [ 0.213 ] test_reference_matches_qwen_key_incremental_oracle
+    PASS [ 3.449 ] test_apple_gpu_matches_tiny_oracle
+    PASS [ 0.589 ] test_apple_gpu_matches_qwen_query_decode_oracle
+    PASS [ 0.740 ] test_apple_gpu_matches_qwen_key_incremental_oracle
+--------
+Summary [ 6.357 ] 9 tests run: 9 passed , 0 failed , 0 skipped
