@@ -9,6 +9,9 @@ VARIANTS = {
     5: (1, 1, 4),
     6: (1, 1, 16),
     7: (1, 1, 64),
+    8: (1, 2, 64),
+    9: (1, 4, 64),
+    10: (1, 7, 64),
 }
 OPERATION = "grouped_query_attention_decode"
 ENTRYPOINTS = {

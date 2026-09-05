@@ -173,6 +173,12 @@ def test_decode_split_context() raises:
     check_variant[1, 1, 64]()
 
 
+def test_decode_grouped_head_reuse() raises:
+    check_variant[1, 2, 64]()
+    check_variant[1, 4, 64]()
+    check_variant[1, 7, 64]()
+
+
 def main() raises:
     print(
         "decode test device:",

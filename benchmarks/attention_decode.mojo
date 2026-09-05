@@ -54,8 +54,20 @@ def enqueue_variant[
         enqueue_grouped_query_attention_decode_apple_gpu[1, 1, 16](
             ctx, query, key, value, output, workspace
         )
-    elif variant == 7:
+    elif variant >= 7:
         enqueue_grouped_query_attention_decode_apple_gpu[1, 1, 64](
+            ctx, query, key, value, output, workspace
+        )
+    elif variant == 8:
+        enqueue_grouped_query_attention_decode_apple_gpu[1, 2, 64](
+            ctx, query, key, value, output, workspace
+        )
+    elif variant == 9:
+        enqueue_grouped_query_attention_decode_apple_gpu[1, 4, 64](
+            ctx, query, key, value, output, workspace
+        )
+    elif variant == 10:
+        enqueue_grouped_query_attention_decode_apple_gpu[1, 7, 64](
             ctx, query, key, value, output, workspace
         )
     else:
@@ -67,7 +79,7 @@ def variant_splits(variant: Int) -> Int:
         return 4
     if variant == 6:
         return 16
-    if variant == 7:
+    if variant >= 7:
         return 64
     return 1
 
@@ -109,9 +121,9 @@ def main() raises:
         or rows > 4096
         or (layers != 1 and layers != 24)
         or candidate < 0
-        or candidate > 7
+        or candidate > 10
         or control < 0
-        or control > 7
+        or control > 10
         or repetitions < 1
         or warmup < 0
     ):
@@ -203,7 +215,16 @@ def main() raises:
                 )
             ),
         )
-        print("heads:", 0 if candidate == 0 else 1)
+        print(
+            "heads:",
+            0 if candidate
+            == 0 else (
+                2 if candidate
+                == 8 else (
+                    4 if candidate == 9 else (7 if candidate == 10 else 1)
+                )
+            ),
+        )
         print("splits:", 0 if candidate == 0 else variant_splits(candidate))
         print(
             "profile workload:",
