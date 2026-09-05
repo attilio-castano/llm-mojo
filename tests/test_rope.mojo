@@ -1,4 +1,4 @@
-from fixtures.rope.reference_data import (
+from oracle_data.rope.reference_data import (
     QWEN_KEY_INCREMENTAL_HEAD_DIM,
     QWEN_KEY_INCREMENTAL_HEADS,
     QWEN_KEY_INCREMENTAL_ROWS,

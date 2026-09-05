@@ -1,0 +1,10 @@
+{
+  "source_commit": "a86f4dbadb4b8c9255aacb004ad30fdfefeaa8fd",
+  "sha256": {
+    "attention/reference_data.mojo": "01e7edbd894c82244c4a7b28b62441cece1be67063d78eb3d9e88fb284f74983",
+    "attention/decode_data.mojo": "c7558633c786a79a9d420b395c884144719603dc0f4ea994798bad35bfb15533",
+    "rms_norm/reference_data.mojo": "461579d715d8cbe4ae6a54ed8dafec79b73bf977ec92250993de7ababcd94301",
+    "linear/reference_data.mojo": "27b422ff3c88b12d5e892ecfe437046aa3b7223268ece066b85748f1fa1b1549",
+    "rope/reference_data.mojo": "4f6d27139977d243bf659cc48d1df4b42fcb478fb7c60ae49924992ad7384e11"
+  }
+}

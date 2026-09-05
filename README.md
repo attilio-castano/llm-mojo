@@ -1,41 +1,57 @@
 # llm-mojo
 
-An understandable LLM inference engine built from first principles in Mojo,
-initially targeting Apple Silicon.
+An understandable study of LLM inference on a MacBook Pro, implemented from
+first principles in Mojo.
 
-The repository is both an inference-engine project and an executable study of
-how decoder-only transformer inference maps onto runtime machinery, memory,
-GPU kernels, and hardware.
+We are building an inference engine and explaining how it works: how tensors
+are stored, which GPU threads own each computation, where data is reused, and
+why an optimization changes the measured result. Code, numerical tests,
+profiles, and graphs are all part of the study.
 
-Status: RMSNorm, affine linear projection, RoPE, and grouped-query attention
-have Mojo host references and Apple GPU implementations with
-provenance-bearing oracle tests. RMSNorm, projection, and grouped-query
-attention also have reproducible microbenchmarks. No end-to-end model inference
-or model-performance result exists yet.
+RMSNorm, affine linear projection, RoPE, and grouped-query attention have Mojo
+host references, Apple GPU implementations, independent oracle tests, and
+reproducible measurements. **The next milestone is composing and numerically
+verifying one complete decoder block.** End-to-end model inference and
+model-level performance remain future work.
+
+## Explore the studies
+
+Each study connects an implementation choice to measurements and explains the
+limits of the result. Start with a question:
+
+| Study | Question |
+| --- | --- |
+| [RMSNorm](studies/rms_norm/README.md) | How should threads cooperate to reduce a row? |
+| [Linear decode](studies/linear_decode/README.md) | What do packing QKV and reusing inputs across outputs buy? |
+| [Linear prefill](studies/linear_prefill/README.md) | How does processing more token rows change useful tiling? |
+| [RoPE](studies/rope/README.md) | What does rotating dimension pairs cost? |
+| [GQA decode](studies/gqa_decode/README.md) | How do fusion, sequence parallelism, and shared KV heads interact? |
+
+![GQA decode latency and paired comparisons on Apple M4 Pro](studies/gqa_decode/latency.png)
+
+GQA decode illustrates how different work partitions behave across context
+lengths. Comparisons use this repository's materialized baseline; hot and
+ring24 measurements have different synchronization boundaries. The
+[GQA study](studies/gqa_decode/README.md) explains the mappings, calibration,
+and profile evidence. See the [study index](studies/README.md) for retained
+measurements and the command to regenerate every graph.
 
 ## Target and reference platform
 
 The first end-to-end target is
 [`Qwen/Qwen2.5-0.5B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/tree/7ae557604adf67be50417f59c2c2f167def9a775)
-in BF16: an instruction-tuned, 0.49-billion-parameter decoder-only transformer.
-V0 is batch-one inference with at most 4,096 live session tokens, deterministic
-greedy decoding, full first-turn prefill, incremental later-turn prefill, and a
-persistent KV cache. The first model-level milestone is numerical parity with
-the reference implementation, not performance.
-
-The pinned BF16 weights artifact is 988,097,824 bytes, about 942 MiB. The
-theoretical unpadded BF16 KV payload is 48 MiB at the V0 limit. Total end-to-end
-runtime memory has not yet been measured, so these figures do not establish a
-minimum system-memory requirement. See [docs/model.md](docs/model.md) for the
-immutable artifact, architecture, and complete runtime contract.
+in BF16, with batch-one greedy decoding, up to 4,096 live session tokens,
+full and incremental prefill, and a persistent KV cache. Model-level work
+starts with numerical parity against the reference implementation. The
+[model contract](docs/model.md) specifies the pinned artifact, architecture,
+memory accounting, and complete V0 behavior.
 
 Apple GPU development and performance evidence are currently anchored to a
 MacBook Pro with an Apple M4 Pro, a 14-core CPU, a 20-core GPU, and 24 GB of
-unified memory. This is the project's reference platform, not a claimed minimum
-requirement. Reproducing the Apple GPU path requires a supported Apple Silicon
-Mac, current macOS, full Xcode 16 or later, and the Metal toolchain. See
-[docs/development.md](docs/development.md) for the complete environment and
-verification procedure.
+unified memory, using Metal. This is the reference platform; minimum system
+requirements and total model runtime memory have not been established. See
+[development guidance](docs/development.md) for the required environment and
+device verification procedure.
 
 ## Principles
 
@@ -59,28 +75,20 @@ Python and resolves the locked Mojo and MAX toolchain.
 
 ```bash
 uv sync --locked
-uv run mojo --version
-uv run mojo run -I src tests/test_import.mojo
-MODULAR_DEBUG=device-sync-mode \
-  uv run mojo run -I src -I tests tests/test_rms_norm.mojo
-MODULAR_DEBUG=device-sync-mode \
-  uv run mojo run -I src -I tests tests/test_linear.mojo
-MODULAR_DEBUG=device-sync-mode \
-  uv run mojo run -I src -I tests tests/test_rope.mojo
-MODULAR_DEBUG=device-sync-mode \
-  uv run mojo run -I src -I tests tests/test_attention.mojo
+uv run --locked mojo --version
+uv run --locked python -m llm_mojo.validate
 ```
 
 See [docs/development.md](docs/development.md) for prerequisites and the
-toolchain policy. See [benchmarks/README.md](benchmarks/README.md) for the
-operation-level benchmark boundary and runner.
+toolchain policy. See the [measurement tools](src/llm_mojo/benchmarks/README.md)
+for building benchmarks, collecting profiles, and regenerating reports.
 
 ## Layout
 
 ```text
-docs/   Project direction and development guidance
-src/    Mojo engine code and narrowly scoped Python support code
-tests/  Correctness and integration tests
-benchmarks/  Reproducible operation-level measurements
-experiments/ Frozen protocols, raw evidence, and bounded findings
+src/llm_mojo/             Inference operations and development commands
+src/llm_mojo/benchmarks/   Measurement, profiling, and report generation
+tests/                   Correctness tests and independent oracle generators
+docs/                    Project direction and development guidance
+studies/                 Topic explanations, compact measurements, and graphs
 ```

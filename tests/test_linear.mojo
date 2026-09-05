@@ -1,4 +1,4 @@
-from fixtures.linear.reference_data import (
+from oracle_data.linear.reference_data import (
     LINEAR_ATOL,
     LINEAR_RTOL,
     SHORT_PREFILL_INPUT_FEATURES,

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from benchmarks.capture_rms_norm_trace import (
+from llm_mojo.benchmarks.capture_trace import (
     CAPTURE_ID,
     capture_trace,
     stage_profile_binary,

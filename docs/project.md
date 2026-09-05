@@ -165,47 +165,22 @@ Exit evidence: each optimization has both correctness evidence and a
 reproducible before-and-after benchmark. A faster microkernel alone does not
 establish faster model decoding.
 
-## Repository growth
+## Repository structure
 
-The repository should remain shallower than the implementation until real code
-creates a stable boundary. Do not create placeholder runtime, kernel, benchmark,
-or experiment hierarchies.
+Keep the Mojo operations directly under `src/llm_mojo/` until implemented
+ownership boundaries justify a subpackage. Tests stay under `tests/`, with
+independent oracle generators and frozen hashes under `tests/fixtures/`.
+Generated arrays and manifests go into ignored `build/oracle_data/`.
 
-Use these placement rules as the project grows:
+Reusable measurement instruments live under `src/llm_mojo/benchmarks/`. The five current
+`studies/` folders collect readable explanations and compact evidence by topic;
+a parameter choice is a matrix row, not a new runner or campaign directory.
+`docs/model.md` owns numerical/model contracts, `docs/layouts.md` owns storage
+notation, and studies own measured comparisons. Link between these homes.
 
-- Put Mojo inference code directly under `src/llm_mojo/` while the modules are
-  few. Introduce a subpackage only when multiple implemented modules share a
-  coherent interface or ownership boundary.
-- Keep tests directly under `tests/` while they are few, using
-  `tests/test_<subject>.mojo`. Split unit and integration test directories only
-  when their setup or execution genuinely differs.
-- When the first external numerical fixture exists, place its data, manifest,
-  and one-purpose generator together under `tests/fixtures/<case>/`. Promote
-  Python oracle support into `src/llm_mojo/` only after more than one consumer
-  needs the same code.
-- Add `benchmarks/` only with the first reproducible benchmark. Every benchmark
-  must name the implementation and workload it measures and must retain a
-  correctness gate.
-- Add `experiments/` only with the first recorded experiment. Keep reusable
-  measurement instruments under `benchmarks/`; keep the frozen protocol, raw
-  samples, provenance, and bounded conclusion together in the experiment
-  record.
-- Keep model weights, download caches, compiler output, and generated full-model
-  artifacts outside the repository.
-- Update documentation when a boundary becomes real. A directory name is not
-  evidence that the corresponding capability exists.
-
-The expected near-term evolution is illustrative rather than pre-created:
-
-```text
-src/llm_mojo/
-    <implemented operation>.mojo
-tests/
-    test_<implemented behavior>.mojo
-    fixtures/<case>/              # after the first external fixture
-benchmarks/                       # after the first measured implementation
-experiments/                      # after the first recorded experiment
-```
+Keep model weights, download caches, compiled binaries and full traces outside
+Git. Add structure only when real code needs it. Historical campaign records
+remain in Git history at the revision linked by the study index.
 
 ## Runtime direction
 

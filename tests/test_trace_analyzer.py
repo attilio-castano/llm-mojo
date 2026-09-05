@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from benchmarks.analyze_rms_norm_trace import (
+from llm_mojo.benchmarks.analyze_trace import (
     capture_identity,
     segment_compute_commands,
     summarize_profile_counters,

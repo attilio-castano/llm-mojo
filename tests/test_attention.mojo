@@ -1,4 +1,4 @@
-from fixtures.attention.reference_data import (
+from oracle_data.attention.reference_data import (
     ATTENTION_ATOL,
     ATTENTION_RTOL,
     QWEN_DECODE_HEAD_DIM,
