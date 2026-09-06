@@ -89,9 +89,10 @@ def _enqueue(ctx: DeviceContext, mut weights: AttentionWeights,
     # Repeat a fixed suffix on the same stream. No prefix upload or reset sync.
     cache.length = t - r
     var launched = enqueue_attention_sublayer(
-        ctx, weights, cache, work, TileTensor(input, row_major(r, 896)), variant
+        ctx, weights, cache, work, TileTensor(input, row_major(r, 896)),
+        3, wo_mma=variant == 4,
     )
-    if launched != variant or cache.length != t:
+    if launched != 3 or cache.length != t:
         raise Error("attention benchmark route or cache length mismatch")
 
 
@@ -119,7 +120,7 @@ def main() raises:
     var repetitions = Int(args[9])
     var warmup = Int(args[10])
     if (r < 1 or r > t or t > 4096 or (layers != 1 and layers != 24)
-        or candidate != 3 or control != 3 or seed != 53
+        or (candidate != 3 and candidate != 4) or control != 3 or seed != 53
         or (first != 0 and first != 1) or (mode != "bench" and mode != "profile")
         or (mode == "profile" and (layers != 1 or repetitions * 12 > 5000))
         or repetitions < 1 or warmup < 0):

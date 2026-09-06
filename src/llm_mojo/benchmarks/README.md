@@ -67,6 +67,12 @@ committed image format; extra exports are disposable. See
 ## Focused Metal profiling
 
 The attention sublayer uses the same runner with `--studies attention_sublayer`.
+The contained Wo experiment uses `--studies attention_sublayer_wo_screen`,
+then `--studies attention_sublayer_wo` only after its declared screen gate
+passes. Both include fresh self-pair calibration. Variant 4 changes only Wo
+to the existing bias-free 8x16 MMA mapping; variant 3 is the fixed control.
+For paired stage curation use `profile_summary --attention-sublayer
+--wo-comparison --prefix wo_`; build/capture both profile variants 3 and 4.
 Its initial matrix measures FP32 route 3 paired with itself over six decode,
 five full-prefill and four chunked-prefill workloads, in hot and ring24 modes.
 Run full validation first: its frozen synthetic case 7 supplies the instrument's

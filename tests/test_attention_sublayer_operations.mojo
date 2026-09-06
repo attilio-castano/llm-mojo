@@ -7,7 +7,9 @@ historical compatibility gate. Standalone operation contracts are unchanged.
 """
 from llm_mojo.attention_sublayer import AttentionWeights, AttentionWorkspace
 from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
-from llm_mojo.linear import enqueue_linear_apple_gpu
+from llm_mojo.linear import (
+    enqueue_linear_apple_gpu, enqueue_linear_prefill_mma_8x16_apple_gpu,
+)
 from llm_mojo.rope import enqueue_rope_apple_gpu
 from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
 from llm_mojo.attention_decode import (
@@ -211,6 +213,18 @@ def _operations(case_id: Int, nq: Int, nk: Int, d: Int, t: Int, precision: Bool 
     assert_sublayer_fixture(
         work.projected, case_id, "projected", 0, t, h, 0.03125, True, reference
     )
+    if precision:
+        # The candidate receives precisely the BF16 attention tensor upstream
+        # consumed, so a preceding GQA error cannot contaminate the Wo gate.
+        work.projected.enqueue_fill(123)
+        enqueue_linear_prefill_mma_8x16_apple_gpu(
+            ctx, TileTensor(work.attention, row_major(t, h)),
+            TileTensor(weights.output, row_major(h, h)), projected,
+        )
+        print("local Wo mapping MMA 8x16")
+        assert_sublayer_fixture(
+            work.projected, case_id, "projected", 0, t, h, 0.03125, True, reference
+        )
     load_sublayer_fixture(work.projected, case_id, "projected", True, reference)
     enqueue_residual_apple_gpu(
         ctx, x, projected, TileTensor(work.output, row_major(t, h))

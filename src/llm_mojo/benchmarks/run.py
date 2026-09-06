@@ -74,7 +74,7 @@ def run(build_dir, output, study_names):
     env = {k: v for k, v in os.environ.items() if k != 'MODULAR_DEBUG'}
     for name in study_names:
         spec = STUDIES[name]
-        if name == 'attention_sublayer' and fixture_identity() != provenance.get('attention_fixtures'):
+        if spec['operation'] == 'attention_sublayer' and fixture_identity() != provenance.get('attention_fixtures'):
             raise RuntimeError('attention benchmark input identity changed')
         directory = output / name
         directory.mkdir()
@@ -93,7 +93,7 @@ def run(build_dir, output, study_names):
                 cases.reverse()
             for workload, layers, candidate in cases:
                 rows = workload['rows']
-                binary_name = spec['operation'] if spec['operation'].startswith('gqa_') or name == 'attention_sublayer' else 'operations'
+                binary_name = spec['operation'] if spec['operation'].startswith('gqa_') or spec['operation'] == 'attention_sublayer' else 'operations'
                 command = [str(build_dir / binary_name)]
                 if binary_name == 'operations':
                     command.append(spec['operation'])
@@ -103,7 +103,7 @@ def run(build_dir, output, study_names):
                                           'bench', REPETITIONS, WARMUP]))
                 # The FP32 4096-row ring performs 960 complete sublayers;
                 # its validated runtime exceeds the standalone-kernel limit.
-                timeout = 600 if name == 'attention_sublayer' else 300
+                timeout = 600 if spec['operation'] == 'attention_sublayer' else 300
                 process = subprocess.run(command, cwd=repository_root(), capture_output=True, text=True, env=env, timeout=timeout)
                 # Local diagnostic logs are useful during execution; compact samples are the retained evidence.
                 (directory / 'last-process.txt').write_text(process.stdout + process.stderr)
@@ -120,7 +120,7 @@ def run(build_dir, output, study_names):
             write_json(directory / 'run.json', record)
             print(name, 'block', block, 'complete:', len(samples), 'observations', flush=True)
         summarize(samples, spec)  # Fail before marking completion if any measurement is missing.
-        if name == 'attention_sublayer' and fixture_identity() != provenance['attention_fixtures']:
+        if spec['operation'] == 'attention_sublayer' and fixture_identity() != provenance['attention_fixtures']:
             raise RuntimeError('attention benchmark inputs changed during measurement')
         if repository_state() != repo or source_hashes() != sources or stable_environment() != environment:
             raise RuntimeError('source or hardware/software changed during measurement')
@@ -134,7 +134,7 @@ def main():
     p.add_argument('--build-dir', type=Path, required=True)
     p.add_argument('--output', type=Path)
     p.add_argument('--studies', nargs='+', choices=list(STUDIES),
-                   default=[name for name in STUDIES if not name.endswith('_screen')])
+                   default=[name for name in STUDIES if not name.endswith('_screen') and name != 'attention_sublayer_wo'])
     args = p.parse_args()
     if args.command == 'build':
         build(args.build_dir.resolve())

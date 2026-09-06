@@ -19,6 +19,7 @@ from attention_sublayer_support import (
 def _case(
     case_id: Int, nq: Int, nk: Int, d: Int, t: Int, route: Int, chunks: Bool,
     reference: String = "upstream", require_close: Bool = True,
+    wo_mma: Bool = False,
 ) raises:
     var ctx = DeviceContext()
     assert_equal(ctx.api(), "metal")
@@ -33,6 +34,8 @@ def _case(
         route,
         "chunks",
         chunks,
+        "Wo MMA",
+        wo_mma,
     )
     var h = nq * d
     var k = nk * d
@@ -75,7 +78,9 @@ def _case(
         )
         if route == 3:
             # All FP32 accuracy cases also exercise the public default route.
-            assert_equal(enqueue_attention_sublayer(ctx, weights, cache, work, view), 3)
+            assert_equal(enqueue_attention_sublayer(
+                ctx, weights, cache, work, view, wo_mma=wo_mma
+            ), 3)
         else:
             assert_equal(
                 enqueue_attention_sublayer(ctx, weights, cache, work, view, route), route
@@ -144,7 +149,7 @@ def _case(
     cache.reset(ctx)
     assert_equal(cache.length, 0)
     _ = enqueue_attention_sublayer(
-        ctx, weights, cache, work, TileTensor(input, row_major(1, h)), route
+        ctx, weights, cache, work, TileTensor(input, row_major(1, h)), route, wo_mma
     )
     assert_sublayer_fixture(work.output, case_id, "output", 0, 1, h, 0.03125, require_close, reference)
     if numerical_failures:
@@ -206,7 +211,9 @@ def test_repeated_asynchronous_use() raises:
     load_sublayer_fixture(weights.norm, 5, "norm_weight")
     load_sublayer_fixture(weights.output, 5, "output_weight")
     load_sublayer_fixture(input, 5, "input")
-    for route in range(4):
+    for implementation in range(5):
+        var route = 3 if implementation == 4 else implementation
+        var wo_mma = implementation == 4
         for _ in range(get_defined_int["SUBLAYER_REPEAT", default=3]()):
             cache.reset(ctx)
             work.output.enqueue_fill(123)
@@ -221,6 +228,7 @@ def test_repeated_asynchronous_use() raises:
                         row_major(1, 896),
                     ),
                     route,
+                    wo_mma,
                 )
             ctx.synchronize()
             assert_equal(cache.length, 65)

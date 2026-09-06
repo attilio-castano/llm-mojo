@@ -66,6 +66,16 @@ STUDIES['attention_sublayer'] = dict(
     layout='X/O[R,896], Wqkv[1152,896], Wo[896,896], K/V[T,2,64]; row major',
     arithmetic=ARITHMETIC, inputs=INPUTS, timing=TIMING)
 
+# One candidate: fixed FP32 GQA, replacing only Wo's rowwise mapping.
+# Full-matrix execution is conditional on the five-shape screen's result.
+STUDIES['attention_sublayer_wo'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer'].items() if k not in ('candidates','names')},
+    candidates=[3,4], names={3:'rowwise Wo',4:'MMA 8x16 Wo'})
+STUDIES['attention_sublayer_wo_screen'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_wo'].items() if k != 'workloads'},
+    workloads=[dict(query_rows=r,rows=t) for r,t in
+               [(1,64),(1,4096),(256,256),(1024,1024),(64,4096)]])
+
 
 def workloads(spec):
     return spec.get('workloads', [dict(rows=r) for r in spec.get('rows', [])])

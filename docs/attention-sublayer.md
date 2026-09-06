@@ -148,6 +148,40 @@ includes local implementation, measurement, documentation and commits.
 Profiling remains conditional on passing correctness. A change to the numerical
 contract requires a separate decision; a failing holdout is retained.
 
+### Contained Wo comparison
+
+The approved first optimization changes only bias-free Wo. The explicit
+`wo_mma=True` enqueue argument selects the existing 8x16 Apple MMA mapping;
+the default remains rowwise and the GQA route remains 3. Benchmark variant 3
+means FP32 attention with rowwise Wo; variant 4 means the same attention with
+MMA Wo. These benchmark IDs do not introduce another GQA precision policy.
+
+For `A[R,896] @ Wo[896,896].T`, rowwise assigns one output dot product to
+one SIMD group. The candidate assigns an 8x16 output tile to one group, using
+two 8x8 matrix fragments per K=8 phase and four FP32 accumulators per lane.
+It reuses operands across rows/output features without shared operand storage
+or block barriers. The 1,605,632-byte BF16 weight allocation, all buffers,
+twelve-dispatch sequence, and BF16 round before residual addition are fixed.
+The partial tile at R=1 is deliberately measured, not hidden by a selector.
+
+Before timing, test both mappings on identical upstream attention tensors,
+then feed original X through full/chunked composition on all 17 frozen
+synthetic and three existing checkpoint cases. Preserve the existing 0.03125
+Wo/branch/final gates, 0.0078125 GQA gate, exact cache checks and frozen arrays.
+Also exercise repeated asynchronous decode and poison the actual benchmark
+buffers for both mappings in hot/ring24 modes. No new tolerance is calibrated.
+
+Use `attention_sublayer_wo_screen` for the five shapes above, comparing variant
+4 with 3 and including 3 versus itself in the same run. Advance this one
+candidate to `attention_sublayer_wo` only if the screen establishes a gain
+under the existing four-block rule in at least one prefill workload/mode;
+retain all losses and inconclusive cells. The full run repeats calibration.
+If advanced, capture both variants at the existing four profile workloads
+with 25, 10, 5 and 10 measured iterations respectively, plus ten warmups.
+These 1,200 stage durations explain the comparison; paired latency determines
+the speed claim. Counter export is optional and any omission is explicit.
+No automatic dispatch crossover is inferred from the older packed-QKV study.
+
 ## Numerical findings before profiling
 
 The integration exposed a RoPE compatibility defect against the declared eager

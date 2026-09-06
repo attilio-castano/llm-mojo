@@ -5,8 +5,8 @@ import json
 from .._repository import repository_root
 
 OPERATION = 'attention_sublayer'
-VARIANTS = {3}
-ENTRYPOINTS = {'attention_sublayer_3': 'enqueue_attention_sublayer'}
+VARIANTS = {3,4}
+ENTRYPOINTS = {f'attention_sublayer_{v}': 'enqueue_attention_sublayer' for v in VARIANTS}
 STAGES = ['RMSNorm', 'Q projection', 'K projection', 'V projection',
           'Q RoPE', 'K RoPE', 'KV append', 'QK', 'softmax', 'PV',
           'output projection', 'residual']
@@ -61,7 +61,7 @@ def configuration(data):
     r, t = data.get('profile_rows'), data.get('key_value_rows')
     if type(r) is not int or type(t) is not int or not 1 <= r <= t <= 4096:
         raise ValueError('invalid attention sublayer query/key length')
-    expected = specification(3, r, t)
+    expected = specification(int(implementation.rsplit('_',1)[1]), r, t)
     if any(data.get(k) != v or (type(v) is int and type(data.get(k)) is not int)
            for k, v in expected.items()):
         raise ValueError('attention sublayer shape or dispatch identity mismatch')
@@ -74,6 +74,6 @@ def configuration(data):
 
 
 def profile_grid(spec):
-    if spec['variants'] != [3] or [tuple(w) for w in spec['workloads']] != PROFILE_WORKLOADS:
+    if spec['variants'] not in ([3],[3,4]) or [tuple(w) for w in spec['workloads']] != PROFILE_WORKLOADS:
         raise ValueError('invalid attention sublayer profile grid')
-    return {3: STAGES}, {(r, t, 3) for r, t in PROFILE_WORKLOADS}
+    return {v: STAGES for v in spec['variants']}, {(r,t,v) for r,t in PROFILE_WORKLOADS for v in spec['variants']}

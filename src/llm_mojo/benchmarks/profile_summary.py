@@ -14,14 +14,16 @@ STAGES = {0: ['QK', 'softmax', 'PV'], 4: ['fused'], 9: ['decode', 'merge']}
 COUNTERS = {'Kernel Occupancy', 'Instruction Throughput Limiter', 'Last Level Cache Limiter'}
 
 
-def collect(source, output, prefill_variant=None, *, prefill_variants=None, prefix='', attention_sublayer=False):
+def collect(source, output, prefill_variant=None, *, prefill_variants=None, prefix='', attention_sublayer=False, wo_comparison=False):
     records, samples = [], []
     common = None
     if prefill_variant is not None and prefill_variants is not None:
         raise ValueError('choose one prefill comparison')
     if attention_sublayer and (prefill_variant is not None or prefill_variants is not None):
         raise ValueError('choose one attention profile study')
-    variants = [3] if attention_sublayer else ([0,prefill_variant] if prefill_variant is not None else prefill_variants)
+    if wo_comparison and not attention_sublayer:
+        raise ValueError('Wo comparison requires the attention sublayer')
+    variants = ([3,4] if wo_comparison else [3]) if attention_sublayer else ([0,prefill_variant] if prefill_variant is not None else prefill_variants)
     prefill = variants is not None
     grid = sublayer.PROFILE_WORKLOADS if attention_sublayer else PREFILL_PROFILE_WORKLOADS
     spec = dict(workloads=grid,variants=list(variants)) if prefill else {}
@@ -114,6 +116,7 @@ if __name__ == '__main__':
     group.add_argument('--prefill-variants',type=int,nargs='+')
     group.add_argument('--attention-sublayer',action='store_true')
     parser.add_argument('--prefix',default='')
+    parser.add_argument('--wo-comparison',action='store_true')
     args = parser.parse_args()
     collect(args.source, args.output, args.prefill_variant,
-            prefill_variants=args.prefill_variants, prefix=args.prefix, attention_sublayer=args.attention_sublayer)
+            prefill_variants=args.prefill_variants, prefix=args.prefix, attention_sublayer=args.attention_sublayer, wo_comparison=args.wo_comparison)

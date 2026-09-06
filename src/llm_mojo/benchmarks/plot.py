@@ -192,6 +192,67 @@ def render_prefill(directory, record, samples, summary):
     print(directory.name,len(samples),'primary observations verified; prefill figures and retained follow-ups regenerated')
 
 
+def render_sublayer_wo(directory, prefix):
+    """Whole-block paired ratios for the single Wo mapping experiment."""
+    record, samples, summary = load_run(directory, prefix)
+    table(directory, prefix+'summary.csv', summary)
+    spec = record['specification']
+    data = [s for s in summary if s['candidate'] == 4]
+    labels = [f'Decode T={w["rows"]}' if w['query_rows'] == 1 else
+              f'Full R=T={w["rows"]}' if w['query_rows'] == w['rows'] else
+              f'Chunk R={w["query_rows"]}, T={w["rows"]}' for w in spec['workloads']]
+    fig, axes = plt.subplots(1,2,figsize=(12, max(5.5,.37*len(labels)+2.7)),sharex=True,sharey=True)
+    for ax,layers in zip(axes,(1,24)):
+        values = [s for s in data if s['layers'] == layers]
+        for i,s in enumerate(values):
+            color = '#167d9a' if s['decision']=='faster' else '#c75b39' if s['decision']=='slower' else '#777777'
+            ax.errorbar(s['ratio'],i,xerr=[[s['ratio']-s['ratio_min']],[s['ratio_max']-s['ratio']]],
+                        fmt='o',color=color,capsize=3,markersize=6,
+                        markerfacecolor='white' if s['decision']=='inconclusive' else color)
+        ax.axvline(1,color='#333333',linewidth=1)
+        ax.grid(axis='x',alpha=.18)
+        ax.set_title('Hot call' if layers==1 else 'Ring24 per call')
+        ax.set_xlabel('Whole-block time / paired rowwise Wo control')
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda value,_:f'{value:g}×'))
+    axes[0].set_yticks(range(len(labels)),labels)
+    axes[0].invert_yaxis()
+    screen = record['study'].endswith('_screen')
+    fig.suptitle('Qwen attention · changing only Wo'+(' · screen' if screen else ''),fontsize=16,fontweight='bold')
+    fig.text(.04,.025,'Left of 1× is faster. Whiskers: four-block ratio range; open marks: inconclusive.\n'
+             'A gain requires all four blocks faster and > max(5%, matching self-pair deviation).\n'
+             f'{len(samples):,} retained observations · {record["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention.\n'
+             f'Source {record["repository"]["commit"][:7]}. Fixed cache prefix; allocation and correctness checks excluded.',fontsize=9,color='#555555')
+    fig.tight_layout(rect=(0,.18,1,.94))
+    fig.savefig(directory/(prefix.rstrip('_')+'.png'),dpi=160)
+    plt.close(fig)
+
+
+def render_sublayer_wo_profile(directory):
+    rows = load_profile(directory,'wo_')
+    table(directory,'wo_profile_summary.csv',rows)
+    from .attention_sublayer_contract import PROFILE_WORKLOADS, STAGES
+    fig, axes = plt.subplots(2,2,figsize=(13,10))
+    for ax,(r,t) in zip(axes.flat,PROFILE_WORKLOADS):
+        for variant,color,offset,label in ((3,'#777777',-.18,'Rowwise Wo'),(4,'#167d9a',.18,'MMA Wo')):
+            lookup = {s['stage']:s for s in rows if s['query_rows']==r and s['rows']==t and s['variant']==variant}
+            ax.barh([i+offset for i in range(len(STAGES))],
+                    [lookup[stage]['median_us'] for stage in STAGES],height=.34,color=color,label=label)
+        ax.set_yticks(range(len(STAGES)),STAGES,fontsize=9)
+        ax.invert_yaxis()
+        ax.set_xscale('log')
+        ax.set_title(f'R={r}, T={t}')
+        ax.set_xlabel('Median active GPU time (µs) · log scale')
+        ax.grid(axis='x',alpha=.15)
+    axes[0,0].legend(frameon=False,fontsize=9)
+    fig.suptitle('Wo experiment · which stage changed?',fontsize=16,fontweight='bold')
+    fig.text(.04,.025,'Separate single captures; active dispatch durations exclude preemption and host gaps.\n'
+             'These stage medians are diagnostic and are not added to construct whole-block latency.\n'
+             f'{sum(s["count"] for s in rows):,} measured dispatch durations. Counter tables were not analyzed; absence is not zero.',fontsize=9,color='#555555')
+    fig.tight_layout(rect=(0,.12,1,.94))
+    fig.savefig(directory/'wo_profile.png',dpi=160)
+    plt.close(fig)
+
+
 def render_sublayer(directory, record, samples, summary):
     """Separate latency scaling from diagnostic per-dispatch active time."""
     prefill_style()
@@ -253,7 +314,12 @@ def render_sublayer(directory, record, samples, summary):
         fig.tight_layout(rect=(0,.13,1,.94))
         fig.savefig(directory / 'profile.png',dpi=160)
         plt.close(fig)
-    print(directory.name, len(samples), 'observations verified; attention tables and figures regenerated')
+    for prefix in ('wo_screen_','wo_'):
+        if (directory/(prefix+'run.json')).exists():
+            render_sublayer_wo(directory,prefix)
+    if (directory/'wo_profiles.json').exists():
+        render_sublayer_wo_profile(directory)
+    print(directory.name, len(samples), 'baseline observations verified; attention figures and retained Wo comparisons regenerated')
 
 
 def render(directory):

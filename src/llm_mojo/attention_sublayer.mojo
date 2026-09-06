@@ -9,7 +9,9 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import global_idx
 from std.math import ceildiv
 from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
-from llm_mojo.linear import enqueue_linear_apple_gpu
+from llm_mojo.linear import (
+    enqueue_linear_apple_gpu, enqueue_linear_prefill_mma_8x16_apple_gpu,
+)
 from llm_mojo.rope import enqueue_rope_apple_gpu
 from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
 from llm_mojo.attention_decode import (
@@ -227,6 +229,7 @@ def enqueue_attention_sublayer[
     mut work: AttentionWorkspace,
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     route: Int = 3,
+    wo_mma: Bool = False,
 ) raises -> Int:
     """Enqueue one sublayer and advance cache length; return the launched route.
 
@@ -234,6 +237,9 @@ def enqueue_attention_sublayer[
     Route 0 materializes BF16 GQA. Route 1 uses G32 decode / original MMA prefill;
     route 2 uses split64 H4 decode / rolled-QK MMA prefill. Surroundings match.
     Routes 0-2 remain explicit BF16 compatibility comparisons.
+    wo_mma selects only the bias-free output projection's 8x16 MMA mapping;
+    it preserves BF16 projection output before the separate residual addition.
+    It is an explicit experiment, independent of the GQA precision route.
     X must not overlap any writable workspace/cache region. Read output from
     work.output only after completion and before its next overwrite.
     """
@@ -384,12 +390,14 @@ def enqueue_attention_sublayer[
                 32, 32, MMA=True, SCHEDULE=2
             ](ctx, q, keys, values, a)
     var projected = TileTensor(work.projected, row_major(r, h))
-    enqueue_linear_apple_gpu(
-        ctx,
-        TileTensor(work.attention, row_major(r, h)),
-        TileTensor(weights.output, row_major(h, h)),
-        projected,
-    )
+    var merged = TileTensor(work.attention, row_major(r, h))
+    var output_weight = TileTensor(weights.output, row_major(h, h))
+    if wo_mma:
+        enqueue_linear_prefill_mma_8x16_apple_gpu(
+            ctx, merged, output_weight, projected
+        )
+    else:
+        enqueue_linear_apple_gpu(ctx, merged, output_weight, projected)
     enqueue_residual_apple_gpu(
         ctx, x, projected, TileTensor(work.output, row_major(r, h))
     )

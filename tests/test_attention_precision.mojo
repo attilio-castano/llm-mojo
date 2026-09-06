@@ -45,6 +45,13 @@ def _run_cases(composed: Bool) raises:
                     _case(case_id, nq, nk, d, t, route, Bool(chunked), "fp32", route == 3)
                 except:
                     failed_cases += 1
+        # Same original X, fixed FP32 attention policy and unchanged gates;
+        # only Wo's work ownership changes. Includes tiny/ragged shapes.
+        for chunked in range(2):
+            try:
+                _case(case_id, nq, nk, d, t, 3, Bool(chunked), "fp32", True, True)
+            except:
+                failed_cases += 1
     if failed_cases:
         raise Error("FP32 attention failed its declared accuracy or exact cache gates")
 

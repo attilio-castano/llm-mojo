@@ -35,6 +35,14 @@ class AttentionProfileTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 sublayer.configuration({**p,key:value})
         self.assertEqual(len(sublayer.profile_grid(dict(variants=[3],workloads=sublayer.PROFILE_WORKLOADS))[1]),4)
+        candidate = {**p, 'implementation':'attention_sublayer_4',
+                     **sublayer.specification(4,64,4096)}
+        sublayer.configuration(candidate)
+        # The same source entrypoint serves both Wo mappings; the workload ID
+        # must still prevent a rowwise capture being labeled as the candidate.
+        with self.assertRaisesRegex(ValueError,'identity mismatch'):
+            sublayer.configuration({**candidate,'profile_workload':p['profile_workload']})
+        self.assertEqual(len(sublayer.profile_grid(dict(variants=[3,4],workloads=sublayer.PROFILE_WORKLOADS))[1]),8)
         with self.assertRaises(ValueError):
             sublayer.profile_grid(dict(variants=[3],workloads=sublayer.PROFILE_WORKLOADS[:-1]))
 
