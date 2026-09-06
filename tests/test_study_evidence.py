@@ -76,7 +76,7 @@ class EvidenceTests(unittest.TestCase):
             for record in directory.glob('*run.json'):
                 _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
-        self.assertEqual(count, 43840)
+        self.assertEqual(count, 47680)
         profile = load_profile(ROOT / 'studies/gqa_decode')
         self.assertEqual(sum(row['count'] for row in profile), 3000)
         profile = load_profile(ROOT / 'studies/gqa_prefill')
@@ -100,6 +100,17 @@ class EvidenceTests(unittest.TestCase):
         run = json.loads((ROOT / 'studies/attention_sublayer/decode_run.json').read_text())
         self.assertEqual(decode['common']['repository'], run['repository'])
         self.assertEqual(decode['common']['source_sha256'], run['build']['sources'])
+        profile = load_profile(ROOT / 'studies/attention_sublayer', 'prefill_')
+        self.assertEqual(sum(row['count'] for row in profile), 1320)
+        prefill_record = json.loads((ROOT / 'studies/attention_sublayer/prefill_profiles.json').read_text())
+        run = json.loads((ROOT / 'studies/attention_sublayer/prefill_run.json').read_text())
+        validation = json.loads((ROOT / 'studies/attention_sublayer/prefill_validation.json').read_text())
+        self.assertEqual(prefill_record['common']['repository'], run['repository'])
+        self.assertEqual(prefill_record['common']['source_sha256'], run['build']['sources'])
+        self.assertEqual(validation['source_commit'], run['repository']['commit'])
+        for name, digest in validation['source_sha256'].items():
+            if name in run['build']['sources']:
+                self.assertEqual(digest, run['build']['sources'][name])
         record = json.loads((ROOT / 'studies/attention_sublayer/profiles.json').read_text())
         full = next(c for c in record['captures'] if c['query_rows'] == 4096)
         self.assertEqual(full['counter_analysis']['status'], 'not_analyzed')
@@ -110,7 +121,8 @@ class EvidenceTests(unittest.TestCase):
         for topic, prefix, groups in (('gqa_decode', '', 6),
                                       ('attention_sublayer', '', 48),
                                       ('attention_sublayer', 'wo_', 96),
-                                      ('attention_sublayer', 'decode_', 66)):
+                                      ('attention_sublayer', 'decode_', 66),
+                                      ('attention_sublayer', 'prefill_', 66)):
             source = ROOT / 'studies' / topic
             with self.subTest(topic=topic, prefix=prefix), tempfile.TemporaryDirectory() as tmp:
                 directory = Path(tmp)

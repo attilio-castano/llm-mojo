@@ -116,6 +116,10 @@ are preserved.
 
 ## Approved work and comparison budget
 
+The following initial budget preceded the separately approved Wo, FP32 decode
+and FP32 prefill comparisons specified below. Their bounded protocols and
+completed results are retained in the [attention study](../studies/attention_sublayer/README.md).
+
 1. Correct reference composition, bias-free linear and residual operations.
 2. Persistent-cache equivalence: full, chunked and single-row execution.
 3. Whole-sublayer paired latency and separately captured stage profiles.

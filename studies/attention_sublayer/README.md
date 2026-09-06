@@ -1,11 +1,13 @@
 # Qwen attention sublayer
 
-FP32 online decode reduces whole-attention latency by **61–69% at T=1024**
-and **89–91% at T=4096**, on Apple M4 Pro / Metal. The earlier Wo-only
-experiment improves full prefill by about 31% at 256 tokens and 10% at 4096.
-These are separate paired comparisons against their matching controls, not
-multipliable speedups. Both experiments retain their negative and inconclusive
-results; new mappings remain explicit options.
+The completed FP32 attention experiments establish substantial remaining
+headroom on Apple M4 Pro / Metal. Decode ownership changes reduce whole-block
+time by **61–69% at T=1024** and **89–91% at T=4096**, with rowwise Wo fixed.
+Prefill tiling reduces it by **47% at full 1024** and **74–75% at full 4096**,
+with MMA Wo fixed. The earlier Wo-only experiment improves full prefill by
+about 31% at 256 tokens and 10% at 4096. These are separate paired comparisons
+against matching controls, not multipliable speedups. Negative and inconclusive
+results are retained; new mappings remain explicit options.
 
 The measured unit is
 `X → RMSNorm → Q/K/V → RoPE → KV append → GQA → Wo → residual X+branch`.
@@ -22,7 +24,7 @@ output remain BF16. This is our agreed inference precision policy; it does
 not identify Qwen's original training kernels.
 
 The default Mojo route retains FP32 scores, probabilities and accumulation.
-Validation passed 81 Mojo tests and 38 Python tests, all 510 frozen synthetic
+Initial baseline validation passed 81 Mojo tests and 38 Python tests, all 510 frozen synthetic
 arrays, three checkpoint attention cases and repeated asynchronous cache
 reuse. The instrument additionally passed full 4096-token ring24 checks
 with a poisoned cache suffix. It checks the projected branch separately so
@@ -345,6 +347,150 @@ passes disappear. They do not support a precise cross-capture kernel speedup,
 a direct candidate ranking, or summing medians to reconstruct block latency.
 The paired measurements establish the speed claims.
 
+## Contained FP32 prefill results
+
+This comparison changes only GQA, with the earlier MMA Wo mapping fixed in
+both arms. Benchmark 4 uses materialized FP32 attention; benchmark 7 uses the
+FP32 adaptation of the earlier 32×32 rolled-QK MMA design. The measurements
+are whole attention calls from RMSNorm through residual, not isolated GQA.
+They do not multiply or inherit the separate Wo experiment's speedups.
+
+### What the tile changes
+
+A threadgroup owns one query head and 32 query rows. Its four SIMD groups
+each own eight rows, with sixteen FP32 output accumulator variables per lane. It
+streams 32 keys/values at a time, reusing the shared K/V tile across its
+query rows. Matrix operations calculate QK and PV; online maximum,
+denominator and numerator state carry information between KV tiles.
+For R=4096 there are 14×128=1,792 threadgroups. That is a work-ownership
+count, not measured occupancy.
+
+The candidate preserves the prior rolled QK loop and four barriers per KV
+tile. Q/K operands remain BF16 with FP32 accumulation, and the scaled score
+stays FP32. Tile weights also remain FP32 through PV. Stored BF16 V is widened
+losslessly for the FP32 PV matrix operation; only final attention output
+rounds to BF16. This preserves the agreed precision policy while changing
+reduction order and online normalization.
+
+Shared K/V storage totals 8 KiB and FP32 scores/weights another 8 KiB, for
+16 KiB per block versus the older BF16-weight mapping's 14 KiB. The new path
+needs no global score/probability matrix: at full R=T=4096 this removes the
+requirement for 896 MiB of attention scratch. The comparison instrument still
+owns the common control scratch outside timing; it does not measure allocation
+savings. Avoiding that matrix also does not mean every input is read only once.
+
+Sublayer route 6 is explicit: R>1 launches tiled FP32 prefill and R=1 launches
+FP32 G32, returning actual route 6 or 4 respectively. Both work without
+materialized scratch. Wo is selected independently; the prefill benchmark
+requires R>1 and fixes MMA Wo in both arms. Public defaults remain route 3 and
+rowwise Wo; no automatic crossover is introduced.
+
+### Numerical results
+
+The full workflow passed **86 Mojo tests and 40 Python tests**, verified all
+510 frozen synthetic arrays, and reproduced all 63 checkpoint arrays. The
+new isolated operation passed 42 synthetic and nine checkpoint comparisons
+on exact upstream Q/K/V, including full and suffix attention. Compositions
+from original X pass with both Wo mappings and exact cache checks.
+
+| Dataset | Maximum GQA scaled error | Maximum composed branch error | Maximum residual output error |
+| --- | ---: | ---: | ---: |
+| Synthetic | 0.00625000 | 0.00516796 | 0.00781250 |
+| Checkpoint | 0.00045683 | 0.00141243 | 0.00137931 |
+
+The attention gate remains 0.0078125; branch/final gates remain 0.03125.
+Scaled error is `abs(got-want)/(1+abs(want))`. Existing standalone prefill
+fixtures add 29 edge cases checked against materialized FP32 Mojo, supplementing
+the pinned upstream authority. All pass twelve poisoned-output repetitions in
+normal execution, along with causal future perturbation and full/suffix tests.
+An 8×8 FP32 identity product with non-BF16-representable operands returns zero
+maximum error, guarding against silently narrowing matrix operands.
+
+Twelve asynchronous 65-token sequences pass on eight composed configurations.
+The new route uses 33,31,1-row calls without intermediate synchronization or
+materialized scratch; the previous seven configurations keep their decode
+coverage. [prefill_validation.json](prefill_validation.json) retains commands,
+source hashes and individual numerical comparisons. No tolerance or frozen
+oracle array changed.
+
+### Screen and full matrix
+
+All six screening cells qualify: about 20% lower whole-attention time at full
+256, 47–48% at full 1024 and 72–73% for chunk (64,4096), across hot/ring24.
+The screen retains 960 observations and is selection evidence. The full run
+uses fresh calibration; it supplies the following final decisions.
+
+The full comparison retains **16 faster, two inconclusive and zero slower**
+decisions across eighteen workload/mode cells. A gain requires every paired
+block to be faster and the median reduction to exceed the larger of 5% and
+matching self-pair variation.
+
+| Workload R,T | Hot latency reduction | Ring24 per-call reduction |
+| --- | ---: | ---: |
+| Full 16,16 | Inconclusive | 7.84% |
+| Full 64,64 | 7.42% | 8.46% |
+| Full 256,256 | 20.18% | 21.11% |
+| Full 1024,1024 | 47.10% | 47.30% |
+| Full 4096,4096 | 74.59% | 74.33% |
+| Chunk 4,64 | 9.60% | 21.14% |
+| Chunk 16,256 | Inconclusive | 23.30% |
+| Chunk 64,1024 | 55.80% | 55.37% |
+| Chunk 64,4096 | 72.70% | 72.04% |
+
+At full 1024, paired-control/candidate medians are 30.875 → 16.333 ms hot
+and 30.339 → 15.985 ms ring24 per call. At full 4096 they are
+323.407 → 82.183 ms hot and 324.106 → 82.921 ms ring24. Chunk (64,4096)
+changes from 9.570 → 2.644 ms hot and 9.374 → 2.622 ms ring24.
+Displayed times are medians of block medians; percentage reductions use
+paired block ratios. [prefill_summary.csv](prefill_summary.csv) retains the
+complete times, ratio ranges, calibration thresholds and decisions.
+
+Hot full-16 has a 3.68% median paired reduction and a 60.67% calibration
+threshold, so it is inconclusive. Hot chunk (16,256) has a 17.85% median
+reduction but one block is 4.59% slower, failing the all-four-block rule.
+These observations are retained. A lower absolute median alone does not
+establish a gain under this protocol.
+
+![Whole-block effect of FP32 prefill tiling](prefill.png)
+
+### Remaining active GPU work
+
+The six separate stage captures validate 12 dispatches per materialized call
+and 10 per tiled call. The table below describes only the candidate captures.
+Shares divide each stage's summed recorded active duration by the total active
+duration in that same capture; they are not percentages of whole-call latency.
+
+| R,T | Q projection median µs | Fused GQA median µs | Q active share | GQA active share |
+| --- | ---: | ---: | ---: | ---: |
+| 1024,1024 | 10789.917 | 1721.750 | 63.1% | 10.0% |
+| 4096,4096 | 46004.938 | 22529.146 | 52.6% | 25.7% |
+| 64,4096 | 645.917 | 1785.500 | 22.6% | 65.3% |
+
+![Remaining stages after FP32 prefill tiling](prefill_profile.png)
+
+In the full-4096 control, QK/PV account for 75.6% of recorded active time.
+With tiling, Q projection becomes the largest stage in both full-prefill
+captures. Long cached chunks still spend most active time inside GQA. This
+is why one optimization target need not serve every workload.
+
+Unchanged stages still vary between separate captures. For example, Q at
+full 1024 has a 11987.915 µs control median and 10789.917 µs candidate median;
+chunk Q changes from 565.708 to 645.917 µs. Consequently these profiles explain
+remaining work but do not supply precise causal kernel-speedup estimates.
+The paired latency experiment establishes the gains. The
+[profile table](prefill_profile_summary.csv) retains all stage medians/ranges.
+There are 352 measured dispatches with segmented execution across these
+captures; all segments were coalesced using validated command identities,
+excluding preemption gaps before stage assignment.
+
+Each tiled capture reports a maximum compiler spill size of **48 bytes per
+event**, with 35,20,35 target events respectively. The materialized captures
+report no target spill event. Event sizes/counts are compiler evidence, not
+measured spill traffic, and absence of an event does not prove spill-free
+execution. The 48-byte maximum is also what the earlier BF16 rolled-QK study
+reported, but it does not establish identical spilled values or their cost.
+No optional counter tables were exported or analyzed for this comparison.
+
 ## What the earlier experiments teach us
 
 The [linear prefill study](../linear_prefill/README.md) already established
@@ -368,15 +514,31 @@ The [prefill study](../gqa_prefill/README.md) showed the value of query tiling
 and matrix execution. Its follow-up found that rolling the QK reduction
 reduced reported compiler spills and improved a subset of workloads; removing
 barriers, changing accumulator representation and adding head reuse did not
-produce general gains. Future FP32 prefill candidates should retain those
-lessons about live state and query ownership. They also need to preserve
-FP32 scores and softmax weights through PV: copying the old MMA path's BF16
-tile-weight cast would change the numerical policy again.
+produce general gains. The completed FP32 prefill comparison retains those
+lessons about live state and query ownership. It also preserves FP32 scores
+and softmax weights through PV: copying the old MMA path's BF16 tile-weight
+cast would change the numerical policy again.
 
-The decode milestone is complete. Next study FP32 prefill tiling and PV
-arithmetic, including the compiler's resource behavior. Q projection is another contained candidate, particularly at 1024
-tokens, but its rounding changes feed attention scores; rerun operation and
-full-block gates. Broader fusion should follow measured remaining stage costs.
+Both follow-up milestones are complete. **Q projection is the clearest next
+contained experiment for full prefill.** It has the same `[R,896]` by
+`[896,896]` matrix dimensions as Wo, with bias, so the existing projection
+mapping is a concrete starting point. Unlike Wo, its rounding differences
+feed RoPE and attention scores. Validate Q on exact upstream normalized inputs,
+then rerun operation and full-block gates before measuring its contribution.
+Do not inherit Wo's numerical or performance result merely because shapes match.
+
+Long cached chunks remain a separate GQA question. At `(64,4096)`, the 32-row
+tile exposes only 28 threadgroups. Smaller query tiles or splitting the KV
+sequence could expose more independent work, informed by the decode study;
+they would also change reuse, partial-state traffic and merge costs. The
+reported spills are another concrete investigation point, but these captures
+do not identify their source values or prove they dominate runtime. Further
+head reuse or barrier changes need fresh motivation after their earlier mixed
+results. Broader fusion should follow the remaining stage costs.
+
+These results show that the original materialized paths were far from the
+best mappings tested here. They do not establish a hardware ceiling, a universal
+dispatch policy, or full-decoder/token-generation performance.
 
 ## Reproduction and evidence
 
@@ -391,7 +553,7 @@ source, binary and condition records below.
 
 The workload uses frozen synthetic seed 53 with a CPU-derived cache prefix.
 Ring24 owns 24 distinct weights, inputs and caches with two sign patterns;
-it shares scratch/output and is not a decoder stack. Timing includes the host
+it shares scratch/output and is not a decoder stack. Baseline timing includes the host
 length rewind, twelve enqueues, cache append and completion. Allocation,
 fixture reads, uploads, prefix setup and correctness checks are excluded.
 Each call overwrites the same suffix, keeping R and T fixed. There are ten
@@ -444,6 +606,25 @@ Post-measurement reporting changes do not alter the measured engine or gates.
 All eight tables and eight figures regenerate from retained raw evidence;
 39 Python checks validate the retained records, including missing/duplicate
 dispatch rejection for each profile grid.
+
+The prefill screen and full run use clean source
+`17720c294ec98a5ba38da004e38ec72eeed6372f`, on 2026-09-06 at
+20:56:23–21:02:22 and 21:02:22–21:47:00 UTC. They retain 960 and 2,880
+observations in [prefill_screen_run.json](prefill_screen_run.json),
+[prefill_screen_samples.csv.gz](prefill_screen_samples.csv.gz),
+[prefill_run.json](prefill_run.json) and [prefill_samples.csv.gz](prefill_samples.csv.gz).
+The six profile binaries use the same clean source. [prefill_profiles.json](prefill_profiles.json)
+and [prefill_profile_samples.csv.gz](prefill_profile_samples.csv.gz) retain
+1,320 active durations: 25,10,25 measured iterations per variant at full 1024,
+full 4096 and chunk (64,4096), with ten warmups each. Every block/capture
+recorded AC power, Low Power Mode off and no reported thermal/performance
+warning. Those checks do not pin clocks or exclude background activity.
+
+All 40 Python checks pass against the retained evidence, including duplicate,
+missing-dispatch and source-identity checks for the added profile grid. All
+11 tables and 11 figures regenerate byte-for-byte. Post-measurement changes
+curate evidence and reporting; the measured engine and numerical gates remain
+unchanged. Full traces/XML, binaries and oracle arrays remain outside Git.
 
 Rebuild tables and figures without a GPU:
 
