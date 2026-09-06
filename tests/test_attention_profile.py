@@ -89,6 +89,24 @@ class AttentionProfileTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 sublayer.profile_grid(dict(variants=variants,workloads=workloads))
 
+    def test_integrated_attention_profile_binds_entrypoint_and_layout_copy(self):
+        for r,t in sublayer.PROFILE_WORKLOADS:
+            p = self.profile()
+            p.update(operation=sublayer.OPERATION, implementation='attention_sublayer_9',
+                     entrypoint='enqueue_attention_sublayer_integrated', profile_iterations=50,
+                     **sublayer.specification(9,r,t))
+            cfg, _, _ = profile_contract(p)
+            self.assertEqual(cfg['dispatches_per_iteration'],9)
+            for key,value in (('entrypoint','enqueue_attention_sublayer'),
+                              ('dispatches_per_iteration',8),
+                              ('implementation','attention_sublayer_8')):
+                with self.assertRaises(ValueError):
+                    sublayer.configuration({**p,key:value})
+        stages,grid = sublayer.profile_grid(dict(variants=[8,9],workloads=sublayer.PROFILE_WORKLOADS))
+        self.assertEqual(len(grid),8)
+        self.assertEqual(stages[9][1:3],['packed QKV projection','QKV unpack'])
+        self.assertEqual([len(stages[v]) for v in (8,9)],[10,9])
+
     def test_prefill_profile_binds_rectangular_shape_and_tile_ownership(self):
         for variant in prefill.VARIANTS:
             p = self.profile()

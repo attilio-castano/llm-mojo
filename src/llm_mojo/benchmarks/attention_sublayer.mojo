@@ -6,6 +6,7 @@ Odd ring entries negate X, Wqkv and Wo, preserving Q/K/V and negating Y.
 """
 from llm_mojo.attention_sublayer import (
     AttentionWeights, AttentionCache, AttentionWorkspace, enqueue_attention_sublayer,
+    enqueue_attention_sublayer_integrated,
 )
 from layout import TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -88,12 +89,17 @@ def _enqueue(ctx: DeviceContext, mut weights: AttentionWeights,
              variant: Int) raises:
     # Repeat a fixed suffix on the same stream. No prefix upload or reset sync.
     cache.length = t - r
-    var route = variant - 1 if variant >= 5 else 3
-    var launched = enqueue_attention_sublayer(
-        ctx, weights, cache, work, TileTensor(input, row_major(r, 896)),
-        route, wo_mma=variant == 4 or variant == 7,
-    )
-    if launched != route or cache.length != t:
+    var route = 6 if variant >= 8 else (variant - 1 if variant >= 5 else 3)
+    var launched: Int
+    var view = TileTensor(input, row_major(r, 896))
+    if variant == 9:
+        launched = enqueue_attention_sublayer_integrated(ctx, weights, cache, work, view)
+    else:
+        launched = enqueue_attention_sublayer(
+            ctx, weights, cache, work, view,
+            route, wo_mma=(r >= 16 if variant == 8 else variant == 4 or variant == 7),
+        )
+    if launched != (4 if route == 6 and r == 1 else route) or cache.length != t:
         raise Error("attention benchmark route or cache length mismatch")
 
 
@@ -103,7 +109,7 @@ def main() raises:
         args = ["profile", String(get_defined_int["GQA_PROFILE_QUERY_ROWS"]()),
                 String(get_defined_int["GQA_PROFILE_ROWS"]()), "1",
                 String(get_defined_int["GQA_PROFILE_VARIANT"]()),
-                "4" if get_defined_int["GQA_PROFILE_VARIANT"]() == 7 else "3", "1", "53",
+                "8" if get_defined_int["GQA_PROFILE_VARIANT"]() >= 8 else ("4" if get_defined_int["GQA_PROFILE_VARIANT"]() == 7 else "3"), "1", "53",
                 "profile", String(get_defined_int["GQA_PROFILE_ITERATIONS"]()),
                 String(get_defined_int["GQA_PROFILE_WARMUP", default=10]())]
     else:
@@ -121,8 +127,10 @@ def main() raises:
     var mode = args[8]
     var repetitions = Int(args[9])
     var warmup = Int(args[10])
-    var dispatches = 10 if candidate == 5 or candidate == 7 else (11 if candidate == 6 else 12)
-    var valid_pair = (control == 3 and 3 <= candidate <= 6) or (control == 4 and (candidate == 4 or candidate == 7))
+    var dispatches = 9 if candidate == 9 else (10 if candidate == 5 or candidate == 7 or candidate == 8 else (11 if candidate == 6 else 12))
+    var valid_pair = ((control == 3 and (3 <= candidate <= 6 or candidate == 9))
+                      or (control == 4 and (candidate == 4 or candidate == 7))
+                      or (control == 8 and (candidate == 8 or candidate == 9)))
     if (r < 1 or r > t or t > 4096 or (layers != 1 and layers != 24)
         or not valid_pair or seed != 53
         or ((candidate == 5 or candidate == 6) and r != 1)
@@ -140,7 +148,7 @@ def main() raises:
     print("query rows:", r)
     print("shape:", t, layers, "seed:", seed)
     print("variants:", control, candidate, "candidate-first:", first)
-    var work = AttentionWorkspace(ctx, r, t)
+    var work = AttentionWorkspace(ctx, r, t, fp32_materialized=control <= 4 or candidate <= 4)
     _load(work.cosine, "upstream_7_cosine", t * 64)
     _load(work.sine, "upstream_7_sine", t * 64)
     var weights = List[AttentionWeights]()
@@ -179,7 +187,7 @@ def main() raises:
         for _ in range(warmup):
             _enqueue(ctx, weights[0], caches[0], work, inputs[0], r, t, candidate)
         ctx.synchronize()
-        print("profile implementation: enqueue_attention_sublayer")
+        print("profile implementation:", "enqueue_attention_sublayer_integrated" if candidate == 9 else "enqueue_attention_sublayer")
         print("rows:", r)
         print("hidden: 896")
         print("key value rows:", t)

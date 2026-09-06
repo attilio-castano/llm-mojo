@@ -5,15 +5,18 @@ import json
 from .._repository import repository_root
 
 OPERATION = 'attention_sublayer'
-VARIANTS = {3,4,5,6,7}
+VARIANTS = {3,4,5,6,7,8,9}
 ENTRYPOINTS = {f'attention_sublayer_{v}': 'enqueue_attention_sublayer' for v in VARIANTS}
+ENTRYPOINTS['attention_sublayer_9'] = 'enqueue_attention_sublayer_integrated'
 STAGES = ['RMSNorm', 'Q projection', 'K projection', 'V projection',
           'Q RoPE', 'K RoPE', 'KV append', 'QK', 'softmax', 'PV',
           'output projection', 'residual']
 STAGES_BY_VARIANT = {3: STAGES, 4: STAGES,
                      5: STAGES[:7]+['GQA G32']+STAGES[-2:],
                      6: STAGES[:7]+['GQA split','GQA merge']+STAGES[-2:],
-                     7: STAGES[:7]+['GQA FP32 MMA']+STAGES[-2:]}
+                     7: STAGES[:7]+['GQA FP32 MMA']+STAGES[-2:],
+                     8: STAGES[:7]+['FP32 GQA']+STAGES[-2:],
+                     9: ['RMSNorm','packed QKV projection','QKV unpack']+STAGES[4:7]+['FP32 GQA']+STAGES[-2:]}
 TARGET_FIELDS = ('profile_workload', 'dispatches_per_iteration', 'key_value_rows',
                  'query_heads', 'key_value_heads')
 PROFILE_WORKLOADS = [(1, 4096), (1024, 1024), (4096, 4096), (64, 4096)]
@@ -87,7 +90,8 @@ def profile_grid(spec):
     grid = [tuple(w) for w in spec['workloads']]
     valid = ((spec['variants'] in ([3],[3,4]) and grid == PROFILE_WORKLOADS)
              or (spec['variants'] == [3,5,6] and grid == DECODE_PROFILE_WORKLOADS)
-             or (spec['variants'] == [4,7] and grid == PREFILL_PROFILE_WORKLOADS))
+             or (spec['variants'] == [4,7] and grid == PREFILL_PROFILE_WORKLOADS)
+             or (spec['variants'] == [8,9] and grid == PROFILE_WORKLOADS))
     if not valid:
         raise ValueError('invalid attention sublayer profile grid')
     return {v: STAGES_BY_VARIANT[v] for v in spec['variants']}, {(r,t,v) for r,t in grid for v in spec['variants']}

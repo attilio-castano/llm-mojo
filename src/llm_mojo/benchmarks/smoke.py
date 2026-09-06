@@ -52,8 +52,8 @@ def main():
                    cwd=repository_root(),check=True)
     for r,t in ((1,64),(7,33),(33,33)):
         for layers in (1,24):
-            for variant in ((3,4,5,6) if r == 1 else (3,4,7)):
-                control = 4 if variant == 7 else 3
+            for variant in ((3,4,5,6,8,9) if r == 1 else (3,4,7,8,9)):
+                control = 8 if variant >= 8 else (4 if variant == 7 else 3)
                 result = subprocess.run(list(map(str,[target,r,t,layers,variant,control,1,53,'bench',1,0])),
                                         cwd=repository_root(),text=True,capture_output=True,env=env,check=True)
                 if (f'query rows: {r}' not in result.stdout or
@@ -68,7 +68,15 @@ def main():
                                 cwd=repository_root(),capture_output=True,env=env)
         if result.returncode == 0:
             raise RuntimeError('invalid attention sublayer benchmark accepted')
-    print('attention sublayer FP32, Wo MMA, decode and prefill measurement routes passed in both modes',flush=True)
+    # Exercise the combined-baseline comparison and both sides of the fixed
+    # projection policy on the actual timed route, before recording samples.
+    for r,t in ((4,64),(15,64),(16,64),(17,64)):
+        for layers in (1,24):
+            result = subprocess.run(list(map(str,[target,r,t,layers,9,3,0,53,'bench',1,0])),
+                                    cwd=repository_root(),text=True,capture_output=True,env=env,check=True)
+            if 'correctness: passed' not in result.stdout or not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE'):
+                raise RuntimeError('integrated attention benchmark boundary check failed')
+    print('attention sublayer FP32, Wo, QKV integration, decode and prefill measurement routes passed in both modes',flush=True)
 
 
 if __name__ == '__main__':

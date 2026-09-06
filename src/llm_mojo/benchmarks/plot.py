@@ -193,12 +193,12 @@ def render_prefill(directory, record, samples, summary):
     print(directory.name,len(samples),'primary observations verified; prefill figures and retained follow-ups regenerated')
 
 
-def render_sublayer_wo(directory, prefix, *, fp32_prefill=False):
+def render_sublayer_wo(directory, prefix, *, fp32_prefill=False, integration=False):
     """Whole-block paired ratios for the single Wo mapping experiment."""
     record, samples, summary = load_run(directory, prefix)
     table(directory, prefix+'summary.csv', summary)
     spec = record['specification']
-    data = [s for s in summary if s['candidate'] == (7 if fp32_prefill else 4)]
+    data = [s for s in summary if s['candidate'] == (9 if integration else (7 if fp32_prefill else 4))]
     labels = [f'Decode T={w["rows"]}' if w['query_rows'] == 1 else
               f'Full R=T={w["rows"]}' if w['query_rows'] == w['rows'] else
               f'Chunk R={w["query_rows"]}, T={w["rows"]}' for w in spec['workloads']]
@@ -213,13 +213,17 @@ def render_sublayer_wo(directory, prefix, *, fp32_prefill=False):
         ax.axvline(1,color='#333333',linewidth=1)
         ax.grid(axis='x',alpha=.18)
         ax.set_title('Hot call' if layers==1 else 'Ring24 per call')
-        ax.set_xlabel('Whole-block time / paired control (MMA Wo fixed)' if fp32_prefill
-                      else 'Whole-block time / paired rowwise Wo control')
+        ax.set_xlabel('Whole-block time / paired control' if integration else
+                      ('Whole-block time / paired control (MMA Wo fixed)' if fp32_prefill
+                       else 'Whole-block time / paired rowwise Wo control'))
         ax.xaxis.set_major_formatter(FuncFormatter(lambda value,_:f'{value:g}×'))
     axes[0].set_yticks(range(len(labels)),labels)
     axes[0].invert_yaxis()
     screen = record['study'].endswith('_screen')
-    fig.suptitle(('Qwen attention · FP32 prefill tiling' if fp32_prefill else 'Qwen attention · changing only Wo')
+    title = ('Qwen attention · integrating QKV projections' if prefix == 'projections_' else
+             'Qwen attention · all studied mappings together') if integration else (
+             'Qwen attention · FP32 prefill tiling' if fp32_prefill else 'Qwen attention · changing only Wo')
+    fig.suptitle(title
                  +(' · screen' if screen else ''),fontsize=16,fontweight='bold')
     fig.text(.04,.025,'Left of 1× is faster. Whiskers: four-block ratio range; open marks: inconclusive.\n'
              'A gain requires all four blocks faster and > max(5%, matching self-pair deviation).\n'
@@ -227,6 +231,39 @@ def render_sublayer_wo(directory, prefix, *, fp32_prefill=False):
              f'Source {record["repository"]["commit"][:7]}. Fixed cache prefix; allocation and correctness checks excluded.',fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.18,1,.94))
     fig.savefig(directory/(prefix.rstrip('_')+'.png'),dpi=160)
+    plt.close(fig)
+
+
+def render_sublayer_integrated_profile(directory):
+    rows = load_profile(directory, 'integrated_')
+    record = json.loads((directory/'integrated_profiles.json').read_text())
+    table(directory, 'integrated_profile_summary.csv', rows)
+    from .attention_sublayer_contract import STAGES_BY_VARIANT, PROFILE_WORKLOADS
+    stages = STAGES_BY_VARIANT[8][:4] + STAGES_BY_VARIANT[9][1:]
+    fig, axes = plt.subplots(2, 2, figsize=(13, 11), sharey=True)
+    for ax, (r, t) in zip(axes.flat, PROFILE_WORKLOADS):
+        for variant, offset, color, label in ((8,-.18,'#777777','Separate QKV'),
+                                               (9,.18,'#167d9a','Integrated packed QKV')):
+            lookup = {s['stage']:s['median_us'] for s in rows
+                      if (s['query_rows'],s['rows'],s['variant']) == (r,t,variant)}
+            present = [(i,lookup[stage]) for i,stage in enumerate(stages) if stage in lookup]
+            ax.barh([i+offset for i,_ in present], [v for _,v in present], height=.34,
+                    color=color,label=label)
+        ax.set_xscale('log')
+        ax.set_yticks(range(len(stages)), stages, fontsize=9)
+        ax.set_title(f'R={r}, T={t}')
+        ax.set_xlabel('Median active GPU time (µs) · log scale')
+        ax.grid(axis='x',alpha=.15)
+    axes[0,0].invert_yaxis()
+    axes[0,0].legend(frameon=False,fontsize=9)
+    fig.suptitle('Integrated attention · where does the time go now?',fontsize=16,fontweight='bold')
+    fig.text(.04,.025,'GQA and Wo policy fixed; QKV packing/tiling and the layout copy change. Missing bars are stages that do not execute.\n'
+             'Separate single captures; active durations exclude preemption and host gaps. Use paired latency for speed claims.\n'
+             f'{sum(s["count"] for s in rows):,} measured dispatch durations · optional counter analysis absent.\n'
+             f'{record["captures"][0]["capture"]["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention · '
+             f'source {record["common"]["repository"]["commit"][:7]}.',fontsize=9,color='#555555')
+    fig.tight_layout(rect=(0,.12,1,.95))
+    fig.savefig(directory/'integrated_profile.png',dpi=160)
     plt.close(fig)
 
 
@@ -441,6 +478,11 @@ def render_sublayer(directory, record, samples, summary):
             render_sublayer_wo(directory,prefix,fp32_prefill=True)
     if (directory/'prefill_profiles.json').exists():
         render_sublayer_prefill_profile(directory)
+    for prefix in ('projections_','integrated_'):
+        if (directory/(prefix+'run.json')).exists():
+            render_sublayer_wo(directory,prefix,integration=True)
+    if (directory/'integrated_profiles.json').exists():
+        render_sublayer_integrated_profile(directory)
     print(directory.name, len(samples), 'baseline observations verified; attention figures and retained comparisons regenerated')
 
 

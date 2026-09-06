@@ -5,7 +5,7 @@ The FP32 route has a strict accuracy gate. BF16 eager comparisons remain
 diagnostic unless SUBLAYER_BF16_COMPATIBILITY=1 explicitly requests their
 historical compatibility gate. Standalone operation contracts are unchanged.
 """
-from llm_mojo.attention_sublayer import AttentionWeights, AttentionWorkspace
+from llm_mojo.attention_sublayer import AttentionWeights, AttentionWorkspace, _enqueue_attention_qkv
 from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.linear import (
     enqueue_linear_apple_gpu, enqueue_linear_prefill_mma_8x16_apple_gpu,
@@ -132,6 +132,20 @@ def _operations(case_id: Int, nq: Int, nk: Int, d: Int, t: Int, precision: Bool 
     assert_sublayer_fixture(
         work.raw_value, case_id, "raw_value", 0, t, k, 0.0078125
     )
+
+    if precision:
+        # Both existing packed kernels consume exactly upstream's normalized X.
+        # The production layout handoff is included in these stage gates.
+        for mapping in [1, 2]:
+            work.packed.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
+            work.raw_query.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
+            work.raw_key.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
+            work.raw_value.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
+            _enqueue_attention_qkv(ctx, weights, work, t, mapping)
+            print("local packed QKV mapping", mapping)
+            assert_sublayer_fixture(work.raw_query, case_id, "raw_query", 0, t, h, 0.0078125)
+            assert_sublayer_fixture(work.raw_key, case_id, "raw_key", 0, t, k, 0.0078125)
+            assert_sublayer_fixture(work.raw_value, case_id, "raw_value", 0, t, k, 0.0078125)
 
     load_sublayer_fixture(work.raw_query, case_id, "raw_query", True)
     load_sublayer_fixture(work.raw_key, case_id, "raw_key", True)

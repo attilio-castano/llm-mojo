@@ -3,6 +3,8 @@ from llm_mojo.attention_sublayer import (
     AttentionCache,
     AttentionWorkspace,
     enqueue_attention_sublayer,
+    enqueue_attention_sublayer_integrated,
+    _unpack_qkv,
 )
 from max.gpu.host import DeviceContext
 from layout import TileTensor, row_major
@@ -20,6 +22,7 @@ def _case(
     case_id: Int, nq: Int, nk: Int, d: Int, t: Int, route: Int, chunks: Bool,
     reference: String = "upstream", require_close: Bool = True,
     wo_mma: Bool = False,
+    qkv_mapping: Int = 0, integrated: Bool = False,
 ) raises:
     var ctx = DeviceContext()
     assert_equal(ctx.api(), "metal")
@@ -36,6 +39,7 @@ def _case(
         chunks,
         "Wo MMA",
         wo_mma,
+        "QKV mapping", qkv_mapping, "integrated", integrated,
     )
     var h = nq * d
     var k = nk * d
@@ -71,19 +75,27 @@ def _case(
         work.output.enqueue_fill(123)
         work.projected.enqueue_fill(123)
         work.attention.enqueue_fill(123)
+        work.packed.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
+        work.raw_query.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
+        work.raw_key.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
+        work.raw_value.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
         var prefix_k = snapshot(cache.key, p * k)
         var prefix_v = snapshot(cache.value, p * k)
         var view = TileTensor(
             input.unsafe_ptr().unsafe_offset(p * h), row_major(r, h)
         )
-        if route == 3:
+        if integrated:
+            assert_equal(enqueue_attention_sublayer_integrated(
+                ctx, weights, cache, work, view
+            ), 4 if r == 1 else 6)
+        elif route == 3:
             # All FP32 accuracy cases also exercise the public default route.
             assert_equal(enqueue_attention_sublayer(
-                ctx, weights, cache, work, view, wo_mma=wo_mma
+                ctx, weights, cache, work, view, wo_mma=wo_mma, qkv_mapping=qkv_mapping
             ), 3)
         else:
             assert_equal(
-                enqueue_attention_sublayer(ctx, weights, cache, work, view, route, wo_mma),
+                enqueue_attention_sublayer(ctx, weights, cache, work, view, route, wo_mma, qkv_mapping),
                 (4 if r == 1 else 6) if route == 6 else (3 if route >= 4 and r != 1 else route),
             )
         assert_equal(cache.length, p + r)
@@ -147,11 +159,21 @@ def _case(
         _ = enqueue_attention_sublayer(
             ctx, weights, cache, work, TileTensor(input, row_major(1, h)), 99
         )
+    with assert_raises(contains="QKV projection mapping"):
+        _ = enqueue_attention_sublayer(
+            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), qkv_mapping=3
+        )
+    assert_equal(cache.length, t)
     cache.reset(ctx)
     assert_equal(cache.length, 0)
-    _ = enqueue_attention_sublayer(
-        ctx, weights, cache, work, TileTensor(input, row_major(1, h)), route, wo_mma
-    )
+    if integrated:
+        _ = enqueue_attention_sublayer_integrated(
+            ctx, weights, cache, work, TileTensor(input, row_major(1, h))
+        )
+    else:
+        _ = enqueue_attention_sublayer(
+            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), route, wo_mma, qkv_mapping
+        )
     assert_sublayer_fixture(work.output, case_id, "output", 0, 1, h, 0.03125, require_close, reference)
     if numerical_failures:
         raise Error("sublayer projected/final compatibility gates failed")
@@ -209,8 +231,8 @@ def test_repeated_asynchronous_use() raises:
     load_sublayer_fixture(weights.norm, 5, "norm_weight")
     load_sublayer_fixture(weights.output, 5, "output_weight")
     load_sublayer_fixture(input, 5, "input")
-    for implementation in range(8):
-        var route = 3 if implementation == 4 else (implementation - 1 if implementation >= 5 else implementation)
+    for implementation in range(10):
+        var route = 6 if implementation >= 8 else (3 if implementation == 4 else (implementation - 1 if implementation >= 5 else implementation))
         var wo_mma = implementation == 4 or implementation == 7
         # Optimized FP32 decode must also work without probability storage.
         var work = AttentionWorkspace(ctx, 65, 65, materialized=route == 0,
@@ -225,18 +247,17 @@ def test_repeated_asynchronous_use() raises:
                 # Route 6 alternates tiled prefill and final decode, without
                 # materialized scratch or a synchronization between enqueues.
                 var rows = (33 if p == 0 else (31 if p == 33 else 1)) if route == 6 else 1
-                var launched = enqueue_attention_sublayer(
-                    ctx,
-                    weights,
-                    cache,
-                    work,
-                    TileTensor(
-                        input.unsafe_ptr().unsafe_offset(p * 896),
-                        row_major(rows, 896),
-                    ),
-                    route,
-                    wo_mma,
-                )
+                if implementation >= 8:
+                    rows = 15 if p == 0 else (16 if p == 15 or p == 48 else (17 if p == 31 else 1))
+                var view = TileTensor(input.unsafe_ptr().unsafe_offset(p * 896), row_major(rows, 896))
+                var launched: Int
+                if implementation == 9:
+                    launched = enqueue_attention_sublayer_integrated(ctx, weights, cache, work, view)
+                else:
+                    launched = enqueue_attention_sublayer(
+                        ctx, weights, cache, work, view, route,
+                        rows >= 16 if implementation == 8 else wo_mma,
+                    )
                 assert_equal(launched, 4 if route == 6 and rows == 1 else route)
                 p += rows
             ctx.synchronize()
@@ -268,6 +289,44 @@ def test_cache_gate_checks_bits_including_signed_zero() raises:
     assert_equal(bits[0], UInt16(0x8000))
     with assert_raises(contains="changed a source value"):
         assert_cache_append(cache, source, 0, 1, 1, 1)
+
+
+def test_packed_qkv_handoff_preserves_bits_rows_and_boundaries() raises:
+    var ctx = DeviceContext()
+    assert_equal(ctx.api(), "metal")
+    # 3 rows x (Q=6,K=4,V=4): ragged launch and MMA-independent layout oracle.
+    var packed = ctx.enqueue_create_buffer[DType.bfloat16](42)
+    var q = ctx.enqueue_create_buffer[DType.bfloat16](19)
+    var k = ctx.enqueue_create_buffer[DType.bfloat16](13)
+    var v = ctx.enqueue_create_buffer[DType.bfloat16](13)
+    q.enqueue_fill(123)
+    k.enqueue_fill(123)
+    v.enqueue_fill(123)
+    var patterns: List[UInt16] = [0x8000, 0, 0x3f80, 0xbf80, 1, 0x7f7f, 0x0080]
+    with packed.map_to_host() as mapped:
+        var a = TileTensor(mapped, row_major(42))
+        for i in range(42):
+            a.ptr.unsafe_bitcast[UInt16]()[unsafe_offset=i] = patterns[(i + i // 14) % 7]
+    var pt = TileTensor(packed, row_major(3, 14))
+    var qt = TileTensor(q, row_major(3, 6))
+    var kt = TileTensor(k, row_major(3, 4))
+    var vt = TileTensor(v, row_major(3, 4))
+    ctx.enqueue_function[_unpack_qkv[type_of(pt.layout), type_of(qt.layout), type_of(kt.layout)]](
+        pt, qt, kt, vt, Int32(3), Int32(6), Int32(4), grid_dim=1, block_dim=128,
+    )
+    var qb = snapshot(q, 19)
+    var kb = snapshot(k, 13)
+    var vb = snapshot(v, 13)
+    var before = snapshot(packed, 42)
+    for row in range(3):
+        for col in range(6):
+            assert_equal(qb[row * 6 + col], before[row * 14 + col])
+        for col in range(4):
+            assert_equal(kb[row * 4 + col], before[row * 14 + 6 + col])
+            assert_equal(vb[row * 4 + col], before[row * 14 + 10 + col])
+    assert_equal(qb[18], UInt16(0x42f6))  # untouched sentinel 123
+    assert_equal(kb[12], UInt16(0x42f6))
+    assert_equal(vb[12], UInt16(0x42f6))
 
 
 def main() raises:

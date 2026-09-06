@@ -105,6 +105,18 @@ Benchmark 7 selects FP32 rolled MMA prefill with MMA Wo; its fixed control is
 attention route remains unchanged. Gates and the complete protocol are in
 [the attention contract](../../../docs/attention-sublayer.md#contained-fp32-prefill-comparison).
 
+The integrated QKV/Wo study uses `--studies attention_sublayer_projections
+attention_sublayer_integrated`. These are two fresh paired runs on the same
+fifteen workloads: variant 9 versus 8 holds the FP32 GQA and Wo policy fixed
+and measures QKV packing/tiling plus its layout copy; 9 versus 3 measures all
+selected mappings together against the original baseline. Variant 9 calls
+`enqueue_attention_sublayer_integrated` directly and executes nine dispatches;
+8 keeps separate Q/K/V and executes ten. Use profile variants 8/9 at the four
+baseline profile workloads, then curate with `--attention-sublayer
+--projection-comparison --prefix integrated_`. The shared plot command
+regenerates `projections_`/`integrated_` comparisons and integrated profiles.
+See the [declared policy and gates](../../../docs/attention-sublayer.md#integrating-the-projection-studies-end-to-end).
+
 For the original twelve-stage Metal baseline, use the existing builder with
 `--operation attention_sublayer --profile-variant 3 --profile-query-rows R
 --profile-rows T --profile-warmup 10 --profile-iterations N`.

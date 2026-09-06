@@ -96,6 +96,17 @@ STUDIES['attention_sublayer_prefill_screen'] = dict(
     **{k:v for k,v in STUDIES['attention_sublayer_prefill'].items() if k != 'workloads'},
     workloads=[dict(query_rows=r,rows=t) for r,t in ((256,256),(1024,1024),(64,4096))])
 
+# Integrate the existing packed QKV and Wo mappings with the validated GQA.
+# 8 fixes GQA/Wo to the integrated policy but retains separate rowwise Q/K/V.
+# 9 exercises the public integrated enqueue, including the explicit unpack.
+# Two fresh paired comparisons: incremental projection value and total value.
+STUDIES['attention_sublayer_projections'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer'].items() if k not in ('control','candidates','names')},
+    control=8, candidates=[8,9], names={8:'separate QKV + FP32 GQA/Wo policy',9:'integrated packed QKV + FP32 GQA/Wo policy'})
+STUDIES['attention_sublayer_integrated'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer'].items() if k not in ('candidates','names')},
+    candidates=[3,9], names={3:'original materialized FP32 / rowwise projections',9:'integrated packed QKV + FP32 GQA/Wo policy'})
+
 
 def workloads(spec):
     return spec.get('workloads', [dict(rows=r) for r in spec.get('rows', [])])

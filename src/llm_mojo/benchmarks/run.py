@@ -135,7 +135,8 @@ def main():
     p.add_argument('--output', type=Path)
     p.add_argument('--studies', nargs='+', choices=list(STUDIES),
                    default=[name for name in STUDIES if not name.endswith('_screen')
-                            and name not in ('attention_sublayer_wo','attention_sublayer_decode','attention_sublayer_prefill')])
+                            and name not in ('attention_sublayer_wo','attention_sublayer_decode','attention_sublayer_prefill',
+                                             'attention_sublayer_projections','attention_sublayer_integrated')])
     args = p.parse_args()
     if args.command == 'build':
         build(args.build_dir.resolve())

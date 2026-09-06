@@ -220,6 +220,78 @@ def _append[
         cache_value[Int(past) + r, d] = value[r, d]
 
 
+def _unpack_qkv[PL: TensorLayout, QL: TensorLayout, KL: TensorLayout](
+    packed: TileTensor[DType.bfloat16, PL, MutAnyOrigin],
+    query: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    key: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
+    value: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
+    rows: Int32, hidden: Int32, kv_width: Int32,
+):
+    """Copy BF16 bits from per-token [Q | K | V] to contiguous consumers."""
+    comptime assert packed.flat_rank == 2 and query.flat_rank == 2
+    comptime assert key.flat_rank == 2 and value.flat_rank == 2
+    var h = Int(hidden)
+    var k = Int(kv_width)
+    var width = h + 2 * k
+    var i = global_idx.x
+    if i < Int(rows) * width:
+        var row = i // width
+        var column = i % width
+        if column < h:
+            query[row, column] = packed[row, column]
+        elif column < h + k:
+            key[row, column - h] = packed[row, column]
+        else:
+            value[row, column - h - k] = packed[row, column]
+
+
+def _enqueue_attention_qkv(
+    ctx: DeviceContext, mut weights: AttentionWeights,
+    mut work: AttentionWorkspace, rows: Int, mapping: Int,
+) raises:
+    """Projection boundary shared by composition and exact-upstream tests.
+
+    The sublayer validates storage before calling. Mapping 0 keeps three
+    rowwise launches; 1/2 use packed rowwise/MMA plus an explicit layout copy.
+    No allocation, synchronization, new arithmetic, or rounding in the copy.
+    """
+    if mapping < 0 or mapping > 2:
+        raise Error("unknown QKV projection mapping")
+    var h = weights.hidden
+    var k = weights.kv_heads * weights.head_dim
+    var normal = TileTensor(work.normalized, row_major(rows, h))
+    var q = TileTensor(work.raw_query, row_major(rows, h))
+    var key = TileTensor(work.raw_key, row_major(rows, k))
+    var value = TileTensor(work.raw_value, row_major(rows, k))
+    if mapping == 0:
+        enqueue_linear_apple_gpu(
+            ctx, normal, TileTensor(weights.qkv, row_major(h, h)),
+            TileTensor(weights.bias, row_major(h)), q,
+        )
+        enqueue_linear_apple_gpu(
+            ctx, normal,
+            TileTensor(weights.qkv.unsafe_ptr().unsafe_offset(h * h), row_major(k, h)),
+            TileTensor(weights.bias.unsafe_ptr().unsafe_offset(h), row_major(k)), key,
+        )
+        enqueue_linear_apple_gpu(
+            ctx, normal,
+            TileTensor(weights.qkv.unsafe_ptr().unsafe_offset((h + k) * h), row_major(k, h)),
+            TileTensor(weights.bias.unsafe_ptr().unsafe_offset(h + k), row_major(k)), value,
+        )
+        return
+    var packed = TileTensor(work.packed, row_major(rows, h + 2 * k))
+    var weight = TileTensor(weights.qkv, row_major(h + 2 * k, h))
+    var bias = TileTensor(weights.bias, row_major(h + 2 * k))
+    if mapping == 1:
+        enqueue_linear_apple_gpu(ctx, normal, weight, bias, packed)
+    else:
+        enqueue_linear_prefill_mma_8x16_apple_gpu(ctx, normal, weight, bias, packed)
+    ctx.enqueue_function[_unpack_qkv[type_of(packed.layout), type_of(q.layout), type_of(key.layout)]](
+        packed, q, key, value, Int32(rows), Int32(h), Int32(k),
+        grid_dim=ceildiv(rows * (h + 2 * k), 128), block_dim=128,
+    )
+
+
 def enqueue_attention_sublayer[
     XL: TensorLayout
 ](
@@ -230,6 +302,7 @@ def enqueue_attention_sublayer[
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     route: Int = 3,
     wo_mma: Bool = False,
+    qkv_mapping: Int = 0,
 ) raises -> Int:
     """Enqueue one sublayer and advance cache length; return the launched route.
 
@@ -243,6 +316,8 @@ def enqueue_attention_sublayer[
     wo_mma selects only the bias-free output projection's 8x16 MMA mapping;
     it preserves BF16 projection output before the separate residual addition.
     It is an explicit experiment, independent of the GQA precision route.
+    qkv_mapping 0 keeps separate rowwise projections; 1/2 select the existing
+    packed rowwise/MMA projection, followed by a bit-preserving layout copy.
     X must not overlap any writable workspace/cache region. Read output from
     work.output only after completion and before its next overwrite.
     """
@@ -257,6 +332,8 @@ def enqueue_attention_sublayer[
     var t = p + r
     if route < 0 or route > 6:
         raise Error("unknown attention sublayer route")
+    if qkv_mapping < 0 or qkv_mapping > 2:
+        raise Error("unknown QKV projection mapping")
     var launched_route = route
     if route == 6 and r == 1:
         launched_route = 4
@@ -292,36 +369,8 @@ def enqueue_attention_sublayer[
     enqueue_rms_norm_apple_gpu(
         ctx, x, TileTensor(weights.norm, row_major(h)), normal
     )
-    var q2 = TileTensor(work.raw_query, row_major(r, h))
-    var k2 = TileTensor(work.raw_key, row_major(r, k))
+    _enqueue_attention_qkv(ctx, weights, work, r, qkv_mapping)
     var v2 = TileTensor(work.raw_value, row_major(r, k))
-    enqueue_linear_apple_gpu(
-        ctx,
-        normal,
-        TileTensor(weights.qkv, row_major(h, h)),
-        TileTensor(weights.bias, row_major(h)),
-        q2,
-    )
-    enqueue_linear_apple_gpu(
-        ctx,
-        normal,
-        TileTensor(
-            weights.qkv.unsafe_ptr().unsafe_offset(h * h), row_major(k, h)
-        ),
-        TileTensor(weights.bias.unsafe_ptr().unsafe_offset(h), row_major(k)),
-        k2,
-    )
-    enqueue_linear_apple_gpu(
-        ctx,
-        normal,
-        TileTensor(
-            weights.qkv.unsafe_ptr().unsafe_offset((h + k) * h), row_major(k, h)
-        ),
-        TileTensor(
-            weights.bias.unsafe_ptr().unsafe_offset(h + k), row_major(k)
-        ),
-        v2,
-    )
     var q = TileTensor(work.query, row_major(r, nq, d))
     var c = TileTensor(work.cosine, row_major(work.capacity, d))
     var s = TileTensor(work.sine, row_major(work.capacity, d))
@@ -425,3 +474,24 @@ def enqueue_attention_sublayer[
     )
     cache.length = t
     return launched_route
+
+
+def enqueue_attention_sublayer_integrated[XL: TensorLayout](
+    ctx: DeviceContext, mut weights: AttentionWeights,
+    mut cache: AttentionCache, mut work: AttentionWorkspace,
+    x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
+) raises -> Int:
+    """Compose the prior Qwen projection and FP32 GQA studies on Metal.
+
+    Packed rowwise QKV and rowwise Wo for R<16; existing 8x16 MMA projections
+    for R>=16. FP32 G32 attention for decode, rolled MMA for multi-row calls.
+    Sixteen is a conservative study policy, not a universal crossover claim.
+    Qwen dimensions only; no materialized probability workspace is required.
+    The original enqueue remains the inspectable control. Both APIs preserve
+    the same cache, lifetime, BF16 boundary and no-allocation enqueue contract.
+    """
+    comptime assert x.flat_rank == 2
+    var use_mma = Int(x.dim[0]()) >= 16
+    return enqueue_attention_sublayer(
+        ctx, weights, cache, work, x, 6, use_mma, 2 if use_mma else 1,
+    )

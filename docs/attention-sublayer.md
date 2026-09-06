@@ -23,7 +23,10 @@ Y=BF16(X+B). A fused final write must preserve both rounding points.
 
 Weights are Wqkv[H+2*Nkv*D,H], bqkv[H+2*Nkv*D], Wo[H,H], and norm[H].
 Their source regions retain Q, K, V ordering. A packed row-major projection
-requires explicit unpacking for contiguous multi-row Q/K/V consumers.
+uses an explicit bit-preserving unpack for contiguous Q/K/V consumers.
+`qkv_mapping=1/2` selects existing packed rowwise/MMA kernels; zero retains
+the three separate rowwise projections. The packed row stride is H+2*Nkv*D,
+not H or Nkv*D. The layout copy adds no arithmetic or rounding.
 K/V caches have fixed [capacity,Nkv,D] storage; only [0,T) is visible.
 Rotated K and unchanged V enter [P,T); prefix entries never change.
 R must be positive; overflow and invalid routes fail before any enqueue.
@@ -287,6 +290,62 @@ spill records. Optional counter export may remain explicitly absent. Given
 the decode captures' unchanged-stage variation, these separate traces remain
 diagnostic; paired latency establishes gains. Extend this same study with
 `prefill_` and `prefill_screen_` evidence using clean, matching measured source.
+
+### Integrating the projection studies end to end
+
+The user approved integrating the earlier QKV and Wo studies with the validated
+FP32 attention paths. `enqueue_attention_sublayer_integrated` is the explicit
+Qwen entrypoint: R<16 uses packed rowwise QKV and rowwise Wo; R>=16 uses the
+existing packed 8x16 MMA QKV and bias-free 8x16 MMA Wo. It uses FP32 G32 decode
+and rolled-MMA FP32 prefill, returning actual GQA route 4 or 6. Sixteen rows is
+a conservative policy chosen before measurement, not a proven crossover for
+every unmeasured row count. The original enqueue and all explicit mappings
+remain available for comparisons. Split64-H4 remains explicit; the earlier
+study did not establish a G32-versus-split crossover.
+
+Packed QKV computes X[R,896] @ Wqkv[1152,896].T + bias with the earlier kernels.
+One extra GPU dispatch reads the packed BF16 result and writes contiguous
+Q[R,896], K[R,128], V[R,128]. It replaces three projection dispatches with one
+projection and one copy. The copy requests 4*R*1152 bytes (read plus write),
+including 18 MiB at R=4096; these are source-requested bytes, not measured
+DRAM traffic. The integrated block has nine dispatches, versus ten with
+separate projections and the same GQA/Wo policy. Wo still rounds to BF16
+before the separate residual addition. There is no allocation or synchronization
+inside enqueue. Construct `AttentionWorkspace(..., fp32_materialized=False)`
+when using the integrated entrypoint alone; it does not need the 896 MiB
+materialized FP32 probability workspace at full 4096. Packed and contiguous
+diagnostic intermediates remain allocated so the handoff stays inspectable.
+
+The numerical gate precedes timing: all 17 frozen synthetic and three existing
+checkpoint cases, isolated packed QKV on exactly upstream's normalized inputs,
+full/chunked composition with both packed mappings and MMA Wo, then the public
+integrated entrypoint. Keep QKV/GQA 0.0078125 and Wo/final 0.03125 gates, all
+frozen arrays, and exact cache-prefix/suffix/unused-capacity checks. A dedicated
+ragged multi-row layout test uses signed zeros, subnormals and extreme BF16
+bit patterns with guard elements. Twelve asynchronous sequences include
+15/16/17-row calls and final decode, with no materialized probability storage.
+Poison projection intermediates and check the actual benchmark routes in both
+hot and ring24 modes, including the 15/16 boundary. A numerical failure stops
+performance work; no tolerance changes or precision retuning are authorized.
+
+Use the existing fifteen-workload matrix and four-block paired protocol for
+two bounded comparisons, each including fresh self-pairs and 4,800 retained
+observations. `attention_sublayer_projections` compares 9 with 8: integrated
+QKV versus separate rowwise QKV, with GQA and Wo policy fixed. Variant 8 uses
+rowwise Wo below 16 rows; it is a precise new paired control, not a reuse of
+old absolute timings. `attention_sublayer_integrated` compares 9 with the
+original variant 3: all selected mappings versus materialized FP32 attention
+and rowwise projections. Report these separately; never multiply earlier
+stage gains. Keep regressions and inconclusive outcomes and stop after the
+declared matrix. The already-studied kernels do not require a new tuning screen.
+
+Profile variants 8/9 at (R,T)=(1,4096),(1024,1024),(4096,4096),(64,4096),
+with 50,25,10,25 measured iterations and ten warmups. The eight captures retain
+2,090 active dispatch durations, including the explicit copy, and compiler
+spill records. Optional counters may remain absent. Retain `projections_`
+and `integrated_` results in the existing study directory and regenerate them
+with the shared plot command. Freeze validated clean source before recorded
+builds, and bind both benchmark/profile records to that source.
 
 ## Numerical findings before profiling
 

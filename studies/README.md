@@ -19,11 +19,12 @@ block and full-model generation remain next.
 The attention-sublayer study uses the explicit CPU FP32 attention policy as
 its accuracy baseline. It has 17 synthetic and three checkpoint cases; the
 earlier BF16 eager holdout remains a recorded compatibility failure, with an
-explicit command to reproduce its original strict gate. Its validated baseline
-adds 2,400 latency observations, two figures and four stage profiles with 1,920
-measured dispatch durations. Small hot-call noise and one omitted optional
-counter analysis remain explicit. Output-projection mapping is the recommended
-next bounded experiment. The measurements below belong to the six operation studies.
+explicit command to reproduce its original strict gate. The composed study
+retains the baseline, Wo, FP32 decode and FP32 prefill comparisons, and integrates
+the existing packed QKV and Wo mappings through one public Mojo entrypoint.
+It separates incremental QKV value from the whole block's combined gain.
+Small hot-call noise and omitted optional counter analysis remain explicit.
+The measurements below belong to the six operation studies.
 
 The six topics retain **31,200 latency observations**, eleven report figures,
 and fifteen focused GQA profiles containing 10,200 measured dispatch durations.
