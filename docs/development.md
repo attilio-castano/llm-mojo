@@ -106,6 +106,13 @@ Normal-mode stress for the new schedules uses `-D PREFILL_REPEAT=12` on
 `tests/test_attention_prefill.mojo`, with `MODULAR_DEBUG` unset.
 Generation uses pinned Torch/Transformers script environments and locked NumPy;
 the first run may download those dependencies. No model weights are required.
+The [attention-sublayer study](attention-sublayer.md) adds 17 synthetic cases
+with frozen arrays and a strict FP32 attention accuracy gate. BF16 eager
+comparisons report their numerical differences while keeping finite-output
+and exact cache checks mandatory. The documented explicit compatibility
+command reproduces the retained seed-887 failures. Checkpoint-derived
+first-layer checks are an explicit separate workflow and do not make ordinary
+validation download a model.
 
 Use `--prepare-only` to generate fixtures without running tests. For an individual
 Mojo suite, include `-I src -I build -I tests`. Generators and the

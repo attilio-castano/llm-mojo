@@ -114,3 +114,16 @@ class StudyTests(unittest.TestCase):
             path = Path(tmp)/'samples.csv.gz'
             path.write_bytes(encode_samples(samples))
             self.assertEqual(read_samples(path),samples)
+
+    def test_sublayer_parser_requires_the_query_suffix_and_fp32_route(self):
+        output = self.output().replace('operation: linear', 'operation: attention_sublayer')
+        output = output.replace('variants: 0 1', 'variants: 3 3')
+        output = output.replace('SAMPLE control 0', 'SAMPLE control 3').replace('SAMPLE candidate 1', 'SAMPLE candidate 3')
+        output = 'query rows: 7\n' + output
+        kwargs = dict(rows=16, layers=24, seed=53, operation='attention_sublayer')
+        self.assertEqual(len(parse_output(output,3,3,False,query_rows=7,**kwargs)[1]),20)
+        for wrong in (None,8,0,17,True):
+            with self.assertRaises(ValueError):
+                parse_output(output,3,3,False,query_rows=wrong,**kwargs)
+        with self.assertRaises(ValueError):
+            parse_output(output.replace('SAMPLE candidate 3','SAMPLE candidate 0'),3,3,False,query_rows=7,**kwargs)

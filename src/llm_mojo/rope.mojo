@@ -2,6 +2,7 @@
 
 from layout import TensorLayout, TileTensor
 from max.gpu.host import DeviceContext
+from std.builtin.simd import FastMathFlag
 from std.gpu import global_idx
 from std.math import ceildiv
 from std.sys.info import is_apple_gpu
@@ -104,12 +105,18 @@ def rope_reference[
                     sine[position, second_dim]
                 )
 
-                var first_cosine: Scalar[DType.bfloat16] = first * cosine_first
-                var second_sine: Scalar[DType.bfloat16] = second * sine_first
-                var second_cosine: Scalar[DType.bfloat16] = (
-                    second * cosine_second
-                )
-                var first_sine: Scalar[DType.bfloat16] = first * sine_second
+                var first_cosine: Scalar[DType.bfloat16] = first.fma[
+                    FastMathFlag.NONE
+                ](cosine_first, 0)
+                var second_sine: Scalar[DType.bfloat16] = second.fma[
+                    FastMathFlag.NONE
+                ](sine_first, 0)
+                var second_cosine: Scalar[DType.bfloat16] = second.fma[
+                    FastMathFlag.NONE
+                ](cosine_second, 0)
+                var first_sine: Scalar[DType.bfloat16] = first.fma[
+                    FastMathFlag.NONE
+                ](sine_second, 0)
                 var rotated_first: Scalar[DType.bfloat16] = (
                     first_cosine - second_sine
                 )
@@ -176,10 +183,21 @@ def _rope_apple_gpu_kernel[
             sine[position, second_dim]
         )
 
-        var first_cosine: Scalar[DType.bfloat16] = first * cosine_first
-        var second_sine: Scalar[DType.bfloat16] = second * sine_first
-        var second_cosine: Scalar[DType.bfloat16] = second * cosine_second
-        var first_sine: Scalar[DType.bfloat16] = first * sine_second
+        # Ordinary BF16 * / + lower with LLVM 'contract', allowing Metal to
+        # fuse across the required product rounding. FMA with zero and NONE
+        # preserves a separately rounded product before the final add/subtract.
+        var first_cosine: Scalar[DType.bfloat16] = first.fma[FastMathFlag.NONE](
+            cosine_first, 0
+        )
+        var second_sine: Scalar[DType.bfloat16] = second.fma[FastMathFlag.NONE](
+            sine_first, 0
+        )
+        var second_cosine: Scalar[DType.bfloat16] = second.fma[
+            FastMathFlag.NONE
+        ](cosine_second, 0)
+        var first_sine: Scalar[DType.bfloat16] = first.fma[FastMathFlag.NONE](
+            sine_second, 0
+        )
         var rotated_first: Scalar[DType.bfloat16] = first_cosine - second_sine
         var rotated_second: Scalar[DType.bfloat16] = second_cosine + first_sine
         output[row, head, pair] = rebind[output.ElementType](rotated_first)

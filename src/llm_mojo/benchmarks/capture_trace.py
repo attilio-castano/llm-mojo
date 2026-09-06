@@ -276,10 +276,13 @@ def parse_target_identity(output: str) -> dict[str, Any]:
             raise ValueError("expected exactly one 'profile workload' line")
         identity["profile_workload"] = workload_matches[0]
         extra_fields = (("output features", "output_features"),)
-        if workload_matches[0].startswith(("decode-", "prefill-")):
+        if workload_matches[0].startswith(("decode-", "prefill-", "sublayer-")):
+            operation = ("attention_sublayer" if workload_matches[0].startswith("sublayer-") else
+                         "grouped_query_attention_prefill" if workload_matches[0].startswith("prefill-") else
+                         "grouped_query_attention_decode")
             extra_fields = tuple(
                 (k.replace("_", " "), k)
-                for k in attention_target_fields("grouped_query_attention_prefill" if workload_matches[0].startswith("prefill-") else "grouped_query_attention_decode")
+                for k in attention_target_fields(operation)
                 if k not in ("profile_workload", "dispatches_per_iteration")
             )
         for label, key in (
@@ -459,6 +462,10 @@ def capture_trace(
         profile_binary
     )
     configuration, repository, hardware = profile_contract(provenance)
+    if configuration['operation'] == 'attention_sublayer':
+        from .attention_sublayer_contract import fixture_identity
+        if fixture_identity() != provenance.get('attention_fixtures'):
+            raise RuntimeError('attention profile fixture identity changed')
     capture_id = new_capture_id(configuration["operation"])
     if CAPTURE_ID.fullmatch(capture_id) is None:
         raise RuntimeError("generated capture ID is invalid")
@@ -559,6 +566,9 @@ def capture_trace(
 
     if not output_trace.exists():
         failures.append("xctrace did not create the requested trace")
+    if configuration['operation'] == 'attention_sublayer':
+        if fixture_identity() != provenance['attention_fixtures']:
+            failures.append('attention profile inputs changed during capture')
 
     output_bytes = capture_output.encode()
     receipt = {

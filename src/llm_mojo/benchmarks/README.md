@@ -66,6 +66,26 @@ committed image format; extra exports are disposable. See
 
 ## Focused Metal profiling
 
+The attention sublayer uses the same runner with `--studies attention_sublayer`.
+Its initial matrix measures FP32 route 3 paired with itself over six decode,
+five full-prefill and four chunked-prefill workloads, in hot and ring24 modes.
+Run full validation first: its frozen synthetic case 7 supplies the instrument's
+weights, nonuniform inputs, upstream cache prefix and FP32 output checks.
+The builder and runner verify the actual input arrays against their frozen
+hashes before and after work. Ring24 owns 24 distinct weight/input/cache
+allocations, with two sign patterns; it shares output/scratch and is not a
+decoder stack. Every call overwrites the same suffix. Only the host length
+rewind, actual sublayer enqueue and completion are timed.
+
+For its twelve-stage Metal trace, use the existing builder with
+`--operation attention_sublayer --profile-variant 3 --profile-query-rows R
+--profile-rows T --profile-warmup 10 --profile-iterations N`.
+The bounded profile grid is `(1,4096), (1024,1024), (4096,4096), (64,4096)`;
+`12*N` must not exceed 5,000 dispatches. Curate folders `rR-tT-v3` with
+`profile_summary --attention-sublayer`, then pass the topic directory to
+`plot`. Source inputs and every measured cache append are checked before
+timing; the existing upstream numerical suites remain the independent gates.
+
 The capture/analyzer pair retains binary hashes, verified launch receipts,
 workload identity, dispatch segmentation and named counters. Its historical
 RMSNorm/linear schema support is retained for reading older captures. The

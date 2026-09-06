@@ -1,4 +1,4 @@
-"""Prepare independent oracles, check frozen anchors, then run all tests."""
+"""Prepare numerical references, check frozen anchors, then run all tests."""
 
 import argparse
 import hashlib
@@ -25,6 +25,7 @@ def prepare():
         (fixtures / name / "__init__.mojo").touch()
     run("uv", "run", "--locked", "python", "tests/fixtures/attention/generate_decode.py")
     run("uv", "run", "--locked", "python", "tests/fixtures/attention/generate_prefill.py")
+    run("uv", "run", "--script", "tests/fixtures/attention_sublayer/generate.py")
     anchors = json.loads((repository_root() / "tests/fixtures/checksums.json").read_text())
     for name, expected in anchors["sha256"].items():
         actual = hashlib.sha256((fixtures / name).read_bytes()).hexdigest()
@@ -34,6 +35,16 @@ def prepare():
     for name, expected in manifest['array_sha256'].items():
         if hashlib.sha256((fixtures / 'attention' / name).read_bytes()).hexdigest() != expected:
             raise RuntimeError(f'prefill oracle array changed: {name}')
+    sublayer = json.loads((fixtures / 'attention_sublayer/manifest.json').read_text())
+    frozen = json.loads((repository_root() / 'tests/fixtures/attention_sublayer/checksums.json').read_text())
+    if any(sublayer[key] != frozen[key] for key in (
+        'cases', 'atol', 'rtol', 'array_sha256', 'numerical_contract', 'upstream_contract'
+    )):
+        raise RuntimeError('sublayer oracle changed: review its numerical contract')
+    for name, expected in frozen['array_sha256'].items():
+        if hashlib.sha256((fixtures / 'attention_sublayer' / name).read_bytes()).hexdigest() != expected:
+            raise RuntimeError(f'sublayer oracle array changed: {name}')
+    run("uv", "run", "--script", "tests/fixtures/attention_sublayer/precision.py")
     print("All generated oracles match the frozen anchors.", flush=True)
 
 

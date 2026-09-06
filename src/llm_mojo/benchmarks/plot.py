@@ -192,9 +192,71 @@ def render_prefill(directory, record, samples, summary):
     print(directory.name,len(samples),'primary observations verified; prefill figures and retained follow-ups regenerated')
 
 
+def render_sublayer(directory, record, samples, summary):
+    """Separate latency scaling from diagnostic per-dispatch active time."""
+    prefill_style()
+    table(directory, 'summary.csv', summary)
+    def regime(s):
+        return 0 if s['query_rows'] == 1 else (1 if s['query_rows'] == s['rows'] else 2)
+    fig, axes = plt.subplots(1, 3, figsize=(13, 5.3))
+    for group, ax in enumerate(axes):
+        for layers, color, label in ((1, '#167d9a', 'Hot'), (24, '#c75b39', 'Ring24 per call')):
+            data = [s for s in summary if s['layers'] == layers and regime(s) == group]
+            x = [s['rows'] for s in data] if group != 2 else list(range(len(data)))
+            ax.plot(x, [s['control_us'] for s in data], '-o', color=color, label=label, markersize=4)
+        if group != 2:
+            ax.set_xscale('log', base=2)
+            ax.set_xticks(x, [str(v) for v in x], rotation=35)
+        else:
+            ax.set_xticks(x, [f'R={s["query_rows"]}\nT={s["rows"]}' for s in data])
+        ax.set_yscale('log')
+        ax.set_ylabel('Latency (µs / sublayer) · log scale')
+        ax.set_title(('Decode · R=1', 'Full prefill · R=T', 'Chunked prefill')[group])
+        ax.set_xlabel('Total KV positions T' if group != 2 else 'New rows R and total positions T')
+        ax.grid(axis='y', alpha=.18)
+    axes[0].legend(frameon=False)
+    fig.suptitle('Qwen attention sublayer · complete enqueue through completion', fontsize=16, fontweight='bold')
+    fig.text(.04,.025, f'{record["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention intermediates · source {record["repository"]["commit"][:7]}.\n'
+             f'{len(samples):,} retained samples, four self-paired blocks; control-arm medians shown. No optimized comparison.\n'
+             'Ring24 uses distinct weights, inputs and caches with shared scratch, and one synchronization per sweep.', fontsize=9, color='#555555')
+    fig.tight_layout(rect=(0,.18,1,.91))
+    fig.savefig(directory / 'latency.png', dpi=160)
+    plt.close(fig)
+    if (directory / 'profiles.json').exists():
+        rows = load_profile(directory)
+        table(directory, 'profile_summary.csv', rows)
+        from .attention_sublayer_contract import PROFILE_WORKLOADS, STAGES
+        fig, axes = plt.subplots(2, 2, figsize=(13, 9.5))
+        for ax, (r,t) in zip(axes.flat, PROFILE_WORKLOADS):
+            lookup = {s['stage']:s for s in rows if s['query_rows']==r and s['rows']==t}
+            data = [lookup[stage] for stage in STAGES]
+            values = [s['median_us'] for s in data]
+            ax.barh(range(len(data)), values,
+                    color=['#c75b39' if s['stage'] in ('QK','softmax','PV') else '#167d9a' for s in data])
+            ax.set_yticks(range(len(data)), STAGES, fontsize=9)
+            ax.invert_yaxis()
+            ax.set_xscale('log')
+            ax.set_xlim(min(values)/2, max(values)*3)
+            ax.set_title(f'R={r}, T={t}')
+            ax.set_xlabel('Median active GPU time (µs) · log scale')
+            for i, value in enumerate(values):
+                ax.text(value*1.05,i,f'{value:.2f}',va='center',fontsize=8)
+            ax.grid(axis='x', alpha=.15)
+        fig.suptitle('Attention sublayer · time spent in each kernel',fontsize=16,fontweight='bold')
+        fig.text(.04,.023,'Orange: GQA stages. Blue: surrounding stages. Separate instrumented captures; no CPU or inter-dispatch gaps.\n'
+                 'Stage labels follow validated enqueue order. Segments of a preempted dispatch are joined before labeling.\n'
+                 f'{sum(s["count"] for s in rows):,} dispatch durations retained. These stage medians are not added to construct whole-sublayer latency.',fontsize=9,color='#555555')
+        fig.tight_layout(rect=(0,.13,1,.94))
+        fig.savefig(directory / 'profile.png',dpi=160)
+        plt.close(fig)
+    print(directory.name, len(samples), 'observations verified; attention tables and figures regenerated')
+
+
 def render(directory):
     record, samples, summary = load_run(directory)
     spec = record['specification']
+    if spec['operation'] == 'attention_sublayer':
+        return render_sublayer(directory,record,samples,summary)
     if record['study'] in ('gqa_prefill_screen','gqa_prefill_resources_screen'):
         prefill_style()
         table(directory,'screen_summary.csv',summary)

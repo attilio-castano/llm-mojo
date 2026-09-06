@@ -41,6 +41,7 @@ def _validate_linear[
     WeightLayout: TensorLayout,
     BiasLayout: TensorLayout,
     OutputLayout: TensorLayout,
+    HAS_BIAS: Bool = True,
 ](
     input: TileTensor[DType.bfloat16, InputLayout, MutAnyOrigin],
     weight: TileTensor[DType.bfloat16, WeightLayout, MutAnyOrigin],
@@ -61,7 +62,7 @@ def _validate_linear[
         raise Error("linear dimensions must be positive")
     if Int(weight.dim[1]()) != input_features:
         raise Error("weight input dimension must match input features")
-    if Int(bias.dim[0]()) != output_features:
+    if HAS_BIAS and Int(bias.dim[0]()) != output_features:
         raise Error("bias length must match output features")
     if Int(output.dim[0]()) != rows or Int(output.dim[1]()) != output_features:
         raise Error("output shape must be (rows, output features)")
@@ -72,6 +73,7 @@ def linear_reference[
     WeightLayout: TensorLayout,
     BiasLayout: TensorLayout,
     OutputLayout: TensorLayout,
+    HAS_BIAS: Bool = True,
 ](
     input: TileTensor[DType.bfloat16, InputLayout, MutAnyOrigin],
     weight: TileTensor[DType.bfloat16, WeightLayout, MutAnyOrigin],
@@ -84,7 +86,9 @@ def linear_reference[
     comptime assert weight.flat_rank == 2, "weight must have rank 2"
     comptime assert bias.flat_rank == 1, "bias must have rank 1"
     comptime assert output.flat_rank == 2, "output must have rank 2"
-    _validate_linear(input, weight, bias, output)
+    _validate_linear[
+        InputLayout, WeightLayout, BiasLayout, OutputLayout, HAS_BIAS
+    ](input, weight, bias, output)
 
     var rows = Int(input.dim[0]())
     var input_features = Int(input.dim[1]())
@@ -104,9 +108,11 @@ def linear_reference[
                     * weight_value.cast[DType.float32]()
                 )
 
-            var bias_value = rebind[Scalar[DType.bfloat16]](
-                bias[output_feature]
-            )
+            var bias_value: Scalar[DType.bfloat16] = 0
+            comptime if HAS_BIAS:
+                bias_value = rebind[Scalar[DType.bfloat16]](
+                    bias[output_feature]
+                )
             var result = (accumulator + bias_value.cast[DType.float32]()).cast[
                 DType.bfloat16
             ]()
@@ -118,6 +124,7 @@ def _linear_rowwise_apple_gpu_kernel[
     WeightLayout: TensorLayout,
     BiasLayout: TensorLayout,
     OutputLayout: TensorLayout,
+    HAS_BIAS: Bool = True,
 ](
     input: TileTensor[DType.bfloat16, InputLayout, MutAnyOrigin],
     weight: TileTensor[DType.bfloat16, WeightLayout, MutAnyOrigin],
@@ -164,9 +171,11 @@ def _linear_rowwise_apple_gpu_kernel[
 
         var sum = warp.sum(accumulator)
         if lane == 0:
-            var bias_value = rebind[Scalar[DType.bfloat16]](
-                bias[output_feature]
-            )
+            var bias_value: Scalar[DType.bfloat16] = 0
+            comptime if HAS_BIAS:
+                bias_value = rebind[Scalar[DType.bfloat16]](
+                    bias[output_feature]
+                )
             var result = (sum + bias_value.cast[DType.float32]()).cast[
                 DType.bfloat16
             ]()
@@ -236,6 +245,7 @@ def _linear_prefill_register_2x2_apple_gpu_kernel[
     WeightLayout: TensorLayout,
     BiasLayout: TensorLayout,
     OutputLayout: TensorLayout,
+    HAS_BIAS: Bool = True,
 ](
     input: TileTensor[DType.bfloat16, InputLayout, MutAnyOrigin],
     weight: TileTensor[DType.bfloat16, WeightLayout, MutAnyOrigin],
@@ -338,9 +348,11 @@ def _linear_prefill_register_2x2_apple_gpu_kernel[
                             second_input * second_weight
                         )
 
-        var first_bias = rebind[Scalar[DType.bfloat16]](
-            bias[first_output_feature]
-        ).cast[DType.float32]()
+        var first_bias: Float32 = 0
+        comptime if HAS_BIAS:
+            first_bias = rebind[Scalar[DType.bfloat16]](
+                bias[first_output_feature]
+            ).cast[DType.float32]()
         var first_first_result = (first_first_accumulator + first_bias).cast[
             DType.bfloat16
         ]()
@@ -357,9 +369,11 @@ def _linear_prefill_register_2x2_apple_gpu_kernel[
             ](second_first_result)
 
         if second_output_feature < output_count:
-            var second_bias = rebind[Scalar[DType.bfloat16]](
-                bias[second_output_feature]
-            ).cast[DType.float32]()
+            var second_bias: Float32 = 0
+            comptime if HAS_BIAS:
+                second_bias = rebind[Scalar[DType.bfloat16]](
+                    bias[second_output_feature]
+                ).cast[DType.float32]()
             var first_second_result = (
                 first_second_accumulator + second_bias
             ).cast[DType.bfloat16]()
@@ -380,6 +394,7 @@ def _linear_prefill_mma_8x16_apple_gpu_kernel[
     WeightLayout: TensorLayout,
     BiasLayout: TensorLayout,
     OutputLayout: TensorLayout,
+    HAS_BIAS: Bool = True,
 ](
     input: TileTensor[DType.bfloat16, InputLayout, MutAnyOrigin],
     weight: TileTensor[DType.bfloat16, WeightLayout, MutAnyOrigin],
@@ -484,9 +499,11 @@ def _linear_prefill_mma_8x16_apple_gpu_kernel[
     comptime for element in range(LINEAR_PREFILL_MMA_FRAGMENT_ELEMENTS):
         var first_output_feature = first_output + element
         if row < row_count and first_output_feature < output_count:
-            var first_bias = rebind[Scalar[DType.bfloat16]](
-                bias[first_output_feature]
-            ).cast[DType.float32]()
+            var first_bias: Float32 = 0
+            comptime if HAS_BIAS:
+                first_bias = rebind[Scalar[DType.bfloat16]](
+                    bias[first_output_feature]
+                ).cast[DType.float32]()
             var first_result = (first_accumulator[element] + first_bias).cast[
                 DType.bfloat16
             ]()
@@ -496,9 +513,11 @@ def _linear_prefill_mma_8x16_apple_gpu_kernel[
 
         var second_output_feature = second_output + element
         if row < row_count and second_output_feature < output_count:
-            var second_bias = rebind[Scalar[DType.bfloat16]](
-                bias[second_output_feature]
-            ).cast[DType.float32]()
+            var second_bias: Float32 = 0
+            comptime if HAS_BIAS:
+                second_bias = rebind[Scalar[DType.bfloat16]](
+                    bias[second_output_feature]
+                ).cast[DType.float32]()
             var second_result = (
                 second_accumulator[element] + second_bias
             ).cast[DType.bfloat16]()
@@ -708,6 +727,7 @@ def enqueue_linear_apple_gpu[
     WeightLayout: TensorLayout,
     BiasLayout: TensorLayout,
     OutputLayout: TensorLayout,
+    HAS_BIAS: Bool = True,
 ](
     context: DeviceContext,
     input: TileTensor[DType.bfloat16, InputLayout, MutAnyOrigin],
@@ -721,7 +741,9 @@ def enqueue_linear_apple_gpu[
     comptime assert weight.flat_rank == 2, "weight must have rank 2"
     comptime assert bias.flat_rank == 1, "bias must have rank 1"
     comptime assert output.flat_rank == 2, "output must have rank 2"
-    _validate_linear(input, weight, bias, output)
+    _validate_linear[
+        InputLayout, WeightLayout, BiasLayout, OutputLayout, HAS_BIAS
+    ](input, weight, bias, output)
     if context.api() != "metal":
         raise Error("Apple GPU linear projection requires the Metal device API")
 
@@ -730,7 +752,7 @@ def enqueue_linear_apple_gpu[
     var output_features = Int(weight.dim[0]())
     var dot_products = rows * output_features
     comptime kernel = _linear_rowwise_apple_gpu_kernel[
-        InputLayout, WeightLayout, BiasLayout, OutputLayout
+        InputLayout, WeightLayout, BiasLayout, OutputLayout, HAS_BIAS
     ]
     context.enqueue_function[kernel](
         input,
@@ -794,6 +816,7 @@ def enqueue_linear_prefill_register_2x2_apple_gpu[
     WeightLayout: TensorLayout,
     BiasLayout: TensorLayout,
     OutputLayout: TensorLayout,
+    HAS_BIAS: Bool = True,
 ](
     context: DeviceContext,
     input: TileTensor[DType.bfloat16, InputLayout, MutAnyOrigin],
@@ -807,7 +830,9 @@ def enqueue_linear_prefill_register_2x2_apple_gpu[
     comptime assert weight.flat_rank == 2, "weight must have rank 2"
     comptime assert bias.flat_rank == 1, "bias must have rank 1"
     comptime assert output.flat_rank == 2, "output must have rank 2"
-    _validate_linear(input, weight, bias, output)
+    _validate_linear[
+        InputLayout, WeightLayout, BiasLayout, OutputLayout, HAS_BIAS
+    ](input, weight, bias, output)
     if context.api() != "metal":
         raise Error("Apple GPU linear projection requires the Metal device API")
 
@@ -815,7 +840,7 @@ def enqueue_linear_prefill_register_2x2_apple_gpu[
     var input_features = Int(input.dim[1]())
     var output_features = Int(weight.dim[0]())
     comptime kernel = _linear_prefill_register_2x2_apple_gpu_kernel[
-        InputLayout, WeightLayout, BiasLayout, OutputLayout
+        InputLayout, WeightLayout, BiasLayout, OutputLayout, HAS_BIAS
     ]
     context.enqueue_function[kernel](
         input,
@@ -838,6 +863,7 @@ def enqueue_linear_prefill_mma_8x16_apple_gpu[
     WeightLayout: TensorLayout,
     BiasLayout: TensorLayout,
     OutputLayout: TensorLayout,
+    HAS_BIAS: Bool = True,
 ](
     context: DeviceContext,
     input: TileTensor[DType.bfloat16, InputLayout, MutAnyOrigin],
@@ -851,7 +877,9 @@ def enqueue_linear_prefill_mma_8x16_apple_gpu[
     comptime assert weight.flat_rank == 2, "weight must have rank 2"
     comptime assert bias.flat_rank == 1, "bias must have rank 1"
     comptime assert output.flat_rank == 2, "output must have rank 2"
-    _validate_linear(input, weight, bias, output)
+    _validate_linear[
+        InputLayout, WeightLayout, BiasLayout, OutputLayout, HAS_BIAS
+    ](input, weight, bias, output)
     if context.api() != "metal":
         raise Error("Apple GPU linear projection requires the Metal device API")
 
@@ -859,7 +887,7 @@ def enqueue_linear_prefill_mma_8x16_apple_gpu[
     var input_features = Int(input.dim[1]())
     var output_features = Int(weight.dim[0]())
     comptime kernel = _linear_prefill_mma_8x16_apple_gpu_kernel[
-        InputLayout, WeightLayout, BiasLayout, OutputLayout
+        InputLayout, WeightLayout, BiasLayout, OutputLayout, HAS_BIAS
     ]
     context.enqueue_function[kernel](
         input,
@@ -990,3 +1018,70 @@ def enqueue_linear_apple_gpu_two_output[
         grid_dim=ceildiv(output_pairs, LINEAR_APPLE_GPU_SIMD_GROUPS),
         block_dim=LINEAR_APPLE_GPU_BLOCK_SIZE,
     )
+
+
+def linear_reference[
+    IL: TensorLayout, WL: TensorLayout, OL: TensorLayout
+](
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+) raises:
+    """Explicit bias-free overload; no bias allocation or load."""
+    # Borrow a metadata-only view to specialize the shared implementation.
+    # HAS_BIAS=False removes every access to this argument at compile time.
+    var unused_bias = TileTensor(weight.ptr, row_major(1))
+    linear_reference[IL, WL, type_of(unused_bias.layout), OL, False](
+        input, weight, unused_bias, output
+    )
+
+
+def enqueue_linear_apple_gpu[
+    IL: TensorLayout, WL: TensorLayout, OL: TensorLayout
+](
+    context: DeviceContext,
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+) raises:
+    """Explicit bias-free overload; no bias allocation or load."""
+    # Borrow a metadata-only view to specialize the shared implementation.
+    # HAS_BIAS=False removes every access to this argument at compile time.
+    var unused_bias = TileTensor(weight.ptr, row_major(1))
+    enqueue_linear_apple_gpu[IL, WL, type_of(unused_bias.layout), OL, False](
+        context, input, weight, unused_bias, output
+    )
+
+
+def enqueue_linear_prefill_register_2x2_apple_gpu[
+    IL: TensorLayout, WL: TensorLayout, OL: TensorLayout
+](
+    context: DeviceContext,
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+) raises:
+    """Explicit bias-free overload; no bias allocation or load."""
+    # Borrow a metadata-only view to specialize the shared implementation.
+    # HAS_BIAS=False removes every access to this argument at compile time.
+    var unused_bias = TileTensor(weight.ptr, row_major(1))
+    enqueue_linear_prefill_register_2x2_apple_gpu[
+        IL, WL, type_of(unused_bias.layout), OL, False
+    ](context, input, weight, unused_bias, output)
+
+
+def enqueue_linear_prefill_mma_8x16_apple_gpu[
+    IL: TensorLayout, WL: TensorLayout, OL: TensorLayout
+](
+    context: DeviceContext,
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+) raises:
+    """Explicit bias-free overload; no bias allocation or load."""
+    # Borrow a metadata-only view to specialize the shared implementation.
+    # HAS_BIAS=False removes every access to this argument at compile time.
+    var unused_bias = TileTensor(weight.ptr, row_major(1))
+    enqueue_linear_prefill_mma_8x16_apple_gpu[
+        IL, WL, type_of(unused_bias.layout), OL, False
+    ](context, input, weight, unused_bias, output)

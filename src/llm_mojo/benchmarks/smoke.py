@@ -46,6 +46,25 @@ def main():
         if result.returncode == 0:
             raise RuntimeError('invalid prefill benchmark accepted')
     print('prefill all',len(PREFILL_VARIANTS),'measurement routes passed in both modes',flush=True)
+    target = repository_root() / 'build/attention-sublayer-smoke'
+    subprocess.run(['uv','run','--locked','mojo','build','-I','src',
+                    'src/llm_mojo/benchmarks/attention_sublayer.mojo','-o',str(target)],
+                   cwd=repository_root(),check=True)
+    for r,t in ((1,64),(7,33),(33,33)):
+        for layers in (1,24):
+            result = subprocess.run(list(map(str,[target,r,t,layers,3,3,1,53,'bench',1,0])),
+                                    cwd=repository_root(),text=True,capture_output=True,env=env,check=True)
+            if (f'query rows: {r}' not in result.stdout or
+                'variants: 3 3 candidate-first: 1' not in result.stdout or
+                'api: metal' not in result.stdout or 'correctness: passed' not in result.stdout or
+                not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE')):
+                raise RuntimeError('attention sublayer measurement identity or completion mismatch')
+    for r,t,variant,seed in ((34,33,3,53),(7,4097,3,53),(7,33,0,53),(7,33,3,17)):
+        result = subprocess.run(list(map(str,[target,r,t,1,variant,3,1,seed,'bench',1,0])),
+                                cwd=repository_root(),capture_output=True,env=env)
+        if result.returncode == 0:
+            raise RuntimeError('invalid attention sublayer benchmark accepted')
+    print('attention sublayer FP32 measurement route passed in both modes',flush=True)
 
 
 if __name__ == '__main__':

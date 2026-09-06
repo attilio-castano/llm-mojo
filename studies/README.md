@@ -13,10 +13,18 @@ operation-level; a working decoder block and full-model generation remain next.
 | [RoPE](rope/README.md) | How much work and data movement does rotating a dimension pair require? |
 | [GQA decode](gqa_decode/README.md) | How do fusion, sequence parallelism and shared KV heads interact? |
 | [GQA prefill](gqa_prefill/README.md) | How do query tiling, online softmax and Apple matrix instructions interact? |
+| [Attention sublayer](../docs/attention-sublayer.md) | How do upstream rounding differences propagate through the composed block? |
+
+The attention-sublayer study uses the explicit CPU FP32 attention policy as
+its accuracy baseline. It has 17 synthetic and three checkpoint cases; the
+earlier BF16 eager holdout remains a recorded compatibility failure, with an
+explicit command to reproduce its original strict gate. Baseline measurement
+and stage profiling follow full validation. The measurements below belong
+to the six completed operation studies.
 
 The six topics retain **31,200 latency observations**, eleven report figures,
 and fifteen focused GQA profiles containing 10,200 measured dispatch durations.
-Full validation passes 71 Mojo tests and 36 Python tooling/evidence checks,
+Their recorded validation passed 71 Mojo tests and 36 Python tooling/evidence checks,
 including every prefill measurement route in hot and ring24 modes.
 
 The original five topics characterize existing implementations at source

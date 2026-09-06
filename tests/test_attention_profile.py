@@ -10,8 +10,34 @@ from llm_mojo.benchmarks.attention_decode_contract import configuration, ENTRYPO
 from llm_mojo.benchmarks.capture_trace import profile_contract, parse_target_identity, validate_target_identity
 from llm_mojo.benchmarks.analyze_trace import segment_compute_commands
 from llm_mojo.benchmarks import attention_prefill_contract as prefill
+from llm_mojo.benchmarks import attention_sublayer_contract as sublayer
 
 class AttentionProfileTests(unittest.TestCase):
+    def test_sublayer_profile_binds_full_stage_sequence_and_causal_shape(self):
+        p = self.profile()
+        p.update(operation=sublayer.OPERATION, implementation='attention_sublayer_3',
+                 entrypoint='enqueue_attention_sublayer', profile_iterations=300,
+                 **sublayer.specification(3,64,4096))
+        cfg, _, hardware = profile_contract(p)
+        output = '\n'.join([
+            'profile implementation: enqueue_attention_sublayer', 'device: Apple Test GPU',
+            'api: metal', 'rows: 64', 'hidden: 896', 'warmup iterations: 100',
+            'profile iterations: 300', 'post-profile idle milliseconds: 250',
+            'profile workload: sublayer-r64-t4096-v3', 'profile dispatches per iteration: 12',
+            'key value rows: 4096', 'query heads: 14', 'key value heads: 2'])
+        target = parse_target_identity(output)
+        validate_target_identity(target,cfg,hardware)
+        for key, value in [('hidden_size',64), ('key_value_rows',65), ('dispatches_per_iteration',3)]:
+            with self.assertRaises(ValueError):
+                validate_target_identity({**target,key:value},cfg,hardware)
+        for key, value in [('profile_rows',4097), ('profile_iterations',417),
+                           ('implementation','attention_sublayer_0'), ('query_heads',True)]:
+            with self.assertRaises(ValueError):
+                sublayer.configuration({**p,key:value})
+        self.assertEqual(len(sublayer.profile_grid(dict(variants=[3],workloads=sublayer.PROFILE_WORKLOADS))[1]),4)
+        with self.assertRaises(ValueError):
+            sublayer.profile_grid(dict(variants=[3],workloads=sublayer.PROFILE_WORKLOADS[:-1]))
+
     def test_prefill_profile_binds_rectangular_shape_and_tile_ownership(self):
         for variant in prefill.VARIANTS:
             p = self.profile()

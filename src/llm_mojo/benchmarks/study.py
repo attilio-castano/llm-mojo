@@ -55,6 +55,16 @@ STUDIES['gqa_prefill_resources_screen'] = dict(
 # Frozen after the five-ablation screen: only the rolled reduction qualified.
 STUDIES['gqa_prefill'].update(candidates=[8,12],names={v:RESOURCE_NAMES[v] for v in (8,12)})
 PREFILL_PROFILE_WORKLOADS = [(16,16),(1024,1024),(64,4096)]
+from .attention_sublayer_contract import ARITHMETIC, INPUTS, TIMING
+STUDIES['attention_sublayer'] = dict(
+    operation='attention_sublayer', control=3, candidates=[3],
+    workloads=[dict(query_rows=r, rows=t) for r,t in
+               [(1,n) for n in (1,16,64,256,1024,4096)] +
+               [(n,n) for n in (16,64,256,1024,4096)] +
+               [(4,64),(16,256),(64,1024),(64,4096)]],
+    names={3: 'FP32 attention baseline'},
+    layout='X/O[R,896], Wqkv[1152,896], Wo[896,896], K/V[T,2,64]; row major',
+    arithmetic=ARITHMETIC, inputs=INPUTS, timing=TIMING)
 
 
 def workloads(spec):
@@ -96,7 +106,7 @@ def parse_output(output, control, candidate, first, *, rows, layers, seed, opera
     expected_headers = [f'shape: {rows} {layers} seed: {seed}',
                         f'variants: {control} {candidate} candidate-first: {int(first)}',
                         'api: metal', 'correctness: passed', 'BENCHMARK_COMPLETE']
-    if operation == 'gqa_prefill':
+    if operation in ('gqa_prefill', 'attention_sublayer'):
         if type(query_rows) is not int or not 1 <= query_rows <= rows:
             raise ValueError('invalid prefill query rows')
         expected_headers.append(f'query rows: {query_rows}')
@@ -205,11 +215,16 @@ def load_profile(directory, prefix=''):
     directory = Path(directory)
     record = json.loads((directory / (prefix+'profiles.json')).read_text())
     path = directory / (prefix+'profile_samples.csv.gz')
-    if record.get('schema') not in (1,2) or record['samples_sha256'] != sha(path):
+    if record.get('schema') not in (1,2,3) or record['samples_sha256'] != sha(path):
         raise ValueError('profile sample hash/schema mismatch')
-    prefill = record['schema'] == 2
+    sublayer = record['schema'] == 3
+    prefill = record['schema'] in (2,3)
     if prefill:
-        stages, grid = prefill_profile_grid(record['specification'])
+        if sublayer:
+            from .attention_sublayer_contract import profile_grid
+            stages, grid = profile_grid(record['specification'])
+        else:
+            stages, grid = prefill_profile_grid(record['specification'])
     else:
         stages = {0: ['QK', 'softmax', 'PV'], 4: ['fused'], 9: ['decode', 'merge']}
         grid = {(0,0,v) for v in stages}
@@ -226,13 +241,17 @@ def load_profile(directory, prefix=''):
             raise ValueError('profile runtime mismatch')
         r,t = capture.get('query_rows',0),capture.get('rows',0)
         if prefill:
-            from .attention_prefill_contract import configuration, OPERATION
+            if sublayer:
+                from .attention_sublayer_contract import configuration, OPERATION
+            else:
+                from .attention_prefill_contract import configuration, OPERATION
             workload = identity['workload']
             configuration({**identity,**workload,
                            'profile_warmup_iterations':workload['warmup_iterations']})
             if identity['operation'] != OPERATION or workload['rows'] != r:
                 raise ValueError('prefill profile operation or rows mismatch')
-        if prefill and (identity['implementation'] != f'gqa_prefill_{variant}' or
+        implementation = f'attention_sublayer_{variant}' if sublayer else f'gqa_prefill_{variant}'
+        if prefill and (identity['implementation'] != implementation or
                         identity['workload']['profile_rows'] != r or identity['workload']['key_value_rows'] != t):
             raise ValueError('prefill profile shape or implementation mismatch')
         expected.update((r,t,variant, iteration, stage)
