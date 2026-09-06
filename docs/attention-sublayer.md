@@ -692,7 +692,28 @@ tokens, 22.5% at 1024 and 10.4% at 4096 in both modes. All 6,400 screen/full
 observations and 1,200 profile dispatch durations are retained from clean
 source `07984fe`. Optional counter analysis is explicitly absent.
 
-`wo_mma=True` remains explicit and the default remains rowwise. These data do
-not establish a general dispatch crossover. The study relates the results to
-earlier projection/decode/prefill experiments and recommends a separate FP32
-decode ownership comparison next, followed by FP32 prefill tiling and PV.
+`wo_mma=True` remains explicit and the original enqueue defaults to rowwise.
+These data do not establish a general dispatch crossover. The subsequent FP32
+decode, FP32 prefill and QKV/Wo integration comparisons are now complete.
+
+## Completed projection integration
+
+Validated source `dc77016` composes existing packed QKV, bias-free Wo MMA and
+FP32 GQA through `enqueue_attention_sublayer_integrated`. The full workflow
+passes 87 Mojo and 41 Python tests, with unchanged numerical gates and all
+frozen arrays. Checkpoint-derived cases and twelve asynchronous sequences
+per configuration also pass, including 15/16/17-row calls and final decode.
+
+Two fresh 4,800-observation comparisons distinguish incremental QKV value
+from the combined gain over the original materialized FP32/rowwise baseline.
+QKV integration qualifies in 19 of 30 cells; the combined path qualifies in
+26 of 30. The remaining cells are inconclusive, with no qualifying regression.
+At full 1024/4096 and the `(64,4096)` chunk, incremental reductions are about
+70%/59%/24%, and combined reductions are about 88%/91%/80%. The copy dispatch
+is included. Do not multiply earlier results to construct these gains.
+
+Eight validated Metal captures retain 2,090 active dispatch durations. GQA
+accounts for 64% at full 4096 and 86% for the long chunk; at full 1024, QKV
+and Wo together still account for about 55%. These are diagnostic shares,
+not a hardware ceiling. The [integrated report](../studies/attention_sublayer/README.md#integrating-qkv-and-wo-with-fp32-attention)
+retains all observations, validation, conditions, profiles and next-step reasoning.

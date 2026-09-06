@@ -76,7 +76,7 @@ class EvidenceTests(unittest.TestCase):
             for record in directory.glob('*run.json'):
                 _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
-        self.assertEqual(count, 47680)
+        self.assertEqual(count, 57280)
         profile = load_profile(ROOT / 'studies/gqa_decode')
         self.assertEqual(sum(row['count'] for row in profile), 3000)
         profile = load_profile(ROOT / 'studies/gqa_prefill')
@@ -111,6 +111,23 @@ class EvidenceTests(unittest.TestCase):
         for name, digest in validation['source_sha256'].items():
             if name in run['build']['sources']:
                 self.assertEqual(digest, run['build']['sources'][name])
+        profile = load_profile(ROOT / 'studies/attention_sublayer', 'integrated_')
+        self.assertEqual(sum(row['count'] for row in profile), 2090)
+        integrated = json.loads((ROOT / 'studies/attention_sublayer/integrated_profiles.json').read_text())
+        validation = json.loads((ROOT / 'studies/attention_sublayer/integrated_validation.json').read_text())
+        for prefix,control in (('projections_',8),('integrated_',3)):
+            run,samples,_ = load_run(ROOT / 'studies/attention_sublayer',prefix)
+            self.assertEqual(len(samples),4800)
+            self.assertEqual(run['specification']['control'],control)
+            self.assertEqual(integrated['common']['repository'],run['repository'])
+            self.assertEqual(integrated['common']['source_sha256'],run['build']['sources'])
+            self.assertEqual(validation['source_commit'],run['repository']['commit'])
+            for name,digest in validation['source_sha256'].items():
+                if name in run['build']['sources']:
+                    self.assertEqual(digest,run['build']['sources'][name])
+        for capture in integrated['captures']:
+            self.assertEqual(capture['counter_analysis']['status'],'not_analyzed')
+            self.assertEqual(capture['counters'],[])
         record = json.loads((ROOT / 'studies/attention_sublayer/profiles.json').read_text())
         full = next(c for c in record['captures'] if c['query_rows'] == 4096)
         self.assertEqual(full['counter_analysis']['status'], 'not_analyzed')
@@ -122,7 +139,8 @@ class EvidenceTests(unittest.TestCase):
                                       ('attention_sublayer', '', 48),
                                       ('attention_sublayer', 'wo_', 96),
                                       ('attention_sublayer', 'decode_', 66),
-                                      ('attention_sublayer', 'prefill_', 66)):
+                                      ('attention_sublayer', 'prefill_', 66),
+                                      ('attention_sublayer', 'integrated_', 76)):
             source = ROOT / 'studies' / topic
             with self.subTest(topic=topic, prefix=prefix), tempfile.TemporaryDirectory() as tmp:
                 directory = Path(tmp)

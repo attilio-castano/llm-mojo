@@ -1,13 +1,16 @@
 # Qwen attention sublayer
 
-The completed FP32 attention experiments establish substantial remaining
-headroom on Apple M4 Pro / Metal. Decode ownership changes reduce whole-block
-time by **61–69% at T=1024** and **89–91% at T=4096**, with rowwise Wo fixed.
-Prefill tiling reduces it by **47% at full 1024** and **74–75% at full 4096**,
-with MMA Wo fixed. The earlier Wo-only experiment improves full prefill by
-about 31% at 256 tokens and 10% at 4096. These are separate paired comparisons
-against matching controls, not multipliable speedups. Negative and inconclusive
-results are retained; new mappings remain explicit options.
+The earlier packed-QKV, Wo and FP32 GQA studies now run together through one
+public Mojo enqueue. On Apple M4 Pro / Metal, the integrated path reduces
+whole-attention latency by **about 88% at full 1024-token prefill, 91% at full
+4096, 80% for a 64-token chunk at context 4096, and 89–92% for decode at context
+4096**, compared directly with the original materialized FP32/rowwise baseline.
+A separate comparison with optimized GQA/Wo already fixed finds that QKV
+integration alone adds **70%, 59%, and 24% reductions** at the three prefill
+workloads respectively. These are two fresh paired comparisons, not products
+of earlier speedups. All 9,600 observations and 2,090 profile durations are
+retained, including inconclusive cases; neither comparison finds a qualifying
+regression.
 
 The measured unit is
 `X → RMSNorm → Q/K/V → RoPE → KV append → GQA → Wo → residual X+branch`.
@@ -34,8 +37,195 @@ Historical BF16 eager compatibility failures remain reproducible. The
 [contract and numerical investigation](../../docs/attention-sublayer.md),
 [validation](validation.json), [original numerical record](numerics.json)
 and [FP32 comparison](precision_numerics.json) retain the precision decision,
-independent gates and provenance. The measured engine and fixtures match the
-validation hashes; only the runner's per-process timeout changed afterward.
+independent gates and provenance. The original baseline's measured engine and
+fixtures match its validation hashes; only the runner's per-process timeout
+changed afterward.
+
+## Integrating QKV and Wo with FP32 attention
+
+The existing projection work now runs through one public Mojo entrypoint,
+`enqueue_attention_sublayer_integrated`. It combines packed QKV, the studied
+Wo mapping, and the validated FP32 GQA paths through the residual addition.
+This addresses a composition gap: the earlier attention experiments kept
+Q/K/V as three separate rowwise projections even though faster projection
+kernels were already available.
+
+| New rows R | QKV | GQA | Wo |
+| --- | --- | --- | --- |
+| 1 | Packed rowwise | FP32 G32 decode | Rowwise |
+| 2–15 | Packed rowwise | FP32 rolled MMA prefill | Rowwise |
+| 16–4096 | Packed 8×16 MMA | FP32 rolled MMA prefill | Bias-free 8×16 MMA |
+
+Sixteen rows is a conservative policy fixed before measurement, not a proven
+optimal crossover across unmeasured sizes. The previous split64-H4 decode
+mapping remains explicit; the earlier study did not establish a direct
+G32/split crossover. The original enqueue and separate mappings remain useful
+controls.
+
+Packed projection produces `[R,1152]` with per-token `[Q | K | V]` ordering.
+The new copy dispatch preserves BF16 bits while producing contiguous Q, K,
+and V for the existing RoPE and cache consumers. Both its enqueue and execution
+are included in timing. The block now has nine dispatches: RMSNorm, packed
+QKV, unpack, Q RoPE, K RoPE, cache append, GQA, Wo, residual. GQA output still
+rounds to BF16 before Wo; Wo output rounds to BF16 before the residual.
+
+The copy requests 4×R×1152 bytes including reads and writes: 18 MiB at R=4096.
+This is source-requested traffic, not measured DRAM traffic. Packed and
+contiguous diagnostic buffers remain allocated. The integrated entrypoint can
+use `AttentionWorkspace(..., fp32_materialized=False)`, avoiding the original
+896 MiB probability allocation at full 4096, apart from a four-byte sentinel.
+All allocation remains outside enqueue and timing. The combined 9-versus-3
+comparison retains the baseline scratch allocation for both timing arms; the
+storage saving is available when the integrated entrypoint is used alone.
+
+### The additional value of the projection work
+
+The first fresh paired comparison fixes GQA and Wo to the policy above in both
+arms. Control 8 keeps separate rowwise Q/K/V; candidate 9 calls the integrated
+entrypoint. Thus it measures QKV packing/tiling and the layout copy together,
+with the previously optimized surrounding block as its control.
+
+All 4,800 observations are retained from clean source `dc77016`. Across thirty
+workload/mode comparisons, **19 qualify as faster, 11 are inconclusive, and
+none qualify as slower**. All five full-prefill sizes qualify in both modes.
+The `(16,256)`, `(64,1024)`, and `(64,4096)` chunks also qualify in both modes;
+`(4,64)` is inconclusive.
+
+| Workload | Hot reduction | Ring24 reduction |
+| --- | ---: | ---: |
+| Full R=T=16 | 37.03% | 25.68% |
+| Full R=T=64 | 60.73% | 68.57% |
+| Full R=T=256 | 70.98% | 73.59% |
+| Full R=T=1024 | 70.20% | 70.67% |
+| Full R=T=4096 | 58.54% | 58.53% |
+| Chunk R=64, T=4096 | 24.19% | 23.97% |
+
+The full-1024 hot paired control/candidate medians are 15.800 → 4.711 ms;
+full-4096 hot is 79.796 → 33.080 ms. Reductions use the median of within-block
+ratios; displayed times are medians of block medians. Their ratio need not
+match the paired reduction, particularly in noisy short calls.
+
+Decode qualifies only at hot T=1 (11.61%), hot T=256 (12.71%), and ring24 T=64
+(10.26%). The remaining nine decode cells are inconclusive. The full-context
+decode point estimates improve by 8.67% hot and 9.27% ring24, but their matching
+noise floors are 35.63% and 33.05%. They do not support speed claims. This is
+consistent with keeping the earlier packing result scoped to its measured
+operation, rather than assuming it transfers equally to every complete call.
+
+At fixed R=64, the median of the four paired ring24 latency savings is
+619.72 µs at T=64, 623.81 µs at T=1024, and 617.89 µs at T=4096. The nearly
+constant absolute saving, despite the shrinking percentage, fits the intended
+mechanism: projection dimensions depend on new rows R, while attention also
+grows with cached context T.
+
+![Additional whole-block value from integrating QKV](projections.png)
+
+[Complete paired table](projections_summary.csv), [run](projections_run.json),
+and [all raw samples](projections_samples.csv.gz) retain calibration, ratios,
+absolute timings, runtime identity, and block conditions.
+
+### Combined gain over the original attention baseline
+
+The second fresh comparison pairs integrated entrypoint 9 with original
+variant 3: materialized FP32 GQA and separate rowwise Q/K/V and Wo. It measures
+all selected mappings together through the residual addition. It retains
+4,800 observations from the same clean source and finds **26 faster, four
+inconclusive, and zero slower** workload/mode decisions.
+
+| Workload | Original → integrated hot latency | Hot reduction | Ring24 reduction |
+| --- | ---: | ---: | ---: |
+| Decode R=1, T=4096 | 2.482 → 0.262 ms | 89.43% | 91.57% |
+| Full R=T=1024 | 38.505 → 4.736 ms | 87.70% | 88.06% |
+| Full R=T=4096 | 349.351 → 33.022 ms | 90.55% | 90.58% |
+| Chunk R=64, T=4096 | 9.757 → 1.921 ms | 80.34% | 79.73% |
+
+All full-prefill cases qualify in both modes. The four inconclusive cells are
+hot decode T=1 and T=16, plus both `(4,64)` chunk modes. Hot T=16 has a favorable
+median ratio but one block reverses direction, so it fails the rule. Short-call
+variation is retained rather than hidden. [The complete table](integrated_summary.csv)
+contains every ratio, matching calibration threshold and absolute time.
+
+![Combined whole-attention gains](integrated.png)
+
+The [run](integrated_run.json) and [raw observations](integrated_samples.csv.gz)
+record hardware/software, source/binary/input hashes, both arm orders, runtime
+Metal identity, and conditions before/after each block. Both timing runs use
+four blocks, ten warmups and ten samples per arm; AC power, power mode 0 and
+no reported thermal warning. The environment is macOS 26.6.2, Xcode 26.6,
+Mojo 1.0.0 and MAX 26.5.0. The fixed prefix and ring24 meaning remain as
+described in the baseline: two sign patterns across 24 distinct allocations,
+not a 24-layer model. Checkpoint inputs establish correctness separately.
+
+### Numerical and data-flow checks
+
+The integrated implementation passed **87 Mojo tests and 41 Python tests**,
+all 510 frozen synthetic arrays, and 63 frozen arrays for three existing
+checkpoint-derived first-layer cases. Both packed kernels consume exactly
+the upstream normalized tensor in isolated tests. Composition then starts
+from original X, including candidate-generated cache prefixes, full/chunked
+prefill, final decode and reset. All tolerances remain unchanged.
+
+| Check | Maximum synthetic scaled error | Maximum checkpoint scaled error | Fixed limit |
+| --- | ---: | ---: | ---: |
+| Isolated packed QKV, both mappings | 0.006250 | 0.003226 | 0.0078125 |
+| Integrated projected branch | 0.005181 | 0.001412 | 0.03125 |
+| Integrated final output | 0.011628 | 0.001379 | 0.03125 |
+
+Scaled error is `abs(got-want)/(1+abs(want))`. The existing isolated GQA gate
+remains 0.0078125. The branch is checked separately so the residual cannot
+conceal its error. Cache prefix, appended source bits and unused capacity
+are exact checks. The new multi-row handoff regression checks signed zeros,
+subnormals, extreme BF16 patterns and guard elements. Projection intermediates
+are poisoned in composition tests. The actual benchmark routes pass hot and
+ring24 checks, including both sides of the 15/16-row boundary.
+
+Twelve asynchronous 65-token sequences pass for each of ten configurations.
+The new control and integrated configurations exercise 15,16,17,16,1-row calls
+on the same stream with reusable buffers and no materialized probability
+storage. [integrated_validation.json](integrated_validation.json) retains the
+commands, source hashes, counts and numerical maxima. No kernel, precision
+policy or threshold was retuned after the paired measurements started.
+
+### Where time goes after integration
+
+Eight separate captures compare control 8 and integrated entrypoint 9 at four
+workloads. All 2,090 measured dispatch durations are retained; 37 segmented
+dispatches were coalesced using validated command identities, excluding
+preemption gaps before stage assignment. The table reports median active GPU
+time in microseconds. QKV totals are summed within each measured iteration
+before taking the median, so the layout copy is included correctly.
+
+| R,T | Separate QKV total µs | Packed QKV + unpack µs | Unpack alone µs | Integrated GQA share of active time |
+| --- | ---: | ---: | ---: | ---: |
+| 1,4096 | 133.52 | 81.04 | 12.69 | 55.85% |
+| 1024,1024 | 12576.79 | 1523.92 | 133.83 | 35.63% |
+| 4096,4096 | 52539.86 | 6103.48 | 591.50 | 64.21% |
+| 64,4096 | 733.79 | 113.88 | 10.13 | 86.39% |
+
+![Stage costs after integrating the projection work](integrated_profile.png)
+
+Unpack accounts for 2.47%, 2.96%, 1.81% and 0.56% of recorded active time in
+those four integrated captures respectively. Its cost is visible but small.
+At full 1024, packed QKV itself is 30.59% and Wo is 23.97%; projections together
+still account for about 55% of active time. At full 4096 their combined share
+falls to about 30%, while GQA is 64%. The long cached chunk is much more
+strongly dominated by GQA.
+
+These are instrumented diagnostics, not additional paired speed claims.
+In particular, decode's instrumented active durations are larger than its
+unprofiled whole-call timing; they cannot be subtracted from that timing to
+estimate CPU overhead. The unchanged GQA/Wo stages are similar in these
+control/candidate captures, but profiling and clock effects remain possible.
+Use the latency experiments for the gains and the profiles for work ownership
+and remaining stage costs.
+
+Both prefill variants report a maximum compiler spill event of 48 bytes,
+with 35,20,35 target events for full 1024, full 4096 and the long chunk. Neither
+decode capture reports a target spill event. These event sizes/counts are
+compiler evidence, not measured spill traffic or proof of a bottleneck.
+Optional counter analysis is absent. [The profile table](integrated_profile_summary.csv),
+[record](integrated_profiles.json), and [all dispatch samples](integrated_profile_samples.csv.gz)
+retain the evidence and capture conditions.
 
 ## Baseline whole-block latency
 
@@ -519,22 +709,27 @@ lessons about live state and query ownership. It also preserves FP32 scores
 and softmax weights through PV: copying the old MMA path's BF16 tile-weight
 cast would change the numerical policy again.
 
-Both follow-up milestones are complete. **Q projection is the clearest next
-contained experiment for full prefill.** It has the same `[R,896]` by
-`[896,896]` matrix dimensions as Wo, with bias, so the existing projection
-mapping is a concrete starting point. Unlike Wo, its rounding differences
-feed RoPE and attention scores. Validate Q on exact upstream normalized inputs,
-then rerun operation and full-block gates before measuring its contribution.
-Do not inherit Wo's numerical or performance result merely because shapes match.
+The projection integration completes the next step those profiles identified.
+The kernel already existed; the missing work was wiring packed output into
+RoPE/cache consumers, retaining the numerical boundaries, and measuring the
+result with Wo and FP32 GQA already present. The large incremental gains above
+show why composition should precede another round of isolated kernel tuning.
 
-Long cached chunks remain a separate GQA question. At `(64,4096)`, the 32-row
-tile exposes only 28 threadgroups. Smaller query tiles or splitting the KV
-sequence could expose more independent work, informed by the decode study;
-they would also change reuse, partial-state traffic and merge costs. The
-reported spills are another concrete investigation point, but these captures
-do not identify their source values or prove they dominate runtime. Further
-head reuse or barrier changes need fresh motivation after their earlier mixed
-results. Broader fusion should follow the remaining stage costs.
+The next experiment should follow the remaining workload-specific costs.
+For `(64,4096)`, GQA now accounts for 86% of recorded active time, while unpack
+is below 1%. Its 32-row query tile still exposes only 28 threadgroups. A bounded
+comparison of smaller query tiles or KV-sequence splitting has a concrete
+parallelism hypothesis, informed by the earlier decode work; increased KV
+loads, partial-state traffic and merge cost must be included. Repeating the
+older head-reuse or barrier ablations needs a fresh reason after their mixed
+results. Preserve FP32 scores/weights and the current gates.
+
+For full 1024, QKV and Wo together still consume about 55% of active time.
+The shared 8x16 linear MMA mapping therefore remains a separate useful target
+for operand reuse or tile ownership work. The current evidence does not select
+one universal next kernel across decode, full prefill and cached chunks.
+Any subsequent optimization should retain this integrated entrypoint as its
+whole-attention control and continue checking stages on exact upstream inputs.
 
 These results show that the original materialized paths were far from the
 best mappings tested here. They do not establish a hardware ceiling, a universal
@@ -625,6 +820,22 @@ missing-dispatch and source-identity checks for the added profile grid. All
 11 tables and 11 figures regenerate byte-for-byte. Post-measurement changes
 curate evidence and reporting; the measured engine and numerical gates remain
 unchanged. Full traces/XML, binaries and oracle arrays remain outside Git.
+
+The projection-only and combined integration comparisons use clean source
+`dc77016af29ef0087807b22ed42a0aeca7cde14f`, on 2026-09-06 at
+22:32:05–22:46:33 and 22:46:33–23:33:27 UTC respectively. Each retains 4,800
+observations in its `projections_` or `integrated_` run/sample files above.
+The eight integration captures use that same source and retain 2,090 active
+dispatch durations: 50,25,10,25 measured iterations per variant at decode
+4096, full 1024, full 4096 and chunk (64,4096), after ten warmups each.
+Capture provenance, dispatch identities, and optional-counter absence are
+validated. Source hashes match the numerical validation record.
+
+All 41 Python checks pass with the retained integration evidence. The complete
+attention study now reproduces **14 tables and 14 figures byte-for-byte**
+offline, including every prior figure. The final report/evidence changes do
+not alter the measured kernels, benchmark or numerical gates. Full traces,
+XML, binaries and generated fixtures remain outside Git.
 
 Rebuild tables and figures without a GPU:
 
