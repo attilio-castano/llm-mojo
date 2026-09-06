@@ -85,6 +85,11 @@ The bounded profile grid is `(1,4096), (1024,1024), (4096,4096), (64,4096)`;
 `profile_summary --attention-sublayer`, then pass the topic directory to
 `plot`. Source inputs and every measured cache append are checked before
 timing; the existing upstream numerical suites remain the independent gates.
+The curator accepts an analysis with optional counters omitted and records
+`counter_analysis.status = not_analyzed`, an empty counter list and an explicit
+scope statement. A capture-local `counter_analysis_note.json`, when present,
+preserves the reason and retention details. Missing counters are never zero
+observations. The attention latency plot marks self-pair deviations above 5%.
 
 The capture/analyzer pair retains binary hashes, verified launch receipts,
 workload identity, dispatch segmentation and named counters. Its historical

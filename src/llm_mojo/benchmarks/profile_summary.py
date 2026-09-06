@@ -79,11 +79,19 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
         for i, row in enumerate(profile):
             samples.append(dict(**shape,variant=variant, iteration=i // len(stages), stage=stages[i % len(stages)],
                                 duration_ns=integer(row, 'duration')))
+        counter_report = report.get('profile_gpu_counters')
+        counter_note = {}
+        if counter_report is None:
+            note_path = directory / 'counter_analysis_note.json'
+            note = json.loads(note_path.read_text()) if note_path.exists() else {}
+            counter_note = dict(counter_analysis={**note, 'status': 'not_analyzed'})
         records.append(dict(**shape,variant=variant, capture=identity, trace=report['trace'],
                             interval_coalescing=coalescing,fragmented_profile_dispatches=report['validated_sequence']['fragmented_profile_dispatches'],
                             conditions=json.loads((directory / 'conditions.json').read_text()),
-                            counters_scope=report['profile_gpu_counters']['scope'],
-                            counters=[c for c in report['profile_gpu_counters']['counters'] if c['name'] in COUNTERS],
+                            counters_scope=counter_report['scope'] if counter_report is not None else
+                                'No counter analysis was supplied for this capture; absence is not zero.',
+                            counters=[c for c in counter_report['counters'] if c['name'] in COUNTERS] if counter_report is not None else [],
+                            **counter_note,
                             spills=report['compiler_spills']))
     stream = io.StringIO(newline='')
     writer = csv.DictWriter(stream, fieldnames=list(samples[0]), lineterminator='\n')

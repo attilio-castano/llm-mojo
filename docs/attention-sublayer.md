@@ -467,3 +467,14 @@ pass hot and ring24 decode/full/chunked cases, including full 4096-token
 ring24. The [validation record](../studies/attention_sublayer/validation.json)
 distinguishes that instrument-only change from the full numerical run and
 retains the final source hashes and exact reproduction commands.
+
+## Completed baseline measurement
+
+The [attention sublayer study](../studies/attention_sublayer/README.md) retains
+the complete 2,400-observation latency matrix and four twelve-stage profiles
+containing 1,920 measured dispatch durations, all from clean source `8d8c854`.
+It separates noisy small calls, whole-block timing and active GPU stage time.
+The full-context optional counter export was stopped because of its size;
+the raw trace and verified stage durations remain available, and the missing
+counter analysis is explicit. The next bounded candidate is the existing
+Apple MMA mapping for bias-free Wo, with FP32 attention and all other stages fixed.

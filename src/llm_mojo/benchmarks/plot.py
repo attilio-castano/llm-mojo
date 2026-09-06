@@ -204,6 +204,9 @@ def render_sublayer(directory, record, samples, summary):
             data = [s for s in summary if s['layers'] == layers and regime(s) == group]
             x = [s['rows'] for s in data] if group != 2 else list(range(len(data)))
             ax.plot(x, [s['control_us'] for s in data], '-o', color=color, label=label, markersize=4)
+            noisy = [(position, s) for position, s in zip(x, data) if s['noise_floor'] > .05]
+            ax.scatter([position for position, _ in noisy], [s['control_us'] for _, s in noisy],
+                       s=22, facecolors='white', edgecolors=color, zorder=3)
         if group != 2:
             ax.set_xscale('log', base=2)
             ax.set_xticks(x, [str(v) for v in x], rotation=35)
@@ -218,7 +221,8 @@ def render_sublayer(directory, record, samples, summary):
     fig.suptitle('Qwen attention sublayer · complete enqueue through completion', fontsize=16, fontweight='bold')
     fig.text(.04,.025, f'{record["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention intermediates · source {record["repository"]["commit"][:7]}.\n'
              f'{len(samples):,} retained samples, four self-paired blocks; control-arm medians shown. No optimized comparison.\n'
-             'Ring24 uses distinct weights, inputs and caches with shared scratch, and one synchronization per sweep.', fontsize=9, color='#555555')
+             'Ring24 uses distinct weights, inputs and caches with shared scratch, and one synchronization per sweep.\n'
+             'Open marks: self-pair deviation exceeds 5%; see the complete calibration ranges in summary.csv.', fontsize=9, color='#555555')
     fig.tight_layout(rect=(0,.18,1,.91))
     fig.savefig(directory / 'latency.png', dpi=160)
     plt.close(fig)

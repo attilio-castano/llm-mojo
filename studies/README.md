@@ -3,7 +3,8 @@
 These studies explain how the existing Mojo operations map work onto the Apple
 M4 Pro. Start with the value and storage contracts in [model](../docs/model.md)
 and [layouts](../docs/layouts.md), then read a topic below. Each comparison is
-operation-level; a working decoder block and full-model generation remain next.
+operation-level except for the composed attention sublayer; a working decoder
+block and full-model generation remain next.
 
 | Topic | Question |
 | --- | --- |
@@ -13,14 +14,16 @@ operation-level; a working decoder block and full-model generation remain next.
 | [RoPE](rope/README.md) | How much work and data movement does rotating a dimension pair require? |
 | [GQA decode](gqa_decode/README.md) | How do fusion, sequence parallelism and shared KV heads interact? |
 | [GQA prefill](gqa_prefill/README.md) | How do query tiling, online softmax and Apple matrix instructions interact? |
-| [Attention sublayer](../docs/attention-sublayer.md) | How do upstream rounding differences propagate through the composed block? |
+| [Attention sublayer](attention_sublayer/README.md) | Where does time go in the complete block under the selected FP32 attention policy? |
 
 The attention-sublayer study uses the explicit CPU FP32 attention policy as
 its accuracy baseline. It has 17 synthetic and three checkpoint cases; the
 earlier BF16 eager holdout remains a recorded compatibility failure, with an
-explicit command to reproduce its original strict gate. Baseline measurement
-and stage profiling follow full validation. The measurements below belong
-to the six completed operation studies.
+explicit command to reproduce its original strict gate. Its validated baseline
+adds 2,400 latency observations, two figures and four stage profiles with 1,920
+measured dispatch durations. Small hot-call noise and one omitted optional
+counter analysis remain explicit. Output-projection mapping is the recommended
+next bounded experiment. The measurements below belong to the six operation studies.
 
 The six topics retain **31,200 latency observations**, eleven report figures,
 and fifteen focused GQA profiles containing 10,200 measured dispatch durations.

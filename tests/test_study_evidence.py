@@ -76,31 +76,44 @@ class EvidenceTests(unittest.TestCase):
             for record in directory.glob('*run.json'):
                 _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
-        self.assertEqual(count, 31200)
+        self.assertEqual(count, 33600)
         profile = load_profile(ROOT / 'studies/gqa_decode')
         self.assertEqual(sum(row['count'] for row in profile), 3000)
         profile = load_profile(ROOT / 'studies/gqa_prefill')
         self.assertEqual(sum(row['count'] for row in profile), 4800)
         profile = load_profile(ROOT / 'studies/gqa_prefill','resources_')
         self.assertEqual(sum(row['count'] for row in profile), 2400)
+        profile = load_profile(ROOT / 'studies/attention_sublayer')
+        self.assertEqual(sum(row['count'] for row in profile), 1920)
+        record = json.loads((ROOT / 'studies/attention_sublayer/profiles.json').read_text())
+        full = next(c for c in record['captures'] if c['query_rows'] == 4096)
+        self.assertEqual(full['counter_analysis']['status'], 'not_analyzed')
+        self.assertEqual(full['counters'], [])
+        self.assertIn('absence is not zero', full['counters_scope'])
 
     def test_profile_corruption_and_duplicate_dispatch_rejected(self):
-        source = ROOT / 'studies/gqa_decode'
-        with tempfile.TemporaryDirectory() as tmp:
-            directory = Path(tmp)
-            record = json.loads((source / 'profiles.json').read_text())
-            path = directory / 'profile_samples.csv.gz'
-            path.write_bytes((source / path.name).read_bytes())
-            write_json(directory / 'profiles.json', record)
-            self.assertEqual(len(load_profile(directory)), 6)
-            raw = gzip.decompress(path.read_bytes()).decode()
-            path.write_bytes(gzip.compress((raw + raw.splitlines()[1] + '\n').encode()))
-            with self.assertRaisesRegex(ValueError, 'hash'):
-                load_profile(directory)
-            record['samples_sha256'] = sha(path)
-            write_json(directory / 'profiles.json', record)
-            with self.assertRaisesRegex(ValueError, 'duplicate'):
-                load_profile(directory)
+        for topic, groups in (('gqa_decode', 6), ('attention_sublayer', 48)):
+            source = ROOT / 'studies' / topic
+            with self.subTest(topic=topic), tempfile.TemporaryDirectory() as tmp:
+                directory = Path(tmp)
+                record = json.loads((source / 'profiles.json').read_text())
+                path = directory / 'profile_samples.csv.gz'
+                path.write_bytes((source / path.name).read_bytes())
+                write_json(directory / 'profiles.json', record)
+                self.assertEqual(len(load_profile(directory)), groups)
+                raw = gzip.decompress(path.read_bytes()).decode()
+                path.write_bytes(gzip.compress((raw + raw.splitlines()[1] + '\n').encode()))
+                with self.assertRaisesRegex(ValueError, 'hash'):
+                    load_profile(directory)
+                record['samples_sha256'] = sha(path)
+                write_json(directory / 'profiles.json', record)
+                with self.assertRaisesRegex(ValueError, 'duplicate'):
+                    load_profile(directory)
+                path.write_bytes(gzip.compress(('\n'.join(raw.splitlines()[:-1]) + '\n').encode()))
+                record['samples_sha256'] = sha(path)
+                write_json(directory / 'profiles.json', record)
+                with self.assertRaisesRegex(ValueError, 'incomplete'):
+                    load_profile(directory)
 
     def test_runner_rejects_foreign_source_environment_and_binary_before_gpu(self):
         with tempfile.TemporaryDirectory() as tmp:
