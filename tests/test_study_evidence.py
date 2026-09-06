@@ -76,7 +76,7 @@ class EvidenceTests(unittest.TestCase):
             for record in directory.glob('*run.json'):
                 _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
-        self.assertEqual(count, 33600)
+        self.assertEqual(count, 40000)
         profile = load_profile(ROOT / 'studies/gqa_decode')
         self.assertEqual(sum(row['count'] for row in profile), 3000)
         profile = load_profile(ROOT / 'studies/gqa_prefill')
@@ -85,6 +85,15 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(sum(row['count'] for row in profile), 2400)
         profile = load_profile(ROOT / 'studies/attention_sublayer')
         self.assertEqual(sum(row['count'] for row in profile), 1920)
+        profile = load_profile(ROOT / 'studies/attention_sublayer', 'wo_')
+        self.assertEqual(sum(row['count'] for row in profile), 1200)
+        wo = json.loads((ROOT / 'studies/attention_sublayer/wo_profiles.json').read_text())
+        run = json.loads((ROOT / 'studies/attention_sublayer/wo_run.json').read_text())
+        self.assertEqual(wo['common']['repository'], run['repository'])
+        self.assertEqual(wo['common']['source_sha256'], run['build']['sources'])
+        for capture in wo['captures']:
+            self.assertEqual(capture['counter_analysis']['status'], 'not_analyzed')
+            self.assertEqual(capture['counters'], [])
         record = json.loads((ROOT / 'studies/attention_sublayer/profiles.json').read_text())
         full = next(c for c in record['captures'] if c['query_rows'] == 4096)
         self.assertEqual(full['counter_analysis']['status'], 'not_analyzed')
@@ -92,13 +101,15 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn('absence is not zero', full['counters_scope'])
 
     def test_profile_corruption_and_duplicate_dispatch_rejected(self):
-        for topic, groups in (('gqa_decode', 6), ('attention_sublayer', 48)):
+        for topic, prefix, groups in (('gqa_decode', '', 6),
+                                      ('attention_sublayer', '', 48),
+                                      ('attention_sublayer', 'wo_', 96)):
             source = ROOT / 'studies' / topic
-            with self.subTest(topic=topic), tempfile.TemporaryDirectory() as tmp:
+            with self.subTest(topic=topic, prefix=prefix), tempfile.TemporaryDirectory() as tmp:
                 directory = Path(tmp)
-                record = json.loads((source / 'profiles.json').read_text())
+                record = json.loads((source / (prefix+'profiles.json')).read_text())
                 path = directory / 'profile_samples.csv.gz'
-                path.write_bytes((source / path.name).read_bytes())
+                path.write_bytes((source / (prefix+path.name)).read_bytes())
                 write_json(directory / 'profiles.json', record)
                 self.assertEqual(len(load_profile(directory)), groups)
                 raw = gzip.decompress(path.read_bytes()).decode()

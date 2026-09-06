@@ -510,5 +510,24 @@ containing 1,920 measured dispatch durations, all from clean source `8d8c854`.
 It separates noisy small calls, whole-block timing and active GPU stage time.
 The full-context optional counter export was stopped because of its size;
 the raw trace and verified stage durations remain available, and the missing
-counter analysis is explicit. The next bounded candidate is the existing
-Apple MMA mapping for bias-free Wo, with FP32 attention and all other stages fixed.
+counter analysis is explicit.
+
+## Completed Wo experiment
+
+The [contained Wo comparison](../studies/attention_sublayer/README.md#contained-wo-results)
+tested the existing Apple MMA mapping with FP32 attention and all other stages
+fixed. All numerical gates passed without tolerance changes, including all
+17 synthetic and three checkpoint cases, exact cache checks and repeated
+asynchronous execution. The full workflow passed 81 Mojo and 38 Python tests.
+
+The candidate passed the declared five-shape screen and then completed the
+full matrix: 13 workload/mode gains, 15 inconclusive comparisons and two hot
+decode regressions. Full-prefill whole-block reductions are about 31% at 256
+tokens, 22.5% at 1024 and 10.4% at 4096 in both modes. All 6,400 screen/full
+observations and 1,200 profile dispatch durations are retained from clean
+source `07984fe`. Optional counter analysis is explicitly absent.
+
+`wo_mma=True` remains explicit and the default remains rowwise. These data do
+not establish a general dispatch crossover. The study relates the results to
+earlier projection/decode/prefill experiments and recommends a separate FP32
+decode ownership comparison next, followed by FP32 prefill tiling and PV.

@@ -1,10 +1,11 @@
 # Qwen attention sublayer
 
-The complete attention sublayer now has a validated FP32 attention baseline,
-whole-block timings and a twelve-stage profile. The bottleneck changes with
-the workload: decode is dominated by softmax and PV; projections dominate
-1024-token prefill; QK and PV dominate 4096-token prefill. The next small
-experiment should compare output-projection mappings with everything else fixed.
+Changing only the output projection to the existing Apple MMA mapping reduces
+whole-attention latency by about 31% at 256-token full prefill and 10% at 4096
+tokens, on Apple M4 Pro / Metal. Decode has no demonstrated gain and two hot
+cases regress. The mapping remains an explicit option, with rowwise Wo as the
+default. This study retains the original FP32 baseline and the completed
+[contained Wo comparison](#contained-wo-results), including negative results.
 
 The measured unit is
 `X → RMSNorm → Q/K/V → RoPE → KV append → GQA → Wo → residual X+branch`.
@@ -34,7 +35,7 @@ and [FP32 comparison](precision_numerics.json) retain the precision decision,
 independent gates and provenance. The measured engine and fixtures match the
 validation hashes; only the runner's per-process timeout changed afterward.
 
-## Whole-block latency
+## Baseline whole-block latency
 
 These are control-arm medians of four block medians, in milliseconds per
 sublayer. Both timing arms run the same implementation, providing noise
@@ -58,7 +59,7 @@ variation above 5%. The four workloads in the table retained the 5% minimum
 decision threshold in both modes. Future comparisons need fresh matching
 calibration; this run's calibration must not be imported into another run.
 
-## Where the GPU time goes
+## Where the baseline GPU time goes
 
 The following percentages divide a stage's total recorded active duration
 by the total active duration in that same capture. They are not percentages
@@ -87,7 +88,7 @@ The source explains why one optimization will not solve every workload:
 - Softmax assigns an entire row to one thread. Decode has only fourteen
   active softmax threads, each scanning up to 4096 scores. More query rows
   provide more independent softmax work, changing its relative importance.
-- Each projection currently uses one SIMD group per output dot product.
+- Each baseline projection uses one SIMD group per output dot product.
   It does not yet use the existing prefill mapping that reuses an input tile
   across several output columns and rows.
 
@@ -124,36 +125,176 @@ together occupy `512*T` bytes. These are source-derived counts and allocated
 storage, not measured memory traffic. The materialized FP32 path is an
 inspectable accuracy baseline with a substantial memory cost.
 
-## Next bounded experiment
+## Contained Wo results
 
-Start with the **bias-free output projection**, comparing its current mapping
-against the existing 8×16 Apple MMA mapping. It is a single seam, already in
-the approved candidate plan, and Wo accounts for 25.4% of full-1024 and 11.7%
-of full-4096 active GPU time. Those shares motivate a trial; they do not predict
-its whole-block speedup. Keep the FP32 attention computation, other projections,
-RoPE, cache and residual fixed, including BF16 rounding before residual addition.
+Wo is the learned, bias-free matrix that mixes the fourteen heads' outputs
+back into the hidden state: `A[R,896] @ Wo[896,896].T`. The candidate changes
+only how that matrix multiplication is assigned to the GPU. Both versions
+accumulate in FP32 and round to BF16 before the existing residual addition.
+The attention precision policy, other projections, cache, buffers and twelve
+dispatches remain fixed. `wo_mma=True` selects the candidate; benchmark IDs
+3 and 4 distinguish rowwise and MMA Wo while both execute GQA route 3.
 
-Use the existing independent operation/composition gates and poisoned-buffer
-instrument checks, then the approved five-shape screen. Advance a configuration
-only if the paired evidence warrants the full matrix. No optimization candidate
-has been screened in this baseline record and no dispatch rule is promoted.
+The rowwise mapping assigns one output dot product to a 32-lane SIMD group,
+with one FP32 accumulator per lane and a final group reduction. The MMA
+mapping assigns an 8×16 output tile to that group, using two distributed 8×8
+matrix fragments per K=8 phase and four FP32 accumulators per lane. It reuses
+operands across rows and output columns without shared operand storage or
+block barriers. At R=1024 this changes 917,504 rowwise groups into 7,168 tile
+groups. These counts describe work ownership, not measured memory traffic.
 
-Packing QKV, direct RoPE/cache writes and projection/residual fusion remain
-possible later experiments. The latter two address small active-time shares
-in these captures; very short calls could behave differently and have noisy
-calibration here. Separately, FP32-preserving GQA parallelism and tiling are
-larger opportunities for decode and long prefill. The older optimized BF16
-routes cannot establish a speedup under the selected FP32 policy without
-their own accuracy validation.
+### Accuracy and screening
+
+All existing numerical gates passed: GQA `atol=rtol=0.0078125`, Wo/projected
+branch/final output `atol=rtol=0.03125`, and exact BF16 cache bits. No tolerance
+changed. Each isolated Wo comparison consumes the exact upstream BF16
+attention tensor; full and chunked comparisons start from the original X.
+The [validation record](wo_validation.json) retains the commands, source
+hashes and individual comparisons.
+
+| Dataset | Maximum isolated Wo scaled error | Maximum composed branch error | Maximum residual output error |
+| --- | ---: | ---: | ---: |
+| 17 synthetic cases | 0.00390625 | 0.00516796 | 0.00781250 |
+| 3 checkpoint cases | 0.00023524 | 0.00141243 | 0.00137931 |
+
+Scaled error is `abs(got-want)/(1+abs(want))`. The complete workflow passed
+81 Mojo tests and 38 Python tests and verified all 510 frozen synthetic arrays.
+The existing checkpoint prefix reproduced its 63 arrays. Normal asynchronous
+execution passed twelve 65-token sequences on each of five configurations,
+including the new mapping. Both benchmark arms additionally poison the actual
+cache suffix and attention/projected/output buffers, then check the projected
+branch, final output and exact cache prefix/suffix for every distinct layer
+allocation before timing.
+
+The five-shape [screen](wo_screen_summary.csv) retained 1,600 observations.
+Its six prefill workload/mode gains met the predeclared advancement rule, so
+the candidate proceeded to the full matrix with fresh self-pair calibration.
+The screen is selection evidence; the following results come from that full run.
+
+### Whole-block comparison
+
+Across thirty workload/mode comparisons, **13 are faster, 15 inconclusive and
+2 slower** under the existing four-block rule. A gain requires all four paired
+blocks to be faster and their median reduction to exceed the larger of 5%
+and matching self-pair variation. The [complete table](wo_summary.csv) includes
+both arms, all ratios, calibration thresholds and decisions.
+
+| Full prefill R=T | Hot latency reduction | Ring24 per-call reduction |
+| ---: | ---: | ---: |
+| 16 | Inconclusive | 23.66% |
+| 64 | 31.99% | 32.44% |
+| 256 | 31.17% | 31.24% |
+| 1024 | 22.49% | 22.56% |
+| 4096 | 10.43% | 10.43% |
+
+For full 1024, paired-control and candidate medians are 38.409 → 29.774 ms
+hot and 38.267 → 29.627 ms ring24. For full 4096 they are 348.731 → 312.373 ms
+hot and 354.276 → 317.393 ms ring24. These are medians of block medians;
+reported reductions use the paired block ratios, not the ratio of those
+displayed medians.
+
+Decode establishes no gain. Hot T=16 is 11.91% slower and hot T=1024 is
+5.03% slower; the other ten decode comparisons are inconclusive. Some short
+hot self-pairs vary substantially, reaching about 190%. All observations are
+retained, including hot full-16's inconclusive result despite its lower median.
+
+For chunked prefill, `(16,256)` improves 15.98% in ring24; `(64,1024)` improves
+15.37% hot and 13.94% ring24. At `(64,4096)` hot improves 6.02%, but ring24's
+4.97% reduction is inconclusive under the fixed 5% floor. That last cell had
+barely qualified in the screen, illustrating why screening does not replace
+confirmation. Both `(4,64)` modes and hot `(16,256)` are inconclusive.
+
+![Whole-block effect of changing only Wo](wo.png)
+
+### What changed inside the block
+
+The eight separate stage captures compare both mappings at four workloads.
+These are median active GPU durations in microseconds, useful for diagnosing
+the change. They are not paired latency measurements.
+
+| R | T | Rowwise Wo µs | MMA Wo µs |
+| ---: | ---: | ---: | ---: |
+| 1 | 4096 | 15.958 | 44.917 |
+| 1024 | 1024 | 9724.230 | 1088.854 |
+| 4096 | 4096 | 40667.333 | 4303.666 |
+| 64 | 4096 | 559.417 | 89.938 |
+
+![Stage comparison with both Wo mappings](wo_profile.png)
+
+Wo becomes roughly nine times faster in the two full-prefill captures, while
+the surrounding stage medians remain similar. Its work grows with R; QK/PV
+work grows with R and the visible context. This explains why the whole-block
+benefit decreases at long context even though Wo improves substantially.
+The 896 MiB FP32 scratch allocation at full 4096 is unchanged.
+
+At R=1, Wo itself takes about 2.8 times longer. Only one of the MMA tile's
+eight rows is useful, and it exposes 56 groups versus 896 rowwise groups.
+The unused row capacity and smaller pool of independent groups are consistent
+with the slowdown; this experiment does not isolate their individual costs.
+The result argues against an unconditional MMA default. It does not establish
+a general dispatch threshold.
+
+In the MMA-Wo captures, stage shares of **total recorded active GPU time** are:
+
+| Workload | Remaining main stages | Wo share |
+| --- | --- | ---: |
+| Decode `(1,4096)` | Softmax 48.7%, PV 44.6% | 2.0% |
+| Full `(1024,1024)` | Q projection 33.1%, QK 28.6%, PV 21.9% | 3.7% |
+| Full `(4096,4096)` | QK 45.2%, PV 32.0% | 1.4% |
+| Chunk `(64,4096)` | PV 41.2%, QK 34.8%, softmax 14.3% | 1.0% |
+
+These shares use summed raw durations within each capture. They do not divide
+by host-to-completion latency, and stage medians are not added to reconstruct
+whole-block time. The [profile table](wo_profile_summary.csv) retains ranges.
+No target compiler spill event was reported in these captures; that does not
+prove every invocation is spill-free. Optional counter tables were not exported
+or analyzed for this comparison; missing values are not zero.
+
+## What the earlier experiments teach us
+
+The [linear prefill study](../linear_prefill/README.md) already established
+that sharing operands across token rows can make Apple MMA effective, while
+tiny row counts can lose. This Wo experiment tests that mechanism at N=896,
+without bias, and inside the full attention block. It does not inherit the
+packed-QKV study's N=1152 crossover or compare its old absolute times with
+this run. The block's remaining stages limit how much a faster projection can
+improve the whole call.
+
+The [decode study](../gqa_decode/README.md) showed that online softmax alone
+was not the end of the optimization: distributing the KV sequence and reusing
+K/V across related heads helped further. It also found that reducing
+exponential calls did not improve the stronger controls. The next FP32 decode
+comparison should reuse those ownership designs and the existing tests while
+keeping scores FP32 and checking against the selected FP32 reference. The old
+timings establish results for those older
+paths, not speed claims for an FP32 adaptation.
+
+The [prefill study](../gqa_prefill/README.md) showed the value of query tiling
+and matrix execution. Its follow-up found that rolling the QK reduction
+reduced reported compiler spills and improved a subset of workloads; removing
+barriers, changing accumulator representation and adding head reuse did not
+produce general gains. Future FP32 prefill candidates should retain those
+lessons about live state and query ownership. They also need to preserve
+FP32 scores and softmax weights through PV: copying the old MMA path's BF16
+tile-weight cast would change the numerical policy again.
+
+Keep the next milestones separate. First compare FP32 versions of the existing
+G32 and split64-H4 decode designs against the materialized control. Then study
+FP32 prefill tiling and PV arithmetic, including the compiler's resource
+behavior. Q projection is another contained candidate, particularly at 1024
+tokens, but its rounding changes feed attention scores; rerun operation and
+full-block gates. Broader fusion should follow measured remaining stage costs.
 
 ## Reproduction and evidence
 
-The latency run used clean source `8d8c8540c5f9de2d7d7cf16fc00f502702a3a941`
+The baseline latency run used clean source `8d8c8540c5f9de2d7d7cf16fc00f502702a3a941`
 on 2026-09-06, 16:22:57–16:53:05 UTC. All four profile binaries use that same
 source. Hardware was Apple M4 Pro / Metal, Mac16,7 with 24 GiB memory;
 Mojo 1.0.0, MAX 26.5.0, macOS 26.6.2 and Xcode 26.6. Every latency block and
 capture recorded AC power, Low Power Mode off and no thermal/performance warning.
-These checks do not pin GPU clocks or exclude background activity.
+These checks do not pin GPU clocks or exclude background activity. The Wo
+comparison uses the same hardware/software configuration, with independent
+source, binary and condition records below.
 
 The workload uses frozen synthetic seed 53 with a CPU-derived cache prefix.
 Ring24 owns 24 distinct weights, inputs and caches with two sign patterns;
@@ -172,8 +313,28 @@ counter-analysis omission. The source of the curator is hashed in that record.
 The post-measurement curation/plot changes handle absent optional counters and
 mark elevated calibration variation; they change no measured engine code.
 All 38 Python checks pass with the retained evidence, including duplicate and
-missing-dispatch rejection for the new profile schema. Both tables and both
-figures regenerate byte-for-byte from the files in this directory.
+missing-dispatch rejection for both attention profile grids.
+
+The Wo screen and full run use clean source
+`07984fedafcbe1c1260c37c86ff708c5098cfa18`. They ran on 2026-09-06 at
+17:55:02–18:03:41 and 18:04:43–19:04:24 UTC respectively, retaining 1,600 and
+4,800 observations in [wo_screen_run.json](wo_screen_run.json),
+[wo_screen_samples.csv.gz](wo_screen_samples.csv.gz), [wo_run.json](wo_run.json)
+and [wo_samples.csv.gz](wo_samples.csv.gz). All eight profile binaries use that
+same clean source. [wo_profiles.json](wo_profiles.json) and
+[wo_profile_samples.csv.gz](wo_profile_samples.csv.gz) retain 1,200 measured
+dispatch durations: 25, 10, 5 and 10 iterations per variant across the four
+workloads, after ten warmups each. All eight captures passed provenance and
+dispatch-sequence validation. The default Metal System Trace was used without
+optional counter-table export; full traces remain external. Every timing block
+and capture recorded AC power, Low Power Mode off and no reported warning.
+
+The same fixed-prefix, hot/ring24 and paired-block protocol applies to Wo.
+The experiment retains the original baseline figures separately and uses fresh
+controls for its comparisons. Post-measurement changes curate evidence, update
+reporting and check retained records; they do not change the measured Mojo
+engine or its numerical tests. All five tables and five figures regenerate
+byte-for-byte from the retained files.
 
 Rebuild tables and figures without a GPU:
 

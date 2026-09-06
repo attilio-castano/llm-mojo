@@ -60,6 +60,8 @@ uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.plot
 ```
 
 That command checks the raw hash and complete observation grid before plotting.
+The attention study also regenerates its retained `wo_` and `wo_screen_`
+comparison tables and figures, including both Wo profile variants.
 No GPU execution or external temporary files are needed. PNG is the single
 committed image format; extra exports are disposable. See
 [the method](../../../docs/experiments.md) for interpreting evidence.
@@ -71,9 +73,9 @@ The contained Wo experiment uses `--studies attention_sublayer_wo_screen`,
 then `--studies attention_sublayer_wo` only after its declared screen gate
 passes. Both include fresh self-pair calibration. Variant 4 changes only Wo
 to the existing bias-free 8x16 MMA mapping; variant 3 is the fixed control.
-For paired stage curation use `profile_summary --attention-sublayer
+For comparing stage captures use `profile_summary --attention-sublayer
 --wo-comparison --prefix wo_`; build/capture both profile variants 3 and 4.
-Its initial matrix measures FP32 route 3 paired with itself over six decode,
+The original baseline matrix measures FP32 route 3 paired with itself over six decode,
 five full-prefill and four chunked-prefill workloads, in hot and ring24 modes.
 Run full validation first: its frozen synthetic case 7 supplies the instrument's
 weights, nonuniform inputs, upstream cache prefix and FP32 output checks.

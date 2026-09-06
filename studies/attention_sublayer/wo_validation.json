@@ -1,0 +1,3325 @@
+{
+  "schema": 1,
+  "purpose": "Contained bias-free Wo MMA experiment; existing FP32 attention policy and gates unchanged.",
+  "source_commit": "07984fedafcbe1c1260c37c86ff708c5098cfa18",
+  "source_sha256": {
+    "src/llm_mojo/attention_sublayer.mojo": "8e5eab4f219696bcfc68458a1e04deeab02e0215c9fc57f123e6bb79c592f866",
+    "src/llm_mojo/linear.mojo": "1f72f29fa058d6fac56cb045df2ac5a4b8d4e975a70ead00fbfce630944829d4",
+    "src/llm_mojo/benchmarks/attention_sublayer.mojo": "fb884afca27907cfdb9094457db2d217b1bffb137ef96f624cf1b14ef084a348",
+    "tests/test_attention_sublayer.mojo": "5a09c003379f1045fd51b1d638f1fd8e8665eec551595e7269527b4307e857c7",
+    "tests/test_attention_sublayer_operations.mojo": "f0eed1b83f889edaf6103482108114bfd679a4f8a61c9d3f54ca59603a9a805e",
+    "tests/test_attention_precision.mojo": "a10714735747508011b3ef1efceb3fc508843eb63e7e6c85dbb285f1effd61c9"
+  },
+  "device": "Apple M4 Pro",
+  "backend": "metal",
+  "limits": {
+    "scaled_error": "abs(got-want)/(1+abs(want))",
+    "gqa": 0.0078125,
+    "wo_projected_and_final": 0.03125,
+    "cache": "exact BF16 bits"
+  },
+  "full_workflow": {
+    "command": [
+      "uv",
+      "run",
+      "--locked",
+      "python",
+      "-m",
+      "llm_mojo.validate"
+    ],
+    "passed": true,
+    "mojo_tests": 81,
+    "python_tests": 38,
+    "sources_unchanged": true,
+    "frozen_synthetic_arrays": 510
+  },
+  "additional": [
+    {
+      "name": "checkpoint",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "mojo",
+        "run",
+        "-D",
+        "PRECISION_CHECKPOINT=1",
+        "-I",
+        "src",
+        "-I",
+        "build",
+        "-I",
+        "tests",
+        "tests/test_attention_precision.mojo"
+      ],
+      "device_sync_mode": true,
+      "returncode": 0
+    },
+    {
+      "name": "asynchronous",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "mojo",
+        "run",
+        "-D",
+        "SUBLAYER_REPEAT=12",
+        "-I",
+        "src",
+        "-I",
+        "build",
+        "-I",
+        "tests",
+        "tests/test_attention_sublayer.mojo"
+      ],
+      "device_sync_mode": false,
+      "returncode": 0
+    }
+  ],
+  "checkpoint_fixture_command": [
+    "uv",
+    "run",
+    "--script",
+    "tests/fixtures/attention_sublayer/checkpoint.py",
+    "--attention-prefix"
+  ],
+  "asynchronous": {
+    "repetitions": 12,
+    "tokens_per_sequence": 65,
+    "configurations": "GQA routes 0-3 with rowwise Wo, plus route 3 with MMA Wo",
+    "passed": true
+  },
+  "synthetic": {
+    "cases": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "isolated_wo_max_scaled": 0.00390625,
+    "composed_branch_max_scaled": 0.005167959,
+    "composed_output_max_scaled": 0.0078125,
+    "isolated_wo": [
+      {
+        "case_id": 0,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 2,
+        "max_scaled": 6.010699e-05
+      },
+      {
+        "case_id": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "max_scaled": 0.000119417244
+      },
+      {
+        "case_id": 5,
+        "max_scaled": 0.00045310377
+      },
+      {
+        "case_id": 6,
+        "max_scaled": 0.0035587188
+      },
+      {
+        "case_id": 7,
+        "max_scaled": 0.0038910506
+      },
+      {
+        "case_id": 8,
+        "max_scaled": 0.0034246575
+      },
+      {
+        "case_id": 9,
+        "max_scaled": 0.0036231885
+      },
+      {
+        "case_id": 10,
+        "max_scaled": 0.003717472
+      },
+      {
+        "case_id": 11,
+        "max_scaled": 0.0038610038
+      },
+      {
+        "case_id": 12,
+        "max_scaled": 0.0037593986
+      },
+      {
+        "case_id": 13,
+        "max_scaled": 0.0038610038
+      },
+      {
+        "case_id": 14,
+        "max_scaled": 0.003787879
+      },
+      {
+        "case_id": 15,
+        "max_scaled": 0.00390625
+      },
+      {
+        "case_id": 16,
+        "max_scaled": 0.003816794
+      }
+    ],
+    "composition_checks": [
+      {
+        "case_id": 0,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 7,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 0,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 7,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 0,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 0,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 0,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 0,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 1,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 0,
+        "chunks": true,
+        "boundary": "output",
+        "start": 1,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 0,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 0,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 0,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 5,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 0,
+        "chunks": true,
+        "boundary": "output",
+        "start": 5,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 0,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 6,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 0,
+        "chunks": true,
+        "boundary": "output",
+        "start": 6,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 0,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 1,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 9,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 1,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 9,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 1,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 1,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 1,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 1,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 1,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 1,
+        "chunks": true,
+        "boundary": "output",
+        "start": 1,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 1,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 1,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 1,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 5,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 1,
+        "chunks": true,
+        "boundary": "output",
+        "start": 5,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 1,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 6,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 1,
+        "chunks": true,
+        "boundary": "output",
+        "start": 6,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 1,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 2,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 6.010699e-05
+      },
+      {
+        "case_id": 2,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 2,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 2,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 6.010699e-05
+      },
+      {
+        "case_id": 2,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 2,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 3,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 7,
+        "max_scaled": 0.002570694
+      },
+      {
+        "case_id": 3,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 7,
+        "max_scaled": 0.0032573289
+      },
+      {
+        "case_id": 3,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 3,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 3,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 3,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 1,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 3,
+        "chunks": true,
+        "boundary": "output",
+        "start": 1,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 3,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4,
+        "rows": 1,
+        "max_scaled": 0.002570694
+      },
+      {
+        "case_id": 3,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4,
+        "rows": 1,
+        "max_scaled": 0.0032573289
+      },
+      {
+        "case_id": 3,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 5,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 3,
+        "chunks": true,
+        "boundary": "output",
+        "start": 5,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 3,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 6,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 3,
+        "chunks": true,
+        "boundary": "output",
+        "start": 6,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 3,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 33,
+        "max_scaled": 0.003816794
+      },
+      {
+        "case_id": 4,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 33,
+        "max_scaled": 0.004761905
+      },
+      {
+        "case_id": 4,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 1,
+        "rows": 3,
+        "max_scaled": 3.8118183e-06
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 1,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 5,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 5,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 6,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 6,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 9,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 9,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 10,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 10,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 11,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 11,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 14,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 14,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 15,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 15,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 16,
+        "rows": 3,
+        "max_scaled": 0.00083333335
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 16,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 19,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 19,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 20,
+        "rows": 1,
+        "max_scaled": 0.003816794
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 20,
+        "rows": 1,
+        "max_scaled": 0.004761905
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 21,
+        "rows": 3,
+        "max_scaled": 3.8118762e-06
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 21,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 24,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 24,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 25,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 25,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 26,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 26,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 29,
+        "rows": 1,
+        "max_scaled": 0.000119417244
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 29,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 30,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 30,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 31,
+        "rows": 2,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 31,
+        "rows": 2,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 4,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 65,
+        "max_scaled": 0.0037593986
+      },
+      {
+        "case_id": 5,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 65,
+        "max_scaled": 0.007575758
+      },
+      {
+        "case_id": 5,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 1,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 1,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 5,
+        "rows": 1,
+        "max_scaled": 1.5219542e-05
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 5,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 6,
+        "rows": 3,
+        "max_scaled": 0.0037593986
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 6,
+        "rows": 3,
+        "max_scaled": 0.007575758
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 9,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 9,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 10,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 10,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 11,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 11,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 14,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 14,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 15,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 15,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 16,
+        "rows": 3,
+        "max_scaled": 1.1920602e-07
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 16,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 19,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 19,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 20,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 20,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 21,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 21,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 24,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 24,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 25,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 25,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 26,
+        "rows": 3,
+        "max_scaled": 0.00045310377
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 26,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 29,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 29,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 30,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 30,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 31,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 31,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 34,
+        "rows": 1,
+        "max_scaled": 2.3841159e-07
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 34,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 35,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 35,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 36,
+        "rows": 3,
+        "max_scaled": 6.0244594e-05
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 36,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 39,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 39,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 40,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 40,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 41,
+        "rows": 3,
+        "max_scaled": 0.00044052864
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 41,
+        "rows": 3,
+        "max_scaled": 0.0014534884
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 44,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 44,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 45,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 45,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 46,
+        "rows": 3,
+        "max_scaled": 3.0326004e-05
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 46,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 49,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 49,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 50,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 50,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 51,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 51,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 54,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 54,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 55,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 55,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 56,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 56,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 59,
+        "rows": 1,
+        "max_scaled": 0.00023315458
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 59,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 60,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 60,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 61,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 61,
+        "rows": 3,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 64,
+        "rows": 1,
+        "max_scaled": 0.0004492363
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 64,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 5,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 6,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 257,
+        "max_scaled": 0.0038910506
+      },
+      {
+        "case_id": 6,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 257,
+        "max_scaled": 0.007751938
+      },
+      {
+        "case_id": 6,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 6,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 239,
+        "max_scaled": 0.0038910506
+      },
+      {
+        "case_id": 6,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 239,
+        "max_scaled": 0.007751938
+      },
+      {
+        "case_id": 6,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 239,
+        "rows": 17,
+        "max_scaled": 0.0026041667
+      },
+      {
+        "case_id": 6,
+        "chunks": true,
+        "boundary": "output",
+        "start": 239,
+        "rows": 17,
+        "max_scaled": 0.005076142
+      },
+      {
+        "case_id": 6,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 256,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 6,
+        "chunks": true,
+        "boundary": "output",
+        "start": 256,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 6,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 7,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.00407332
+      },
+      {
+        "case_id": 7,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 7,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 7,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.00407332
+      },
+      {
+        "case_id": 7,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 7,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.0024038462
+      },
+      {
+        "case_id": 7,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.0035587188
+      },
+      {
+        "case_id": 7,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 7,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 7,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 8,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.00390625
+      },
+      {
+        "case_id": 8,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 8,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 8,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.00390625
+      },
+      {
+        "case_id": 8,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 8,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 3.0351777e-05
+      },
+      {
+        "case_id": 8,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 8,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 8,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 8,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 9,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.005050505
+      },
+      {
+        "case_id": 9,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 9,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 9,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.005050505
+      },
+      {
+        "case_id": 9,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 9,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.0008368201
+      },
+      {
+        "case_id": 9,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.00085251493
+      },
+      {
+        "case_id": 9,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 9,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 9,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 10,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.00390625
+      },
+      {
+        "case_id": 10,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.007751938
+      },
+      {
+        "case_id": 10,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 10,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.00390625
+      },
+      {
+        "case_id": 10,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.007751938
+      },
+      {
+        "case_id": 10,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.0021231424
+      },
+      {
+        "case_id": 10,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 10,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 10,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 10,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 11,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.00390625
+      },
+      {
+        "case_id": 11,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 11,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 11,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.00390625
+      },
+      {
+        "case_id": 11,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 11,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 9.5353243e-07
+      },
+      {
+        "case_id": 11,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 11,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 11,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 11,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 12,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.00390625
+      },
+      {
+        "case_id": 12,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 12,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 12,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.00390625
+      },
+      {
+        "case_id": 12,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 12,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 12,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 12,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 12,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 12,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 13,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.005167959
+      },
+      {
+        "case_id": 13,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 13,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 13,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.005167959
+      },
+      {
+        "case_id": 13,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 13,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.003717472
+      },
+      {
+        "case_id": 13,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.0051020407
+      },
+      {
+        "case_id": 13,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 13,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 13,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 14,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.005141388
+      },
+      {
+        "case_id": 14,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 14,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 14,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.005141388
+      },
+      {
+        "case_id": 14,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 14,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.0036363637
+      },
+      {
+        "case_id": 14,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.006756757
+      },
+      {
+        "case_id": 14,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 14,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 14,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 15,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.00390625
+      },
+      {
+        "case_id": 15,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.007751938
+      },
+      {
+        "case_id": 15,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 15,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.00390625
+      },
+      {
+        "case_id": 15,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.007751938
+      },
+      {
+        "case_id": 15,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.00390625
+      },
+      {
+        "case_id": 15,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.006369427
+      },
+      {
+        "case_id": 15,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 15,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 15,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 16,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.00390625
+      },
+      {
+        "case_id": 16,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 16,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 16,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.00390625
+      },
+      {
+        "case_id": 16,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.0078125
+      },
+      {
+        "case_id": 16,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.0036630037
+      },
+      {
+        "case_id": 16,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.0050251256
+      },
+      {
+        "case_id": 16,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.003787879
+      },
+      {
+        "case_id": 16,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.00390625
+      },
+      {
+        "case_id": 16,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      }
+    ]
+  },
+  "checkpoint": {
+    "cases": [
+      17,
+      18,
+      19
+    ],
+    "isolated_wo_max_scaled": 0.00023523877,
+    "composed_branch_max_scaled": 0.0014124294,
+    "composed_output_max_scaled": 0.0013793104,
+    "isolated_wo": [
+      {
+        "case_id": 17,
+        "max_scaled": 1.5202651e-05
+      },
+      {
+        "case_id": 18,
+        "max_scaled": 6.045218e-05
+      },
+      {
+        "case_id": 19,
+        "max_scaled": 0.00023523877
+      }
+    ],
+    "composition_checks": [
+      {
+        "case_id": 17,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 30,
+        "max_scaled": 0.00023623908
+      },
+      {
+        "case_id": 17,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 30,
+        "max_scaled": 0.00047281323
+      },
+      {
+        "case_id": 17,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 1,
+        "rows": 3,
+        "max_scaled": 3.0337966e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 1,
+        "rows": 3,
+        "max_scaled": 0.00011978917
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4,
+        "rows": 1,
+        "max_scaled": 3.0390518e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4,
+        "rows": 1,
+        "max_scaled": 3.0474797e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 5,
+        "rows": 1,
+        "max_scaled": 1.5211902e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 5,
+        "rows": 1,
+        "max_scaled": 7.61545e-06
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 6,
+        "rows": 3,
+        "max_scaled": 0.000120019206
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 6,
+        "rows": 3,
+        "max_scaled": 0.00011961722
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 9,
+        "rows": 1,
+        "max_scaled": 0.00011996161
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 9,
+        "rows": 1,
+        "max_scaled": 0.00012110936
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 10,
+        "rows": 1,
+        "max_scaled": 7.6147544e-06
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 10,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 11,
+        "rows": 3,
+        "max_scaled": 0.00023623908
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 11,
+        "rows": 3,
+        "max_scaled": 0.00024213074
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 14,
+        "rows": 1,
+        "max_scaled": 3.0338886e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 14,
+        "rows": 1,
+        "max_scaled": 3.0501755e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 15,
+        "rows": 1,
+        "max_scaled": 6.041931e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 15,
+        "rows": 1,
+        "max_scaled": 6.048509e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 16,
+        "rows": 3,
+        "max_scaled": 6.041201e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 16,
+        "rows": 3,
+        "max_scaled": 6.09236e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 19,
+        "rows": 1,
+        "max_scaled": 1.9068467e-06
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 19,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 20,
+        "rows": 1,
+        "max_scaled": 3.0387748e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 20,
+        "rows": 1,
+        "max_scaled": 0.00011974614
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 21,
+        "rows": 3,
+        "max_scaled": 6.037189e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 21,
+        "rows": 3,
+        "max_scaled": 6.0971892e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 24,
+        "rows": 1,
+        "max_scaled": 6.055835e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 24,
+        "rows": 1,
+        "max_scaled": 6.050705e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 25,
+        "rows": 1,
+        "max_scaled": 2.9802134e-08
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 25,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 26,
+        "rows": 3,
+        "max_scaled": 0.00023474179
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 26,
+        "rows": 3,
+        "max_scaled": 0.00047281323
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 29,
+        "rows": 1,
+        "max_scaled": 6.0547347e-05
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 29,
+        "rows": 1,
+        "max_scaled": 0.00011997601
+      },
+      {
+        "case_id": 17,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 18,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 41,
+        "max_scaled": 0.0014124294
+      },
+      {
+        "case_id": 18,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 41,
+        "max_scaled": 0.0013793104
+      },
+      {
+        "case_id": 18,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 1,
+        "rows": 3,
+        "max_scaled": 3.0337966e-05
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 1,
+        "rows": 3,
+        "max_scaled": 0.00011978917
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4,
+        "rows": 1,
+        "max_scaled": 3.0390518e-05
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4,
+        "rows": 1,
+        "max_scaled": 3.0474797e-05
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 5,
+        "rows": 1,
+        "max_scaled": 1.5211902e-05
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 5,
+        "rows": 1,
+        "max_scaled": 7.61545e-06
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 6,
+        "rows": 3,
+        "max_scaled": 0.000120019206
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 6,
+        "rows": 3,
+        "max_scaled": 0.00011961722
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 9,
+        "rows": 1,
+        "max_scaled": 0.00011996161
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 9,
+        "rows": 1,
+        "max_scaled": 0.00012110936
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 10,
+        "rows": 1,
+        "max_scaled": 7.6147544e-06
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 10,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 11,
+        "rows": 3,
+        "max_scaled": 0.00023623908
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 11,
+        "rows": 3,
+        "max_scaled": 0.00024213074
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 14,
+        "rows": 1,
+        "max_scaled": 1.5203113e-05
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 14,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 15,
+        "rows": 1,
+        "max_scaled": 6.034639e-05
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 15,
+        "rows": 1,
+        "max_scaled": 0.00011978917
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 16,
+        "rows": 3,
+        "max_scaled": 0.00023635074
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 16,
+        "rows": 3,
+        "max_scaled": 0.00023710729
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 19,
+        "rows": 1,
+        "max_scaled": 0.000119417244
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 19,
+        "rows": 1,
+        "max_scaled": 0.00023584906
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 20,
+        "rows": 1,
+        "max_scaled": 0.0014124294
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 20,
+        "rows": 1,
+        "max_scaled": 0.0013793104
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 21,
+        "rows": 3,
+        "max_scaled": 0.0002342469
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 21,
+        "rows": 3,
+        "max_scaled": 0.00024047133
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 24,
+        "rows": 1,
+        "max_scaled": 0.00011951715
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 24,
+        "rows": 1,
+        "max_scaled": 0.00023601604
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 25,
+        "rows": 1,
+        "max_scaled": 6.0536353e-05
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 25,
+        "rows": 1,
+        "max_scaled": 0.00023579344
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 26,
+        "rows": 3,
+        "max_scaled": 0.00023084026
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 26,
+        "rows": 3,
+        "max_scaled": 0.00023523877
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 29,
+        "rows": 1,
+        "max_scaled": 0.000119717464
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 29,
+        "rows": 1,
+        "max_scaled": 0.00023646252
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 30,
+        "rows": 1,
+        "max_scaled": 6.055835e-05
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 30,
+        "rows": 1,
+        "max_scaled": 6.0686976e-05
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 31,
+        "rows": 3,
+        "max_scaled": 0.00023277468
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 31,
+        "rows": 3,
+        "max_scaled": 0.0002362949
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 34,
+        "rows": 1,
+        "max_scaled": 6.0551014e-05
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 34,
+        "rows": 1,
+        "max_scaled": 0.000119832235
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 35,
+        "rows": 1,
+        "max_scaled": 0.000119717464
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 35,
+        "rows": 1,
+        "max_scaled": 0.00012020676
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 36,
+        "rows": 3,
+        "max_scaled": 0.00011997601
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 36,
+        "rows": 3,
+        "max_scaled": 0.00023957834
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 39,
+        "rows": 1,
+        "max_scaled": 6.0430262e-05
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 39,
+        "rows": 1,
+        "max_scaled": 0.00023612751
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 40,
+        "rows": 1,
+        "max_scaled": 6.0551014e-05
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 40,
+        "rows": 1,
+        "max_scaled": 0.000119303266
+      },
+      {
+        "case_id": 18,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 19,
+        "chunks": false,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.00079113926
+      },
+      {
+        "case_id": 19,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4096,
+        "max_scaled": 0.0007942812
+      },
+      {
+        "case_id": 19,
+        "chunks": false,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      },
+      {
+        "case_id": 19,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.00079113926
+      },
+      {
+        "case_id": 19,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 4078,
+        "max_scaled": 0.0007942812
+      },
+      {
+        "case_id": 19,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.00011961722
+      },
+      {
+        "case_id": 19,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4078,
+        "rows": 17,
+        "max_scaled": 0.000120344186
+      },
+      {
+        "case_id": 19,
+        "chunks": true,
+        "boundary": "projected",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 6.055468e-05
+      },
+      {
+        "case_id": 19,
+        "chunks": true,
+        "boundary": "output",
+        "start": 4095,
+        "rows": 1,
+        "max_scaled": 0.00011993284
+      },
+      {
+        "case_id": 19,
+        "chunks": true,
+        "boundary": "output",
+        "start": 0,
+        "rows": 1,
+        "max_scaled": 0.0
+      }
+    ]
+  },
+  "notes": [
+    "All 17 synthetic and three checkpoint cases compare isolated Wo on exact upstream attention outputs and full/chunked composition from original X.",
+    "Exact cache prefix, append, unused suffix, reset and overflow checks retain their existing requirements.",
+    "Only reporting code changed after full validation; Python checks passed again and all four baseline tables/figures regenerated byte-for-byte.",
+    "The benchmark additionally poisons and validates both arms for each distinct input/weight/cache allocation before timing."
+  ]
+}

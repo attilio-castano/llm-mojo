@@ -4,6 +4,7 @@ Run with: uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmark
 """
 import argparse
 import csv
+import json
 from pathlib import Path
 
 import matplotlib
@@ -229,6 +230,7 @@ def render_sublayer_wo(directory, prefix):
 
 def render_sublayer_wo_profile(directory):
     rows = load_profile(directory,'wo_')
+    record = json.loads((directory/'wo_profiles.json').read_text())
     table(directory,'wo_profile_summary.csv',rows)
     from .attention_sublayer_contract import PROFILE_WORKLOADS, STAGES
     fig, axes = plt.subplots(2,2,figsize=(13,10))
@@ -247,7 +249,9 @@ def render_sublayer_wo_profile(directory):
     fig.suptitle('Wo experiment · which stage changed?',fontsize=16,fontweight='bold')
     fig.text(.04,.025,'Separate single captures; active dispatch durations exclude preemption and host gaps.\n'
              'These stage medians are diagnostic and are not added to construct whole-block latency.\n'
-             f'{sum(s["count"] for s in rows):,} measured dispatch durations. Counter tables were not analyzed; absence is not zero.',fontsize=9,color='#555555')
+             f'{sum(s["count"] for s in rows):,} measured dispatch durations. Counter tables were not analyzed; absence is not zero.\n'
+             f'{record["captures"][0]["capture"]["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention. '
+             f'Source {record["common"]["repository"]["commit"][:7]}.',fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.12,1,.94))
     fig.savefig(directory/'wo_profile.png',dpi=160)
     plt.close(fig)
