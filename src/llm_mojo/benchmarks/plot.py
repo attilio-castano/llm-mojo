@@ -193,12 +193,12 @@ def render_prefill(directory, record, samples, summary):
     print(directory.name,len(samples),'primary observations verified; prefill figures and retained follow-ups regenerated')
 
 
-def render_sublayer_wo(directory, prefix):
+def render_sublayer_wo(directory, prefix, *, fp32_prefill=False):
     """Whole-block paired ratios for the single Wo mapping experiment."""
     record, samples, summary = load_run(directory, prefix)
     table(directory, prefix+'summary.csv', summary)
     spec = record['specification']
-    data = [s for s in summary if s['candidate'] == 4]
+    data = [s for s in summary if s['candidate'] == (7 if fp32_prefill else 4)]
     labels = [f'Decode T={w["rows"]}' if w['query_rows'] == 1 else
               f'Full R=T={w["rows"]}' if w['query_rows'] == w['rows'] else
               f'Chunk R={w["query_rows"]}, T={w["rows"]}' for w in spec['workloads']]
@@ -213,12 +213,14 @@ def render_sublayer_wo(directory, prefix):
         ax.axvline(1,color='#333333',linewidth=1)
         ax.grid(axis='x',alpha=.18)
         ax.set_title('Hot call' if layers==1 else 'Ring24 per call')
-        ax.set_xlabel('Whole-block time / paired rowwise Wo control')
+        ax.set_xlabel('Whole-block time / paired control (MMA Wo fixed)' if fp32_prefill
+                      else 'Whole-block time / paired rowwise Wo control')
         ax.xaxis.set_major_formatter(FuncFormatter(lambda value,_:f'{value:g}×'))
     axes[0].set_yticks(range(len(labels)),labels)
     axes[0].invert_yaxis()
     screen = record['study'].endswith('_screen')
-    fig.suptitle('Qwen attention · changing only Wo'+(' · screen' if screen else ''),fontsize=16,fontweight='bold')
+    fig.suptitle(('Qwen attention · FP32 prefill tiling' if fp32_prefill else 'Qwen attention · changing only Wo')
+                 +(' · screen' if screen else ''),fontsize=16,fontweight='bold')
     fig.text(.04,.025,'Left of 1× is faster. Whiskers: four-block ratio range; open marks: inconclusive.\n'
              'A gain requires all four blocks faster and > max(5%, matching self-pair deviation).\n'
              f'{len(samples):,} retained observations · {record["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention.\n'
@@ -332,6 +334,37 @@ def render_sublayer_decode_profile(directory):
     plt.close(fig)
 
 
+def render_sublayer_prefill_profile(directory):
+    rows = load_profile(directory,'prefill_')
+    table(directory,'prefill_profile_summary.csv',rows)
+    record = json.loads((directory/'prefill_profiles.json').read_text())
+    from .attention_sublayer_contract import STAGES, PREFILL_PROFILE_WORKLOADS
+    stages = STAGES[:10]+['GQA FP32 MMA']+STAGES[-2:]
+    fig,axes = plt.subplots(1,3,figsize=(15,8),sharey=True)
+    for ax,(r,t) in zip(axes,PREFILL_PROFILE_WORKLOADS):
+        for variant,color,offset,label in ((4,'#777777',-.18,'Materialized FP32'),
+                                          (7,'#167d9a',.18,'FP32 rolled MMA')):
+            values = [s for s in rows if s['query_rows']==r and s['rows']==t and s['variant']==variant]
+            ax.barh([stages.index(s['stage'])+offset for s in values],
+                    [s['median_us'] for s in values],height=.34,color=color,label=label)
+        ax.set_xscale('log')
+        ax.set_title(f'R={r}, T={t}')
+        ax.set_xlabel('Median active GPU time (µs) · log scale')
+        ax.grid(axis='x',alpha=.15)
+    axes[0].set_yticks(range(len(stages)),stages,fontsize=10)
+    axes[0].invert_yaxis()
+    axes[0].legend(frameon=False,fontsize=9)
+    fig.suptitle('FP32 prefill · which work remains after tiling?',fontsize=16,fontweight='bold')
+    fig.text(.04,.025,'Separate single captures; active durations exclude preemption and host gaps. Use paired latency for speed claims.\n'
+             'A missing bar means that variant does not execute that stage. Stage medians are not whole-block latency.\n'
+             f'{sum(s["count"] for s in rows):,} measured dispatch durations. Optional counter analysis is absent.\n'
+             f'{record["captures"][0]["capture"]["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention, MMA Wo fixed. '
+             f'Source {record["common"]["repository"]["commit"][:7]}.',fontsize=9,color='#555555')
+    fig.tight_layout(rect=(0,.16,1,.94))
+    fig.savefig(directory/'prefill_profile.png',dpi=160)
+    plt.close(fig)
+
+
 def render_sublayer(directory, record, samples, summary):
     """Separate latency scaling from diagnostic per-dispatch active time."""
     prefill_style()
@@ -403,6 +436,11 @@ def render_sublayer(directory, record, samples, summary):
             render_sublayer_decode(directory,prefix)
     if (directory/'decode_profiles.json').exists():
         render_sublayer_decode_profile(directory)
+    for prefix in ('prefill_screen_','prefill_'):
+        if (directory/(prefix+'run.json')).exists():
+            render_sublayer_wo(directory,prefix,fp32_prefill=True)
+    if (directory/'prefill_profiles.json').exists():
+        render_sublayer_prefill_profile(directory)
     print(directory.name, len(samples), 'baseline observations verified; attention figures and retained comparisons regenerated')
 
 

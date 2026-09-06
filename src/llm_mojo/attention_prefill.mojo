@@ -2,7 +2,8 @@
 
 The materialized control retains BF16 probability rounding. Fused paths keep
 FP32 online state and expose only O; the MMA path rounds unnormalized tile
-weights to BF16 before PV. These are separately tested numerical paths.
+weights to BF16 before PV by default. The explicit FP32 rolled-MMA option
+retains FP32 scores and weights through PV. These paths are separately tested.
 """
 from layout import TensorLayout, TileTensor, row_major, stack_allocation
 from llm_mojo.attention import (
@@ -391,7 +392,7 @@ def _mma[
 
 # Fixed 32x32 / one-head ablations. The original _mma remains the control.
 def _mma_tuned[
-    SCHEDULE: Int, QL: TensorLayout, KL: TensorLayout
+    SCHEDULE: Int, QL: TensorLayout, KL: TensorLayout, FP32: Bool = False
 ](
     q: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
     k: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
@@ -437,8 +438,9 @@ def _mma_tuned[
         DType.float32, address_space=AddressSpace.SHARED
     ](row_major[BQ * HEADS, BK]())
     comptime assert scores.flat_rank == 2
+    comptime PTYPE = DType.float32 if FP32 else DType.bfloat16
     var probs = stack_allocation[
-        DType.bfloat16, address_space=AddressSpace.SHARED
+        PTYPE, address_space=AddressSpace.SHARED
     ](row_major[BQ * HEADS, BK]())
     comptime assert probs.flat_rank == 2
     var u = SIMD[DType.float32, 16](0)
@@ -511,11 +513,9 @@ def _mma_tuned[
                 var t = base + j * 8 + fc + c
                 var s: Float32 = neg_inf[DType.float32]()
                 if valid and t < end and t <= past + r:
-                    s = (
-                        (acc[c] * 0.125)
-                        .cast[DType.bfloat16]()
-                        .cast[DType.float32]()
-                    )
+                    s = acc[c] * 0.125
+                    comptime if not FP32:
+                        s = s.cast[DType.bfloat16]().cast[DType.float32]()
                 comptime if SCHEDULE == 5:
                     lane_scores[j * 2 + c] = s
                 else:
@@ -537,7 +537,7 @@ def _mma_tuned[
         tile_m = max(tile_m, warp.shuffle_xor(tile_m, UInt32(8)))
         var new_m = max(m, tile_m)
         # Rescale the old unnormalized output once per KV tile. Probabilities
-        # round to BF16 for matrix multiplication; m and z remain FP32.
+        # retain FP32 for the accuracy path; m and z are always FP32.
         var alpha = exp(m - new_m)
         var tile_z: Float32 = 0
         comptime for j in range(BK // 8):
@@ -553,7 +553,7 @@ def _mma_tuned[
                             - new_m
                         )
                 tile_z += p
-                probs[local_r, j * 8 + fc + c] = p.cast[DType.bfloat16]()
+                probs[local_r, j * 8 + fc + c] = p.cast[PTYPE]()
         tile_z += warp.shuffle_xor(tile_z, UInt32(1))
         tile_z += warp.shuffle_xor(tile_z, UInt32(8))
         z = z * alpha + tile_z
@@ -575,19 +575,19 @@ def _mma_tuned[
             else:
                 acc = SIMD[DType.float32, 2](u[ds * 2], u[ds * 2 + 1])
             comptime for j in range(BK // 8):
-                var a = SIMD[DType.bfloat16, 2](0)
-                var b = SIMD[DType.bfloat16, 2](0)
-                a[0] = rebind[Scalar[DType.bfloat16]](
+                var a = SIMD[PTYPE, 2](0)
+                var b = SIMD[PTYPE, 2](0)
+                a[0] = rebind[Scalar[PTYPE]](
                     probs[local_r, j * 8 + fc]
                 )
-                a[1] = rebind[Scalar[DType.bfloat16]](
+                a[1] = rebind[Scalar[PTYPE]](
                     probs[local_r, j * 8 + fc + 1]
                 )
-                b[0] = rebind[Scalar[DType.bfloat16]](
-                    vs[j * 8 + fr, ds * 8 + fc]
+                b[0] = rebind[Scalar[PTYPE]](
+                    vs[j * 8 + fr, ds * 8 + fc].cast[PTYPE]()
                 )
-                b[1] = rebind[Scalar[DType.bfloat16]](
-                    vs[j * 8 + fr, ds * 8 + fc + 1]
+                b[1] = rebind[Scalar[PTYPE]](
+                    vs[j * 8 + fr, ds * 8 + fc + 1].cast[PTYPE]()
                 )
                 var previous = acc
                 _mma_apple_8x8(acc, a, b, previous)
@@ -617,6 +617,7 @@ def enqueue_grouped_query_attention_prefill_apple_gpu[
     HEADS: Int = 1,
     SHARED: Bool = True,
     SCHEDULE: Int = 0,
+    FP32: Bool = False,
 ](
     ctx: DeviceContext,
     q: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
@@ -640,13 +641,14 @@ def enqueue_grouped_query_attention_prefill_apple_gpu[
     comptime assert SCHEDULE == 0 or (
         MMA and BQ == 32 and BK == 32 and HEADS == 1
     )
+    comptime assert not FP32 or (MMA and SCHEDULE == 2)
     _validate_prefill(ctx, q, k, v, output)
     var r = Int(q.dim[0]())
     var t = Int(k.dim[0]())
     comptime if MMA:
         comptime kernel = (
             _mma[BQ, BK, HEADS, QL, KL] if SCHEDULE
-            == 0 else _mma_tuned[SCHEDULE, QL, KL]
+            == 0 else _mma_tuned[SCHEDULE, QL, KL, FP32]
         )
         ctx.enqueue_function[kernel](
             q,

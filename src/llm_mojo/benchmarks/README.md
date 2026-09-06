@@ -94,6 +94,17 @@ dispatches per call. Use `profile_summary --attention-sublayer
 --decode-comparison --prefix decode_` to curate variants 3/5/6 at R=1 and
 T=64/4096. The existing plot command also regenerates this retained comparison.
 
+The contained FP32 prefill experiment uses
+`--studies attention_sublayer_prefill_screen`, then
+`--studies attention_sublayer_prefill` if the predeclared screen gate passes.
+Benchmark 7 selects FP32 rolled MMA prefill with MMA Wo; its fixed control is
+4 (materialized FP32 plus MMA Wo). Both require R>1 in this comparison. Use
+`--profile-variant 4` or `7` and curate with
+`--attention-sublayer --prefill-comparison --prefix prefill_` at
+(1024,1024),(4096,4096),(64,4096). The dispatch counts are 12/10; the default
+attention route remains unchanged. Gates and the complete protocol are in
+[the attention contract](../../../docs/attention-sublayer.md#contained-fp32-prefill-comparison).
+
 For the original twelve-stage Metal baseline, use the existing builder with
 `--operation attention_sublayer --profile-variant 3 --profile-query-rows R
 --profile-rows T --profile-warmup 10 --profile-iterations N`.

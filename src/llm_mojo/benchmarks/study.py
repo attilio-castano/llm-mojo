@@ -86,6 +86,17 @@ STUDIES['attention_sublayer_decode_screen'] = dict(
     workloads=[dict(query_rows=1,rows=t) for t in (64,4096)])
 
 
+# One prefill candidate with the earlier Wo mapping fixed in both arms.
+STUDIES['attention_sublayer_prefill'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer'].items()
+       if k not in ('control','workloads','candidates','names')},
+    workloads=[w for w in STUDIES['attention_sublayer']['workloads'] if w['query_rows'] > 1],
+    control=4, candidates=[4,7], names={4:'materialized FP32 + MMA Wo',7:'FP32 rolled MMA + MMA Wo'})
+STUDIES['attention_sublayer_prefill_screen'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_prefill'].items() if k != 'workloads'},
+    workloads=[dict(query_rows=r,rows=t) for r,t in ((256,256),(1024,1024),(64,4096))])
+
+
 def workloads(spec):
     return spec.get('workloads', [dict(rows=r) for r in spec.get('rows', [])])
 

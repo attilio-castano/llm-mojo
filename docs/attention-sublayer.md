@@ -232,6 +232,58 @@ absent if not performed. Extend the current attention study with `decode_`
 and `decode_screen_` evidence. Builds require clean matching sources; numerical
 failure stops performance work without widening gates.
 
+### Contained FP32 prefill comparison
+
+The decode milestone passed its numerical and performance gates. Adapt one
+prefill candidate from the prior rolled-QK study: BQ=BK=32, four SIMD groups
+per query-head tile, HEADS=1 and SCHEDULE=2. Keep the rolled QK loop, output
+ownership and four barriers per KV tile. QK uses BF16 operands with FP32
+accumulation and retains the scaled FP32 score. Online softmax state and tile
+weights remain FP32. PV uses FP32 matrix operands/accumulation, widening the
+stored BF16 values losslessly; only final attention output rounds to BF16.
+Shared K/V remain BF16. Shared score/probability tiles are FP32, increasing
+source-declared shared storage from 14 to 16 KiB per block. No global
+score/probability scratch is needed by this candidate.
+
+A local 8x8 FP32 matrix identity probe passed on Apple M4 Pro / Metal with
+non-BF16-representable operands and zero maximum error. Retain that arithmetic
+regression alongside the candidate's tests. This establishes primitive support,
+not its performance. The existing BF16 prefill specializations keep their defaults.
+
+Sublayer route 6 explicitly selects FP32 rolled MMA for R>1 and FP32 G32 for
+R=1, returning actual route 6 or 4 respectively. This one-dispatch decode
+choice completes an explicitly requested family; it is not a measured G32/H4
+crossover or the public default. Benchmark 7 selects route 6 with MMA Wo for
+R>1. Compare only against benchmark 4 (materialized FP32 plus MMA Wo), so
+Wo and all surrounding stages are fixed. Do not multiply this comparison by
+the earlier Wo gains. The default remains materialized route 3/rowwise Wo.
+
+Before timing, retain the existing GQA 0.0078125 and composition 0.03125 gates,
+exact cache checks, all 510 frozen synthetic arrays and 63 checkpoint arrays.
+Compare isolated full/suffix attention on exact upstream Q/K/V, then compose
+from X with both Wo mappings. Reuse all 29 standalone prefill edge fixtures
+against materialized FP32, including causal future perturbations and full/suffix
+agreement; repeat poisoned-output launches. Run twelve asynchronous 65-token
+sequences with mixed prefill/decode for route 6 without materialized scratch,
+and preserve coverage of the previous seven configurations. A numerical failure
+stops performance work; no tolerance is widened.
+
+Screen (R,T)=(256,256),(1024,1024),(64,4096) in hot and ring24 modes using
+candidate/control 7/4 plus 4/4 self-pairs: 960 observations. If at least one
+cell qualifies under the existing four-block rule, advance to all nine existing
+R>1 workloads: full 16,64,256,1024,4096 and chunks (4,64),(16,256),(64,1024),
+(64,4096). The full run retains 2,880 observations with fresh calibration.
+Keep every loss and inconclusive result. No tile or precision retuning follows
+from timing within this experiment.
+
+If advanced, capture variants 4/7 at (1024,1024),(4096,4096),(64,4096), with
+25,10,25 measured iterations respectively and ten warmups each. Validate
+12/10 dispatches per call and retain all 1,320 active durations and compiler
+spill records. Optional counter export may remain explicitly absent. Given
+the decode captures' unchanged-stage variation, these separate traces remain
+diagnostic; paired latency establishes gains. Extend this same study with
+`prefill_` and `prefill_screen_` evidence using clean, matching measured source.
+
 ## Numerical findings before profiling
 
 The integration exposed a RoPE compatibility defect against the declared eager

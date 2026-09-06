@@ -37,7 +37,7 @@ def _run_cases(composed: Bool) raises:
             except:
                 failed_cases += 1
             continue
-        for route in range(6):
+        for route in range(7):
             if nq != 14 and route != 0 and route != 3:
                 continue
             for chunked in range(2):
@@ -52,6 +52,11 @@ def _run_cases(composed: Bool) raises:
                 _case(case_id, nq, nk, d, t, 3, Bool(chunked), "fp32", True, True)
             except:
                 failed_cases += 1
+            if nq == 14:
+                try:
+                    _case(case_id, nq, nk, d, t, 6, Bool(chunked), "fp32", True, True)
+                except:
+                    failed_cases += 1
     if failed_cases:
         raise Error("FP32 attention failed its declared accuracy or exact cache gates")
 

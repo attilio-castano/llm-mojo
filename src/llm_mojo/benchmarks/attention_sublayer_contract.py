@@ -5,18 +5,20 @@ import json
 from .._repository import repository_root
 
 OPERATION = 'attention_sublayer'
-VARIANTS = {3,4,5,6}
+VARIANTS = {3,4,5,6,7}
 ENTRYPOINTS = {f'attention_sublayer_{v}': 'enqueue_attention_sublayer' for v in VARIANTS}
 STAGES = ['RMSNorm', 'Q projection', 'K projection', 'V projection',
           'Q RoPE', 'K RoPE', 'KV append', 'QK', 'softmax', 'PV',
           'output projection', 'residual']
 STAGES_BY_VARIANT = {3: STAGES, 4: STAGES,
                      5: STAGES[:7]+['GQA G32']+STAGES[-2:],
-                     6: STAGES[:7]+['GQA split','GQA merge']+STAGES[-2:]}
+                     6: STAGES[:7]+['GQA split','GQA merge']+STAGES[-2:],
+                     7: STAGES[:7]+['GQA FP32 MMA']+STAGES[-2:]}
 TARGET_FIELDS = ('profile_workload', 'dispatches_per_iteration', 'key_value_rows',
                  'query_heads', 'key_value_heads')
 PROFILE_WORKLOADS = [(1, 4096), (1024, 1024), (4096, 4096), (64, 4096)]
 DECODE_PROFILE_WORKLOADS = [(1,64),(1,4096)]
+PREFILL_PROFILE_WORKLOADS = [(1024,1024),(4096,4096),(64,4096)]
 ARITHMETIC = ('BF16 weights/activations/cache/output; FP32 GQA scores, softmax '
               'probabilities and accumulation; GQA output rounded to BF16 before Wo.')
 INPUTS = ('Frozen synthetic case 7 (seed 53, T=4096); each workload uses suffix '
@@ -52,8 +54,10 @@ def fixture_identity():
 def specification(variant, query_rows, key_rows):
     if variant not in VARIANTS:
         raise ValueError('unknown attention sublayer profile variant')
-    if variant >= 5 and query_rows != 1:
+    if variant in (5,6) and query_rows != 1:
         raise ValueError('FP32 decode profile requires one query row')
+    if variant == 7 and query_rows <= 1:
+        raise ValueError('FP32 prefill profile requires multiple query rows')
     return dict(profile_rows=query_rows, hidden_size=896, key_value_rows=key_rows,
                 query_heads=14, key_value_heads=2,
                 profile_workload=f'sublayer-r{query_rows}-t{key_rows}-v{variant}',
@@ -82,7 +86,8 @@ def configuration(data):
 def profile_grid(spec):
     grid = [tuple(w) for w in spec['workloads']]
     valid = ((spec['variants'] in ([3],[3,4]) and grid == PROFILE_WORKLOADS)
-             or (spec['variants'] == [3,5,6] and grid == DECODE_PROFILE_WORKLOADS))
+             or (spec['variants'] == [3,5,6] and grid == DECODE_PROFILE_WORKLOADS)
+             or (spec['variants'] == [4,7] and grid == PREFILL_PROFILE_WORKLOADS))
     if not valid:
         raise ValueError('invalid attention sublayer profile grid')
     return {v: STAGES_BY_VARIANT[v] for v in spec['variants']}, {(r,t,v) for r,t in grid for v in spec['variants']}

@@ -239,6 +239,7 @@ def enqueue_attention_sublayer[
     Routes 0-2 remain explicit BF16 compatibility comparisons.
     Routes 4/5 use FP32 G32/split64-H4 decode for R=1; for R>1 they use
     materialized FP32 attention and return actual route 3. No length crossover.
+    Route 6 uses FP32 rolled-MMA prefill and G32 decode (actual route 4).
     wo_mma selects only the bias-free output projection's 8x16 MMA mapping;
     it preserves BF16 projection output before the separate residual addition.
     It is an explicit experiment, independent of the GQA precision route.
@@ -254,9 +255,13 @@ def enqueue_attention_sublayer[
     var k = nk * d
     var p = cache.length
     var t = p + r
-    if route < 0 or route > 5:
+    if route < 0 or route > 6:
         raise Error("unknown attention sublayer route")
-    var launched_route = 3 if route >= 4 and r != 1 else route
+    var launched_route = route
+    if route == 6 and r == 1:
+        launched_route = 4
+    elif (route == 4 or route == 5) and r != 1:
+        launched_route = 3
     if (
         r <= 0
         or r > work.max_rows
@@ -364,6 +369,10 @@ def enqueue_attention_sublayer[
             ctx, q, keys, values,
             TileTensor(work.fp32_scratch, row_major(r, nq, t)), a,
         )
+    elif launched_route == 6:
+        enqueue_grouped_query_attention_prefill_apple_gpu[
+            32, 32, MMA=True, SCHEDULE=2, FP32=True
+        ](ctx, q, keys, values, a)
     elif launched_route == 4:
         enqueue_grouped_query_attention_decode_apple_gpu[32, 1, 1, fp32_scores=True](
             ctx, q, keys, values, a,

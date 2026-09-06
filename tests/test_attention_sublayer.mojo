@@ -48,7 +48,7 @@ def _case(
     var cache = AttentionCache(ctx, capacity, nk, d)
     cache.key.enqueue_fill(123)
     cache.value.enqueue_fill(123)
-    var work = AttentionWorkspace(ctx, t, capacity, nq, nk, d, route == 0, route >= 3)
+    var work = AttentionWorkspace(ctx, t, capacity, nq, nk, d, route == 0, route >= 3 and route != 6)
     print("composition reference", reference, "strict", require_close)
     load_sublayer_fixture(work.cosine, case_id, "cosine", True)
     load_sublayer_fixture(work.sine, case_id, "sine", True)
@@ -84,7 +84,7 @@ def _case(
         else:
             assert_equal(
                 enqueue_attention_sublayer(ctx, weights, cache, work, view, route, wo_mma),
-                3 if route >= 4 and r != 1 else route,
+                (4 if r == 1 else 6) if route == 6 else (3 if route >= 4 and r != 1 else route),
             )
         assert_equal(cache.length, p + r)
         assert_sublayer_fixture(
@@ -209,9 +209,9 @@ def test_repeated_asynchronous_use() raises:
     load_sublayer_fixture(weights.norm, 5, "norm_weight")
     load_sublayer_fixture(weights.output, 5, "output_weight")
     load_sublayer_fixture(input, 5, "input")
-    for implementation in range(7):
+    for implementation in range(8):
         var route = 3 if implementation == 4 else (implementation - 1 if implementation >= 5 else implementation)
-        var wo_mma = implementation == 4
+        var wo_mma = implementation == 4 or implementation == 7
         # Optimized FP32 decode must also work without probability storage.
         var work = AttentionWorkspace(ctx, 65, 65, materialized=route == 0,
                                       fp32_materialized=route == 3)
@@ -220,7 +220,11 @@ def test_repeated_asynchronous_use() raises:
         for _ in range(get_defined_int["SUBLAYER_REPEAT", default=3]()):
             cache.reset(ctx)
             work.output.enqueue_fill(123)
-            for p in range(65):
+            var p = 0
+            while p < 65:
+                # Route 6 alternates tiled prefill and final decode, without
+                # materialized scratch or a synchronization between enqueues.
+                var rows = (33 if p == 0 else (31 if p == 33 else 1)) if route == 6 else 1
                 var launched = enqueue_attention_sublayer(
                     ctx,
                     weights,
@@ -228,19 +232,20 @@ def test_repeated_asynchronous_use() raises:
                     work,
                     TileTensor(
                         input.unsafe_ptr().unsafe_offset(p * 896),
-                        row_major(1, 896),
+                        row_major(rows, 896),
                     ),
                     route,
                     wo_mma,
                 )
-                assert_equal(launched, route)
+                assert_equal(launched, 4 if route == 6 and rows == 1 else route)
+                p += rows
             ctx.synchronize()
             assert_equal(cache.length, 65)
             assert_sublayer_fixture(
                 work.output, 5, "output", 64, 1, 896, 0.03125, True,
                 "fp32" if route >= 3 else "upstream",
             )
-        if route >= 4:
+        if route == 4 or route == 5:
             cache.reset(ctx)
             with assert_raises(contains="FP32 probability scratch"):
                 _ = enqueue_attention_sublayer(

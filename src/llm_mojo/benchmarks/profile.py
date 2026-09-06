@@ -57,7 +57,8 @@ def build_profile(args):
         or not 0 <= warmup <= 100
         or not 1 <= query_rows <= args.profile_rows
         or (not rectangular and query_rows != 1)
-        or (is_sublayer and args.profile_variant >= 5 and query_rows != 1)
+        or (is_sublayer and args.profile_variant in (5,6) and query_rows != 1)
+        or (is_sublayer and args.profile_variant == 7 and query_rows <= 1)
         or (is_prefill and args.profile_variant not in prefill.VARIANTS)
         or not 1 <= args.profile_rows <= 4096
         or not 1 <= args.profile_iterations * spec["dispatches"] <= 5000
