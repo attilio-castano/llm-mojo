@@ -182,6 +182,56 @@ These 1,200 stage durations explain the comparison; paired latency determines
 the speed claim. Counter export is optional and any omission is explicit.
 No automatic dispatch crossover is inferred from the older packed-QKV study.
 
+### Contained FP32 decode comparison
+
+After the Wo study, compare the existing G32 and split64-H4 decode ownership
+designs with FP32 scaled scores, online softmax state and weighted sums. Keep
+BF16 Q/K/V, cache and output, and retain every current numerical gate. The
+existing BF16-score specializations remain available with their old defaults.
+Rowwise Wo and all surrounding stages are fixed in this experiment.
+
+G32 assigns 32 SIMD groups to each query head, partitions its KV sequence,
+then merges FP32 states inside one threadgroup using 8,448 shared bytes and
+one barrier. Split64 H4 divides the sequence into 64 independent pieces and
+reuses K/V across up to four related query heads. Its 256 groups write
+`[14,64,66]` FP32 partial state (236,544 bytes), followed by a separate merge.
+These are work/storage counts, not measured DRAM traffic or register usage.
+The full block has 10 dispatches with G32 and 11 with split64, versus 12 in
+the materialized control. Online weights remain FP32 through accumulation.
+
+Sublayer routes 4/5 explicitly request FP32 G32/split64 decode. For R>1 they
+use the existing FP32 materialized route and return actual route 3. Their
+single-row calls do not require materialized scratch. Benchmark IDs 5/6 select
+these routes with rowwise Wo; benchmark 3 is the fixed materialized control.
+The public default remains route 3. No length crossover is introduced.
+
+Before timing, run the complete validation workflow, all synthetic/checkpoint
+operation and composition gates, and twelve asynchronous 65-token sequences
+per configuration. In addition to each fixture's last token, compare both
+decode mappings on fixed prefixes 1,7,16,31,32,33,63,64,65,257,351,668,1024,
+4095,4096 when present. The exact upstream Q/K/V and causal output arrays
+already contain these comparisons; 351/668 include earlier rounding examples.
+Use the existing 0.0078125 GQA and 0.03125 composition gates and exact cache
+bits. Also compare the two mappings against materialized FP32 on the existing
+standalone edge fixtures (NaN guards, empty/ragged splits, tied/extreme scores,
+cancellation and head mapping). That cross-kernel check supplements the pinned
+upstream reference. Frozen oracle arrays and tolerances do not change.
+
+Screen the three-way comparison at decode T=64/4096 in hot and ring24 modes.
+Advance to all six existing decode lengths if at least one candidate establishes
+a gain in one screening cell. Both candidates and all negative/inconclusive
+results remain in the full comparison. Use the original four-block paired rule
+with fresh self-pair calibration for each run: 960 screen and 2,880 full-run
+observations. This compares each candidate with the materialized control; it
+does not establish a direct G32-versus-split64 crossover.
+
+If advanced, capture variants 3/5/6 at T=64/4096, with 50 measured iterations
+and 20 warmups each. Retain all 3,300 active dispatch durations, validate the
+variant-specific sequence, and leave optional counter analysis explicitly
+absent if not performed. Extend the current attention study with `decode_`
+and `decode_screen_` evidence. Builds require clean matching sources; numerical
+failure stops performance work without widening gates.
+
 ## Numerical findings before profiling
 
 The integration exposed a RoPE compatibility defect against the declared eager

@@ -237,6 +237,8 @@ def enqueue_attention_sublayer[
     Route 0 materializes BF16 GQA. Route 1 uses G32 decode / original MMA prefill;
     route 2 uses split64 H4 decode / rolled-QK MMA prefill. Surroundings match.
     Routes 0-2 remain explicit BF16 compatibility comparisons.
+    Routes 4/5 use FP32 G32/split64-H4 decode for R=1; for R>1 they use
+    materialized FP32 attention and return actual route 3. No length crossover.
     wo_mma selects only the bias-free output projection's 8x16 MMA mapping;
     it preserves BF16 projection output before the separate residual addition.
     It is an explicit experiment, independent of the GQA precision route.
@@ -252,8 +254,9 @@ def enqueue_attention_sublayer[
     var k = nk * d
     var p = cache.length
     var t = p + r
-    if route < 0 or route > 3:
+    if route < 0 or route > 5:
         raise Error("unknown attention sublayer route")
+    var launched_route = 3 if route >= 4 and r != 1 else route
     if (
         r <= 0
         or r > work.max_rows
@@ -273,9 +276,9 @@ def enqueue_attention_sublayer[
         raise Error("sublayer storage dimensions do not agree")
     if route == 0 and not work.materialized:
         raise Error("materialized route requires probability scratch")
-    if route == 3 and not work.fp32_materialized:
+    if launched_route == 3 and not work.fp32_materialized:
         raise Error("FP32 route requires FP32 probability scratch")
-    if (route == 1 or route == 2) and (nq != 14 or nk != 2 or d != 64):
+    if (route == 1 or route == 2 or route >= 4) and (nq != 14 or nk != 2 or d != 64):
         raise Error("optimized GQA requires Qwen dimensions")
     if ctx.api() != "metal":
         raise Error("attention sublayer requires Metal")
@@ -356,10 +359,20 @@ def enqueue_attention_sublayer[
             TileTensor(work.scratch, row_major(r, nq, t)),
             a,
         )
-    elif route == 3:
+    elif launched_route == 3:
         enqueue_grouped_query_attention_apple_gpu(
             ctx, q, keys, values,
             TileTensor(work.fp32_scratch, row_major(r, nq, t)), a,
+        )
+    elif launched_route == 4:
+        enqueue_grouped_query_attention_decode_apple_gpu[32, 1, 1, fp32_scores=True](
+            ctx, q, keys, values, a,
+            TileTensor(work.split, row_major(14, 1, 66)),
+        )
+    elif launched_route == 5:
+        enqueue_grouped_query_attention_decode_apple_gpu[1, 4, 64, fp32_scores=True](
+            ctx, q, keys, values, a,
+            TileTensor(work.split, row_major(14, 64, 66)),
         )
     elif r == 1:
         if route == 1:
@@ -402,4 +415,4 @@ def enqueue_attention_sublayer[
         ctx, x, projected, TileTensor(work.output, row_major(r, h))
     )
     cache.length = t
-    return route
+    return launched_route

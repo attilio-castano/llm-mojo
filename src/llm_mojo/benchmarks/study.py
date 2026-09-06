@@ -76,6 +76,15 @@ STUDIES['attention_sublayer_wo_screen'] = dict(
     workloads=[dict(query_rows=r,rows=t) for r,t in
                [(1,64),(1,4096),(256,256),(1024,1024),(64,4096)]])
 
+# Fixed rowwise Wo; only the FP32 decode ownership changes.
+STUDIES['attention_sublayer_decode'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer'].items() if k not in ('workloads','candidates','names')},
+    workloads=[dict(query_rows=1,rows=t) for t in (1,16,64,256,1024,4096)],
+    candidates=[3,5,6], names={3:'materialized FP32',5:'FP32 G32',6:'FP32 split64 H4'})
+STUDIES['attention_sublayer_decode_screen'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_decode'].items() if k != 'workloads'},
+    workloads=[dict(query_rows=1,rows=t) for t in (64,4096)])
+
 
 def workloads(spec):
     return spec.get('workloads', [dict(rows=r) for r in spec.get('rows', [])])

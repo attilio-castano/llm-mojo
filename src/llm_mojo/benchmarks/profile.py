@@ -49,7 +49,7 @@ def build_profile(args):
     allowed = sublayer.VARIANTS if is_sublayer else (prefill.VARIANTS if is_prefill else VARIANTS)
     if args.profile_variant not in allowed:
         raise RuntimeError('unknown profile variant for operation')
-    spec = (dict(dispatches=len(sublayer.STAGES)) if is_sublayer else
+    spec = (dict(dispatches=len(sublayer.STAGES_BY_VARIANT[args.profile_variant])) if is_sublayer else
             dict(dispatches=3 if args.profile_variant<=1 else 1) if is_prefill
             else specification(args.profile_variant, args.profile_rows))
     if (
@@ -57,6 +57,7 @@ def build_profile(args):
         or not 0 <= warmup <= 100
         or not 1 <= query_rows <= args.profile_rows
         or (not rectangular and query_rows != 1)
+        or (is_sublayer and args.profile_variant >= 5 and query_rows != 1)
         or (is_prefill and args.profile_variant not in prefill.VARIANTS)
         or not 1 <= args.profile_rows <= 4096
         or not 1 <= args.profile_iterations * spec["dispatches"] <= 5000

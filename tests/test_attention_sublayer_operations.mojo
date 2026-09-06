@@ -29,6 +29,46 @@ from attention_sublayer_support import (
 )
 
 
+def _fp32_decode_prefixes(
+    ctx: DeviceContext, mut work: AttentionWorkspace, case_id: Int, t: Int
+) raises -> Int:
+    """Compare selected causal rows with their frozen upstream FP32 outputs."""
+    var prefixes = List[Int]()
+    for length in [1, 7, 16, 31, 32, 33, 63, 64, 65, 257, 351, 668, 1024, 4095, 4096]:
+        if length <= t:
+            prefixes.append(length)
+    if prefixes[len(prefixes) - 1] != t:
+        prefixes.append(t)
+    # A diagnostic compile can prove the strict gate catches the older policy.
+    comptime fp32 = get_defined_int["FP32_DECODE_LEGACY_PROBE", default=0]() == 0
+    var failures = 0
+    for length in prefixes:
+        var q = TileTensor(work.query.unsafe_ptr().unsafe_offset((length - 1) * 896),
+                           row_major(1, 14, 64))
+        var key = TileTensor(work.rotated_key, row_major(length, 2, 64))
+        var value = TileTensor(work.raw_value, row_major(length, 2, 64))
+        var output = TileTensor(work.attention, row_major(1, 14, 64))
+        for route in [4, 5]:
+            work.attention.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
+            work.split.enqueue_fill(Float32(FloatLiteral.nan))
+            if route == 4:
+                enqueue_grouped_query_attention_decode_apple_gpu[32, 1, 1, fp32_scores=fp32](
+                    ctx, q, key, value, output, TileTensor(work.split, row_major(14, 1, 66))
+                )
+            else:
+                enqueue_grouped_query_attention_decode_apple_gpu[1, 4, 64, fp32_scores=fp32](
+                    ctx, q, key, value, output, TileTensor(work.split, row_major(14, 64, 66))
+                )
+            print("FP32 decode prefix case", case_id, "route", route,
+                  "T", length, "FP32 scores", fp32)
+            try:
+                assert_sublayer_fixture(work.attention, case_id, "attention",
+                                        length - 1, 1, 896, 0.0078125, True, "fp32")
+            except:
+                failures += 1
+    return failures
+
+
 def _operations(case_id: Int, nq: Int, nk: Int, d: Int, t: Int, precision: Bool = False) raises:
     var ctx = DeviceContext()
     assert_equal(ctx.api(), "metal")
@@ -200,6 +240,9 @@ def _operations(case_id: Int, nq: Int, nk: Int, d: Int, t: Int, precision: Bool 
                 )
             except:
                 gqa_failures += 1
+
+    if precision and nq == 14 and nk == 2 and d == 64:
+        gqa_failures += _fp32_decode_prefixes(ctx, work, case_id, t)
 
     var reference = "fp32" if precision else "upstream"
     load_sublayer_fixture(work.attention, case_id, "attention", True, reference)

@@ -88,11 +88,12 @@ def _enqueue(ctx: DeviceContext, mut weights: AttentionWeights,
              variant: Int) raises:
     # Repeat a fixed suffix on the same stream. No prefix upload or reset sync.
     cache.length = t - r
+    var route = variant - 1 if variant >= 5 else 3
     var launched = enqueue_attention_sublayer(
         ctx, weights, cache, work, TileTensor(input, row_major(r, 896)),
-        3, wo_mma=variant == 4,
+        route, wo_mma=variant == 4,
     )
-    if launched != 3 or cache.length != t:
+    if launched != route or cache.length != t:
         raise Error("attention benchmark route or cache length mismatch")
 
 
@@ -119,10 +120,12 @@ def main() raises:
     var mode = args[8]
     var repetitions = Int(args[9])
     var warmup = Int(args[10])
+    var dispatches = 10 if candidate == 5 else (11 if candidate == 6 else 12)
     if (r < 1 or r > t or t > 4096 or (layers != 1 and layers != 24)
-        or (candidate != 3 and candidate != 4) or control != 3 or seed != 53
+        or candidate < 3 or candidate > 6 or control != 3 or seed != 53
+        or (candidate >= 5 and r != 1)
         or (first != 0 and first != 1) or (mode != "bench" and mode != "profile")
-        or (mode == "profile" and (layers != 1 or repetitions * 12 > 5000))
+        or (mode == "profile" and (layers != 1 or repetitions * dispatches > 5000))
         or repetitions < 1 or warmup < 0):
         raise Error("invalid attention sublayer benchmark arguments")
     var ctx = DeviceContext()
@@ -180,7 +183,7 @@ def main() raises:
         print("query heads: 14")
         print("key value heads: 2")
         print("profile workload:", "sublayer-r" + String(r) + "-t" + String(t) + "-v" + String(candidate))
-        print("profile dispatches per iteration: 12")
+        print("profile dispatches per iteration:", dispatches)
         print("warmup iterations:", warmup)
         print("profile iterations:", repetitions)
         print("post-profile idle milliseconds: 250")

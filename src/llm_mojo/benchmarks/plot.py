@@ -10,7 +10,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter
+from matplotlib.ticker import FuncFormatter, LogLocator
 
 from .study import load_run, load_profile
 
@@ -257,6 +257,78 @@ def render_sublayer_wo_profile(directory):
     plt.close(fig)
 
 
+def render_sublayer_decode(directory, prefix):
+    """Paired whole-block comparison with rowwise Wo fixed in every arm."""
+    record,samples,summary = load_run(directory,prefix)
+    table(directory,prefix+'summary.csv',summary)
+    lengths = [w['rows'] for w in record['specification']['workloads']]
+    fig,axes = plt.subplots(1,2,figsize=(12,max(5.5,.65*len(lengths)+2.4)),sharex=True,sharey=True)
+    for ax,layers in zip(axes,(1,24)):
+        for variant,color,offset,label in ((5,'#167d9a',-.15,'FP32 G32'),
+                                          (6,'#8064a2',.15,'FP32 split64 H4')):
+            values = [s for s in summary if s['candidate']==variant and s['layers']==layers]
+            for i,s in enumerate(values):
+                ax.errorbar(s['ratio'],i+offset,
+                            xerr=[[s['ratio']-s['ratio_min']],[s['ratio_max']-s['ratio']]],
+                            fmt='o',color=color,capsize=3,markersize=6,
+                            markerfacecolor='white' if s['decision']=='inconclusive' else color,
+                            label=label if i==0 else None)
+        ax.axvline(1,color='#333333',linewidth=1)
+        ax.set_xscale('log')
+        ax.xaxis.set_major_locator(LogLocator(base=10,subs=(1,2,5)))
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda value,_:f'{value:g}×'))
+        ax.xaxis.set_minor_formatter(FuncFormatter(lambda value,_:''))
+        ax.grid(axis='x',alpha=.18)
+        ax.set_title('Hot call' if layers==1 else 'Ring24 per call')
+        ax.set_xlabel('Whole-block time / paired materialized control · log scale')
+    axes[0].set_yticks(range(len(lengths)),[f'Decode T={t}' for t in lengths])
+    axes[0].invert_yaxis()
+    axes[0].legend(frameon=False,fontsize=10)
+    screen = record['study'].endswith('_screen')
+    fig.suptitle('Qwen attention · FP32 decode ownership'+(' · screen' if screen else ''),
+                 fontsize=16,fontweight='bold')
+    fig.text(.04,.025,'Left of 1× is faster. Whiskers: four-block ratio range; open marks: inconclusive.\n'
+             'A gain requires all four blocks faster and > max(5%, matching self-pair deviation).\n'
+             f'{len(samples):,} retained observations · {record["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention.\n'
+             f'Source {record["repository"]["commit"][:7]}. Rowwise Wo fixed; cache prefix fixed; allocation excluded.',
+             fontsize=9,color='#555555')
+    fig.tight_layout(rect=(0,.2,1,.94))
+    fig.savefig(directory/(prefix.rstrip('_')+'.png'),dpi=160)
+    plt.close(fig)
+
+
+def render_sublayer_decode_profile(directory):
+    rows = load_profile(directory,'decode_')
+    table(directory,'decode_profile_summary.csv',rows)
+    record = json.loads((directory/'decode_profiles.json').read_text())
+    from .attention_sublayer_contract import STAGES, DECODE_PROFILE_WORKLOADS
+    stages = STAGES[:10]+['GQA G32','GQA split','GQA merge']+STAGES[-2:]
+    fig,axes = plt.subplots(1,2,figsize=(13,9),sharey=True)
+    for ax,(r,t) in zip(axes,DECODE_PROFILE_WORKLOADS):
+        for variant,color,offset,label in ((3,'#777777',-.23,'Materialized FP32'),
+                                          (5,'#167d9a',0,'FP32 G32'),
+                                          (6,'#8064a2',.23,'FP32 split64 H4')):
+            values = [s for s in rows if s['query_rows']==r and s['rows']==t and s['variant']==variant]
+            ax.barh([stages.index(s['stage'])+offset for s in values],
+                    [s['median_us'] for s in values],height=.21,color=color,label=label)
+        ax.set_xscale('log')
+        ax.set_title(f'Decode T={t}')
+        ax.set_xlabel('Median active GPU time (µs) · log scale')
+        ax.grid(axis='x',alpha=.15)
+    axes[0].set_yticks(range(len(stages)),stages,fontsize=10)
+    axes[0].invert_yaxis()
+    axes[0].legend(frameon=False,fontsize=9)
+    fig.suptitle('FP32 decode · where does attention time move?',fontsize=16,fontweight='bold')
+    fig.text(.04,.025,'Separate single captures; active dispatch durations exclude preemption and host gaps.\n'
+             'A missing bar means that variant does not execute that stage. Stage medians are not whole-block latency.\n'
+             f'{sum(s["count"] for s in rows):,} measured dispatch durations. Optional counter analysis is absent.\n'
+             f'{record["captures"][0]["capture"]["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention, rowwise Wo. '
+             f'Source {record["common"]["repository"]["commit"][:7]}.',fontsize=9,color='#555555')
+    fig.tight_layout(rect=(0,.15,1,.94))
+    fig.savefig(directory/'decode_profile.png',dpi=160)
+    plt.close(fig)
+
+
 def render_sublayer(directory, record, samples, summary):
     """Separate latency scaling from diagnostic per-dispatch active time."""
     prefill_style()
@@ -323,7 +395,12 @@ def render_sublayer(directory, record, samples, summary):
             render_sublayer_wo(directory,prefix)
     if (directory/'wo_profiles.json').exists():
         render_sublayer_wo_profile(directory)
-    print(directory.name, len(samples), 'baseline observations verified; attention figures and retained Wo comparisons regenerated')
+    for prefix in ('decode_screen_','decode_'):
+        if (directory/(prefix+'run.json')).exists():
+            render_sublayer_decode(directory,prefix)
+    if (directory/'decode_profiles.json').exists():
+        render_sublayer_decode_profile(directory)
+    print(directory.name, len(samples), 'baseline observations verified; attention figures and retained comparisons regenerated')
 
 
 def render(directory):

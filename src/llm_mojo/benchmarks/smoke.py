@@ -52,7 +52,7 @@ def main():
                    cwd=repository_root(),check=True)
     for r,t in ((1,64),(7,33),(33,33)):
         for layers in (1,24):
-            for variant in (3,4):
+            for variant in ((3,4,5,6) if r == 1 else (3,4)):
                 result = subprocess.run(list(map(str,[target,r,t,layers,variant,3,1,53,'bench',1,0])),
                                         cwd=repository_root(),text=True,capture_output=True,env=env,check=True)
                 if (f'query rows: {r}' not in result.stdout or
@@ -61,12 +61,13 @@ def main():
                     'api: metal' not in result.stdout or 'correctness: passed' not in result.stdout or
                     not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE')):
                     raise RuntimeError('attention sublayer measurement identity or completion mismatch')
-    for r,t,variant,seed in ((34,33,3,53),(7,4097,3,53),(7,33,0,53),(7,33,3,17)):
+    for r,t,variant,seed in ((34,33,3,53),(7,4097,3,53),(7,33,0,53),(7,33,3,17),
+                           (7,33,5,53),(7,33,6,53)):
         result = subprocess.run(list(map(str,[target,r,t,1,variant,3,1,seed,'bench',1,0])),
                                 cwd=repository_root(),capture_output=True,env=env)
         if result.returncode == 0:
             raise RuntimeError('invalid attention sublayer benchmark accepted')
-    print('attention sublayer FP32 and Wo MMA measurement routes passed in both modes',flush=True)
+    print('attention sublayer FP32, Wo MMA and FP32 decode measurement routes passed in both modes',flush=True)
 
 
 if __name__ == '__main__':

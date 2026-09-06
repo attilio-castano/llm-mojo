@@ -37,12 +37,12 @@ def _run_cases(composed: Bool) raises:
             except:
                 failed_cases += 1
             continue
-        for route in range(4):
+        for route in range(6):
             if nq != 14 and route != 0 and route != 3:
                 continue
             for chunked in range(2):
                 try:
-                    _case(case_id, nq, nk, d, t, route, Bool(chunked), "fp32", route == 3)
+                    _case(case_id, nq, nk, d, t, route, Bool(chunked), "fp32", route >= 3)
                 except:
                     failed_cases += 1
         # Same original X, fixed FP32 attention policy and unchanged gates;

@@ -134,7 +134,8 @@ def main():
     p.add_argument('--build-dir', type=Path, required=True)
     p.add_argument('--output', type=Path)
     p.add_argument('--studies', nargs='+', choices=list(STUDIES),
-                   default=[name for name in STUDIES if not name.endswith('_screen') and name != 'attention_sublayer_wo'])
+                   default=[name for name in STUDIES if not name.endswith('_screen')
+                            and name not in ('attention_sublayer_wo','attention_sublayer_decode')])
     args = p.parse_args()
     if args.command == 'build':
         build(args.build_dir.resolve())

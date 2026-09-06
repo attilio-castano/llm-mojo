@@ -46,6 +46,28 @@ class AttentionProfileTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             sublayer.profile_grid(dict(variants=[3],workloads=sublayer.PROFILE_WORKLOADS[:-1]))
 
+    def test_fp32_decode_profiles_bind_variant_specific_dispatches(self):
+        for variant,dispatches in ((5,10),(6,11)):
+            with self.subTest(variant=variant):
+                p = self.profile()
+                p.update(operation=sublayer.OPERATION,
+                         implementation=f'attention_sublayer_{variant}',
+                         entrypoint='enqueue_attention_sublayer', profile_iterations=450,
+                         **sublayer.specification(variant,1,4096))
+                cfg,_,_ = profile_contract(p)
+                self.assertEqual(cfg['dispatches_per_iteration'],dispatches)
+                for key,value in (('dispatches_per_iteration',12),
+                                  ('profile_workload','sublayer-r1-t4096-v3'),
+                                  ('profile_rows',2),('profile_iterations',501)):
+                    with self.assertRaises(ValueError):
+                        sublayer.configuration({**p,key:value})
+        stages,grid = sublayer.profile_grid(dict(variants=[3,5,6],
+                                               workloads=sublayer.DECODE_PROFILE_WORKLOADS))
+        self.assertEqual([len(stages[v]) for v in (3,5,6)],[12,10,11])
+        self.assertEqual(len(grid),6)
+        with self.assertRaises(ValueError):
+            sublayer.profile_grid(dict(variants=[3,5,6],workloads=sublayer.PROFILE_WORKLOADS))
+
     def test_prefill_profile_binds_rectangular_shape_and_tile_ownership(self):
         for variant in prefill.VARIANTS:
             p = self.profile()

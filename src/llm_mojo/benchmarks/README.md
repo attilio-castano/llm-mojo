@@ -85,7 +85,16 @@ allocations, with two sign patterns; it shares output/scratch and is not a
 decoder stack. Every call overwrites the same suffix. Only the host length
 rewind, actual sublayer enqueue and completion are timed.
 
-For its twelve-stage Metal trace, use the existing builder with
+The next contained comparison uses `--studies attention_sublayer_decode_screen`
+at T=64/4096, then `--studies attention_sublayer_decode` at all six decode
+lengths if the declared gate passes. Benchmark variants 5/6 select FP32
+G32/split64-H4 with rowwise Wo; variant 3 is the materialized FP32 control.
+Both new variants require R=1 in this instrument. They contain 10/11
+dispatches per call. Use `profile_summary --attention-sublayer
+--decode-comparison --prefix decode_` to curate variants 3/5/6 at R=1 and
+T=64/4096. The existing plot command also regenerates this retained comparison.
+
+For the original twelve-stage Metal baseline, use the existing builder with
 `--operation attention_sublayer --profile-variant 3 --profile-query-rows R
 --profile-rows T --profile-warmup 10 --profile-iterations N`.
 The bounded profile grid is `(1,4096), (1024,1024), (4096,4096), (64,4096)`;
