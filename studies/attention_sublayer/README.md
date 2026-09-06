@@ -1,11 +1,11 @@
 # Qwen attention sublayer
 
-Changing only the output projection to the existing Apple MMA mapping reduces
-whole-attention latency by about 31% at 256-token full prefill and 10% at 4096
-tokens, on Apple M4 Pro / Metal. Decode has no demonstrated gain and two hot
-cases regress. The mapping remains an explicit option, with rowwise Wo as the
-default. This study retains the original FP32 baseline and the completed
-[contained Wo comparison](#contained-wo-results), including negative results.
+FP32 online decode reduces whole-attention latency by **61–69% at T=1024**
+and **89–91% at T=4096**, on Apple M4 Pro / Metal. The earlier Wo-only
+experiment improves full prefill by about 31% at 256 tokens and 10% at 4096.
+These are separate paired comparisons against their matching controls, not
+multipliable speedups. Both experiments retain their negative and inconclusive
+results; new mappings remain explicit options.
 
 The measured unit is
 `X → RMSNorm → Q/K/V → RoPE → KV append → GQA → Wo → residual X+branch`.
@@ -250,6 +250,101 @@ No target compiler spill event was reported in these captures; that does not
 prove every invocation is spill-free. Optional counter tables were not exported
 or analyzed for this comparison; missing values are not zero.
 
+## Contained FP32 decode results
+
+The two candidates change GQA ownership while retaining FP32 scaled scores,
+online softmax state, weights and accumulation. BF16 Q/K/V, cache and output,
+rowwise Wo and all surrounding stages remain fixed. G32 divides a head's
+sequence among 32 SIMD groups and merges inside one threadgroup; split64-H4
+uses 64 sequence pieces and shares K/V across up to four related query heads,
+then launches a separate merge. See the [predeclared design and gates](../../docs/attention-sublayer.md#contained-fp32-decode-comparison).
+
+### Accuracy and discrimination
+
+The full workflow passed **83 Mojo tests and 39 Python tests**, verified all
+510 frozen synthetic arrays and reproduced 63 checkpoint arrays. Twelve
+asynchronous 65-token sequences passed on each of seven configurations,
+including both candidates without materialized scratch. All numerical gates
+and exact cache requirements remain unchanged.
+
+There are 408 strict comparisons against the pinned upstream FP32 attention
+outputs using exact upstream Q/K/V at predefined cache prefixes. The largest
+scaled error is 0.003649635 for synthetic inputs and 0.00012019231 for checkpoint
+inputs, within the 0.0078125 GQA gate. Existing standalone edge fixtures add
+NaN guards, tied and extreme scores, ragged/empty splits, cancellation and head
+mapping checks against materialized FP32 Mojo. Those supplement the primary
+upstream comparison. [decode_validation.json](decode_validation.json) retains
+all commands, hashes and numerical results.
+
+A diagnostic probe on existing hard seed 887 changes only the isolated decode
+comparison back to the older BF16 score boundary. It fails 24 of 30 strict
+prefix checks, with maximum scaled error 0.1813063; the FP32 version passes all
+30, maximum 0.002020202. This shows the checks distinguish the agreed precision
+policy. It does not make the historical BF16 policy invalid for every backend.
+Composition gates also pass for all synthetic/checkpoint cases and R>1 fallback.
+
+### Whole-block comparison
+
+Seven of eight candidate screening comparisons qualified, advancing the fixed
+three-way matrix. The full run uses fresh self-pair calibration and retains
+**13 faster, 11 inconclusive and zero slower** decisions across 24 comparisons.
+G32 accounts for eight gains and split64-H4 for five. The candidates are each
+paired against materialized FP32; they are not paired directly with one another.
+No G32/split crossover or default selector follows from this experiment.
+
+| T | G32 hot reduction | G32 ring24 reduction | Split64-H4 hot reduction | Split64-H4 ring24 reduction |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 13.62% | 14.27% | 17.40% | Inconclusive |
+| 16 | Inconclusive | Inconclusive | Inconclusive | Inconclusive |
+| 64 | Inconclusive | 16.73% | Inconclusive | Inconclusive |
+| 256 | Inconclusive | 24.16% | Inconclusive | Inconclusive |
+| 1024 | 66.74% | 65.40% | 68.65% | 61.42% |
+| 4096 | 88.79% | 90.67% | 88.97% | 89.47% |
+
+At T=4096, G32 paired-control/candidate medians are 2473.250 → 274.750 µs hot
+and 2680.635 → 250.479 µs ring24 per call. Split64-H4 has separate paired
+controls: 2492.000 → 274.500 µs hot and 2693.865 → 283.875 µs ring24.
+Reported reductions use paired block ratios; the displayed times are medians
+of block medians. Their ratio need not equal the paired result. The complete
+[table](decode_summary.csv) includes all four ratios, absolute times and rules.
+
+Short hot cases remain noisy: matching self-pair thresholds reach 105.2% at
+T=16, 163.8% at T=64 and 46.2% at T=256. All samples are retained. For example,
+G32 hot T=256 has a 42.56% median paired reduction but is inconclusive because
+it does not exceed its matching calibration threshold.
+
+![FP32 decode whole-block comparison](decode.png)
+
+### What the profiles establish
+
+At T=4096 the materialized control spends 94.5% of its total recorded active
+GPU time in serial softmax/PV. Their stage medians are 1108.959 and 1002.812 µs.
+The fused candidates distribute that sequence work and retain online FP32
+state instead of scanning a materialized score/probability array. Their whole
+block executes 10 dispatches (G32) or 11 (split64), versus 12 for the control.
+A production single-row call needs no quadratic scratch for these routes;
+the comparison instrument still allocates its common control scratch outside
+timing, so it does not measure an allocation benefit.
+
+![Decode stages with all three mappings](decode_profile.png)
+
+These separate captures have significant variation in unchanged stages:
+Q projection at T=4096 has medians 15.146, 23.604 and 35.145 µs for control,
+G32 and split64 respectively. A few large durations also distort summed stage
+shares: G32 T=64 K projection has a 35.126 µs median but a 2113.541 µs maximum.
+The [profile table](decode_profile_summary.csv) retains every range. All
+captures passed provenance and exact dispatch-sequence checks; eight measured
+control T=4096 dispatches had segmented execution and were coalesced before
+stage assignment. No target spill event was reported; optional counters were
+not analyzed. Power/thermal checks passed but do not pin clocks or identify
+the cause of cross-capture variation.
+
+Consequently the profiles support a qualitative change in remaining work:
+projections and other stages become material once the long serial attention
+passes disappear. They do not support a precise cross-capture kernel speedup,
+a direct candidate ranking, or summing medians to reconstruct block latency.
+The paired measurements establish the speed claims.
+
 ## What the earlier experiments teach us
 
 The [linear prefill study](../linear_prefill/README.md) already established
@@ -263,8 +358,8 @@ improve the whole call.
 The [decode study](../gqa_decode/README.md) showed that online softmax alone
 was not the end of the optimization: distributing the KV sequence and reusing
 K/V across related heads helped further. It also found that reducing
-exponential calls did not improve the stronger controls. The next FP32 decode
-comparison should reuse those ownership designs and the existing tests while
+exponential calls did not improve the stronger controls. The completed FP32 decode
+comparison reuses those ownership designs and the existing tests while
 keeping scores FP32 and checking against the selected FP32 reference. The old
 timings establish results for those older
 paths, not speed claims for an FP32 adaptation.
@@ -278,10 +373,8 @@ lessons about live state and query ownership. They also need to preserve
 FP32 scores and softmax weights through PV: copying the old MMA path's BF16
 tile-weight cast would change the numerical policy again.
 
-Keep the next milestones separate. First compare FP32 versions of the existing
-G32 and split64-H4 decode designs against the materialized control. Then study
-FP32 prefill tiling and PV arithmetic, including the compiler's resource
-behavior. Q projection is another contained candidate, particularly at 1024
+The decode milestone is complete. Next study FP32 prefill tiling and PV
+arithmetic, including the compiler's resource behavior. Q projection is another contained candidate, particularly at 1024
 tokens, but its rounding changes feed attention scores; rerun operation and
 full-block gates. Broader fusion should follow measured remaining stage costs.
 
@@ -335,6 +428,22 @@ controls for its comparisons. Post-measurement changes curate evidence, update
 reporting and check retained records; they do not change the measured Mojo
 engine or its numerical tests. All five tables and five figures regenerate
 byte-for-byte from the retained files.
+
+The decode screen and full run use clean source
+`d2a320f0705e0459fd1e8c3c8c50b76a745f1b47`, on 2026-09-06 at
+20:22:52–20:23:38 and 20:23:39–20:25:13 UTC. They retain 960 and 2,880
+observations in [decode_screen_run.json](decode_screen_run.json),
+[decode_screen_samples.csv.gz](decode_screen_samples.csv.gz),
+[decode_run.json](decode_run.json) and [decode_samples.csv.gz](decode_samples.csv.gz).
+The six captures use that same clean source and retain 3,300 durations in
+[decode_profiles.json](decode_profiles.json) and
+[decode_profile_samples.csv.gz](decode_profile_samples.csv.gz), with 50 measured
+iterations and 20 warmups per capture. Both timing modes and each candidate's
+actual route are validated before timing. All conditions checks passed.
+Post-measurement reporting changes do not alter the measured engine or gates.
+All eight tables and eight figures regenerate from retained raw evidence;
+39 Python checks validate the retained records, including missing/duplicate
+dispatch rejection for each profile grid.
 
 Rebuild tables and figures without a GPU:
 

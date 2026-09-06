@@ -281,6 +281,9 @@ def render_sublayer_decode(directory, prefix):
         ax.grid(axis='x',alpha=.18)
         ax.set_title('Hot call' if layers==1 else 'Ring24 per call')
         ax.set_xlabel('Whole-block time / paired materialized control · log scale')
+    candidates = [s for s in summary if s['candidate'] in (5,6)]
+    axes[0].set_xlim(min(s['ratio_min'] for s in candidates)/1.2,
+                     max(1,max(s['ratio_max'] for s in candidates))*1.2)
     axes[0].set_yticks(range(len(lengths)),[f'Decode T={t}' for t in lengths])
     axes[0].invert_yaxis()
     axes[0].legend(frameon=False,fontsize=10)
@@ -321,7 +324,7 @@ def render_sublayer_decode_profile(directory):
     fig.suptitle('FP32 decode · where does attention time move?',fontsize=16,fontweight='bold')
     fig.text(.04,.025,'Separate single captures; active dispatch durations exclude preemption and host gaps.\n'
              'A missing bar means that variant does not execute that stage. Stage medians are not whole-block latency.\n'
-             f'{sum(s["count"] for s in rows):,} measured dispatch durations. Optional counter analysis is absent.\n'
+             f'{sum(s["count"] for s in rows):,} durations. Unchanged stages vary across captures; use paired latency for speed claims.\n'
              f'{record["captures"][0]["capture"]["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention, rowwise Wo. '
              f'Source {record["common"]["repository"]["commit"][:7]}.',fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.15,1,.94))
