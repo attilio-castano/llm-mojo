@@ -93,3 +93,24 @@ class StudyTests(unittest.TestCase):
             path.write_bytes(gzip.compress(b'corrupted'))
             with self.assertRaisesRegex(ValueError, 'hash'):
                 load_run(directory)
+
+    def test_prefill_query_rows_are_part_of_runtime_and_calibration_identity(self):
+        output = self.output().replace('operation: linear','operation: gqa_prefill')
+        output = 'query rows: 7\n' + output
+        kwargs = dict(rows=16,layers=24,seed=53,operation='gqa_prefill')
+        self.assertEqual(len(parse_output(output,0,1,False,query_rows=7,**kwargs)[1]),20)
+        for wrong in (None,8,0,17,True):
+            with self.assertRaises(ValueError):
+                parse_output(output,0,1,False,query_rows=wrong,**kwargs)
+        spec = dict(control=0,candidates=[0,1],workloads=[dict(query_rows=r,rows=16) for r in (7,16)])
+        samples = [dict(**s,query_rows=r) for r in (7,16) for s in self.samples()]
+        result = summarize(samples,spec)
+        self.assertEqual({s['query_rows'] for s in result},{7,16})
+        # A full-prefill calibration must not stand in for an incremental one.
+        missing = [s for s in samples if not (s['query_rows']==7 and s['candidate']==0)]
+        with self.assertRaises(ValueError):
+            summarize(missing,spec)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)/'samples.csv.gz'
+            path.write_bytes(encode_samples(samples))
+            self.assertEqual(read_samples(path),samples)

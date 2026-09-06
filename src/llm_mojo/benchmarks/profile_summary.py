@@ -6,18 +6,27 @@ import io
 import json
 from pathlib import Path
 
-from .analyze_trace import (integer, read_table, segment_compute_commands, duration_summary)
-from .study import sha, write_json
+from .analyze_trace import (integer, read_table, segment_compute_commands, duration_summary, coalesce_compute_commands)
+from .study import sha, write_json, PREFILL_PROFILE_WORKLOADS, prefill_profile_grid
 
 STAGES = {0: ['QK', 'softmax', 'PV'], 4: ['fused'], 9: ['decode', 'merge']}
 COUNTERS = {'Kernel Occupancy', 'Instruction Throughput Limiter', 'Last Level Cache Limiter'}
 
 
-def collect(source, output):
+def collect(source, output, prefill_variant=None, *, prefill_variants=None, prefix=''):
     records, samples = [], []
     common = None
-    for variant, stages in STAGES.items():
-        directory = source / str(variant)
+    if prefill_variant is not None and prefill_variants is not None:
+        raise ValueError('choose one prefill comparison')
+    variants = [0,prefill_variant] if prefill_variant is not None else prefill_variants
+    prefill = variants is not None
+    spec = dict(workloads=PREFILL_PROFILE_WORKLOADS,variants=list(variants)) if prefill else {}
+    stage_map, _ = prefill_profile_grid(spec) if prefill else (STAGES, None)
+    captures = [(r,t,v,f'r{r}-t{t}-v{v}') for r,t in PREFILL_PROFILE_WORKLOADS for v in variants] if prefill else [
+        (None,None,v,str(v)) for v in STAGES]
+    for r,t,variant,folder in captures:
+        stages = stage_map[variant]
+        directory = source / folder
         report = json.loads((directory / 'summary.json').read_text())
         provenance = json.loads((directory / 'profile.provenance.json').read_text())
         identity = report['capture_identity']
@@ -26,6 +35,10 @@ def collect(source, output):
         if identity['provenance']['sha256'] != sha(directory / 'profile.provenance.json'):
             raise ValueError('profile provenance changed')
         current = {k: provenance[k] for k in ('repository', 'hardware', 'software', 'source_sha256')}
+        if 'analysis_source_sha256' not in report:
+            raise ValueError('profile must be reanalyzed with dispatch coalescing')
+        current['analysis_source_sha256'] = report['analysis_source_sha256']
+        current['curation_source_sha256'] = sha(Path(__file__))
         if common is not None and current != common:
             raise ValueError('captures must share source and environment')
         common = current
@@ -45,26 +58,38 @@ def collect(source, output):
                      and r['channel-name'][0] == 'Compute' and ':Compute Command' in r['event-label'][1]]
         intervals.sort(key=lambda r: integer(r, 'start'))
         workload = identity['workload']
+        shape = dict(query_rows=r,rows=t) if prefill else {}
+        if prefill and (
+            workload['profile_rows'] != r or workload['key_value_rows'] != t or
+            identity['implementation'] != f'gqa_prefill_{variant}'
+        ):
+            raise ValueError('prefill capture differs from requested comparison')
+        intervals, coalescing = coalesce_compute_commands(intervals,submissions,
+            (workload['warmup_iterations']+workload['profile_iterations'])*len(stages))
+        if coalescing != report['validated_sequence']['interval_coalescing']:
+            raise ValueError('dispatch coalescing differs from validated analysis')
         *_, profile = segment_compute_commands(intervals, workload['warmup_iterations'],
                                                workload['profile_iterations'], len(stages), False)
         if duration_summary(profile) != report['instrumented_gpu_interval_duration']['profile']:
             raise ValueError('profile sequence differs from validated analysis')
         for i, row in enumerate(profile):
-            samples.append(dict(variant=variant, iteration=i // len(stages), stage=stages[i % len(stages)],
+            samples.append(dict(**shape,variant=variant, iteration=i // len(stages), stage=stages[i % len(stages)],
                                 duration_ns=integer(row, 'duration')))
-        records.append(dict(variant=variant, capture=identity, trace=report['trace'],
+        records.append(dict(**shape,variant=variant, capture=identity, trace=report['trace'],
+                            interval_coalescing=coalescing,fragmented_profile_dispatches=report['validated_sequence']['fragmented_profile_dispatches'],
                             conditions=json.loads((directory / 'conditions.json').read_text()),
                             counters_scope=report['profile_gpu_counters']['scope'],
                             counters=[c for c in report['profile_gpu_counters']['counters'] if c['name'] in COUNTERS],
                             spills=report['compiler_spills']))
     stream = io.StringIO(newline='')
-    writer = csv.DictWriter(stream, fieldnames=['variant', 'iteration', 'stage', 'duration_ns'], lineterminator='\n')
+    writer = csv.DictWriter(stream, fieldnames=list(samples[0]), lineterminator='\n')
     writer.writeheader(); writer.writerows(samples)
-    raw = output / 'profile_samples.csv.gz'
+    raw = output / (prefix+'profile_samples.csv.gz')
     raw.write_bytes(gzip.compress(stream.getvalue().encode(), mtime=0))
-    write_json(output / 'profiles.json', dict(schema=1, common=common, captures=records,
+    write_json(output / (prefix+'profiles.json'), dict(schema=2 if prefill else 1,
+                **(dict(specification=spec) if prefill else {}), common=common, captures=records,
                 samples_sha256=sha(raw),
-                boundary='Instrumented GPU dispatch durations; three single captures, not paired latency trials. Counter statistics are device-wide within each target window. Stage labels follow the validated source enqueue order.',
+                boundary=f'Instrumented GPU active dispatch durations (non-overlapping segments summed, preemption gaps excluded); {len(captures)} single captures, not paired latency trials. Counter statistics are device-wide within each target window. Stage labels follow the validated source enqueue order.',
                 retention='All target dispatch durations retained. Three named counter summaries retained; full trace/XML exports and other counters remain external.'))
 
 
@@ -72,5 +97,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source', type=Path)
     parser.add_argument('output', type=Path)
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--prefill-variant',type=int)
+    group.add_argument('--prefill-variants',type=int,nargs='+')
+    parser.add_argument('--prefix',default='')
     args = parser.parse_args()
-    collect(args.source, args.output)
+    collect(args.source, args.output, args.prefill_variant,
+            prefill_variants=args.prefill_variants, prefix=args.prefix)

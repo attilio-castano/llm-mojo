@@ -1,0 +1,466 @@
+{
+  "schema": 1,
+  "study": "gqa_prefill",
+  "specification": {
+    "operation": "gqa_prefill",
+    "control": 8,
+    "candidates": [
+      0,
+      7,
+      8,
+      10
+    ],
+    "workloads": [
+      {
+        "query_rows": 16,
+        "rows": 16
+      },
+      {
+        "query_rows": 64,
+        "rows": 64
+      },
+      {
+        "query_rows": 256,
+        "rows": 256
+      },
+      {
+        "query_rows": 1024,
+        "rows": 1024
+      },
+      {
+        "query_rows": 4096,
+        "rows": 4096
+      },
+      {
+        "query_rows": 16,
+        "rows": 256
+      },
+      {
+        "query_rows": 16,
+        "rows": 1024
+      },
+      {
+        "query_rows": 16,
+        "rows": 4096
+      },
+      {
+        "query_rows": 64,
+        "rows": 1024
+      },
+      {
+        "query_rows": 64,
+        "rows": 4096
+      },
+      {
+        "query_rows": 256,
+        "rows": 4096
+      }
+    ],
+    "names": {
+      "0": "materialized",
+      "1": "cooperative softmax",
+      "2": "streaming",
+      "3": "tile 8x32",
+      "4": "tile 16x32",
+      "5": "tile 32x32",
+      "6": "tile 16x64",
+      "7": "MMA 16x32",
+      "8": "MMA 32x32",
+      "9": "MMA H2",
+      "10": "MMA H4"
+    },
+    "layout": "Q/O[R,14,64], K/V[T,2,64]; contiguous row major; query position T-R+r",
+    "arithmetic": "BF16 scaled scores; FP32 online states for fused paths; MMA rounds unnormalized tile weights to BF16 before PV; output BF16"
+  },
+  "repository": {
+    "commit": "bf4277c2aa260a49de4aea60c1316b1df419713a",
+    "branch": "codex/gqa-prefill-study",
+    "dirty": false
+  },
+  "build": {
+    "repository": {
+      "commit": "bf4277c2aa260a49de4aea60c1316b1df419713a",
+      "branch": "codex/gqa-prefill-study",
+      "dirty": false
+    },
+    "sources": {
+      "pyproject.toml": "d31b8de28d1284f4bc247cdd306f3078dbf94b67c17d67ff9eae9752e611bc9d",
+      "src/llm_mojo/__init__.mojo": "54ca844ca97d5f13084dae07021cbe9535b95cf3414d5133daec18787507d905",
+      "src/llm_mojo/__init__.py": "d45f08c560f8a501262a3c17663244a1a74fb76658d746e99a430dbc1f9935b7",
+      "src/llm_mojo/_repository.py": "900f133c6c5a89b14884e2353e882d1bae589cd0280f726cc7df990b5ab9eefe",
+      "src/llm_mojo/attention.mojo": "ea24655495210711e958b0f2fec1eb10b4f7a5a9cbd3214378e22e57cabce8b8",
+      "src/llm_mojo/attention_decode.mojo": "d217c580b3f8183b3d80a6400a751058b32052d15106e11caf21a85dc167a4c9",
+      "src/llm_mojo/attention_prefill.mojo": "f376f945a1bafad80f2cd13218bd378287d1730b97348d984a5064c4d1dbdc03",
+      "src/llm_mojo/benchmarks/__init__.mojo": "b8a8f32ace824dd687bc6b2f87afeb3180f7b5ac78684ecefd669201a1e9801c",
+      "src/llm_mojo/benchmarks/__init__.py": "11fddc93cafb04100810b633bfea5b41fb2ba60a48383c9fecb3fdd1ae9cd00c",
+      "src/llm_mojo/benchmarks/analyze_trace.py": "f1bf9549c22ba850ea43b73087fbe5777869a200aeb576e2829b73d1d1693c80",
+      "src/llm_mojo/benchmarks/attention_contract.py": "137c88f598753a492452e7da81e4639e4ac315c420d8778ff2cc75e28c9d92d6",
+      "src/llm_mojo/benchmarks/attention_decode.mojo": "983f00a4a01396cfa46f5064098b6155a893c0aa4c66d197f65d91b38bc6a76d",
+      "src/llm_mojo/benchmarks/attention_decode_contract.py": "36b34c75a5186931331d6ae9bab8da6e493e55f6c8a612614c26a6c613dbd201",
+      "src/llm_mojo/benchmarks/attention_decode_support.mojo": "55ad60c4cbf1379adfb0575e840db8726d8d64103d6d973c20d71366c32a9968",
+      "src/llm_mojo/benchmarks/attention_prefill.mojo": "fa7b9d095deee29bfe0b44e0c34282c7e06571dc72602fa769e65ae8ff41e726",
+      "src/llm_mojo/benchmarks/attention_prefill_contract.py": "079092294225c7f61bdd89259edb79927eb707eefdf6db74a4616a97081042b3",
+      "src/llm_mojo/benchmarks/attention_prefill_support.mojo": "474f3ef3aa4db60ac0dfb8e1ba29c77924973600678da4f50b585b66c6ccebcc",
+      "src/llm_mojo/benchmarks/capture_trace.py": "7772fd1494fea652126996067c8dabea11eb854016515a68411d3e1d15b1f73a",
+      "src/llm_mojo/benchmarks/environment.py": "03688054b017b428a2c4c6f3be10f5be702fcf76e4e8585a02d613cbbf0fe3f7",
+      "src/llm_mojo/benchmarks/operations.mojo": "3d3a96985d42cfbb314cda9fd7d4318a11e9fe841b3f52347b6402309d071561",
+      "src/llm_mojo/benchmarks/plot.py": "ef2aefc3ba0fd677ff1608ac971c1d463194cf4c591715d08923dba7c8822408",
+      "src/llm_mojo/benchmarks/profile.py": "9c9c0d2544199c5d7ec618670750cf4d19661a6942ac473827dcabcaf716e1f1",
+      "src/llm_mojo/benchmarks/profile_summary.py": "fd37c55d0d519f8ab297ac7380f3ac30d3af38422f1a5f3dcd55e5a00e358875",
+      "src/llm_mojo/benchmarks/run.py": "b66745463408e15fbcece05d5edba4b6b5b0c270e390d9c7fe9b0e07ee717e7c",
+      "src/llm_mojo/benchmarks/smoke.py": "aa56610679cf0c8f74f56ed7a998a58be748e6464c3ccee4f72e8511f8677789",
+      "src/llm_mojo/benchmarks/study.py": "471e8876b84833b3b119a4b47027200d74d417748d15e12499cd57ab7dd40ef1",
+      "src/llm_mojo/linear.mojo": "a0b0b5d09fa5f2c83abe2d91e10dd1066fefb26c0985e682850c45717bd26607",
+      "src/llm_mojo/rms_norm.mojo": "a555c33f86c6f893b780beab8033a9495ad62e502d0670753e7639850fba0f56",
+      "src/llm_mojo/rope.mojo": "939df2ea49af9f711879d1525a212c4b6f73df86dda166681a633dd7f26996a8",
+      "src/llm_mojo/validate.py": "24d858063cd91ee9bf2d37266070895b2660dd28bc6736594f73f15395e9707f",
+      "tests/fixtures/attention/generate.py": "b69d61c30f796e107b2e857d4f79df3488592dfe708c4178753db374cc9951a0",
+      "tests/fixtures/attention/generate_decode.py": "dd82f833f9507cd54edfaf95c5b2ade7381fefb6f612547b8849711be503861a",
+      "tests/fixtures/attention/generate_prefill.py": "35193674d82c1b5ca18a642b452de298ad58dcc2a609396c895f8b2819a3f54e",
+      "tests/fixtures/checksums.json": "becd13cec305f11367f5523d4c80732052215f7862070c6635ad4b7cb59ab51b",
+      "tests/fixtures/linear/generate.py": "b87b5841c1dba556750dbf53de3bcf078a4f2d70538bac0db563c1304c0ca951",
+      "tests/fixtures/rms_norm/generate.py": "e01e8e2bd0f6723921a8f3c65803c87c3aa89818569a9a62b5794e381892389e",
+      "tests/fixtures/rope/generate.py": "7c616a7d991876d176e4b9808257b3c2c4c43641b5b51bae693eb1a20769eda5",
+      "uv.lock": "a96fdc1a706203ed10ae74d7d1afd69c99e335068fe8dd0f184e67789559cca2"
+    },
+    "binaries": {
+      "operations": "28255a1915e7e9e0d37c5286af3007bff0fa6640a3e5ade192579061ef86d71d",
+      "gqa_decode": "bf004ae95c8ba1cc4d01555b9e997a5c950dc585e35d9cea6ba903aa0f16f36c",
+      "gqa_prefill": "44dfe4df226010b2fdb65f08fc0beebcf9cab3e8ea580cf798f9f290b8c4b5b8"
+    },
+    "commands": {
+      "operations": [
+        "uv",
+        "run",
+        "--locked",
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/operations.mojo",
+        "-o",
+        "<binary>"
+      ],
+      "gqa_decode": [
+        "uv",
+        "run",
+        "--locked",
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/attention_decode.mojo",
+        "-o",
+        "<binary>"
+      ],
+      "gqa_prefill": [
+        "uv",
+        "run",
+        "--locked",
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/attention_prefill.mojo",
+        "-o",
+        "<binary>"
+      ]
+    },
+    "environment": {
+      "hardware": {
+        "model": "Mac16,7",
+        "chip": "Apple M4 Pro",
+        "logical_cpu_count": "14",
+        "gpu_api": "metal",
+        "gpu_target": "metal:4-metal4",
+        "physical_memory_bytes": 25769803776
+      },
+      "software": {
+        "macos": "26.6.2",
+        "macos_build": "25G83",
+        "darwin": "25.6.0",
+        "xcode": [
+          "Xcode 26.6",
+          "Build version 17F113"
+        ],
+        "metal": [
+          "Apple metal version 32023.883 (metalfe-32023.883)",
+          "Target: air64-apple-darwin25.6.0",
+          "Thread model: posix"
+        ],
+        "uv": "uv 0.12.5 (210d1f678 2026-08-14 aarch64-apple-darwin)",
+        "mojo": "1.0.0",
+        "max": "26.5.0"
+      }
+    }
+  },
+  "seed": 53,
+  "repetitions": 10,
+  "warmup": 10,
+  "blocks": 4,
+  "dtype": "BF16 operands/output; FP32 accumulation. GQA rounds scaled scores to BF16.",
+  "timing": "Host monotonic enqueue through one synchronization per sample; microseconds per call. 24 distinct input or weight buffers, divided by 24; output/scratch reused.",
+  "inputs": "GQA deterministic signed recipe, seed + 13*layer; other operations analytical constants varying by layer, see operations.mojo. Numerical suites cover nonuniform data.",
+  "started_utc": "2026-09-05T19:45:18.616645+00:00",
+  "conditions": [
+    {
+      "block": 1,
+      "before": {
+        "timestamp_utc": "2026-09-05T19:45:18.616758+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 66
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-05T19:51:14.079826+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 66
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    },
+    {
+      "block": 2,
+      "before": {
+        "timestamp_utc": "2026-09-05T19:51:14.395098+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 66
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-05T19:57:06.888032+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 67
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    },
+    {
+      "block": 3,
+      "before": {
+        "timestamp_utc": "2026-09-05T19:57:07.214555+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 67
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-05T20:02:58.861608+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 66
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    },
+    {
+      "block": 4,
+      "before": {
+        "timestamp_utc": "2026-09-05T20:02:59.179404+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 66
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-05T20:08:53.264110+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 68
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    }
+  ],
+  "runtime": {
+    "device": "Apple M4 Pro",
+    "api": "metal",
+    "correctness": "passed"
+  },
+  "completed_utc": "2026-09-05T20:08:53.903242+00:00",
+  "samples_sha256": "a993f6c168ae33aa025fb2aea229048aef87295a05f05e4b6103b5c408c12400"
+}

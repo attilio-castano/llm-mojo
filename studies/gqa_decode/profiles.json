@@ -51,7 +51,14 @@
       "tests/attention_decode_support.mojo": "55ad60c4cbf1379adfb0575e840db8726d8d64103d6d973c20d71366c32a9968",
       "tests/fixtures/checksums.json": "f058d95cfec552afcbafee9faf084823f8afda0edb543e0d8fd788fad865138e",
       "uv.lock": "a96fdc1a706203ed10ae74d7d1afd69c99e335068fe8dd0f184e67789559cca2"
-    }
+    },
+    "analysis_source_sha256": {
+      "analyze_trace.py": "a01eb2641a4adbf18d0ddd228dbc98c1051426d64bc0427b061fb193c83db5b9",
+      "attention_contract.py": "137c88f598753a492452e7da81e4639e4ac315c420d8778ff2cc75e28c9d92d6",
+      "attention_decode_contract.py": "36b34c75a5186931331d6ae9bab8da6e493e55f6c8a612614c26a6c613dbd201",
+      "attention_prefill_contract.py": "079092294225c7f61bdd89259edb79927eb707eefdf6db74a4616a97081042b3"
+    },
+    "curation_source_sha256": "2b2496ebf12faef50d7bcc554c0c297ff0093a5860457e871cae9ae3119380ae"
   },
   "captures": [
     {
@@ -126,6 +133,14 @@
         },
         "template": "LLM_Mojo_Metal_Limiters"
       },
+      "interval_coalescing": {
+        "active_intervals": 1812,
+        "dispatches": 1809,
+        "fragmented_dispatches": 3,
+        "verified_trailing_submissions": 1800,
+        "duration_rule": "Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end."
+      },
+      "fragmented_profile_dispatches": 3,
       "conditions": {
         "before": {
           "timestamp_utc": "2026-09-05T16:26:41.599168+00:00",
@@ -191,9 +206,9 @@
           "median": 1.456939565,
           "minimum": 0.0,
           "name": "Kernel Occupancy",
-          "nonzero_sample_count": 52770,
+          "nonzero_sample_count": 52873,
           "p95": 1.459758879,
-          "sample_count": 52789,
+          "sample_count": 52892,
           "type": "Percentage",
           "unit": "percent"
         },
@@ -201,12 +216,12 @@
           "counter_id": 7,
           "description": "Measures the time during which shader instructions are attempted to be processed as a percentage of peak shader execution pipeline performance. If the instruction throughput limiter is low, you can push more ALU and non-ALU instructions from the sub-blocks that are not fully limited. As an example if the instruction throughput limiter is less than 100%, but 100% F16 limited but less than 100% limited by F32, Integer and Complex or Integer and Conditional, then there is an opportunity to push ALU instructions from these ALU sub-blocks to execute in parallel",
           "maximum": 84.769534713,
-          "median": 1.275651776,
+          "median": 1.275772695,
           "minimum": 0.0,
           "name": "Instruction Throughput Limiter",
-          "nonzero_sample_count": 52775,
-          "p95": 1.7964248662000002,
-          "sample_count": 52789,
+          "nonzero_sample_count": 52878,
+          "p95": 1.79644432285,
+          "sample_count": 52892,
           "type": "Percentage",
           "unit": "percent"
         },
@@ -214,12 +229,12 @@
           "counter_id": 82,
           "description": "Measures the time during which GPU\u2019s last level cache is attempting to service read and write requests as a percentage of cache\u2019s peak performance",
           "maximum": 96.200918302,
-          "median": 2.195378801,
+          "median": 2.195496579,
           "minimum": 0.229546605,
           "name": "Last Level Cache Limiter",
-          "nonzero_sample_count": 21904,
-          "p95": 3.8393937864499943,
-          "sample_count": 21904,
+          "nonzero_sample_count": 21947,
+          "p95": 3.8388458459000026,
+          "sample_count": 21947,
           "type": "Percentage",
           "unit": "percent"
         }
@@ -303,6 +318,14 @@
         },
         "template": "LLM_Mojo_Metal_Limiters"
       },
+      "interval_coalescing": {
+        "active_intervals": 611,
+        "dispatches": 607,
+        "fragmented_dispatches": 4,
+        "verified_trailing_submissions": 600,
+        "duration_rule": "Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end."
+      },
+      "fragmented_profile_dispatches": 3,
       "conditions": {
         "before": {
           "timestamp_utc": "2026-09-05T16:29:49.820507+00:00",
@@ -365,12 +388,12 @@
           "counter_id": 3,
           "description": "Percentage of shader core resources that are occupied by the compute kernel",
           "maximum": 28.480212904,
-          "median": 21.579157511,
+          "median": 21.581753434,
           "minimum": 0.0,
           "name": "Kernel Occupancy",
-          "nonzero_sample_count": 1796,
-          "p95": 22.839557061,
-          "sample_count": 1841,
+          "nonzero_sample_count": 1810,
+          "p95": 22.8403856622,
+          "sample_count": 1855,
           "type": "Percentage",
           "unit": "percent"
         },
@@ -378,12 +401,12 @@
           "counter_id": 7,
           "description": "Measures the time during which shader instructions are attempted to be processed as a percentage of peak shader execution pipeline performance. If the instruction throughput limiter is low, you can push more ALU and non-ALU instructions from the sub-blocks that are not fully limited. As an example if the instruction throughput limiter is less than 100%, but 100% F16 limited but less than 100% limited by F32, Integer and Complex or Integer and Conditional, then there is an opportunity to push ALU instructions from these ALU sub-blocks to execute in parallel",
           "maximum": 89.883339922,
-          "median": 43.478378501,
+          "median": 43.46291716,
           "minimum": 0.0,
           "name": "Instruction Throughput Limiter",
-          "nonzero_sample_count": 1839,
-          "p95": 63.805158784,
-          "sample_count": 1841,
+          "nonzero_sample_count": 1853,
+          "p95": 63.802455578600004,
+          "sample_count": 1855,
           "type": "Percentage",
           "unit": "percent"
         },
@@ -392,11 +415,11 @@
           "description": "Measures the time during which GPU\u2019s last level cache is attempting to service read and write requests as a percentage of cache\u2019s peak performance",
           "maximum": 100.0,
           "median": 100.0,
-          "minimum": 0.235117162,
+          "minimum": 0.031065188,
           "name": "Last Level Cache Limiter",
-          "nonzero_sample_count": 766,
+          "nonzero_sample_count": 772,
           "p95": 100.0,
-          "sample_count": 766,
+          "sample_count": 772,
           "type": "Percentage",
           "unit": "percent"
         }
@@ -480,6 +503,14 @@
         },
         "template": "LLM_Mojo_Metal_Limiters"
       },
+      "interval_coalescing": {
+        "active_intervals": 1208,
+        "dispatches": 1208,
+        "fragmented_dispatches": 0,
+        "verified_trailing_submissions": 1200,
+        "duration_rule": "Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end."
+      },
+      "fragmented_profile_dispatches": 0,
       "conditions": {
         "before": {
           "timestamp_utc": "2026-09-05T16:30:32.186314+00:00",
@@ -586,7 +617,7 @@
       }
     }
   ],
-  "samples_sha256": "ca63552f066113d93428e02d72cb1e053b3e5e433bf2f62696593be4aec38833",
-  "boundary": "Instrumented GPU dispatch durations; three single captures, not paired latency trials. Counter statistics are device-wide within each target window. Stage labels follow the validated source enqueue order.",
+  "samples_sha256": "e84ab51cc651b384923b785de0b062d03575cc13e4d40a787bc18682191efeab",
+  "boundary": "Instrumented GPU active dispatch durations (non-overlapping segments summed, preemption gaps excluded); 3 single captures, not paired latency trials. Counter statistics are device-wide within each target window. Stage labels follow the validated source enqueue order.",
   "retention": "All target dispatch durations retained. Three named counter summaries retained; full trace/XML exports and other counters remain external."
 }

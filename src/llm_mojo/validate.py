@@ -24,12 +24,17 @@ def prepare():
         run("uv", "run", "--script", f"tests/fixtures/{name}/generate.py")
         (fixtures / name / "__init__.mojo").touch()
     run("uv", "run", "--locked", "python", "tests/fixtures/attention/generate_decode.py")
+    run("uv", "run", "--locked", "python", "tests/fixtures/attention/generate_prefill.py")
     anchors = json.loads((repository_root() / "tests/fixtures/checksums.json").read_text())
     for name, expected in anchors["sha256"].items():
         actual = hashlib.sha256((fixtures / name).read_bytes()).hexdigest()
         if actual != expected:
             raise RuntimeError(f"oracle changed: {name}; review the numerical contract before updating anchors")
-    print("All generated oracles match the landed fixtures.", flush=True)
+    manifest = json.loads((fixtures / 'attention/prefill_manifest.json').read_text())
+    for name, expected in manifest['array_sha256'].items():
+        if hashlib.sha256((fixtures / 'attention' / name).read_bytes()).hexdigest() != expected:
+            raise RuntimeError(f'prefill oracle array changed: {name}')
+    print("All generated oracles match the frozen anchors.", flush=True)
 
 
 def main():

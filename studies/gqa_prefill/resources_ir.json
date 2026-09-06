@@ -1,0 +1,118 @@
+{
+  "source_commit": "9a8bc10f57f6a0a6b9477baec5e743c51b93f907",
+  "kernel_source_sha256": "fe058c6ba5026985f5b8be707738e66f41cc104197069ec32f83f94dfbbd22e5",
+  "target": "Apple M4 Pro / Metal; Q/O[R,14,64], K/V[T,2,64]; runtime R=T=1024",
+  "method": "Direct kernel-only launch with DeviceContext.enqueue_function[kernel, dump_llvm=True, dump_asm=True]. IR is intermediate lowering, not final register allocation or timing.",
+  "interpretation": "alloca sites are not physical spill bytes. Barrier ablations differ from the original control IR only by one removed barrier after normalizing the kernel symbol. Variant 11 carries the output in eight two-value fragments; an unused wide zero value remains in intermediate IR.",
+  "kernels": [
+    {
+      "variant": 8,
+      "ir_sha256": "cc2da70b7c06953c8ee51ff4981844948b4db8157817f66de0977e0081f568c4",
+      "lines": 4239,
+      "allocas": 30,
+      "barriers": 4,
+      "shared_globals": [
+        "[2048 x bfloat]",
+        "[2048 x bfloat]",
+        "[1024 x float]",
+        "[1024 x bfloat]"
+      ],
+      "schedule": 0,
+      "filename_normalized_ir_sha256": "65d17211628b26915ee80229e890f99e6360b710cfe390318e8381907370d157",
+      "shared_bytes": 14336
+    },
+    {
+      "variant": 11,
+      "ir_sha256": "eab4e5746cdbe360fe693b352e9d55a8d70e8b6a1e109e6db97b0bc84fdaccc1",
+      "lines": 4006,
+      "allocas": 6,
+      "barriers": 4,
+      "shared_globals": [
+        "[2048 x bfloat]",
+        "[2048 x bfloat]",
+        "[1024 x float]",
+        "[1024 x bfloat]"
+      ],
+      "schedule": 1,
+      "filename_normalized_ir_sha256": "42ef94d0bdc0e7d3a1cc8d1c0d7b47a9d98a15054799545249c6818151110620",
+      "shared_bytes": 14336
+    },
+    {
+      "variant": 12,
+      "ir_sha256": "8aec0a44dda7198cc62371a9e038ab801beeba0d6036e38fbda1caefa59d738c",
+      "lines": 2967,
+      "allocas": 30,
+      "barriers": 4,
+      "shared_globals": [
+        "[2048 x bfloat]",
+        "[2048 x bfloat]",
+        "[1024 x float]",
+        "[1024 x bfloat]"
+      ],
+      "schedule": 2,
+      "filename_normalized_ir_sha256": "7d1069d8fd1f1b684780d0694e0580d0acb856507e859784dc3d3db2de48534f",
+      "shared_bytes": 14336
+    },
+    {
+      "variant": 13,
+      "ir_sha256": "cb8488fb25226a966cd719162517680dd4596ef0e225535d214289ba8ba44b8c",
+      "lines": 4238,
+      "allocas": 30,
+      "barriers": 3,
+      "shared_globals": [
+        "[2048 x bfloat]",
+        "[2048 x bfloat]",
+        "[1024 x float]",
+        "[1024 x bfloat]"
+      ],
+      "normalized_difference": {
+        "removed_instruction": "call void @air.wg.barrier(i32 2, i32 1)",
+        "all_other_ir_lines_identical": true
+      },
+      "schedule": 3,
+      "filename_normalized_ir_sha256": "a4c4407b09aae1088c5e35a95a401c2888dd17f249ead0317edb933a6a31309e",
+      "shared_bytes": 14336
+    },
+    {
+      "variant": 14,
+      "ir_sha256": "1508cc91bb8ac5e094a9105d053fc2f1ff1a42c27eabab1008fa10ca951a522b",
+      "lines": 4238,
+      "allocas": 30,
+      "barriers": 3,
+      "shared_globals": [
+        "[2048 x bfloat]",
+        "[2048 x bfloat]",
+        "[1024 x float]",
+        "[1024 x bfloat]"
+      ],
+      "normalized_difference": {
+        "removed_instruction": "call void @air.wg.barrier(i32 2, i32 1)",
+        "all_other_ir_lines_identical": true
+      },
+      "schedule": 4,
+      "filename_normalized_ir_sha256": "1f505b270fe4256545a3b29ef4e6271379b523b46d720950e2218168e10cfd9e",
+      "shared_bytes": 14336
+    },
+    {
+      "variant": 15,
+      "ir_sha256": "48ca340828ae194efddce46755a04915ea8e21b93351025ec1e15e7103dc53da",
+      "lines": 4102,
+      "allocas": 30,
+      "barriers": 4,
+      "shared_globals": [
+        "[2048 x bfloat]",
+        "[2048 x bfloat]",
+        "[1024 x bfloat]"
+      ],
+      "schedule": 5,
+      "filename_normalized_ir_sha256": "c334135fa9d04f80881b3cc42dbd7e4f12753f3e0245a8033756dd62acff8b86",
+      "shared_bytes": 10240
+    }
+  ],
+  "reproducer": {
+    "path": "src/llm_mojo/benchmarks/attention_prefill_ir.mojo",
+    "sha256": "bfcbd58d4052d3fd7774c724f868d817dbb4c8402cc3f2483159eb45857fda67",
+    "command": "uv run --locked mojo run -I src -D INSPECT_SCHEDULE=S src/llm_mojo/benchmarks/attention_prefill_ir.mojo 1024 1024",
+    "verification": "All six helper outputs match the original inspected IR after removing the two header lines and trailing whitespace, and normalizing the source filename metadata to INSPECTOR.metal. Normalized hashes use these rules. Line counts include the original trailing blank line."
+  }
+}

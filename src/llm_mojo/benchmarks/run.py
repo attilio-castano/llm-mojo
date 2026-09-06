@@ -10,14 +10,14 @@ from .environment import (conditions_snapshot, ensure_record_location,
                          repository_state, require_ac, require_nominal_thermal_state,
                          stable_environment, utc_now)
 from .study import (STUDIES, BLOCKS, REPETITIONS, WARMUP, sha, write_json,
-                   encode_samples, parse_output, summarize)
+                   encode_samples, parse_output, summarize, workloads)
 
 
 
 def source_hashes():
     root = repository_root()
     paths = [*root.glob('src/**/*.mojo'), *root.glob('src/**/*.py'),
-             root / 'tests/fixtures/checksums.json', root / 'pyproject.toml', root / 'uv.lock']
+             *root.glob('tests/fixtures/**/*.py'), root / 'tests/fixtures/checksums.json', root / 'pyproject.toml', root / 'uv.lock']
     return {str(p.relative_to(root)): sha(p) for p in sorted(paths)}
 
 
@@ -31,7 +31,7 @@ def build(directory):
     sources = source_hashes()
     commands, binaries = {}, {}
     env = {k: v for k, v in os.environ.items() if k != 'MODULAR_DEBUG'}
-    for name, source in [('operations', 'operations.mojo'), ('gqa_decode', 'attention_decode.mojo')]:
+    for name, source in [('operations', 'operations.mojo'), ('gqa_decode', 'attention_decode.mojo'), ('gqa_prefill','attention_prefill.mojo')]:
         command = ['uv', 'run', '--locked', 'mojo', 'build', '-I', 'src',
                    f'src/llm_mojo/benchmarks/{source}', '-o', str(directory / name)]
         subprocess.run(command, cwd=repository_root(), env=env, check=True)
@@ -84,14 +84,17 @@ def run(build_dir, output, study_names):
         for block in range(1, BLOCKS + 1):
             before = checked_conditions()
             first = block in (2, 3)
-            workloads = [(r, l, c) for r in spec['rows'] for l in (1, 24) for c in spec['candidates']]
+            cases = [(w, l, c) for w in workloads(spec) for l in (1, 24) for c in spec['candidates']]
             if first:
-                workloads.reverse()
-            for rows, layers, candidate in workloads:
-                binary_name = 'gqa_decode' if spec['operation'] == 'gqa_decode' else 'operations'
+                cases.reverse()
+            for workload, layers, candidate in cases:
+                rows = workload['rows']
+                binary_name = spec['operation'] if spec['operation'].startswith('gqa_') else 'operations'
                 command = [str(build_dir / binary_name)]
                 if binary_name == 'operations':
                     command.append(spec['operation'])
+                if binary_name == 'gqa_prefill':
+                    command.append(str(workload['query_rows']))
                 command += list(map(str, [rows, layers, candidate, spec['control'], int(first), 53,
                                           'bench', REPETITIONS, WARMUP]))
                 process = subprocess.run(command, capture_output=True, text=True, env=env, timeout=300)
@@ -99,11 +102,11 @@ def run(build_dir, output, study_names):
                 (directory / 'last-process.txt').write_text(process.stdout + process.stderr)
                 process.check_returncode()
                 identity, observations = parse_output(process.stdout, spec['control'], candidate, first,
-                                                      rows=rows, layers=layers, seed=53, operation=spec['operation'])
+                                                      rows=rows, layers=layers, seed=53, operation=spec['operation'], query_rows=workload.get('query_rows'))
                 if record.get('runtime', identity) != identity:
                     raise RuntimeError('runtime identity changed')
                 record['runtime'] = identity
-                samples.extend(dict(block=block, rows=rows, layers=layers, candidate=candidate, **s) for s in observations)
+                samples.extend(dict(block=block, **workload, layers=layers, candidate=candidate, **s) for s in observations)
             after = checked_conditions()
             record['conditions'].append(dict(block=block, before=before, after=after))
             (directory / 'samples.csv.gz').write_bytes(encode_samples(samples))
@@ -121,7 +124,8 @@ def main():
     p.add_argument('command', choices=['build', 'run'])
     p.add_argument('--build-dir', type=Path, required=True)
     p.add_argument('--output', type=Path)
-    p.add_argument('--studies', nargs='+', choices=list(STUDIES), default=list(STUDIES))
+    p.add_argument('--studies', nargs='+', choices=list(STUDIES),
+                   default=[name for name in STUDIES if not name.endswith('_screen')])
     args = p.parse_args()
     if args.command == 'build':
         build(args.build_dir.resolve())

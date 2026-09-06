@@ -29,6 +29,38 @@ STUDIES = {
                        names={0: 'materialized', 1: 'fused G1', 4: 'fused G32', 9: 'split64 H4'},
                        layout='Q/O[1,14,64], K/V[T,2,64]; contiguous row major'),
 }
+PREFILL_NAMES = {0: 'materialized', 1: 'cooperative softmax', 2: 'streaming',
+                 3: 'tile 8x32', 4: 'tile 16x32', 5: 'tile 32x32', 6: 'tile 16x64',
+                 7: 'MMA 16x32', 8: 'MMA 32x32', 9: 'MMA H2', 10: 'MMA H4'}
+STUDIES['gqa_prefill'] = dict(
+    operation='gqa_prefill', control=8, candidates=[0, 7, 8, 10],
+    workloads=[dict(query_rows=r, rows=t) for r,t in
+               [(n,n) for n in (16,64,256,1024,4096)] +
+               [(16,256),(16,1024),(16,4096),(64,1024),(64,4096),(256,4096)]],
+    names=PREFILL_NAMES,
+    layout='Q/O[R,14,64], K/V[T,2,64]; contiguous row major; query position T-R+r',
+    arithmetic='BF16 scaled scores; FP32 online states for fused paths; MMA rounds unnormalized tile weights to BF16 before PV; output BF16')
+STUDIES['gqa_prefill_screen'] = dict(
+    **{k: v for k,v in STUDIES['gqa_prefill'].items() if k not in ('workloads','candidates','control')},
+    workloads=[dict(query_rows=r,rows=t) for r,t in ((256,256),(1024,1024),(64,4096))],
+    control=0, candidates=list(PREFILL_NAMES))
+RESOURCE_NAMES = {8: 'MMA 32x32', 11: 'fragment accumulators',
+                  12: 'rolled QK reduction', 13: 'score barrier removed',
+                  14: 'probability barrier removed', 15: 'lane-owned scores'}
+STUDIES['gqa_prefill_resources_screen'] = dict(
+    **{k:v for k,v in STUDIES['gqa_prefill'].items() if k not in ('workloads','candidates','names')},
+    workloads=[dict(query_rows=r,rows=t) for r,t in
+               [(16,16),(1024,1024),(4096,4096),(16,4096),(64,4096)]],
+    candidates=list(RESOURCE_NAMES), names=RESOURCE_NAMES)
+# Frozen after the five-ablation screen: only the rolled reduction qualified.
+STUDIES['gqa_prefill'].update(candidates=[8,12],names={v:RESOURCE_NAMES[v] for v in (8,12)})
+PREFILL_PROFILE_WORKLOADS = [(16,16),(1024,1024),(64,4096)]
+
+
+def workloads(spec):
+    return spec.get('workloads', [dict(rows=r) for r in spec.get('rows', [])])
+
+
 BLOCKS, REPETITIONS, WARMUP = 4, 10, 10
 FIELDS = ['block', 'rows', 'layers', 'candidate', 'arm', 'variant', 'repetition', 'us']
 
@@ -43,7 +75,8 @@ def write_json(path, data):
 
 def encode_samples(samples):
     stream = io.StringIO(newline='')
-    writer = csv.DictWriter(stream, fieldnames=FIELDS, lineterminator='\n')
+    fields = (['query_rows'] + FIELDS) if samples and 'query_rows' in samples[0] else FIELDS
+    writer = csv.DictWriter(stream, fieldnames=fields, lineterminator='\n')
     writer.writeheader()
     writer.writerows(samples)
     return gzip.compress(stream.getvalue().encode(), mtime=0)
@@ -52,17 +85,21 @@ def encode_samples(samples):
 def read_samples(path):
     with gzip.open(path, 'rt', newline='') as stream:
         reader = csv.DictReader(stream)
-        if reader.fieldnames != FIELDS:
+        if reader.fieldnames not in (FIELDS, ['query_rows'] + FIELDS):
             raise ValueError('unexpected sample columns')
         return [{k: (v if k == 'arm' else float(v) if k == 'us' else int(v))
                  for k, v in row.items()} for row in reader]
 
 
-def parse_output(output, control, candidate, first, *, rows, layers, seed, operation):
+def parse_output(output, control, candidate, first, *, rows, layers, seed, operation, query_rows=None):
     lines = output.splitlines()
     expected_headers = [f'shape: {rows} {layers} seed: {seed}',
                         f'variants: {control} {candidate} candidate-first: {int(first)}',
                         'api: metal', 'correctness: passed', 'BENCHMARK_COMPLETE']
+    if operation == 'gqa_prefill':
+        if type(query_rows) is not int or not 1 <= query_rows <= rows:
+            raise ValueError('invalid prefill query rows')
+        expected_headers.append(f'query rows: {query_rows}')
     if operation != 'gqa_decode':
         expected_headers.append(f'operation: {operation}')
     if any(lines.count(h) != 1 for h in expected_headers) or not output.rstrip().endswith('BENCHMARK_COMPLETE'):
@@ -92,24 +129,26 @@ def summarize(samples, spec):
     grouped = defaultdict(list)
     observed = set()
     for s in samples:
-        key = tuple(s[k] for k in ('block', 'rows', 'layers', 'candidate', 'arm', 'repetition'))
+        key = (s.get('query_rows', 0),) + tuple(s[k] for k in ('block', 'rows', 'layers', 'candidate', 'arm', 'repetition'))
         if key in observed or not math.isfinite(s['us']) or s['us'] <= 0:
             raise ValueError('duplicate or invalid observation')
         observed.add(key)
         expected_variant = spec['control'] if s['arm'] == 'control' else s['candidate']
         if s['variant'] != expected_variant:
             raise ValueError('sample implementation differs from requested arm')
-        grouped[(s['rows'], s['layers'], s['candidate'], s['block'], s['arm'])].append(s['us'])
-    expected = {(b, r, l, c, a, n) for b in range(1, BLOCKS + 1)
-                for r in spec['rows'] for l in (1, 24) for c in spec['candidates']
+        grouped[(s.get('query_rows',0),s['rows'], s['layers'], s['candidate'], s['block'], s['arm'])].append(s['us'])
+    expected = {(w.get('query_rows',0), b, w['rows'], l, c, a, n) for b in range(1, BLOCKS + 1)
+                for w in workloads(spec) for l in (1, 24) for c in spec['candidates']
                 for a in ('control', 'candidate') for n in range(REPETITIONS)}
     if observed != expected:
         raise ValueError('incomplete or unexpected study grid, including self-pair calibration')
     result = []
-    for rows in spec['rows']:
+    for workload in workloads(spec):
+        rows = workload['rows']
+        query_rows = workload.get('query_rows',0)
         for layers in (1, 24):
             def medians(candidate, arm):
-                return [statistics.median(grouped[(rows, layers, candidate, b, arm)]) for b in range(1, BLOCKS + 1)]
+                return [statistics.median(grouped[(query_rows,rows, layers, candidate, b, arm)]) for b in range(1, BLOCKS + 1)]
             noise_ratios = [a / b for a, b in zip(medians(spec['control'], 'candidate'), medians(spec['control'], 'control'))]
             floor = max(0.05, max(abs(1 - r) for r in noise_ratios))
             for candidate in spec['candidates']:
@@ -119,19 +158,19 @@ def summarize(samples, spec):
                 decision = 'calibration' if candidate == spec['control'] else (
                     'faster' if ratio < 1 - floor and all(r < 1 for r in ratios) else
                     'slower' if ratio > 1 + floor and all(r > 1 for r in ratios) else 'inconclusive')
-                result.append(dict(rows=rows, layers=layers, candidate=candidate,
+                result.append(dict(**workload, layers=layers, candidate=candidate,
                                    control_us=statistics.median(b), candidate_us=statistics.median(a),
                                    ratio=ratio, ratio_min=min(ratios), ratio_max=max(ratios),
                                    noise_floor=floor, decision=decision))
     return result
 
 
-def load_run(directory):
+def load_run(directory, prefix=''):
     directory = Path(directory)
-    record = json.loads((directory / 'run.json').read_text())
+    record = json.loads((directory / (prefix+'run.json')).read_text())
     if record.get('schema') != 1 or not record.get('completed_utc'):
         raise ValueError('incomplete or unsupported run')
-    if record['samples_sha256'] != sha(directory / 'samples.csv.gz'):
+    if record['samples_sha256'] != sha(directory / (prefix+'samples.csv.gz')):
         raise ValueError('raw sample hash mismatch')
     if record['repository']['dirty'] or record['runtime']['api'] != 'metal' or not record['runtime']['device'].startswith('Apple '):
         raise ValueError('unverified source or GPU execution')
@@ -141,20 +180,41 @@ def load_run(directory):
         raise ValueError('unsupported timing/calibration protocol')
     if [c['block'] for c in record['conditions']] != list(range(1, BLOCKS + 1)):
         raise ValueError('missing block conditions')
-    samples = read_samples(directory / 'samples.csv.gz')
+    samples = read_samples(directory / (prefix+'samples.csv.gz'))
     # Use the frozen run specification: later matrix changes cannot reinterpret evidence.
     summary = summarize(samples, record['specification'])
     return record, samples, summary
 
 
-def load_profile(directory):
+def prefill_profile_grid(spec):
+    """Validate the fixed diagnostic shapes and an explicit bounded comparison."""
+    from .attention_prefill_contract import VARIANTS
+    variants = spec['variants']
+    original = len(variants) == 2 and variants[0] == 0 and variants[1] in range(2,11)
+    resources = (len(variants) in (2,3) and variants[0] == 8
+                 and all(v >= 11 and v in VARIANTS for v in variants[1:]))
+    if not (original or resources) or len(set(variants)) != len(variants):
+        raise ValueError('invalid prefill profile variants')
+    if [tuple(w) for w in spec['workloads']] != PREFILL_PROFILE_WORKLOADS:
+        raise ValueError('invalid prefill profile grid')
+    stages = {v: (['QK','softmax','PV'] if v == 0 else ['fused']) for v in variants}
+    return stages, {(r,t,v) for r,t in spec['workloads'] for v in variants}
+
+
+def load_profile(directory, prefix=''):
     directory = Path(directory)
-    record = json.loads((directory / 'profiles.json').read_text())
-    path = directory / 'profile_samples.csv.gz'
-    if record.get('schema') != 1 or record['samples_sha256'] != sha(path):
+    record = json.loads((directory / (prefix+'profiles.json')).read_text())
+    path = directory / (prefix+'profile_samples.csv.gz')
+    if record.get('schema') not in (1,2) or record['samples_sha256'] != sha(path):
         raise ValueError('profile sample hash/schema mismatch')
-    stages = {0: ['QK', 'softmax', 'PV'], 4: ['fused'], 9: ['decode', 'merge']}
-    if len(record['captures']) != 3 or {c['variant'] for c in record['captures']} != set(stages):
+    prefill = record['schema'] == 2
+    if prefill:
+        stages, grid = prefill_profile_grid(record['specification'])
+    else:
+        stages = {0: ['QK', 'softmax', 'PV'], 4: ['fused'], 9: ['decode', 'merge']}
+        grid = {(0,0,v) for v in stages}
+    actual = {(c.get('query_rows',0),c.get('rows',0),c['variant']) for c in record['captures']}
+    if len(record['captures']) != len(grid) or actual != grid:
         raise ValueError('missing or duplicate profile capture')
     expected = set()
     for capture in record['captures']:
@@ -164,20 +224,31 @@ def load_profile(directory):
             raise ValueError('profile source mismatch')
         if identity['runtime']['backend'] != 'metal' or not identity['runtime']['device'].startswith('Apple '):
             raise ValueError('profile runtime mismatch')
-        expected.update((variant, iteration, stage)
+        r,t = capture.get('query_rows',0),capture.get('rows',0)
+        if prefill:
+            from .attention_prefill_contract import configuration, OPERATION
+            workload = identity['workload']
+            configuration({**identity,**workload,
+                           'profile_warmup_iterations':workload['warmup_iterations']})
+            if identity['operation'] != OPERATION or workload['rows'] != r:
+                raise ValueError('prefill profile operation or rows mismatch')
+        if prefill and (identity['implementation'] != f'gqa_prefill_{variant}' or
+                        identity['workload']['profile_rows'] != r or identity['workload']['key_value_rows'] != t):
+            raise ValueError('prefill profile shape or implementation mismatch')
+        expected.update((r,t,variant, iteration, stage)
                         for iteration in range(identity['workload']['profile_iterations'])
                         for stage in stages[variant])
     observed, grouped = set(), defaultdict(list)
     with gzip.open(path, 'rt', newline='') as stream:
         for row in csv.DictReader(stream):
-            key = (int(row['variant']), int(row['iteration']), row['stage'])
+            key = (int(row.get('query_rows',0)),int(row.get('rows',0)),int(row['variant']), int(row['iteration']), row['stage'])
             duration = int(row['duration_ns'])
             if key in observed or duration <= 0:
                 raise ValueError('invalid/duplicate profile dispatch')
             observed.add(key)
-            grouped[(key[0], key[2])].append(duration / 1000)
+            grouped[(key[0],key[1],key[2],key[4])].append(duration / 1000)
     if observed != expected:
         raise ValueError('incomplete profile dispatch sequence')
-    return [dict(variant=variant, stage=stage, count=len(values),
+    return [dict(**(dict(query_rows=r,rows=t) if prefill else {}),variant=variant, stage=stage, count=len(values),
                  median_us=statistics.median(values), minimum_us=min(values), maximum_us=max(values))
-            for (variant, stage), values in grouped.items()]
+            for (r,t,variant,stage), values in grouped.items()]

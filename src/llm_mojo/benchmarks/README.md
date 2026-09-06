@@ -19,7 +19,7 @@ uv run --locked python -m llm_mojo.benchmarks.run run --build-dir /private/tmp/m
 ```
 
 Both destinations must be new directories outside the checkout. Use
-`--studies gqa_decode` (or any combination of the five study names) for a
+`--studies gqa_decode` (or any combination of the maintained study names) for a
 bounded subset. The matrix and named implementations are in `study.py`.
 The runner requires AC power, Low Power Mode off, no reported thermal warning,
 a clean matching source commit, unchanged hardware/software, and the exact
@@ -36,6 +36,14 @@ nonfinite samples, changed identity, and missing completion markers fail.
 `attention_decode.mojo` retains all thirteen GQA routes; the maintained matrix
 compares the materialized control, simple fusion, parallel fusion, and split
 head reuse. The full numerical suites still test every original GQA candidate.
+`attention_prefill.mojo` records both query rows R and KV rows T. Its sixteen
+routes cover materialized/cooperative softmax, streaming, query tiling, Apple
+MMA, related-head reuse and five isolated compiler/resource ablations. Run `--studies gqa_prefill_screen` explicitly for
+the three-workload screen; it is excluded from the default run. The maintained
+full/incremental matrix is `--studies gqa_prefill`: it now pairs the original
+MMA route 8 with rolled QK route 12. The five-ablation follow-up screen is
+`--studies gqa_prefill_resources_screen`, also excluded from default runs.
+Historical matrices remain defined by their tagged sources and frozen records.
 `src/llm_mojo/benchmarks/smoke.py` exercises the other measurement routes and output gates.
 
 Hot measures one operation through completion. Ring24 measures 24 distinct
@@ -61,12 +69,20 @@ committed image format; extra exports are disposable. See
 The capture/analyzer pair retains binary hashes, verified launch receipts,
 workload identity, dispatch segmentation and named counters. Its historical
 RMSNorm/linear schema support is retained for reading older captures. The
-maintained standalone builder currently targets GQA decode:
+maintained standalone builder supports GQA decode and prefill:
 
 ```bash
 uv run --locked python -m llm_mojo.benchmarks.profile --build-profile-binary /private/tmp/gqa-profile --profile-variant 9 --profile-rows 4096
 uv run --locked python -m llm_mojo.benchmarks.capture_trace --profile-binary /private/tmp/gqa-profile --output-trace /private/tmp/gqa-profile.trace --time-limit 2s
 ```
+
+For prefill, add `--operation gqa_prefill --profile-query-rows R` to the builder;
+`--profile-rows T` remains the KV length. `--profile-warmup` and
+`--profile-iterations` bound the capture independently of the latency protocol.
+The receipt binds R, T, tile sizes, head sharing and exact dispatch count.
+The original prefill comparison profiles variants 0 and 8 at `(R,T)=(16,16)`,
+`(1024,1024)` and `(64,4096)`, with ten warmups and respectively 1000, 100 and
+100 measured iterations. Each capture stays below 5,000 dispatches.
 
 Use `capture_trace.py --help` and `analyze_trace.py --help` for receipt and XML
 export inputs. Default Metal System Trace gives dispatch timing; performance
@@ -85,3 +101,47 @@ target dispatch durations plus selected named counter summaries. `plot.py`
 then checks those retained samples and regenerates `profile_summary.csv`.
 Full traces/XML are needed to redo trace analysis; they are not needed to
 rebuild the report's tables or figures.
+
+For the prefill set, use folders `rR-tT-vV` for those six captures and pass
+`--prefill-variant 8` to `profile_summary.py`. Instruments can split one dispatch
+into several active intervals. The analyzer joins non-overlapping segments by
+command buffer, encoder and GPU submission, sums active time, and preserves
+the final segment end for the counter window. Every trailing submission must
+be covered once before stages are assigned. The curator checks that same join
+against the analysis and records both analysis and curation source hashes.
+
+In `studies/gqa_prefill/`, `screen_run.json` and `screen_samples.csv.gz` retain
+the bounded screen alongside the final `run.json` and `samples.csv.gz`.
+The frozen specifications preserve their different controls and source
+commits. One plot command rebuilds those original summaries and four figures, plus the
+resource follow-up below.
+
+The resource follow-up uses the same six-capture workload grid with variants
+8 and 12. Curate it in the existing topic folder with:
+
+```bash
+uv run --locked python -m llm_mojo.benchmarks.profile_summary /private/tmp/gqa-resource-captures studies/gqa_prefill --prefill-variants 8 12 --prefix resources_
+```
+
+The curator and offline loader require the full declared capture grid and
+exact dispatch sequences. No new profile schema is needed. The paired screen
+uses `resources_screen_run.json` / `resources_screen_samples.csv.gz`; the
+final comparison uses `resources_run.json` / `resources_samples.csv.gz`.
+Keep newly collected runs outside Git until their provenance and purpose have
+been reviewed. Plotting regenerates both follow-up summaries, the screen and
+paired comparison PNGs, and the compact profile summary.
+
+For intermediate Metal LLVM inspection, the small `attention_prefill_ir.mojo`
+helper launches only the requested kernel with dump flags. Use schedule 0 for
+original route 8, or schedules 1–5 for routes 11–15:
+
+```bash
+uv run --locked mojo run -I src -D INSPECT_SCHEDULE=2 src/llm_mojo/benchmarks/attention_prefill_ir.mojo 1024 1024 > /private/tmp/prefill-ir.log
+```
+
+This is a compiler diagnostic, not a benchmark. With the pinned toolchain,
+both dump flags emit the same module; inspect one copy. The compact IR record
+retains counts and hashes. Reproduction normalizes only filename metadata;
+IR allocas and line counts are not physical spills or machine-code size.
+The rolled reduction is selected through `SCHEDULE=2, MMA=True, BQ=BK=32,
+HEADS=1` on the explicit engine entrypoint. The original control stays intact.
