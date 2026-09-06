@@ -101,7 +101,10 @@ def run(build_dir, output, study_names):
                     command.append(str(workload['query_rows']))
                 command += list(map(str, [rows, layers, candidate, spec['control'], int(first), 53,
                                           'bench', REPETITIONS, WARMUP]))
-                process = subprocess.run(command, cwd=repository_root(), capture_output=True, text=True, env=env, timeout=300)
+                # The FP32 4096-row ring performs 960 complete sublayers;
+                # its validated runtime exceeds the standalone-kernel limit.
+                timeout = 600 if name == 'attention_sublayer' else 300
+                process = subprocess.run(command, cwd=repository_root(), capture_output=True, text=True, env=env, timeout=timeout)
                 # Local diagnostic logs are useful during execution; compact samples are the retained evidence.
                 (directory / 'last-process.txt').write_text(process.stdout + process.stderr)
                 process.check_returncode()
