@@ -42,12 +42,14 @@ source = { editable = "." }
 dependencies = [
     { name = "max" },
     { name = "mojo" },
+    { name = "numpy" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "max", specifier = ">=26.5.0" },
     { name = "mojo", specifier = ">=1.0.0" },
+    { name = "numpy", specifier = ">=2.5.2" },
 ]
 
 [[package]]

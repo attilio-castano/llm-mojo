@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 
-from ._repository import repository_root
+from ._repository import environment_tool, repository_root
 
 
 def run(*args):
@@ -20,11 +20,11 @@ def prepare():
     fixtures = repository_root() / "build/oracle_data"
     fixtures.mkdir(parents=True, exist_ok=True)
     (fixtures / "__init__.mojo").touch()
+    run("uv", "run", "--locked", "--script", "tests/fixtures/generate.py")
     for name in ("rms_norm", "linear", "rope", "attention"):
-        run("uv", "run", "--script", f"tests/fixtures/{name}/generate.py")
         (fixtures / name / "__init__.mojo").touch()
-    run("uv", "run", "--locked", "python", "tests/fixtures/attention/generate_decode.py")
-    run("uv", "run", "--locked", "python", "tests/fixtures/attention/generate_prefill.py")
+    run(sys.executable, "tests/fixtures/attention/generate_decode.py")
+    run(sys.executable, "tests/fixtures/attention/generate_prefill.py")
     anchors = json.loads((repository_root() / "tests/fixtures/checksums.json").read_text())
     for name, expected in anchors["sha256"].items():
         actual = hashlib.sha256((fixtures / name).read_bytes()).hexdigest()
@@ -45,7 +45,7 @@ def main():
     if not args.prepare_only:
         run(sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py")
         for test in sorted((repository_root() / "tests").glob("test_*.mojo")):
-            run("uv", "run", "--locked", "mojo", "run", "-I", "src", "-I", "build",
+            run(environment_tool("mojo"), "run", "-I", "src", "-I", "build",
                 "-I", "tests", str(test.relative_to(repository_root())))
 
         run(sys.executable, "-m", "llm_mojo.benchmarks.smoke")

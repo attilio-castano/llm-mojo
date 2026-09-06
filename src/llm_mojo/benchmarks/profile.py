@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
-from .._repository import repository_root
+from .._repository import environment_tool, repository_root
 from .attention_decode_contract import VARIANTS
 from . import attention_prefill_contract as prefill
 from .environment import ensure_record_location, repository_state, stable_environment, utc_now
@@ -63,10 +63,7 @@ def build_profile(args):
     sources = source_hashes()
     binary.parent.mkdir(parents=True, exist_ok=True)
     command = [
-        "uv",
-        "run",
-        "--locked",
-        "mojo",
+        environment_tool("mojo"),
         "build",
         "-I",
         "src",
@@ -114,7 +111,7 @@ def build_profile(args):
         **workload,
         "source_sha256": sources,
         "binary": {"bytes": binary.stat().st_size, "sha256": sha(binary)},
-        "command": command[:-1] + ["<external-profile-binary>"],
+        "command": ["mojo", *command[1:-1], "<external-profile-binary>"],
     }
     Path(str(binary) + ".provenance.json").write_text(
         json.dumps(record, indent=2) + "\n"

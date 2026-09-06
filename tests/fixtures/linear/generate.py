@@ -1,11 +1,3 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.12,<3.13"
-# dependencies = [
-#   "torch==2.4.0",
-#   "transformers==4.43.1",
-# ]
-# ///
 """Generate deterministic Qwen2 affine linear projection oracle fixtures."""
 
 from __future__ import annotations
@@ -210,7 +202,7 @@ def build_manifest(cases: list[dict[str, Any]]) -> dict[str, Any]:
             for case in cases
         ],
         "generation": {
-            "command": "uv run --script tests/fixtures/linear/generate.py",
+            "command": "uv run --locked --script tests/fixtures/generate.py linear",
             "generator_sha256": sha256(Path(__file__)),
             "data_sha256": sha256(DATA_PATH),
         },
