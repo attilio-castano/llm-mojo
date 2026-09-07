@@ -953,3 +953,33 @@ this comparison's control.
 Retain compact `combined_` evidence and numerical validation in the existing
 attention study, extend its offline plots, and finish with local commits.
 Stop at this candidate and matrix, retaining negative or inconclusive outcomes.
+
+## Completed combined-projection attention comparison
+
+Measured source `bbdbd4a` combines the existing 16x16 QKV and Wo tiles through
+`projection_mapping=5`, keeping integrated FP32 GQA fixed. Before timing,
+93 Mojo and 46 Python tests, all frozen fixture checks, three checkpoint
+cases and twelve asynchronous sequences across nineteen configurations passed.
+All numerical gates and BF16 boundaries are unchanged.
+
+The fresh 4,800-observation matrix finds eight faster, one slower and twenty-one
+inconclusive cells. Whole-block reductions are 16.51% hot / 18.82% ring24 at
+full 256, 15.45% / 16.10% at full 1024, and 9.19% / 9.11% at full 4096.
+Ring24 chunk (16,256) regresses 13.91%; the mapping remains an explicit option.
+The long cached chunk has no qualifying projection-combination gain.
+
+Eight validated Metal captures retain 1,530 active dispatch durations from the
+same source. In the combined variant, projection/GQA shares are 62.65%/22.06%
+at full 256, 45.56%/42.84% at full 1024, 22.88%/70.78% at full 4096, and
+8.54%/88.82% at chunk (64,4096). Shares are summed active GPU time within each
+capture, not whole-call wall time or a hardware-ceiling claim. All captures
+report 48-byte maximum target compiler-spill events; physical traffic and
+per-stage attribution are not established. Optional counters were not analyzed.
+
+An obsolete CLI argument list rejected variant 18 before compilation. The
+remaining profiles used the already-valid package builder API without changing
+measured source or repeating latency. The CLI was fixed afterward and now has
+a regression test. Post-measurement 47 Python checks validate retained evidence
+and reject profile corruption. All 26 tables and 25 figures regenerate offline.
+The [combined report](../studies/attention_sublayer/README.md#combined-qkv-and-wo-complete-attention-timing-and-profiling)
+records reproduction, precision, negative results and the remaining stage costs.

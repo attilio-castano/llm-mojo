@@ -76,7 +76,7 @@ class EvidenceTests(unittest.TestCase):
             for record in directory.glob('*run.json'):
                 _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
-        self.assertEqual(count, 77920)
+        self.assertEqual(count, 82720)
         profile = load_profile(ROOT / 'studies/gqa_decode')
         self.assertEqual(sum(row['count'] for row in profile), 3000)
         profile = load_profile(ROOT / 'studies/gqa_prefill')
@@ -205,6 +205,34 @@ class EvidenceTests(unittest.TestCase):
                     for value in fields.values():
                         self.assertGreater(value['checks'],0)
                         self.assertLessEqual(value['maximum_scaled_error'],gate)
+        run,samples,_ = load_run(directory,'combined_')
+        profile = load_profile(directory,'combined_')
+        record = json.loads((directory/'combined_profiles.json').read_text())
+        validation = json.loads((directory/'combined_validation.json').read_text())
+        self.assertEqual(len(samples),4800)
+        self.assertEqual(sum(row['count'] for row in profile),1530)
+        self.assertEqual(run['specification']['candidates'],[9,18])
+        self.assertEqual(run['specification']['control'],9)
+        self.assertEqual(run['runtime']['measurement'],'whole_attention')
+        self.assertEqual(record['common']['repository'],run['repository'])
+        self.assertEqual(record['common']['source_sha256'],run['build']['sources'])
+        self.assertEqual(validation['source_commit'],run['repository']['commit'])
+        for name,digest in validation['source_sha256'].items():
+            if name in run['build']['sources']:
+                self.assertEqual(digest,run['build']['sources'][name])
+        self.assertEqual(len(record['captures']),8)
+        for capture in record['captures']:
+            self.assertEqual(capture['counter_analysis']['status'],'not_analyzed')
+            self.assertEqual(capture['counters'],[])
+        self.assertEqual(validation['tests']['asynchronous_configurations'],19)
+        self.assertTrue(all(c['returncode']==0 and c['sources_unchanged'] for c in validation['commands']))
+        for dataset in validation['numerics'].values():
+            self.assertEqual(set(dataset['composition']),{'0','5'})
+            for fields in dataset['composition'].values():
+                self.assertEqual(set(fields),{'projected','output'})
+                for value in fields.values():
+                    self.assertGreater(value['checks'],0)
+                    self.assertLessEqual(value['maximum_scaled_error'],validation['limits']['projected_and_final'])
         record = json.loads((ROOT / 'studies/attention_sublayer/profiles.json').read_text())
         full = next(c for c in record['captures'] if c['query_rows'] == 4096)
         self.assertEqual(full['counter_analysis']['status'], 'not_analyzed')
@@ -218,7 +246,8 @@ class EvidenceTests(unittest.TestCase):
                                       ('attention_sublayer', 'decode_', 66),
                                       ('attention_sublayer', 'prefill_', 66),
                                       ('attention_sublayer', 'integrated_', 76),
-                                      ('attention_sublayer', 'parallelism_', 38)):
+                                      ('attention_sublayer', 'parallelism_', 38),
+                                      ('attention_sublayer', 'combined_', 72)):
             source = ROOT / 'studies' / topic
             with self.subTest(topic=topic, prefix=prefix), tempfile.TemporaryDirectory() as tmp:
                 directory = Path(tmp)

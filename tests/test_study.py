@@ -11,6 +11,15 @@ from llm_mojo.benchmarks.study import (parse_output, summarize, encode_samples, 
 
 
 class StudyTests(unittest.TestCase):
+    def test_profile_cli_accepts_the_combined_attention_variant(self):
+        from llm_mojo.benchmarks.profile import argument_parser
+        args=argument_parser().parse_args(['--operation','attention_sublayer',
+            '--build-profile-binary','/private/tmp/not-built-by-this-test',
+            '--profile-variant','18','--profile-query-rows','1024',
+            '--profile-rows','1024','--profile-iterations','25'])
+        self.assertEqual(args.profile_variant,18)
+        self.assertEqual(args.operation,'attention_sublayer')
+
     def test_combined_projection_profile_contract(self):
         from llm_mojo.benchmarks.attention_sublayer_contract import (
             profile_grid, COMBINED_PROFILE_WORKLOADS, STAGES_BY_VARIANT, specification)

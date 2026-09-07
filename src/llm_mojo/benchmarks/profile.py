@@ -133,13 +133,17 @@ def build_profile(args):
         json.dumps(record, indent=2) + "\n"
     )
 
-if __name__ == '__main__':
+def argument_parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--operation', choices=['gqa_decode','gqa_prefill','attention_sublayer'], default='gqa_decode')
     p.add_argument('--profile-query-rows', type=int, default=1)
     p.add_argument('--profile-warmup', type=int, default=100)
     p.add_argument('--build-profile-binary', type=Path, required=True)
-    p.add_argument('--profile-variant', type=int, choices=sorted(set(VARIANTS)|set(prefill.VARIANTS)), default=9)
+    p.add_argument('--profile-variant', type=int, choices=sorted(set(VARIANTS)|set(prefill.VARIANTS)|set(sublayer.VARIANTS)), default=9)
     p.add_argument('--profile-rows', type=int, default=4096)
     p.add_argument('--profile-iterations', type=int, default=500)
-    build_profile(p.parse_args())
+    return p
+
+
+if __name__ == '__main__':
+    build_profile(argument_parser().parse_args())

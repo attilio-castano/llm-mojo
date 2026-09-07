@@ -1,6 +1,16 @@
 # Qwen attention sublayer
 
-The completed projection-tile study finds more headroom in the already
+The complete attention block has now been timed and profiled with **16x16
+QKV and Wo enabled together**. Against the integrated 8x16 control on Apple
+M4 Pro / Metal, whole-block latency falls **16.5–18.8% at full 256**, **15.4–16.1%
+at full 1024**, and **about 9.1% at full 4096**. A 16-token chunk at context 256
+regresses 13.91% in ring24, so the combined mapping remains an explicit option.
+The [combined results](#combined-qkv-and-wo-complete-attention-timing-and-profiling)
+retain 4,800 fresh timing observations and eight validated stage captures.
+GQA accounts for 71% of active time at full 4096 and 89% in the long cached
+chunk; at full 1024, GQA and the two projections have comparable shares.
+
+The preceding projection-tile study found more headroom in the already
 integrated attention block. At full 1024 on Apple M4 Pro / Metal, **16x16 Wo
 reduces whole-attention latency by about 7%**, and a separate **16x16 QKV
 comparison reduces it by 8–9%**. These gains were measured one projection at
@@ -59,6 +69,153 @@ and [FP32 comparison](precision_numerics.json) retain the precision decision,
 independent gates and provenance. The original baseline's measured engine and
 fixtures match its validation hashes; only the runner's per-process timeout
 changed afterward.
+
+## Combined QKV and Wo: complete attention timing and profiling
+
+This experiment enables the two previously validated 16x16 projections
+together through `enqueue_attention_sublayer_integrated(...,
+projection_mapping=5)`, benchmark variant 18. The fresh control is variant 9,
+with both projections at 8x16. GQA remains the integrated FP32 unsplit mapping.
+Calls with fewer than sixteen rows use the same rowwise projections in both
+arms. This is an explicit study option, without automatic workload selection.
+
+The measured block is still
+`RMSNorm → packed QKV → unpack → Q/K RoPE → KV append → FP32 GQA → Wo → residual`.
+It contains nine GPU dispatches, with no allocation or synchronization between
+stages inside the enqueue. The latency sample ends at device completion; the
+separate profile captures assign active GPU time to each stage. The scope ends
+before the decoder MLP.
+
+The implementation reuses both existing 16x16 kernels and adds only their
+composition choice. At full 1024, the QKV/Wo matrices have K=896 and N=1152/896.
+Together the old tiles launch 16,384 SIMD groups and request 672 MiB of input
+and weight operands; the new tiles launch 8,192 groups and request 448 MiB.
+Each lane owns eight FP32 accumulator values instead of four. These source
+counts exclude caching, output stores and other stages. They describe operand
+reuse, not measured DRAM traffic or physical register allocation. BF16 storage
+and rounding boundaries, FP32 GQA, bias, packing and cache behavior stay fixed.
+
+### Correctness before performance
+
+The complete workflow passed **93 Mojo and 46 Python tests**, all frozen
+synthetic fixtures, three checkpoint cases and actual benchmark routes in hot
+and ring24 modes. The combined route is included in full/chunked precision
+checks and in nineteen asynchronous configurations, with twelve sequences each.
+The latter cross 15/16/17-row calls and finish with decode; exact cache checks
+and projected-branch checks prevent the residual from hiding an error.
+
+For control and combined mapping, the maximum scaled projected/final errors
+are respectively 0.005181347 / 0.011627907 on synthetic data and
+0.0014124294 / 0.0013793104 on checkpoint data. Each field has 113 synthetic
+and 49 checkpoint comparisons per mapping. All satisfy the unchanged 0.03125
+gate, `abs(got-want)/(1+abs(want))`, and cache checks remain exact BF16 bits.
+Equal recorded maxima do not establish bitwise equality between mappings.
+[combined_validation.json](combined_validation.json) retains the commands,
+source identity, successful returns and numerical summaries.
+
+### Fresh paired whole-block measurement
+
+The existing fifteen-workload matrix retains 4,800 observations: control
+self-pairs plus 9/18 comparisons, hot and ring24, four blocks, ten warmups and
+ten measured samples per arm. Blocks two and three reverse workload and arm
+order. The primary workloads are full 256 and full 1024; all small and long
+cases remain in the result under the existing 5%/matching-calibration rule.
+These are fresh combined measurements, not sums or products of earlier gains.
+
+The result is **eight faster, one slower and twenty-one inconclusive cells**.
+Positive entries below are latency reductions; negative entries are increases.
+Percentages are medians of paired block ratios, which need not equal the ratio
+of separately aggregated control/candidate medians.
+
+| Workload R, T | Hot reduction | Ring24 reduction |
+|---|---:|---:|
+| Full 16, 16 | -18.00%, inconclusive | -4.88%, inconclusive |
+| Full 64, 64 | 11.83%, inconclusive | 13.64%, faster |
+| Full 256, 256 | 16.51%, faster | 18.82%, faster |
+| Full 1024, 1024 | 15.45%, faster | 16.10%, faster |
+| Full 4096, 4096 | 9.19%, faster | 9.11%, faster |
+| Chunk 16, 256 | -6.65%, inconclusive | -13.91%, slower |
+| Chunk 64, 1024 | 6.19%, faster | 6.67%, inconclusive |
+| Chunk 64, 4096 | 1.57%, inconclusive | 2.27%, inconclusive |
+
+The combined projections therefore improve the primary full-prefill cases
+and establish a qualifying full-4096 gain. At full 1024, aggregate medians are
+4,707.5 → 3,992.5 microseconds hot and 4,576.1 → 3,841.0 microseconds ring24.
+The long cached chunk remains dominated by other work: the observed 1.57% /
+2.27% reductions do not exceed the 5% floor.
+
+The small-row warning from the isolated study survives composition. Ring24
+at `(16,256)` regresses 13.91%, beyond its 10.56% calibration floor, in all
+four paired blocks. This rules out treating the combined mapping as a universal
+replacement at R>=16. Full 16 and the four-row chunk remain inconclusive;
+decode cells also remain inconclusive. Full-64 hot and `(64,1024)` ring24
+illustrate the conservative rule: a positive median is insufficient when a
+block reverses or matching self-pair variation exceeds the improvement.
+All observations, including noisy and slow ones, are retained.
+
+![Combined projections measured through residual addition](combined.png)
+
+### Stage profiles after combining the projections
+
+Eight separate Metal captures compare 9/18 at full 256, full 1024, full 4096
+and chunk (64,4096). Each has ten warmups, followed by 25/25/10/25 measured
+iterations respectively. All 1,530 measured dispatch durations are retained.
+The analyzer validates the nine-stage order and joins any fragmented dispatch
+intervals, excluding preemption and host gaps from active time. These single
+captures diagnose stage cost; the paired unprofiled trials establish speed.
+
+The combined variant's shares of **summed recorded active GPU time** are:
+
+| Workload R, T | QKV + Wo | FP32 GQA | Other six stages |
+|---|---:|---:|---:|
+| Full 256, 256 | 62.65% | 22.06% | 15.29% |
+| Full 1024, 1024 | 45.56% | 42.84% | 11.60% |
+| Full 4096, 4096 | 22.88% | 70.78% | 6.34% |
+| Chunk 64, 4096 | 8.54% | 88.82% | 2.64% |
+
+These shares use all retained active durations within each capture, rather
+than sums of stage medians. At full 1024, median QKV time changes from
+1,388.542 to 978.583 microseconds and Wo from 1,089.125 to 761.917 microseconds.
+GQA is 1,617.459 versus 1,637.084 microseconds. This is consistent with the
+projection change and explains why the remaining cost is now more balanced.
+At full 4096 and the long chunk, GQA is the dominant remaining stage; faster
+projections have less influence on the full call.
+
+Unchanged stages can vary between captures: full-256 GQA is 169.000 versus
+181.666 microseconds despite identical GQA code. Do not interpret that as a
+new GQA regression or subtract separately captured stage medians to reconstruct
+whole-block latency. Instrumentation, execution conditions and scheduling can
+vary; no optional occupancy, throughput or cache counters were analyzed.
+
+Every capture reports a maximum target compiler-spill event size of 48 bytes.
+There are 35 target events at full 256/1024 and the chunk, and 20 at full 4096,
+for both variants. These are event counts and sizes across the target capture,
+not measured spill traffic or a per-stage attribution. They neither prove
+that the new projections are spill-free nor identify why the small-row
+latency regresses.
+
+![Complete attention stage profiles with combined projections](combined_profile.png)
+
+### What this establishes and where to focus next
+
+The whole attention block has now been **validated, timed and profiled with
+both winning projections enabled together**. It is a useful full-prefill
+configuration on this hardware, with an explicit small-chunk regression that
+prevents a universal replacement policy. Its default GQA and numerical policy
+remain the same as the comparison control.
+
+For full 256, projections still account for almost two thirds of active time.
+At full 1024, projection work and GQA are comparable. Full 4096 and long cached
+chunks make GQA the clearer next target. This is why another kernel experiment
+should name its workload rather than assume one global attention bottleneck.
+
+The earlier split8 study remains directly relevant to cached chunks: it already
+showed large gains where these projection changes barely affect latency.
+A subsequent integration check can combine the selected projection policy
+with split8 and compare it against split8 with the old projections. Full-4096
+GQA needs its own bounded question, because the earlier split8 comparison did
+not qualify there. This study does not add that combination or claim a hardware
+ceiling. The approved projection-composition and profiling experiment is complete.
 
 ## Projection tile ownership
 
@@ -252,12 +409,11 @@ synthetic and 0.003225807 checkpoint, below 0.0078125. Equal recorded maxima
 across mappings do not establish bitwise equality. The primary reference
 remains the pinned upstream CPU inference policy described above.
 
-The next contained integration question is whether **16x16 QKV and 16x16 Wo
-together** retain their gains at full 256/1024, compared freshly with the
-integrated 8x16 control. That is more directly motivated than another tile
-sweep: both components now have independent numerical and whole-block evidence,
-but their combination is unmeasured. Keep the smaller-row controls and test
-full 4096 separately, where QKV only narrowly qualified and Wo did not.
+Those results motivated the combined 16x16 QKV/Wo comparison completed above.
+At the end of this separate-tile study, the combination was unmeasured; the
+subsequent experiment retained small-row controls and full 4096 rather than
+assuming that individual gains would combine. The combined report supplies
+the fresh result and stage profiles.
 
 For cached attention, the split-domain result makes split8 a useful additional
 control for subsequent GQA optimization. Earlier smaller-query-tile losses and
@@ -274,8 +430,9 @@ within one stable arm alone may not resolve this. A predeclared interleaved-arm
 and host-versus-device timing diagnostic would address that question. The
 current data does not identify clock, scheduling or host overhead as the cause.
 
-These are proposed next experiments. The completed budget ends here: no
-combined new projection mapping, new GQA kernel or dispatch rule was introduced.
+These were the proposed follow-ups at the end of the separate-tile study.
+That study introduced no combined mapping or dispatch rule; the subsequent
+combined comparison above completes the first integration question.
 
 ## GQA parallelism on the integrated block
 
@@ -1309,6 +1466,58 @@ changes after measurement update explanations, evidence checks and timing-plot
 tick labels; they do not alter the measured kernels, benchmark or numerical
 gates. Full logs, binaries, checkpoint assets and generated arrays stay outside
 Git. The approved candidate budget is complete; commits remain local.
+
+The combined-projection comparison uses clean source
+`bbdbd4a99f71837f542d2847ec9b7a96c732b66e`. The 4,800-observation latency run
+completed on 2026-09-07 at **10:28:34–10:36:10 UTC**. The eight validated captures
+span condition checks at **10:36:17–10:41:22 UTC**. Both use the same measured
+source, frozen inputs and hardware/software configuration. Every block/capture
+recorded AC power, Low Power Mode off and no reported thermal/performance
+warning; this does not pin clocks or eliminate the observed calibration noise.
+
+[combined_run.json](combined_run.json), [raw latency samples](combined_samples.csv.gz)
+and [latency table](combined_summary.csv) retain the complete paired grid.
+[combined_profiles.json](combined_profiles.json), [raw stage durations](combined_profile_samples.csv.gz)
+and [stage table](combined_profile_summary.csv) retain all 1,530 measured
+dispatch durations, capture identities, coalescing, conditions, compiler-spill
+summaries and explicit counter-analysis absence. Numerical validation is bound
+to the same source in [combined_validation.json](combined_validation.json).
+
+One tooling defect was encountered after the first valid control capture:
+the profiling CLI's choice list omitted attention variants above 15, although
+its package builder already validated and supported variant 18. The remaining
+captures called that unchanged `build_profile` API directly, preserving the
+measured commit and the first completed capture. The latency run was not
+repeated. After all measurements, the CLI list was fixed and a regression test
+added. At the exact measured commit, the corresponding builder invocation is:
+
+```python
+from argparse import Namespace
+from pathlib import Path
+from llm_mojo.benchmarks.profile import build_profile
+build_profile(Namespace(
+    operation="attention_sublayer", profile_variant=18,
+    build_profile_binary=Path("/private/tmp/combined-profile-reproduction"),
+    profile_query_rows=1024, profile_rows=1024,
+    profile_iterations=25, profile_warmup=10,
+))
+```
+
+Run it through the locked Python environment; change shape, iteration count
+and variant according to the declared eight-capture grid. The current CLI
+accepts the same arguments directly. Both routes preserve the builder's clean
+source, device, binary, input and workload checks.
+
+Before measurement, all 93 Mojo and 46 Python tests passed, together with
+checkpoint and asynchronous stress validation. Post-measurement **47 Python
+checks** include the CLI regression and bind the new profiles, numerical
+validation and **82,720 retained latency observations across the repository**;
+missing/duplicate dispatches are rejected. All **26 tables and 25 figures** in
+this attention study regenerate byte-for-byte, including the preceding 24
+tables and 23 figures. The post-measurement changes affect the CLI argument
+list, evidence checks and reporting; the measured kernels, benchmark and
+numerical gates are unchanged. Raw traces/XML, binaries, full logs and generated
+fixtures remain outside Git. The implementation and evidence commits are local.
 
 Rebuild tables and figures without a GPU:
 
