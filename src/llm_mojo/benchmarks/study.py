@@ -55,6 +55,156 @@ STUDIES['gqa_prefill_resources_screen'] = dict(
 # Frozen after the five-ablation screen: only the rolled reduction qualified.
 STUDIES['gqa_prefill'].update(candidates=[8,12],names={v:RESOURCE_NAMES[v] for v in (8,12)})
 PREFILL_PROFILE_WORKLOADS = [(16,16),(1024,1024),(64,4096)]
+from .attention_sublayer_contract import ARITHMETIC, INPUTS, TIMING
+STUDIES['attention_sublayer'] = dict(
+    operation='attention_sublayer', control=3, candidates=[3],
+    workloads=[dict(query_rows=r, rows=t) for r,t in
+               [(1,n) for n in (1,16,64,256,1024,4096)] +
+               [(n,n) for n in (16,64,256,1024,4096)] +
+               [(4,64),(16,256),(64,1024),(64,4096)]],
+    names={3: 'FP32 attention baseline'},
+    layout='X/O[R,896], Wqkv[1152,896], Wo[896,896], K/V[T,2,64]; row major',
+    arithmetic=ARITHMETIC, inputs=INPUTS, timing=TIMING)
+
+# One candidate: fixed FP32 GQA, replacing only Wo's rowwise mapping.
+# Full-matrix execution is conditional on the five-shape screen's result.
+STUDIES['attention_sublayer_wo'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer'].items() if k not in ('candidates','names')},
+    candidates=[3,4], names={3:'rowwise Wo',4:'MMA 8x16 Wo'})
+STUDIES['attention_sublayer_wo_screen'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_wo'].items() if k != 'workloads'},
+    workloads=[dict(query_rows=r,rows=t) for r,t in
+               [(1,64),(1,4096),(256,256),(1024,1024),(64,4096)]])
+
+# Fixed rowwise Wo; only the FP32 decode ownership changes.
+STUDIES['attention_sublayer_decode'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer'].items() if k not in ('workloads','candidates','names')},
+    workloads=[dict(query_rows=1,rows=t) for t in (1,16,64,256,1024,4096)],
+    candidates=[3,5,6], names={3:'materialized FP32',5:'FP32 G32',6:'FP32 split64 H4'})
+STUDIES['attention_sublayer_decode_screen'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_decode'].items() if k != 'workloads'},
+    workloads=[dict(query_rows=1,rows=t) for t in (64,4096)])
+
+
+# One prefill candidate with the earlier Wo mapping fixed in both arms.
+STUDIES['attention_sublayer_prefill'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer'].items()
+       if k not in ('control','workloads','candidates','names')},
+    workloads=[w for w in STUDIES['attention_sublayer']['workloads'] if w['query_rows'] > 1],
+    control=4, candidates=[4,7], names={4:'materialized FP32 + MMA Wo',7:'FP32 rolled MMA + MMA Wo'})
+STUDIES['attention_sublayer_prefill_screen'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_prefill'].items() if k != 'workloads'},
+    workloads=[dict(query_rows=r,rows=t) for r,t in ((256,256),(1024,1024),(64,4096))])
+
+# Integrate the existing packed QKV and Wo mappings with the validated GQA.
+# 8 fixes GQA/Wo to the integrated policy but retains separate rowwise Q/K/V.
+# 9 exercises the public integrated enqueue, including the explicit unpack.
+# Two fresh paired comparisons: incremental projection value and total value.
+STUDIES['attention_sublayer_projections'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer'].items() if k not in ('control','candidates','names')},
+    control=8, candidates=[8,9], names={8:'separate QKV + FP32 GQA/Wo policy',9:'integrated packed QKV + FP32 GQA/Wo policy'})
+STUDIES['attention_sublayer_integrated'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer'].items() if k not in ('candidates','names')},
+    candidates=[3,9], names={3:'original materialized FP32 / rowwise projections',9:'integrated packed QKV + FP32 GQA/Wo policy'})
+
+# Four candidates, fixed integrated control. The full run selects at most one
+# from each family from the completed screen; it never widens the search.
+PARALLELISM_NAMES = {9:'integrated BQ32',10:'query tile 16',11:'query tile 8',
+                     12:'KV split4',13:'KV split8'}
+STUDIES['attention_sublayer_parallelism'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer'].items() if k not in ('control','candidates','names')},
+    control=9, candidates=list(PARALLELISM_NAMES), names=PARALLELISM_NAMES)
+STUDIES['attention_sublayer_parallelism_screen'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_parallelism'].items() if k != 'workloads'},
+    workloads=[dict(query_rows=r,rows=t) for r,t in ((64,1024),(64,4096),(1024,1024))])
+
+
+def select_parallelism_finalists(summary):
+    """Both modes must qualify at (64,4096); prefer the weaker-mode gain.
+
+    Ties choose the lower candidate ID: BQ16 before BQ8, split4 before split8.
+    Selection consumes the complete, hash-validated screen via load_run.
+    """
+    target = {(r['candidate'],r['layers']):r for r in summary
+              if (r.get('query_rows'),r['rows']) == (64,4096)}
+    if set(target) != {(v,l) for v in PARALLELISM_NAMES for l in (1,24)}:
+        raise ValueError('parallelism selection requires every target comparison')
+    finalists = []
+    for family in ((10,11),(12,13)):
+        eligible = [v for v in family if all(target[v,l]['decision'] == 'faster' for l in (1,24))]
+        if eligible:
+            finalists.append(min(eligible, key=lambda v:(max(target[v,l]['ratio'] for l in (1,24)),v)))
+    return finalists
+
+
+# Projection ownership study: two tiles, current integrated control, then
+# conditional full-Wo and same-tile QKV transfer. No combined new mappings.
+TILE_NAMES = {9:'MMA 8x16 control',14:'Wo MMA 16x16',15:'Wo MMA 8x32',
+              16:'QKV MMA 16x16',17:'QKV MMA 8x32'}
+_TILE_BASE = {k:v for k,v in STUDIES['attention_sublayer'].items()
+              if k not in ('control','candidates','names','workloads')}
+STUDIES['attention_sublayer_tiles_screen'] = dict(
+    **_TILE_BASE, control=9,candidates=[9,14,15],names=TILE_NAMES,opt_in=True,
+    measurement='whole_attention',
+    workloads=[dict(query_rows=r,rows=t) for r,t in ((16,16),(64,64),(1024,1024),(64,4096))])
+STUDIES['attention_sublayer_tiles_kernel_screen'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_tiles_screen'].items()
+       if k not in ('measurement','timing','inputs')}, mode='wo',measurement='isolated_wo',
+    inputs='Frozen fp32_7_attention BF16 suffix, Wo weights from case 7; odd ring weights negated. Same input in both arms.',
+    timing='Host enqueue of bias-free Wo only through completion. Hot one call; ring24 distinct weights, one sync, divide by 24. Allocation, fixture reads and checks excluded.')
+STUDIES['attention_sublayer_tiles'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_tiles_screen'].items() if k != 'workloads'},
+    workloads=STUDIES['attention_sublayer']['workloads'])
+STUDIES['attention_sublayer_tiles_qkv'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_tiles_screen'].items() if k not in ('workloads','candidates')},
+    candidates=[9,16,17],
+    workloads=[dict(query_rows=r,rows=t) for r,t in [(n,n) for n in (16,64,256,1024,4096)]+[(64,4096)]])
+STUDIES['attention_sublayer_split_domain'] = dict(
+    **_TILE_BASE,control=9,candidates=[9,13],names={9:'integrated BQ32',13:'KV split8'},
+    opt_in=True,measurement='whole_attention',
+    workloads=[dict(query_rows=r,rows=t) for r in (16,64,256) for t in (1024,4096)])
+STUDIES['attention_sublayer_timing'] = dict(
+    **_TILE_BASE,control=9,candidates=[9],names={9:'identical integrated control'},
+    opt_in=True,measurement='whole_attention',
+    workloads=[dict(query_rows=r,rows=t) for r,t in ((16,16),(64,64),(64,1024))])
+STUDIES['attention_sublayer_timing_buffered'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_timing'].items() if k != 'measurement'},
+    mode='buffered',measurement='whole_attention_buffered')
+
+
+# Compose the independently validated winning projections; GQA remains fixed.
+STUDIES['attention_sublayer_combined'] = dict(
+    **_TILE_BASE,control=9,candidates=[9,18],opt_in=True,
+    measurement='whole_attention',
+    names={9:'integrated 8x16 projections',18:'combined 16x16 QKV and Wo'},
+    workloads=STUDIES['attention_sublayer']['workloads'])
+
+
+# Close the composition gap on the prior split domain plus the known short
+# projection regression. Two independent paired comparisons, no new selector.
+_SPLIT_COMBINED_WORKLOADS = [dict(query_rows=16,rows=256),
+                           *STUDIES['attention_sublayer_split_domain']['workloads']]
+for suffix,control in (('projections',13),('gqa',18)):
+    STUDIES['attention_sublayer_split_combined_'+suffix] = dict(
+        **_TILE_BASE,control=control,candidates=[control,19],opt_in=True,
+        measurement='whole_attention',
+        names={13:'split8 + 8x16 projections',18:'unsplit + 16x16 projections',
+               19:'split8 + 16x16 projections'},
+        workloads=_SPLIT_COMBINED_WORKLOADS)
+
+
+def select_projection_tile(block_summary, kernel_summary):
+    """Require isolated and whole-block gains in both modes at full 1024."""
+    def target(summary):
+        rows={(s['candidate'],s['layers']):s for s in summary
+              if (s.get('query_rows'),s['rows'])==(1024,1024)}
+        if set(rows)!={(v,l) for v in (9,14,15) for l in (1,24)}:
+            raise ValueError('projection selection requires every target comparison')
+        return rows
+    block,kernel=target(block_summary),target(kernel_summary)
+    eligible=[v for v in (14,15) if all(table[v,l]['decision']=='faster'
+              for table in (block,kernel) for l in (1,24))]
+    return min(eligible,key=lambda v:(max(block[v,l]['ratio'] for l in (1,24)),v)) if eligible else None
 
 
 def workloads(spec):
@@ -91,15 +241,17 @@ def read_samples(path):
                  for k, v in row.items()} for row in reader]
 
 
-def parse_output(output, control, candidate, first, *, rows, layers, seed, operation, query_rows=None):
+def parse_output(output, control, candidate, first, *, rows, layers, seed, operation, query_rows=None, measurement=None):
     lines = output.splitlines()
     expected_headers = [f'shape: {rows} {layers} seed: {seed}',
                         f'variants: {control} {candidate} candidate-first: {int(first)}',
                         'api: metal', 'correctness: passed', 'BENCHMARK_COMPLETE']
-    if operation == 'gqa_prefill':
+    if operation in ('gqa_prefill', 'attention_sublayer'):
         if type(query_rows) is not int or not 1 <= query_rows <= rows:
             raise ValueError('invalid prefill query rows')
         expected_headers.append(f'query rows: {query_rows}')
+    if measurement is not None:
+        expected_headers.append(f'measurement: {measurement}')
     if operation != 'gqa_decode':
         expected_headers.append(f'operation: {operation}')
     if any(lines.count(h) != 1 for h in expected_headers) or not output.rstrip().endswith('BENCHMARK_COMPLETE'):
@@ -121,7 +273,8 @@ def parse_output(output, control, candidate, first, *, rows, layers, seed, opera
     expected = [(arm, variant, r) for arm, variant in arms for r in range(REPETITIONS)]
     if [(s['arm'], s['variant'], s['repetition']) for s in samples] != expected:
         raise ValueError('wrong implementation, sample count or execution order')
-    return dict(device=devices[0], api='metal', correctness='passed'), samples
+    return dict(device=devices[0], api='metal', correctness='passed',
+                **({'measurement':measurement} if measurement is not None else {})), samples
 
 
 def summarize(samples, spec):
@@ -165,8 +318,31 @@ def summarize(samples, spec):
     return result
 
 
+def evidence_directory(directory):
+    """Accept a study root or a flat external run directory."""
+    return directory / 'data' if (directory / 'data').is_dir() else directory
+
+
+def load_numerical_record(path):
+    """Read a historical record, checking both compressed and original bytes."""
+    record = json.loads(path.read_text())
+    if record.get('format') != 'lossless-json-gzip-v1':
+        return record
+    name = record['record']
+    if name != Path(name).name:
+        raise ValueError('numerical record must be adjacent to its summary')
+    raw = (path.parent / name).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != record['sha256']:
+        raise ValueError('compressed numerical record changed')
+    decoded = gzip.decompress(raw)
+    if hashlib.sha256(decoded).hexdigest() != record['uncompressed_sha256']:
+        raise ValueError('original numerical record changed')
+    return json.loads(decoded)
+
+
 def load_run(directory, prefix=''):
     directory = Path(directory)
+    directory = evidence_directory(directory)
     record = json.loads((directory / (prefix+'run.json')).read_text())
     if record.get('schema') != 1 or not record.get('completed_utc'):
         raise ValueError('incomplete or unsupported run')
@@ -203,13 +379,19 @@ def prefill_profile_grid(spec):
 
 def load_profile(directory, prefix=''):
     directory = Path(directory)
+    directory = evidence_directory(directory)
     record = json.loads((directory / (prefix+'profiles.json')).read_text())
     path = directory / (prefix+'profile_samples.csv.gz')
-    if record.get('schema') not in (1,2) or record['samples_sha256'] != sha(path):
+    if record.get('schema') not in (1,2,3) or record['samples_sha256'] != sha(path):
         raise ValueError('profile sample hash/schema mismatch')
-    prefill = record['schema'] == 2
+    sublayer = record['schema'] == 3
+    prefill = record['schema'] in (2,3)
     if prefill:
-        stages, grid = prefill_profile_grid(record['specification'])
+        if sublayer:
+            from .attention_sublayer_contract import profile_grid
+            stages, grid = profile_grid(record['specification'])
+        else:
+            stages, grid = prefill_profile_grid(record['specification'])
     else:
         stages = {0: ['QK', 'softmax', 'PV'], 4: ['fused'], 9: ['decode', 'merge']}
         grid = {(0,0,v) for v in stages}
@@ -226,13 +408,17 @@ def load_profile(directory, prefix=''):
             raise ValueError('profile runtime mismatch')
         r,t = capture.get('query_rows',0),capture.get('rows',0)
         if prefill:
-            from .attention_prefill_contract import configuration, OPERATION
+            if sublayer:
+                from .attention_sublayer_contract import configuration, OPERATION
+            else:
+                from .attention_prefill_contract import configuration, OPERATION
             workload = identity['workload']
             configuration({**identity,**workload,
                            'profile_warmup_iterations':workload['warmup_iterations']})
             if identity['operation'] != OPERATION or workload['rows'] != r:
                 raise ValueError('prefill profile operation or rows mismatch')
-        if prefill and (identity['implementation'] != f'gqa_prefill_{variant}' or
+        implementation = f'attention_sublayer_{variant}' if sublayer else f'gqa_prefill_{variant}'
+        if prefill and (identity['implementation'] != implementation or
                         identity['workload']['profile_rows'] != r or identity['workload']['key_value_rows'] != t):
             raise ValueError('prefill profile shape or implementation mismatch')
         expected.update((r,t,variant, iteration, stage)

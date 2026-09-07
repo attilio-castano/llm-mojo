@@ -2,7 +2,8 @@
 
 The materialized control retains BF16 probability rounding. Fused paths keep
 FP32 online state and expose only O; the MMA path rounds unnormalized tile
-weights to BF16 before PV. These are separately tested numerical paths.
+weights to BF16 before PV by default. The explicit FP32 rolled-MMA option
+retains FP32 scores and weights through PV. These paths are separately tested.
 """
 from layout import TensorLayout, TileTensor, row_major, stack_allocation
 from llm_mojo.attention import (
@@ -389,14 +390,15 @@ def _mma[
             ]()
 
 
-# Fixed 32x32 / one-head ablations. The original _mma remains the control.
+# One-head ablations. BQ=32/SPLITS=1 preserves the prior tuned control.
 def _mma_tuned[
-    SCHEDULE: Int, QL: TensorLayout, KL: TensorLayout
+    SCHEDULE: Int, QL: TensorLayout, KL: TensorLayout, OL: TensorLayout,
+    FP32: Bool = False, BQ: Int = 32, SPLITS: Int = 1,
 ](
     q: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
     k: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
     v: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
-    output: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    output: TileTensor[DType.float32 if SPLITS > 1 else DType.bfloat16, OL, MutAnyOrigin],
     rows: Int32,
     tokens: Int32,
 ):
@@ -404,11 +406,13 @@ def _mma_tuned[
     comptime assert q.flat_rank == 3
     comptime assert k.flat_rank == 3
     comptime assert v.flat_rank == 3
-    comptime assert output.flat_rank == 3
-    comptime BQ = 32
+    comptime assert output.flat_rank == (4 if SPLITS > 1 else 3)
+    comptime assert BQ == 8 or BQ == 16 or BQ == 32
+    comptime assert SPLITS == 1 or (FP32 and SCHEDULE == 2 and BQ == 32)
+    comptime OTYPE = DType.float32 if SPLITS > 1 else DType.bfloat16
     comptime BK = 32
     comptime HEADS = 1
-    comptime W = 4
+    comptime W = BQ // 8
     # Apple's 8x8 fragment assigns two adjacent columns to each lane. Four
     # lanes share one row; XOR 1 and XOR 8 reduce that row without a block sum.
     var tid = thread_idx.x
@@ -425,6 +429,13 @@ def _mma_tuned[
     var valid = r < Int(rows) and h < kh * 7 + 7
     var past = Int(tokens) - Int(rows)
     var end = min(Int(tokens), past + block_idx.y * BQ + BQ)
+    var begin = 0
+    comptime if SPLITS > 1:
+        # Partition whole KV tiles: disjoint coverage, unchanged tile order
+        # inside a split, and potentially empty causal pieces for early rows.
+        var tiles = ceildiv(Int(tokens), BK)
+        begin = (tiles * block_idx.z // SPLITS) * BK
+        end = min(end, (tiles * (block_idx.z + 1) // SPLITS) * BK)
     var ks = stack_allocation[
         DType.bfloat16, address_space=AddressSpace.SHARED
     ](row_major[BK, 64]())
@@ -437,8 +448,9 @@ def _mma_tuned[
         DType.float32, address_space=AddressSpace.SHARED
     ](row_major[BQ * HEADS, BK]())
     comptime assert scores.flat_rank == 2
+    comptime PTYPE = DType.float32 if FP32 else DType.bfloat16
     var probs = stack_allocation[
-        DType.bfloat16, address_space=AddressSpace.SHARED
+        PTYPE, address_space=AddressSpace.SHARED
     ](row_major[BQ * HEADS, BK]())
     comptime assert probs.flat_rank == 2
     var u = SIMD[DType.float32, 16](0)
@@ -454,7 +466,7 @@ def _mma_tuned[
     )
     var m: Float32 = neg_inf[DType.float32]()
     var z: Float32 = 0
-    for base in range(0, end, BK):
+    for base in range(begin, end, BK):
         var lane_scores = SIMD[DType.float32, 8](0)
         for index in range(tid, BK * 64, W * 32):
             var t = base + index // 64
@@ -511,11 +523,9 @@ def _mma_tuned[
                 var t = base + j * 8 + fc + c
                 var s: Float32 = neg_inf[DType.float32]()
                 if valid and t < end and t <= past + r:
-                    s = (
-                        (acc[c] * 0.125)
-                        .cast[DType.bfloat16]()
-                        .cast[DType.float32]()
-                    )
+                    s = acc[c] * 0.125
+                    comptime if not FP32:
+                        s = s.cast[DType.bfloat16]().cast[DType.float32]()
                 comptime if SCHEDULE == 5:
                     lane_scores[j * 2 + c] = s
                 else:
@@ -537,8 +547,13 @@ def _mma_tuned[
         tile_m = max(tile_m, warp.shuffle_xor(tile_m, UInt32(8)))
         var new_m = max(m, tile_m)
         # Rescale the old unnormalized output once per KV tile. Probabilities
-        # round to BF16 for matrix multiplication; m and z remain FP32.
+        # retain FP32 for the accuracy path; m and z are always FP32.
         var alpha = exp(m - new_m)
+        comptime if SPLITS > 1:
+            # An all-masked row has m=new_m=-inf. Its neutral state must
+            # survive without exp(-inf - -inf) contaminating z or u.
+            if z == 0:
+                alpha = 0
         var tile_z: Float32 = 0
         comptime for j in range(BK // 8):
             comptime for c in range(2):
@@ -553,7 +568,7 @@ def _mma_tuned[
                             - new_m
                         )
                 tile_z += p
-                probs[local_r, j * 8 + fc + c] = p.cast[DType.bfloat16]()
+                probs[local_r, j * 8 + fc + c] = p.cast[PTYPE]()
         tile_z += warp.shuffle_xor(tile_z, UInt32(1))
         tile_z += warp.shuffle_xor(tile_z, UInt32(8))
         z = z * alpha + tile_z
@@ -575,19 +590,19 @@ def _mma_tuned[
             else:
                 acc = SIMD[DType.float32, 2](u[ds * 2], u[ds * 2 + 1])
             comptime for j in range(BK // 8):
-                var a = SIMD[DType.bfloat16, 2](0)
-                var b = SIMD[DType.bfloat16, 2](0)
-                a[0] = rebind[Scalar[DType.bfloat16]](
+                var a = SIMD[PTYPE, 2](0)
+                var b = SIMD[PTYPE, 2](0)
+                a[0] = rebind[Scalar[PTYPE]](
                     probs[local_r, j * 8 + fc]
                 )
-                a[1] = rebind[Scalar[DType.bfloat16]](
+                a[1] = rebind[Scalar[PTYPE]](
                     probs[local_r, j * 8 + fc + 1]
                 )
-                b[0] = rebind[Scalar[DType.bfloat16]](
-                    vs[j * 8 + fr, ds * 8 + fc]
+                b[0] = rebind[Scalar[PTYPE]](
+                    vs[j * 8 + fr, ds * 8 + fc].cast[PTYPE]()
                 )
-                b[1] = rebind[Scalar[DType.bfloat16]](
-                    vs[j * 8 + fr, ds * 8 + fc + 1]
+                b[1] = rebind[Scalar[PTYPE]](
+                    vs[j * 8 + fr, ds * 8 + fc + 1].cast[PTYPE]()
                 )
                 var previous = acc
                 _mma_apple_8x8(acc, a, b, previous)
@@ -602,10 +617,19 @@ def _mma_tuned[
             comptime if SCHEDULE == 1:
                 u[ds * 2] = fragments[ds][0]
                 u[ds * 2 + 1] = fragments[ds][1]
-            output[r, h, ds * 8 + fc] = (u[ds * 2] / z).cast[DType.bfloat16]()
-            output[r, h, ds * 8 + fc + 1] = (u[ds * 2 + 1] / z).cast[
-                DType.bfloat16
-            ]()
+            comptime if SPLITS > 1:
+                comptime assert output.flat_rank == 4
+                output[r, h, block_idx.z, ds * 8 + fc] = u[ds * 2].cast[OTYPE]()
+                output[r, h, block_idx.z, ds * 8 + fc + 1] = u[ds * 2 + 1].cast[OTYPE]()
+            else:
+                comptime assert output.flat_rank == 3
+                output[r, h, ds * 8 + fc] = (u[ds * 2] / z).cast[OTYPE]()
+                output[r, h, ds * 8 + fc + 1] = (u[ds * 2 + 1] / z).cast[OTYPE]()
+        comptime if SPLITS > 1:
+            comptime assert output.flat_rank == 4
+            if fc == 0:
+                output[r, h, block_idx.z, 64] = m.cast[OTYPE]()
+                output[r, h, block_idx.z, 65] = z.cast[OTYPE]()
 
 
 def enqueue_grouped_query_attention_prefill_apple_gpu[
@@ -617,6 +641,7 @@ def enqueue_grouped_query_attention_prefill_apple_gpu[
     HEADS: Int = 1,
     SHARED: Bool = True,
     SCHEDULE: Int = 0,
+    FP32: Bool = False,
 ](
     ctx: DeviceContext,
     q: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
@@ -638,15 +663,17 @@ def enqueue_grouped_query_attention_prefill_apple_gpu[
     comptime assert not MMA or BQ >= 8
     comptime assert 0 <= SCHEDULE <= 5
     comptime assert SCHEDULE == 0 or (
-        MMA and BQ == 32 and BK == 32 and HEADS == 1
+        MMA and BK == 32 and HEADS == 1
+        and (BQ == 32 or (FP32 and SCHEDULE == 2))
     )
+    comptime assert not FP32 or (MMA and SCHEDULE == 2)
     _validate_prefill(ctx, q, k, v, output)
     var r = Int(q.dim[0]())
     var t = Int(k.dim[0]())
     comptime if MMA:
         comptime kernel = (
             _mma[BQ, BK, HEADS, QL, KL] if SCHEDULE
-            == 0 else _mma_tuned[SCHEDULE, QL, KL]
+            == 0 else _mma_tuned[SCHEDULE, QL, KL, QL, FP32, BQ]
         )
         ctx.enqueue_function[kernel](
             q,
@@ -670,3 +697,69 @@ def enqueue_grouped_query_attention_prefill_apple_gpu[
             grid_dim=(14, ceildiv(r, BQ)),
             block_dim=128,
         )
+
+
+def _merge_prefill_splits[SPLITS: Int, QL: TensorLayout, PL: TensorLayout](
+    partial: TileTensor[DType.float32, PL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    rows: Int32,
+):
+    comptime assert partial.flat_rank == 4
+    comptime assert output.flat_rank == 3
+    var row_head = block_idx.x * 4 + thread_idx.x // 32
+    var r = row_head // 14
+    var h = row_head % 14
+    var lane = Int(lane_id())
+    if r < Int(rows):
+        var m: Float32 = neg_inf[DType.float32]()
+        for s in range(SPLITS):
+            if partial[r, h, s, 65] > 0:
+                m = max(m, rebind[Float32](partial[r, h, s, 64]))
+        var z: Float32 = 0
+        var u0: Float32 = 0
+        var u1: Float32 = 0
+        for s in range(SPLITS):
+            var mass = rebind[Float32](partial[r, h, s, 65])
+            if mass > 0:
+                var weight = exp(rebind[Float32](partial[r, h, s, 64]) - m)
+                z += weight * mass
+                u0 += weight * rebind[Float32](partial[r, h, s, lane])
+                u1 += weight * rebind[Float32](partial[r, h, s, lane + 32])
+        output[r, h, lane] = (u0 / z).cast[DType.bfloat16]()
+        output[r, h, lane + 32] = (u1 / z).cast[DType.bfloat16]()
+
+
+def enqueue_grouped_query_attention_prefill_split_apple_gpu[
+    SPLITS: Int, QL: TensorLayout, KL: TensorLayout, PL: TensorLayout,
+](
+    ctx: DeviceContext,
+    q: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    k: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
+    v: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
+    partial: TileTensor[DType.float32, PL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+) raises:
+    """FP32 rolled-MMA partial states followed by one stable merge dispatch.
+
+    Borrow disjoint contiguous row-major views, including caller-owned partial
+    storage [R,14,SPLITS,66] = [weighted numerator[64], maximum, denominator].
+    Empty pieces write (0,-inf,0). No allocation, initialization or sync here.
+    """
+    comptime assert SPLITS == 4 or SPLITS == 8
+    comptime assert q.flat_rank == 3 and k.flat_rank == 3
+    comptime assert partial.flat_rank == 4
+    _validate_prefill(ctx, q, k, v, output)
+    var r = Int(q.dim[0]())
+    var t = Int(k.dim[0]())
+    if (Int(partial.dim[0]()) != r or Int(partial.dim[1]()) != 14
+        or Int(partial.dim[2]()) != SPLITS or Int(partial.dim[3]()) != 66):
+        raise Error("split prefill requires FP32 workspace [R,14,SPLITS,66]")
+    comptime kernel = _mma_tuned[2, QL, KL, PL, True, 32, SPLITS]
+    ctx.enqueue_function[kernel](
+        q, k, v, partial, Int32(r), Int32(t),
+        grid_dim=(14, ceildiv(r, 32), SPLITS), block_dim=128,
+    )
+    comptime merge = _merge_prefill_splits[SPLITS, QL, PL]
+    ctx.enqueue_function[merge](
+        partial, output, Int32(r), grid_dim=ceildiv(r * 14, 4), block_dim=128,
+    )

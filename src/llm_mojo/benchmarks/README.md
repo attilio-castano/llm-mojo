@@ -44,7 +44,40 @@ full/incremental matrix is `--studies gqa_prefill`: it now pairs the original
 MMA route 8 with rolled QK route 12. The five-ablation follow-up screen is
 `--studies gqa_prefill_resources_screen`, also excluded from default runs.
 Historical matrices remain defined by their tagged sources and frozen records.
+The bounded GQA work-distribution study uses
+`--studies attention_sublayer_parallelism_screen`, comparing integrated control
+9 with BQ16/BQ8 (10/11) and KV split4/split8 (12/13). Run
+`--studies attention_sublayer_parallelism --parallelism-screen /path/to/attention_sublayer_parallelism_screen`
+only after the screen completes. The runner validates its build identity and
+selects at most one qualifying candidate per family using the frozen rule in
+[the contract](../../../studies/attention_sublayer/plans.md#contained-gqa-parallelism-comparison).
+These two studies are excluded from the default run. Both stages include
+control self-pairs, complete attention calls and any partial-state merge.
+For profile curation, use `--attention-sublayer --parallelism-variants 9 FINALIST... --prefix parallelism_`
+at `(64,4096)` and `(1024,1024)`, with 25 measured iterations and ten warmups.
 `src/llm_mojo/benchmarks/smoke.py` exercises the other measurement routes and output gates.
+
+The projection-tile follow-up starts with
+`--studies attention_sublayer_tiles_screen attention_sublayer_tiles_kernel_screen`.
+Both compare 9/14/15; the first times the complete block and the second only
+Wo on frozen upstream attention inputs. After both complete, use
+`--studies attention_sublayer_tiles attention_sublayer_tiles_qkv`
+with `--tile-screen /path/to/attention_sublayer_tiles_screen` and
+`--tile-kernel-screen /path/to/attention_sublayer_tiles_kernel_screen`.
+The runner requires a tile to qualify at both boundaries in both modes at
+full 1024, binds the screens to this build, and selects at most one. No winner
+means stop this family after screening. QKV transfer changes only QKV, leaving
+Wo at the control mapping. All these studies are opt-in.
+
+The independent `attention_sublayer_split_domain` study compares existing 9/13
+at R=16/64/256 and T=1024/4096. Run control-only `attention_sublayer_timing` and
+`attention_sublayer_timing_buffered` beforehand to diagnose sensitivity to
+printing between samples. The latter buffers observations until both arms
+finish; timing still includes enqueue through completion. The parser verifies
+each requested measurement boundary. The [bounded plan](../../../studies/attention_sublayer/plans.md#contained-projection-tiles-and-split-domain-follow-up)
+defines the matrices, selection and interpretation. Retain these files under
+their matching `tiles_`, `split_domain_` and `timing_` prefixes in the existing
+attention study; the common plotter reconstructs all tables and figures.
 
 Hot measures one operation through completion. Ring24 measures 24 distinct
 input buffers (RMSNorm/RoPE/GQA) or weight buffers (linear), one synchronization,
@@ -60,11 +93,85 @@ uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.plot
 ```
 
 That command checks the raw hash and complete observation grid before plotting.
+The attention study also regenerates its retained `wo_` and `wo_screen_`
+comparison tables and figures, including both Wo profile variants.
 No GPU execution or external temporary files are needed. PNG is the single
 committed image format; extra exports are disposable. See
 [the method](../../../docs/experiments.md) for interpreting evidence.
 
+The attention study keeps records and regenerated CSVs in
+`studies/attention_sublayer/data/` and generated PNGs in `figures/`.
+External run directories remain flat. Numerical `.json` summaries referencing
+`.json.gz` records can be read with `study.load_numerical_record()`; it verifies
+both compressed and original hashes before returning the full record.
+
 ## Focused Metal profiling
+
+Profile curation accepts one `--attention-study` name: `baseline`, `wo`,
+`decode`, `prefill`, `projections`, `parallelism`, or `combined`. Parallelism
+also requires `--parallelism-variants` with the selected finalists. Historical
+`--attention-sublayer --…-comparison` flags remain compatible aliases. The
+same fixed grids and dispatch validation apply to both spellings.
+
+The attention sublayer uses the same runner with `--studies attention_sublayer`.
+The contained Wo experiment uses `--studies attention_sublayer_wo_screen`,
+then `--studies attention_sublayer_wo` only after its declared screen gate
+passes. Both include fresh self-pair calibration. Variant 4 changes only Wo
+to the existing bias-free 8x16 MMA mapping; variant 3 is the fixed control.
+For comparing stage captures use `profile_summary --attention-study wo --prefix wo_`; build/capture both profile variants 3 and 4.
+The original baseline matrix measures FP32 route 3 paired with itself over six decode,
+five full-prefill and four chunked-prefill workloads, in hot and ring24 modes.
+Run full validation first: its frozen synthetic case 7 supplies the instrument's
+weights, nonuniform inputs, upstream cache prefix and FP32 output checks.
+The builder and runner verify the actual input arrays against their frozen
+hashes before and after work. Ring24 owns 24 distinct weight/input/cache
+allocations, with two sign patterns; it shares output/scratch and is not a
+decoder stack. Every call overwrites the same suffix. Only the host length
+rewind, actual sublayer enqueue and completion are timed.
+
+The next contained comparison uses `--studies attention_sublayer_decode_screen`
+at T=64/4096, then `--studies attention_sublayer_decode` at all six decode
+lengths if the declared gate passes. Benchmark variants 5/6 select FP32
+G32/split64-H4 with rowwise Wo; variant 3 is the materialized FP32 control.
+Both new variants require R=1 in this instrument. They contain 10/11
+dispatches per call. Use `profile_summary --attention-study decode --prefix decode_` to curate variants 3/5/6 at R=1 and
+T=64/4096. The existing plot command also regenerates this retained comparison.
+
+The contained FP32 prefill experiment uses
+`--studies attention_sublayer_prefill_screen`, then
+`--studies attention_sublayer_prefill` if the predeclared screen gate passes.
+Benchmark 7 selects FP32 rolled MMA prefill with MMA Wo; its fixed control is
+4 (materialized FP32 plus MMA Wo). Both require R>1 in this comparison. Use
+`--profile-variant 4` or `7` and curate with
+`--attention-study prefill --prefix prefill_` at
+(1024,1024),(4096,4096),(64,4096). The dispatch counts are 12/10; the default
+attention route remains unchanged. Gates and the complete protocol are in
+[the attention contract](../../../studies/attention_sublayer/plans.md#contained-fp32-prefill-comparison).
+
+The integrated QKV/Wo study uses `--studies attention_sublayer_projections
+attention_sublayer_integrated`. These are two fresh paired runs on the same
+fifteen workloads: variant 9 versus 8 holds the FP32 GQA and Wo policy fixed
+and measures QKV packing/tiling plus its layout copy; 9 versus 3 measures all
+selected mappings together against the original baseline. Variant 9 calls
+`enqueue_attention_sublayer_integrated` directly and executes nine dispatches;
+8 keeps separate Q/K/V and executes ten. Use profile variants 8/9 at the four
+baseline profile workloads, then curate with `--attention-study projections --prefix integrated_`. The shared plot command
+regenerates `projections_`/`integrated_` comparisons and integrated profiles.
+See the [declared policy and gates](../../../studies/attention_sublayer/plans.md#integrating-the-projection-studies-end-to-end).
+
+For the original twelve-stage Metal baseline, use the existing builder with
+`--operation attention_sublayer --profile-variant 3 --profile-query-rows R
+--profile-rows T --profile-warmup 10 --profile-iterations N`.
+The bounded profile grid is `(1,4096), (1024,1024), (4096,4096), (64,4096)`;
+`12*N` must not exceed 5,000 dispatches. Curate folders `rR-tT-v3` with
+`profile_summary --attention-sublayer`, then pass the topic directory to
+`plot`. Source inputs and every measured cache append are checked before
+timing; the existing upstream numerical suites remain the independent gates.
+The curator accepts an analysis with optional counters omitted and records
+`counter_analysis.status = not_analyzed`, an empty counter list and an explicit
+scope statement. A capture-local `counter_analysis_note.json`, when present,
+preserves the reason and retention details. Missing counters are never zero
+observations. The attention latency plot marks self-pair deviations above 5%.
 
 The capture/analyzer pair retains binary hashes, verified launch receipts,
 workload identity, dispatch segmentation and named counters. Its historical
@@ -145,3 +252,25 @@ retains counts and hashes. Reproduction normalizes only filename metadata;
 IR allocas and line counts are not physical spills or machine-code size.
 The rolled reduction is selected through `SCHEDULE=2, MMA=True, BQ=BK=32,
 HEADS=1` on the explicit engine entrypoint. The original control stays intact.
+
+## Combined 16x16 projections
+
+After numerical validation, run `--studies attention_sublayer_combined` to
+compare integrated control 9 with combined 16x16 QKV/Wo variant 18 across the
+existing fifteen workloads. This opt-in comparison keeps GQA fixed and needs
+no new screen: both components already qualified independently. Profile 9/18
+at (256,256), (1024,1024), (4096,4096), (64,4096), with ten warmups and
+25/25/10/25 measured iterations. Curate with `profile_summary SOURCE OUTPUT
+--attention-study combined --prefix combined_`. Retain the
+run, samples, profiles and validation under that prefix; the normal plotter
+regenerates both latency and stage-time figures.
+
+The split8/projection closure uses
+`--studies attention_sublayer_split_combined_projections attention_sublayer_split_combined_gqa`.
+It compares 13/19 (projection gain with split8 fixed) and 18/19 (split8 gain
+with new projections fixed) over the seven predeclared cached-chunk workloads.
+Each comparison includes its own control self-pairs; both are opt-in. Keep
+results under `split_combined_projections_` and `split_combined_gqa_` in the
+existing attention study. No screen or new profile capture is required for
+this composition of existing kernels. See the
+[closure contract](../../../studies/attention_sublayer/plans.md#closing-the-split8-and-projection-integration-gap).

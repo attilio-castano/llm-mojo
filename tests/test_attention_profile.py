@@ -10,8 +10,127 @@ from llm_mojo.benchmarks.attention_decode_contract import configuration, ENTRYPO
 from llm_mojo.benchmarks.capture_trace import profile_contract, parse_target_identity, validate_target_identity
 from llm_mojo.benchmarks.analyze_trace import segment_compute_commands
 from llm_mojo.benchmarks import attention_prefill_contract as prefill
+from llm_mojo.benchmarks import attention_sublayer_contract as sublayer
 
 class AttentionProfileTests(unittest.TestCase):
+    def test_partitioned_gqa_profiles_require_merge_only_for_multirow_splits(self):
+        for variant in range(10,14):
+            for rows in (1,64):
+                p = self.profile()
+                p.update(operation=sublayer.OPERATION,
+                         implementation=f'attention_sublayer_{variant}',
+                         entrypoint='enqueue_attention_sublayer_integrated', profile_iterations=25,
+                         **sublayer.specification(variant,rows,4096))
+                cfg,_,_ = profile_contract(p)
+                expected = 10 if variant >= 12 and rows > 1 else 9
+                self.assertEqual(cfg['dispatches_per_iteration'],expected)
+                for field,value in (('dispatches_per_iteration',19-expected),
+                                    ('profile_workload','sublayer-r64-t4096-v9'),
+                                    ('entrypoint','enqueue_attention_sublayer')):
+                    with self.assertRaises(ValueError):
+                        sublayer.configuration({**p,field:value})
+        stages,grid = sublayer.profile_grid(dict(variants=[9,10,13],
+                                                workloads=sublayer.PARALLELISM_PROFILE_WORKLOADS))
+        self.assertEqual(len(grid),6)
+        self.assertEqual(stages[13][-4:-2],['FP32 GQA split','FP32 GQA merge'])
+        for variants in ([10,13],[9,10,11],[9,12,13],[9,10,13,13]):
+            with self.assertRaises(ValueError):
+                sublayer.profile_grid(dict(variants=variants,workloads=sublayer.PARALLELISM_PROFILE_WORKLOADS))
+
+    def test_sublayer_profile_binds_full_stage_sequence_and_causal_shape(self):
+        p = self.profile()
+        p.update(operation=sublayer.OPERATION, implementation='attention_sublayer_3',
+                 entrypoint='enqueue_attention_sublayer', profile_iterations=300,
+                 **sublayer.specification(3,64,4096))
+        cfg, _, hardware = profile_contract(p)
+        output = '\n'.join([
+            'profile implementation: enqueue_attention_sublayer', 'device: Apple Test GPU',
+            'api: metal', 'rows: 64', 'hidden: 896', 'warmup iterations: 100',
+            'profile iterations: 300', 'post-profile idle milliseconds: 250',
+            'profile workload: sublayer-r64-t4096-v3', 'profile dispatches per iteration: 12',
+            'key value rows: 4096', 'query heads: 14', 'key value heads: 2'])
+        target = parse_target_identity(output)
+        validate_target_identity(target,cfg,hardware)
+        for key, value in [('hidden_size',64), ('key_value_rows',65), ('dispatches_per_iteration',3)]:
+            with self.assertRaises(ValueError):
+                validate_target_identity({**target,key:value},cfg,hardware)
+        for key, value in [('profile_rows',4097), ('profile_iterations',417),
+                           ('implementation','attention_sublayer_0'), ('query_heads',True)]:
+            with self.assertRaises(ValueError):
+                sublayer.configuration({**p,key:value})
+        self.assertEqual(len(sublayer.profile_grid(dict(variants=[3],workloads=sublayer.PROFILE_WORKLOADS))[1]),4)
+        candidate = {**p, 'implementation':'attention_sublayer_4',
+                     **sublayer.specification(4,64,4096)}
+        sublayer.configuration(candidate)
+        # The same source entrypoint serves both Wo mappings; the workload ID
+        # must still prevent a rowwise capture being labeled as the candidate.
+        with self.assertRaisesRegex(ValueError,'identity mismatch'):
+            sublayer.configuration({**candidate,'profile_workload':p['profile_workload']})
+        self.assertEqual(len(sublayer.profile_grid(dict(variants=[3,4],workloads=sublayer.PROFILE_WORKLOADS))[1]),8)
+        with self.assertRaises(ValueError):
+            sublayer.profile_grid(dict(variants=[3],workloads=sublayer.PROFILE_WORKLOADS[:-1]))
+
+    def test_fp32_decode_profiles_bind_variant_specific_dispatches(self):
+        for variant,dispatches in ((5,10),(6,11)):
+            with self.subTest(variant=variant):
+                p = self.profile()
+                p.update(operation=sublayer.OPERATION,
+                         implementation=f'attention_sublayer_{variant}',
+                         entrypoint='enqueue_attention_sublayer', profile_iterations=450,
+                         **sublayer.specification(variant,1,4096))
+                cfg,_,_ = profile_contract(p)
+                self.assertEqual(cfg['dispatches_per_iteration'],dispatches)
+                for key,value in (('dispatches_per_iteration',12),
+                                  ('profile_workload','sublayer-r1-t4096-v3'),
+                                  ('profile_rows',2),('profile_iterations',501)):
+                    with self.assertRaises(ValueError):
+                        sublayer.configuration({**p,key:value})
+        stages,grid = sublayer.profile_grid(dict(variants=[3,5,6],
+                                               workloads=sublayer.DECODE_PROFILE_WORKLOADS))
+        self.assertEqual([len(stages[v]) for v in (3,5,6)],[12,10,11])
+        self.assertEqual(len(grid),6)
+        with self.assertRaises(ValueError):
+            sublayer.profile_grid(dict(variants=[3,5,6],workloads=sublayer.PROFILE_WORKLOADS))
+
+    def test_fp32_sublayer_prefill_profile_binds_both_arms(self):
+        p = self.profile()
+        p.update(operation=sublayer.OPERATION, implementation='attention_sublayer_7',
+                 entrypoint='enqueue_attention_sublayer', profile_iterations=450,
+                 **sublayer.specification(7,64,4096))
+        cfg,_,_ = profile_contract(p)
+        self.assertEqual(cfg['dispatches_per_iteration'],10)
+        for key,value in (('dispatches_per_iteration',12), ('profile_rows',1),
+                          ('profile_workload','sublayer-r64-t4096-v4'),
+                          ('profile_iterations',501)):
+            with self.assertRaises(ValueError):
+                sublayer.configuration({**p,key:value})
+        stages,grid = sublayer.profile_grid(dict(variants=[4,7],
+                                               workloads=sublayer.PREFILL_PROFILE_WORKLOADS))
+        self.assertEqual([len(stages[v]) for v in (4,7)],[12,10])
+        self.assertEqual(len(grid),6)
+        for variants,workloads in (([3,7],sublayer.PREFILL_PROFILE_WORKLOADS),
+                                  ([4,7],sublayer.PROFILE_WORKLOADS)):
+            with self.assertRaises(ValueError):
+                sublayer.profile_grid(dict(variants=variants,workloads=workloads))
+
+    def test_integrated_attention_profile_binds_entrypoint_and_layout_copy(self):
+        for r,t in sublayer.PROFILE_WORKLOADS:
+            p = self.profile()
+            p.update(operation=sublayer.OPERATION, implementation='attention_sublayer_9',
+                     entrypoint='enqueue_attention_sublayer_integrated', profile_iterations=50,
+                     **sublayer.specification(9,r,t))
+            cfg, _, _ = profile_contract(p)
+            self.assertEqual(cfg['dispatches_per_iteration'],9)
+            for key,value in (('entrypoint','enqueue_attention_sublayer'),
+                              ('dispatches_per_iteration',8),
+                              ('implementation','attention_sublayer_8')):
+                with self.assertRaises(ValueError):
+                    sublayer.configuration({**p,key:value})
+        stages,grid = sublayer.profile_grid(dict(variants=[8,9],workloads=sublayer.PROFILE_WORKLOADS))
+        self.assertEqual(len(grid),8)
+        self.assertEqual(stages[9][1:3],['packed QKV projection','QKV unpack'])
+        self.assertEqual([len(stages[v]) for v in (8,9)],[10,9])
+
     def test_prefill_profile_binds_rectangular_shape_and_tile_ownership(self):
         for variant in prefill.VARIANTS:
             p = self.profile()

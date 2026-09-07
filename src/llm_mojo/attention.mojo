@@ -1,4 +1,4 @@
-"""BF16 grouped-query attention reference and Apple GPU baseline."""
+"""BF16 GQA inputs/output with explicit BF16 or FP32 materialized intermediates."""
 
 from layout import TensorLayout, TileTensor
 from max.gpu.host import DeviceContext
@@ -16,11 +16,12 @@ def _validate_grouped_query_attention[
     ValueLayout: TensorLayout,
     ScratchLayout: TensorLayout,
     OutputLayout: TensorLayout,
+    ScratchDType: DType = DType.bfloat16,
 ](
     query: TileTensor[DType.bfloat16, QueryLayout, MutAnyOrigin],
     key: TileTensor[DType.bfloat16, KeyLayout, MutAnyOrigin],
     value: TileTensor[DType.bfloat16, ValueLayout, MutAnyOrigin],
-    scratch: TileTensor[DType.bfloat16, ScratchLayout, MutAnyOrigin],
+    scratch: TileTensor[ScratchDType, ScratchLayout, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OutputLayout, MutAnyOrigin],
 ) raises:
     """Validate the shared host and enqueue contract."""
@@ -29,6 +30,7 @@ def _validate_grouped_query_attention[
     comptime assert key.flat_rank == 3, "key must have rank 3"
     comptime assert value.flat_rank == 3, "value must have rank 3"
     comptime assert scratch.flat_rank == 3, "scratch must have rank 3"
+    comptime assert ScratchDType == DType.bfloat16 or ScratchDType == DType.float32
     comptime assert output.flat_rank == 3, "output must have rank 3"
 
     var query_rows = Int(query.dim[0]())
@@ -78,14 +80,15 @@ def grouped_query_attention_reference[
     ValueLayout: TensorLayout,
     ScratchLayout: TensorLayout,
     OutputLayout: TensorLayout,
+    ScratchDType: DType = DType.bfloat16,
 ](
     query: TileTensor[DType.bfloat16, QueryLayout, MutAnyOrigin],
     key: TileTensor[DType.bfloat16, KeyLayout, MutAnyOrigin],
     value: TileTensor[DType.bfloat16, ValueLayout, MutAnyOrigin],
-    scratch: TileTensor[DType.bfloat16, ScratchLayout, MutAnyOrigin],
+    scratch: TileTensor[ScratchDType, ScratchLayout, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OutputLayout, MutAnyOrigin],
 ) raises:
-    """Run serial causal GQA, leaving BF16 probabilities in scratch.
+    """Run serial causal GQA, leaving probabilities in the declared scratch dtype.
 
     The caller owns five non-overlapping storage regions.
     """
@@ -94,6 +97,7 @@ def grouped_query_attention_reference[
     comptime assert key.flat_rank == 3, "key must have rank 3"
     comptime assert value.flat_rank == 3, "value must have rank 3"
     comptime assert scratch.flat_rank == 3, "scratch must have rank 3"
+    comptime assert ScratchDType == DType.bfloat16 or ScratchDType == DType.float32
     comptime assert output.flat_rank == 3, "output must have rank 3"
     _validate_grouped_query_attention(query, key, value, scratch, output)
 
@@ -127,21 +131,21 @@ def grouped_query_attention_reference[
                             * key_value.cast[DType.float32]()
                         )
                     score *= scale
-                var stored_score = score.cast[DType.bfloat16]()
+                var stored_score = score.cast[ScratchDType]()
                 scratch[row, query_head, key_position] = rebind[
                     scratch.ElementType
                 ](stored_score)
 
-    # Stage 2: stable causal softmax in FP32, materialized back to BF16.
+    # Stage 2: stable causal softmax in FP32, stored in the declared dtype.
     for row in range(query_rows):
         var visible_key_count = past + row + 1
         for query_head in range(query_heads):
-            var first_score = rebind[Scalar[DType.bfloat16]](
+            var first_score = rebind[Scalar[ScratchDType]](
                 scratch[row, query_head, 0]
             )
             var max_score = first_score.cast[DType.float32]()
             for key_position in range(1, visible_key_count):
-                var stored_score = rebind[Scalar[DType.bfloat16]](
+                var stored_score = rebind[Scalar[ScratchDType]](
                     scratch[row, query_head, key_position]
                 )
                 var score = stored_score.cast[DType.float32]()
@@ -150,7 +154,7 @@ def grouped_query_attention_reference[
 
             var denominator: Scalar[DType.float32] = 0.0
             for key_position in range(visible_key_count):
-                var stored_score = rebind[Scalar[DType.bfloat16]](
+                var stored_score = rebind[Scalar[ScratchDType]](
                     scratch[row, query_head, key_position]
                 )
                 denominator += exp(
@@ -160,14 +164,14 @@ def grouped_query_attention_reference[
             for key_position in range(key_value_rows):
                 var probability: Scalar[DType.float32] = 0.0
                 if key_position < visible_key_count:
-                    var stored_score = rebind[Scalar[DType.bfloat16]](
+                    var stored_score = rebind[Scalar[ScratchDType]](
                         scratch[row, query_head, key_position]
                     )
                     probability = (
                         exp(stored_score.cast[DType.float32]() - max_score)
                         / denominator
                     )
-                var stored_probability = probability.cast[DType.bfloat16]()
+                var stored_probability = probability.cast[ScratchDType]()
                 scratch[row, query_head, key_position] = rebind[
                     scratch.ElementType
                 ](stored_probability)
@@ -180,7 +184,7 @@ def grouped_query_attention_reference[
             for dimension in range(head_dim):
                 var accumulator: Scalar[DType.float32] = 0.0
                 for key_position in range(visible_key_count):
-                    var probability = rebind[Scalar[DType.bfloat16]](
+                    var probability = rebind[Scalar[ScratchDType]](
                         scratch[row, query_head, key_position]
                     )
                     var value_element = rebind[Scalar[DType.bfloat16]](
@@ -200,10 +204,11 @@ def _grouped_query_attention_qk_apple_gpu_kernel[
     QueryLayout: TensorLayout,
     KeyLayout: TensorLayout,
     ScratchLayout: TensorLayout,
+    ScratchDType: DType = DType.bfloat16,
 ](
     query: TileTensor[DType.bfloat16, QueryLayout, MutAnyOrigin],
     key: TileTensor[DType.bfloat16, KeyLayout, MutAnyOrigin],
-    scratch: TileTensor[DType.bfloat16, ScratchLayout, MutAnyOrigin],
+    scratch: TileTensor[ScratchDType, ScratchLayout, MutAnyOrigin],
     query_rows: Int32,
     key_value_rows: Int32,
     query_heads: Int32,
@@ -216,6 +221,7 @@ def _grouped_query_attention_qk_apple_gpu_kernel[
     comptime assert query.flat_rank == 3, "query must have rank 3"
     comptime assert key.flat_rank == 3, "key must have rank 3"
     comptime assert scratch.flat_rank == 3, "scratch must have rank 3"
+    comptime assert ScratchDType == DType.bfloat16 or ScratchDType == DType.float32
 
     var query_row_count = Int(query_rows)
     var key_value_row_count = Int(key_value_rows)
@@ -249,7 +255,7 @@ def _grouped_query_attention_qk_apple_gpu_kernel[
                     * key_value.cast[DType.float32]()
                 )
             score *= rsqrt(Float32(dimension_count))
-        var stored_score = score.cast[DType.bfloat16]()
+        var stored_score = score.cast[ScratchDType]()
         scratch[row, query_head, key_position] = rebind[scratch.ElementType](
             stored_score
         )
@@ -257,8 +263,9 @@ def _grouped_query_attention_qk_apple_gpu_kernel[
 
 def _grouped_query_attention_softmax_apple_gpu_kernel[
     ScratchLayout: TensorLayout,
+    ScratchDType: DType = DType.bfloat16,
 ](
-    scratch: TileTensor[DType.bfloat16, ScratchLayout, MutAnyOrigin],
+    scratch: TileTensor[ScratchDType, ScratchLayout, MutAnyOrigin],
     query_rows: Int32,
     key_value_rows: Int32,
     query_heads: Int32,
@@ -267,6 +274,7 @@ def _grouped_query_attention_softmax_apple_gpu_kernel[
 
     comptime assert is_apple_gpu(), "kernel requires an Apple GPU target"
     comptime assert scratch.flat_rank == 3, "scratch must have rank 3"
+    comptime assert ScratchDType == DType.bfloat16 or ScratchDType == DType.float32
 
     var query_row_count = Int(query_rows)
     var key_value_row_count = Int(key_value_rows)
@@ -278,12 +286,12 @@ def _grouped_query_attention_softmax_apple_gpu_kernel[
         var row = row_head // query_head_count
         var past = key_value_row_count - query_row_count
         var visible_key_count = past + row + 1
-        var first_score = rebind[Scalar[DType.bfloat16]](
+        var first_score = rebind[Scalar[ScratchDType]](
             scratch[row, query_head, 0]
         )
         var max_score = first_score.cast[DType.float32]()
         for key_position in range(1, visible_key_count):
-            var stored_score = rebind[Scalar[DType.bfloat16]](
+            var stored_score = rebind[Scalar[ScratchDType]](
                 scratch[row, query_head, key_position]
             )
             var score = stored_score.cast[DType.float32]()
@@ -292,7 +300,7 @@ def _grouped_query_attention_softmax_apple_gpu_kernel[
 
         var denominator: Scalar[DType.float32] = 0.0
         for key_position in range(visible_key_count):
-            var stored_score = rebind[Scalar[DType.bfloat16]](
+            var stored_score = rebind[Scalar[ScratchDType]](
                 scratch[row, query_head, key_position]
             )
             denominator += exp(stored_score.cast[DType.float32]() - max_score)
@@ -300,14 +308,14 @@ def _grouped_query_attention_softmax_apple_gpu_kernel[
         for key_position in range(key_value_row_count):
             var probability: Scalar[DType.float32] = 0.0
             if key_position < visible_key_count:
-                var stored_score = rebind[Scalar[DType.bfloat16]](
+                var stored_score = rebind[Scalar[ScratchDType]](
                     scratch[row, query_head, key_position]
                 )
                 probability = (
                     exp(stored_score.cast[DType.float32]() - max_score)
                     / denominator
                 )
-            var stored_probability = probability.cast[DType.bfloat16]()
+            var stored_probability = probability.cast[ScratchDType]()
             scratch[row, query_head, key_position] = rebind[
                 scratch.ElementType
             ](stored_probability)
@@ -317,9 +325,10 @@ def _grouped_query_attention_pv_apple_gpu_kernel[
     ValueLayout: TensorLayout,
     ScratchLayout: TensorLayout,
     OutputLayout: TensorLayout,
+    ScratchDType: DType = DType.bfloat16,
 ](
     value: TileTensor[DType.bfloat16, ValueLayout, MutAnyOrigin],
-    scratch: TileTensor[DType.bfloat16, ScratchLayout, MutAnyOrigin],
+    scratch: TileTensor[ScratchDType, ScratchLayout, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OutputLayout, MutAnyOrigin],
     query_rows: Int32,
     key_value_rows: Int32,
@@ -332,6 +341,7 @@ def _grouped_query_attention_pv_apple_gpu_kernel[
     comptime assert is_apple_gpu(), "kernel requires an Apple GPU target"
     comptime assert value.flat_rank == 3, "value must have rank 3"
     comptime assert scratch.flat_rank == 3, "scratch must have rank 3"
+    comptime assert ScratchDType == DType.bfloat16 or ScratchDType == DType.float32
     comptime assert output.flat_rank == 3, "output must have rank 3"
 
     var query_row_count = Int(query_rows)
@@ -354,7 +364,7 @@ def _grouped_query_attention_pv_apple_gpu_kernel[
         var visible_key_count = past + row + 1
         var accumulator: Scalar[DType.float32] = 0.0
         for key_position in range(visible_key_count):
-            var probability = rebind[Scalar[DType.bfloat16]](
+            var probability = rebind[Scalar[ScratchDType]](
                 scratch[row, query_head, key_position]
             )
             var value_element = rebind[Scalar[DType.bfloat16]](
@@ -374,15 +384,19 @@ def enqueue_grouped_query_attention_apple_gpu[
     ValueLayout: TensorLayout,
     ScratchLayout: TensorLayout,
     OutputLayout: TensorLayout,
+    ScratchDType: DType = DType.bfloat16,
 ](
     context: DeviceContext,
     query: TileTensor[DType.bfloat16, QueryLayout, MutAnyOrigin],
     key: TileTensor[DType.bfloat16, KeyLayout, MutAnyOrigin],
     value: TileTensor[DType.bfloat16, ValueLayout, MutAnyOrigin],
-    scratch: TileTensor[DType.bfloat16, ScratchLayout, MutAnyOrigin],
+    scratch: TileTensor[ScratchDType, ScratchLayout, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OutputLayout, MutAnyOrigin],
 ) raises:
     """Enqueue materialized GQA without allocating or synchronizing.
+
+    BF16 scratch preserves the original score/probability rounding. FP32
+    scratch keeps scores and normalized probabilities in FP32 until PV output.
 
     The caller owns five non-overlapping storage regions and must keep them
     alive through their last queued use.
@@ -392,6 +406,7 @@ def enqueue_grouped_query_attention_apple_gpu[
     comptime assert key.flat_rank == 3, "key must have rank 3"
     comptime assert value.flat_rank == 3, "value must have rank 3"
     comptime assert scratch.flat_rank == 3, "scratch must have rank 3"
+    comptime assert ScratchDType == DType.bfloat16 or ScratchDType == DType.float32
     comptime assert output.flat_rank == 3, "output must have rank 3"
     _validate_grouped_query_attention(query, key, value, scratch, output)
     if context.api() != "metal":
@@ -407,7 +422,7 @@ def enqueue_grouped_query_attention_apple_gpu[
     var output_count = query_rows * query_heads * head_dim
 
     comptime qk_kernel = _grouped_query_attention_qk_apple_gpu_kernel[
-        QueryLayout, KeyLayout, ScratchLayout
+        QueryLayout, KeyLayout, ScratchLayout, ScratchDType
     ]
     context.enqueue_function[qk_kernel](
         query,
@@ -423,7 +438,9 @@ def enqueue_grouped_query_attention_apple_gpu[
     )
 
     comptime softmax_kernel = (
-        _grouped_query_attention_softmax_apple_gpu_kernel[ScratchLayout]
+        _grouped_query_attention_softmax_apple_gpu_kernel[
+            ScratchLayout, ScratchDType
+        ]
     )
     context.enqueue_function[softmax_kernel](
         scratch,
@@ -435,7 +452,7 @@ def enqueue_grouped_query_attention_apple_gpu[
     )
 
     comptime pv_kernel = _grouped_query_attention_pv_apple_gpu_kernel[
-        ValueLayout, ScratchLayout, OutputLayout
+        ValueLayout, ScratchLayout, OutputLayout, ScratchDType
     ]
     context.enqueue_function[pv_kernel](
         value,

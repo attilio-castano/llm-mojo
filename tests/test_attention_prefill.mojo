@@ -1,6 +1,16 @@
-from layout import TileTensor, row_major
-from max.gpu.host import DeviceContext
-from std.testing import TestSuite, assert_equal, assert_raises
+from layout import TensorLayout, TileTensor, row_major
+from max.gpu.host import DeviceContext, DeviceBuffer
+from std.testing import TestSuite, assert_equal, assert_raises, assert_true
+from std.math import isfinite, ceildiv, exp
+from std.utils.numerics import neg_inf
+from std.gpu import lane_id
+from std.sys.info import is_apple_gpu
+from max.gpu.compute.arch.mma_apple import _mma_apple_8x8
+from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
+from llm_mojo.attention_prefill import (
+    enqueue_grouped_query_attention_prefill_apple_gpu,
+    enqueue_grouped_query_attention_prefill_split_apple_gpu, _merge_prefill_splits,
+)
 from std.sys import get_defined_int
 from llm_mojo.benchmarks.attention_prefill_support import (
     enqueue_variant,
@@ -79,8 +89,42 @@ def test_all_prefill_routes_against_independent_oracles() raises:
         )
 
 
+def _fp32_candidate[QL: TensorLayout, KL: TensorLayout](
+    ctx: DeviceContext, q: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    k: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
+    v: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    mut partial: DeviceBuffer[DType.float32], mapping: Int,
+) raises:
+    comptime assert q.flat_rank == 3
+    var r = Int(q.dim[0]())
+    if mapping == 0:
+        enqueue_grouped_query_attention_prefill_apple_gpu[
+            32, 32, MMA=True, SCHEDULE=2, FP32=True
+        ](ctx, q, k, v, output)
+    elif mapping == 1:
+        enqueue_grouped_query_attention_prefill_apple_gpu[
+            16, 32, MMA=True, SCHEDULE=2, FP32=True
+        ](ctx, q, k, v, output)
+    elif mapping == 2:
+        enqueue_grouped_query_attention_prefill_apple_gpu[
+            8, 32, MMA=True, SCHEDULE=2, FP32=True
+        ](ctx, q, k, v, output)
+    elif mapping == 3:
+        enqueue_grouped_query_attention_prefill_split_apple_gpu[4](
+            ctx, q, k, v, TileTensor(partial, row_major(r, 14, 4, 66)), output,
+        )
+    elif mapping == 4:
+        enqueue_grouped_query_attention_prefill_split_apple_gpu[8](
+            ctx, q, k, v, TileTensor(partial, row_major(r, 14, 8, 66)), output,
+        )
+    else:
+        raise Error("unknown FP32 prefill test mapping")
+
+
 def _result(
-    rows: Int, tokens: Int, variant: Int, perturb_future: Bool = False
+    rows: Int, tokens: Int, variant: Int, perturb_future: Bool = False,
+    fp32: Bool = False, mapping: Int = 0,
 ) raises -> List[Float32]:
     var ctx = DeviceContext()
     var ql = row_major(rows, 14, 64)
@@ -109,15 +153,21 @@ def _result(
                             for d in range(64):
                                 k[t, h, d] = 64
                                 v[t, h, d] = -64
-    _ = enqueue_variant(
-        variant,
-        ctx,
-        TileTensor(qb, ql),
-        TileTensor(kb, kl),
-        TileTensor(vb, kl),
-        TileTensor(ob, ql),
-        TileTensor(sb, row_major(rows, 14, tokens)),
-    )
+    if fp32:
+        var partial = ctx.enqueue_create_buffer[DType.float32](rows * 14 * 8 * 66)
+        partial.enqueue_fill(Float32(FloatLiteral.nan))
+        _fp32_candidate(ctx, TileTensor(qb, ql), TileTensor(kb, kl),
+                        TileTensor(vb, kl), TileTensor(ob, ql), partial, mapping)
+    else:
+        _ = enqueue_variant(
+            variant,
+            ctx,
+            TileTensor(qb, ql),
+            TileTensor(kb, kl),
+            TileTensor(vb, kl),
+            TileTensor(ob, ql),
+            TileTensor(sb, row_major(rows, 14, tokens)),
+        )
     var result = List[Float32]()
     with ob.map_to_host() as mapped:
         var output = TileTensor(mapped, ql)
@@ -160,6 +210,154 @@ def test_causality_and_full_versus_suffix_prefill() raises:
                 raise Error("suffix query position differs from full prefill")
 
 
+def _strict_fp32(got: Float32, want: Float32) raises:
+    if (not isfinite(got) or not isfinite(want)
+        or abs(got - want) > 0.0078125 * (1 + abs(want))):
+        print("FP32 prefill mismatch", got, want)
+        raise Error("FP32 prefill exceeded the unchanged strict gate")
+
+
+def test_fp32_prefill_edges_against_materialized() raises:
+    # Structural coverage supplements the pinned upstream operation suite.
+    var ctx = DeviceContext()
+    print("FP32 prefill edges:", ctx.name(), ctx.api())
+    assert_equal(ctx.api(), "metal")
+    for case_id in range(PREFILL_CASE_COUNT):
+        var r = prefill_case_query_rows(case_id)
+        var t = prefill_case_key_rows(case_id)
+        var ql = row_major(r, 14, 64)
+        var kl = row_major(t, 2, 64)
+        var qb = ctx.enqueue_create_buffer[DType.bfloat16](r * 896)
+        var kb = ctx.enqueue_create_buffer[DType.bfloat16](t * 128)
+        var vb = ctx.enqueue_create_buffer[DType.bfloat16](t * 128)
+        var ob = ctx.enqueue_create_buffer[DType.bfloat16](r * 896)
+        var sb = ctx.enqueue_create_buffer[DType.float32](r * 14 * t)
+        var partial = ctx.enqueue_create_buffer[DType.float32](r * 14 * 8 * 66)
+        with qb.map_to_host() as qm:
+            with kb.map_to_host() as km:
+                with vb.map_to_host() as vm:
+                    fill_prefill(TileTensor(qm, ql), TileTensor(km, kl), TileTensor(vm, kl),
+                                 prefill_case_seed(case_id), prefill_case_kind(case_id))
+        var q = TileTensor(qb, ql)
+        var k = TileTensor(kb, kl)
+        var v = TileTensor(vb, kl)
+        var output = TileTensor(ob, ql)
+        enqueue_grouped_query_attention_apple_gpu(
+            ctx, q, k, v, TileTensor(sb, row_major(r, 14, t)), output
+        )
+        var expected = List[Float32]()
+        with ob.map_to_host() as mapped:
+            var result = TileTensor(mapped, row_major(r * 896))
+            comptime assert result.flat_rank == 1
+            for i in range(r * 896):
+                expected.append(rebind[Float32](result[i].cast[DType.float32]()))
+        for mapping in range(5):
+            for _ in range(get_defined_int["PREFILL_REPEAT", default=2]()):
+                ob.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
+                partial.enqueue_fill(Float32(FloatLiteral.nan))
+                _fp32_candidate(ctx, q, k, v, output, partial, mapping)
+                with ob.map_to_host() as mapped:
+                    var result = TileTensor(mapped, row_major(r * 896))
+                    comptime assert result.flat_rank == 1
+                    for i in range(r * 896):
+                        _strict_fp32(rebind[Float32](result[i].cast[DType.float32]()), expected[i])
+        print("FP32 prefill edge", case_id, "R", r, "T", t, "passed")
+
+
+def test_fp32_prefill_causality_and_suffix() raises:
+    for mapping in range(5):
+        var full = _result(33, 33, 0, fp32=True, mapping=mapping)
+        var suffix = _result(17, 33, 0, fp32=True, mapping=mapping)
+        var perturbed = _result(33, 33, 0, True, True, mapping)
+        for i in range(17 * 896):
+            assert_equal(full[i], perturbed[i])
+            _strict_fp32(suffix[i], full[16 * 896 + i])
+
+
+def test_fp32_prefill_split_neutral_states_and_guards() raises:
+    var ctx = DeviceContext()
+    var r = 35
+    var t = 65
+    var ql = row_major(r, 14, 64)
+    var kl = row_major(t, 2, 64)
+    var qb = ctx.enqueue_create_buffer[DType.bfloat16](r * 896)
+    var kb = ctx.enqueue_create_buffer[DType.bfloat16](t * 128)
+    var vb = ctx.enqueue_create_buffer[DType.bfloat16](t * 128)
+    var ob = ctx.enqueue_create_buffer[DType.bfloat16](r * 896 + 16)
+    with qb.map_to_host() as qm:
+        with kb.map_to_host() as km:
+            with vb.map_to_host() as vm:
+                fill_prefill(TileTensor(qm, ql), TileTensor(km, kl), TileTensor(vm, kl), 91)
+    for mapping in [3, 4]:
+        var splits = 4 if mapping == 3 else 8
+        var count = r * 14 * splits * 66
+        var partial = ctx.enqueue_create_buffer[DType.float32](count + 16)
+        partial.enqueue_fill(123)
+        ob.enqueue_fill(123)
+        _fp32_candidate(ctx, TileTensor(qb, ql), TileTensor(kb, kl),
+                        TileTensor(vb, kl), TileTensor(ob, ql), partial, mapping)
+        with partial.map_to_host() as mapped:
+            var p = TileTensor(mapped, row_major(r, 14, splits, 66))
+            var flat = TileTensor(mapped, row_major(count + 16))
+            comptime assert p.flat_rank == 4 and flat.flat_rank == 1
+            for row in range(r):
+                for h in range(14):
+                    for s in range(splits):
+                        var begin = (ceildiv(t, 32) * s // splits) * 32
+                        var end = min(t - r + row + 1, (ceildiv(t, 32) * (s + 1) // splits) * 32)
+                        if begin >= end:
+                            assert_equal(p[row, h, s, 64], neg_inf[DType.float32]())
+                            assert_equal(p[row, h, s, 65], 0)
+                            for d in range(64):
+                                assert_equal(p[row, h, s, d], 0)
+                        else:
+                            assert_true(isfinite(p[row, h, s, 64]))
+                            assert_true(p[row, h, s, 65] > 0)
+                            for d in range(64):
+                                assert_true(isfinite(p[row, h, s, d]))
+            for i in range(count, count + 16):
+                assert_equal(flat[i], 123)
+        with ob.map_to_host() as mapped:
+            var output = TileTensor(mapped, row_major(r * 896 + 16))
+            comptime assert output.flat_rank == 1
+            for i in range(r * 896):
+                assert_true(isfinite(output[i].cast[DType.float32]()))
+            for i in range(r * 896, r * 896 + 16):
+                assert_equal(output[i].cast[DType.float32](), 123)
+
+
+def test_fp32_prefill_merge_rescales_and_ignores_empty_pieces() raises:
+    # Maxima 1000/999 require a stable merge. Empty pieces are neutral.
+    var ctx = DeviceContext()
+    var pl = row_major(1, 14, 4, 66)
+    var ql = row_major(1, 14, 64)
+    var pb = ctx.enqueue_create_buffer[DType.float32](14 * 4 * 66)
+    var ob = ctx.enqueue_create_buffer[DType.bfloat16](896)
+    with pb.map_to_host() as mapped:
+        var p = TileTensor(mapped, pl)
+        comptime assert p.flat_rank == 4
+        for h in range(14):
+            for s in range(4):
+                p[0, h, s, 64] = Float32(1001 - s) if s == 1 or s == 2 else neg_inf[DType.float32]()
+                p[0, h, s, 65] = Float32(3 - s) if s == 1 or s == 2 else 0
+                for d in range(64):
+                    var a = Float32(h + 1) * 0.03125 + Float32(d % 7) * 0.015625
+                    var b = -Float32(0.25) + Float32(d) * 0.0078125
+                    p[0, h, s, d] = 2 * a if s == 1 else (b if s == 2 else 0)
+    ctx.enqueue_function[_merge_prefill_splits[4, type_of(ql), type_of(pl)]](
+        TileTensor(pb, pl), TileTensor(ob, ql), Int32(1), grid_dim=4, block_dim=128,
+    )
+    with ob.map_to_host() as mapped:
+        var output = TileTensor(mapped, ql)
+        comptime assert output.flat_rank == 3
+        for h in range(14):
+            for d in range(64):
+                var a = Float32(h + 1) * 0.03125 + Float32(d % 7) * 0.015625
+                var b = -Float32(0.25) + Float32(d) * 0.0078125
+                var expected = (2 * a + exp(Float32(-1)) * b) / (2 + exp(Float32(-1)))
+                _strict_fp32(rebind[Float32](output[0, h, d].cast[DType.float32]()), expected)
+
+
 def test_prefill_rejects_unsupported_shapes() raises:
     var ctx = DeviceContext()
     var b = ctx.enqueue_create_buffer[DType.bfloat16](8192 * 896)
@@ -190,6 +388,51 @@ def test_prefill_rejects_unsupported_shapes() raises:
         _ = enqueue_variant(
             7, ctx, q, k, k, TileTensor(b, row_major(15, 14, 64)), s
         )
+    var partial = ctx.enqueue_create_buffer[DType.float32](16 * 14 * 4 * 66)
+    with assert_raises(contains="FP32 workspace"):
+        enqueue_grouped_query_attention_prefill_split_apple_gpu[4](
+            ctx, q, k, k, TileTensor(partial, row_major(16, 14, 4, 65)), q,
+        )
+
+
+def _fp32_mma_probe[OL: TensorLayout](output: TileTensor[DType.float32, OL, MutAnyOrigin]):
+    comptime assert is_apple_gpu()
+    comptime assert output.flat_rank == 2
+    var lane = Int(lane_id())
+    var row = ((lane & 6) >> 1) + ((lane & 16) >> 2)
+    var col = ((lane & 1) << 1) + ((lane & 8) >> 1)
+    var a = SIMD[DType.float32, 2](0)
+    var b = SIMD[DType.float32, 2](0)
+    comptime for element in range(2):
+        a[element] = Float32(row + 1) * 0.1 + Float32(col + element) * 0.013671875 + 0.00012345
+        b[element] = 1 if row == col + element else 0
+    var result = SIMD[DType.float32, 2](0)
+    var previous = result
+    _mma_apple_8x8(result, a, b, previous)
+    comptime for element in range(2):
+        output[row, col + element] = result[element]
+
+
+def test_fp32_mma_operands_preserve_non_bf16_values() raises:
+    var ctx = DeviceContext()
+    assert_equal(ctx.api(), "metal")
+    print("device:", ctx.name(), "api:", ctx.api())
+    var buffer = ctx.enqueue_create_buffer[DType.float32](64)
+    buffer.enqueue_fill(Float32(FloatLiteral.nan))
+    var out_tensor = TileTensor(buffer, row_major(8, 8))
+    comptime kernel = _fp32_mma_probe[type_of(out_tensor.layout)]
+    ctx.enqueue_function[kernel](out_tensor, grid_dim=1, block_dim=32)
+    var worst: Float32 = 0
+    with buffer.map_to_host() as mapped:
+        var result = TileTensor(mapped, row_major(8, 8))
+        comptime assert result.flat_rank == 2
+        for row in range(8):
+            for col in range(8):
+                var expected = Float32(row + 1) * 0.1 + Float32(col) * 0.013671875 + 0.00012345
+                var error = abs(rebind[Float32](result[row, col]) - expected)
+                assert_true(error < 0.000001)
+                worst = max(worst, error)
+    print("FP32 MMA identity product passed; maximum absolute error:", worst)
 
 
 def main() raises:

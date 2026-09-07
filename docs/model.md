@@ -45,7 +45,30 @@ download caches, or generated full-model artifacts. Small test fixtures must
 record the source revision, source tensor names, extraction procedure, oracle
 versions, dtype, shapes, and checksums.
 
+The bounded first-layer attention workflow also supports a separately hashed
+prefix containing the original header, embeddings and complete required
+tensors. That workflow verifies the prefix identity and explicitly records
+that the full-file digest was not verified. See the
+[attention fixture provenance](../studies/attention_sublayer/numerics.md#reproduction).
+
 ## V0 runtime boundary
+
+Qwen's configuration, weights and official implementation define model
+semantics. Numerical compatibility also requires a named precision policy and
+an independently executed upstream comparison on a recorded backend, device
+and dtype. The independent NumPy implementations
+are mathematical and rounding diagnostics; disagreement with them is not, by
+itself, proof of a Mojo defect. The upstream eager, SDPA and Flash Attention
+paths can also differ numerically. A pinned eager CPU reference is reproducible
+compatibility evidence, not a claim to reproduce the original training kernels.
+Agreement among Mojo variants is useful regression evidence but cannot replace
+an independent comparison. The attention sublayer's selected CPU baseline
+explicitly casts SDPA inputs to FP32 and its output to BF16. The Mojo sublayer
+defaults to matching that policy, with FP32 scores/probabilities/accumulation
+and BF16 operands/cache/output. The standalone BF16 GQA paths below retain
+their own contracts and remain named compatibility comparisons.
+The composed attention study describes its
+[reference hierarchy and validation boundaries](attention-sublayer.md).
 
 V0 is deliberately narrower than the model's complete advertised capability:
 

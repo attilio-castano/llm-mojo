@@ -1,0 +1,2570 @@
+{
+  "kind": "numerical correctness investigation; failed holdout; no performance measurement",
+  "repository": {
+    "commit": "f18488202a5c0cbe37fc3997e425ca89b4f27156",
+    "dirty": true,
+    "sha256": {
+      "pyproject.toml": "d31b8de28d1284f4bc247cdd306f3078dbf94b67c17d67ff9eae9752e611bc9d",
+      "src/llm_mojo/__init__.mojo": "54ca844ca97d5f13084dae07021cbe9535b95cf3414d5133daec18787507d905",
+      "src/llm_mojo/__init__.py": "d45f08c560f8a501262a3c17663244a1a74fb76658d746e99a430dbc1f9935b7",
+      "src/llm_mojo/_repository.py": "900f133c6c5a89b14884e2353e882d1bae589cd0280f726cc7df990b5ab9eefe",
+      "src/llm_mojo/attention.mojo": "ea24655495210711e958b0f2fec1eb10b4f7a5a9cbd3214378e22e57cabce8b8",
+      "src/llm_mojo/attention_decode.mojo": "d217c580b3f8183b3d80a6400a751058b32052d15106e11caf21a85dc167a4c9",
+      "src/llm_mojo/attention_prefill.mojo": "fe058c6ba5026985f5b8be707738e66f41cc104197069ec32f83f94dfbbd22e5",
+      "src/llm_mojo/attention_sublayer.mojo": "d1252ee126257cb20a305768076659e1bb1f5ccd997f5dd7d59bf01314000a0a",
+      "src/llm_mojo/benchmarks/__init__.mojo": "b8a8f32ace824dd687bc6b2f87afeb3180f7b5ac78684ecefd669201a1e9801c",
+      "src/llm_mojo/benchmarks/__init__.py": "11fddc93cafb04100810b633bfea5b41fb2ba60a48383c9fecb3fdd1ae9cd00c",
+      "src/llm_mojo/benchmarks/analyze_trace.py": "a01eb2641a4adbf18d0ddd228dbc98c1051426d64bc0427b061fb193c83db5b9",
+      "src/llm_mojo/benchmarks/attention_contract.py": "137c88f598753a492452e7da81e4639e4ac315c420d8778ff2cc75e28c9d92d6",
+      "src/llm_mojo/benchmarks/attention_decode.mojo": "983f00a4a01396cfa46f5064098b6155a893c0aa4c66d197f65d91b38bc6a76d",
+      "src/llm_mojo/benchmarks/attention_decode_contract.py": "36b34c75a5186931331d6ae9bab8da6e493e55f6c8a612614c26a6c613dbd201",
+      "src/llm_mojo/benchmarks/attention_decode_support.mojo": "55ad60c4cbf1379adfb0575e840db8726d8d64103d6d973c20d71366c32a9968",
+      "src/llm_mojo/benchmarks/attention_prefill.mojo": "9edb4b4761b99993ba3175e9dfc4f526f9c0820dad5badc5b7cf820aed322b06",
+      "src/llm_mojo/benchmarks/attention_prefill_contract.py": "8cd0df325ea4cbab884b3205e50832a0dc289d1d18194375bdd9f90ef8ac2578",
+      "src/llm_mojo/benchmarks/attention_prefill_ir.mojo": "bfcbd58d4052d3fd7774c724f868d817dbb4c8402cc3f2483159eb45857fda67",
+      "src/llm_mojo/benchmarks/attention_prefill_support.mojo": "85fea01a59589c62513221d2840610750a20f51977a775a0c99574c49df8aceb",
+      "src/llm_mojo/benchmarks/capture_trace.py": "7772fd1494fea652126996067c8dabea11eb854016515a68411d3e1d15b1f73a",
+      "src/llm_mojo/benchmarks/environment.py": "03688054b017b428a2c4c6f3be10f5be702fcf76e4e8585a02d613cbbf0fe3f7",
+      "src/llm_mojo/benchmarks/operations.mojo": "3d3a96985d42cfbb314cda9fd7d4318a11e9fe841b3f52347b6402309d071561",
+      "src/llm_mojo/benchmarks/plot.py": "0e6ff80dadd4ebb0ba9d3c7ed62ec4c2917fa8a6ccbacb1cf6b0236ff06890a9",
+      "src/llm_mojo/benchmarks/profile.py": "3d468f87042c8b82d2a2d3dc250bb2d6c5b342cb805e1675d9ed13fc8ea2afbf",
+      "src/llm_mojo/benchmarks/profile_summary.py": "d9e056aff7afa7a0b1c00e992141640bca9b60c99aae4d7cb1f31fa1312dc9d8",
+      "src/llm_mojo/benchmarks/run.py": "b66745463408e15fbcece05d5edba4b6b5b0c270e390d9c7fe9b0e07ee717e7c",
+      "src/llm_mojo/benchmarks/smoke.py": "2c465b2451ace9dfe251b7624ccbaa51faeb40b77b4df73731df9fdcbd40c0a2",
+      "src/llm_mojo/benchmarks/study.py": "ee6c9321fec35b4e0325d6a5de6eda48d40e2a9d11cccb5b703c3a9ed4a138d6",
+      "src/llm_mojo/linear.mojo": "1f72f29fa058d6fac56cb045df2ac5a4b8d4e975a70ead00fbfce630944829d4",
+      "src/llm_mojo/residual.mojo": "aff4030007124a2a1a59b92d75966f13da0de0c6275bce1cc2d19417a9594d5e",
+      "src/llm_mojo/rms_norm.mojo": "a555c33f86c6f893b780beab8033a9495ad62e502d0670753e7639850fba0f56",
+      "src/llm_mojo/rope.mojo": "12add6e982c6d1b500c1f346bf3733a9306acd1d15994fbaed8eb610904b289e",
+      "src/llm_mojo/validate.py": "ebd2a9f3ff3040f67029187a43fdd91ade283d22e27e98aeab15d3dfe87ace8b",
+      "tests/attention_sublayer_support.mojo": "ef69ea4517a5339cad53f00695b4c928441c4cf88dc613ec7972fb00d98d5164",
+      "tests/fixtures/attention/generate.py": "b69d61c30f796e107b2e857d4f79df3488592dfe708c4178753db374cc9951a0",
+      "tests/fixtures/attention/generate_decode.py": "dd82f833f9507cd54edfaf95c5b2ade7381fefb6f612547b8849711be503861a",
+      "tests/fixtures/attention/generate_prefill.py": "35193674d82c1b5ca18a642b452de298ad58dcc2a609396c895f8b2819a3f54e",
+      "tests/fixtures/attention_sublayer/checksums.json": "64bc40d13d26492880d7c848da237afb4e5406588a01f5f4575c1bee6dcf49de",
+      "tests/fixtures/attention_sublayer/generate.py": "9aad5a1c88be6d5a8e14319cec97e626342a61a81efc7b8fa50f4c388d178bc6",
+      "tests/fixtures/attention_sublayer/upstream.py": "67023099424f006a63d0f092211f5956b233263aae47d23ddee2ec898ab1154e",
+      "tests/fixtures/checksums.json": "becd13cec305f11367f5523d4c80732052215f7862070c6635ad4b7cb59ab51b",
+      "tests/fixtures/linear/generate.py": "b87b5841c1dba556750dbf53de3bcf078a4f2d70538bac0db563c1304c0ca951",
+      "tests/fixtures/rms_norm/generate.py": "e01e8e2bd0f6723921a8f3c65803c87c3aa89818569a9a62b5794e381892389e",
+      "tests/fixtures/rope/generate.py": "7c616a7d991876d176e4b9808257b3c2c4c43641b5b51bae693eb1a20769eda5",
+      "tests/test_attention.mojo": "dcdfbc34b965114f057681189b2b184cdf3b9e6ea8051ea80a367e5badf592f1",
+      "tests/test_attention_decode.mojo": "3a3509e7a9ae7f1d7ff161504e9d1bdd862c76fb9ec16054059dc2d1cf05e37a",
+      "tests/test_attention_decode_benchmark.mojo": "f81e767fc538945ef2137b24dc670fb30702496a2b812849c8762081b61de191",
+      "tests/test_attention_prefill.mojo": "b1614dc6da7bef3790566697faab05832a147a6055a45f9a3aaad56aa457a0bb",
+      "tests/test_attention_primitives.mojo": "1c6be9ed263f1f9daf8da82765d1648e1e5d5ceab46d076373d7b122e7276662",
+      "tests/test_attention_profile.py": "c7c705209811dce5b379363fdb6d7050c0b9bb13987a83d70b384218913264f8",
+      "tests/test_attention_sublayer.mojo": "909561e99b86a95c7fde0a5c76febfe538254c59f600854115759f4a21495e09",
+      "tests/test_attention_sublayer_operations.mojo": "57b46108fe748efc6558f7861600cc11ef5c926a099b46e63280ab14ecd2cf63",
+      "tests/test_import.mojo": "d82ead4423a78c5f518b5820997212ac8ad8dd2d068ed57953479ee2322a4aeb",
+      "tests/test_linear.mojo": "3e808fa818d106ab39e5b5a2e31e4babf4bc8b0ee5bd55be9c0a0e05eb6e10f8",
+      "tests/test_rms_norm.mojo": "39fca6497f1aba10266a6a56d2ca76f456d2935bcbfef1d351a16f6b028747e5",
+      "tests/test_rope.mojo": "1fa948b48aac0c41f7c7ce9a70c37af5e2b8f5f1253e4299650571aa68cf5b17",
+      "tests/test_study.py": "74e88ca9596c17990cd309cd10b91aec727629c87811b2ceed277f3f59696443",
+      "tests/test_study_evidence.py": "39c5dcebf0bd4641e8e0b867feb1ec90e1c6889cf6bdc74f11754ab1f739682f",
+      "tests/test_trace_analyzer.py": "a4a83479bee9567f06cb5cc282de72c09dde4714969dba04c3e668fa19d684ef",
+      "tests/test_trace_capture.py": "384cb922565a35f350eb2fddd200a658ed4bf355e6e5692a6e7fa3c817dcae99",
+      "uv.lock": "a96fdc1a706203ed10ae74d7d1afd69c99e335068fe8dd0f184e67789559cca2"
+    }
+  },
+  "gpu": {
+    "device": "Apple M4 Pro",
+    "api": "metal",
+    "mojo": "1.0.0 (ed45d567)",
+    "dtype": "bfloat16",
+    "layout": "contiguous row-major",
+    "batch": 1,
+    "synchronization": "MODULAR_DEBUG=device-sync-mode; host maps complete numerical readback"
+  },
+  "upstream": {
+    "implementation": "transformers.models.qwen2.modeling_qwen2.Qwen2Attention",
+    "source_sha256": "06a9e704e9ec103c47c44fc974519dc93480aa325b9ad7d047239200bcf6fa69",
+    "torch": "2.4.0",
+    "transformers": "4.43.1",
+    "numpy": "1.26.4",
+    "device": "cpu",
+    "backend": "eager",
+    "dtype": "bfloat16",
+    "torch_threads": 1,
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "training_arithmetic_reproduced": false
+  },
+  "fixture_identity": {
+    "checksums": "../../tests/fixtures/attention_sublayer/checksums.json",
+    "generator_sha256": "9aad5a1c88be6d5a8e14319cec97e626342a61a81efc7b8fa50f4c388d178bc6",
+    "capture_sha256": "67023099424f006a63d0f092211f5956b233263aae47d23ddee2ec898ab1154e",
+    "cases": [
+      [
+        2,
+        1,
+        4,
+        7,
+        17
+      ],
+      [
+        4,
+        2,
+        4,
+        9,
+        37
+      ],
+      [
+        14,
+        2,
+        64,
+        1,
+        17
+      ],
+      [
+        14,
+        2,
+        64,
+        7,
+        37
+      ],
+      [
+        14,
+        2,
+        64,
+        33,
+        53
+      ],
+      [
+        14,
+        2,
+        64,
+        65,
+        71
+      ],
+      [
+        14,
+        2,
+        64,
+        257,
+        17
+      ],
+      [
+        14,
+        2,
+        64,
+        4096,
+        53
+      ],
+      [
+        14,
+        2,
+        64,
+        4096,
+        103
+      ],
+      [
+        14,
+        2,
+        64,
+        4096,
+        149
+      ],
+      [
+        14,
+        2,
+        64,
+        4096,
+        211
+      ],
+      [
+        14,
+        2,
+        64,
+        4096,
+        307
+      ],
+      [
+        14,
+        2,
+        64,
+        4096,
+        401
+      ],
+      [
+        14,
+        2,
+        64,
+        4096,
+        509
+      ],
+      [
+        14,
+        2,
+        64,
+        4096,
+        887
+      ]
+    ]
+  },
+  "metric": "abs(actual-expected)/(1+abs(expected)); failure when above atol=rtol",
+  "routes": {
+    "0": "materialized",
+    "1": "G32 decode / original MMA prefill",
+    "2": "split64 H4 decode / rolled MMA prefill"
+  },
+  "validation": {
+    "python_passed": 36,
+    "mojo_passed": 77,
+    "mojo_failed": 2,
+    "failed_suites": [
+      "test_attention_sublayer.mojo",
+      "test_attention_sublayer_operations.mojo"
+    ],
+    "failing_case": 14,
+    "failing_seed": 887,
+    "benchmark_route_smoke": "passed",
+    "source_drift": false,
+    "profiling": "paused",
+    "committed": false
+  },
+  "original_calibration": {
+    "atol": 0.015625,
+    "rtol": 0.015625,
+    "columns": [
+      "case",
+      "route",
+      "query_rows",
+      "context_length",
+      "max_abs",
+      "max_scaled",
+      "failed_elements"
+    ],
+    "rows": [
+      [
+        9,
+        0,
+        4096,
+        4096,
+        0.0625,
+        0.025209572,
+        17
+      ],
+      [
+        9,
+        1,
+        4096,
+        4096,
+        0.046875,
+        0.024844438,
+        15
+      ],
+      [
+        9,
+        2,
+        4096,
+        4096,
+        0.046875,
+        0.024844438,
+        15
+      ],
+      [
+        9,
+        0,
+        1,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        9,
+        1,
+        1,
+        4096,
+        0.03125,
+        0.0060975608,
+        0
+      ],
+      [
+        9,
+        2,
+        1,
+        4096,
+        0.03125,
+        0.0060975608,
+        0
+      ],
+      [
+        9,
+        0,
+        17,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        9,
+        1,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        9,
+        2,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        10,
+        0,
+        4096,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        10,
+        1,
+        4096,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        10,
+        2,
+        4096,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        10,
+        0,
+        1,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        10,
+        1,
+        1,
+        4096,
+        0.03125,
+        0.0061728396,
+        0
+      ],
+      [
+        10,
+        2,
+        1,
+        4096,
+        0.03125,
+        0.0061728396,
+        0
+      ],
+      [
+        10,
+        0,
+        17,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        10,
+        1,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        10,
+        2,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        11,
+        0,
+        4096,
+        4096,
+        0.03125,
+        0.01601281,
+        2
+      ],
+      [
+        11,
+        1,
+        4096,
+        4096,
+        0.03125,
+        0.01521217,
+        0
+      ],
+      [
+        11,
+        2,
+        4096,
+        4096,
+        0.03125,
+        0.01521217,
+        0
+      ],
+      [
+        11,
+        0,
+        1,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        11,
+        1,
+        1,
+        4096,
+        0.03125,
+        0.0060975608,
+        0
+      ],
+      [
+        11,
+        2,
+        1,
+        4096,
+        0.03125,
+        0.0060975608,
+        0
+      ],
+      [
+        11,
+        0,
+        17,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        11,
+        1,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        11,
+        2,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        12,
+        0,
+        4096,
+        4096,
+        0.03125,
+        0.0061728396,
+        0
+      ],
+      [
+        12,
+        1,
+        4096,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        12,
+        2,
+        4096,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        12,
+        0,
+        1,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        12,
+        1,
+        1,
+        4096,
+        0.03125,
+        0.0060975608,
+        0
+      ],
+      [
+        12,
+        2,
+        1,
+        4096,
+        0.03125,
+        0.0060975608,
+        0
+      ],
+      [
+        12,
+        0,
+        17,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        12,
+        1,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        12,
+        2,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ]
+    ]
+  },
+  "current_gqa_checks": {
+    "atol": 0.03125,
+    "rtol": 0.03125,
+    "columns": [
+      "case",
+      "route",
+      "query_rows",
+      "context_length",
+      "max_abs",
+      "max_scaled",
+      "failed_elements"
+    ],
+    "rows": [
+      [
+        7,
+        0,
+        4096,
+        4096,
+        0.03125,
+        0.006134969,
+        0
+      ],
+      [
+        7,
+        1,
+        4096,
+        4096,
+        0.03125,
+        0.0064400714,
+        0
+      ],
+      [
+        7,
+        2,
+        4096,
+        4096,
+        0.03125,
+        0.0064400714,
+        0
+      ],
+      [
+        7,
+        0,
+        1,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        7,
+        1,
+        1,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        7,
+        2,
+        1,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        7,
+        0,
+        17,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        7,
+        1,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        7,
+        2,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        8,
+        0,
+        4096,
+        4096,
+        0.03125,
+        0.01764706,
+        0
+      ],
+      [
+        8,
+        1,
+        4096,
+        4096,
+        0.03125,
+        0.01764706,
+        0
+      ],
+      [
+        8,
+        2,
+        4096,
+        4096,
+        0.03125,
+        0.01764706,
+        0
+      ],
+      [
+        8,
+        0,
+        1,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        8,
+        1,
+        1,
+        4096,
+        0.03125,
+        0.006060606,
+        0
+      ],
+      [
+        8,
+        2,
+        1,
+        4096,
+        0.03125,
+        0.006060606,
+        0
+      ],
+      [
+        8,
+        0,
+        17,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        8,
+        1,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        8,
+        2,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        9,
+        0,
+        4096,
+        4096,
+        0.0625,
+        0.025209572,
+        0
+      ],
+      [
+        9,
+        1,
+        4096,
+        4096,
+        0.046875,
+        0.024844438,
+        0
+      ],
+      [
+        9,
+        2,
+        4096,
+        4096,
+        0.046875,
+        0.024844438,
+        0
+      ],
+      [
+        9,
+        0,
+        1,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        9,
+        1,
+        1,
+        4096,
+        0.03125,
+        0.0060975608,
+        0
+      ],
+      [
+        9,
+        2,
+        1,
+        4096,
+        0.03125,
+        0.0060975608,
+        0
+      ],
+      [
+        9,
+        0,
+        17,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        9,
+        1,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        9,
+        2,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        10,
+        0,
+        4096,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        10,
+        1,
+        4096,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        10,
+        2,
+        4096,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        10,
+        0,
+        1,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        10,
+        1,
+        1,
+        4096,
+        0.03125,
+        0.0061728396,
+        0
+      ],
+      [
+        10,
+        2,
+        1,
+        4096,
+        0.03125,
+        0.0061728396,
+        0
+      ],
+      [
+        10,
+        0,
+        17,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        10,
+        1,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        10,
+        2,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        11,
+        0,
+        4096,
+        4096,
+        0.03125,
+        0.01601281,
+        0
+      ],
+      [
+        11,
+        1,
+        4096,
+        4096,
+        0.03125,
+        0.01521217,
+        0
+      ],
+      [
+        11,
+        2,
+        4096,
+        4096,
+        0.03125,
+        0.01521217,
+        0
+      ],
+      [
+        11,
+        0,
+        1,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        11,
+        1,
+        1,
+        4096,
+        0.03125,
+        0.0060975608,
+        0
+      ],
+      [
+        11,
+        2,
+        1,
+        4096,
+        0.03125,
+        0.0060975608,
+        0
+      ],
+      [
+        11,
+        0,
+        17,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        11,
+        1,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        11,
+        2,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        12,
+        0,
+        4096,
+        4096,
+        0.03125,
+        0.0061728396,
+        0
+      ],
+      [
+        12,
+        1,
+        4096,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        12,
+        2,
+        4096,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        12,
+        0,
+        1,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        12,
+        1,
+        1,
+        4096,
+        0.03125,
+        0.0060975608,
+        0
+      ],
+      [
+        12,
+        2,
+        1,
+        4096,
+        0.03125,
+        0.0060975608,
+        0
+      ],
+      [
+        12,
+        0,
+        17,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        12,
+        1,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        12,
+        2,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        13,
+        0,
+        4096,
+        4096,
+        0.03125,
+        0.014354067,
+        0
+      ],
+      [
+        13,
+        1,
+        4096,
+        4096,
+        0.03125,
+        0.014354067,
+        0
+      ],
+      [
+        13,
+        2,
+        4096,
+        4096,
+        0.03125,
+        0.014354067,
+        0
+      ],
+      [
+        13,
+        0,
+        1,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        13,
+        1,
+        1,
+        4096,
+        0.03125,
+        0.006060606,
+        0
+      ],
+      [
+        13,
+        2,
+        1,
+        4096,
+        0.03125,
+        0.006060606,
+        0
+      ],
+      [
+        13,
+        0,
+        17,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        13,
+        1,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        13,
+        2,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        14,
+        0,
+        4096,
+        4096,
+        0.265625,
+        0.15555556,
+        46
+      ],
+      [
+        14,
+        1,
+        4096,
+        4096,
+        0.265625,
+        0.15555556,
+        47
+      ],
+      [
+        14,
+        2,
+        4096,
+        4096,
+        0.265625,
+        0.15555556,
+        47
+      ],
+      [
+        14,
+        0,
+        1,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        14,
+        1,
+        1,
+        4096,
+        0.03125,
+        0.0061728396,
+        0
+      ],
+      [
+        14,
+        2,
+        1,
+        4096,
+        0.03125,
+        0.0061728396,
+        0
+      ],
+      [
+        14,
+        0,
+        17,
+        4096,
+        0.0,
+        0.0,
+        0
+      ],
+      [
+        14,
+        1,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ],
+      [
+        14,
+        2,
+        17,
+        4096,
+        0.03125,
+        0.00625,
+        0
+      ]
+    ]
+  },
+  "current_composition_checks": {
+    "atol": 0.03125,
+    "rtol": 0.03125,
+    "selection": "all full-context cases; full run and initial chunk; both strict output boundaries",
+    "columns": [
+      "case",
+      "route",
+      "chunked",
+      "stage",
+      "rows",
+      "max_abs",
+      "max_scaled",
+      "failed_elements"
+    ],
+    "rows": [
+      [
+        7,
+        0,
+        false,
+        "projected",
+        4096,
+        0.01171875,
+        0.0077279755,
+        0
+      ],
+      [
+        7,
+        0,
+        false,
+        "output",
+        4096,
+        0.015625,
+        0.009596929,
+        0
+      ],
+      [
+        7,
+        0,
+        true,
+        "projected",
+        4078,
+        0.01171875,
+        0.0077279755,
+        0
+      ],
+      [
+        7,
+        0,
+        true,
+        "output",
+        4078,
+        0.015625,
+        0.009596929,
+        0
+      ],
+      [
+        7,
+        1,
+        false,
+        "projected",
+        4096,
+        0.01953125,
+        0.014596398,
+        0
+      ],
+      [
+        7,
+        1,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.018518519,
+        0
+      ],
+      [
+        7,
+        1,
+        true,
+        "projected",
+        4078,
+        0.01953125,
+        0.014596398,
+        0
+      ],
+      [
+        7,
+        1,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.018518519,
+        0
+      ],
+      [
+        7,
+        2,
+        false,
+        "projected",
+        4096,
+        0.01953125,
+        0.014596398,
+        0
+      ],
+      [
+        7,
+        2,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.018518519,
+        0
+      ],
+      [
+        7,
+        2,
+        true,
+        "projected",
+        4078,
+        0.01953125,
+        0.014596398,
+        0
+      ],
+      [
+        7,
+        2,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.018518519,
+        0
+      ],
+      [
+        8,
+        0,
+        false,
+        "projected",
+        4096,
+        0.0078125,
+        0.005506344,
+        0
+      ],
+      [
+        8,
+        0,
+        false,
+        "output",
+        4096,
+        0.015625,
+        0.0078125,
+        0
+      ],
+      [
+        8,
+        0,
+        true,
+        "projected",
+        4078,
+        0.0078125,
+        0.005506344,
+        0
+      ],
+      [
+        8,
+        0,
+        true,
+        "output",
+        4078,
+        0.015625,
+        0.0078125,
+        0
+      ],
+      [
+        8,
+        1,
+        false,
+        "projected",
+        4096,
+        0.015625,
+        0.013484123,
+        0
+      ],
+      [
+        8,
+        1,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.015503876,
+        0
+      ],
+      [
+        8,
+        1,
+        true,
+        "projected",
+        4078,
+        0.015625,
+        0.013484123,
+        0
+      ],
+      [
+        8,
+        1,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.015503876,
+        0
+      ],
+      [
+        8,
+        2,
+        false,
+        "projected",
+        4096,
+        0.015625,
+        0.013484123,
+        0
+      ],
+      [
+        8,
+        2,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.015503876,
+        0
+      ],
+      [
+        8,
+        2,
+        true,
+        "projected",
+        4078,
+        0.015625,
+        0.013484123,
+        0
+      ],
+      [
+        8,
+        2,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.015503876,
+        0
+      ],
+      [
+        9,
+        0,
+        false,
+        "projected",
+        4096,
+        0.015625,
+        0.012449778,
+        0
+      ],
+      [
+        9,
+        0,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.014035088,
+        0
+      ],
+      [
+        9,
+        0,
+        true,
+        "projected",
+        4078,
+        0.015625,
+        0.012449778,
+        0
+      ],
+      [
+        9,
+        0,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.014035088,
+        0
+      ],
+      [
+        9,
+        1,
+        false,
+        "projected",
+        4096,
+        0.0234375,
+        0.013953488,
+        0
+      ],
+      [
+        9,
+        1,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.015625,
+        0
+      ],
+      [
+        9,
+        1,
+        true,
+        "projected",
+        4078,
+        0.0234375,
+        0.013953488,
+        0
+      ],
+      [
+        9,
+        1,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.015625,
+        0
+      ],
+      [
+        9,
+        2,
+        false,
+        "projected",
+        4096,
+        0.0234375,
+        0.013953488,
+        0
+      ],
+      [
+        9,
+        2,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.015625,
+        0
+      ],
+      [
+        9,
+        2,
+        true,
+        "projected",
+        4078,
+        0.0234375,
+        0.013953488,
+        0
+      ],
+      [
+        9,
+        2,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.015625,
+        0
+      ],
+      [
+        10,
+        0,
+        false,
+        "projected",
+        4096,
+        0.025878906,
+        0.024278516,
+        0
+      ],
+      [
+        10,
+        0,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.02457467,
+        0
+      ],
+      [
+        10,
+        0,
+        true,
+        "projected",
+        4078,
+        0.025878906,
+        0.024278516,
+        0
+      ],
+      [
+        10,
+        0,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.02457467,
+        0
+      ],
+      [
+        10,
+        1,
+        false,
+        "projected",
+        4096,
+        0.029785156,
+        0.027943198,
+        0
+      ],
+      [
+        10,
+        1,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.028355388,
+        0
+      ],
+      [
+        10,
+        1,
+        true,
+        "projected",
+        4078,
+        0.029785156,
+        0.027943198,
+        0
+      ],
+      [
+        10,
+        1,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.028355388,
+        0
+      ],
+      [
+        10,
+        2,
+        false,
+        "projected",
+        4096,
+        0.029785156,
+        0.027943198,
+        0
+      ],
+      [
+        10,
+        2,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.028355388,
+        0
+      ],
+      [
+        10,
+        2,
+        true,
+        "projected",
+        4078,
+        0.029785156,
+        0.027943198,
+        0
+      ],
+      [
+        10,
+        2,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.028355388,
+        0
+      ],
+      [
+        11,
+        0,
+        false,
+        "projected",
+        4096,
+        0.0078125,
+        0.005154639,
+        0
+      ],
+      [
+        11,
+        0,
+        false,
+        "output",
+        4096,
+        0.015625,
+        0.007751938,
+        0
+      ],
+      [
+        11,
+        0,
+        true,
+        "projected",
+        4078,
+        0.0078125,
+        0.005154639,
+        0
+      ],
+      [
+        11,
+        0,
+        true,
+        "output",
+        4078,
+        0.015625,
+        0.007751938,
+        0
+      ],
+      [
+        11,
+        1,
+        false,
+        "projected",
+        4096,
+        0.015625,
+        0.014106774,
+        0
+      ],
+      [
+        11,
+        1,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.015625,
+        0
+      ],
+      [
+        11,
+        1,
+        true,
+        "projected",
+        4078,
+        0.015625,
+        0.014106774,
+        0
+      ],
+      [
+        11,
+        1,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.015625,
+        0
+      ],
+      [
+        11,
+        2,
+        false,
+        "projected",
+        4096,
+        0.015625,
+        0.014106774,
+        0
+      ],
+      [
+        11,
+        2,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.015625,
+        0
+      ],
+      [
+        11,
+        2,
+        true,
+        "projected",
+        4078,
+        0.015625,
+        0.014106774,
+        0
+      ],
+      [
+        11,
+        2,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.015625,
+        0
+      ],
+      [
+        12,
+        0,
+        false,
+        "projected",
+        4096,
+        0.0078125,
+        0.00390625,
+        0
+      ],
+      [
+        12,
+        0,
+        false,
+        "output",
+        4096,
+        0.015625,
+        0.007751938,
+        0
+      ],
+      [
+        12,
+        0,
+        true,
+        "projected",
+        4078,
+        0.0078125,
+        0.00390625,
+        0
+      ],
+      [
+        12,
+        0,
+        true,
+        "output",
+        4078,
+        0.015625,
+        0.007751938,
+        0
+      ],
+      [
+        12,
+        1,
+        false,
+        "projected",
+        4096,
+        0.015625,
+        0.014732303,
+        0
+      ],
+      [
+        12,
+        1,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.015625,
+        0
+      ],
+      [
+        12,
+        1,
+        true,
+        "projected",
+        4078,
+        0.015625,
+        0.014732303,
+        0
+      ],
+      [
+        12,
+        1,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.015625,
+        0
+      ],
+      [
+        12,
+        2,
+        false,
+        "projected",
+        4096,
+        0.015625,
+        0.014732303,
+        0
+      ],
+      [
+        12,
+        2,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.015625,
+        0
+      ],
+      [
+        12,
+        2,
+        true,
+        "projected",
+        4078,
+        0.015625,
+        0.014732303,
+        0
+      ],
+      [
+        12,
+        2,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.015625,
+        0
+      ],
+      [
+        13,
+        0,
+        false,
+        "projected",
+        4096,
+        0.01171875,
+        0.011298324,
+        0
+      ],
+      [
+        13,
+        0,
+        false,
+        "output",
+        4096,
+        0.015625,
+        0.011278195,
+        0
+      ],
+      [
+        13,
+        0,
+        true,
+        "projected",
+        4078,
+        0.01171875,
+        0.011298324,
+        0
+      ],
+      [
+        13,
+        0,
+        true,
+        "output",
+        4078,
+        0.015625,
+        0.011278195,
+        0
+      ],
+      [
+        13,
+        1,
+        false,
+        "projected",
+        4096,
+        0.015625,
+        0.01285896,
+        0
+      ],
+      [
+        13,
+        1,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.015503876,
+        0
+      ],
+      [
+        13,
+        1,
+        true,
+        "projected",
+        4078,
+        0.015625,
+        0.01285896,
+        0
+      ],
+      [
+        13,
+        1,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.015503876,
+        0
+      ],
+      [
+        13,
+        2,
+        false,
+        "projected",
+        4096,
+        0.015625,
+        0.01285896,
+        0
+      ],
+      [
+        13,
+        2,
+        false,
+        "output",
+        4096,
+        0.03125,
+        0.015503876,
+        0
+      ],
+      [
+        13,
+        2,
+        true,
+        "projected",
+        4078,
+        0.015625,
+        0.01285896,
+        0
+      ],
+      [
+        13,
+        2,
+        true,
+        "output",
+        4078,
+        0.03125,
+        0.015503876,
+        0
+      ],
+      [
+        14,
+        0,
+        false,
+        "projected",
+        4096,
+        0.0546875,
+        0.044444445,
+        51
+      ],
+      [
+        14,
+        0,
+        false,
+        "output",
+        4096,
+        0.0625,
+        0.05078125,
+        39
+      ],
+      [
+        14,
+        0,
+        true,
+        "projected",
+        4078,
+        0.0546875,
+        0.044444445,
+        51
+      ],
+      [
+        14,
+        0,
+        true,
+        "output",
+        4078,
+        0.0625,
+        0.05078125,
+        39
+      ],
+      [
+        14,
+        1,
+        false,
+        "projected",
+        4096,
+        0.05859375,
+        0.045333333,
+        57
+      ],
+      [
+        14,
+        1,
+        false,
+        "output",
+        4096,
+        0.0625,
+        0.0546875,
+        38
+      ],
+      [
+        14,
+        1,
+        true,
+        "projected",
+        4078,
+        0.05859375,
+        0.045333333,
+        57
+      ],
+      [
+        14,
+        1,
+        true,
+        "output",
+        4078,
+        0.0625,
+        0.0546875,
+        38
+      ],
+      [
+        14,
+        2,
+        false,
+        "projected",
+        4096,
+        0.05859375,
+        0.045333333,
+        57
+      ],
+      [
+        14,
+        2,
+        false,
+        "output",
+        4096,
+        0.0625,
+        0.0546875,
+        38
+      ],
+      [
+        14,
+        2,
+        true,
+        "projected",
+        4078,
+        0.05859375,
+        0.045333333,
+        57
+      ],
+      [
+        14,
+        2,
+        true,
+        "output",
+        4078,
+        0.0625,
+        0.0546875,
+        38
+      ]
+    ]
+  },
+  "score_boundary_diagnostics": {
+    "8": {
+      "position": 350,
+      "head": 4,
+      "key_position": 303,
+      "fp64_scaled_dot": 67.25000309944153,
+      "serial_fp32_scaled_dot": 67.25,
+      "upstream_bf16_score": 67.5,
+      "serial_bf16_score": 67.0,
+      "upstream_probability": 0.07177734375,
+      "changed_probability": 0.044677734375,
+      "atol": 0.03125,
+      "rtol": 0.03125,
+      "changed_output_vs_upstream": {
+        "elements": 896,
+        "failed": 0,
+        "max_abs": 0.03125,
+        "max_scaled": 0.01764705963432789,
+        "rms_abs": 0.005900471615371892,
+        "index": [
+          4,
+          53
+        ],
+        "actual": 0.1826171875,
+        "expected": 0.162109375
+      }
+    },
+    "14": {
+      "position": 667,
+      "head": 0,
+      "key_position": 665,
+      "fp64_scaled_dot": 75.74999618530273,
+      "serial_fp32_scaled_dot": 75.74999237060547,
+      "upstream_bf16_score": 76.0,
+      "serial_bf16_score": 75.5,
+      "upstream_probability": 0.5859375,
+      "changed_probability": 0.4609375,
+      "atol": 0.03125,
+      "rtol": 0.03125,
+      "changed_output_vs_upstream": {
+        "elements": 896,
+        "failed": 46,
+        "max_abs": 0.265625,
+        "max_scaled": 0.15555556118488312,
+        "rms_abs": 0.04984003637110323,
+        "index": [
+          0,
+          9
+        ],
+        "actual": 0.294921875,
+        "expected": 0.12060546875
+      },
+      "observed_materialized_gpu_vs_counterfactual": {
+        "different_fp32_bit_patterns": 0,
+        "elements": 896,
+        "output_fp32_bytes_sha256": "896d8cfdb2abc10625fd8e3ee7046ad978d9b2ff3c9c03dc0c425dc85b0d51e9"
+      }
+    }
+  },
+  "official_backend_diagnostic": {
+    "generator_sha256": "9aad5a1c88be6d5a8e14319cec97e626342a61a81efc7b8fa50f4c388d178bc6",
+    "capture_sha256": "4c5e633b1376dc260a2121dbe9c412c5988bd61cac3f69622f1d0655f5efc82a",
+    "cases": {
+      "8": {
+        "implementation": "transformers.models.qwen2.modeling_qwen2.Qwen2SdpaAttention",
+        "backend": "SDPBackend.MATH",
+        "device": "cpu",
+        "diagnostic_only": true,
+        "atol": {
+          "normalized": 0.0078125,
+          "raw_query": 0.0078125,
+          "raw_key": 0.0078125,
+          "raw_value": 0.0078125,
+          "query": 0.0078125,
+          "rotated_key": 0.0078125,
+          "attention": 0.03125,
+          "projected": 0.03125,
+          "output": 0.03125
+        },
+        "rtol": {
+          "normalized": 0.0078125,
+          "raw_query": 0.0078125,
+          "raw_key": 0.0078125,
+          "raw_value": 0.0078125,
+          "query": 0.0078125,
+          "rotated_key": 0.0078125,
+          "attention": 0.03125,
+          "projected": 0.03125,
+          "output": 0.03125
+        },
+        "sdpa_vs_eager": {
+          "normalized": {
+            "elements": 3670016,
+            "failed": 0,
+            "max_abs": 0.0,
+            "max_scaled": 0.0,
+            "rms_abs": 0.0,
+            "index": [
+              0,
+              0
+            ],
+            "actual": -1.703125,
+            "expected": -1.703125
+          },
+          "raw_query": {
+            "elements": 3670016,
+            "failed": 0,
+            "max_abs": 0.0,
+            "max_scaled": 0.0,
+            "rms_abs": 0.0,
+            "index": [
+              0,
+              0
+            ],
+            "actual": 4.84375,
+            "expected": 4.84375
+          },
+          "raw_key": {
+            "elements": 524288,
+            "failed": 0,
+            "max_abs": 0.0,
+            "max_scaled": 0.0,
+            "rms_abs": 0.0,
+            "index": [
+              0,
+              0
+            ],
+            "actual": -0.8984375,
+            "expected": -0.8984375
+          },
+          "raw_value": {
+            "elements": 524288,
+            "failed": 0,
+            "max_abs": 0.0,
+            "max_scaled": 0.0,
+            "rms_abs": 0.0,
+            "index": [
+              0,
+              0
+            ],
+            "actual": -1.53125,
+            "expected": -1.53125
+          },
+          "query": {
+            "elements": 3670016,
+            "failed": 0,
+            "max_abs": 0.0,
+            "max_scaled": 0.0,
+            "rms_abs": 0.0,
+            "index": [
+              0,
+              0,
+              0
+            ],
+            "actual": 4.84375,
+            "expected": 4.84375
+          },
+          "rotated_key": {
+            "elements": 524288,
+            "failed": 0,
+            "max_abs": 0.0,
+            "max_scaled": 0.0,
+            "rms_abs": 0.0,
+            "index": [
+              0,
+              0,
+              0
+            ],
+            "actual": -0.8984375,
+            "expected": -0.8984375
+          },
+          "attention": {
+            "elements": 3670016,
+            "failed": 25195,
+            "max_abs": 0.546875,
+            "max_scaled": 0.37642940878868103,
+            "rms_abs": 0.015554401764244979,
+            "index": [
+              1265,
+              1,
+              3
+            ],
+            "actual": -0.34765625,
+            "expected": 0.046142578125
+          },
+          "projected": {
+            "elements": 3670016,
+            "failed": 7091,
+            "max_abs": 0.09765625,
+            "max_scaled": 0.08818181604146957,
+            "rms_abs": 0.007425235298076953,
+            "index": [
+              2201,
+              320
+            ],
+            "actual": 0.1689453125,
+            "expected": 0.07421875
+          },
+          "output": {
+            "elements": 3670016,
+            "failed": 3497,
+            "max_abs": 0.09765625,
+            "max_scaled": 0.0882352963089943,
+            "rms_abs": 0.007960015108247604,
+            "index": [
+              4000,
+              645
+            ],
+            "actual": 0.03125,
+            "expected": -0.0625
+          }
+        }
+      },
+      "14": {
+        "implementation": "transformers.models.qwen2.modeling_qwen2.Qwen2SdpaAttention",
+        "backend": "SDPBackend.MATH",
+        "device": "cpu",
+        "diagnostic_only": true,
+        "atol": {
+          "normalized": 0.0078125,
+          "raw_query": 0.0078125,
+          "raw_key": 0.0078125,
+          "raw_value": 0.0078125,
+          "query": 0.0078125,
+          "rotated_key": 0.0078125,
+          "attention": 0.03125,
+          "projected": 0.03125,
+          "output": 0.03125
+        },
+        "rtol": {
+          "normalized": 0.0078125,
+          "raw_query": 0.0078125,
+          "raw_key": 0.0078125,
+          "raw_value": 0.0078125,
+          "query": 0.0078125,
+          "rotated_key": 0.0078125,
+          "attention": 0.03125,
+          "projected": 0.03125,
+          "output": 0.03125
+        },
+        "sdpa_vs_eager": {
+          "normalized": {
+            "elements": 3670016,
+            "failed": 0,
+            "max_abs": 0.0,
+            "max_scaled": 0.0,
+            "rms_abs": 0.0,
+            "index": [
+              0,
+              0
+            ],
+            "actual": -1.390625,
+            "expected": -1.390625
+          },
+          "raw_query": {
+            "elements": 3670016,
+            "failed": 0,
+            "max_abs": 0.0,
+            "max_scaled": 0.0,
+            "rms_abs": 0.0,
+            "index": [
+              0,
+              0
+            ],
+            "actual": 4.65625,
+            "expected": 4.65625
+          },
+          "raw_key": {
+            "elements": 524288,
+            "failed": 0,
+            "max_abs": 0.0,
+            "max_scaled": 0.0,
+            "rms_abs": 0.0,
+            "index": [
+              0,
+              0
+            ],
+            "actual": -0.828125,
+            "expected": -0.828125
+          },
+          "raw_value": {
+            "elements": 524288,
+            "failed": 0,
+            "max_abs": 0.0,
+            "max_scaled": 0.0,
+            "rms_abs": 0.0,
+            "index": [
+              0,
+              0
+            ],
+            "actual": -1.3515625,
+            "expected": -1.3515625
+          },
+          "query": {
+            "elements": 3670016,
+            "failed": 0,
+            "max_abs": 0.0,
+            "max_scaled": 0.0,
+            "rms_abs": 0.0,
+            "index": [
+              0,
+              0,
+              0
+            ],
+            "actual": 4.65625,
+            "expected": 4.65625
+          },
+          "rotated_key": {
+            "elements": 524288,
+            "failed": 0,
+            "max_abs": 0.0,
+            "max_scaled": 0.0,
+            "rms_abs": 0.0,
+            "index": [
+              0,
+              0,
+              0
+            ],
+            "actual": -0.828125,
+            "expected": -0.828125
+          },
+          "attention": {
+            "elements": 3670016,
+            "failed": 23276,
+            "max_abs": 0.484375,
+            "max_scaled": 0.3418413996696472,
+            "rms_abs": 0.014949310021025997,
+            "index": [
+              3695,
+              1,
+              24
+            ],
+            "actual": 0.294921875,
+            "expected": -0.0712890625
+          },
+          "projected": {
+            "elements": 3670016,
+            "failed": 7612,
+            "max_abs": 0.107421875,
+            "max_scaled": 0.09798534959554672,
+            "rms_abs": 0.007471965095650559,
+            "index": [
+              1292,
+              328
+            ],
+            "actual": -0.1708984375,
+            "expected": -0.06640625
+          },
+          "output": {
+            "elements": 3670016,
+            "failed": 3582,
+            "max_abs": 0.107421875,
+            "max_scaled": 0.09090909361839294,
+            "rms_abs": 0.007999551644536257,
+            "index": [
+              1292,
+              328
+            ],
+            "actual": -0.265625,
+            "expected": -0.16015625
+          }
+        }
+      }
+    }
+  }
+}

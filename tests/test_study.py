@@ -6,10 +6,88 @@ import tempfile
 import unittest
 
 from llm_mojo.benchmarks.study import (parse_output, summarize, encode_samples, read_samples,
-                              load_run, sha, write_json, REPETITIONS)
+                              load_run, sha, write_json, REPETITIONS,
+                              select_parallelism_finalists, select_projection_tile)
 
 
 class StudyTests(unittest.TestCase):
+    def test_split_combined_dispatch_contract_includes_merge_and_decode_fallback(self):
+        from llm_mojo.benchmarks.attention_sublayer_contract import (
+            STAGES_BY_VARIANT, specification)
+        from llm_mojo.benchmarks.profile import argument_parser
+        self.assertEqual(STAGES_BY_VARIANT[19], STAGES_BY_VARIANT[13])
+        self.assertEqual(specification(19,17,64)['dispatches_per_iteration'],10)
+        self.assertEqual(specification(19,1,64)['dispatches_per_iteration'],9)
+        args=argument_parser().parse_args(['--operation','attention_sublayer',
+            '--build-profile-binary','/private/tmp/not-built-by-this-test',
+            '--profile-variant','19','--profile-query-rows','64',
+            '--profile-rows','4096','--profile-iterations','25'])
+        self.assertEqual(args.profile_variant,19)
+
+    def test_profile_cli_accepts_the_combined_attention_variant(self):
+        from llm_mojo.benchmarks.profile import argument_parser
+        args=argument_parser().parse_args(['--operation','attention_sublayer',
+            '--build-profile-binary','/private/tmp/not-built-by-this-test',
+            '--profile-variant','18','--profile-query-rows','1024',
+            '--profile-rows','1024','--profile-iterations','25'])
+        self.assertEqual(args.profile_variant,18)
+        self.assertEqual(args.operation,'attention_sublayer')
+
+    def test_combined_projection_profile_contract(self):
+        from llm_mojo.benchmarks.attention_sublayer_contract import (
+            profile_grid, COMBINED_PROFILE_WORKLOADS, STAGES_BY_VARIANT, specification)
+        spec=dict(workloads=COMBINED_PROFILE_WORKLOADS,variants=[9,18])
+        stages,grid=profile_grid(spec)
+        self.assertEqual(len(grid),8)
+        self.assertEqual(stages[18],STAGES_BY_VARIANT[9])
+        self.assertEqual(specification(18,17,64)['dispatches_per_iteration'],9)
+        for bad in (dict(spec,variants=[9,17]),dict(spec,workloads=[(1,4096),*COMBINED_PROFILE_WORKLOADS[1:]])):
+            with self.assertRaises(ValueError):
+                profile_grid(bad)
+
+    def test_projection_selection_requires_both_boundaries_and_modes(self):
+        block = [dict(query_rows=1024,rows=1024,candidate=v,layers=l,
+                      decision='calibration' if v==9 else 'faster',ratio=.8)
+                 for v in (9,14,15) for l in (1,24)]
+        kernel = copy.deepcopy(block)
+        self.assertEqual(select_projection_tile(block,kernel),14)
+        kernel[2]['decision']='inconclusive'
+        self.assertEqual(select_projection_tile(block,kernel),15)
+        block[-1]['decision']='inconclusive'
+        self.assertIsNone(select_projection_tile(block,kernel))
+        with self.assertRaises(ValueError):
+            select_projection_tile(block[:-1],kernel)
+
+    def test_measurement_boundary_cannot_be_silently_swapped(self):
+        output=self.output()+'\nmeasurement: isolated_wo\n'
+        # Keep the completion sentinel last, as the real instrument does.
+        output=output.replace('BENCHMARK_COMPLETE\n','')+'BENCHMARK_COMPLETE\n'
+        args=dict(rows=16,layers=24,seed=53,operation='linear')
+        identity,_=parse_output(output,0,1,False,measurement='isolated_wo',**args)
+        self.assertEqual(identity['measurement'],'isolated_wo')
+        for boundary in ('whole_attention','whole_attention_buffered'):
+            with self.assertRaises(ValueError):
+                parse_output(output,0,1,False,measurement=boundary,**args)
+
+    def test_parallelism_selection_requires_both_modes_and_respects_family_budget(self):
+        rows = [dict(query_rows=64,rows=4096,candidate=v,layers=l,
+                     decision='calibration' if v == 9 else 'faster',ratio=.8)
+                for v in range(9,14) for l in (1,24)]
+        self.assertEqual(select_parallelism_finalists(rows),[10,12])
+        # A spectacular hot result cannot conceal a weaker ring result.
+        for row in rows:
+            if row['candidate'] == 11:
+                row['ratio'] = .5 if row['layers'] == 1 else .9
+            if row['candidate'] == 12 and row['layers'] == 24:
+                row['decision'] = 'inconclusive'
+        self.assertEqual(select_parallelism_finalists(rows),[10,13])
+        for row in rows:
+            if row['candidate'] != 9:
+                row['decision'] = 'inconclusive'
+        self.assertEqual(select_parallelism_finalists(rows),[])
+        with self.assertRaises(ValueError):
+            select_parallelism_finalists(rows[:-1])
+
     spec = dict(control=0, candidates=[0, 1], rows=[16])
 
     def samples(self, ratio=0.8):
@@ -114,3 +192,16 @@ class StudyTests(unittest.TestCase):
             path = Path(tmp)/'samples.csv.gz'
             path.write_bytes(encode_samples(samples))
             self.assertEqual(read_samples(path),samples)
+
+    def test_sublayer_parser_requires_the_query_suffix_and_fp32_route(self):
+        output = self.output().replace('operation: linear', 'operation: attention_sublayer')
+        output = output.replace('variants: 0 1', 'variants: 3 3')
+        output = output.replace('SAMPLE control 0', 'SAMPLE control 3').replace('SAMPLE candidate 1', 'SAMPLE candidate 3')
+        output = 'query rows: 7\n' + output
+        kwargs = dict(rows=16, layers=24, seed=53, operation='attention_sublayer')
+        self.assertEqual(len(parse_output(output,3,3,False,query_rows=7,**kwargs)[1]),20)
+        for wrong in (None,8,0,17,True):
+            with self.assertRaises(ValueError):
+                parse_output(output,3,3,False,query_rows=wrong,**kwargs)
+        with self.assertRaises(ValueError):
+            parse_output(output.replace('SAMPLE candidate 3','SAMPLE candidate 0'),3,3,False,query_rows=7,**kwargs)

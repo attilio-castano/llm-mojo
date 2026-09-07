@@ -1,0 +1,29 @@
+{
+  "format": "lossless-json-gzip-v1",
+  "record": "decode_validation.json.gz",
+  "sha256": "592c39a586c16ec62c8653d5f3b97c18ff562a1ab92de8751670f24df77421f7",
+  "uncompressed_sha256": "06d15f1c43fe82032312c88810354c026fc89ed7cfdcd5804c1165a234ce1ac4",
+  "purpose": "FP32 decode ownership comparison with fixed rowwise Wo and unchanged gates.",
+  "metadata": {
+    "schema": 1,
+    "source_commit": "d2a320f0705e0459fd1e8c3c8c50b76a745f1b47",
+    "device": "Apple M4 Pro",
+    "backend": "metal",
+    "limits": {
+      "scaled_error": "abs(got-want)/(1+abs(want))",
+      "gqa": 0.0078125,
+      "projected_and_final": 0.03125,
+      "cache": "exact BF16 bits"
+    }
+  },
+  "list_lengths": {
+    "commands": 4,
+    "datasets.full.prefix_checks": 356,
+    "datasets.full.composition_checks": 512,
+    "datasets.checkpoint.prefix_checks": 52,
+    "datasets.checkpoint.composition_checks": 208,
+    "old_score_policy_probe.command": 16,
+    "old_score_policy_probe.checks": 30,
+    "notes": 4
+  }
+}

@@ -1,0 +1,1050 @@
+{
+  "schema": 3,
+  "specification": {
+    "workloads": [
+      [
+        1024,
+        1024
+      ],
+      [
+        4096,
+        4096
+      ],
+      [
+        64,
+        4096
+      ]
+    ],
+    "variants": [
+      4,
+      7
+    ]
+  },
+  "common": {
+    "repository": {
+      "commit": "17720c294ec98a5ba38da004e38ec72eeed6372f",
+      "branch": "codex/attention-sublayer-study",
+      "dirty": false
+    },
+    "hardware": {
+      "model": "Mac16,7",
+      "chip": "Apple M4 Pro",
+      "logical_cpu_count": "14",
+      "gpu_api": "metal",
+      "gpu_target": "metal:4-metal4",
+      "physical_memory_bytes": 25769803776
+    },
+    "software": {
+      "macos": "26.6.2",
+      "macos_build": "25G83",
+      "darwin": "25.6.0",
+      "xcode": [
+        "Xcode 26.6",
+        "Build version 17F113"
+      ],
+      "metal": [
+        "Apple metal version 32023.883 (metalfe-32023.883)",
+        "Target: air64-apple-darwin25.6.0",
+        "Thread model: posix"
+      ],
+      "uv": "uv 0.12.5 (210d1f678 2026-08-14 aarch64-apple-darwin)",
+      "mojo": "1.0.0",
+      "max": "26.5.0"
+    },
+    "source_sha256": {
+      "pyproject.toml": "d31b8de28d1284f4bc247cdd306f3078dbf94b67c17d67ff9eae9752e611bc9d",
+      "src/llm_mojo/__init__.mojo": "54ca844ca97d5f13084dae07021cbe9535b95cf3414d5133daec18787507d905",
+      "src/llm_mojo/__init__.py": "d45f08c560f8a501262a3c17663244a1a74fb76658d746e99a430dbc1f9935b7",
+      "src/llm_mojo/_repository.py": "900f133c6c5a89b14884e2353e882d1bae589cd0280f726cc7df990b5ab9eefe",
+      "src/llm_mojo/attention.mojo": "3210f50d6850db60a6cacf4c30d860ca0b72177ad1c9b313c7ae7d92b79be973",
+      "src/llm_mojo/attention_decode.mojo": "0f240c7571344c619e400fa108b62027a32ff0c4e77c4df261ea16a8d7f441e6",
+      "src/llm_mojo/attention_prefill.mojo": "52373ebe0af235a000e8876e3f0063d16287b034e705243564ca6bcdba4f29e3",
+      "src/llm_mojo/attention_sublayer.mojo": "726c194c7fcfb238f06cd760434ac1ca5d9f9b71c5b489152adf3e97f0b13d04",
+      "src/llm_mojo/benchmarks/__init__.mojo": "b8a8f32ace824dd687bc6b2f87afeb3180f7b5ac78684ecefd669201a1e9801c",
+      "src/llm_mojo/benchmarks/__init__.py": "11fddc93cafb04100810b633bfea5b41fb2ba60a48383c9fecb3fdd1ae9cd00c",
+      "src/llm_mojo/benchmarks/analyze_trace.py": "28201de810a443f3c216d8192176672a89e9241b8cbf2960f9823c8d738e2a8e",
+      "src/llm_mojo/benchmarks/attention_contract.py": "9e47ff5b5dc3b953cfeffeeaf1a6ead10637b1fcd055a9bbd4a59e439d76882a",
+      "src/llm_mojo/benchmarks/attention_decode.mojo": "983f00a4a01396cfa46f5064098b6155a893c0aa4c66d197f65d91b38bc6a76d",
+      "src/llm_mojo/benchmarks/attention_decode_contract.py": "36b34c75a5186931331d6ae9bab8da6e493e55f6c8a612614c26a6c613dbd201",
+      "src/llm_mojo/benchmarks/attention_decode_support.mojo": "55ad60c4cbf1379adfb0575e840db8726d8d64103d6d973c20d71366c32a9968",
+      "src/llm_mojo/benchmarks/attention_prefill.mojo": "9edb4b4761b99993ba3175e9dfc4f526f9c0820dad5badc5b7cf820aed322b06",
+      "src/llm_mojo/benchmarks/attention_prefill_contract.py": "8cd0df325ea4cbab884b3205e50832a0dc289d1d18194375bdd9f90ef8ac2578",
+      "src/llm_mojo/benchmarks/attention_prefill_ir.mojo": "bfcbd58d4052d3fd7774c724f868d817dbb4c8402cc3f2483159eb45857fda67",
+      "src/llm_mojo/benchmarks/attention_prefill_support.mojo": "85fea01a59589c62513221d2840610750a20f51977a775a0c99574c49df8aceb",
+      "src/llm_mojo/benchmarks/attention_sublayer.mojo": "2554263cb15b1f7623fea84d89729a1651e460420ea1de97c022770d9eb81158",
+      "src/llm_mojo/benchmarks/attention_sublayer_contract.py": "4257c8e2253f896fc05c0df232c65f524f018ade238a8e8e173f4a5debb1ab72",
+      "src/llm_mojo/benchmarks/capture_trace.py": "69f23a0b99450a72d46ba1a56a9638f57c59088c378e945762008be1ea9dcd0d",
+      "src/llm_mojo/benchmarks/environment.py": "03688054b017b428a2c4c6f3be10f5be702fcf76e4e8585a02d613cbbf0fe3f7",
+      "src/llm_mojo/benchmarks/operations.mojo": "3d3a96985d42cfbb314cda9fd7d4318a11e9fe841b3f52347b6402309d071561",
+      "src/llm_mojo/benchmarks/plot.py": "7a738c007bcb6e1291004e985d5feb93372cd5886f826e2f57f8eaea02983410",
+      "src/llm_mojo/benchmarks/profile.py": "79863e1e7dd19f10e362cde9e19f42844e44bfe77bb9b238be60d2131775f4b6",
+      "src/llm_mojo/benchmarks/profile_summary.py": "a974b80cdf49f2be73447d96556d5ccd8664b47307d3668587a6067bcaa20c4b",
+      "src/llm_mojo/benchmarks/run.py": "6b42b07ff5013d95964dce006a062b2702cb9e46eebbe453200125eabcd17283",
+      "src/llm_mojo/benchmarks/smoke.py": "2e2d1dd2ac7304e75eea9d73f52353b8ded5ef3f037d4aa78586fb47e0364fda",
+      "src/llm_mojo/benchmarks/study.py": "7156a2ce4ad808b0c4c617b47e010a1442ad14090d1029e534fea1616a5d706a",
+      "src/llm_mojo/linear.mojo": "1f72f29fa058d6fac56cb045df2ac5a4b8d4e975a70ead00fbfce630944829d4",
+      "src/llm_mojo/residual.mojo": "aff4030007124a2a1a59b92d75966f13da0de0c6275bce1cc2d19417a9594d5e",
+      "src/llm_mojo/rms_norm.mojo": "a555c33f86c6f893b780beab8033a9495ad62e502d0670753e7639850fba0f56",
+      "src/llm_mojo/rope.mojo": "12add6e982c6d1b500c1f346bf3733a9306acd1d15994fbaed8eb610904b289e",
+      "src/llm_mojo/validate.py": "d01a6b60230e7b77f799be060470670bd53a7bf8a93584be37296c2c53a53936",
+      "tests/fixtures/attention/generate.py": "b69d61c30f796e107b2e857d4f79df3488592dfe708c4178753db374cc9951a0",
+      "tests/fixtures/attention/generate_decode.py": "dd82f833f9507cd54edfaf95c5b2ade7381fefb6f612547b8849711be503861a",
+      "tests/fixtures/attention/generate_prefill.py": "35193674d82c1b5ca18a642b452de298ad58dcc2a609396c895f8b2819a3f54e",
+      "tests/fixtures/attention_sublayer/checkpoint.py": "201e2299d54aa1afd654e34bf9dcb32725c192e6892e119e81100571abdaf687",
+      "tests/fixtures/attention_sublayer/checkpoint_checksums.json": "a6730403ed7a3ae4becc02e39a1910bdb5781c3846b0bdd71eca20fc26a6cb20",
+      "tests/fixtures/attention_sublayer/checksums.json": "64bc40d13d26492880d7c848da237afb4e5406588a01f5f4575c1bee6dcf49de",
+      "tests/fixtures/attention_sublayer/generate.py": "9aad5a1c88be6d5a8e14319cec97e626342a61a81efc7b8fa50f4c388d178bc6",
+      "tests/fixtures/attention_sublayer/precision.py": "bf2aa95c4d3328ec2203fc284bfa031511c2944fad25b4813dae955a0df92924",
+      "tests/fixtures/attention_sublayer/precision_checksums.json": "3a4d9e6642be1729b206f18de7253b784bc70b455e3ead7bc1a3d402a21d7f84",
+      "tests/fixtures/attention_sublayer/upstream.py": "e6228d7ecfa07976479372758d28fc10a99cf9391a1b3cf18955be419dcac02b",
+      "tests/fixtures/checksums.json": "becd13cec305f11367f5523d4c80732052215f7862070c6635ad4b7cb59ab51b",
+      "tests/fixtures/linear/generate.py": "b87b5841c1dba556750dbf53de3bcf078a4f2d70538bac0db563c1304c0ca951",
+      "tests/fixtures/rms_norm/generate.py": "e01e8e2bd0f6723921a8f3c65803c87c3aa89818569a9a62b5794e381892389e",
+      "tests/fixtures/rope/generate.py": "7c616a7d991876d176e4b9808257b3c2c4c43641b5b51bae693eb1a20769eda5",
+      "uv.lock": "a96fdc1a706203ed10ae74d7d1afd69c99e335068fe8dd0f184e67789559cca2"
+    },
+    "analysis_source_sha256": {
+      "analyze_trace.py": "28201de810a443f3c216d8192176672a89e9241b8cbf2960f9823c8d738e2a8e",
+      "attention_contract.py": "9e47ff5b5dc3b953cfeffeeaf1a6ead10637b1fcd055a9bbd4a59e439d76882a",
+      "attention_decode_contract.py": "36b34c75a5186931331d6ae9bab8da6e493e55f6c8a612614c26a6c613dbd201",
+      "attention_prefill_contract.py": "8cd0df325ea4cbab884b3205e50832a0dc289d1d18194375bdd9f90ef8ac2578",
+      "attention_sublayer_contract.py": "4257c8e2253f896fc05c0df232c65f524f018ade238a8e8e173f4a5debb1ab72"
+    },
+    "curation_source_sha256": "a974b80cdf49f2be73447d96556d5ccd8664b47307d3668587a6067bcaa20c4b"
+  },
+  "captures": [
+    {
+      "query_rows": 1024,
+      "rows": 1024,
+      "variant": 4,
+      "capture": {
+        "binary": {
+          "bytes": 521304,
+          "sha256": "167e66cec0d60d036fad7124af842ff36bd58cda78abf051df2d788fac496708"
+        },
+        "capture_id": "attention-d309b81d340843ccbf74b8346bdf7ce3",
+        "capture_receipt": {
+          "bytes": 2998,
+          "sha256": "b85d8e281402e1f4a70f432895180c2d5772e92a404f97aea863b353a9c47577"
+        },
+        "entrypoint": "enqueue_attention_sublayer",
+        "implementation": "attention_sublayer_4",
+        "operation": "attention_sublayer",
+        "provenance": {
+          "bytes": 9231,
+          "sha256": "f96fba021d12a8f6bd6a536922d2f3849fdd199e0b5325b69d5c37935ada54a3"
+        },
+        "repository": {
+          "branch": "codex/attention-sublayer-study",
+          "commit": "17720c294ec98a5ba38da004e38ec72eeed6372f",
+          "dirty": false
+        },
+        "runtime": {
+          "backend": "metal",
+          "device": "Apple M4 Pro"
+        },
+        "verification": "capture_receipt_v2_and_trace_target",
+        "workload": {
+          "dispatches_per_iteration": 12,
+          "hidden_size": 896,
+          "key_value_heads": 2,
+          "key_value_rows": 1024,
+          "post_profile_idle_milliseconds": 250,
+          "profile_iterations": 25,
+          "profile_rows": 1024,
+          "profile_workload": "sublayer-r1024-t1024-v4",
+          "query_heads": 14,
+          "rows": 1024,
+          "warmup_iterations": 10
+        }
+      },
+      "trace": {
+        "counter_configuration": {
+          "counter-device": "0",
+          "counter-profile": "0",
+          "shader-profiler": "0"
+        },
+        "end_reason": "Target app exited",
+        "instruments_version": "16.0 (17F113)",
+        "metal_application_gpu_settings": [
+          "Counter Set: (null)",
+          "Shader Timeline: Disabled",
+          "Induced GPU Performance State: Default"
+        ],
+        "recording_duration_seconds": 2.792807,
+        "run_name": "attention-d309b81d340843ccbf74b8346bdf7ce3",
+        "target": {
+          "capture_id_verified": true,
+          "device_model": "MacBook Pro",
+          "device_os_version": "26.6.2 (25G83)",
+          "device_platform": "macOS",
+          "return_exit_status": "0",
+          "termination_reason": "exit(0)"
+        },
+        "template": "Metal System Trace"
+      },
+      "interval_coalescing": {
+        "active_intervals": 1106,
+        "dispatches": 444,
+        "fragmented_dispatches": 189,
+        "verified_trailing_submissions": 420,
+        "duration_rule": "Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end."
+      },
+      "fragmented_profile_dispatches": 123,
+      "conditions": {
+        "before": {
+          "timestamp_utc": "2026-09-06T21:47:07.396249+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 56
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        },
+        "after": {
+          "timestamp_utc": "2026-09-06T21:47:25.201935+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 46
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        }
+      },
+      "counters_scope": "No counter analysis was supplied for this capture; absence is not zero.",
+      "counters": [],
+      "counter_analysis": {
+        "status": "not_analyzed",
+        "reason": "Stage-duration comparison; optional counter tables were not exported.",
+        "raw_trace_preserved": true,
+        "stage_timing_exports_complete": true
+      },
+      "spills": {
+        "interpretation": "No target spill event was reported in this capture. This does not prove that all executions are spill-free.",
+        "target_event_count": 0,
+        "target_spilled_bytes_maximum_event": 0,
+        "target_spilled_bytes_total": 0
+      }
+    },
+    {
+      "query_rows": 1024,
+      "rows": 1024,
+      "variant": 7,
+      "capture": {
+        "binary": {
+          "bytes": 521304,
+          "sha256": "e491ffc4206c5bcc4ac1415909b13ea6ce9193dd12e49923eeb207ba550c483b"
+        },
+        "capture_id": "attention-5658cd549efd45e0af8862a5937f3234",
+        "capture_receipt": {
+          "bytes": 2998,
+          "sha256": "5e364a5617a8bfffeda92cf0eea9970d5b5ae8b5e8b10ca0dd2613ae03c5f590"
+        },
+        "entrypoint": "enqueue_attention_sublayer",
+        "implementation": "attention_sublayer_7",
+        "operation": "attention_sublayer",
+        "provenance": {
+          "bytes": 9231,
+          "sha256": "df10290f3ca109ec16705304ae0b955bbb6d55ce5a3838f653d3cec78cf370c8"
+        },
+        "repository": {
+          "branch": "codex/attention-sublayer-study",
+          "commit": "17720c294ec98a5ba38da004e38ec72eeed6372f",
+          "dirty": false
+        },
+        "runtime": {
+          "backend": "metal",
+          "device": "Apple M4 Pro"
+        },
+        "verification": "capture_receipt_v2_and_trace_target",
+        "workload": {
+          "dispatches_per_iteration": 10,
+          "hidden_size": 896,
+          "key_value_heads": 2,
+          "key_value_rows": 1024,
+          "post_profile_idle_milliseconds": 250,
+          "profile_iterations": 25,
+          "profile_rows": 1024,
+          "profile_workload": "sublayer-r1024-t1024-v7",
+          "query_heads": 14,
+          "rows": 1024,
+          "warmup_iterations": 10
+        }
+      },
+      "trace": {
+        "counter_configuration": {
+          "counter-device": "0",
+          "counter-profile": "0",
+          "shader-profiler": "0"
+        },
+        "end_reason": "Target app exited",
+        "instruments_version": "16.0 (17F113)",
+        "metal_application_gpu_settings": [
+          "Counter Set: (null)",
+          "Shader Timeline: Disabled",
+          "Induced GPU Performance State: Default"
+        ],
+        "recording_duration_seconds": 2.448706,
+        "run_name": "attention-5658cd549efd45e0af8862a5937f3234",
+        "target": {
+          "capture_id_verified": true,
+          "device_model": "MacBook Pro",
+          "device_os_version": "26.6.2 (25G83)",
+          "device_platform": "macOS",
+          "return_exit_status": "0",
+          "termination_reason": "exit(0)"
+        },
+        "template": "Metal System Trace"
+      },
+      "interval_coalescing": {
+        "active_intervals": 647,
+        "dispatches": 372,
+        "fragmented_dispatches": 89,
+        "verified_trailing_submissions": 350,
+        "duration_rule": "Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end."
+      },
+      "fragmented_profile_dispatches": 60,
+      "conditions": {
+        "before": {
+          "timestamp_utc": "2026-09-06T21:47:45.618475+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 51
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        },
+        "after": {
+          "timestamp_utc": "2026-09-06T21:47:58.659940+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 47
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        }
+      },
+      "counters_scope": "No counter analysis was supplied for this capture; absence is not zero.",
+      "counters": [],
+      "counter_analysis": {
+        "status": "not_analyzed",
+        "reason": "Stage-duration comparison; optional counter tables were not exported.",
+        "raw_trace_preserved": true,
+        "stage_timing_exports_complete": true
+      },
+      "spills": {
+        "interpretation": "The trace reported target spill events; inspect before use.",
+        "target_event_count": 35,
+        "target_spilled_bytes_maximum_event": 48,
+        "target_spilled_bytes_total": 1680
+      }
+    },
+    {
+      "query_rows": 4096,
+      "rows": 4096,
+      "variant": 4,
+      "capture": {
+        "binary": {
+          "bytes": 521304,
+          "sha256": "483e74c8665ba6c53c1f3ce8f5a2f98746ff37e6fef84a9471134aee4d8919ba"
+        },
+        "capture_id": "attention-b57014b05d494a73896e1cdece3ea9c8",
+        "capture_receipt": {
+          "bytes": 2998,
+          "sha256": "6e694a648b3fb9ce60fb5ae86d47025990bd649884ac4a6d6cd945e470fa898e"
+        },
+        "entrypoint": "enqueue_attention_sublayer",
+        "implementation": "attention_sublayer_4",
+        "operation": "attention_sublayer",
+        "provenance": {
+          "bytes": 9231,
+          "sha256": "ad10262e075ab39624842312c087c86d94f9e6dcc3c01da25edc7f076507a8e5"
+        },
+        "repository": {
+          "branch": "codex/attention-sublayer-study",
+          "commit": "17720c294ec98a5ba38da004e38ec72eeed6372f",
+          "dirty": false
+        },
+        "runtime": {
+          "backend": "metal",
+          "device": "Apple M4 Pro"
+        },
+        "verification": "capture_receipt_v2_and_trace_target",
+        "workload": {
+          "dispatches_per_iteration": 12,
+          "hidden_size": 896,
+          "key_value_heads": 2,
+          "key_value_rows": 4096,
+          "post_profile_idle_milliseconds": 250,
+          "profile_iterations": 10,
+          "profile_rows": 4096,
+          "profile_workload": "sublayer-r4096-t4096-v4",
+          "query_heads": 14,
+          "rows": 4096,
+          "warmup_iterations": 10
+        }
+      },
+      "trace": {
+        "counter_configuration": {
+          "counter-device": "0",
+          "counter-profile": "0",
+          "shader-profiler": "0"
+        },
+        "end_reason": "Target app exited",
+        "instruments_version": "16.0 (17F113)",
+        "metal_application_gpu_settings": [
+          "Counter Set: (null)",
+          "Shader Timeline: Disabled",
+          "Induced GPU Performance State: Default"
+        ],
+        "recording_duration_seconds": 9.193557,
+        "run_name": "attention-b57014b05d494a73896e1cdece3ea9c8",
+        "target": {
+          "capture_id_verified": true,
+          "device_model": "MacBook Pro",
+          "device_os_version": "26.6.2 (25G83)",
+          "device_platform": "macOS",
+          "return_exit_status": "0",
+          "termination_reason": "exit(0)"
+        },
+        "template": "Metal System Trace"
+      },
+      "interval_coalescing": {
+        "active_intervals": 3652,
+        "dispatches": 264,
+        "fragmented_dispatches": 166,
+        "verified_trailing_submissions": 240,
+        "duration_rule": "Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end."
+      },
+      "fragmented_profile_dispatches": 74,
+      "conditions": {
+        "before": {
+          "timestamp_utc": "2026-09-06T21:48:20.314843+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 44
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        },
+        "after": {
+          "timestamp_utc": "2026-09-06T21:49:07.444146+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 48
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        }
+      },
+      "counters_scope": "No counter analysis was supplied for this capture; absence is not zero.",
+      "counters": [],
+      "counter_analysis": {
+        "status": "not_analyzed",
+        "reason": "Stage-duration comparison; optional counter tables were not exported.",
+        "raw_trace_preserved": true,
+        "stage_timing_exports_complete": true
+      },
+      "spills": {
+        "interpretation": "No target spill event was reported in this capture. This does not prove that all executions are spill-free.",
+        "target_event_count": 0,
+        "target_spilled_bytes_maximum_event": 0,
+        "target_spilled_bytes_total": 0
+      }
+    },
+    {
+      "query_rows": 4096,
+      "rows": 4096,
+      "variant": 7,
+      "capture": {
+        "binary": {
+          "bytes": 521304,
+          "sha256": "82d51f236b65bb48f7ace462931e6b980982a63ede8cbbf7b07cf20b5dcc449d"
+        },
+        "capture_id": "attention-541ede0e26d54563819a935c286f40e8",
+        "capture_receipt": {
+          "bytes": 2998,
+          "sha256": "d93fac5bc4513e285f31292bbe7c055f708affce2d8ebfd165e2a1aa072746b8"
+        },
+        "entrypoint": "enqueue_attention_sublayer",
+        "implementation": "attention_sublayer_7",
+        "operation": "attention_sublayer",
+        "provenance": {
+          "bytes": 9231,
+          "sha256": "a494a79a8da3f7157be069ded9f6fd565bf6eb02d52dceadde1ed5edd9a4a709"
+        },
+        "repository": {
+          "branch": "codex/attention-sublayer-study",
+          "commit": "17720c294ec98a5ba38da004e38ec72eeed6372f",
+          "dirty": false
+        },
+        "runtime": {
+          "backend": "metal",
+          "device": "Apple M4 Pro"
+        },
+        "verification": "capture_receipt_v2_and_trace_target",
+        "workload": {
+          "dispatches_per_iteration": 10,
+          "hidden_size": 896,
+          "key_value_heads": 2,
+          "key_value_rows": 4096,
+          "post_profile_idle_milliseconds": 250,
+          "profile_iterations": 10,
+          "profile_rows": 4096,
+          "profile_workload": "sublayer-r4096-t4096-v7",
+          "query_heads": 14,
+          "rows": 4096,
+          "warmup_iterations": 10
+        }
+      },
+      "trace": {
+        "counter_configuration": {
+          "counter-device": "0",
+          "counter-profile": "0",
+          "shader-profiler": "0"
+        },
+        "end_reason": "Target app exited",
+        "instruments_version": "16.0 (17F113)",
+        "metal_application_gpu_settings": [
+          "Counter Set: (null)",
+          "Shader Timeline: Disabled",
+          "Induced GPU Performance State: Default"
+        ],
+        "recording_duration_seconds": 3.776066,
+        "run_name": "attention-541ede0e26d54563819a935c286f40e8",
+        "target": {
+          "capture_id_verified": true,
+          "device_model": "MacBook Pro",
+          "device_os_version": "26.6.2 (25G83)",
+          "device_platform": "macOS",
+          "return_exit_status": "0",
+          "termination_reason": "exit(0)"
+        },
+        "template": "Metal System Trace"
+      },
+      "interval_coalescing": {
+        "active_intervals": 1217,
+        "dispatches": 222,
+        "fragmented_dispatches": 107,
+        "verified_trailing_submissions": 200,
+        "duration_rule": "Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end."
+      },
+      "fragmented_profile_dispatches": 48,
+      "conditions": {
+        "before": {
+          "timestamp_utc": "2026-09-06T21:49:33.769709+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 54
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        },
+        "after": {
+          "timestamp_utc": "2026-09-06T21:49:53.409847+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 50
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        }
+      },
+      "counters_scope": "No counter analysis was supplied for this capture; absence is not zero.",
+      "counters": [],
+      "counter_analysis": {
+        "status": "not_analyzed",
+        "reason": "Stage-duration comparison; optional counter tables were not exported.",
+        "raw_trace_preserved": true,
+        "stage_timing_exports_complete": true
+      },
+      "spills": {
+        "interpretation": "The trace reported target spill events; inspect before use.",
+        "target_event_count": 20,
+        "target_spilled_bytes_maximum_event": 48,
+        "target_spilled_bytes_total": 960
+      }
+    },
+    {
+      "query_rows": 64,
+      "rows": 4096,
+      "variant": 4,
+      "capture": {
+        "binary": {
+          "bytes": 521304,
+          "sha256": "2c85271f0632e441733c6a426c50fb3561c670e5f54f0221b1f266dba5cf79ed"
+        },
+        "capture_id": "attention-b63c617f620545e3b6d091aeb0015266",
+        "capture_receipt": {
+          "bytes": 2990,
+          "sha256": "1dc0e548027363b2c2eedade3331fcded9a09e651b7646f00ef8afe3f94f5f8d"
+        },
+        "entrypoint": "enqueue_attention_sublayer",
+        "implementation": "attention_sublayer_4",
+        "operation": "attention_sublayer",
+        "provenance": {
+          "bytes": 9225,
+          "sha256": "8eac4f79a9bcc1868db72b62b3bd245f19cb179456d9e6ad48f60771dfbb5bcd"
+        },
+        "repository": {
+          "branch": "codex/attention-sublayer-study",
+          "commit": "17720c294ec98a5ba38da004e38ec72eeed6372f",
+          "dirty": false
+        },
+        "runtime": {
+          "backend": "metal",
+          "device": "Apple M4 Pro"
+        },
+        "verification": "capture_receipt_v2_and_trace_target",
+        "workload": {
+          "dispatches_per_iteration": 12,
+          "hidden_size": 896,
+          "key_value_heads": 2,
+          "key_value_rows": 4096,
+          "post_profile_idle_milliseconds": 250,
+          "profile_iterations": 25,
+          "profile_rows": 64,
+          "profile_workload": "sublayer-r64-t4096-v4",
+          "query_heads": 14,
+          "rows": 64,
+          "warmup_iterations": 10
+        }
+      },
+      "trace": {
+        "counter_configuration": {
+          "counter-device": "0",
+          "counter-profile": "0",
+          "shader-profiler": "0"
+        },
+        "end_reason": "Target app exited",
+        "instruments_version": "16.0 (17F113)",
+        "metal_application_gpu_settings": [
+          "Counter Set: (null)",
+          "Shader Timeline: Disabled",
+          "Induced GPU Performance State: Default"
+        ],
+        "recording_duration_seconds": 1.814982,
+        "run_name": "attention-b63c617f620545e3b6d091aeb0015266",
+        "target": {
+          "capture_id_verified": true,
+          "device_model": "MacBook Pro",
+          "device_os_version": "26.6.2 (25G83)",
+          "device_platform": "macOS",
+          "return_exit_status": "0",
+          "termination_reason": "exit(0)"
+        },
+        "template": "Metal System Trace"
+      },
+      "interval_coalescing": {
+        "active_intervals": 560,
+        "dispatches": 444,
+        "fragmented_dispatches": 57,
+        "verified_trailing_submissions": 420,
+        "duration_rule": "Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end."
+      },
+      "fragmented_profile_dispatches": 37,
+      "conditions": {
+        "before": {
+          "timestamp_utc": "2026-09-06T21:50:14.308882+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 52
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        },
+        "after": {
+          "timestamp_utc": "2026-09-06T21:50:24.642915+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 54
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        }
+      },
+      "counters_scope": "No counter analysis was supplied for this capture; absence is not zero.",
+      "counters": [],
+      "counter_analysis": {
+        "status": "not_analyzed",
+        "reason": "Stage-duration comparison; optional counter tables were not exported.",
+        "raw_trace_preserved": true,
+        "stage_timing_exports_complete": true
+      },
+      "spills": {
+        "interpretation": "No target spill event was reported in this capture. This does not prove that all executions are spill-free.",
+        "target_event_count": 0,
+        "target_spilled_bytes_maximum_event": 0,
+        "target_spilled_bytes_total": 0
+      }
+    },
+    {
+      "query_rows": 64,
+      "rows": 4096,
+      "variant": 7,
+      "capture": {
+        "binary": {
+          "bytes": 521304,
+          "sha256": "db90db28d1f96cac100e139a498e42ca7b9a7f1d7a2377458492bcaadd997e2a"
+        },
+        "capture_id": "attention-6c048570dc7b46ed81f408193ae9082f",
+        "capture_receipt": {
+          "bytes": 2990,
+          "sha256": "f774ffa7175e039a9bdc165d0887577b8263ae2d347cddf38aa8aebffe194118"
+        },
+        "entrypoint": "enqueue_attention_sublayer",
+        "implementation": "attention_sublayer_7",
+        "operation": "attention_sublayer",
+        "provenance": {
+          "bytes": 9225,
+          "sha256": "da4a2345fbfac467a08703901d7069bf59d23b47e9f90c81c4cf80ed19af9ea9"
+        },
+        "repository": {
+          "branch": "codex/attention-sublayer-study",
+          "commit": "17720c294ec98a5ba38da004e38ec72eeed6372f",
+          "dirty": false
+        },
+        "runtime": {
+          "backend": "metal",
+          "device": "Apple M4 Pro"
+        },
+        "verification": "capture_receipt_v2_and_trace_target",
+        "workload": {
+          "dispatches_per_iteration": 10,
+          "hidden_size": 896,
+          "key_value_heads": 2,
+          "key_value_rows": 4096,
+          "post_profile_idle_milliseconds": 250,
+          "profile_iterations": 25,
+          "profile_rows": 64,
+          "profile_workload": "sublayer-r64-t4096-v7",
+          "query_heads": 14,
+          "rows": 64,
+          "warmup_iterations": 10
+        }
+      },
+      "trace": {
+        "counter_configuration": {
+          "counter-device": "0",
+          "counter-profile": "0",
+          "shader-profiler": "0"
+        },
+        "end_reason": "Target app exited",
+        "instruments_version": "16.0 (17F113)",
+        "metal_application_gpu_settings": [
+          "Counter Set: (null)",
+          "Shader Timeline: Disabled",
+          "Induced GPU Performance State: Default"
+        ],
+        "recording_duration_seconds": 1.316221,
+        "run_name": "attention-6c048570dc7b46ed81f408193ae9082f",
+        "target": {
+          "capture_id_verified": true,
+          "device_model": "MacBook Pro",
+          "device_os_version": "26.6.2 (25G83)",
+          "device_platform": "macOS",
+          "return_exit_status": "0",
+          "termination_reason": "exit(0)"
+        },
+        "template": "Metal System Trace"
+      },
+      "interval_coalescing": {
+        "active_intervals": 409,
+        "dispatches": 372,
+        "fragmented_dispatches": 23,
+        "verified_trailing_submissions": 350,
+        "duration_rule": "Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end."
+      },
+      "fragmented_profile_dispatches": 10,
+      "conditions": {
+        "before": {
+          "timestamp_utc": "2026-09-06T21:50:43.582777+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 54
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        },
+        "after": {
+          "timestamp_utc": "2026-09-06T21:50:51.742836+00:00",
+          "battery": {
+            "power_source": "AC Power",
+            "charge": "100%",
+            "state": "charged",
+            "estimate": "0:00 remaining present: true"
+          },
+          "power_mode_raw": "0",
+          "thermal": [
+            "Note: No thermal warning level has been recorded",
+            "Note: No performance warning level has been recorded",
+            "Note: No CPU power status has been recorded"
+          ],
+          "memory": {
+            "physical_bytes": 25769803776,
+            "free_percent": 55
+          },
+          "displays": [
+            {
+              "name": "LG HDR 4K",
+              "connection": "unknown",
+              "resolution": "3008 x 1692 @ 60.00Hz",
+              "online": "spdisplays_yes"
+            }
+          ],
+          "power_settings": [
+            "powermode            0"
+          ]
+        }
+      },
+      "counters_scope": "No counter analysis was supplied for this capture; absence is not zero.",
+      "counters": [],
+      "counter_analysis": {
+        "status": "not_analyzed",
+        "reason": "Stage-duration comparison; optional counter tables were not exported.",
+        "raw_trace_preserved": true,
+        "stage_timing_exports_complete": true
+      },
+      "spills": {
+        "interpretation": "The trace reported target spill events; inspect before use.",
+        "target_event_count": 35,
+        "target_spilled_bytes_maximum_event": 48,
+        "target_spilled_bytes_total": 1680
+      }
+    }
+  ],
+  "samples_sha256": "883fb573289a4b6d7d23127699e3cdb3909bf5a855326f6555e6a336845996c3",
+  "boundary": "Instrumented GPU active dispatch durations (non-overlapping segments summed, preemption gaps excluded); 6 single captures, not paired latency trials. Counter statistics are device-wide within each target window. Stage labels follow the validated source enqueue order.",
+  "retention": "All target dispatch durations retained. Three named counter summaries retained; full trace/XML exports and other counters remain external."
+}

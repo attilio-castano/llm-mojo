@@ -34,7 +34,38 @@ from llm_mojo.rope import enqueue_rope_apple_gpu, rope_reference
 from max.gpu.host import DeviceContext
 from std.math import isfinite
 from std.sys.info import has_apple_gpu_accelerator
-from std.testing import TestSuite, assert_raises
+from std.testing import TestSuite, assert_raises, assert_equal
+
+
+def test_rope_preserves_bf16_product_rounding_under_metal_contraction() raises:
+    # A pair found by the composed sublayer oracle. Products are exactly
+    # 3.66064453125 and -0.0209903717041015625; rounding each BF16 first
+    # gives 3.65625 and -0.02099609375, then 3.671875 after subtraction.
+    # The previous contraction-enabled kernel returned 3.6875.
+    var ctx = DeviceContext()
+    var xb = ctx.enqueue_create_buffer[DType.bfloat16](2)
+    var cb = ctx.enqueue_create_buffer[DType.bfloat16](2)
+    var sb = ctx.enqueue_create_buffer[DType.bfloat16](2)
+    var ob = ctx.enqueue_create_buffer[DType.bfloat16](2)
+    with xb.map_to_host() as m:
+        var x = TileTensor(m, row_major(1, 1, 2))
+        x[0, 0, 0] = 4.59375
+        x[0, 0, 1] = -0.03466796875
+    cb.enqueue_fill(0.796875)
+    sb.enqueue_fill(0.60546875)
+    enqueue_rope_apple_gpu(
+        ctx,
+        TileTensor(xb, row_major(1, 1, 2)),
+        TileTensor(cb, row_major(1, 2)),
+        TileTensor(sb, row_major(1, 2)),
+        TileTensor(ob, row_major(1, 1, 2)),
+        0,
+    )
+    with ob.map_to_host() as m:
+        var y = TileTensor(m, row_major(1, 1, 2))
+        assert_equal(
+            rebind[Float32](y[0, 0, 0].cast[DType.float32]()), Float32(3.671875)
+        )
 
 
 def fill_fixture[

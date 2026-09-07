@@ -1,0 +1,307 @@
+"""Whole attention latency and trace instrument with frozen upstream gates.
+
+Python only reads fixture arrays before timing. All enqueues are engine Mojo.
+Ring24 owns distinct weights, inputs and caches; scratch/output are shared.
+Odd ring entries negate X, Wqkv and Wo, preserving Q/K/V and negating Y.
+"""
+from llm_mojo.attention_sublayer import (
+    AttentionWeights, AttentionCache, AttentionWorkspace, enqueue_attention_sublayer,
+    enqueue_attention_sublayer_integrated, _enqueue_attention_wo,
+)
+from layout import TileTensor, row_major
+from max.gpu.host import DeviceBuffer, DeviceContext
+from std.python import Python, PythonObject
+from std.math import isfinite
+from std.sys import argv, is_defined, get_defined_int
+from std.time import perf_counter_ns, sleep
+
+
+def _array(name: String) raises -> PythonObject:
+    var np = Python.import_module("numpy")
+    return np.load("build/oracle_data/attention_sublayer/" + name + ".npy",
+                   allow_pickle=False).reshape(-1)
+
+
+def _load(mut buffer: DeviceBuffer[DType.bfloat16], name: String,
+          count: Int, start: Int = 0, sign: Float32 = 1) raises:
+    var a = _array(name)
+    if start < 0 or start + count > Int(py=a.size):
+        raise Error("benchmark fixture slice is outside its frozen array")
+    var source = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(py=a.ctypes.data))
+    with buffer.map_to_host() as mapped:
+        var dst = TileTensor(mapped, row_major(count))
+        comptime assert dst.flat_rank == 1
+        for i in range(count):
+            dst[i] = (sign * source[unsafe_offset=start + i]).cast[DType.bfloat16]()
+
+
+def _poison_suffix(mut buffer: DeviceBuffer[DType.bfloat16], past: Int, rows: Int) raises:
+    with buffer.map_to_host() as mapped:
+        var dst = TileTensor(mapped, row_major((past + rows) * 128))
+        comptime assert dst.flat_rank == 1
+        for i in range(past * 128, (past + rows) * 128):
+            dst[i] = 123
+
+
+def _check(mut buffer: DeviceBuffer[DType.bfloat16], name: String,
+           count: Int, start: Int, sign: Float32) raises:
+    var a = _array(name)
+    var source = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(py=a.ctypes.data))
+    var worst: Float32 = 0
+    with buffer.map_to_host() as mapped:
+        var result = TileTensor(mapped, row_major(count))
+        comptime assert result.flat_rank == 1
+        for i in range(count):
+            var got = rebind[Float32](result[i].cast[DType.float32]())
+            var want = sign * source[unsafe_offset=start + i]
+            var error = abs(got - want) / (1 + abs(want))
+            if not isfinite(got) or not isfinite(want) or error > 0.03125:
+                print("benchmark fixture mismatch", name, i, got, want)
+                raise Error("attention benchmark exceeded its FP32 composition gate")
+            worst = max(worst, error)
+    print("fixture gate:", name, "max scaled:", worst)
+
+
+def _check_cache(mut cache: DeviceBuffer[DType.bfloat16],
+                 mut source: DeviceBuffer[DType.bfloat16], name: String,
+                 past: Int, rows: Int) raises:
+    var a = _array(name)
+    var prefix = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(py=a.ctypes.data))
+    with cache.map_to_host() as mapped:
+        var actual = TileTensor(mapped, row_major((past + rows) * 128))
+        comptime assert actual.flat_rank == 1
+        for i in range(past * 128):
+            # Frozen arrays store exact BF16 values expanded losslessly to FP32.
+            var want = UInt16(prefix.unsafe_bitcast[UInt32]()[unsafe_offset=i] >> 16)
+            if actual.ptr.unsafe_bitcast[UInt16]()[unsafe_offset=i] != want:
+                raise Error("benchmark changed a cache prefix bit")
+        with source.map_to_host() as sm:
+            var original = TileTensor(sm, row_major(rows * 128))
+            comptime assert original.flat_rank == 1
+            for i in range(rows * 128):
+                if actual.ptr.unsafe_bitcast[UInt16]()[unsafe_offset=past * 128 + i] != original.ptr.unsafe_bitcast[UInt16]()[unsafe_offset=i]:
+                    raise Error("benchmark cache append changed a source bit")
+
+
+# Benchmark IDs are historical experiment identities, not engine route IDs.
+# Decode falls back inside the engine; projection mappings keep the same GQA.
+@always_inline
+def _gqa_mapping(variant: Int) -> Int:
+    if variant == 19:
+        return 4
+    if 9 <= variant <= 13:
+        return variant - 9
+    return 0
+
+
+@always_inline
+def _projection_mapping(variant: Int) -> Int:
+    if variant == 19:
+        return 5
+    return variant - 13 if variant >= 14 else 0
+
+
+@always_inline
+def _route(variant: Int) -> Int:
+    if variant >= 9:
+        return 6 + _gqa_mapping(variant)
+    if variant == 8:
+        return 6
+    return variant - 1 if variant >= 5 else 3
+
+
+def _profile_control(variant: Int) -> Int:
+    if variant == 19:
+        return 13
+    if variant >= 10:
+        return 9
+    if variant >= 8:
+        return 8
+    return 4 if variant == 7 else 3
+
+
+def _splits(variant: Int) -> Int:
+    var mapping = _gqa_mapping(variant)
+    if mapping == 4:
+        return 8
+    return 4 if mapping == 3 else 1
+
+
+def _dispatches(variant: Int, rows: Int) -> Int:
+    if variant >= 9:
+        return 10 if _splits(variant) > 1 and rows > 1 else 9
+    if variant == 5 or variant == 7 or variant == 8:
+        return 10
+    return 11 if variant == 6 else 12
+
+
+def _enqueue(ctx: DeviceContext, mut weights: AttentionWeights,
+             mut cache: AttentionCache, mut work: AttentionWorkspace,
+             mut input: DeviceBuffer[DType.bfloat16], r: Int, t: Int,
+             variant: Int) raises:
+    # Repeat a fixed suffix on the same stream. No prefix upload or reset sync.
+    cache.length = t - r
+    var route = _route(variant)
+    var launched: Int
+    var view = TileTensor(input, row_major(r, 896))
+    if variant >= 9:
+        launched = enqueue_attention_sublayer_integrated(
+            ctx, weights, cache, work, view, _gqa_mapping(variant), _projection_mapping(variant))
+    else:
+        launched = enqueue_attention_sublayer(
+            ctx, weights, cache, work, view,
+            route, wo_mma=(r >= 16 if variant == 8 else variant == 4 or variant == 7),
+        )
+    if launched != (4 if route >= 6 and r == 1 else route) or cache.length != t:
+        raise Error("attention benchmark route or cache length mismatch")
+
+
+def main() raises:
+    var args = List[String]()
+    comptime if is_defined["GQA_PROFILE_ROWS"]():
+        args = ["profile", String(get_defined_int["GQA_PROFILE_QUERY_ROWS"]()),
+                String(get_defined_int["GQA_PROFILE_ROWS"]()), "1",
+                String(get_defined_int["GQA_PROFILE_VARIANT"]()),
+                String(_profile_control(get_defined_int["GQA_PROFILE_VARIANT"]())), "1", "53",
+                "profile", String(get_defined_int["GQA_PROFILE_ITERATIONS"]()),
+                String(get_defined_int["GQA_PROFILE_WARMUP", default=10]())]
+    else:
+        for arg in argv():
+            args.append(String(arg))
+    if len(args) != 11:
+        raise Error("expected R T layers candidate control candidate-first seed mode repetitions warmup")
+    var r = Int(args[1])
+    var t = Int(args[2])
+    var layers = Int(args[3])
+    var candidate = Int(args[4])
+    var control = Int(args[5])
+    var first = Int(args[6])
+    var seed = Int(args[7])
+    var mode = args[8]
+    var repetitions = Int(args[9])
+    var warmup = Int(args[10])
+    var dispatches = _dispatches(candidate, r)
+    var valid_pair = ((control == 3 and (3 <= candidate <= 6 or candidate == 9))
+                      or (control == 4 and (candidate == 4 or candidate == 7))
+                      or (control == 8 and (candidate == 8 or candidate == 9))
+                      or (control == 9 and 9 <= candidate <= 18)
+                      or (control == 13 and (candidate == 13 or candidate == 19))
+                      or (control == 18 and (candidate == 18 or candidate == 19)))
+    if (r < 1 or r > t or t > 4096 or (layers != 1 and layers != 24)
+        or not valid_pair or seed != 53
+        or ((candidate == 5 or candidate == 6) and r != 1)
+        or (candidate == 7 and r == 1)
+        or (first != 0 and first != 1) or (mode != "bench" and mode != "profile" and mode != "wo" and mode != "buffered")
+        or (mode == "profile" and (layers != 1 or repetitions * dispatches > 5000))
+        or (mode == "wo" and (r < 16 or control != 9 or (candidate != 9 and candidate != 14 and candidate != 15)))
+        or (mode == "buffered" and (candidate != 9 or control != 9))
+        or repetitions < 1 or warmup < 0):
+        raise Error("invalid attention sublayer benchmark arguments")
+    var ctx = DeviceContext()
+    if ctx.api() != "metal":
+        raise Error("attention benchmark requires Metal")
+    print("device:", ctx.name())
+    print("api:", ctx.api())
+    print("operation: attention_sublayer")
+    print("measurement:", "isolated_wo" if mode == "wo" else ("whole_attention_buffered" if mode == "buffered" else "whole_attention"))
+    print("query rows:", r)
+    print("shape:", t, layers, "seed:", seed)
+    print("variants:", control, candidate, "candidate-first:", first)
+    var work = AttentionWorkspace(ctx, r, t, fp32_materialized=control <= 4 or candidate <= 4,
+                                  prefill_splits=max(_splits(candidate), _splits(control)))
+    _load(work.cosine, "upstream_7_cosine", t * 64)
+    _load(work.sine, "upstream_7_sine", t * 64)
+    var weights = List[AttentionWeights]()
+    var caches = List[AttentionCache]()
+    var inputs = List[DeviceBuffer[DType.bfloat16]]()
+    for layer in range(layers):
+        var sign: Float32 = -1 if layer % 2 else 1
+        var w = AttentionWeights(ctx)
+        var cache = AttentionCache(ctx, t)
+        var input = ctx.enqueue_create_buffer[DType.bfloat16](r * 896)
+        _load(w.qkv, "7_weight", 1152 * 896, sign=sign)
+        _load(w.output, "7_output_weight", 896 * 896, sign=sign)
+        _load(w.bias, "7_bias", 1152)
+        _load(w.norm, "7_norm_weight", 896)
+        _load(input, "7_input", r * 896, (t - r) * 896, sign)
+        _load(cache.key, "upstream_7_cache_key", t * 128)
+        _load(cache.value, "upstream_7_cache_value", t * 128)
+        for arm in range(2):
+            _poison_suffix(cache.key, t - r, r)
+            _poison_suffix(cache.value, t - r, r)
+            work.attention.enqueue_fill(123)
+            work.projected.enqueue_fill(123)
+            work.output.enqueue_fill(123)
+            work.prefill_partial.enqueue_fill(Float32(FloatLiteral.nan))
+            _enqueue(ctx, w, cache, work, input, r, t, control if arm == 0 else candidate)
+            _check(work.projected, "fp32_7_projected", r * 896, (t - r) * 896, sign)
+            _check(work.output, "fp32_7_output", r * 896, (t - r) * 896, sign)
+            _check_cache(cache.key, work.rotated_key, "upstream_7_cache_key", t - r, r)
+            _check_cache(cache.value, work.raw_value, "upstream_7_cache_value", t - r, r)
+        weights.append(w^)
+        caches.append(cache^)
+        inputs.append(input^)
+    if mode == "wo":
+        # Every arm consumes exactly the BF16 attention tensor upstream used.
+        # Sign changes live in the distinct layer weights, not this input.
+        _load(work.attention, "fp32_7_attention", r * 896, (t - r) * 896)
+        for layer in range(layers):
+            for variant in [control, candidate]:
+                _enqueue_attention_wo(ctx, weights[layer], work, r, True,
+                                      _projection_mapping(variant))
+                _check(work.projected, "fp32_7_projected", r * 896, (t - r) * 896,
+                       Float32(-1 if layer % 2 else 1))
+    ctx.synchronize()
+    print("correctness: passed")
+
+    if mode == "profile":
+        for _ in range(warmup):
+            _enqueue(ctx, weights[0], caches[0], work, inputs[0], r, t, candidate)
+        ctx.synchronize()
+        print("profile implementation:", "enqueue_attention_sublayer_integrated" if candidate >= 9 else "enqueue_attention_sublayer")
+        print("rows:", r)
+        print("hidden: 896")
+        print("key value rows:", t)
+        print("query heads: 14")
+        print("key value heads: 2")
+        print("profile workload:", "sublayer-r" + String(r) + "-t" + String(t) + "-v" + String(candidate))
+        print("profile dispatches per iteration:", dispatches)
+        print("warmup iterations:", warmup)
+        print("profile iterations:", repetitions)
+        print("post-profile idle milliseconds: 250")
+        print("PROFILE_REGION_BEGIN")
+        for _ in range(repetitions):
+            _enqueue(ctx, weights[0], caches[0], work, inputs[0], r, t, candidate)
+        ctx.synchronize()
+        print("PROFILE_REGION_END")
+        sleep(0.25)
+        return
+
+    var recorded = List[Float64]()
+    for arm in range(2):
+        var is_candidate = (arm == 0) == (first == 1)
+        var variant = candidate if is_candidate else control
+        var label = "candidate" if is_candidate else "control"
+        for sample in range(warmup + repetitions):
+            var start = perf_counter_ns()
+            for layer in range(layers):
+                if mode == "wo":
+                    _enqueue_attention_wo(ctx, weights[layer], work, r, True,
+                                          _projection_mapping(variant))
+                else:
+                    _enqueue(ctx, weights[layer], caches[layer], work, inputs[layer], r, t, variant)
+            ctx.synchronize()
+            var us = Float64(perf_counter_ns() - start) / Float64(1000 * layers)
+            if sample >= warmup:
+                if mode == "buffered":
+                    recorded.append(us)
+                else:
+                    print("SAMPLE", label, variant, sample - warmup, us)
+    if mode == "buffered":
+        for arm in range(2):
+            var is_candidate = (arm == 0) == (first == 1)
+            for sample in range(repetitions):
+                print("SAMPLE", "candidate" if is_candidate else "control",
+                      candidate if is_candidate else control, sample,
+                      recorded[arm * repetitions + sample])
+    print("BENCHMARK_COMPLETE")

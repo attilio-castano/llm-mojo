@@ -15,6 +15,7 @@ def _decode_kernel[
     heads: Int,
     splits: Int,
     conditional_rescale: Bool,
+    fp32_scores: Bool,
     QL: TensorLayout,
     KL: TensorLayout,
     VL: TensorLayout,
@@ -75,7 +76,8 @@ def _decode_kernel[
         comptime for h in range(heads):
             # All lanes participate, including an unused final head slot.
             var score = warp.sum(q0[h] * k0 + q1[h] * k1) * 0.125
-            score = score.cast[DType.bfloat16]().cast[DType.float32]()
+            comptime if not fp32_scores:
+                score = score.cast[DType.bfloat16]().cast[DType.float32]()
             comptime if conditional_rescale:
                 # score is SIMD-group uniform after warp.sum. Only a new
                 # maximum changes the scale of the already accumulated state.
@@ -186,6 +188,7 @@ def enqueue_grouped_query_attention_decode_apple_gpu[
     OL: TensorLayout,
     WL: TensorLayout,
     conditional_rescale: Bool = False,
+    fp32_scores: Bool = False,
 ](
     context: DeviceContext,
     query: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
@@ -202,6 +205,8 @@ def enqueue_grouped_query_attention_decode_apple_gpu[
     unused (a [1,1,1] view suffices). The enqueue allocates and synchronizes
     nothing. It issues one dispatch, or two when splits>1. No probabilities
     are exposed; the separate materialized API retains that postcondition.
+    fp32_scores=True retains scaled scores in FP32, as well as every online
+    softmax/weighted-sum state. The default preserves the BF16-score studies.
     """
     comptime assert groups == 1 or groups == 2 or groups == 8 or groups == 32
     comptime assert heads == 1 or heads == 2 or heads == 4 or heads == 7
@@ -247,7 +252,7 @@ def enqueue_grouped_query_attention_decode_apple_gpu[
         ):
             raise Error("split decode requires FP32 workspace [14,splits,66]")
     comptime kernel = _decode_kernel[
-        groups, heads, splits, conditional_rescale, QL, KL, VL, OL, WL
+        groups, heads, splits, conditional_rescale, fp32_scores, QL, KL, VL, OL, WL
     ]
     context.enqueue_function[kernel](
         query,

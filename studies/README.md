@@ -3,7 +3,8 @@
 These studies explain how the existing Mojo operations map work onto the Apple
 M4 Pro. Start with the value and storage contracts in [model](../docs/model.md)
 and [layouts](../docs/layouts.md), then read a topic below. Each comparison is
-operation-level; a working decoder block and full-model generation remain next.
+operation-level except for the composed attention sublayer; a working decoder
+block and full-model generation remain next.
 
 | Topic | Question |
 | --- | --- |
@@ -13,10 +14,21 @@ operation-level; a working decoder block and full-model generation remain next.
 | [RoPE](rope/README.md) | How much work and data movement does rotating a dimension pair require? |
 | [GQA decode](gqa_decode/README.md) | How do fusion, sequence parallelism and shared KV heads interact? |
 | [GQA prefill](gqa_prefill/README.md) | How do query tiling, online softmax and Apple matrix instructions interact? |
+| [Attention sublayer](attention_sublayer/README.md) | Where does time go in the complete block under the selected FP32 attention policy? |
+
+The attention-sublayer study uses the explicit CPU FP32 attention policy as
+its accuracy baseline. It has 17 synthetic and three checkpoint cases; the
+earlier BF16 eager holdout remains a recorded compatibility failure, with an
+explicit command to reproduce its original strict gate. The composed study
+retains the baseline, Wo, FP32 decode and FP32 prefill comparisons, and integrates
+the existing packed QKV and Wo mappings through one public Mojo entrypoint.
+It separates incremental QKV value from the whole block's combined gain.
+Small hot-call noise and omitted optional counter analysis remain explicit.
+The measurements below belong to the six operation studies.
 
 The six topics retain **31,200 latency observations**, eleven report figures,
 and fifteen focused GQA profiles containing 10,200 measured dispatch durations.
-Full validation passes 71 Mojo tests and 36 Python tooling/evidence checks,
+Their recorded validation passed 71 Mojo tests and 36 Python tooling/evidence checks,
 including every prefill measurement route in hot and ring24 modes.
 
 The original five topics characterize existing implementations at source
@@ -47,6 +59,9 @@ small `summary.csv`, and the PNGs used in its explanation. GQA prefill retains
 its original screen with a `screen_` filename prefix and the bounded resource
 follow-up with `resources_screen_` and `resources_` prefixes in the same folder. GQA
 decode and prefill also retain compact profile records and dispatch samples.
+The larger [attention topic](attention_sublayer/README.md) separates its current
+overview, detailed experiments, numerical history and predeclared plans. It
+keeps records/CSVs in `data/` and generated PNGs in `figures/`.
 Rebuild every table and figure without a GPU:
 
 ```bash

@@ -22,6 +22,7 @@ from llm_mojo.linear import (
     enqueue_linear_apple_gpu_two_output,
     enqueue_linear_prefill_direct_apple_gpu,
     enqueue_linear_prefill_mma_8x16_apple_gpu,
+    enqueue_linear_prefill_mma_tile_apple_gpu,
     enqueue_linear_prefill_register_2x2_apple_gpu,
     enqueue_linear_prefill_tiled_apple_gpu,
     enqueue_linear_prefill_tiled_apple_gpu_bk,
@@ -30,7 +31,7 @@ from llm_mojo.linear import (
 from max.gpu.host import DeviceContext
 from std.math import isfinite
 from std.sys.info import has_apple_gpu_accelerator
-from std.testing import TestSuite, assert_raises
+from std.testing import TestSuite, assert_equal, assert_raises
 
 
 def fill_fixture[
@@ -166,6 +167,7 @@ def check_apple_gpu_fixture[
     use_tiled_prefill: Bool = False,
     use_register_prefill: Bool = False,
     use_mma_prefill: Bool = False,
+    mma_tile: Int = 0,
 ](
     input_values: List[Float32],
     weight_values: List[Float32],
@@ -368,6 +370,7 @@ def check_model_shape[
     tiled_input_features: Int = 32,
     use_register_prefill: Bool = False,
     use_mma_prefill: Bool = False,
+    mma_tile: Int = 0,
 ]() raises:
     comptime assert has_apple_gpu_accelerator(), "test requires an Apple GPU"
     comptime assert not (
@@ -451,9 +454,15 @@ def check_model_shape[
             context, device_input, device_weight, device_bias, device_output
         )
     elif use_mma_prefill:
-        enqueue_linear_prefill_mma_8x16_apple_gpu(
-            context, device_input, device_weight, device_bias, device_output
-        )
+        comptime if mma_tile == 1:
+            enqueue_linear_prefill_mma_tile_apple_gpu[16, 16](
+                context, device_input, device_weight, device_bias, device_output)
+        elif mma_tile == 2:
+            enqueue_linear_prefill_mma_tile_apple_gpu[8, 32](
+                context, device_input, device_weight, device_bias, device_output)
+        else:
+            enqueue_linear_prefill_mma_8x16_apple_gpu(
+                context, device_input, device_weight, device_bias, device_output)
     elif use_register_prefill:
         enqueue_linear_prefill_register_2x2_apple_gpu(
             context, device_input, device_weight, device_bias, device_output
@@ -1078,6 +1087,41 @@ def test_two_output_apple_gpu_rejects_prefill_rows() raises:
         enqueue_linear_apple_gpu_two_output(
             context, input, weight, bias, output
         )
+
+
+def test_mma_tiles_match_independent_fixture() raises:
+    comptime for mapping in range(1, 3):
+        check_apple_gpu_fixture[
+            SHORT_PREFILL_ROWS, SHORT_PREFILL_INPUT_FEATURES,
+            SHORT_PREFILL_OUTPUT_FEATURES, False, False, False, True, mapping
+        ](short_prefill_input(), short_prefill_weight(), short_prefill_bias(), short_prefill_expected())
+
+
+def test_mma_tiles_match_exact_ragged_and_qwen_shapes() raises:
+    comptime for mapping in range(1, 3):
+        check_model_shape[16, 32, 32, False, False, False, 32, False, True, mapping]()
+        check_model_shape[17, 129, 33, False, False, False, 32, False, True, mapping]()
+        check_model_shape[1, 7, 3, False, False, False, 32, False, True, mapping]()
+        check_model_shape[16, 896, 1152, False, False, False, 32, False, True, mapping]()
+
+
+def test_bias_free_mma_tiles_preserve_output_guard() raises:
+    var ctx = DeviceContext()
+    assert_equal(ctx.api(), "metal")
+    var a = ctx.enqueue_create_buffer[DType.bfloat16](17 * 9)
+    var w = ctx.enqueue_create_buffer[DType.bfloat16](33 * 9)
+    var o = ctx.enqueue_create_buffer[DType.bfloat16](17 * 33 + 8)
+    a.enqueue_fill(1)
+    w.enqueue_fill(1)
+    comptime for mapping in range(2):
+        o.enqueue_fill(-123)
+        enqueue_linear_prefill_mma_tile_apple_gpu[16 if mapping == 0 else 8, 16 if mapping == 0 else 32](
+            ctx, TileTensor(a, row_major(17, 9)), TileTensor(w, row_major(33, 9)),
+            TileTensor(o, row_major(17, 33)))
+        with o.map_to_host() as values:
+            var view = TileTensor(values, row_major(17 * 33 + 8))
+            for i in range(17 * 33 + 8):
+                assert_equal(view[i].cast[DType.float32](), Float32(9 if i < 17 * 33 else -123))
 
 
 def main() raises:

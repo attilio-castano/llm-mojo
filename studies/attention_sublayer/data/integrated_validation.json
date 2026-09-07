@@ -1,0 +1,209 @@
+{
+  "schema": 1,
+  "purpose": "Integrate the existing packed QKV, Wo and FP32 GQA mappings through the attention sublayer.",
+  "source_commit": "dc77016af29ef0087807b22ed42a0aeca7cde14f",
+  "device": "Apple M4 Pro",
+  "backend": "metal",
+  "limits": {
+    "scaled_error": "abs(got-want)/(1+abs(want))",
+    "isolated_qkv_and_gqa": 0.0078125,
+    "projected_and_final": 0.03125,
+    "cache_and_layout_copy": "exact BF16 bits"
+  },
+  "tests": {
+    "mojo": 87,
+    "python": 41,
+    "synthetic_cases": 17,
+    "checkpoint_cases": 3,
+    "asynchronous_configurations": 10,
+    "asynchronous_sequences_per_configuration": 12
+  },
+  "commands": [
+    {
+      "name": "full",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "-m",
+        "llm_mojo.validate"
+      ],
+      "returncode": 0,
+      "started_utc": "2026-09-06T22:18:57.670601+00:00",
+      "completed_utc": "2026-09-06T22:28:57.797937+00:00",
+      "note": "Final source used by all suites; tooling edits completed during fixture preparation."
+    },
+    {
+      "name": "checkpoint-fixtures",
+      "command": [
+        "uv",
+        "run",
+        "--script",
+        "tests/fixtures/attention_sublayer/checkpoint.py",
+        "--attention-prefix"
+      ],
+      "started_utc": "2026-09-06T22:29:41.263936+00:00",
+      "completed_utc": "2026-09-06T22:30:07.385822+00:00",
+      "returncode": 0,
+      "device_sync_mode": false,
+      "sources_unchanged": true
+    },
+    {
+      "name": "checkpoint",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "mojo",
+        "run",
+        "-D",
+        "PRECISION_CHECKPOINT=1",
+        "-I",
+        "src",
+        "-I",
+        "build",
+        "-I",
+        "tests",
+        "tests/test_attention_precision.mojo"
+      ],
+      "started_utc": "2026-09-06T22:30:07.386196+00:00",
+      "completed_utc": "2026-09-06T22:30:35.673492+00:00",
+      "returncode": 0,
+      "device_sync_mode": true,
+      "sources_unchanged": true
+    },
+    {
+      "name": "asynchronous",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "mojo",
+        "run",
+        "-D",
+        "SUBLAYER_REPEAT=12",
+        "-I",
+        "src",
+        "-I",
+        "build",
+        "-I",
+        "tests",
+        "tests/test_attention_sublayer.mojo"
+      ],
+      "started_utc": "2026-09-06T22:30:35.674149+00:00",
+      "completed_utc": "2026-09-06T22:31:07.809462+00:00",
+      "returncode": 0,
+      "device_sync_mode": false,
+      "sources_unchanged": true
+    }
+  ],
+  "source_sha256": {
+    "src/llm_mojo/attention_decode.mojo": "0f240c7571344c619e400fa108b62027a32ff0c4e77c4df261ea16a8d7f441e6",
+    "src/llm_mojo/attention_prefill.mojo": "52373ebe0af235a000e8876e3f0063d16287b034e705243564ca6bcdba4f29e3",
+    "src/llm_mojo/attention_sublayer.mojo": "c6aed773a016665824154d90172181308630f02da570617d2a081602d1295b19",
+    "src/llm_mojo/benchmarks/attention_sublayer.mojo": "1ac2239a3a0f16139d60db4f5ffb792a5ee4b692b87a82d0b97f1395a7e1baed",
+    "src/llm_mojo/linear.mojo": "1f72f29fa058d6fac56cb045df2ac5a4b8d4e975a70ead00fbfce630944829d4",
+    "tests/test_attention_precision.mojo": "39ed853601548de5cb540781716cb7bd4a964d2c57e664789fefeba773a5eeac",
+    "tests/test_attention_sublayer.mojo": "1bc8c70dbead48abab14ffc6cfa350860e04d1447e66df6e3fe154e293dc99eb",
+    "tests/test_attention_sublayer_operations.mojo": "e3b3a1e49c848378d2245090d6f950ffad03aab116927fce28ac9bb555b3a105"
+  },
+  "numerics": {
+    "synthetic": {
+      "isolated_packed_qkv": {
+        "mapping_1_raw_query": {
+          "checks": 17,
+          "maximum_scaled_error": 0.0061728396,
+          "failed_elements": 0
+        },
+        "mapping_1_raw_key": {
+          "checks": 17,
+          "maximum_scaled_error": 0.0062111802,
+          "failed_elements": 0
+        },
+        "mapping_1_raw_value": {
+          "checks": 17,
+          "maximum_scaled_error": 0.0054644807,
+          "failed_elements": 0
+        },
+        "mapping_2_raw_query": {
+          "checks": 17,
+          "maximum_scaled_error": 0.00625,
+          "failed_elements": 0
+        },
+        "mapping_2_raw_key": {
+          "checks": 17,
+          "maximum_scaled_error": 0.0062111802,
+          "failed_elements": 0
+        },
+        "mapping_2_raw_value": {
+          "checks": 17,
+          "maximum_scaled_error": 0.0061728396,
+          "failed_elements": 0
+        }
+      },
+      "integrated_composition": {
+        "projected": {
+          "checks": 113,
+          "maximum_scaled_error": 0.005181347,
+          "failed_elements": 0
+        },
+        "output": {
+          "checks": 143,
+          "maximum_scaled_error": 0.011627907,
+          "failed_elements": 0
+        }
+      }
+    },
+    "checkpoint": {
+      "isolated_packed_qkv": {
+        "mapping_1_raw_query": {
+          "checks": 3,
+          "maximum_scaled_error": 5.9603977e-08,
+          "failed_elements": 0
+        },
+        "mapping_1_raw_key": {
+          "checks": 3,
+          "maximum_scaled_error": 0,
+          "failed_elements": 0
+        },
+        "mapping_1_raw_value": {
+          "checks": 3,
+          "maximum_scaled_error": 0,
+          "failed_elements": 0
+        },
+        "mapping_2_raw_query": {
+          "checks": 3,
+          "maximum_scaled_error": 0.0032258064,
+          "failed_elements": 0
+        },
+        "mapping_2_raw_key": {
+          "checks": 3,
+          "maximum_scaled_error": 9.534834e-07,
+          "failed_elements": 0
+        },
+        "mapping_2_raw_value": {
+          "checks": 3,
+          "maximum_scaled_error": 2.3840431e-07,
+          "failed_elements": 0
+        }
+      },
+      "integrated_composition": {
+        "projected": {
+          "checks": 49,
+          "maximum_scaled_error": 0.0014124294,
+          "failed_elements": 0
+        },
+        "output": {
+          "checks": 55,
+          "maximum_scaled_error": 0.0013793104,
+          "failed_elements": 0
+        }
+      }
+    }
+  },
+  "frozen_arrays": {
+    "precision_checksums": 510,
+    "checkpoint_checksums": 63
+  }
+}

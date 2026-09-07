@@ -116,7 +116,7 @@ extreme-score regression checks across sixteen routes, including the five resour
 arrays are loaded only by tests; inference and timed paths remain Mojo.
 Normal-mode stress for the new schedules uses `-D PREFILL_REPEAT=12` on
 `tests/test_attention_prefill.mojo`, with `MODULAR_DEBUG` unset.
-The four Torch/Transformers oracles share the isolated script environment in
+The Torch/Transformers oracles share the isolated script environment in
 `tests/fixtures/generate.py`, locked by its adjacent `.lock` file. The NumPy
 oracles use the project environment. The first run may download dependencies;
 no model weights are required. To regenerate one Torch oracle, for example:
@@ -128,6 +128,14 @@ uv run --locked --script tests/fixtures/generate.py rms_norm
 After deliberately editing dependency declarations, update the corresponding
 lock with `uv lock` or `uv lock --script tests/fixtures/generate.py`, then rerun
 validation. Add `--upgrade-package NAME` only when intentionally upgrading.
+
+The [attention-sublayer study](attention-sublayer.md) adds 17 synthetic cases
+with frozen arrays and a strict FP32 attention accuracy gate. BF16 eager
+comparisons report their numerical differences while keeping finite-output
+and exact cache checks mandatory. The documented explicit compatibility
+command reproduces the retained seed-887 failures. Checkpoint-derived
+first-layer checks are an explicit separate workflow and do not make ordinary
+validation download a model.
 
 Use `--prepare-only` to generate fixtures without running tests. For an individual
 Mojo suite, include `-I src -I build -I tests`. Generators and the

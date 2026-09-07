@@ -1,0 +1,27 @@
+{
+  "format": "lossless-json-gzip-v1",
+  "record": "prefill_validation.json.gz",
+  "sha256": "6becc59f93ec4ba9c9dfb1f6544e8d806e37efee0fb7e5ad30fb88520eea0ab8",
+  "uncompressed_sha256": "5261ba527f6054372a8f3527d8db42609cd91da436f542d539a162cc8aaf2719",
+  "purpose": "FP32 rolled-MMA prefill with MMA Wo fixed in both benchmark arms.",
+  "metadata": {
+    "schema": 1,
+    "source_commit": "17720c294ec98a5ba38da004e38ec72eeed6372f",
+    "device": "Apple M4 Pro",
+    "backend": "metal",
+    "limits": {
+      "scaled_error": "abs(got-want)/(1+abs(want))",
+      "gqa": 0.0078125,
+      "projected_and_final": 0.03125,
+      "cache": "exact BF16 bits"
+    }
+  },
+  "list_lengths": {
+    "commands": 5,
+    "datasets.full.operation_checks": 42,
+    "datasets.full.composition_checks": 512,
+    "datasets.checkpoint.operation_checks": 9,
+    "datasets.checkpoint.composition_checks": 208,
+    "notes": 5
+  }
+}

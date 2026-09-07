@@ -1,0 +1,367 @@
+{
+  "schema": 1,
+  "purpose": "Contained Wo MMA tiles, conditional QKV transfer, unchanged GQA split-domain and timing diagnostics.",
+  "source_commit": "5c7ca774c68910934e54624e3194e1fa4a734a7e",
+  "device": "Apple M4 Pro",
+  "backend": "metal",
+  "limits": {
+    "scaled_error": "abs(got-want)/(1+abs(want))",
+    "isolated_qkv": 0.0078125,
+    "isolated_wo_and_composed": 0.03125,
+    "cache": "exact BF16 bits"
+  },
+  "mapping_names": {
+    "isolated": {
+      "0": "8x16 control",
+      "1": "16x16",
+      "2": "8x32"
+    },
+    "composition": {
+      "0": "integrated control",
+      "1": "Wo16x16",
+      "2": "Wo8x32",
+      "3": "QKV16x16",
+      "4": "QKV8x32"
+    }
+  },
+  "tests": {
+    "mojo": 93,
+    "python": 45,
+    "synthetic_cases": 17,
+    "checkpoint_cases": 3,
+    "synthetic_arrays": 510,
+    "checkpoint_arrays": 63,
+    "asynchronous_configurations": 18,
+    "asynchronous_sequences_per_configuration": 12
+  },
+  "commands": [
+    {
+      "name": "full",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "-m",
+        "llm_mojo.validate"
+      ],
+      "started_utc": "2026-09-07T03:18:20.746525+00:00",
+      "completed_utc": "2026-09-07T03:29:22.921186+00:00",
+      "returncode": 0,
+      "device_sync_mode": true,
+      "sources_unchanged": true
+    },
+    {
+      "name": "checkpoint-fixtures",
+      "command": [
+        "uv",
+        "run",
+        "--script",
+        "tests/fixtures/attention_sublayer/checkpoint.py",
+        "--attention-prefix"
+      ],
+      "started_utc": "2026-09-07T03:29:22.942838+00:00",
+      "completed_utc": "2026-09-07T03:29:48.807013+00:00",
+      "returncode": 0,
+      "device_sync_mode": false,
+      "sources_unchanged": true
+    },
+    {
+      "name": "checkpoint",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "mojo",
+        "run",
+        "-D",
+        "PRECISION_CHECKPOINT=1",
+        "-I",
+        "src",
+        "-I",
+        "build",
+        "-I",
+        "tests",
+        "tests/test_attention_precision.mojo"
+      ],
+      "started_utc": "2026-09-07T03:29:48.807385+00:00",
+      "completed_utc": "2026-09-07T03:30:25.612953+00:00",
+      "returncode": 0,
+      "device_sync_mode": true,
+      "sources_unchanged": true
+    },
+    {
+      "name": "asynchronous",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "mojo",
+        "run",
+        "-D",
+        "SUBLAYER_REPEAT=12",
+        "-I",
+        "src",
+        "-I",
+        "build",
+        "-I",
+        "tests",
+        "tests/test_attention_sublayer.mojo"
+      ],
+      "started_utc": "2026-09-07T03:30:25.613780+00:00",
+      "completed_utc": "2026-09-07T03:30:57.434355+00:00",
+      "returncode": 0,
+      "device_sync_mode": false,
+      "sources_unchanged": true
+    }
+  ],
+  "source_sha256": {
+    "src/llm_mojo/linear.mojo": "e8f25c8cd98b0141ba917e2492360d2a7bc58ff4194f886a6f26555a43643ac4",
+    "src/llm_mojo/attention_sublayer.mojo": "c75e427fa4b9227b6aa1ac374da58f079a4f6ce3044b931282f01c4f11e08fb6",
+    "src/llm_mojo/attention_prefill.mojo": "5ee18f967ca73a17d5ea8a32f1e70c1c69de0174a644931796d3c044bb8f204c",
+    "src/llm_mojo/attention_decode.mojo": "0f240c7571344c619e400fa108b62027a32ff0c4e77c4df261ea16a8d7f441e6",
+    "src/llm_mojo/benchmarks/attention_sublayer.mojo": "aa3d87de5c81ef4a1bd2ce159b8d0753e412213f275414a492ab35fbe77f0263",
+    "tests/test_linear.mojo": "864860ca1a7f0dd1f8364482dbf58520bce6fc8688a65a2609468b8cf2144884",
+    "tests/test_attention_sublayer.mojo": "ba00e662b4629c8b7664d7131b13e7bc2f4d2642552f0489217c36592694b45e",
+    "tests/test_attention_precision.mojo": "7fb8a7c301cddeea7e492578ddeebab8202c0b58d361931799998cb6f0cb0857",
+    "tests/test_attention_sublayer_operations.mojo": "2749f073e175d4b944694598ae9584ab87412453a82e06bad2183c532cc46588"
+  },
+  "numerics": {
+    "synthetic": {
+      "isolated_wo": {
+        "0": {
+          "projected": {
+            "checks": 17,
+            "maximum_scaled_error": 0.00390625
+          }
+        },
+        "1": {
+          "projected": {
+            "checks": 17,
+            "maximum_scaled_error": 0.00390625
+          }
+        },
+        "2": {
+          "projected": {
+            "checks": 17,
+            "maximum_scaled_error": 0.00390625
+          }
+        }
+      },
+      "isolated_qkv": {
+        "0": {
+          "raw_query": {
+            "checks": 17,
+            "maximum_scaled_error": 0.00625
+          },
+          "raw_key": {
+            "checks": 17,
+            "maximum_scaled_error": 0.0062111802
+          },
+          "raw_value": {
+            "checks": 17,
+            "maximum_scaled_error": 0.0061728396
+          }
+        },
+        "1": {
+          "raw_query": {
+            "checks": 17,
+            "maximum_scaled_error": 0.00625
+          },
+          "raw_key": {
+            "checks": 17,
+            "maximum_scaled_error": 0.0062111802
+          },
+          "raw_value": {
+            "checks": 17,
+            "maximum_scaled_error": 0.0061728396
+          }
+        },
+        "2": {
+          "raw_query": {
+            "checks": 17,
+            "maximum_scaled_error": 0.00625
+          },
+          "raw_key": {
+            "checks": 17,
+            "maximum_scaled_error": 0.0062111802
+          },
+          "raw_value": {
+            "checks": 17,
+            "maximum_scaled_error": 0.0061728396
+          }
+        }
+      },
+      "composition": {
+        "0": {
+          "projected": {
+            "checks": 113,
+            "maximum_scaled_error": 0.005181347
+          },
+          "output": {
+            "checks": 113,
+            "maximum_scaled_error": 0.011627907
+          }
+        },
+        "1": {
+          "projected": {
+            "checks": 113,
+            "maximum_scaled_error": 0.005181347
+          },
+          "output": {
+            "checks": 113,
+            "maximum_scaled_error": 0.011627907
+          }
+        },
+        "2": {
+          "projected": {
+            "checks": 113,
+            "maximum_scaled_error": 0.005181347
+          },
+          "output": {
+            "checks": 113,
+            "maximum_scaled_error": 0.011627907
+          }
+        },
+        "3": {
+          "projected": {
+            "checks": 113,
+            "maximum_scaled_error": 0.005181347
+          },
+          "output": {
+            "checks": 113,
+            "maximum_scaled_error": 0.011627907
+          }
+        },
+        "4": {
+          "projected": {
+            "checks": 113,
+            "maximum_scaled_error": 0.005181347
+          },
+          "output": {
+            "checks": 113,
+            "maximum_scaled_error": 0.011627907
+          }
+        }
+      }
+    },
+    "checkpoint": {
+      "isolated_wo": {
+        "0": {
+          "projected": {
+            "checks": 3,
+            "maximum_scaled_error": 0.00023523877
+          }
+        },
+        "1": {
+          "projected": {
+            "checks": 3,
+            "maximum_scaled_error": 0.00023523877
+          }
+        },
+        "2": {
+          "projected": {
+            "checks": 3,
+            "maximum_scaled_error": 0.00023523877
+          }
+        }
+      },
+      "isolated_qkv": {
+        "0": {
+          "raw_query": {
+            "checks": 3,
+            "maximum_scaled_error": 0.0032258064
+          },
+          "raw_key": {
+            "checks": 3,
+            "maximum_scaled_error": 9.534834e-07
+          },
+          "raw_value": {
+            "checks": 3,
+            "maximum_scaled_error": 2.3840431e-07
+          }
+        },
+        "1": {
+          "raw_query": {
+            "checks": 3,
+            "maximum_scaled_error": 0.0032258064
+          },
+          "raw_key": {
+            "checks": 3,
+            "maximum_scaled_error": 9.534834e-07
+          },
+          "raw_value": {
+            "checks": 3,
+            "maximum_scaled_error": 2.3840431e-07
+          }
+        },
+        "2": {
+          "raw_query": {
+            "checks": 3,
+            "maximum_scaled_error": 0.0032258064
+          },
+          "raw_key": {
+            "checks": 3,
+            "maximum_scaled_error": 9.534834e-07
+          },
+          "raw_value": {
+            "checks": 3,
+            "maximum_scaled_error": 2.3840431e-07
+          }
+        }
+      },
+      "composition": {
+        "0": {
+          "projected": {
+            "checks": 49,
+            "maximum_scaled_error": 0.0014124294
+          },
+          "output": {
+            "checks": 49,
+            "maximum_scaled_error": 0.0013793104
+          }
+        },
+        "1": {
+          "projected": {
+            "checks": 49,
+            "maximum_scaled_error": 0.0014124294
+          },
+          "output": {
+            "checks": 49,
+            "maximum_scaled_error": 0.0013793104
+          }
+        },
+        "2": {
+          "projected": {
+            "checks": 49,
+            "maximum_scaled_error": 0.0014124294
+          },
+          "output": {
+            "checks": 49,
+            "maximum_scaled_error": 0.0013793104
+          }
+        },
+        "3": {
+          "projected": {
+            "checks": 49,
+            "maximum_scaled_error": 0.0014124294
+          },
+          "output": {
+            "checks": 49,
+            "maximum_scaled_error": 0.0013793104
+          }
+        },
+        "4": {
+          "projected": {
+            "checks": 49,
+            "maximum_scaled_error": 0.0014124294
+          },
+          "output": {
+            "checks": 49,
+            "maximum_scaled_error": 0.0013793104
+          }
+        }
+      }
+    }
+  }
+}

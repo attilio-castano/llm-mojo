@@ -13,17 +13,33 @@ from oracle_data.attention.reference_data import (
     qwen_decode_expected,
 )
 from test_attention import fill_fixture
-from layout import TileTensor, row_major
+from layout import TensorLayout, TileTensor, row_major
 from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
 from llm_mojo.attention_decode import (
     enqueue_grouped_query_attention_decode_apple_gpu,
 )
 from max.gpu.host import DeviceContext
 from std.testing import TestSuite, assert_raises
+from std.math import isfinite
+
+
+def assert_fp32_decode_close[OL: TensorLayout](
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin], expected: List[Float32]
+) raises:
+    comptime assert output.flat_rank == 3
+    for h in range(14):
+        for d in range(64):
+            var actual = rebind[Float32](output[0, h, d].cast[DType.float32]())
+            var target = expected[h * 64 + d]
+            if (not isfinite(actual) or not isfinite(target)
+                or abs(actual - target) > 0.0078125 * (1 + abs(target))):
+                print("FP32 decode mismatch", h, d, actual, target)
+                raise Error("FP32 decode exceeded its existing accuracy tolerance")
 
 
 def check_case[
-    groups: Int, heads: Int, splits: Int, conditional_rescale: Bool = False
+    groups: Int, heads: Int, splits: Int, conditional_rescale: Bool = False,
+    fp32_scores: Bool = False,
 ](
     ctx: DeviceContext,
     rows: Int,
@@ -69,6 +85,20 @@ def check_case[
                     )
                 else:
                     fill_decode(q, k, v, seed, kind)
+    var fp32_expected = List[Float32]()
+    comptime if fp32_scores:
+        # Structural edge coverage against the materialized FP32 kernel.
+        # The independent pinned-upstream gates live in test_attention_precision.
+        var fp32_scratch = ctx.enqueue_create_buffer[DType.float32](14 * rows)
+        enqueue_grouped_query_attention_apple_gpu(
+            ctx, query, key, value, TileTensor(fp32_scratch, row_major(1, 14, rows)), output
+        )
+        with ob.map_to_host() as mapped:
+            var result = TileTensor(mapped, ql)
+            comptime assert result.flat_rank == 3
+            for h in range(14):
+                for d in range(64):
+                    fp32_expected.append(rebind[Float32](result[0, h, d].cast[DType.float32]()))
     # Repeated calls overwrite poisoned output and workspace; empty splits
     # must write neutral states rather than retain prior workspace contents.
     for repeat in range(2):
@@ -81,21 +111,26 @@ def check_case[
             )
         else:
             enqueue_grouped_query_attention_decode_apple_gpu[
-                groups, heads, splits, conditional_rescale=conditional_rescale
+                groups, heads, splits, conditional_rescale=conditional_rescale,
+                fp32_scores=fp32_scores,
             ](ctx, query, key, value, output, workspace)
         ctx.synchronize()
         with ob.map_to_host() as mapped:
             var result = TileTensor(mapped, ql)
-            _ = assert_decode_close(result, expected)
-            _ = assert_decode_close(result, diagnostic)
+            comptime if fp32_scores:
+                assert_fp32_decode_close(result, fp32_expected)
+            else:
+                _ = assert_decode_close(result, expected)
+                _ = assert_decode_close(result, diagnostic)
 
 
 def check_variant[
-    groups: Int, heads: Int, splits: Int, conditional_rescale: Bool = False
+    groups: Int, heads: Int, splits: Int, conditional_rescale: Bool = False,
+    fp32_scores: Bool = False,
 ]() raises:
     var ctx = DeviceContext()
     for case_id in range(DECODE_CASE_COUNT):
-        check_case[groups, heads, splits, conditional_rescale](
+        check_case[groups, heads, splits, conditional_rescale, fp32_scores](
             ctx,
             decode_case_rows(case_id),
             decode_case_seed(case_id),
@@ -103,7 +138,7 @@ def check_variant[
             decode_case_expected(case_id),
             decode_case_expected(case_id, True),
         )
-    check_case[groups, heads, splits, conditional_rescale](
+    check_case[groups, heads, splits, conditional_rescale, fp32_scores](
         ctx, 7, 0, 0, qwen_decode_expected(), qwen_decode_expected(), True
     )
     print(
@@ -111,6 +146,7 @@ def check_variant[
         groups,
         heads,
         splits,
+        "FP32 scores:", fp32_scores,
         "cases:",
         DECODE_CASE_COUNT + 1,
     )
@@ -184,6 +220,14 @@ def test_decode_grouped_head_reuse() raises:
 def test_decode_conditional_rescale() raises:
     check_variant[32, 1, 1, True]()
     check_variant[1, 1, 64, True]()
+
+
+def test_fp32_decode_context_parallel_edges() raises:
+    check_variant[32, 1, 1, fp32_scores=True]()
+
+
+def test_fp32_decode_split_head_reuse_edges() raises:
+    check_variant[1, 4, 64, fp32_scores=True]()
 
 
 def main() raises:
