@@ -90,9 +90,9 @@ def main() raises:
         or rows > 4096
         or (layers != 1 and layers != 24)
         or candidate < 0
-        or candidate > 6
+        or candidate > 7
         or control < 0
-        or control > 6
+        or control > 7
         or (first != 0 and first != 1)
         or Int(args[6]) != 1601
         or repetitions < 1

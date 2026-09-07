@@ -12,11 +12,13 @@ from llm_mojo.residual import enqueue_residual_apple_gpu
 
 
 def mlp_projection_mapping(mapping: Int, stage: Int) -> Int:
-    """0 rowwise; 1/2/3 tile gate/up; 4/5/6 tile down independently.
+    """0 rowwise; 1/2/3 tile gate/up; 4/5/6 tile down; 7 combines finalists.
 
     Tile IDs 1/2/3 mean 8x16, 16x16, 8x32. No row-count selector.
     Public entrypoints validate the configuration before enqueue.
     """
+    if mapping == 7 and (stage == 1 or stage == 2 or stage == 5):
+        return 2  # Both independent screens selected 16x16.
     if (stage == 1 or stage == 2) and mapping <= 3:
         return mapping
     if stage == 5 and mapping >= 4:
@@ -137,7 +139,7 @@ def _validate_mlp[
     mapping: Int,
 ) raises:
     comptime assert x.flat_rank == 2
-    if mapping < 0 or mapping > 6:
+    if mapping < 0 or mapping > 7:
         raise Error("unknown MLP projection mapping")
     var r = Int(x.dim[0]())
     if (
@@ -233,6 +235,7 @@ def enqueue_mlp_apple_gpu[
     this stream through completion. Consume output before workspace reuse.
     Mapping 0 retains rowwise projections. 1/2/3 change only gate/up and
     4/5/6 change only down to 8x16/16x16/8x32 MMA, at every row count.
+    Mapping 7 uses the independently selected 16x16 tile for all projections.
     """
     _validate_mlp(ctx, weights, work, x, mapping)
     for stage in range(7):

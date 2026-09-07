@@ -35,6 +35,29 @@ class MLPToolingTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 mlp.configuration({**identity,'profile_workload':'mlp-r17-v999'})
 
+    def test_retained_mlp_profile_rejects_false_capture_identity(self):
+        source=Path(__file__).resolve().parents[1]/'studies/mlp_sublayer/data'
+        original=json.loads((source/'profiles.json').read_text())
+        changes=[('runtime','backend','cpu'),('workload','rows',17),
+                 ('workload','profile_workload','mlp-r1-v1'),
+                 ('workload','dispatches_per_iteration',6)]
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary)
+            (directory/'profile_samples.csv.gz').write_bytes((source/'profile_samples.csv.gz').read_bytes())
+            (directory/'profiles.json').write_text(json.dumps(original))
+            self.assertEqual(sum(s['count'] for s in study.load_profile(directory)),4445)
+            for group,key,value in changes:
+                record=copy.deepcopy(original)
+                record['captures'][0]['capture'][group][key]=value
+                (directory/'profiles.json').write_text(json.dumps(record))
+                with self.subTest(group=group,key=key),self.assertRaises(ValueError):
+                    study.load_profile(directory)
+            record=copy.deepcopy(original)
+            record['captures'][-1]=record['captures'][0]
+            (directory/'profiles.json').write_text(json.dumps(record))
+            with self.assertRaises(ValueError):
+                study.load_profile(directory)
+
     def test_projection_finalist_needs_both_modes_and_uses_weaker_mode(self):
         variants=[0,1,2,3]
         rows=[dict(rows=1024,layers=l,candidate=v,decision='faster',ratio=r)

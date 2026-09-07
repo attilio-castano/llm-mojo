@@ -106,3 +106,18 @@ campaign. Pushes, PR publication and new asset downloads are separate actions.
   `data/optimization_screen_attempt.json`. The header repair changes no
   arithmetic; expanded smoke checks validate real non-self outputs in both
   arm orders. Both complete screens restart from the repaired clean source.
+- The corrected screens completed at `a8b62cd`: 5,120 observations. Gate chose
+  variant 2 and down chose variant 5, both 16x16. At R=1024 the gate paired
+  ratios are 0.0811 hot / 0.0776 ring24; down 0.1116 / 0.1068. All qualify
+  under the fixed rule. Gate R=1 ring24 regresses by 45.8%; hot is inconclusive.
+  Full selection and all observations are retained in `data/optimization_*`.
+- Variant 7 composes these choices explicitly, with the same seven stores and
+  dispatches. The up confirmation, gate/up whole-block comparison and down
+  increment each contain 1,280 observations. A change advances into the
+  projection configuration only if its R=1024 comparisons are faster in both
+  modes; otherwise its previous control remains. This decision is fixed
+  before any of these follow-up timings. Small-row outcomes remain reported.
+- The combined configuration passed the 43 synthetic cases and asynchronous
+  reuse with the fixed gates. The full workflow passed 102 Mojo, 63 tooling
+  and eleven pinned-reference tests, primitive sweeps and all route smokes.
+  Normal-mode checkpoint and observed-holdout checks precede follow-up timing.

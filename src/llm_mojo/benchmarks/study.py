@@ -234,6 +234,18 @@ def select_mlp_projection(summary, variants):
     return min(eligible,key=lambda v:(max(target[v,l]['ratio'] for l in (1,24)),v)) if eligible else 0
 
 
+# Frozen after the complete gate/down screens at source a8b62cd: both selected
+# 16x16. These are direct follow-ups, with matched control self-pairs.
+STUDIES['mlp_up_confirmation'] = {
+    **STUDIES['mlp_gate_screen'], 'candidates':[0,2], 'mode':'stage2',
+    'measurement':'mlp_stage_2', 'names':{v:mlp.NAMES[v] for v in (0,2)}}
+for name,control,candidate in [('gate_up',0,2),('down_increment',2,7)]:
+    STUDIES[f'mlp_{name}'] = {
+        **STUDIES['mlp'], 'rows':[1,16,17,1024], 'layers':[1,24],
+        'control':control, 'candidates':[control,candidate],
+        'names':{v:mlp.NAMES[v] for v in (control,candidate)}}
+
+
 def workloads(spec):
     return spec.get('workloads', [dict(rows=r) for r in spec.get('rows', [])])
 
@@ -404,11 +416,61 @@ def prefill_profile_grid(spec):
     return stages, {(r,t,v) for r,t in spec['workloads'] for v in variants}
 
 
+def load_mlp_profile(directory,prefix=''):
+    directory=Path(directory)
+    record=json.loads((directory/(prefix+'profiles.json')).read_text())
+    path=directory/(prefix+'profile_samples.csv.gz')
+    if record.get('schema')!=4 or record['samples_sha256']!=sha(path):
+        raise ValueError('MLP profile sample hash/schema mismatch')
+    spec=record['specification'];variants=spec['variants']
+    rows=[w['rows'] for w in spec['workloads']]
+    if (not variants or any(type(v)is not int or v not in mlp.VARIANTS for v in variants)
+        or len(set(variants))!=len(variants) or not rows
+        or any(type(r)is not int or r not in mlp.PROFILE_ROWS for r in rows)
+        or len(set(rows))!=len(rows)):
+        raise ValueError('invalid declared MLP profile grid')
+    grid={(r,v) for r in rows for v in variants}
+    if len(record['captures'])!=len(grid) or {(c['rows'],c['variant']) for c in record['captures']}!=grid:
+        raise ValueError('missing or duplicate MLP profile capture')
+    expected=set()
+    for capture in record['captures']:
+        r,v=capture['rows'],capture['variant'];identity=capture['capture']
+        if identity['repository']!=record['common']['repository'] or identity['repository']['dirty']:
+            raise ValueError('MLP profile source mismatch')
+        if identity['runtime']['backend']!='metal' or not identity['runtime']['device'].startswith('Apple '):
+            raise ValueError('MLP profile runtime mismatch')
+        workload=identity['workload']
+        mlp.configuration({**identity,**workload,'profile_warmup_iterations':workload['warmup_iterations']})
+        if (identity['operation']!='mlp' or identity['implementation']!=f'mlp_{v}'
+            or workload['profile_rows']!=r or workload['rows']!=r):
+            raise ValueError('MLP profile shape or implementation mismatch')
+        stages=mlp.STAGES
+        expected.update((r,v,j,stage) for j in range(workload['profile_iterations']) for stage in stages)
+    observed=set();grouped=defaultdict(list);totals=defaultdict(float)
+    with gzip.open(path,'rt',newline='') as stream:
+        for row in csv.DictReader(stream):
+            key=(int(row['rows']),int(row['variant']),int(row['iteration']),row['stage'])
+            duration=int(row['duration_ns'])
+            if key in observed or duration<=0:
+                raise ValueError('invalid/duplicate MLP profile dispatch')
+            observed.add(key);grouped[key[0],key[1],key[3]].append(duration/1000)
+            totals[key[0],key[1]]+=duration/1000
+    if observed!=expected:
+        raise ValueError('incomplete MLP profile dispatch sequence')
+    return [dict(rows=r,variant=v,stage=stage,count=len(values),
+                 median_us=statistics.median(values),mean_us=statistics.mean(values),
+                 minimum_us=min(values),maximum_us=max(values),
+                 active_share_percent=100*sum(values)/totals[r,v])
+            for (r,v,stage),values in grouped.items()]
+
+
 def load_profile(directory, prefix=''):
     directory = Path(directory)
     directory = evidence_directory(directory)
     record = json.loads((directory / (prefix+'profiles.json')).read_text())
     path = directory / (prefix+'profile_samples.csv.gz')
+    if record.get('schema') == 4:
+        return load_mlp_profile(directory,prefix)
     if record.get('schema') not in (1,2,3) or record['samples_sha256'] != sha(path):
         raise ValueError('profile sample hash/schema mismatch')
     sublayer = record['schema'] == 3

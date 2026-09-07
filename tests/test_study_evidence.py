@@ -140,7 +140,7 @@ class EvidenceTests(unittest.TestCase):
             for record in evidence_directory(directory).glob('*run.json'):
                 _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
-        self.assertEqual(count, 91040)
+        self.assertEqual(count, 96160)
         profile = load_profile(ROOT / 'studies/gqa_decode')
         self.assertEqual(sum(row['count'] for row in profile), 3000)
         profile = load_profile(ROOT / 'studies/gqa_prefill')
@@ -304,7 +304,8 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn('absence is not zero', full['counters_scope'])
 
     def test_profile_corruption_and_duplicate_dispatch_rejected(self):
-        for topic, prefix, groups in (('gqa_decode', '', 6),
+        for topic, prefix, groups in (('mlp_sublayer', '', 28),
+                                      ('gqa_decode', '', 6),
                                       ('attention_sublayer', '', 48),
                                       ('attention_sublayer', 'wo_', 96),
                                       ('attention_sublayer', 'decode_', 66),

@@ -10,7 +10,7 @@ from .._repository import repository_root
 
 OPERATION = 'mlp'
 PROJECTION_MAPPINGS = {0:(0,0), 1:(1,0), 2:(2,0), 3:(3,0),
-                       4:(0,1), 5:(0,2), 6:(0,3)}
+                       4:(0,1), 5:(0,2), 6:(0,3), 7:(2,2)}
 VARIANTS = set(PROJECTION_MAPPINGS)
 ENTRYPOINTS = {f'mlp_{v}':'enqueue_mlp_apple_gpu' for v in VARIANTS}
 TILES = {0:'rowwise',1:'MMA 8x16',2:'MMA 16x16',3:'MMA 8x32'}

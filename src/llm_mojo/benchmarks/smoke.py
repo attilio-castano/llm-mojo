@@ -127,13 +127,14 @@ def main():
     # Exercise the reader itself on a non-self pair in both orders. The old
     # candidate/control header reversal escaped substring-only route checks.
     from .study import parse_output, REPETITIONS
-    for first in (0,1):
-        result = subprocess.run(list(map(str,[target,1,1,1,0,first,1601,'stage1',REPETITIONS,0])),
-                                cwd=repository_root(),capture_output=True,text=True,env=env,check=True)
-        parse_output(result.stdout,0,1,first,rows=1,layers=1,seed=1601,
-                     operation='mlp',measurement='mlp_stage_1')
+    for candidate,control,mode,measurement in [(1,0,'stage1','mlp_stage_1'),(7,2,'bench','whole_mlp')]:
+        for first in (0,1):
+            result = subprocess.run(list(map(str,[target,1,1,candidate,control,first,1601,mode,REPETITIONS,0])),
+                                    cwd=repository_root(),capture_output=True,text=True,env=env,check=True)
+            parse_output(result.stdout,control,candidate,first,rows=1,layers=1,seed=1601,
+                         operation='mlp',measurement=measurement)
     for rows,layers,variant,seed,mode in [(0,1,0,1601,'bench'),(4097,1,0,1601,'bench'),
-        (1,2,0,1601,'bench'),(1,1,7,1601,'bench'),(1,1,0,53,'bench'),(1,1,0,1601,'stage7'),(1,24,0,1601,'stage0')]:
+        (1,2,0,1601,'bench'),(1,1,8,1601,'bench'),(1,1,0,53,'bench'),(1,1,0,1601,'stage7'),(1,24,0,1601,'stage0')]:
         result = subprocess.run(list(map(str,[target,rows,layers,variant,0,0,seed,mode,1,0])),
                                 cwd=repository_root(),capture_output=True,env=env)
         if result.returncode == 0:
