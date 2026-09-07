@@ -5,17 +5,17 @@ visible. Python builds them once, alternates paired measurements, checks the
 runtime identity, and saves a compact record. Kernel implementations live in
 `src/llm_mojo`; instruments never substitute Python computation for GPU work.
 
-Run the commands below as package modules from the source checkout. Building,
+Run the commands below from the source checkout. Building,
 validation, and trace capture need that checkout for source identity and the
 locked toolchain. Offline analysis and plotting also work from an installed
 package when given explicit data directories. Plotting adds pinned Matplotlib
 only to the command environment.
 
-From a clean commit, after `uv run --locked python -m llm_mojo.validate` passes:
+From a clean commit, after `uv run --locked llm-mojo-validate` passes:
 
 ```bash
-uv run --locked python -m llm_mojo.benchmarks.run build --build-dir /private/tmp/mojo-study-build
-uv run --locked python -m llm_mojo.benchmarks.run run --build-dir /private/tmp/mojo-study-build --output /private/tmp/mojo-study-run
+uv run --locked llm-mojo-bench build --build-dir /private/tmp/mojo-study-build
+uv run --locked llm-mojo-bench run --build-dir /private/tmp/mojo-study-build --output /private/tmp/mojo-study-run
 ```
 
 Both destinations must be new directories outside the checkout. Use

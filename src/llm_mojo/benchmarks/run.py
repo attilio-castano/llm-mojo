@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
-from .._repository import repository_root
+from .._repository import environment_tool, repository_root
 
 from .environment import (conditions_snapshot, ensure_record_location,
                          repository_state, require_ac, require_nominal_thermal_state,
@@ -17,7 +17,8 @@ from .study import (STUDIES, BLOCKS, REPETITIONS, WARMUP, sha, write_json,
 def source_hashes():
     root = repository_root()
     paths = [*root.glob('src/**/*.mojo'), *root.glob('src/**/*.py'),
-             *root.glob('tests/fixtures/**/*.py'), root / 'tests/fixtures/checksums.json', root / 'pyproject.toml', root / 'uv.lock']
+             *root.glob('tests/fixtures/**/*.py'), *root.glob('tests/fixtures/**/*.lock'),
+             root / 'tests/fixtures/checksums.json', root / 'pyproject.toml', root / 'uv.lock']
     return {str(p.relative_to(root)): sha(p) for p in sorted(paths)}
 
 
@@ -32,11 +33,11 @@ def build(directory):
     commands, binaries = {}, {}
     env = {k: v for k, v in os.environ.items() if k != 'MODULAR_DEBUG'}
     for name, source in [('operations', 'operations.mojo'), ('gqa_decode', 'attention_decode.mojo'), ('gqa_prefill','attention_prefill.mojo')]:
-        command = ['uv', 'run', '--locked', 'mojo', 'build', '-I', 'src',
+        command = [environment_tool('mojo'), 'build', '-I', 'src',
                    f'src/llm_mojo/benchmarks/{source}', '-o', str(directory / name)]
         subprocess.run(command, cwd=repository_root(), env=env, check=True)
         binaries[name] = sha(directory / name)
-        commands[name] = command[:-1] + ['<binary>']
+        commands[name] = ['mojo', *command[1:-1], '<binary>']
     if repository_state() != repo or source_hashes() != sources:
         raise RuntimeError('source changed during build')
     write_json(directory / 'build.json', dict(repository=repo, sources=sources, binaries=binaries,

@@ -2,14 +2,14 @@
 import os
 import subprocess
 
-from .._repository import repository_root
+from .._repository import environment_tool, repository_root
 from .attention_prefill_contract import VARIANTS as PREFILL_VARIANTS
 
 
 def main():
     target = repository_root() / 'build/operations-smoke'
     target.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(['uv', 'run', '--locked', 'mojo', 'build', '-I', 'src',
+    subprocess.run([environment_tool('mojo'), 'build', '-I', 'src',
                     'src/llm_mojo/benchmarks/operations.mojo', '-o', str(target)], cwd=repository_root(), check=True)
     env = {**os.environ, 'MODULAR_DEBUG': 'device-sync-mode'}
     for operation, variants in [('linear', range(7)), ('rms_norm', range(2)), ('rope', range(1))]:
@@ -28,7 +28,7 @@ def main():
             raise RuntimeError('invalid route accepted')
         print(operation, 'all measurement routes passed', flush=True)
     target = repository_root() / 'build/prefill-smoke'
-    subprocess.run(['uv','run','--locked','mojo','build','-I','src',
+    subprocess.run([environment_tool('mojo'),'build','-I','src',
                     'src/llm_mojo/benchmarks/attention_prefill.mojo','-o',str(target)],
                    cwd=repository_root(),check=True)
     for variant in PREFILL_VARIANTS:

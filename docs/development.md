@@ -83,14 +83,26 @@ uv run mojo --version
 ```
 
 There is no need to activate `.venv`; `uv run` executes commands in the managed
-environment.
+environment. Each worktree has its own `.venv`; uv reuses its package cache when
+setting up another checkout.
+
+For everyday commands, use `uv run mojo ...` or `uv run python ...`. Plain
+`uv run` uses the existing lockfile and does not upgrade packages just because
+new releases exist. Validation and recorded measurements use `--locked` so an
+outdated lockfile fails explicitly instead of changing during a run. Their
+Python and Mojo subprocesses reuse the selected environment directly.
+
+`--offline` and `--no-sync` are not part of the normal workflow. Offline mode
+requires cached dependencies; no-sync assumes the environment is already ready.
+If an agent sandbox blocks uv's cache or downloads, grant the required access
+for setup rather than adding these flags to project commands.
 
 ## Tests
 
 Run the complete validation workflow from a clean checkout:
 
 ```bash
-uv run --locked python -m llm_mojo.validate
+uv run --locked llm-mojo-validate
 ```
 
 This regenerates every independent oracle into ignored `build/oracle_data/`,
@@ -104,8 +116,18 @@ extreme-score regression checks across sixteen routes, including the five resour
 arrays are loaded only by tests; inference and timed paths remain Mojo.
 Normal-mode stress for the new schedules uses `-D PREFILL_REPEAT=12` on
 `tests/test_attention_prefill.mojo`, with `MODULAR_DEBUG` unset.
-Generation uses pinned Torch/Transformers script environments and locked NumPy;
-the first run may download those dependencies. No model weights are required.
+The four Torch/Transformers oracles share the isolated script environment in
+`tests/fixtures/generate.py`, locked by its adjacent `.lock` file. The NumPy
+oracles use the project environment. The first run may download dependencies;
+no model weights are required. To regenerate one Torch oracle, for example:
+
+```bash
+uv run --locked --script tests/fixtures/generate.py rms_norm
+```
+
+After deliberately editing dependency declarations, update the corresponding
+lock with `uv lock` or `uv lock --script tests/fixtures/generate.py`, then rerun
+validation. Add `--upgrade-package NAME` only when intentionally upgrading.
 
 Use `--prepare-only` to generate fixtures without running tests. For an individual
 Mojo suite, include `-I src -I build -I tests`. Generators and the
