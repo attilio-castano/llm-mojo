@@ -133,7 +133,7 @@ def main() raises:
     var valid_pair = ((control == 3 and (3 <= candidate <= 6 or candidate == 9))
                       or (control == 4 and (candidate == 4 or candidate == 7))
                       or (control == 8 and (candidate == 8 or candidate == 9))
-                      or (control == 9 and 9 <= candidate <= 17))
+                      or (control == 9 and 9 <= candidate <= 18))
     if (r < 1 or r > t or t > 4096 or (layers != 1 and layers != 24)
         or not valid_pair or seed != 53
         or ((candidate == 5 or candidate == 6) and r != 1)

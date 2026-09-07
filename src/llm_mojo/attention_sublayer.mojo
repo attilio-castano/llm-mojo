@@ -552,20 +552,21 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     preserves the integrated study control; this is not an automatic selector.
     Projection mappings 1/2 change only Wo to 16x16/8x32 MMA; 3/4 change only
     packed QKV to those tiles. They require the control GQA mapping and retain
-    rowwise projections below sixteen rows. Zero keeps both 8x16 projections.
+    rowwise projections below sixteen rows. Mapping 5 combines 16x16 QKV and
+    Wo, with the same control GQA. Zero keeps both 8x16 projections.
     """
     comptime assert x.flat_rank == 2
     if gqa_mapping < 0 or gqa_mapping > 4:
         raise Error("unknown integrated GQA mapping")
-    if projection_mapping < 0 or projection_mapping > 4:
+    if projection_mapping < 0 or projection_mapping > 5:
         raise Error("unknown integrated projection mapping")
     if projection_mapping and gqa_mapping:
         raise Error("projection study requires control GQA mapping")
     var use_mma = Int(x.dim[0]()) >= 16
     var qkv = 2 if use_mma else 1
     if use_mma and projection_mapping >= 3:
-        qkv = projection_mapping
+        qkv = 3 if projection_mapping == 5 else projection_mapping
     return enqueue_attention_sublayer(
         ctx, weights, cache, work, x, 6 + gqa_mapping, use_mma, qkv,
-        projection_mapping if projection_mapping <= 2 else 0,
+        1 if projection_mapping == 5 else (projection_mapping if projection_mapping <= 2 else 0),
     )

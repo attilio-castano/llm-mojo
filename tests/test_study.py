@@ -11,6 +11,18 @@ from llm_mojo.benchmarks.study import (parse_output, summarize, encode_samples, 
 
 
 class StudyTests(unittest.TestCase):
+    def test_combined_projection_profile_contract(self):
+        from llm_mojo.benchmarks.attention_sublayer_contract import (
+            profile_grid, COMBINED_PROFILE_WORKLOADS, STAGES_BY_VARIANT, specification)
+        spec=dict(workloads=COMBINED_PROFILE_WORKLOADS,variants=[9,18])
+        stages,grid=profile_grid(spec)
+        self.assertEqual(len(grid),8)
+        self.assertEqual(stages[18],STAGES_BY_VARIANT[9])
+        self.assertEqual(specification(18,17,64)['dispatches_per_iteration'],9)
+        for bad in (dict(spec,variants=[9,17]),dict(spec,workloads=[(1,4096),*COMBINED_PROFILE_WORKLOADS[1:]])):
+            with self.assertRaises(ValueError):
+                profile_grid(bad)
+
     def test_projection_selection_requires_both_boundaries_and_modes(self):
         block = [dict(query_rows=1024,rows=1024,candidate=v,layers=l,
                       decision='calibration' if v==9 else 'faster',ratio=.8)

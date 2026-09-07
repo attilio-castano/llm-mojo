@@ -243,3 +243,15 @@ retains counts and hashes. Reproduction normalizes only filename metadata;
 IR allocas and line counts are not physical spills or machine-code size.
 The rolled reduction is selected through `SCHEDULE=2, MMA=True, BQ=BK=32,
 HEADS=1` on the explicit engine entrypoint. The original control stays intact.
+
+## Combined 16x16 projections
+
+After numerical validation, run `--studies attention_sublayer_combined` to
+compare integrated control 9 with combined 16x16 QKV/Wo variant 18 across the
+existing fifteen workloads. This opt-in comparison keeps GQA fixed and needs
+no new screen: both components already qualified independently. Profile 9/18
+at (256,256), (1024,1024), (4096,4096), (64,4096), with ten warmups and
+25/25/10/25 measured iterations. Curate with `profile_summary SOURCE OUTPUT
+--attention-sublayer --combined-projections --prefix combined_`. Retain the
+run, samples, profiles and validation under that prefix; the normal plotter
+regenerates both latency and stage-time figures.

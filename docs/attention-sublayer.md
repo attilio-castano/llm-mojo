@@ -919,3 +919,37 @@ retains all 13,440 new observations, numerical validation, source/build/selectio
 identity, negative cases and next-step reasoning. The existing plotter
 reproduces 24 tables and 23 figures offline, preserving prior artifacts.
 No new profiler captures, combined mappings or remote publication were added.
+
+## Combining the winning projection tiles
+
+The approved follow-up composes the existing 16x16 QKV and Wo kernels through
+`projection_mapping=5` (benchmark 18). Control 9 retains both 8x16 projections.
+GQA remains the integrated unsplit FP32 policy; decode and R<16 keep the same
+rowwise projections. No new arithmetic, kernel, rounding boundary, allocation,
+synchronization, cache policy or automatic selector is introduced.
+
+Validate the combined path against the frozen upstream-derived projected and
+final outputs, exact caches, full/chunked synthetic and checkpoint cases, and
+nineteen asynchronous configurations with twelve sequences each. Exercise the
+actual benchmark route around 15/16/17 rows in both timing modes. All gates and
+frozen arrays remain unchanged.
+
+Run `attention_sublayer_combined` once over the existing fifteen workloads,
+with 9/18, two timing modes, four paired blocks, ten warmups and ten samples
+per arm: 4,800 retained observations. Primary interpretation is full 256/1024;
+retain all small-row and long-context outcomes under the existing self-pair
+calibration and 5% rule. Do not construct a combined gain from earlier ratios.
+
+Then capture control and combined variant at full 256/1024/4096 and chunk
+(64,4096), with ten warmups and 25/25/10/25 measured iterations respectively.
+Eight separate Metal captures retain 1,530 dispatch durations. Require clean
+source/build/input identity and validated nine-stage dispatch order. Collect
+stage times and available compiler-spill events; optional hardware counters
+may remain absent and must be recorded as such. Use paired unprofiled timing
+for speed claims, and profile shares to identify remaining work. Keep GQA
+fixed; the earlier split8 results inform subsequent work rather than changing
+this comparison's control.
+
+Retain compact `combined_` evidence and numerical validation in the existing
+attention study, extend its offline plots, and finish with local commits.
+Stop at this candidate and matrix, retaining negative or inconclusive outcomes.

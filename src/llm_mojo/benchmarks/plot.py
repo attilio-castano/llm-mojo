@@ -243,9 +243,9 @@ def render_sublayer_parallelism(directory, prefix):
               f'Full R=T={w["rows"]}' if w['query_rows'] == w['rows'] else
               f'Chunk R={w["query_rows"]}, T={w["rows"]}' for w in spec['workloads']]
     colors = {10:'#167d9a',11:'#3c9e79',12:'#8064a2',13:'#ba7437',
-              14:'#167d9a',15:'#8064a2',16:'#167d9a',17:'#8064a2'}
+              14:'#167d9a',15:'#8064a2',16:'#167d9a',17:'#8064a2',18:'#167d9a'}
     isolated = spec.get('measurement') == 'isolated_wo'
-    tiles = prefix.startswith('tiles')
+    tiles = prefix.startswith('tiles') or prefix == 'combined_'
     boundary = 'Isolated Wo' if isolated else 'Whole-block'
     fig,axes = plt.subplots(1,2,figsize=(13,max(6,.6*len(labels)+2.4)),sharex=True,sharey=True)
     for ax,layers in zip(axes,(1,24)):
@@ -274,18 +274,49 @@ def render_sublayer_parallelism(directory, prefix):
     handles,names = axes[0].get_legend_handles_labels()
     fig.legend(handles,names,loc='upper center',bbox_to_anchor=(.5,.93),ncol=len(variants),frameon=False)
     title = ('Qwen Wo · MMA tile ownership' if isolated else
-             'Qwen attention · '+('QKV' if prefix == 'tiles_qkv_' else 'Wo')+' tile ownership') if tiles else (
+             'Qwen attention · '+('QKV + Wo' if prefix == 'combined_' else ('QKV' if prefix == 'tiles_qkv_' else 'Wo'))+' tile ownership') if tiles else (
              'Qwen attention · KV split domain' if prefix == 'split_domain_' else 'Qwen attention · GQA work distribution')
     fig.suptitle(title+(' · screen' if record['study'].endswith('_screen') else ''),
                  fontsize=16,fontweight='bold')
     fig.text(.04,.025,'Left of 1× is faster. Whiskers: four-block ratio range; open marks: inconclusive.\n'
              'Gain rule: all four blocks faster and > max(5%, matching self-pair deviation). '
-             +('Same frozen attention input; Wo only.\n' if isolated else ('GQA fixed; one projection changes.\n' if tiles else 'QKV/Wo fixed; merge included.\n'))+
+             +('Same frozen attention input; Wo only.\n' if isolated else (('GQA fixed; both projections use 16x16.\n' if prefix == 'combined_' else 'GQA fixed; one projection changes.\n') if tiles else 'QKV/Wo fixed; merge included.\n'))+
              f'{len(samples):,} retained observations · {record["runtime"]["device"]} / Metal · BF16 I/O, FP32 '+('accumulation.\n' if isolated else 'attention.\n')+
              f'Source {record["repository"]["commit"][:7]}. Fixed cache prefix; allocation and correctness checks excluded.',
              fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.18,1,.86))
     fig.savefig(directory/(prefix.rstrip('_')+'.png'),dpi=160)
+    plt.close(fig)
+
+
+def render_sublayer_combined_profile(directory):
+    rows=load_profile(directory,'combined_')
+    table(directory,'combined_profile_summary.csv',rows)
+    record=json.loads((directory/'combined_profiles.json').read_text())
+    from .attention_sublayer_contract import STAGES_BY_VARIANT
+    stages=STAGES_BY_VARIANT[9]
+    fig,axes=plt.subplots(2,2,figsize=(14,11),sharex=True,sharey=True)
+    for ax,(r,t) in zip(axes.flat,record['specification']['workloads']):
+        for variant,color,offset,label in ((9,'#777777',-.18,'8x16 projections'),
+                                           (18,'#167d9a',.18,'16x16 QKV + Wo')):
+            values=[s for s in rows if (s['query_rows'],s['rows'],s['variant'])==(r,t,variant)]
+            ax.barh([stages.index(s['stage'])+offset for s in values],
+                    [s['median_us'] for s in values],height=.34,color=color,label=label)
+        ax.set_xscale('log')
+        ax.set_title(f'R={r}, T={t}')
+        ax.set_xlabel('Median active GPU time (µs) · log scale')
+        ax.grid(axis='x',alpha=.15)
+    axes[0,0].set_yticks(range(len(stages)),stages,fontsize=9)
+    axes[0,0].invert_yaxis()
+    handles,names=axes[0,0].get_legend_handles_labels()
+    fig.legend(handles,names,loc='upper center',bbox_to_anchor=(.5,.94),ncol=2,frameon=False)
+    fig.suptitle('Combined projections · where does attention time remain?',fontsize=16,fontweight='bold')
+    fig.text(.04,.025,'Separate single captures; active durations exclude host and preemption gaps. Stage medians are not whole-block latency.\n'
+             'GQA is fixed; use paired unprofiled measurements for speed claims. Optional counter analysis is absent.\n'
+             f'{sum(s["count"] for s in rows):,} retained durations · source {record["common"]["repository"]["commit"][:7]} · '
+             f'{record["captures"][0]["capture"]["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention.',fontsize=9)
+    fig.tight_layout(rect=(0,.12,1,.9))
+    fig.savefig(directory/'combined_profile.png',dpi=160)
     plt.close(fig)
 
 
@@ -611,13 +642,15 @@ def render_sublayer(directory, record, samples, summary):
             render_sublayer_wo(directory,prefix,integration=True)
     if (directory/'integrated_profiles.json').exists():
         render_sublayer_integrated_profile(directory)
-    for prefix in ('parallelism_screen_','parallelism_','tiles_screen_','tiles_kernel_screen_','tiles_','tiles_qkv_','split_domain_'):
+    for prefix in ('parallelism_screen_','parallelism_','tiles_screen_','tiles_kernel_screen_','tiles_','tiles_qkv_','split_domain_','combined_'):
         if (directory/(prefix+'run.json')).exists():
             render_sublayer_parallelism(directory,prefix)
     if (directory/'timing_run.json').exists() and (directory/'timing_buffered_run.json').exists():
         render_sublayer_timing(directory)
     if (directory/'parallelism_profiles.json').exists():
         render_sublayer_parallelism_profile(directory)
+    if (directory/'combined_profiles.json').exists():
+        render_sublayer_combined_profile(directory)
     print(directory.name, len(samples), 'baseline observations verified; attention figures and retained comparisons regenerated')
 
 

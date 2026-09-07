@@ -5,9 +5,9 @@ import json
 from .._repository import repository_root
 
 OPERATION = 'attention_sublayer'
-VARIANTS = set(range(3,18))
+VARIANTS = set(range(3,19))
 ENTRYPOINTS = {f'attention_sublayer_{v}': 'enqueue_attention_sublayer' for v in VARIANTS}
-ENTRYPOINTS.update({f'attention_sublayer_{v}':'enqueue_attention_sublayer_integrated' for v in range(9,18)})
+ENTRYPOINTS.update({f'attention_sublayer_{v}':'enqueue_attention_sublayer_integrated' for v in range(9,19)})
 STAGES = ['RMSNorm', 'Q projection', 'K projection', 'V projection',
           'Q RoPE', 'K RoPE', 'KV append', 'QK', 'softmax', 'PV',
           'output projection', 'residual']
@@ -17,13 +17,14 @@ STAGES_BY_VARIANT = {3: STAGES, 4: STAGES,
                      7: STAGES[:7]+['GQA FP32 MMA']+STAGES[-2:],
                      8: STAGES[:7]+['FP32 GQA']+STAGES[-2:],
                      9: ['RMSNorm','packed QKV projection','QKV unpack']+STAGES[4:7]+['FP32 GQA']+STAGES[-2:]}
-STAGES_BY_VARIANT.update({v:STAGES_BY_VARIANT[9] for v in (10,11,14,15,16,17)})
+STAGES_BY_VARIANT.update({v:STAGES_BY_VARIANT[9] for v in (10,11,14,15,16,17,18)})
 STAGES_BY_VARIANT.update({v:STAGES_BY_VARIANT[9][:-3]+['FP32 GQA split','FP32 GQA merge']+STAGES[-2:] for v in (12,13)})
 TARGET_FIELDS = ('profile_workload', 'dispatches_per_iteration', 'key_value_rows',
                  'query_heads', 'key_value_heads')
 PROFILE_WORKLOADS = [(1, 4096), (1024, 1024), (4096, 4096), (64, 4096)]
 DECODE_PROFILE_WORKLOADS = [(1,64),(1,4096)]
 PREFILL_PROFILE_WORKLOADS = [(1024,1024),(4096,4096),(64,4096)]
+COMBINED_PROFILE_WORKLOADS = [(256,256),(1024,1024),(4096,4096),(64,4096)]
 PARALLELISM_PROFILE_WORKLOADS = [(64,4096),(1024,1024)]
 ARITHMETIC = ('BF16 weights/activations/cache/output; FP32 GQA scores, softmax '
               'probabilities and accumulation; GQA output rounded to BF16 before Wo.')
@@ -101,6 +102,7 @@ def profile_grid(spec):
              or (spec['variants'] == [3,5,6] and grid == DECODE_PROFILE_WORKLOADS)
              or (spec['variants'] == [4,7] and grid == PREFILL_PROFILE_WORKLOADS)
              or (spec['variants'] == [8,9] and grid == PROFILE_WORKLOADS)
+             or (variants == [9,18] and grid == COMBINED_PROFILE_WORKLOADS)
              or parallelism)
     if not valid:
         raise ValueError('invalid attention sublayer profile grid')

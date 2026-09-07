@@ -69,7 +69,7 @@ def _run_cases(composed: Bool) raises:
                               integrated=True, gqa_mapping=mapping)
                     except:
                         failed_cases += 1
-                for mapping in range(1, 5):
+                for mapping in range(1, 6):
                     try:
                         _case(case_id, nq, nk, d, t, 6, Bool(chunked), "fp32", True,
                               integrated=True, projection_mapping=mapping)

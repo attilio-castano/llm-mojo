@@ -169,7 +169,7 @@ def _case(
         )
     with assert_raises(contains="unknown integrated projection mapping"):
         _ = enqueue_attention_sublayer_integrated(
-            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), 0, 5)
+            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), 0, 6)
     with assert_raises(contains="requires control GQA"):
         _ = enqueue_attention_sublayer_integrated(
             ctx, weights, cache, work, TileTensor(input, row_major(1, h)), 1, 1)
@@ -244,7 +244,7 @@ def test_repeated_asynchronous_use() raises:
     load_sublayer_fixture(weights.norm, 5, "norm_weight")
     load_sublayer_fixture(weights.output, 5, "output_weight")
     load_sublayer_fixture(input, 5, "input")
-    for implementation in range(18):
+    for implementation in range(19):
         var route = 6 if implementation >= 14 else (implementation - 3 if implementation >= 10 else (6 if implementation >= 8 else (3 if implementation == 4 else (implementation - 1 if implementation >= 5 else implementation))))
         var wo_mma = implementation == 4 or implementation == 7
         # Optimized FP32 decode must also work without probability storage.

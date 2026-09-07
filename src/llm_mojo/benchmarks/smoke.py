@@ -52,7 +52,7 @@ def main():
                    cwd=repository_root(),check=True)
     for r,t in ((1,64),(7,33),(33,33)):
         for layers in (1,24):
-            for variant in ((3,4,5,6,8,9,10,11,12,13,14,15,16,17) if r == 1 else (3,4,7,8,9,10,11,12,13,14,15,16,17)):
+            for variant in ((3,4,5,6,8,9,10,11,12,13,14,15,16,17,18) if r == 1 else (3,4,7,8,9,10,11,12,13,14,15,16,17,18)):
                 control = 9 if variant >= 10 else (8 if variant >= 8 else (4 if variant == 7 else 3))
                 result = subprocess.run(list(map(str,[target,r,t,layers,variant,control,1,53,'bench',1,0])),
                                         cwd=repository_root(),text=True,capture_output=True,env=env,check=True)
@@ -78,7 +78,7 @@ def main():
                 raise RuntimeError('integrated attention benchmark boundary check failed')
     for r,t in ((15,64),(16,64),(17,64),(64,4096)):
         for layers in (1,24):
-            for variant in range(10,14):
+            for variant in (10,11,12,13,18):
                 result = subprocess.run(list(map(str,[target,r,t,layers,variant,9,0,53,'bench',1,0])),
                                         cwd=repository_root(),text=True,capture_output=True,env=env,check=True)
                 if 'correctness: passed' not in result.stdout or not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE'):

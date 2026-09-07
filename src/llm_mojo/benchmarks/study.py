@@ -172,6 +172,14 @@ STUDIES['attention_sublayer_timing_buffered'] = dict(
     mode='buffered',measurement='whole_attention_buffered')
 
 
+# Compose the independently validated winning projections; GQA remains fixed.
+STUDIES['attention_sublayer_combined'] = dict(
+    **_TILE_BASE,control=9,candidates=[9,18],opt_in=True,
+    measurement='whole_attention',
+    names={9:'integrated 8x16 projections',18:'combined 16x16 QKV and Wo'},
+    workloads=STUDIES['attention_sublayer']['workloads'])
+
+
 def select_projection_tile(block_summary, kernel_summary):
     """Require isolated and whole-block gains in both modes at full 1024."""
     def target(summary):
