@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "baseline_commit": "ee3b99f",
+  "reference_sha256": "6de9811889f14c9ece9999b7e4ee6116dfc41bb3dfac95486ec86f3582ec43e7",
+  "cases": [
+    [
+      896,
+      4864,
+      1,
+      3037
+    ],
+    [
+      896,
+      4864,
+      17,
+      3037
+    ],
+    [
+      896,
+      4864,
+      4096,
+      3037
+    ],
+    [
+      896,
+      4864,
+      1,
+      3041
+    ],
+    [
+      896,
+      4864,
+      17,
+      3041
+    ],
+    [
+      896,
+      4864,
+      4096,
+      3041
+    ]
+  ],
+  "checkpoint_prompt": "Describe how a lever can lift a heavy object, using a simple numerical example.",
+  "checkpoint_token_ids": [
+    151644,
+    8948,
+    198,
+    2610,
+    525,
+    264,
+    10950,
+    17847,
+    13,
+    151645,
+    198,
+    151644,
+    872,
+    198,
+    74785,
+    1246,
+    264,
+    27505,
+    646,
+    11893,
+    264,
+    8811,
+    1633,
+    11,
+    1667,
+    264,
+    4285,
+    34776,
+    3110,
+    13,
+    151645,
+    198,
+    151644,
+    77091,
+    198
+  ],
+  "checkpoint_token_ids_sha256": "14740f6ce069492355772bd64a3017bb8b31b8b8861bf5334ed5976572257c07",
+  "model_outputs_observed_at_declaration": false
+}

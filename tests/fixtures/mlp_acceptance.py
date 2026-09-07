@@ -55,7 +55,7 @@ def frozen():
     return data
 
 
-def checkpoint_input(directory, reference):
+def checkpoint_input(directory, reference, token_ids=None):
     identity = reference['checkpoint']
     for name, digest in identity['asset_sha256'].items():
         if name != 'model.safetensors':
@@ -80,8 +80,9 @@ def checkpoint_input(directory, reference):
         values.update({k: array(load(p+'mlp.'+k+'_proj.weight')) for k in ('gate','up','down')})
         for k, value in values.items():
             assert hashlib.sha256(bf16_bits(value).tobytes()).hexdigest() == identity['mlp_tensor_bits_sha256'][k]
-        ids = identity['holdout_token_ids']
-        assert hashlib.sha256(np.asarray(ids, dtype=np.int64).tobytes()).hexdigest() == identity['holdout_token_ids_sha256']
+        ids = identity['holdout_token_ids'] if token_ids is None else token_ids
+        if token_ids is None:
+            assert hashlib.sha256(np.asarray(ids, dtype=np.int64).tobytes()).hexdigest() == identity['holdout_token_ids_sha256']
         data = dict(input=array(torch.nn.functional.embedding(torch.tensor(ids), load('model.embed_tokens.weight'))),
                     norm_weight=array(load(p+'input_layernorm.weight')),
                     output_weight=array(load(p+'self_attn.o_proj.weight')),
@@ -94,16 +95,51 @@ def checkpoint_input(directory, reference):
     return values
 
 
+def optimization_spec(directory, reference, *, freeze=False):
+    """Tokenization only; this must precede candidate or held-out model output."""
+    from transformers import AutoTokenizer
+    path = HERE / 'mlp_optimization_holdout.json'
+    prompt = 'Describe how a lever can lift a heavy object, using a simple numerical example.'
+    for name, digest in reference['checkpoint']['asset_sha256'].items():
+        if name != 'model.safetensors':
+            assert sha(directory / name) == digest, name
+    tokenizer = AutoTokenizer.from_pretrained(directory, local_files_only=True, trust_remote_code=False)
+    ids = tokenizer.apply_chat_template([
+        dict(role='system', content='You are a helpful assistant.'),
+        dict(role='user', content=prompt)], tokenize=True, add_generation_prompt=True)
+    value = dict(schema=1, baseline_commit='ee3b99f', reference_sha256=sha(HERE/'mlp/checksums.json'),
+                 cases=[[896,4864,r,seed] for seed in (3037,3041) for r in (1,17,4096)],
+                 checkpoint_prompt=prompt, checkpoint_token_ids=ids,
+                 checkpoint_token_ids_sha256=hashlib.sha256(np.asarray(ids,dtype=np.int64).tobytes()).hexdigest(),
+                 model_outputs_observed_at_declaration=False)
+    if freeze:
+        with path.open('x') as stream:
+            stream.write(json.dumps(value,indent=2)+'\n')
+    if json.loads(path.read_text()) != value:
+        raise ValueError('optimization holdout declaration changed')
+    return value
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--candidate-binary', type=Path)
     p.add_argument('--checkpoint-dir', type=Path)
     p.add_argument('--check-env', action='store_true')
+    p.add_argument('--optimization', action='store_true')
+    p.add_argument('--freeze-optimization-spec', action='store_true')
     args = p.parse_args()
     torch.set_num_threads(1)
     reference = frozen()
     origin = provenance()
     assert origin == reference['upstream']
+    extra = None
+    if args.optimization or args.freeze_optimization_spec:
+        if args.checkpoint_dir is None:
+            p.error('local checkpoint directory required for optimization holdouts')
+        extra = optimization_spec(args.checkpoint_dir, reference, freeze=args.freeze_optimization_spec)
+    if args.freeze_optimization_spec:
+        print('Optimization recipes and checkpoint tokens frozen; no model outputs generated.')
+        return
     if args.check_env:
         print('Pinned acceptance environment and frozen reference verified; no holdouts executed.')
         return
@@ -113,17 +149,23 @@ def main():
         raise RuntimeError('holdouts require a clean frozen candidate')
     candidate = dict(commit=git('rev-parse','HEAD'), binary_sha256=sha(args.candidate_binary),
                      generator_sha256=sha(__file__), reference_sha256=sha(HERE/'mlp/checksums.json'))
-    output = REPO / 'build/oracle_data/mlp_holdout'
+    if extra is not None:
+        candidate['holdout_spec_sha256'] = sha(HERE/'mlp_optimization_holdout.json')
+    output = REPO / 'build/oracle_data' / ('mlp_optimization_holdout' if extra else 'mlp_holdout')
     output.mkdir(exist_ok=False)
     # Write the exposure event before any holdout model computation.
     record = dict(candidate=candidate, upstream=origin, specification=specification(),
                   status='started', holdout_outputs_observed=True, arrays={}, cases={})
+    if extra is not None:
+        record['additional_holdout_specification'] = extra
     def save_record():
         (output/'manifest.json').write_text(json.dumps(record, indent=2, allow_nan=False)+'\n')
     save_record()
-    recipes = [(f'holdout_h{h}_i{i}_r{r}_s{seed}', lambda h=h,i=i,r=r,seed=seed: inputs(h,i,r,seed))
-               for h,i,r,seed in HOLDOUT]
-    recipes.append(('holdout_checkpoint', lambda: checkpoint_input(args.checkpoint_dir, reference)))
+    prefix = 'optimization_holdout' if extra else 'holdout'
+    recipes = [(f'{prefix}_h{h}_i{i}_r{r}_s{seed}', lambda h=h,i=i,r=r,seed=seed: inputs(h,i,r,seed))
+               for h,i,r,seed in (extra['cases'] if extra else HOLDOUT)]
+    recipes.append((prefix+'_checkpoint', lambda: checkpoint_input(
+        args.checkpoint_dir, reference, extra['checkpoint_token_ids'] if extra else None)))
     for name, recipe in recipes:
         values = recipe()
         module = UpstreamMLP(values)
@@ -149,6 +191,8 @@ def main():
     assert not git('status','--porcelain') and git('rev-parse','HEAD') == candidate['commit']
     assert sha(args.candidate_binary) == candidate['binary_sha256']
     assert sha(__file__) == candidate['generator_sha256']
+    if extra is not None:
+        assert sha(HERE/'mlp_optimization_holdout.json') == candidate['holdout_spec_sha256']
     frozen()
     record['status'] = 'complete'
     record['manifest_payload_sha256'] = hashlib.sha256(json.dumps(record, sort_keys=True).encode()).hexdigest()
