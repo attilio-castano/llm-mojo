@@ -133,6 +133,7 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
         samples = []
         for block in range(1, BLOCKS + 1):
             before = checked_conditions()
+            record['conditions'].append(dict(block=block, before=before))
             first = block in (2, 3)
             cases = [(w, l, c) for w in workloads(spec) for l in spec.get('layers',(1,24)) for c in spec['candidates']]
             if first:
@@ -147,9 +148,9 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
                     command.append(str(workload['query_rows']))
                 command += list(map(str, [rows, layers, candidate, spec['control'], int(first), seed,
                                           spec.get('mode','bench'), REPETITIONS, WARMUP]))
-                # The FP32 4096-row ring performs 960 complete sublayers;
-                # its validated runtime exceeds the standalone-kernel limit.
-                timeout = 600 if spec['operation'] == 'attention_sublayer' else 300
+                # A 4096-row MLP ring process performs 960 complete blocks.
+                # The rowwise baseline needs about ten minutes on this host.
+                timeout = 1200 if spec['operation'] == 'mlp' else 600 if spec['operation'] == 'attention_sublayer' else 300
                 process = subprocess.run(command, cwd=repository_root(), capture_output=True, text=True, env=env, timeout=timeout)
                 # Local diagnostic logs are useful during execution; compact samples are the retained evidence.
                 (directory / 'last-process.txt').write_text(process.stdout + process.stderr)
@@ -160,8 +161,12 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
                     raise RuntimeError('runtime identity changed')
                 record['runtime'] = identity
                 samples.extend(dict(block=block, **workload, layers=layers, candidate=candidate, **s) for s in observations)
+                # Preserve completed cases if a later process fails. The
+                # loader still rejects any run without completed_utc.
+                (directory / 'samples.csv.gz').write_bytes(encode_samples(samples))
+                write_json(directory / 'run.json', record)
             after = checked_conditions()
-            record['conditions'].append(dict(block=block, before=before, after=after))
+            record['conditions'][-1]['after'] = after
             (directory / 'samples.csv.gz').write_bytes(encode_samples(samples))
             write_json(directory / 'run.json', record)
             print(name, 'block', block, 'complete:', len(samples), 'observations', flush=True)

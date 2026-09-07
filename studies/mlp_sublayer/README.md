@@ -7,7 +7,26 @@ R counts new rows and has no KV-cache-length axis. The
 The implementation is in `src/llm_mojo/mlp.mojo`; each invocation enqueues seven
 kernels using caller-owned storage and one ordered stream.
 
-This study is undergoing acceptance. Timing and holdout results are pending.
+Numerical acceptance is complete at source `afbe288`: all 43 synthetic and
+three checkpoint development cases, followed by six synthetic holdouts and
+one reserved checkpoint prompt, passed the frozen gates on Apple M4 Pro/Metal.
+All GPU full/chunked comparisons were bit-exact. Normal-mode checkpoint and
+holdout runs also passed the invalid-call and twelve-call asynchronous reuse
+checks. Timing and profiles are pending.
+
+[The numerical summary](data/numerical.json) links a lossless compressed record
+of every check, source identity, holdout fixture hash and execution receipt.
+Full validation passed 101 Mojo tests, 58 Python tooling tests, eleven pinned
+reference tests and every benchmark route. Two subsequent test/tooling-only
+edits received their relevant reruns; every engine source hash stayed fixed.
+
+The first latency attempt reached the 4,096-row ring process and exceeded the
+old 300-second harness timeout before completing its first block. The fixed
+protocol requires 960 complete MLP invocations there. Its replacement allows
+1,200 seconds and persists each completed case before proceeding; the matrix,
+warmups and samples are unchanged. The incomplete attempt is recorded in
+[measurement_attempt.json](data/measurement_attempt.json), outside the accepted
+latency comparison.
 
 ## What the primitive checks established
 

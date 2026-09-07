@@ -460,6 +460,14 @@ model assets, and introduced no Mojo MLP implementation or optimization.
 
 ## Approved implementation and baseline study
 
+Implementation acceptance completed on 2026-09-07 at local source `afbe288`.
+All 43 synthetic and three checkpoint development cases passed, followed by
+the six declared synthetic holdouts and reserved checkpoint prompt on the
+same frozen binary. All GPU full/chunked intermediate comparisons were
+bit-exact. No numerical budget or supported input domain changed. See the
+[MLP study](../studies/mlp_sublayer/README.md) for the retained checks and
+the subsequent baseline measurement results.
+
 The next run is authorized for local implementation, validation, local commits,
 Metal measurement and trace capture, and study documentation using existing
 assets. Preserve this frozen reference package; new acceptance tooling records

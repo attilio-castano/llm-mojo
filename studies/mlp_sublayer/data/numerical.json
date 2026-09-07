@@ -1,0 +1,152 @@
+{
+  "format": "lossless-json-gzip-v1",
+  "record": "numerical.json.gz",
+  "sha256": "9c5c031c409780d5171d7e287b7b1927fd0d63293467d082d449f9acccb59dbc",
+  "uncompressed_sha256": "fbea4df4c357e147db5c413af811badfe1f09e2eff68fa2ec1d7c8cad2e16649",
+  "status": "accepted",
+  "candidate": {
+    "commit": "afbe2888abe86294c6e52292ec31bd1caddaf4a0",
+    "binary_sha256": "682c8402d828a60e6098e3ba2e2c3f3d37f191ea133e7da6cad5bcb52b45e1aa",
+    "generator_sha256": "3bb4736cbbd6ae7c74003c248c8cfc442fdcec3f91ff76f650aae38a36c617a0",
+    "reference_sha256": "6de9811889f14c9ece9999b7e4ee6116dfc41bb3dfac95486ec86f3582ec43e7"
+  },
+  "coverage": {
+    "development": {
+      "cases": [
+        "h7_i11_cancellation",
+        "h7_i11_large_input",
+        "h7_i11_r17_s1601",
+        "h7_i11_r1_s1601",
+        "h7_i11_r7_s1601",
+        "h7_i11_small_input",
+        "h7_i11_swap_gate_up",
+        "h7_i11_zero_down",
+        "h7_i11_zero_gate",
+        "h7_i11_zero_input",
+        "h7_i11_zero_up",
+        "h896_i4864_cancellation",
+        "h896_i4864_large_input",
+        "h896_i4864_r1024_s1601",
+        "h896_i4864_r15_s1601",
+        "h896_i4864_r16_s1601",
+        "h896_i4864_r17_s1601",
+        "h896_i4864_r17_s1613",
+        "h896_i4864_r1_s1601",
+        "h896_i4864_r1_s1613",
+        "h896_i4864_r257_s1601",
+        "h896_i4864_r33_s1601",
+        "h896_i4864_r4096_s1601",
+        "h896_i4864_r4096_s1613",
+        "h896_i4864_r65_s1601",
+        "h896_i4864_r7_s1601",
+        "h896_i4864_small_input",
+        "h896_i4864_swap_gate_up",
+        "h896_i4864_zero_down",
+        "h896_i4864_zero_gate",
+        "h896_i4864_zero_input",
+        "h896_i4864_zero_up",
+        "h8_i12_cancellation",
+        "h8_i12_large_input",
+        "h8_i12_r17_s1601",
+        "h8_i12_r1_s1601",
+        "h8_i12_r7_s1601",
+        "h8_i12_small_input",
+        "h8_i12_swap_gate_up",
+        "h8_i12_zero_down",
+        "h8_i12_zero_gate",
+        "h8_i12_zero_input",
+        "h8_i12_zero_up"
+      ],
+      "case_count": 43,
+      "check_count": 4476,
+      "checks_by_mode": {
+        "local": 301,
+        "full": 301,
+        "chunk": 3850,
+        "reuse": 24
+      },
+      "failed_elements": 0,
+      "gpu_full_chunk_bit_differences": 0,
+      "max_scaled_by_stage": {
+        "N": 0.004608294930875576,
+        "G": 0.0051813471502590676,
+        "U": 0.005208333333333333,
+        "A": 0.008,
+        "S": 0.0081799591002045,
+        "D": 0.009259259259259259,
+        "Y": 0.015037593984962405
+      }
+    },
+    "checkpoint": {
+      "cases": [
+        "checkpoint_0",
+        "checkpoint_1",
+        "checkpoint_2"
+      ],
+      "case_count": 3,
+      "check_count": 129,
+      "checks_by_mode": {
+        "local": 21,
+        "full": 21,
+        "chunk": 63,
+        "reuse": 24
+      },
+      "failed_elements": 0,
+      "gpu_full_chunk_bit_differences": 0,
+      "max_scaled_by_stage": {
+        "N": 0.003976143141153081,
+        "G": 0.004830917874396135,
+        "U": 0.0038910505836575876,
+        "A": 0.004514672686230248,
+        "S": 0.003401360544217687,
+        "D": 0.003401360544217687,
+        "Y": 0.003367003367003367
+      }
+    },
+    "holdout": {
+      "cases": [
+        "holdout_checkpoint",
+        "holdout_h896_i4864_r17_s2017",
+        "holdout_h896_i4864_r17_s2027",
+        "holdout_h896_i4864_r1_s2017",
+        "holdout_h896_i4864_r1_s2027",
+        "holdout_h896_i4864_r4096_s2017",
+        "holdout_h896_i4864_r4096_s2027"
+      ],
+      "case_count": 7,
+      "check_count": 437,
+      "checks_by_mode": {
+        "local": 49,
+        "full": 49,
+        "chunk": 315,
+        "reuse": 24
+      },
+      "failed_elements": 0,
+      "gpu_full_chunk_bit_differences": 0,
+      "max_scaled_by_stage": {
+        "N": 0.005208333333333333,
+        "G": 0.005208333333333333,
+        "U": 0.0051813471502590676,
+        "A": 0.010101010101010102,
+        "S": 0.010948905109489052,
+        "D": 0.0051813471502590676,
+        "Y": 0.007692307692307693
+      }
+    }
+  },
+  "validation": {
+    "mojo_tests": 101,
+    "python_tests": 58,
+    "pinned_reference_tests": 11,
+    "all_route_smokes_passed": true,
+    "full_validation_source_unchanged": true,
+    "changes_after_full_validation": [
+      "src/llm_mojo/benchmarks/analyze_trace.py",
+      "tests/test_swiglu.mojo"
+    ],
+    "selective_rechecks": "58 Python tests and six SwiGLU primitive tests passed after the two listed tooling/test-only edits; all engine source hashes match the full run."
+  },
+  "primitive_checks": 12,
+  "all_recorded_numerical_gates_passed": true,
+  "retention": "Every final numerical check, holdout array hash, original execution record and source identity is retained losslessly. Raw arrays, binaries and full console logs remain outside Git."
+}

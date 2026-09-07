@@ -1,9 +1,15 @@
 """MLP measurement and capture boundaries must fail closed."""
 import copy
+import gzip
+import json
+from contextlib import ExitStack
+from pathlib import Path
+import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 from llm_mojo.benchmarks import mlp_contract as mlp
-from llm_mojo.benchmarks import capture_trace, study
+from llm_mojo.benchmarks import capture_trace, study, run as runner
 
 
 class MLPToolingTests(unittest.TestCase):
@@ -60,6 +66,38 @@ PROFILE_REGION_END
     def test_fixture_identity_rejects_mutated_array_hash(self):
         with patch.object(mlp,'sha',return_value='changed'),self.assertRaises(ValueError):
             mlp.fixture_identity()
+
+    def test_completed_cases_survive_a_later_timeout_without_becoming_a_run(self):
+        repo=dict(commit='a'*40,branch='test',dirty=False)
+        spec={**study.STUDIES['mlp'], 'layers':[1]}
+        observation=dict(arm='control',variant=0,repetition=0,us=10.0)
+        with tempfile.TemporaryDirectory() as temporary, ExitStack() as stack:
+            root=Path(temporary); build=root/'build'; build.mkdir()
+            (build/'build.json').write_text(json.dumps(dict(repository=repo,sources={},
+                environment={},binaries={'mlp':'digest'},mlp_fixtures={})))
+            replacements=dict(ensure_record_location=None,repository_state=repo,
+                source_hashes={},stable_environment={},mlp_fixture_identity={},
+                checked_conditions={'power':'AC'},sha='digest',
+                workloads=[dict(rows=1),dict(rows=17)],
+                parse_output=(dict(device='Apple Test GPU',api='metal'),[observation]))
+            for name,value in replacements.items():
+                stack.enter_context(patch.object(runner,name,return_value=value))
+            stack.enter_context(patch.object(runner,'STUDIES',{'mlp':spec}))
+            process=stack.enter_context(patch.object(runner.subprocess,'run',side_effect=[
+                subprocess.CompletedProcess([],0,stdout='completed case',stderr=''),
+                subprocess.TimeoutExpired(['mlp'],1200)]))
+            output=root/'output'
+            with self.assertRaises(subprocess.TimeoutExpired):
+                runner.run(build,output,['mlp'])
+            saved=json.loads((output/'mlp/run.json').read_text())
+            self.assertNotIn('completed_utc',saved)
+            self.assertNotIn('after',saved['conditions'][0])
+            raw=gzip.decompress((output/'mlp/samples.csv.gz').read_bytes()).decode()
+            self.assertEqual(len(raw.splitlines()),2)
+            self.assertIn('10.0',raw)
+            self.assertEqual(process.call_args.kwargs['timeout'],1200)
+            with self.assertRaises(ValueError):
+                study.load_run(output/'mlp')
 
 
 if __name__=='__main__':
