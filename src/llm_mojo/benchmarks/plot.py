@@ -640,6 +640,89 @@ def render_sublayer(directory, record, samples, summary):
     print(directory.name, len(samples), 'baseline observations verified; attention figures and retained comparisons regenerated')
 
 
+def render_mlp_optimization(directory):
+    # Every retained comparison is revalidated against its frozen specification.
+    runs={}
+    for path in sorted(directory.glob('optimization_*run.json')):
+        prefix=path.name.removesuffix('run.json')
+        record,samples,summary=load_run(directory,prefix)
+        if record['specification']['operation']!='mlp':
+            raise ValueError('unexpected operation in MLP campaign')
+        runs[prefix]=(record,samples,summary)
+        table(directory,prefix+'summary.csv',summary)
+    screens=['optimization_gate_screen_','optimization_down_screen_']
+    if all(p in runs for p in screens):
+        if runs[screens[0]][0]['build']!=runs[screens[1]][0]['build']:
+            raise ValueError('MLP screens must share a build')
+        fig,axes=plt.subplots(1,2,figsize=(11.5,4.6))
+        for ax,prefix,label in zip(axes,screens,['Gate: K=896, N=4864','Down: K=4864, N=896']):
+            record,samples,summary=runs[prefix]
+            variants=[v for v in record['specification']['candidates'] if v!=0]
+            for color,variant in zip(['#2166ac','#1b7837','#b35806'],variants):
+                tile={1:'8x16',2:'16x16',3:'8x32',4:'8x16',5:'16x16',6:'8x32'}[variant]
+                for layers,style,mode in [(1,'o-','hot'),(24,'s--','ring24')]:
+                    points=sorted((s for s in summary if s['candidate']==variant and s['layers']==layers),key=lambda s:s['rows'])
+                    ax.plot(range(len(points)),[s['ratio'] for s in points],'-' if layers==1 else '--',color=color,label=f'{tile} {mode}')
+                    for j,s in enumerate(points):
+                        ax.plot(j,s['ratio'],'o' if layers==1 else 's',color=color,markerfacecolor=color if s['decision']=='faster' else 'white',markersize=4)
+            ax.axhline(1,color='#555555',linewidth=1)
+            ax.set(yscale='log',xticks=range(4),xticklabels=['1','16','17','1024'],xlabel='Rows R (measured cases)',ylabel='Candidate / rowwise paired ratio',title=label)
+            ax.legend(fontsize=7,ncol=2)
+        fig.text(.5,.015,f'{record["runtime"]["device"]} / Metal; BF16 I/O, FP32 accumulation; source {record["repository"]["commit"][:7]}.\n'
+                 'Four paired blocks; lower is faster. Filled markers pass the frozen gain rule; hollow markers do not.\n'
+                 'Selection requires a calibrated R=1024 gain in both modes; all decisions and ranges remain in the tables.',ha='center',fontsize=8)
+        fig.tight_layout(rect=(0,.13,1,1));fig.savefig(figure_directory(directory)/'optimization_projections.png',dpi=160);plt.close(fig)
+    prefix='optimization_final_'
+    if prefix not in runs:return
+    record,samples,summary=runs[prefix]
+    candidates=[v for v in record['specification']['candidates'] if v!=record['specification']['control']]
+    if len(candidates)!=1:raise ValueError('final MLP plot needs one declared candidate')
+    variant=candidates[0]
+    fig,axes=plt.subplots(1,2,figsize=(11.5,4.6))
+    for ax,layers,label in zip(axes,[1,24],['Hot: one call through completion','Ring24: one sync per 24 calls']):
+        points=sorted((s for s in summary if s['candidate']==variant and s['layers']==layers),key=lambda s:s['rows'])
+        ax.plot(range(len(points)),[s['ratio'] for s in points],color='#2166ac',linewidth=1)
+        for j,s in enumerate(points):
+            color={'faster':'#2166ac','slower':'#b35806','inconclusive':'#666666'}[s['decision']]
+            ax.errorbar(j,s['ratio'],yerr=[[s['ratio']-s['ratio_min']],[s['ratio_max']-s['ratio']]],
+                        fmt='o',color=color,markerfacecolor=color if s['decision']=='faster' else 'white',capsize=3,markersize=5)
+        ax.axhline(1,color='#555555',linewidth=1)
+        ax.set(yscale='log',xticks=range(len(points)),xticklabels=[str(s['rows']) for s in points],xlabel='Rows R (measured cases)',ylabel='Final / original paired ratio',title=label)
+        ax.tick_params(axis='x',labelsize=8)
+    fig.text(.5,.015,f'{record["runtime"]["device"]} / Metal; source {record["repository"]["commit"][:7]}; {len(samples):,} observations.\n'
+             'Points are median paired ratios; whiskers span the four blocks. Filled blue passes the frozen gain rule.\n'
+             'Hollow gray is inconclusive; hollow orange is a regression. Lower is faster; this is MLP latency, not decoder throughput.',ha='center',fontsize=8)
+    fig.tight_layout(rect=(0,.13,1,1));fig.savefig(figure_directory(directory)/'optimization_latency.png',dpi=160);plt.close(fig)
+
+def render_mlp_optimization_profiles(directory,prefix,latency_prefix):
+    # load_profile gains schema-4 support through the separately validated reader.
+    summary=load_profile(directory,prefix)
+    table(directory,prefix+'profile_summary.csv',summary)
+    record=json.loads((directory/(prefix+'profiles.json')).read_text())
+    latency,_,_=load_run(directory,latency_prefix)
+    if (record['common']['repository']!=latency['repository']
+        or record['common']['source_sha256']!=latency['build']['sources']):
+        raise ValueError('MLP profiles and latency comparison must share source')
+    variants=record['specification']['variants']
+    rows=[w['rows'] for w in record['specification']['workloads']]
+    stages=list(dict.fromkeys(s['stage'] for s in summary))
+    bars=[(r,v) for r in rows for v in variants]
+    fig,ax=plt.subplots(figsize=(11.5,4.8));bottom=[0.0]*len(bars)
+    for stage in stages:
+        shares=[next((s['active_share_percent'] for s in summary if (s['rows'],s['variant'],s['stage'])==(r,v,stage)),0.0) for r,v in bars]
+        ax.bar(range(len(bars)),shares,bottom=bottom,label=stage)
+        bottom=[a+b for a,b in zip(bottom,shares)]
+    ax.set(xticks=range(len(bars)),xticklabels=[f'R={r}\nv{v}' for r,v in bars],
+           ylabel='Share of active GPU dispatch time (%)',title='Which stages remain expensive after projection changes?')
+    ax.legend(bbox_to_anchor=(1.02,1),loc='upper left',fontsize=8)
+    device=record['captures'][0]['capture']['runtime']['device']
+    fig.text(.5,.015,f'{device} / Metal; BF16 I/O, FP32 arithmetic; v0=rowwise, v7=16x16 projections.\n'
+             f'{sum(s["count"] for s in summary):,} measured dispatch durations; source {record["common"]["repository"]["commit"][:7]}.\n'
+             'Single instrumented captures; preemption gaps excluded. These shares do not establish latency gains.',ha='center',fontsize=8)
+    fig.tight_layout(rect=(0,.13,1,1));fig.savefig(figure_directory(directory)/(prefix+'profile.png'),dpi=160);plt.close(fig)
+
+
+
 def render_mlp(directory, record, samples, summary):
     import gzip
     import io
@@ -712,6 +795,10 @@ def render_mlp(directory, record, samples, summary):
             f'{len(profile_rows):,} measured dispatches in four single captures; active time excludes preemption gaps.\n'
             'Profiling is separate from the paired latency runs; optional limiter counters were not analyzed.',ha='center',fontsize=8)
         fig.tight_layout(rect=(0,.12,1,1));fig.savefig(figure_directory(directory)/'profile.png',dpi=160);plt.close(fig)
+    render_mlp_optimization(directory)
+    for prefix,latency_prefix in [('optimization_projection_','optimization_down_increment_'),('optimization_final_','optimization_final_')]:
+        if (directory/(prefix+'profiles.json')).exists():
+            render_mlp_optimization_profiles(directory,prefix,latency_prefix)
     print('MLP raw samples verified; latency and profile figures regenerated')
 
 

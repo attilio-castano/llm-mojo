@@ -245,6 +245,10 @@ for name,control,candidate in [('gate_up',0,2),('down_increment',2,7)]:
         'control':control, 'candidates':[control,candidate],
         'names':{v:mlp.NAMES[v] for v in (control,candidate)}}
 
+STUDIES['mlp_final'] = {
+    **STUDIES['mlp'], 'control':0, 'candidates':[0,7], 'layers':[1,24],
+    'names':{v:mlp.NAMES[v] for v in (0,7)}}
+
 
 def workloads(spec):
     return spec.get('workloads', [dict(rows=r) for r in spec.get('rows', [])])

@@ -121,3 +121,25 @@ campaign. Pushes, PR publication and new asset downloads are separate actions.
   reuse with the fixed gates. The full workflow passed 102 Mojo, 63 tooling
   and eleven pinned-reference tests, primitive sweeps and all route smokes.
   Normal-mode checkpoint and observed-holdout checks precede follow-up timing.
+- All eight configurations passed the 53 existing cases; checkpoint and
+  observed-holdout regressions also ran in normal mode. There are 40,336
+  stage/reuse checks and thirteen primitive
+  records. The complete 3,840-observation follow-up campaign at `2760400`
+  confirmed up (R=1024 ratios 0.0811/0.0776), whole gate/up (0.3312/0.3304),
+  and down added to that block (0.2825/0.2806). All advance under the frozen
+  rule. Variant 7 is the selected projection configuration; the two whole
+  comparison ratios are not multiplied to construct a final gain.
+- Two validated profiles retain 3,675 measured dispatches. At R=1024,
+  projections occupy 91.44% of active GPU time; SiLU/multiply 7.70%. At R=1,
+  projections occupy 94.72%, down alone 59.61%, and SiLU/multiply 1.78%.
+  `data/optimization_followup_decision.json` records the decision before any
+  optional kernel implementation: skip fusion and packing in this campaign.
+  The traffic-scaled fusion estimate is about 3.08% of total active GPU time,
+  below the 5% decision floor, and is explicitly not a measured gain or bound.
+  Packing the existing tile preserves matrix work and source request counts;
+  these captures give no strong launch-cost hypothesis. This is a bounded
+  allocation of experiments, not proof that either technique never helps.
+- The final comparison is now declared as `mlp_final`: original 0 versus 7,
+  all ten row counts and both modes, 3,200 observations with self-pairs. The
+  candidate is fixed before fresh holdout output access. Final validation,
+  fresh holdouts, the full latency campaign and eight final profiles remain.

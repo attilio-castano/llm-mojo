@@ -140,7 +140,7 @@ class EvidenceTests(unittest.TestCase):
             for record in evidence_directory(directory).glob('*run.json'):
                 _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
-        self.assertEqual(count, 96160)
+        self.assertEqual(count, 100000)
         profile = load_profile(ROOT / 'studies/gqa_decode')
         self.assertEqual(sum(row['count'] for row in profile), 3000)
         profile = load_profile(ROOT / 'studies/gqa_prefill')

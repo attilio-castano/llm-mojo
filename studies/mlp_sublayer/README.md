@@ -1,4 +1,19 @@
-# Materialized Qwen MLP on Metal
+# Qwen MLP on Metal
+
+The projection campaign has selected an explicit 16x16 MMA configuration for
+gate, up and down. The fixed numerical gates pass. At R=1024, direct whole-MLP
+comparisons show a 67% reduction from gate/up tiling, then a further 72%
+relative to that configuration from down tiling. These are separate
+comparisons; their ratios are not multiplied into a final claim.
+
+The [campaign plan and completed evidence](optimization-plan.md) retain all
+screen and incremental results, including one-row regressions. The updated
+profiles still put 91.4% of large-row active GPU time in projections. The
+[recorded follow-up decision](data/optimization_followup_decision.json) closes
+the optional fusion/packing search for this campaign. Fresh final holdouts and
+the direct original-versus-final full row matrix are the remaining steps.
+
+## Materialized baseline at source `afb54fa`
 
 The materialized Mojo baseline passes the frozen [numerical contract](../../docs/mlp-sublayer.md) and provides a measured reference for the post-attention MLP: RMSNorm, gate projection, up projection, SiLU, gating multiplication, down projection and residual addition. It uses H=896 and I=4864. R counts new rows; there is no KV-cache-length axis in this sublayer.
 
