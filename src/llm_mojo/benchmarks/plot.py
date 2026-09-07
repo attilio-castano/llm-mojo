@@ -306,7 +306,9 @@ def render_sublayer_timing(directory):
     for ax,layers in zip(axes,(1,24)):
         ax.axvline(1,color='#333333',linewidth=1)
         ax.set_xscale('log')
+        ax.xaxis.set_major_locator(LogLocator(base=10,subs=(1,2,5)))
         ax.xaxis.set_major_formatter(FuncFormatter(lambda v,_:f'{v:g}×'))
+        ax.xaxis.set_minor_formatter(FuncFormatter(lambda v,_:''))
         ax.set_title('Hot call' if layers==1 else 'Ring24 per call')
         ax.set_xlabel('Identical-kernel paired time ratio · log scale')
         ax.grid(axis='x',alpha=.2)

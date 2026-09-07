@@ -883,3 +883,39 @@ and `timing_`/`timing_buffered_` evidence in the existing attention study.
 Use the same package runner and offline plotter. Explain measured domain and
 remaining uncertainty before proposing a dispatch rule; conclude with local
 commits and no remote publication.
+
+## Completed projection tiles and split-domain follow-up
+
+Validated clean source `5c7ca77` implements the two contained projection tiles
+and explicit integrated options. All 93 Mojo and 45 Python tests passed before
+measurement, including frozen synthetic/checkpoint comparisons and twelve
+asynchronous sequences across eighteen configurations. BF16 boundaries,
+FP32 accumulation and all gates remain unchanged.
+
+The two 1,920-observation screens select only Wo 16x16: at full 1024, isolated
+Wo improves 25.20% hot / 29.45% ring24 and whole attention 6.95% / 7.11%.
+The conditional 4,800-observation full matrix repeats about 7% at full 1024
+and qualifies five of thirty cells. Isolated full-16 ring24 Wo regresses
+33.42%; no universal tile replacement follows. Wo 8x32 does not advance.
+
+The conditional 1,920-observation QKV comparison uses the same 16x16 tile
+while keeping Wo at 8x16. Seven of twelve cells qualify, including 7.83% /
+8.99% whole-attention reductions at full 1024. The two new projections have
+not been combined or assigned an automatic selector. Their explicit options
+are `projection_mapping=1` (Wo) and `projection_mapping=3` (QKV), with control
+GQA. Calls below sixteen rows retain the existing rowwise implementations.
+
+The two 480-observation control-only diagnostics do not establish deferred
+printing as a fix for short hot-call variation. The existing split8 domain
+comparison therefore keeps the original timing protocol and its own calibration.
+Its 1,920 observations qualify eleven of twelve cells at R=16/64/256 and
+T=1024/4096. Context-4096 reductions shrink from about 63–69% at R=16 to
+15–16% at R=256, consistent with more unsplit query groups already supplying
+parallel work. Hot (16,1024) remains inconclusive. No exact crossover or
+physical occupancy claim follows.
+
+The [completed report](../studies/attention_sublayer/README.md#projection-tile-ownership)
+retains all 13,440 new observations, numerical validation, source/build/selection
+identity, negative cases and next-step reasoning. The existing plotter
+reproduces 24 tables and 23 figures offline, preserving prior artifacts.
+No new profiler captures, combined mappings or remote publication were added.

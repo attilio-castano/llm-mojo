@@ -1,6 +1,16 @@
 # Qwen attention sublayer
 
-The latest contained experiment divides GQA's KV sequence into eight pieces
+The completed projection-tile study finds more headroom in the already
+integrated attention block. At full 1024 on Apple M4 Pro / Metal, **16x16 Wo
+reduces whole-attention latency by about 7%**, and a separate **16x16 QKV
+comparison reduces it by 8–9%**. These gains were measured one projection at
+a time. The expanded existing split8 comparison qualifies in 11 of 12 cached
+chunk/mode cells; short hot-call timing variation persists after deferring
+sample printing. The [new results](#projection-tile-ownership) retain all
+13,440 observations, negative cases, unchanged numerical gates and reproducible
+figures. The candidates are explicit study options, not an automatic selector.
+
+The preceding GQA parallelism experiment divides the KV sequence into eight pieces
 while keeping packed QKV, Wo and FP32 attention fixed. On Apple M4 Pro / Metal,
 this reduces whole-attention latency by **39.69% hot and 47.96% ring24** for a
 64-token chunk at context 4096, compared with the already integrated block.
@@ -49,6 +59,223 @@ and [FP32 comparison](precision_numerics.json) retain the precision decision,
 independent gates and provenance. The original baseline's measured engine and
 fixtures match its validation hashes; only the runner's per-process timeout
 changed afterward.
+
+## Projection tile ownership
+
+The earlier integration profiles put QKV and Wo together at about 55% of
+active time for full 1024. This experiment keeps the integrated FP32 GQA
+control and changes one projection at a time. It compares the existing 8x16
+Apple MMA mapping with 16x16 and 8x32 output tiles, then transfers only the
+qualifying Wo tile to packed QKV. Every reported reduction is against a fresh
+integrated control from this experiment.
+
+One 32-lane SIMD group computes each tile. The original kernel uses two 8x8
+MMA fragments; each new candidate uses four. All keep the same K-step of eight,
+BF16 inputs/output, FP32 accumulators, and bias-before-output-rounding policy.
+The new mappings add no shared staging, barriers or reduction split.
+
+| Wo tile at R=1024, K=N=896 | SIMD groups | FP32 accumulator values/lane | Requested operand bytes/group/K-step | Total requested operands |
+|---|---:|---:|---:|---:|
+| 8x16 control | 7,168 | 4 | 384 B | 294 MiB |
+| 16x16 | 3,584 | 8 | 512 B | 196 MiB |
+| 8x32 | 3,584 | 8 | 640 B | 245 MiB |
+
+The 16x16 tile shares each weight fragment across twice as many token rows;
+8x32 shares each input fragment across twice as many output features. Thus
+16x16 reduces requested operands per output by one third, and 8x32 by one sixth.
+These counts exclude output/bias and describe source loads before caching;
+they are not measured DRAM traffic. Accumulator counts do not identify physical
+register allocation. No new profiler captures or hardware counters were collected.
+
+### Two measurement boundaries select the tile
+
+Each screen retains 1,920 observations at full 16/64/1024 and chunk (64,4096).
+The isolated instrument supplies exactly the frozen BF16 attention tensor that
+the selected upstream implementation passed to Wo, uses the same engine helper,
+and times only Wo enqueue through completion. The whole-block instrument starts
+at input normalization and ends after residual addition. Both include control
+self-pairs, four paired blocks, ten warmups and ten samples per arm in hot and
+ring24 modes. Ring24 Wo uses distinct weights and one shared frozen input.
+
+The predeclared full-1024 result is:
+
+| Candidate | Isolated Wo hot | Isolated Wo ring24 | Whole attention hot | Whole attention ring24 |
+|---|---:|---:|---:|---:|
+| 16x16 | 25.20% faster | 29.45% faster | 6.95% faster | 7.11% faster |
+| 8x32 | 16.22% reduction, inconclusive | 18.48% faster | 4.22% reduction, inconclusive | 4.54% reduction, inconclusive |
+
+Only 16x16 qualifies at both boundaries in both modes. The 8x32 hot isolated
+result includes a reversed block; its whole-block reductions are below 5%.
+The screen does not justify advancing it. Isolated and composed timings are
+separate paired experiments, so their absolute times need not add up.
+
+Smaller workloads give a useful counterexample: at full 16, isolated ring24 Wo
+is **33.42% slower with 16x16 and 51.25% slower with 8x32**. At chunk (64,4096),
+16x16 improves isolated ring24 Wo by 25.54%, but whole attention by only 1.16%,
+an inconclusive change. Reuse alone does not establish a useful whole-block
+mapping; parallel work and the cost of surrounding stages still matter.
+
+![Whole-attention tile screen](tiles_screen.png)
+![Isolated Wo tile screen](tiles_kernel_screen.png)
+
+### The selected Wo tile across the full matrix
+
+The conditional 4,800-observation comparison uses 16x16 Wo and retains 8x16
+QKV. It finds **five faster and twenty-five inconclusive cells**, with no
+qualifying whole-block regression. Full 256 improves by 7.12% hot / 7.89%
+ring24, and full 1024 by 6.93% / 7.08%. Full 64 gains 7.88% in ring24; its
+hot result is inconclusive. Full 4096 reductions of 3.94% / 4.04% remain below
+the rule's 5% minimum. Neither cached chunk qualifies. Calls below sixteen
+rows retain the same rowwise projection implementation in both arms.
+
+This independently repeats the screen's full-1024 gain. It does not erase
+the isolated small-row regression or justify a universal dispatch threshold.
+Hot short-call calibration deviations reach 168% in this run; all such
+observations remain in the evidence.
+
+![Selected Wo tile across workloads](tiles.png)
+
+### Transfer to packed QKV
+
+The same selected 16x16 tile then changes only QKV; Wo remains 8x16. This tests
+reuse at N=1152 with bias and the existing packed-output copy/consumer handoff.
+The 1,920 observations give seven faster and five inconclusive cells:
+
+| New rows R | Visible positions T | Whole-attention hot reduction | Whole-attention ring24 reduction |
+|---:|---:|---:|---:|
+| 16 | 16 | -7.70%, inconclusive | -4.15%, inconclusive |
+| 64 | 64 | -104.81%, inconclusive | 7.96%, faster |
+| 256 | 256 | 10.37%, faster | 10.79%, faster |
+| 1024 | 1024 | 7.83%, faster | 8.99%, faster |
+| 4096 | 4096 | 5.15%, faster | 5.12%, faster |
+| 64 | 4096 | 1.18%, inconclusive | 1.15%, inconclusive |
+
+Positive values are reductions; negative values are increases. The large
+full-64 hot increase is not a qualifying regression: its matching self-pair
+deviation reaches 228.47%, and the result does not satisfy the four-block rule.
+The full-4096 gains qualify but are only just above the 5% floor. All raw
+observations and ranges are retained.
+
+The projection lesson transfers for medium/long prefill. It is not a claim
+that Wo and QKV gains add or multiply: this experiment never enables both new
+tiles together. The explicit integrated options are `projection_mapping=1`
+for Wo 16x16 and `projection_mapping=3` for QKV 16x16, each with control GQA.
+Mappings 2/4 retain the 8x32 implementations for study; 8x32 QKV passed numerical
+validation but did not advance to a performance comparison. Mapping zero is
+the existing integrated control. None is an automatic workload selector.
+
+![Selected tile transferred to QKV](tiles_qkv.png)
+
+## Short-call timing and the split8 domain
+
+### Deferring sample printing does not resolve the variation
+
+Two separate control-only runs retain 480 observations each at full 16,
+full 64 and chunk (64,1024). One prints after each sample; the other appends
+elapsed values outside the timed region and prints after both arms. Both keep
+the same enqueue-through-completion boundary and synchronizations. The table
+shows the largest absolute deviation of a paired identical-kernel ratio from
+one across four blocks, before applying the 5% decision floor:
+
+| R, T | Original hot | Deferred hot | Original ring24 | Deferred ring24 |
+|---|---:|---:|---:|---:|
+| 16, 16 | 1.79% | 62.06% | 9.74% | 5.25% |
+| 64, 64 | 71.56% | 259.10% | 0.33% | 0.37% |
+| 64, 1024 | 2.02% | 44.77% | 0.09% | 0.17% |
+
+Removing per-sample printing did not eliminate short hot-call variation in
+this diagnostic. The two methods ran separately, so these deviations do not
+prove that deferred output caused a regression, or identify the cause of the
+historical variation. They do reject treating output buffering as an established
+fix. Ring24 is steadier here except for the smallest workload. The split-domain
+comparison therefore retains the original protocol and its own calibration;
+no observations are discarded and no noisy cells are rerun.
+
+![Timing calibration under two emission methods](timing.png)
+
+### Existing split8 across query size and context
+
+This 1,920-observation comparison adds no GQA algorithm. It compares existing
+unsplit BQ32 with existing split8, keeps both projections at the integrated
+control, and includes the merge in whole-attention latency.
+
+| New rows R | Visible positions T | Hot reduction | Ring24 reduction |
+|---:|---:|---:|---:|
+| 16 | 1024 | 43.45%, inconclusive | 54.55%, faster |
+| 16 | 4096 | 62.79%, faster | 68.86%, faster |
+| 64 | 1024 | 23.06%, faster | 31.65%, faster |
+| 64 | 4096 | 39.72%, faster | 47.92%, faster |
+| 256 | 1024 | 6.62%, faster | 7.69%, faster |
+| 256 | 4096 | 14.66%, faster | 16.27%, faster |
+
+Eleven cells qualify; the hot `(16,1024)` cell remains inconclusive with a
+52.91% calibration floor. At `(64,4096)`, the fresh result closely reproduces
+the earlier 39.69% / 47.96% reductions. The earlier hot `(64,1024)` result was
+inconclusive; this run qualifies at 23.06% with its own lower calibration
+floor. Both records remain valid observations of their respective sessions.
+
+For R=16/64/256, unsplit BQ32 launches 14/28/112 primary query groups; split8
+launches 112/224/896 primary groups plus a merge. At a fixed R, longer contexts
+leave more scanning work for each unsplit group. At a fixed T, more query rows
+already provide more groups without splitting. The measured pattern is
+consistent with the parallelism hypothesis: gain is greatest at small R and
+large T, and shrinks as R increases. These are source ownership counts and
+whole-block observations, not measured occupancy or a proof of the limiting
+hardware resource.
+
+The grid supports split8 for the tested long cached chunks. It does not locate
+an exact crossover between these points, cover arbitrary heads/batches, or
+reverse the earlier full-64 regression and inconclusive full-1024/4096 results.
+There is no automatic selector. The existing option remains `gqa_mapping=4`
+with caller-owned `prefill_splits=8` workspace and control projections.
+
+![Split8 domain with integrated projections held fixed](split_domain.png)
+
+### Numerical validation and what to try next
+
+The measured implementation passed **93 Mojo and 45 Python tests**, benchmark
+route smoke checks, all seventeen frozen synthetic cases and three checkpoint
+cases, and twelve asynchronous sequences for each of eighteen configurations.
+Ragged/exact matrix tiles, bias-free output guards, packed QKV bias/layout,
+full/chunked composition, poisoned scratch and 15/16/17-row transitions are
+covered. Frozen arrays and all numerical limits are unchanged; cache checks
+remain exact BF16 comparisons.
+
+The [compact validation record](tiles_validation.json) binds the measured
+source and preserves check counts and maximum scaled errors
+`abs(got-want)/(1+abs(want))`. Across all three Wo mappings, isolated maxima
+are 0.00390625 synthetic and 0.000235239 checkpoint. Across all five composed
+projection choices, maxima are 0.005181347 / 0.001412429 for the projected
+branch and 0.011627907 / 0.001379310 for the final output, respectively.
+All are below the unchanged 0.03125 gate. Isolated QKV maxima are 0.00625
+synthetic and 0.003225807 checkpoint, below 0.0078125. Equal recorded maxima
+across mappings do not establish bitwise equality. The primary reference
+remains the pinned upstream CPU inference policy described above.
+
+The next contained integration question is whether **16x16 QKV and 16x16 Wo
+together** retain their gains at full 256/1024, compared freshly with the
+integrated 8x16 control. That is more directly motivated than another tile
+sweep: both components now have independent numerical and whole-block evidence,
+but their combination is unmeasured. Keep the smaller-row controls and test
+full 4096 separately, where QKV only narrowly qualified and Wo did not.
+
+For cached attention, the split-domain result makes split8 a useful additional
+control for subsequent GQA optimization. Earlier smaller-query-tile losses and
+mixed head-reuse/barrier results still apply; another candidate needs a specific
+change to work ownership or live state and must beat the stronger split control
+in its useful domain. More splitting is not implied by this result.
+
+Before using short hot-call measurements to set a dispatch threshold, a bounded
+follow-up should distinguish changes between arms from variation within an arm.
+At full 64, the original diagnostic's arm medians span 376–1322 microseconds
+while its worst within-arm relative median absolute deviation is only 2.99%;
+with deferred output these are 365.5–1312.5 microseconds and 1.09%. More samples
+within one stable arm alone may not resolve this. A predeclared interleaved-arm
+and host-versus-device timing diagnostic would address that question. The
+current data does not identify clock, scheduling or host overhead as the cause.
+
+These are proposed next experiments. The completed budget ends here: no
+combined new projection mapping, new GQA kernel or dispatch rule was introduced.
 
 ## GQA parallelism on the integrated block
 
@@ -907,9 +1134,9 @@ bottleneck. KV splitting retained the larger tile and improved this chunk
 even after partial writes and merge. The earlier decode work supplied a useful
 ownership idea, while the new whole-block measurements established its scope.
 
-There are now two useful directions for later contained work. For full 1024,
+Those profiles motivated the completed projection-tile and split-domain follow-up above. For full 1024,
 QKV and Wo together still consume about 55% of active time. Their shared 8x16
-linear MMA mapping is a concrete target for operand reuse and tile ownership.
+linear MMA mapping supplied the operand-reuse and tile-ownership target.
 For the long cached chunk, split GQA plus merge still consumes about 76% of
 active time; a later GQA study should use split8 as an additional control and
 explain which live state or data movement it reduces. Full 4096 already has
@@ -1045,6 +1272,43 @@ changes do not alter the measured kernels or numerical gates. All **17 tables
 and 17 figures** regenerate offline from compact evidence, preserving every
 previous table and figure byte-for-byte. Full traces/XML, binaries, checkpoint
 assets and generated arrays remain outside Git.
+
+The projection-tile and split-domain follow-up uses clean source
+`5c7ca774c68910934e54624e3194e1fa4a734a7e`, with a single validated build on the
+same Apple M4 Pro / Metal and software versions listed above. All seven runs
+were completed on **2026-09-07 UTC**:
+
+| Comparison | UTC interval | Observations | Retained evidence |
+|---|---|---:|---|
+| Whole-attention Wo screen | 03:33:42–03:35:51 | 1,920 | [record](tiles_screen_run.json), [samples](tiles_screen_samples.csv.gz), [table](tiles_screen_summary.csv) |
+| Isolated Wo screen | 03:35:51–03:36:59 | 1,920 | [record](tiles_kernel_screen_run.json), [samples](tiles_kernel_screen_samples.csv.gz), [table](tiles_kernel_screen_summary.csv) |
+| Selected Wo full matrix | 03:37:00–03:44:42 | 4,800 | [record](tiles_run.json), [samples](tiles_samples.csv.gz), [table](tiles_summary.csv) |
+| Selected tile in QKV | 03:44:42–03:51:18 | 1,920 | [record](tiles_qkv_run.json), [samples](tiles_qkv_samples.csv.gz), [table](tiles_qkv_summary.csv) |
+| Original control-only timing | 03:51:19–03:51:34 | 480 | [record](timing_run.json), [samples](timing_samples.csv.gz), [table](timing_summary.csv) |
+| Deferred control-only timing | 03:51:34–03:51:49 | 480 | [record](timing_buffered_run.json), [samples](timing_buffered_samples.csv.gz), [table](timing_buffered_summary.csv) |
+| Existing split8 domain | 03:51:50–03:53:53 | 1,920 | [record](split_domain_run.json), [samples](split_domain_samples.csv.gz), [table](split_domain_summary.csv) |
+
+Both conditional projection runs bind the hashes of both complete screens and
+record the sole finalist, Wo 16x16. Every runtime identifies Metal and the
+expected measurement boundary. The same fixed seed, immutable prefix,
+hot/ring24 definitions and four-block pairing apply; the isolated Wo and
+sample-emission differences are declared in their specifications. All blocks
+recorded AC power, Low Power Mode off and no reported thermal/performance
+warning. Short-call variation remains despite these condition checks.
+
+[tiles_validation.json](tiles_validation.json) records the complete 93-Mojo /
+45-Python validation, unchanged frozen synthetic/checkpoint arrays, asynchronous
+stress checks and source hashes. Post-measurement Python checks validate all
+**77,920 retained latency observations across the repository**, including the
+13,440 new observations, both screen hashes, conditional selection, measurement
+boundaries and validation/build identity. No new profile durations are claimed.
+
+All **24 tables and 23 figures** in this attention study regenerate byte-for-byte
+offline, including the prior seventeen tables and seventeen figures. Reporting
+changes after measurement update explanations, evidence checks and timing-plot
+tick labels; they do not alter the measured kernels, benchmark or numerical
+gates. Full logs, binaries, checkpoint assets and generated arrays stay outside
+Git. The approved candidate budget is complete; commits remain local.
 
 Rebuild tables and figures without a GPU:
 

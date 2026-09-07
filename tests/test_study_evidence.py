@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from llm_mojo.benchmarks import run as runner
-from llm_mojo.benchmarks.study import load_run, load_profile, select_parallelism_finalists, sha, write_json
+from llm_mojo.benchmarks.study import load_run, load_profile, select_parallelism_finalists, select_projection_tile, sha, write_json
 from llm_mojo.benchmarks import attention_prefill_contract as prefill
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -76,7 +76,7 @@ class EvidenceTests(unittest.TestCase):
             for record in directory.glob('*run.json'):
                 _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
-        self.assertEqual(count, 64480)
+        self.assertEqual(count, 77920)
         profile = load_profile(ROOT / 'studies/gqa_decode')
         self.assertEqual(sum(row['count'] for row in profile), 3000)
         profile = load_profile(ROOT / 'studies/gqa_prefill')
@@ -156,6 +156,55 @@ class EvidenceTests(unittest.TestCase):
         for capture in parallelism['captures']:
             self.assertEqual(capture['counter_analysis']['status'], 'not_analyzed')
             self.assertEqual(capture['counters'], [])
+        tile_screen, _, block_summary = load_run(directory, 'tiles_screen_')
+        kernel_screen, _, kernel_summary = load_run(directory, 'tiles_kernel_screen_')
+        winner = select_projection_tile(block_summary, kernel_summary)
+        self.assertEqual(winner, 14)
+        validation = json.loads((directory / 'tiles_validation.json').read_text())
+        cases = [('tiles_screen_', 1920, 'whole_attention', [9,14,15]),
+                 ('tiles_kernel_screen_', 1920, 'isolated_wo', [9,14,15]),
+                 ('timing_', 480, 'whole_attention', [9]),
+                 ('timing_buffered_', 480, 'whole_attention_buffered', [9]),
+                 ('split_domain_', 1920, 'whole_attention', [9,13])]
+        for prefix, variant, size in (('tiles_',winner,4800),
+                                      ('tiles_qkv_',None if winner is None else winner+2,1920)):
+            self.assertEqual((directory / (prefix+'run.json')).exists(), winner is not None)
+            if winner is not None:
+                cases.append((prefix,size,'whole_attention',[9,variant]))
+                record,_,_ = load_run(directory,prefix)
+                self.assertEqual(record['selection']['wo_finalist'],winner)
+                self.assertEqual(record['selection']['variant'],variant)
+                for selection, screen_prefix in zip(record['selection']['screens'],
+                                                     ('tiles_screen_','tiles_kernel_screen_')):
+                    screen,_,_ = load_run(directory,screen_prefix)
+                    self.assertEqual(selection['study'],screen['study'])
+                    self.assertEqual(selection['run_sha256'],sha(directory / (screen_prefix+'run.json')))
+                    self.assertEqual(selection['samples_sha256'],screen['samples_sha256'])
+                self.assertEqual(len(record['selection']['screens']),2)
+        for prefix,size,measurement,variants in cases:
+            record,samples,_ = load_run(directory,prefix)
+            self.assertEqual(len(samples),size)
+            self.assertEqual(record['build'],tile_screen['build'])
+            self.assertEqual(record['repository']['commit'],validation['source_commit'])
+            self.assertEqual(record['specification']['control'],9)
+            self.assertEqual(record['specification']['candidates'],variants)
+            self.assertEqual(record['specification']['measurement'],measurement)
+            self.assertEqual(record['runtime']['measurement'],measurement)
+            for name,digest in validation['source_sha256'].items():
+                if name in record['build']['sources']:
+                    self.assertEqual(digest,record['build']['sources'][name])
+        self.assertTrue(all(c['returncode']==0 and c['sources_unchanged'] for c in validation['commands']))
+        self.assertEqual(validation['tests']['mojo'],93)
+        self.assertEqual(validation['tests']['asynchronous_configurations'],18)
+        self.assertEqual(validation['tests']['asynchronous_sequences_per_configuration'],12)
+        for dataset in validation['numerics'].values():
+            for family, mappings in dataset.items():
+                gate = validation['limits']['isolated_qkv' if family=='isolated_qkv' else 'isolated_wo_and_composed']
+                self.assertEqual(set(mappings),set(map(str,range(5 if family=='composition' else 3))))
+                for fields in mappings.values():
+                    for value in fields.values():
+                        self.assertGreater(value['checks'],0)
+                        self.assertLessEqual(value['maximum_scaled_error'],gate)
         record = json.loads((ROOT / 'studies/attention_sublayer/profiles.json').read_text())
         full = next(c for c in record['captures'] if c['query_rows'] == 4096)
         self.assertEqual(full['counter_analysis']['status'], 'not_analyzed')
