@@ -137,6 +137,12 @@ command reproduces the retained seed-887 failures. Checkpoint-derived
 first-layer checks are an explicit separate workflow and do not make ordinary
 validation download a model.
 
+The [MLP reference contract](mlp-sublayer.md) adds upstream development captures,
+independent FP64 diagnostics, and a finite BF16 SiLU sweep. Validation runs its
+fixture-tooling tests and verifies synthetic frozen evidence. Checkpoint
+reproduction uses an explicit local-asset argument; holdout outputs remain
+unopened. This prepares a numerical target, not a Mojo MLP implementation.
+
 Use `--prepare-only` to generate fixtures without running tests. For an individual
 Mojo suite, include `-I src -I build -I tests`. Generators and the
 small checksum record are versioned; large generated arrays and manifests are

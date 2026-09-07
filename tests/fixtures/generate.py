@@ -19,7 +19,8 @@ def main():
     generators = {name: f"{name}/generate.py" for name in defaults}
     generators.update(attention_sublayer="attention_sublayer/generate.py",
                       attention_precision="attention_sublayer/precision.py",
-                      attention_checkpoint="attention_sublayer/checkpoint.py")
+                      attention_checkpoint="attention_sublayer/checkpoint.py",
+                      mlp="mlp/generate.py")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operations", nargs="*", help="Oracle names; defaults to the four standalone operations.")
     # Arguments after -- belong to one explicitly selected generator. This keeps

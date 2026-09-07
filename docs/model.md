@@ -250,6 +250,14 @@ V0 defines no separate reasoning channel or thinking-mode protocol. Any
 rationale the model emits is ordinary assistant-token output and follows the
 same autoregressive path as any other response.
 
+### MLP sublayer specification
+
+The [MLP numerical contract and upstream fixture specification](mlp-sublayer.md)
+defines post-attention RMSNorm, SwiGLU, and the second residual boundary.
+The CPU upstream development fixtures and initial numerical budgets are
+characterized and frozen there. A Mojo MLP baseline and its holdout validation
+remain the next implementation milestone.
+
 ## Conversation semantics
 
 The model is stateless. A session consists of the canonical token history,
