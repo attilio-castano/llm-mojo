@@ -1,8 +1,3 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.12,<3.13"
-# dependencies = ["numpy==1.26.4", "torch==2.4.0", "transformers==4.43.1"]
-# ///
 """Pinned Qwen compatibility fixtures plus an independent numerical diagnostic.
 
 No checkpoint downloads. All arrays remain in ignored build/oracle_data/.

@@ -45,6 +45,32 @@ FIXTURES += [f'upstream_7_{name}.npy' for name in
 FIXTURES += [f'fp32_7_{name}.npy' for name in ('projected', 'output', 'attention')]
 
 
+# Stable IDs retain their historical meaning. Profile collection and smoke use
+# this registry; the Mojo launch path independently checks what actually ran.
+PROFILE_COMPARISONS = {
+    'baseline': ([3], PROFILE_WORKLOADS),
+    'wo': ([3,4], PROFILE_WORKLOADS),
+    'decode': ([3,5,6], DECODE_PROFILE_WORKLOADS),
+    'prefill': ([4,7], PREFILL_PROFILE_WORKLOADS),
+    'projections': ([8,9], PROFILE_WORKLOADS),
+    'combined': ([9,18], COMBINED_PROFILE_WORKLOADS),
+}
+PROFILE_CONTROLS = {**{v:3 for v in (3,4,5,6)}, 7:4, 8:8, 9:8,
+                    **{v:9 for v in range(10,19)}, 19:13}
+
+
+def profile_comparison(name, variants=None):
+    if name == 'parallelism':
+        spec = dict(variants=variants or [], workloads=PARALLELISM_PROFILE_WORKLOADS)
+    else:
+        if variants is not None:
+            raise ValueError('explicit variants require the parallelism comparison')
+        selected, grid = PROFILE_COMPARISONS[name]
+        spec = dict(variants=list(selected), workloads=list(grid))
+    profile_grid(spec)
+    return spec
+
+
 def fixture_identity():
     root = repository_root()
     frozen = json.loads((root / 'tests/fixtures/attention_sublayer/precision_checksums.json').read_text())

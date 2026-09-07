@@ -9,13 +9,44 @@ import unittest
 from unittest.mock import patch
 
 from llm_mojo.benchmarks import run as runner
-from llm_mojo.benchmarks.study import load_run, load_profile, select_parallelism_finalists, select_projection_tile, sha, write_json
+from llm_mojo.benchmarks.study import load_run, load_profile, evidence_directory, load_numerical_record, select_parallelism_finalists, select_projection_tile, sha, write_json
 from llm_mojo.benchmarks import attention_prefill_contract as prefill
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_compact_numerical_records_preserve_original_and_reject_corruption(self):
+        directory = ROOT / 'studies/attention_sublayer/data'
+        for name in ('decode_validation', 'prefill_validation', 'wo_validation', 'precision_numerics'):
+            path = directory / (name + '.json')
+            summary = json.loads(path.read_text())
+            record = load_numerical_record(path)
+            self.assertTrue(record)
+            for key, value in summary['metadata'].items():
+                self.assertEqual(record[key], value)
+            for dotted, count in summary['list_lengths'].items():
+                value = record
+                for key in dotted.split('.'):
+                    value = value[key]
+                self.assertEqual(len(value), count)
+        path = directory / 'prefill_validation.json'
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = Path(tmp) / path.name
+            destination.write_bytes(path.read_bytes())
+            with self.assertRaises(FileNotFoundError):
+                load_numerical_record(destination)
+            summary = json.loads(path.read_text())
+            raw = Path(tmp) / summary['record']
+            raw.write_bytes((directory / summary['record']).read_bytes() + b'changed')
+            with self.assertRaisesRegex(ValueError, 'compressed'):
+                load_numerical_record(destination)
+            raw.write_bytes((directory / summary['record']).read_bytes())
+            summary['uncompressed_sha256'] = '0' * 64
+            write_json(destination, summary)
+            with self.assertRaisesRegex(ValueError, 'original'):
+                load_numerical_record(destination)
+
     def test_prefill_profiles_require_each_shape_and_exact_dispatch_sequence(self):
         for variants,prefix in (([0,8],''),([8,12],'resources_'),([8,11,12],'resources_')):
             with self.subTest(variants=variants):
@@ -71,7 +102,7 @@ class EvidenceTests(unittest.TestCase):
                         load_profile(directory,prefix)
 
     def test_split_combined_evidence_binds_both_comparisons_to_validated_source(self):
-        directory=ROOT / 'studies/attention_sublayer'
+        directory=ROOT / 'studies/attention_sublayer/data'
         validation=json.loads((directory/'split_combined_validation.json').read_text())
         builds=[]
         expected=[(16,256),*[(r,t) for r in (16,64,256) for t in (1024,4096)]]
@@ -106,7 +137,7 @@ class EvidenceTests(unittest.TestCase):
     def test_retained_studies_are_complete(self):
         count = 0
         for directory in (ROOT / 'studies').glob('*/'):
-            for record in directory.glob('*run.json'):
+            for record in evidence_directory(directory).glob('*run.json'):
                 _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
         self.assertEqual(count, 87200)
@@ -116,40 +147,40 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(sum(row['count'] for row in profile), 4800)
         profile = load_profile(ROOT / 'studies/gqa_prefill','resources_')
         self.assertEqual(sum(row['count'] for row in profile), 2400)
-        profile = load_profile(ROOT / 'studies/attention_sublayer')
+        profile = load_profile(ROOT / 'studies/attention_sublayer/data')
         self.assertEqual(sum(row['count'] for row in profile), 1920)
-        profile = load_profile(ROOT / 'studies/attention_sublayer', 'wo_')
+        profile = load_profile(ROOT / 'studies/attention_sublayer/data', 'wo_')
         self.assertEqual(sum(row['count'] for row in profile), 1200)
-        wo = json.loads((ROOT / 'studies/attention_sublayer/wo_profiles.json').read_text())
-        run = json.loads((ROOT / 'studies/attention_sublayer/wo_run.json').read_text())
+        wo = json.loads((ROOT / 'studies/attention_sublayer/data/wo_profiles.json').read_text())
+        run = json.loads((ROOT / 'studies/attention_sublayer/data/wo_run.json').read_text())
         self.assertEqual(wo['common']['repository'], run['repository'])
         self.assertEqual(wo['common']['source_sha256'], run['build']['sources'])
         for capture in wo['captures']:
             self.assertEqual(capture['counter_analysis']['status'], 'not_analyzed')
             self.assertEqual(capture['counters'], [])
-        profile = load_profile(ROOT / 'studies/attention_sublayer', 'decode_')
+        profile = load_profile(ROOT / 'studies/attention_sublayer/data', 'decode_')
         self.assertEqual(sum(row['count'] for row in profile), 3300)
-        decode = json.loads((ROOT / 'studies/attention_sublayer/decode_profiles.json').read_text())
-        run = json.loads((ROOT / 'studies/attention_sublayer/decode_run.json').read_text())
+        decode = json.loads((ROOT / 'studies/attention_sublayer/data/decode_profiles.json').read_text())
+        run = json.loads((ROOT / 'studies/attention_sublayer/data/decode_run.json').read_text())
         self.assertEqual(decode['common']['repository'], run['repository'])
         self.assertEqual(decode['common']['source_sha256'], run['build']['sources'])
-        profile = load_profile(ROOT / 'studies/attention_sublayer', 'prefill_')
+        profile = load_profile(ROOT / 'studies/attention_sublayer/data', 'prefill_')
         self.assertEqual(sum(row['count'] for row in profile), 1320)
-        prefill_record = json.loads((ROOT / 'studies/attention_sublayer/prefill_profiles.json').read_text())
-        run = json.loads((ROOT / 'studies/attention_sublayer/prefill_run.json').read_text())
-        validation = json.loads((ROOT / 'studies/attention_sublayer/prefill_validation.json').read_text())
+        prefill_record = json.loads((ROOT / 'studies/attention_sublayer/data/prefill_profiles.json').read_text())
+        run = json.loads((ROOT / 'studies/attention_sublayer/data/prefill_run.json').read_text())
+        validation = load_numerical_record(ROOT / 'studies/attention_sublayer/data/prefill_validation.json')
         self.assertEqual(prefill_record['common']['repository'], run['repository'])
         self.assertEqual(prefill_record['common']['source_sha256'], run['build']['sources'])
         self.assertEqual(validation['source_commit'], run['repository']['commit'])
         for name, digest in validation['source_sha256'].items():
             if name in run['build']['sources']:
                 self.assertEqual(digest, run['build']['sources'][name])
-        profile = load_profile(ROOT / 'studies/attention_sublayer', 'integrated_')
+        profile = load_profile(ROOT / 'studies/attention_sublayer/data', 'integrated_')
         self.assertEqual(sum(row['count'] for row in profile), 2090)
-        integrated = json.loads((ROOT / 'studies/attention_sublayer/integrated_profiles.json').read_text())
-        validation = json.loads((ROOT / 'studies/attention_sublayer/integrated_validation.json').read_text())
+        integrated = json.loads((ROOT / 'studies/attention_sublayer/data/integrated_profiles.json').read_text())
+        validation = json.loads((ROOT / 'studies/attention_sublayer/data/integrated_validation.json').read_text())
         for prefix,control in (('projections_',8),('integrated_',3)):
-            run,samples,_ = load_run(ROOT / 'studies/attention_sublayer',prefix)
+            run,samples,_ = load_run(ROOT / 'studies/attention_sublayer/data',prefix)
             self.assertEqual(len(samples),4800)
             self.assertEqual(run['specification']['control'],control)
             self.assertEqual(integrated['common']['repository'],run['repository'])
@@ -161,7 +192,7 @@ class EvidenceTests(unittest.TestCase):
         for capture in integrated['captures']:
             self.assertEqual(capture['counter_analysis']['status'],'not_analyzed')
             self.assertEqual(capture['counters'],[])
-        directory = ROOT / 'studies/attention_sublayer'
+        directory = ROOT / 'studies/attention_sublayer/data'
         screen, samples, summary = load_run(directory, 'parallelism_screen_')
         self.assertEqual(len(samples), 2400)
         finalists = select_parallelism_finalists(summary)
@@ -266,7 +297,7 @@ class EvidenceTests(unittest.TestCase):
                 for value in fields.values():
                     self.assertGreater(value['checks'],0)
                     self.assertLessEqual(value['maximum_scaled_error'],validation['limits']['projected_and_final'])
-        record = json.loads((ROOT / 'studies/attention_sublayer/profiles.json').read_text())
+        record = json.loads((ROOT / 'studies/attention_sublayer/data/profiles.json').read_text())
         full = next(c for c in record['captures'] if c['query_rows'] == 4096)
         self.assertEqual(full['counter_analysis']['status'], 'not_analyzed')
         self.assertEqual(full['counters'], [])
@@ -281,7 +312,7 @@ class EvidenceTests(unittest.TestCase):
                                       ('attention_sublayer', 'integrated_', 76),
                                       ('attention_sublayer', 'parallelism_', 38),
                                       ('attention_sublayer', 'combined_', 72)):
-            source = ROOT / 'studies' / topic
+            source = evidence_directory(ROOT / 'studies' / topic)
             with self.subTest(topic=topic, prefix=prefix), tempfile.TemporaryDirectory() as tmp:
                 directory = Path(tmp)
                 record = json.loads((source / (prefix+'profiles.json')).read_text())

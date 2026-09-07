@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
-from .._repository import repository_root
+from .._repository import environment_tool, repository_root
 from .attention_decode_contract import VARIANTS
 from . import attention_prefill_contract as prefill
 from . import attention_sublayer_contract as sublayer
@@ -70,10 +70,7 @@ def build_profile(args):
     fixtures = sublayer.fixture_identity() if is_sublayer else None
     binary.parent.mkdir(parents=True, exist_ok=True)
     command = [
-        "uv",
-        "run",
-        "--locked",
-        "mojo",
+        environment_tool("mojo"),
         "build",
         "-I",
         "src",
@@ -125,7 +122,7 @@ def build_profile(args):
         **workload,
         "source_sha256": sources,
         "binary": {"bytes": binary.stat().st_size, "sha256": sha(binary)},
-        "command": command[:-1] + ["<external-profile-binary>"],
+        "command": ["mojo", *command[1:-1], "<external-profile-binary>"],
     }
     if is_sublayer:
         record['attention_fixtures'] = fixtures

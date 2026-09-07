@@ -1,15 +1,17 @@
 """Exercise every maintained measurement route, output gate, and invalid selector."""
+from .attention_sublayer_contract import PROFILE_CONTROLS
+
 import os
 import subprocess
 
-from .._repository import repository_root
+from .._repository import environment_tool, repository_root
 from .attention_prefill_contract import VARIANTS as PREFILL_VARIANTS
 
 
 def main():
     target = repository_root() / 'build/operations-smoke'
     target.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(['uv', 'run', '--locked', 'mojo', 'build', '-I', 'src',
+    subprocess.run([environment_tool('mojo'), 'build', '-I', 'src',
                     'src/llm_mojo/benchmarks/operations.mojo', '-o', str(target)], cwd=repository_root(), check=True)
     env = {**os.environ, 'MODULAR_DEBUG': 'device-sync-mode'}
     for operation, variants in [('linear', range(7)), ('rms_norm', range(2)), ('rope', range(1))]:
@@ -28,7 +30,7 @@ def main():
             raise RuntimeError('invalid route accepted')
         print(operation, 'all measurement routes passed', flush=True)
     target = repository_root() / 'build/prefill-smoke'
-    subprocess.run(['uv','run','--locked','mojo','build','-I','src',
+    subprocess.run([environment_tool('mojo'),'build','-I','src',
                     'src/llm_mojo/benchmarks/attention_prefill.mojo','-o',str(target)],
                    cwd=repository_root(),check=True)
     for variant in PREFILL_VARIANTS:
@@ -47,13 +49,13 @@ def main():
             raise RuntimeError('invalid prefill benchmark accepted')
     print('prefill all',len(PREFILL_VARIANTS),'measurement routes passed in both modes',flush=True)
     target = repository_root() / 'build/attention-sublayer-smoke'
-    subprocess.run(['uv','run','--locked','mojo','build','-I','src',
+    subprocess.run([environment_tool('mojo'),'build','-I','src',
                     'src/llm_mojo/benchmarks/attention_sublayer.mojo','-o',str(target)],
                    cwd=repository_root(),check=True)
     for r,t in ((1,64),(7,33),(33,33)):
         for layers in (1,24):
             for variant in ((3,4,5,6,8,9,10,11,12,13,14,15,16,17,18,19) if r == 1 else (3,4,7,8,9,10,11,12,13,14,15,16,17,18,19)):
-                control = 13 if variant == 19 else (9 if variant >= 10 else (8 if variant >= 8 else (4 if variant == 7 else 3)))
+                control = PROFILE_CONTROLS[variant]
                 result = subprocess.run(list(map(str,[target,r,t,layers,variant,control,1,53,'bench',1,0])),
                                         cwd=repository_root(),text=True,capture_output=True,env=env,check=True)
                 if (f'query rows: {r}' not in result.stdout or

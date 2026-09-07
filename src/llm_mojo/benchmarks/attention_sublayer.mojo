@@ -83,21 +83,70 @@ def _check_cache(mut cache: DeviceBuffer[DType.bfloat16],
                     raise Error("benchmark cache append changed a source bit")
 
 
+# Benchmark IDs are historical experiment identities, not engine route IDs.
+# Decode falls back inside the engine; projection mappings keep the same GQA.
+@always_inline
+def _gqa_mapping(variant: Int) -> Int:
+    if variant == 19:
+        return 4
+    if 9 <= variant <= 13:
+        return variant - 9
+    return 0
+
+
+@always_inline
+def _projection_mapping(variant: Int) -> Int:
+    if variant == 19:
+        return 5
+    return variant - 13 if variant >= 14 else 0
+
+
+@always_inline
+def _route(variant: Int) -> Int:
+    if variant >= 9:
+        return 6 + _gqa_mapping(variant)
+    if variant == 8:
+        return 6
+    return variant - 1 if variant >= 5 else 3
+
+
+def _profile_control(variant: Int) -> Int:
+    if variant == 19:
+        return 13
+    if variant >= 10:
+        return 9
+    if variant >= 8:
+        return 8
+    return 4 if variant == 7 else 3
+
+
+def _splits(variant: Int) -> Int:
+    var mapping = _gqa_mapping(variant)
+    if mapping == 4:
+        return 8
+    return 4 if mapping == 3 else 1
+
+
+def _dispatches(variant: Int, rows: Int) -> Int:
+    if variant >= 9:
+        return 10 if _splits(variant) > 1 and rows > 1 else 9
+    if variant == 5 or variant == 7 or variant == 8:
+        return 10
+    return 11 if variant == 6 else 12
+
+
 def _enqueue(ctx: DeviceContext, mut weights: AttentionWeights,
              mut cache: AttentionCache, mut work: AttentionWorkspace,
              mut input: DeviceBuffer[DType.bfloat16], r: Int, t: Int,
              variant: Int) raises:
     # Repeat a fixed suffix on the same stream. No prefix upload or reset sync.
     cache.length = t - r
-    var route = 10 if variant == 19 else (6 if variant >= 14 else (variant - 3 if variant >= 9 else (6 if variant == 8 else (variant - 1 if variant >= 5 else 3))))
+    var route = _route(variant)
     var launched: Int
     var view = TileTensor(input, row_major(r, 896))
-    if variant == 19:
-        launched = enqueue_attention_sublayer_integrated(ctx, weights, cache, work, view, 4, 5)
-    elif variant >= 14:
-        launched = enqueue_attention_sublayer_integrated(ctx, weights, cache, work, view, 0, variant - 13)
-    elif variant >= 9:
-        launched = enqueue_attention_sublayer_integrated(ctx, weights, cache, work, view, variant - 9)
+    if variant >= 9:
+        launched = enqueue_attention_sublayer_integrated(
+            ctx, weights, cache, work, view, _gqa_mapping(variant), _projection_mapping(variant))
     else:
         launched = enqueue_attention_sublayer(
             ctx, weights, cache, work, view,
@@ -113,7 +162,7 @@ def main() raises:
         args = ["profile", String(get_defined_int["GQA_PROFILE_QUERY_ROWS"]()),
                 String(get_defined_int["GQA_PROFILE_ROWS"]()), "1",
                 String(get_defined_int["GQA_PROFILE_VARIANT"]()),
-                "13" if get_defined_int["GQA_PROFILE_VARIANT"]() == 19 else ("9" if get_defined_int["GQA_PROFILE_VARIANT"]() >= 10 else ("8" if get_defined_int["GQA_PROFILE_VARIANT"]() >= 8 else ("4" if get_defined_int["GQA_PROFILE_VARIANT"]() == 7 else "3"))), "1", "53",
+                String(_profile_control(get_defined_int["GQA_PROFILE_VARIANT"]())), "1", "53",
                 "profile", String(get_defined_int["GQA_PROFILE_ITERATIONS"]()),
                 String(get_defined_int["GQA_PROFILE_WARMUP", default=10]())]
     else:
@@ -131,7 +180,7 @@ def main() raises:
     var mode = args[8]
     var repetitions = Int(args[9])
     var warmup = Int(args[10])
-    var dispatches = (10 if (candidate == 12 or candidate == 13 or candidate == 19) and r > 1 else 9) if candidate >= 9 else (10 if candidate == 5 or candidate == 7 or candidate == 8 else (11 if candidate == 6 else 12))
+    var dispatches = _dispatches(candidate, r)
     var valid_pair = ((control == 3 and (3 <= candidate <= 6 or candidate == 9))
                       or (control == 4 and (candidate == 4 or candidate == 7))
                       or (control == 8 and (candidate == 8 or candidate == 9))
@@ -159,7 +208,7 @@ def main() raises:
     print("shape:", t, layers, "seed:", seed)
     print("variants:", control, candidate, "candidate-first:", first)
     var work = AttentionWorkspace(ctx, r, t, fp32_materialized=control <= 4 or candidate <= 4,
-                                  prefill_splits=8 if candidate == 13 or candidate == 19 or control == 13 else (4 if candidate == 12 else 1))
+                                  prefill_splits=max(_splits(candidate), _splits(control)))
     _load(work.cosine, "upstream_7_cosine", t * 64)
     _load(work.sine, "upstream_7_sine", t * 64)
     var weights = List[AttentionWeights]()
@@ -199,7 +248,7 @@ def main() raises:
         for layer in range(layers):
             for variant in [control, candidate]:
                 _enqueue_attention_wo(ctx, weights[layer], work, r, True,
-                                      variant - 13 if variant >= 14 else 0)
+                                      _projection_mapping(variant))
                 _check(work.projected, "fp32_7_projected", r * 896, (t - r) * 896,
                        Float32(-1 if layer % 2 else 1))
     ctx.synchronize()
@@ -238,7 +287,7 @@ def main() raises:
             for layer in range(layers):
                 if mode == "wo":
                     _enqueue_attention_wo(ctx, weights[layer], work, r, True,
-                                          variant - 13 if variant >= 14 else 0)
+                                          _projection_mapping(variant))
                 else:
                     _enqueue(ctx, weights[layer], caches[layer], work, inputs[layer], r, t, variant)
             ctx.synchronize()

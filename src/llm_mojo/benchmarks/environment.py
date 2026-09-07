@@ -8,7 +8,7 @@ from pathlib import Path
 from datetime import UTC, datetime
 from typing import Any
 
-from .._repository import repository_root
+from .._repository import environment_tool, repository_root
 
 def command(*args: str) -> str:
     result = subprocess.run(
@@ -127,13 +127,10 @@ def stable_environment() -> dict[str, Any]:
             ),
             "logical_cpu_count": optional_command("sysctl", "-n", "hw.ncpu"),
             "gpu_api": optional_command(
-                "uv", "run", "--locked", "gpu-query", "--api"
+                environment_tool("gpu-query"), "--api"
             ),
             "gpu_target": optional_command(
-                "uv",
-                "run",
-                "--locked",
-                "gpu-query",
+                environment_tool("gpu-query"),
                 "--target-accelerator",
             ),
             "physical_memory_bytes": memory()["physical_bytes"],

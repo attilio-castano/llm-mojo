@@ -83,8 +83,8 @@ Python and resolves the locked Mojo and MAX toolchain.
 
 ```bash
 uv sync --locked
-uv run --locked mojo --version
-uv run --locked python -m llm_mojo.validate
+uv run mojo --version
+uv run --locked llm-mojo-validate
 ```
 
 See [docs/development.md](docs/development.md) for prerequisites and the

@@ -18,6 +18,11 @@ from .._repository import repository_root
 COLORS = ['#6b7280', '#167d9a', '#c75b39', '#8064a2', '#579059']
 
 
+def figure_directory(directory):
+    figures = directory.parent / 'figures'
+    return figures if directory.name == 'data' and figures.is_dir() else directory
+
+
 def table(directory, name, rows):
     with (directory / name).open('w', newline='') as stream:
         writer = csv.DictWriter(stream, fieldnames=list(rows[0]), lineterminator='\n')
@@ -62,7 +67,7 @@ def prefill_screen(directory, record, samples, summary, prefix='screen_', resour
              'Each cell uses its own paired control. First row is self-pair calibration; colors are centered on equal time.\n'
              f'Source {record["repository"]["commit"][:7]}. Exact ratios, block ranges and decisions: {prefix}summary.csv.',fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.12,1,.88))
-    fig.savefig(directory/(prefix.rstrip('_')+'.png'),dpi=160)
+    fig.savefig(figure_directory(directory)/(prefix.rstrip('_')+'.png'),dpi=160)
     plt.close(fig)
 
 
@@ -104,7 +109,7 @@ def prefill_comparisons(directory, record, samples, summary, prefix='', resource
              'A gain needs all blocks faster and a median reduction exceeding both 5% and the matching control self-pair deviation.\n'
              f'{len(samples):,} observations · {record["runtime"]["device"]} / Metal / BF16 · source {record["repository"]["commit"][:7]}.',fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.12,1,.91))
-    fig.savefig(directory/(prefix+'comparisons.png'),dpi=160)
+    fig.savefig(figure_directory(directory)/(prefix+'comparisons.png'),dpi=160)
     plt.close(fig)
 
 
@@ -149,7 +154,7 @@ def render_prefill(directory, record, samples, summary):
              'Enqueue through completion; allocation, checks and compilation excluded. Ring24 uses distinct Q/K/V and reuses O/scratch.\n'
              'Absolute curves do not establish paired gains; see comparisons.png and summary.csv. This is not model throughput.',fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.115,1,.91))
-    fig.savefig(directory/'latency.png',dpi=160)
+    fig.savefig(figure_directory(directory)/'latency.png',dpi=160)
     plt.close(fig)
 
     prefill_comparisons(directory,record,samples,summary)
@@ -178,7 +183,7 @@ def render_prefill(directory, record, samples, summary):
                  'Preempted segments are joined by dispatch identity; durations exclude preemption gaps and host gaps.\n'
                  f'{sum(s["count"] for s in rows):,} target dispatch durations retained; see profiles.json and profile_summary.csv.',fontsize=9,color='#555555')
         fig.tight_layout(rect=(0,.2,1,.9))
-        fig.savefig(directory/'profile.png',dpi=160)
+        fig.savefig(figure_directory(directory)/'profile.png',dpi=160)
         plt.close(fig)
     if (directory/'resources_screen_run.json').exists():
         resource_record,resource_samples,resource_summary=load_run(directory,'resources_screen_')
@@ -230,7 +235,7 @@ def render_sublayer_wo(directory, prefix, *, fp32_prefill=False, integration=Fal
              f'{len(samples):,} retained observations · {record["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention.\n'
              f'Source {record["repository"]["commit"][:7]}. Fixed cache prefix; allocation and correctness checks excluded.',fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.18,1,.94))
-    fig.savefig(directory/(prefix.rstrip('_')+'.png'),dpi=160)
+    fig.savefig(figure_directory(directory)/(prefix.rstrip('_')+'.png'),dpi=160)
     plt.close(fig)
 
 
@@ -298,8 +303,28 @@ def render_sublayer_parallelism(directory, prefix):
              f'Source {record["repository"]["commit"][:7]}. Fixed cache prefix; allocation and correctness checks excluded.',
              fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.18,1,.86))
-    fig.savefig(directory/(prefix.rstrip('_')+'.png'),dpi=160)
+    fig.savefig(figure_directory(directory)/(prefix.rstrip('_')+'.png'),dpi=160)
     plt.close(fig)
+
+
+def stage_panels(axes, rows, grid, stages, variants, *, height=.34,
+                 stage_order=False, ticks=None, invert=False, decode=False):
+    """Draw the same measured stages for each declared shape and variant."""
+    for ax, (r,t) in zip(axes, grid):
+        for variant, color, offset, label in variants:
+            values = [s for s in rows if (s['query_rows'],s['rows'],s['variant']) == (r,t,variant)]
+            if stage_order:
+                values.sort(key=lambda s: stages.index(s['stage']))
+            ax.barh([stages.index(s['stage'])+offset for s in values],
+                    [s['median_us'] for s in values], height=height, color=color, label=label)
+        ax.set_xscale('log')
+        if ticks is not None:
+            ax.set_yticks(range(len(stages)), stages, fontsize=ticks)
+        if invert:
+            ax.invert_yaxis()
+        ax.set_title(f'Decode T={t}' if decode else f'R={r}, T={t}')
+        ax.set_xlabel('Median active GPU time (µs) · log scale')
+        ax.grid(axis='x',alpha=.15)
 
 
 def render_sublayer_combined_profile(directory):
@@ -309,16 +334,8 @@ def render_sublayer_combined_profile(directory):
     from .attention_sublayer_contract import STAGES_BY_VARIANT
     stages=STAGES_BY_VARIANT[9]
     fig,axes=plt.subplots(2,2,figsize=(14,11),sharex=True,sharey=True)
-    for ax,(r,t) in zip(axes.flat,record['specification']['workloads']):
-        for variant,color,offset,label in ((9,'#777777',-.18,'8x16 projections'),
-                                           (18,'#167d9a',.18,'16x16 QKV + Wo')):
-            values=[s for s in rows if (s['query_rows'],s['rows'],s['variant'])==(r,t,variant)]
-            ax.barh([stages.index(s['stage'])+offset for s in values],
-                    [s['median_us'] for s in values],height=.34,color=color,label=label)
-        ax.set_xscale('log')
-        ax.set_title(f'R={r}, T={t}')
-        ax.set_xlabel('Median active GPU time (µs) · log scale')
-        ax.grid(axis='x',alpha=.15)
+    stage_panels(axes.flat, rows, record['specification']['workloads'], stages,
+                 ((9,'#777777',-.18,'8x16 projections'),(18,'#167d9a',.18,'16x16 QKV + Wo')))
     axes[0,0].set_yticks(range(len(stages)),stages,fontsize=9)
     axes[0,0].invert_yaxis()
     handles,names=axes[0,0].get_legend_handles_labels()
@@ -329,7 +346,7 @@ def render_sublayer_combined_profile(directory):
              f'{sum(s["count"] for s in rows):,} retained durations · source {record["common"]["repository"]["commit"][:7]} · '
              f'{record["captures"][0]["capture"]["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention.',fontsize=9)
     fig.tight_layout(rect=(0,.12,1,.9))
-    fig.savefig(directory/'combined_profile.png',dpi=160)
+    fig.savefig(figure_directory(directory)/'combined_profile.png',dpi=160)
     plt.close(fig)
 
 
@@ -365,7 +382,7 @@ def render_sublayer_timing(directory):
              'Samples retain enqueue-through-completion timing; only emission changes. These are calibration diagnostics, not gains.\n'
              f'{count:,} retained observations · {record["runtime"]["device"]} / Metal · source {record["repository"]["commit"][:7]}.',fontsize=9)
     fig.tight_layout(rect=(0,.18,1,.84))
-    fig.savefig(directory/'timing.png',dpi=160)
+    fig.savefig(figure_directory(directory)/'timing.png',dpi=160)
     plt.close(fig)
 
 
@@ -379,19 +396,9 @@ def render_sublayer_parallelism_profile(directory):
     stages = STAGES_BY_VARIANT[9][:-2]+['FP32 GQA split','FP32 GQA merge']+STAGES_BY_VARIANT[9][-2:]
     colors = {9:'#777777',10:'#167d9a',11:'#3c9e79',12:'#8064a2',13:'#ba7437'}
     fig,axes = plt.subplots(1,2,figsize=(13,7),sharey=True)
-    for ax,(r,t) in zip(axes,record['specification']['workloads']):
-        for index,variant in enumerate(variants):
-            offset = (index-(len(variants)-1)/2)*.23
-            lookup = {s['stage']:s['median_us'] for s in rows
-                      if (s['query_rows'],s['rows'],s['variant']) == (r,t,variant)}
-            present = [(i,lookup[stage]) for i,stage in enumerate(stages) if stage in lookup]
-            ax.barh([i+offset for i,_ in present],[v for _,v in present],height=.22,
-                    color=colors[variant],label=PARALLELISM_NAMES[variant])
-        ax.set_xscale('log')
-        ax.set_yticks(range(len(stages)),stages,fontsize=9)
-        ax.set_title(f'R={r}, T={t}')
-        ax.set_xlabel('Median active GPU time (µs) · log scale')
-        ax.grid(axis='x',alpha=.15)
+    stage_panels(axes, rows, record['specification']['workloads'], stages,
+                 [(v,colors[v],(i-(len(variants)-1)/2)*.23,PARALLELISM_NAMES[v])
+                  for i,v in enumerate(variants)], height=.22, stage_order=True, ticks=9)
     axes[0].invert_yaxis()
     handles,names = axes[0].get_legend_handles_labels()
     fig.legend(handles,names,loc='upper center',bbox_to_anchor=(.5,.93),ncol=len(variants),frameon=False)
@@ -402,7 +409,7 @@ def render_sublayer_parallelism_profile(directory):
              f'{record["captures"][0]["capture"]["runtime"]["device"]} / Metal · FP32 attention · '
              f'source {record["common"]["repository"]["commit"][:7]}.',fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.14,1,.86))
-    fig.savefig(directory/'parallelism_profile.png',dpi=160)
+    fig.savefig(figure_directory(directory)/'parallelism_profile.png',dpi=160)
     plt.close(fig)
 
 
@@ -413,19 +420,9 @@ def render_sublayer_integrated_profile(directory):
     from .attention_sublayer_contract import STAGES_BY_VARIANT, PROFILE_WORKLOADS
     stages = STAGES_BY_VARIANT[8][:4] + STAGES_BY_VARIANT[9][1:]
     fig, axes = plt.subplots(2, 2, figsize=(13, 11), sharey=True)
-    for ax, (r, t) in zip(axes.flat, PROFILE_WORKLOADS):
-        for variant, offset, color, label in ((8,-.18,'#777777','Separate QKV'),
-                                               (9,.18,'#167d9a','Integrated packed QKV')):
-            lookup = {s['stage']:s['median_us'] for s in rows
-                      if (s['query_rows'],s['rows'],s['variant']) == (r,t,variant)}
-            present = [(i,lookup[stage]) for i,stage in enumerate(stages) if stage in lookup]
-            ax.barh([i+offset for i,_ in present], [v for _,v in present], height=.34,
-                    color=color,label=label)
-        ax.set_xscale('log')
-        ax.set_yticks(range(len(stages)), stages, fontsize=9)
-        ax.set_title(f'R={r}, T={t}')
-        ax.set_xlabel('Median active GPU time (µs) · log scale')
-        ax.grid(axis='x',alpha=.15)
+    stage_panels(axes.flat, rows, PROFILE_WORKLOADS, stages,
+                 ((8,'#777777',-.18,'Separate QKV'),(9,'#167d9a',.18,'Integrated packed QKV')),
+                 stage_order=True, ticks=9)
     axes[0,0].invert_yaxis()
     axes[0,0].legend(frameon=False,fontsize=9)
     fig.suptitle('Integrated attention · where does the time go now?',fontsize=16,fontweight='bold')
@@ -435,7 +432,7 @@ def render_sublayer_integrated_profile(directory):
              f'{record["captures"][0]["capture"]["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention · '
              f'source {record["common"]["repository"]["commit"][:7]}.',fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.12,1,.95))
-    fig.savefig(directory/'integrated_profile.png',dpi=160)
+    fig.savefig(figure_directory(directory)/'integrated_profile.png',dpi=160)
     plt.close(fig)
 
 
@@ -445,17 +442,9 @@ def render_sublayer_wo_profile(directory):
     table(directory,'wo_profile_summary.csv',rows)
     from .attention_sublayer_contract import PROFILE_WORKLOADS, STAGES
     fig, axes = plt.subplots(2,2,figsize=(13,10))
-    for ax,(r,t) in zip(axes.flat,PROFILE_WORKLOADS):
-        for variant,color,offset,label in ((3,'#777777',-.18,'Rowwise Wo'),(4,'#167d9a',.18,'MMA Wo')):
-            lookup = {s['stage']:s for s in rows if s['query_rows']==r and s['rows']==t and s['variant']==variant}
-            ax.barh([i+offset for i in range(len(STAGES))],
-                    [lookup[stage]['median_us'] for stage in STAGES],height=.34,color=color,label=label)
-        ax.set_yticks(range(len(STAGES)),STAGES,fontsize=9)
-        ax.invert_yaxis()
-        ax.set_xscale('log')
-        ax.set_title(f'R={r}, T={t}')
-        ax.set_xlabel('Median active GPU time (µs) · log scale')
-        ax.grid(axis='x',alpha=.15)
+    stage_panels(axes.flat, rows, PROFILE_WORKLOADS, STAGES,
+                 ((3,'#777777',-.18,'Rowwise Wo'),(4,'#167d9a',.18,'MMA Wo')),
+                 stage_order=True, ticks=9, invert=True)
     axes[0,0].legend(frameon=False,fontsize=9)
     fig.suptitle('Wo experiment · which stage changed?',fontsize=16,fontweight='bold')
     fig.text(.04,.025,'Separate single captures; active dispatch durations exclude preemption and host gaps.\n'
@@ -464,7 +453,7 @@ def render_sublayer_wo_profile(directory):
              f'{record["captures"][0]["capture"]["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention. '
              f'Source {record["common"]["repository"]["commit"][:7]}.',fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.12,1,.94))
-    fig.savefig(directory/'wo_profile.png',dpi=160)
+    fig.savefig(figure_directory(directory)/'wo_profile.png',dpi=160)
     plt.close(fig)
 
 
@@ -507,7 +496,7 @@ def render_sublayer_decode(directory, prefix):
              f'Source {record["repository"]["commit"][:7]}. Rowwise Wo fixed; cache prefix fixed; allocation excluded.',
              fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.2,1,.94))
-    fig.savefig(directory/(prefix.rstrip('_')+'.png'),dpi=160)
+    fig.savefig(figure_directory(directory)/(prefix.rstrip('_')+'.png'),dpi=160)
     plt.close(fig)
 
 
@@ -518,17 +507,9 @@ def render_sublayer_decode_profile(directory):
     from .attention_sublayer_contract import STAGES, DECODE_PROFILE_WORKLOADS
     stages = STAGES[:10]+['GQA G32','GQA split','GQA merge']+STAGES[-2:]
     fig,axes = plt.subplots(1,2,figsize=(13,9),sharey=True)
-    for ax,(r,t) in zip(axes,DECODE_PROFILE_WORKLOADS):
-        for variant,color,offset,label in ((3,'#777777',-.23,'Materialized FP32'),
-                                          (5,'#167d9a',0,'FP32 G32'),
-                                          (6,'#8064a2',.23,'FP32 split64 H4')):
-            values = [s for s in rows if s['query_rows']==r and s['rows']==t and s['variant']==variant]
-            ax.barh([stages.index(s['stage'])+offset for s in values],
-                    [s['median_us'] for s in values],height=.21,color=color,label=label)
-        ax.set_xscale('log')
-        ax.set_title(f'Decode T={t}')
-        ax.set_xlabel('Median active GPU time (µs) · log scale')
-        ax.grid(axis='x',alpha=.15)
+    stage_panels(axes, rows, DECODE_PROFILE_WORKLOADS, stages,
+                 ((3,'#777777',-.23,'Materialized FP32'),(5,'#167d9a',0,'FP32 G32'),
+                  (6,'#8064a2',.23,'FP32 split64 H4')), height=.21, decode=True)
     axes[0].set_yticks(range(len(stages)),stages,fontsize=10)
     axes[0].invert_yaxis()
     axes[0].legend(frameon=False,fontsize=9)
@@ -539,7 +520,7 @@ def render_sublayer_decode_profile(directory):
              f'{record["captures"][0]["capture"]["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention, rowwise Wo. '
              f'Source {record["common"]["repository"]["commit"][:7]}.',fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.15,1,.94))
-    fig.savefig(directory/'decode_profile.png',dpi=160)
+    fig.savefig(figure_directory(directory)/'decode_profile.png',dpi=160)
     plt.close(fig)
 
 
@@ -550,16 +531,8 @@ def render_sublayer_prefill_profile(directory):
     from .attention_sublayer_contract import STAGES, PREFILL_PROFILE_WORKLOADS
     stages = STAGES[:10]+['GQA FP32 MMA']+STAGES[-2:]
     fig,axes = plt.subplots(1,3,figsize=(15,8),sharey=True)
-    for ax,(r,t) in zip(axes,PREFILL_PROFILE_WORKLOADS):
-        for variant,color,offset,label in ((4,'#777777',-.18,'Materialized FP32'),
-                                          (7,'#167d9a',.18,'FP32 rolled MMA')):
-            values = [s for s in rows if s['query_rows']==r and s['rows']==t and s['variant']==variant]
-            ax.barh([stages.index(s['stage'])+offset for s in values],
-                    [s['median_us'] for s in values],height=.34,color=color,label=label)
-        ax.set_xscale('log')
-        ax.set_title(f'R={r}, T={t}')
-        ax.set_xlabel('Median active GPU time (µs) · log scale')
-        ax.grid(axis='x',alpha=.15)
+    stage_panels(axes, rows, PREFILL_PROFILE_WORKLOADS, stages,
+                 ((4,'#777777',-.18,'Materialized FP32'),(7,'#167d9a',.18,'FP32 rolled MMA')))
     axes[0].set_yticks(range(len(stages)),stages,fontsize=10)
     axes[0].invert_yaxis()
     axes[0].legend(frameon=False,fontsize=9)
@@ -570,7 +543,7 @@ def render_sublayer_prefill_profile(directory):
              f'{record["captures"][0]["capture"]["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention, MMA Wo fixed. '
              f'Source {record["common"]["repository"]["commit"][:7]}.',fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.16,1,.94))
-    fig.savefig(directory/'prefill_profile.png',dpi=160)
+    fig.savefig(figure_directory(directory)/'prefill_profile.png',dpi=160)
     plt.close(fig)
 
 
@@ -606,7 +579,7 @@ def render_sublayer(directory, record, samples, summary):
              'Ring24 uses distinct weights, inputs and caches with shared scratch, and one synchronization per sweep.\n'
              'Open marks: self-pair deviation exceeds 5%; see the complete calibration ranges in summary.csv.', fontsize=9, color='#555555')
     fig.tight_layout(rect=(0,.18,1,.91))
-    fig.savefig(directory / 'latency.png', dpi=160)
+    fig.savefig(figure_directory(directory) / 'latency.png', dpi=160)
     plt.close(fig)
     if (directory / 'profiles.json').exists():
         rows = load_profile(directory)
@@ -633,7 +606,7 @@ def render_sublayer(directory, record, samples, summary):
                  'Stage labels follow validated enqueue order. Segments of a preempted dispatch are joined before labeling.\n'
                  f'{sum(s["count"] for s in rows):,} dispatch durations retained. These stage medians are not added to construct whole-sublayer latency.',fontsize=9,color='#555555')
         fig.tight_layout(rect=(0,.13,1,.94))
-        fig.savefig(directory / 'profile.png',dpi=160)
+        fig.savefig(figure_directory(directory) / 'profile.png',dpi=160)
         plt.close(fig)
     for prefix in ('wo_screen_','wo_'):
         if (directory/(prefix+'run.json')).exists():
@@ -668,6 +641,8 @@ def render_sublayer(directory, record, samples, summary):
 
 
 def render(directory):
+    from .study import evidence_directory
+    directory = evidence_directory(directory)
     record, samples, summary = load_run(directory)
     spec = record['specification']
     if spec['operation'] == 'attention_sublayer':
@@ -743,7 +718,7 @@ def render(directory):
              'Gray latency: self-pair control. Ratios use their own paired controls; these can differ in a noisy run.\n'
              f"{len(samples):,} retained observations · source {record['repository']['commit'][:7]} · enqueue through completion; not model throughput.", fontsize=9, color='#555555')
     fig.tight_layout(rect=(0, .14, 1, .905))
-    fig.savefig(directory / 'latency.png', dpi=160)
+    fig.savefig(figure_directory(directory) / 'latency.png', dpi=160)
     plt.close(fig)
     if (directory / 'profiles.json').exists():
         profile_rows = load_profile(directory)

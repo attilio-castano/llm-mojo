@@ -49,7 +49,7 @@ The bounded first-layer attention workflow also supports a separately hashed
 prefix containing the original header, embeddings and complete required
 tensors. That workflow verifies the prefix identity and explicitly records
 that the full-file digest was not verified. See the
-[attention fixture provenance](attention-sublayer.md#reproduction).
+[attention fixture provenance](../studies/attention_sublayer/numerics.md#reproduction).
 
 ## V0 runtime boundary
 

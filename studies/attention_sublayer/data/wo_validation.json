@@ -1,0 +1,31 @@
+{
+  "format": "lossless-json-gzip-v1",
+  "record": "wo_validation.json.gz",
+  "sha256": "39c07f2b698d571d89b63b2b6d7b8647c5fafbaf680fe110b3e03a4bb91024f8",
+  "uncompressed_sha256": "268995ea706ac23e625e67f16fed31f69b419a076e68a188a5dcb267cc8596c9",
+  "purpose": "Contained bias-free Wo MMA experiment; existing FP32 attention policy and gates unchanged.",
+  "metadata": {
+    "schema": 1,
+    "source_commit": "07984fedafcbe1c1260c37c86ff708c5098cfa18",
+    "device": "Apple M4 Pro",
+    "backend": "metal",
+    "limits": {
+      "scaled_error": "abs(got-want)/(1+abs(want))",
+      "gqa": 0.0078125,
+      "wo_projected_and_final": 0.03125,
+      "cache": "exact BF16 bits"
+    }
+  },
+  "list_lengths": {
+    "full_workflow.command": 6,
+    "additional": 2,
+    "checkpoint_fixture_command": 5,
+    "synthetic.cases": 17,
+    "synthetic.isolated_wo": 17,
+    "synthetic.composition_checks": 284,
+    "checkpoint.cases": 3,
+    "checkpoint.isolated_wo": 3,
+    "checkpoint.composition_checks": 104,
+    "notes": 4
+  }
+}

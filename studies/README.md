@@ -59,6 +59,9 @@ small `summary.csv`, and the PNGs used in its explanation. GQA prefill retains
 its original screen with a `screen_` filename prefix and the bounded resource
 follow-up with `resources_screen_` and `resources_` prefixes in the same folder. GQA
 decode and prefill also retain compact profile records and dispatch samples.
+The larger [attention topic](attention_sublayer/README.md) separates its current
+overview, detailed experiments, numerical history and predeclared plans. It
+keeps records/CSVs in `data/` and generated PNGs in `figures/`.
 Rebuild every table and figure without a GPU:
 
 ```bash

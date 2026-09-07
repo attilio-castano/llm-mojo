@@ -88,6 +88,13 @@ compact profile table only when it substantiates a report's explanation.
 Avoid repeated metadata per sample, hash lists of disposable logs, duplicate
 image formats, and a new runner or directory for each parameter choice.
 
+The larger attention topic groups evidence in `data/` and images in `figures/`;
+experiment prefixes still identify comparisons within those directories. Four
+verbose numerical records are retained losslessly as `.json.gz`, with adjacent
+readable JSON summaries and hashes for compressed and original bytes. Loading
+verifies both hashes; decompression recovers every original check and failure.
+Historical source identities remain those of the measured or validated code.
+
 Generated oracle arrays belong in `build/`; their independent generators,
 pinned dependencies and frozen data hashes belong in tests. Model weights,
 compiled binaries, full traces and temporary logs remain outside Git.

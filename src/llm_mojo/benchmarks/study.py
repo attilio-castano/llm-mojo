@@ -318,8 +318,31 @@ def summarize(samples, spec):
     return result
 
 
+def evidence_directory(directory):
+    """Accept a study root or a flat external run directory."""
+    return directory / 'data' if (directory / 'data').is_dir() else directory
+
+
+def load_numerical_record(path):
+    """Read a historical record, checking both compressed and original bytes."""
+    record = json.loads(path.read_text())
+    if record.get('format') != 'lossless-json-gzip-v1':
+        return record
+    name = record['record']
+    if name != Path(name).name:
+        raise ValueError('numerical record must be adjacent to its summary')
+    raw = (path.parent / name).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != record['sha256']:
+        raise ValueError('compressed numerical record changed')
+    decoded = gzip.decompress(raw)
+    if hashlib.sha256(decoded).hexdigest() != record['uncompressed_sha256']:
+        raise ValueError('original numerical record changed')
+    return json.loads(decoded)
+
+
 def load_run(directory, prefix=''):
     directory = Path(directory)
+    directory = evidence_directory(directory)
     record = json.loads((directory / (prefix+'run.json')).read_text())
     if record.get('schema') != 1 or not record.get('completed_utc'):
         raise ValueError('incomplete or unsupported run')
@@ -356,6 +379,7 @@ def prefill_profile_grid(spec):
 
 def load_profile(directory, prefix=''):
     directory = Path(directory)
+    directory = evidence_directory(directory)
     record = json.loads((directory / (prefix+'profiles.json')).read_text())
     path = directory / (prefix+'profile_samples.csv.gz')
     if record.get('schema') not in (1,2,3) or record['samples_sha256'] != sha(path):
