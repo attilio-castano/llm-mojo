@@ -1,9 +1,11 @@
 # MLP numerical contract and upstream fixture specification
 
-Status: upstream reference package frozen; materialized Mojo MLP implemented and
-undergoing final acceptance. The initial budgets were selected before any Mojo
-MLP or holdout output. Reference results below retain their original CPU scope.
-The [MLP study](../studies/mlp_sublayer/README.md) records implementation and measurement progress.
+Status: upstream reference package frozen; materialized Mojo MLP accepted and
+profiled on Apple M4 Pro/Metal. The initial budgets were selected before any
+Mojo MLP or holdout output and remain unchanged. The
+[MLP study](../studies/mlp_sublayer/README.md) records 53 accepted cases, the
+primitive rounding repairs, 3,840 latency observations and four Metal captures.
+Reference results below retain their original CPU scope.
 
 ## Scope and data flow
 
@@ -332,7 +334,7 @@ milestone is the Mojo correctness baseline described below.
 
 ## Ownership, provenance, and implementation follow-through
 
-The intended Mojo baseline reuses RMSNorm, bias-free rowwise linear, and residual
+The accepted Mojo baseline reuses RMSNorm, bias-free rowwise linear, and residual
 operations. New SiLU and gating operations have host references and separate
 GPU dispatches. No projection-tile selection or fusion experiment is part of
 this baseline. The caller owns weights, input, and reusable workspace; allocation
@@ -342,12 +344,13 @@ Metal before launching any work; it allocates and synchronizes nothing. All
 resources remain alive on the same ordered stream until completion, and output
 is consumed before the next invocation overwrites it.
 
-Future tests must verify poisoned outputs are completely written, inactive
+The tests verify poisoned outputs are completely written, inactive
 workspace/guard regions remain untouched, and rejected calls leave buffers
-unchanged. Repeated asynchronous calls require a check of each call's output
-(copy to retained test storage before reuse), with a final synchronization.
-Also run in normal mode: debug synchronization can hide lifetime/order defects.
-Require runtime device name and `ctx.api()=="metal"` in GPU validation evidence.
+unchanged. Twelve repeated asynchronous calls retain each call's output before
+workspace reuse and use a final synchronization. Normal-mode checkpoint and
+observed-holdout regression checks also pass; debug synchronization can hide
+lifetime/order defects. GPU evidence records the runtime device name and
+`ctx.api()=="metal"`.
 
 Extend the existing fixture dispatcher and validation workflow when implementing
 the generator. Generated arrays belong in ignored `build/oracle_data/`; add only
@@ -360,10 +363,10 @@ and model revision/tensor identities for checkpoint cases. Record the contract
 revision, source commit, dirty state, and source hashes before and after any
 validation run. Reject drift rather than assembling a mixed result.
 
-The implementation milestone will run `uv run --locked llm-mojo-validate`,
-including the new operation/composition suites, plus the normal-mode reuse
-check. Synthetic acceptance and checkpoint acceptance must be reported
-separately if assets are missing. Full decoder composition and model-level
+The implementation milestone passed `uv run --locked llm-mojo-validate`:
+102 Mojo tests, 59 Python tooling tests, eleven pinned reference tests and every
+benchmark route. The corrected frozen binary also passed normal-mode checkpoint
+and observed-holdout reuse checks. Full decoder composition and model-level
 logit/generation parity remain subsequent milestones.
 
 This specification applies the attention study's lessons about
@@ -373,10 +376,12 @@ This specification applies the attention study's lessons about
 
 The development matrix contains 43 synthetic/stress cases and three checkpoint
 cases (30, 41, and 4096 rows), plus the 65,280-value finite BF16 activation sweep,
-seven gating multipliers, and isolated down-projection cancellation. Holdout
-model outputs have not been generated. Checkpoint holdout token IDs are frozen
-without running their attention or MLP outputs. The verified historical prefix
-does contain all required layer-0 MLP tensors; no assets were downloaded.
+seven gating multipliers, and isolated down-projection cancellation. At reference
+freeze, holdout model outputs remained unobserved and checkpoint holdout token
+IDs were frozen separately. The later baseline milestone opened all seven
+holdouts, which passed; after the residual repair they were rerun unchanged as
+regression cases. The verified historical prefix contains all required layer-0
+MLP tensors; no assets were downloaded.
 
 | CPU reference comparison | Largest scaled error |
 | --- | ---: |

@@ -25,6 +25,13 @@ retains the baseline, Wo, FP32 decode and FP32 prefill comparisons, and integrat
 the existing packed QKV and Wo mappings through one public Mojo entrypoint.
 It separates incremental QKV value from the whole block's combined gain.
 Small hot-call noise and omitted optional counter analysis remain explicit.
+
+The MLP study establishes the materialized seven-stage baseline under frozen
+BF16 rounding rules, including the subnormal repairs required by exact
+multiplication and residual checks. Its 53 accepted cases, 3,840 latency
+observations and four profiles identify gate/up matrix reuse as the next
+experiment: those projections account for 73.2% of active GPU time at 4,096
+rows. The one-row hot timing is noisy; no MLP optimization has been selected.
 The measurements below belong to the six operation studies.
 
 The six topics retain **31,200 latency observations**, eleven report figures,
