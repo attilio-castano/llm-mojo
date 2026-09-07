@@ -6,7 +6,7 @@ Odd ring entries negate X, Wqkv and Wo, preserving Q/K/V and negating Y.
 """
 from llm_mojo.attention_sublayer import (
     AttentionWeights, AttentionCache, AttentionWorkspace, enqueue_attention_sublayer,
-    enqueue_attention_sublayer_integrated,
+    enqueue_attention_sublayer_integrated, _enqueue_attention_wo,
 )
 from layout import TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -89,10 +89,12 @@ def _enqueue(ctx: DeviceContext, mut weights: AttentionWeights,
              variant: Int) raises:
     # Repeat a fixed suffix on the same stream. No prefix upload or reset sync.
     cache.length = t - r
-    var route = variant - 3 if variant >= 9 else (6 if variant == 8 else (variant - 1 if variant >= 5 else 3))
+    var route = 6 if variant >= 14 else (variant - 3 if variant >= 9 else (6 if variant == 8 else (variant - 1 if variant >= 5 else 3)))
     var launched: Int
     var view = TileTensor(input, row_major(r, 896))
-    if variant >= 9:
+    if variant >= 14:
+        launched = enqueue_attention_sublayer_integrated(ctx, weights, cache, work, view, 0, variant - 13)
+    elif variant >= 9:
         launched = enqueue_attention_sublayer_integrated(ctx, weights, cache, work, view, variant - 9)
     else:
         launched = enqueue_attention_sublayer(
@@ -127,17 +129,19 @@ def main() raises:
     var mode = args[8]
     var repetitions = Int(args[9])
     var warmup = Int(args[10])
-    var dispatches = (10 if candidate >= 12 and r > 1 else 9) if candidate >= 9 else (10 if candidate == 5 or candidate == 7 or candidate == 8 else (11 if candidate == 6 else 12))
+    var dispatches = (10 if (candidate == 12 or candidate == 13) and r > 1 else 9) if candidate >= 9 else (10 if candidate == 5 or candidate == 7 or candidate == 8 else (11 if candidate == 6 else 12))
     var valid_pair = ((control == 3 and (3 <= candidate <= 6 or candidate == 9))
                       or (control == 4 and (candidate == 4 or candidate == 7))
                       or (control == 8 and (candidate == 8 or candidate == 9))
-                      or (control == 9 and 9 <= candidate <= 13))
+                      or (control == 9 and 9 <= candidate <= 17))
     if (r < 1 or r > t or t > 4096 or (layers != 1 and layers != 24)
         or not valid_pair or seed != 53
         or ((candidate == 5 or candidate == 6) and r != 1)
         or (candidate == 7 and r == 1)
-        or (first != 0 and first != 1) or (mode != "bench" and mode != "profile")
+        or (first != 0 and first != 1) or (mode != "bench" and mode != "profile" and mode != "wo" and mode != "buffered")
         or (mode == "profile" and (layers != 1 or repetitions * dispatches > 5000))
+        or (mode == "wo" and (r < 16 or control != 9 or (candidate != 9 and candidate != 14 and candidate != 15)))
+        or (mode == "buffered" and (candidate != 9 or control != 9))
         or repetitions < 1 or warmup < 0):
         raise Error("invalid attention sublayer benchmark arguments")
     var ctx = DeviceContext()
@@ -146,6 +150,7 @@ def main() raises:
     print("device:", ctx.name())
     print("api:", ctx.api())
     print("operation: attention_sublayer")
+    print("measurement:", "isolated_wo" if mode == "wo" else ("whole_attention_buffered" if mode == "buffered" else "whole_attention"))
     print("query rows:", r)
     print("shape:", t, layers, "seed:", seed)
     print("variants:", control, candidate, "candidate-first:", first)
@@ -183,6 +188,16 @@ def main() raises:
         weights.append(w^)
         caches.append(cache^)
         inputs.append(input^)
+    if mode == "wo":
+        # Every arm consumes exactly the BF16 attention tensor upstream used.
+        # Sign changes live in the distinct layer weights, not this input.
+        _load(work.attention, "fp32_7_attention", r * 896, (t - r) * 896)
+        for layer in range(layers):
+            for variant in [control, candidate]:
+                _enqueue_attention_wo(ctx, weights[layer], work, r, True,
+                                      variant - 13 if variant >= 14 else 0)
+                _check(work.projected, "fp32_7_projected", r * 896, (t - r) * 896,
+                       Float32(-1 if layer % 2 else 1))
     ctx.synchronize()
     print("correctness: passed")
 
@@ -209,6 +224,7 @@ def main() raises:
         sleep(0.25)
         return
 
+    var recorded = List[Float64]()
     for arm in range(2):
         var is_candidate = (arm == 0) == (first == 1)
         var variant = candidate if is_candidate else control
@@ -216,9 +232,23 @@ def main() raises:
         for sample in range(warmup + repetitions):
             var start = perf_counter_ns()
             for layer in range(layers):
-                _enqueue(ctx, weights[layer], caches[layer], work, inputs[layer], r, t, variant)
+                if mode == "wo":
+                    _enqueue_attention_wo(ctx, weights[layer], work, r, True,
+                                          variant - 13 if variant >= 14 else 0)
+                else:
+                    _enqueue(ctx, weights[layer], caches[layer], work, inputs[layer], r, t, variant)
             ctx.synchronize()
             var us = Float64(perf_counter_ns() - start) / Float64(1000 * layers)
             if sample >= warmup:
-                print("SAMPLE", label, variant, sample - warmup, us)
+                if mode == "buffered":
+                    recorded.append(us)
+                else:
+                    print("SAMPLE", label, variant, sample - warmup, us)
+    if mode == "buffered":
+        for arm in range(2):
+            var is_candidate = (arm == 0) == (first == 1)
+            for sample in range(repetitions):
+                print("SAMPLE", "candidate" if is_candidate else "control",
+                      candidate if is_candidate else control, sample,
+                      recorded[arm * repetitions + sample])
     print("BENCHMARK_COMPLETE")

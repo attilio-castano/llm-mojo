@@ -242,7 +242,11 @@ def render_sublayer_parallelism(directory, prefix):
     labels = [f'Decode T={w["rows"]}' if w['query_rows'] == 1 else
               f'Full R=T={w["rows"]}' if w['query_rows'] == w['rows'] else
               f'Chunk R={w["query_rows"]}, T={w["rows"]}' for w in spec['workloads']]
-    colors = {10:'#167d9a',11:'#3c9e79',12:'#8064a2',13:'#ba7437'}
+    colors = {10:'#167d9a',11:'#3c9e79',12:'#8064a2',13:'#ba7437',
+              14:'#167d9a',15:'#8064a2',16:'#167d9a',17:'#8064a2'}
+    isolated = spec.get('measurement') == 'isolated_wo'
+    tiles = prefix.startswith('tiles')
+    boundary = 'Isolated Wo' if isolated else 'Whole-block'
     fig,axes = plt.subplots(1,2,figsize=(13,max(6,.6*len(labels)+2.4)),sharex=True,sharey=True)
     for ax,layers in zip(axes,(1,24)):
         for index,variant in enumerate(variants):
@@ -262,22 +266,60 @@ def render_sublayer_parallelism(directory, prefix):
         ax.xaxis.set_minor_formatter(FuncFormatter(lambda value,_:''))
         ax.grid(axis='x',alpha=.18)
         ax.set_title('Hot call' if layers==1 else 'Ring24 per call')
-        ax.set_xlabel('Whole-block time / paired integrated control · log scale')
+        ax.set_xlabel(boundary+' time / paired '+('8x16 MMA control' if isolated else 'integrated control')+' · log scale')
     data = [s for s in summary if s['candidate'] in variants]
     axes[0].set_xlim(min(s['ratio_min'] for s in data)/1.2,max(1,max(s['ratio_max'] for s in data))*1.2)
     axes[0].set_yticks(range(len(labels)),labels)
     axes[0].invert_yaxis()
     handles,names = axes[0].get_legend_handles_labels()
     fig.legend(handles,names,loc='upper center',bbox_to_anchor=(.5,.93),ncol=len(variants),frameon=False)
-    fig.suptitle('Qwen attention · GQA work distribution'+(' · screen' if record['study'].endswith('_screen') else ''),
+    title = ('Qwen Wo · MMA tile ownership' if isolated else
+             'Qwen attention · '+('QKV' if prefix == 'tiles_qkv_' else 'Wo')+' tile ownership') if tiles else (
+             'Qwen attention · KV split domain' if prefix == 'split_domain_' else 'Qwen attention · GQA work distribution')
+    fig.suptitle(title+(' · screen' if record['study'].endswith('_screen') else ''),
                  fontsize=16,fontweight='bold')
     fig.text(.04,.025,'Left of 1× is faster. Whiskers: four-block ratio range; open marks: inconclusive.\n'
-             'Gain rule: all four blocks faster and > max(5%, matching self-pair deviation). QKV/Wo fixed; merge included.\n'
-             f'{len(samples):,} retained observations · {record["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention.\n'
+             'Gain rule: all four blocks faster and > max(5%, matching self-pair deviation). '
+             +('Same frozen attention input; Wo only.\n' if isolated else ('GQA fixed; one projection changes.\n' if tiles else 'QKV/Wo fixed; merge included.\n'))+
+             f'{len(samples):,} retained observations · {record["runtime"]["device"]} / Metal · BF16 I/O, FP32 '+('accumulation.\n' if isolated else 'attention.\n')+
              f'Source {record["repository"]["commit"][:7]}. Fixed cache prefix; allocation and correctness checks excluded.',
              fontsize=9,color='#555555')
     fig.tight_layout(rect=(0,.18,1,.86))
     fig.savefig(directory/(prefix.rstrip('_')+'.png'),dpi=160)
+    plt.close(fig)
+
+
+def render_sublayer_timing(directory):
+    fig,axes=plt.subplots(1,2,figsize=(12,5.5),sharex=True,sharey=True)
+    count=0
+    for prefix,offset,color,label in (('timing_',-.12,'#777777','Print each sample'),
+                                      ('timing_buffered_',.12,'#167d9a','Print after both arms')):
+        record,samples,summary=load_run(directory,prefix)
+        table(directory,prefix+'summary.csv',summary)
+        count+=len(samples)
+        labels=[f'R={w["query_rows"]}, T={w["rows"]}' for w in record['specification']['workloads']]
+        for ax,layers in zip(axes,(1,24)):
+            for i,row in enumerate(s for s in summary if s['layers']==layers):
+                ax.errorbar(row['ratio'],i+offset,
+                    xerr=[[row['ratio']-row['ratio_min']],[row['ratio_max']-row['ratio']]],
+                    fmt='o',capsize=3,color=color,label=label if i==0 else None)
+    for ax,layers in zip(axes,(1,24)):
+        ax.axvline(1,color='#333333',linewidth=1)
+        ax.set_xscale('log')
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda v,_:f'{v:g}×'))
+        ax.set_title('Hot call' if layers==1 else 'Ring24 per call')
+        ax.set_xlabel('Identical-kernel paired time ratio · log scale')
+        ax.grid(axis='x',alpha=.2)
+    axes[0].set_yticks(range(len(labels)),labels)
+    axes[0].invert_yaxis()
+    handles,names=axes[0].get_legend_handles_labels()
+    fig.legend(handles,names,loc='upper center',bbox_to_anchor=(.5,.92),ncol=2,frameon=False)
+    fig.suptitle('Attention timing · sensitivity to sample printing',fontsize=16,fontweight='bold')
+    fig.text(.04,.025,'Control self-pairs only; 1× means agreement. Whiskers show the four-block range, not a confidence interval.\n'
+             'Samples retain enqueue-through-completion timing; only emission changes. These are calibration diagnostics, not gains.\n'
+             f'{count:,} retained observations · {record["runtime"]["device"]} / Metal · source {record["repository"]["commit"][:7]}.',fontsize=9)
+    fig.tight_layout(rect=(0,.18,1,.84))
+    fig.savefig(directory/'timing.png',dpi=160)
     plt.close(fig)
 
 
@@ -567,9 +609,11 @@ def render_sublayer(directory, record, samples, summary):
             render_sublayer_wo(directory,prefix,integration=True)
     if (directory/'integrated_profiles.json').exists():
         render_sublayer_integrated_profile(directory)
-    for prefix in ('parallelism_screen_','parallelism_'):
+    for prefix in ('parallelism_screen_','parallelism_','tiles_screen_','tiles_kernel_screen_','tiles_','tiles_qkv_','split_domain_'):
         if (directory/(prefix+'run.json')).exists():
             render_sublayer_parallelism(directory,prefix)
+    if (directory/'timing_run.json').exists() and (directory/'timing_buffered_run.json').exists():
+        render_sublayer_timing(directory)
     if (directory/'parallelism_profiles.json').exists():
         render_sublayer_parallelism_profile(directory)
     print(directory.name, len(samples), 'baseline observations verified; attention figures and retained comparisons regenerated')

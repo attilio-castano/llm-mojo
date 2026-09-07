@@ -52,7 +52,7 @@ def main():
                    cwd=repository_root(),check=True)
     for r,t in ((1,64),(7,33),(33,33)):
         for layers in (1,24):
-            for variant in ((3,4,5,6,8,9,10,11,12,13) if r == 1 else (3,4,7,8,9,10,11,12,13)):
+            for variant in ((3,4,5,6,8,9,10,11,12,13,14,15,16,17) if r == 1 else (3,4,7,8,9,10,11,12,13,14,15,16,17)):
                 control = 9 if variant >= 10 else (8 if variant >= 8 else (4 if variant == 7 else 3))
                 result = subprocess.run(list(map(str,[target,r,t,layers,variant,control,1,53,'bench',1,0])),
                                         cwd=repository_root(),text=True,capture_output=True,env=env,check=True)
@@ -83,6 +83,16 @@ def main():
                                         cwd=repository_root(),text=True,capture_output=True,env=env,check=True)
                 if 'correctness: passed' not in result.stdout or not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE'):
                     raise RuntimeError('GQA parallelism benchmark boundary check failed')
+    for mode, variants in [('wo',(9,14,15)),('buffered',(9,))]:
+        for variant in variants:
+            for layers in (1,24):
+                result=subprocess.run(list(map(str,[target,17,64,layers,variant,9,1,53,mode,1,0])),
+                    cwd=repository_root(),text=True,capture_output=True,env=env,check=True)
+                measurement='isolated_wo' if mode=='wo' else 'whole_attention_buffered'
+                if (f'measurement: {measurement}' not in result.stdout
+                    or 'correctness: passed' not in result.stdout
+                    or not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE')):
+                    raise RuntimeError('contained projection/timing boundary check failed')
     print('attention sublayer FP32, projections, GQA parallelism and decode measurement routes passed in both modes',flush=True)
 
 

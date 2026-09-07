@@ -5,9 +5,9 @@ import json
 from .._repository import repository_root
 
 OPERATION = 'attention_sublayer'
-VARIANTS = {3,4,5,6,7,8,9,10,11,12,13}
+VARIANTS = set(range(3,18))
 ENTRYPOINTS = {f'attention_sublayer_{v}': 'enqueue_attention_sublayer' for v in VARIANTS}
-ENTRYPOINTS.update({f'attention_sublayer_{v}':'enqueue_attention_sublayer_integrated' for v in range(9,14)})
+ENTRYPOINTS.update({f'attention_sublayer_{v}':'enqueue_attention_sublayer_integrated' for v in range(9,18)})
 STAGES = ['RMSNorm', 'Q projection', 'K projection', 'V projection',
           'Q RoPE', 'K RoPE', 'KV append', 'QK', 'softmax', 'PV',
           'output projection', 'residual']
@@ -17,7 +17,7 @@ STAGES_BY_VARIANT = {3: STAGES, 4: STAGES,
                      7: STAGES[:7]+['GQA FP32 MMA']+STAGES[-2:],
                      8: STAGES[:7]+['FP32 GQA']+STAGES[-2:],
                      9: ['RMSNorm','packed QKV projection','QKV unpack']+STAGES[4:7]+['FP32 GQA']+STAGES[-2:]}
-STAGES_BY_VARIANT.update({v:STAGES_BY_VARIANT[9] for v in (10,11)})
+STAGES_BY_VARIANT.update({v:STAGES_BY_VARIANT[9] for v in (10,11,14,15,16,17)})
 STAGES_BY_VARIANT.update({v:STAGES_BY_VARIANT[9][:-3]+['FP32 GQA split','FP32 GQA merge']+STAGES[-2:] for v in (12,13)})
 TARGET_FIELDS = ('profile_workload', 'dispatches_per_iteration', 'key_value_rows',
                  'query_heads', 'key_value_heads')
@@ -41,7 +41,7 @@ FIXTURES = [f'7_{name}.npy' for name in
             ('input', 'weight', 'bias', 'norm_weight', 'output_weight')]
 FIXTURES += [f'upstream_7_{name}.npy' for name in
              ('cosine', 'sine', 'cache_key', 'cache_value')]
-FIXTURES += [f'fp32_7_{name}.npy' for name in ('projected', 'output')]
+FIXTURES += [f'fp32_7_{name}.npy' for name in ('projected', 'output', 'attention')]
 
 
 def fixture_identity():
@@ -67,7 +67,7 @@ def specification(variant, query_rows, key_rows):
     return dict(profile_rows=query_rows, hidden_size=896, key_value_rows=key_rows,
                 query_heads=14, key_value_heads=2,
                 profile_workload=f'sublayer-r{query_rows}-t{key_rows}-v{variant}',
-                dispatches_per_iteration=9 if variant >= 12 and query_rows == 1 else len(STAGES_BY_VARIANT[variant]))
+                dispatches_per_iteration=9 if variant in (12,13) and query_rows == 1 else len(STAGES_BY_VARIANT[variant]))
 
 
 def configuration(data):

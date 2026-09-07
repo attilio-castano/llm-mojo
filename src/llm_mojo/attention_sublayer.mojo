@@ -11,6 +11,7 @@ from std.math import ceildiv
 from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.linear import (
     enqueue_linear_apple_gpu, enqueue_linear_prefill_mma_8x16_apple_gpu,
+    enqueue_linear_prefill_mma_tile_apple_gpu,
 )
 from llm_mojo.rope import enqueue_rope_apple_gpu
 from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
@@ -261,10 +262,11 @@ def _enqueue_attention_qkv(
     """Projection boundary shared by composition and exact-upstream tests.
 
     The sublayer validates storage before calling. Mapping 0 keeps three
-    rowwise launches; 1/2 use packed rowwise/MMA plus an explicit layout copy.
+    rowwise launches; 1/2 use packed rowwise/8x16 MMA; 3/4 use 16x16/8x32 MMA.
+    Packed mappings include an explicit layout copy.
     No allocation, synchronization, new arithmetic, or rounding in the copy.
     """
-    if mapping < 0 or mapping > 2:
+    if mapping < 0 or mapping > 4:
         raise Error("unknown QKV projection mapping")
     var h = weights.hidden
     var k = weights.kv_heads * weights.head_dim
@@ -293,12 +295,37 @@ def _enqueue_attention_qkv(
     var bias = TileTensor(weights.bias, row_major(h + 2 * k))
     if mapping == 1:
         enqueue_linear_apple_gpu(ctx, normal, weight, bias, packed)
-    else:
+    elif mapping == 2:
         enqueue_linear_prefill_mma_8x16_apple_gpu(ctx, normal, weight, bias, packed)
+    elif mapping == 3:
+        enqueue_linear_prefill_mma_tile_apple_gpu[16, 16](ctx, normal, weight, bias, packed)
+    else:
+        enqueue_linear_prefill_mma_tile_apple_gpu[8, 32](ctx, normal, weight, bias, packed)
     ctx.enqueue_function[_unpack_qkv[type_of(packed.layout), type_of(q.layout), type_of(key.layout)]](
         packed, q, key, value, Int32(rows), Int32(h), Int32(k),
         grid_dim=ceildiv(rows * (h + 2 * k), 128), block_dim=128,
     )
+
+
+def _enqueue_attention_wo(
+    ctx: DeviceContext, mut weights: AttentionWeights,
+    mut work: AttentionWorkspace, rows: Int, use_mma: Bool, tile: Int = 0,
+) raises:
+    """Shared Wo boundary for composition and isolated timing on identical data."""
+    if tile < 0 or tile > 2:
+        raise Error("unknown Wo tile mapping")
+    var h = weights.hidden
+    var a = TileTensor(work.attention, row_major(rows, h))
+    var w = TileTensor(weights.output, row_major(h, h))
+    var o = TileTensor(work.projected, row_major(rows, h))
+    if not use_mma:
+        enqueue_linear_apple_gpu(ctx, a, w, o)
+    elif tile == 0:
+        enqueue_linear_prefill_mma_8x16_apple_gpu(ctx, a, w, o)
+    elif tile == 1:
+        enqueue_linear_prefill_mma_tile_apple_gpu[16, 16](ctx, a, w, o)
+    else:
+        enqueue_linear_prefill_mma_tile_apple_gpu[8, 32](ctx, a, w, o)
 
 
 def enqueue_attention_sublayer[
@@ -312,6 +339,7 @@ def enqueue_attention_sublayer[
     route: Int = 3,
     wo_mma: Bool = False,
     qkv_mapping: Int = 0,
+    wo_tile: Int = 0,
 ) raises -> Int:
     """Enqueue one sublayer and advance cache length; return the launched route.
 
@@ -329,6 +357,8 @@ def enqueue_attention_sublayer[
     It is an explicit experiment, independent of the GQA precision route.
     qkv_mapping 0 keeps separate rowwise projections; 1/2 select the existing
     packed rowwise/MMA projection, followed by a bit-preserving layout copy.
+    QKV mappings 3/4 select 16x16/8x32 MMA. When wo_mma is true, wo_tile 1/2
+    select those same larger tiles for Wo; zero preserves the 8x16 control.
     X must not overlap any writable workspace/cache region. Read output from
     work.output only after completion and before its next overwrite.
     """
@@ -343,8 +373,10 @@ def enqueue_attention_sublayer[
     var t = p + r
     if route < 0 or route > 10:
         raise Error("unknown attention sublayer route")
-    if qkv_mapping < 0 or qkv_mapping > 2:
+    if qkv_mapping < 0 or qkv_mapping > 4:
         raise Error("unknown QKV projection mapping")
+    if wo_tile < 0 or wo_tile > 2:
+        raise Error("unknown Wo tile mapping")
     var launched_route = route
     if route >= 6 and r == 1:
         launched_route = 4
@@ -492,14 +524,7 @@ def enqueue_attention_sublayer[
                 32, 32, MMA=True, SCHEDULE=2
             ](ctx, q, keys, values, a)
     var projected = TileTensor(work.projected, row_major(r, h))
-    var merged = TileTensor(work.attention, row_major(r, h))
-    var output_weight = TileTensor(weights.output, row_major(h, h))
-    if wo_mma:
-        enqueue_linear_prefill_mma_8x16_apple_gpu(
-            ctx, merged, output_weight, projected
-        )
-    else:
-        enqueue_linear_apple_gpu(ctx, merged, output_weight, projected)
+    _enqueue_attention_wo(ctx, weights, work, r, wo_mma, wo_tile)
     enqueue_residual_apple_gpu(
         ctx, x, projected, TileTensor(work.output, row_major(r, h))
     )
@@ -512,6 +537,7 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     mut cache: AttentionCache, mut work: AttentionWorkspace,
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     gqa_mapping: Int = 0,
+    projection_mapping: Int = 0,
 ) raises -> Int:
     """Compose the prior Qwen projection and FP32 GQA studies on Metal.
 
@@ -524,11 +550,22 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     Explicit GQA mappings 1/2 use 16/8 query rows; 3/4 use 4/8 KV splits
     and require preallocated partial storage for multi-row calls. Mapping 0
     preserves the integrated study control; this is not an automatic selector.
+    Projection mappings 1/2 change only Wo to 16x16/8x32 MMA; 3/4 change only
+    packed QKV to those tiles. They require the control GQA mapping and retain
+    rowwise projections below sixteen rows. Zero keeps both 8x16 projections.
     """
     comptime assert x.flat_rank == 2
     if gqa_mapping < 0 or gqa_mapping > 4:
         raise Error("unknown integrated GQA mapping")
+    if projection_mapping < 0 or projection_mapping > 4:
+        raise Error("unknown integrated projection mapping")
+    if projection_mapping and gqa_mapping:
+        raise Error("projection study requires control GQA mapping")
     var use_mma = Int(x.dim[0]()) >= 16
+    var qkv = 2 if use_mma else 1
+    if use_mma and projection_mapping >= 3:
+        qkv = projection_mapping
     return enqueue_attention_sublayer(
-        ctx, weights, cache, work, x, 6 + gqa_mapping, use_mma, 2 if use_mma else 1,
+        ctx, weights, cache, work, x, 6 + gqa_mapping, use_mma, qkv,
+        projection_mapping if projection_mapping <= 2 else 0,
     )

@@ -905,6 +905,137 @@ def enqueue_linear_prefill_mma_8x16_apple_gpu[
     )
 
 
+@always_inline
+def _linear_mma_fragment[TRANSPOSE: Bool, L: TensorLayout](
+    tensor: TileTensor[DType.bfloat16, L, MutAnyOrigin],
+    row: Int, column: Int, rows: Int, columns: Int,
+) -> SIMD[DType.bfloat16, 2]:
+    comptime assert tensor.flat_rank == 2
+    var fragment = SIMD[DType.bfloat16, 2](0)
+    comptime for e in range(2):
+        if row < rows and column + e < columns:
+            comptime if TRANSPOSE:
+                fragment[e] = rebind[Scalar[DType.bfloat16]](tensor[column + e, row])
+            else:
+                fragment[e] = rebind[Scalar[DType.bfloat16]](tensor[row, column + e])
+    return fragment
+
+
+@always_inline
+def _linear_mma_store[HAS_BIAS: Bool, BL: TensorLayout, OL: TensorLayout](
+    bias: TileTensor[DType.bfloat16, BL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+    accumulator: SIMD[DType.float32, 2],
+    row: Int, column: Int, rows: Int, columns: Int,
+):
+    comptime assert bias.flat_rank == 1 and output.flat_rank == 2
+    comptime for e in range(2):
+        if row < rows and column + e < columns:
+            var b: Float32 = 0
+            comptime if HAS_BIAS:
+                b = rebind[Scalar[DType.bfloat16]](bias[column + e]).cast[DType.float32]()
+            var value = (accumulator[e] + b).cast[DType.bfloat16]()
+            output[row, column + e] = rebind[output.ElementType](value)
+
+
+def _linear_mma_tile[
+    BM: Int, BN: Int, IL: TensorLayout, WL: TensorLayout,
+    BL: TensorLayout, OL: TensorLayout, HAS_BIAS: Bool,
+](
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    bias: TileTensor[DType.bfloat16, BL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+    row_count: Int32, input_count: Int32, output_count: Int32,
+):
+    """One SIMD group owns four 8x8 fragments: eight FP32 values per lane.
+
+    16x16 reuses each weight fragment across two input row fragments;
+    8x32 reuses one input fragment across four weight fragments. No shared
+    storage, barriers, K splitting, or additional intermediate rounding.
+    """
+    comptime assert is_apple_gpu()
+    comptime assert (BM == 16 and BN == 16) or (BM == 8 and BN == 32)
+    var rows = Int(row_count)
+    var inputs = Int(input_count)
+    var outputs = Int(output_count)
+    var lane = Int(lane_id())
+    var fr = ((lane & 6) >> 1) + ((lane & 16) >> 2)
+    var fc = ((lane & 1) << 1) + ((lane & 8) >> 1)
+    var row = block_idx.y * BM + fr
+    var column = block_idx.x * BN + fc
+    var c0 = SIMD[DType.float32, 2](0)
+    var c1 = SIMD[DType.float32, 2](0)
+    var c2 = SIMD[DType.float32, 2](0)
+    var c3 = SIMD[DType.float32, 2](0)
+    var k = 0
+    while k < inputs:
+        var a0 = _linear_mma_fragment[False](input, row, k + fc, rows, inputs)
+        var b0 = _linear_mma_fragment[True](weight, k + fr, column, inputs, outputs)
+        var b1 = _linear_mma_fragment[True](weight, k + fr, column + 8, inputs, outputs)
+        var p0 = c0
+        var p1 = c1
+        var p2 = c2
+        var p3 = c3
+        _mma_apple_8x8(c0, a0, b0, p0)
+        _mma_apple_8x8(c1, a0, b1, p1)
+        comptime if BM == 16:
+            var a1 = _linear_mma_fragment[False](input, row + 8, k + fc, rows, inputs)
+            _mma_apple_8x8(c2, a1, b0, p2)
+            _mma_apple_8x8(c3, a1, b1, p3)
+        else:
+            var b2 = _linear_mma_fragment[True](weight, k + fr, column + 16, inputs, outputs)
+            var b3 = _linear_mma_fragment[True](weight, k + fr, column + 24, inputs, outputs)
+            _mma_apple_8x8(c2, a0, b2, p2)
+            _mma_apple_8x8(c3, a0, b3, p3)
+        k += 8
+    _linear_mma_store[HAS_BIAS](bias, output, c0, row, column, rows, outputs)
+    _linear_mma_store[HAS_BIAS](bias, output, c1, row, column + 8, rows, outputs)
+    comptime if BM == 16:
+        _linear_mma_store[HAS_BIAS](bias, output, c2, row + 8, column, rows, outputs)
+        _linear_mma_store[HAS_BIAS](bias, output, c3, row + 8, column + 8, rows, outputs)
+    else:
+        _linear_mma_store[HAS_BIAS](bias, output, c2, row, column + 16, rows, outputs)
+        _linear_mma_store[HAS_BIAS](bias, output, c3, row, column + 24, rows, outputs)
+
+
+def enqueue_linear_prefill_mma_tile_apple_gpu[
+    BM: Int, BN: Int, IL: TensorLayout, WL: TensorLayout,
+    BL: TensorLayout, OL: TensorLayout, HAS_BIAS: Bool = True,
+](
+    context: DeviceContext,
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    bias: TileTensor[DType.bfloat16, BL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+) raises:
+    """Contained 16x16/8x32 MMA alternatives to the unchanged 8x16 control."""
+    comptime assert (BM == 16 and BN == 16) or (BM == 8 and BN == 32)
+    _validate_linear[IL, WL, BL, OL, HAS_BIAS](input, weight, bias, output)
+    if context.api() != "metal":
+        raise Error("Apple GPU linear projection requires the Metal device API")
+    var r = Int(input.dim[0]())
+    var k = Int(input.dim[1]())
+    var n = Int(weight.dim[0]())
+    comptime kernel = _linear_mma_tile[BM, BN, IL, WL, BL, OL, HAS_BIAS]
+    context.enqueue_function[kernel](input, weight, bias, output, Int32(r), Int32(k), Int32(n),
+        grid_dim=(ceildiv(n, BN), ceildiv(r, BM)), block_dim=WARP_SIZE)
+
+
+def enqueue_linear_prefill_mma_tile_apple_gpu[
+    BM: Int, BN: Int, IL: TensorLayout, WL: TensorLayout, OL: TensorLayout,
+](
+    context: DeviceContext,
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+) raises:
+    var unused_bias = TileTensor(weight.ptr, row_major(1))
+    enqueue_linear_prefill_mma_tile_apple_gpu[
+        BM, BN, IL, WL, type_of(unused_bias.layout), OL, False
+    ](context, input, weight, unused_bias, output)
+
+
 def enqueue_linear_prefill_tiled_apple_gpu_bk[
     tile_input_features: Int,
     InputLayout: TensorLayout,

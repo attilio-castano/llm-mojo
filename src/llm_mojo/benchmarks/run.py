@@ -11,7 +11,7 @@ from .environment import (conditions_snapshot, ensure_record_location,
                          stable_environment, utc_now)
 from .study import (STUDIES, BLOCKS, REPETITIONS, WARMUP, sha, write_json,
                    encode_samples, parse_output, summarize, workloads, load_run,
-                   select_parallelism_finalists)
+                   select_parallelism_finalists, select_projection_tile)
 from .attention_sublayer_contract import fixture_identity
 
 
@@ -59,7 +59,7 @@ def checked_conditions():
     return conditions
 
 
-def run(build_dir, output, study_names, *, parallelism_screen=None):
+def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=None, tile_kernel_screen=None):
     ensure_record_location(output)
     provenance = json.loads((build_dir / 'build.json').read_text())
     repo, sources = repository_state(), source_hashes()
@@ -91,6 +91,27 @@ def run(build_dir, output, study_names, *, parallelism_screen=None):
             selection = dict(finalists=finalists,screen_run_sha256=sha(parallelism_screen / 'run.json'),
                              screen_samples_sha256=screen['samples_sha256'],
                              rule='Both modes faster at (64,4096); minimum worst-mode ratio per family; lower-ID tie break.')
+        if name in ('attention_sublayer_tiles','attention_sublayer_tiles_qkv'):
+            records=[]
+            summaries=[]
+            for path,study in ((tile_screen,'attention_sublayer_tiles_screen'),
+                               (tile_kernel_screen,'attention_sublayer_tiles_kernel_screen')):
+                if path is None:
+                    raise ValueError('projection follow-up requires both completed screens')
+                screen,_,summary=load_run(path)
+                if (screen['study']!=study or screen['build']!=provenance
+                    or screen['specification']!=json.loads(json.dumps(STUDIES[study]))):
+                    raise ValueError('projection screen must match this specification and build')
+                records.append(dict(study=study,run_sha256=sha(path/'run.json'),
+                                    samples_sha256=screen['samples_sha256']))
+                summaries.append(summary)
+            winner=select_projection_tile(*summaries)
+            if winner is None:
+                raise ValueError('no projection tile qualified; stop at screens')
+            variant=winner+2 if name.endswith('_qkv') else winner
+            spec={**spec,'candidates':[9,variant]}
+            selection=dict(wo_finalist=winner,variant=variant,screens=records,
+                           rule='Full 1024 faster for isolated Wo and whole attention in both modes; minimum worst-mode whole-block ratio, lower-ID tie break.')
         if spec['operation'] == 'attention_sublayer' and fixture_identity() != provenance.get('attention_fixtures'):
             raise RuntimeError('attention benchmark input identity changed')
         directory = output / name
@@ -119,7 +140,7 @@ def run(build_dir, output, study_names, *, parallelism_screen=None):
                 if binary_name in ('gqa_prefill', 'attention_sublayer'):
                     command.append(str(workload['query_rows']))
                 command += list(map(str, [rows, layers, candidate, spec['control'], int(first), 53,
-                                          'bench', REPETITIONS, WARMUP]))
+                                          spec.get('mode','bench'), REPETITIONS, WARMUP]))
                 # The FP32 4096-row ring performs 960 complete sublayers;
                 # its validated runtime exceeds the standalone-kernel limit.
                 timeout = 600 if spec['operation'] == 'attention_sublayer' else 300
@@ -128,7 +149,7 @@ def run(build_dir, output, study_names, *, parallelism_screen=None):
                 (directory / 'last-process.txt').write_text(process.stdout + process.stderr)
                 process.check_returncode()
                 identity, observations = parse_output(process.stdout, spec['control'], candidate, first,
-                                                      rows=rows, layers=layers, seed=53, operation=spec['operation'], query_rows=workload.get('query_rows'))
+                                                      rows=rows, layers=layers, seed=53, operation=spec['operation'], query_rows=workload.get('query_rows'), measurement=spec.get('measurement'))
                 if record.get('runtime', identity) != identity:
                     raise RuntimeError('runtime identity changed')
                 record['runtime'] = identity
@@ -153,8 +174,10 @@ def main():
     p.add_argument('--build-dir', type=Path, required=True)
     p.add_argument('--output', type=Path)
     p.add_argument('--parallelism-screen', type=Path)
+    p.add_argument('--tile-screen', type=Path)
+    p.add_argument('--tile-kernel-screen', type=Path)
     p.add_argument('--studies', nargs='+', choices=list(STUDIES),
-                   default=[name for name in STUDIES if not name.endswith('_screen')
+                   default=[name for name in STUDIES if not name.endswith('_screen') and not STUDIES[name].get('opt_in')
                             and name not in ('attention_sublayer_wo','attention_sublayer_decode','attention_sublayer_prefill',
                                              'attention_sublayer_projections','attention_sublayer_integrated',
                                              'attention_sublayer_parallelism')])
@@ -165,7 +188,9 @@ def main():
         p.error('run requires --output')
     else:
         run(args.build_dir.resolve(), args.output.resolve(), args.studies,
-            parallelism_screen=args.parallelism_screen.resolve() if args.parallelism_screen else None)
+            parallelism_screen=args.parallelism_screen.resolve() if args.parallelism_screen else None,
+            tile_screen=args.tile_screen.resolve() if args.tile_screen else None,
+            tile_kernel_screen=args.tile_kernel_screen.resolve() if args.tile_kernel_screen else None)
 
 
 if __name__ == '__main__':

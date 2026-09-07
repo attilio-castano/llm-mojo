@@ -137,6 +137,55 @@ def select_parallelism_finalists(summary):
     return finalists
 
 
+# Projection ownership study: two tiles, current integrated control, then
+# conditional full-Wo and same-tile QKV transfer. No combined new mappings.
+TILE_NAMES = {9:'MMA 8x16 control',14:'Wo MMA 16x16',15:'Wo MMA 8x32',
+              16:'QKV MMA 16x16',17:'QKV MMA 8x32'}
+_TILE_BASE = {k:v for k,v in STUDIES['attention_sublayer'].items()
+              if k not in ('control','candidates','names','workloads')}
+STUDIES['attention_sublayer_tiles_screen'] = dict(
+    **_TILE_BASE, control=9,candidates=[9,14,15],names=TILE_NAMES,opt_in=True,
+    measurement='whole_attention',
+    workloads=[dict(query_rows=r,rows=t) for r,t in ((16,16),(64,64),(1024,1024),(64,4096))])
+STUDIES['attention_sublayer_tiles_kernel_screen'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_tiles_screen'].items()
+       if k not in ('measurement','timing','inputs')}, mode='wo',measurement='isolated_wo',
+    inputs='Frozen fp32_7_attention BF16 suffix, Wo weights from case 7; odd ring weights negated. Same input in both arms.',
+    timing='Host enqueue of bias-free Wo only through completion. Hot one call; ring24 distinct weights, one sync, divide by 24. Allocation, fixture reads and checks excluded.')
+STUDIES['attention_sublayer_tiles'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_tiles_screen'].items() if k != 'workloads'},
+    workloads=STUDIES['attention_sublayer']['workloads'])
+STUDIES['attention_sublayer_tiles_qkv'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_tiles_screen'].items() if k not in ('workloads','candidates')},
+    candidates=[9,16,17],
+    workloads=[dict(query_rows=r,rows=t) for r,t in [(n,n) for n in (16,64,256,1024,4096)]+[(64,4096)]])
+STUDIES['attention_sublayer_split_domain'] = dict(
+    **_TILE_BASE,control=9,candidates=[9,13],names={9:'integrated BQ32',13:'KV split8'},
+    opt_in=True,measurement='whole_attention',
+    workloads=[dict(query_rows=r,rows=t) for r in (16,64,256) for t in (1024,4096)])
+STUDIES['attention_sublayer_timing'] = dict(
+    **_TILE_BASE,control=9,candidates=[9],names={9:'identical integrated control'},
+    opt_in=True,measurement='whole_attention',
+    workloads=[dict(query_rows=r,rows=t) for r,t in ((16,16),(64,64),(64,1024))])
+STUDIES['attention_sublayer_timing_buffered'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_timing'].items() if k != 'measurement'},
+    mode='buffered',measurement='whole_attention_buffered')
+
+
+def select_projection_tile(block_summary, kernel_summary):
+    """Require isolated and whole-block gains in both modes at full 1024."""
+    def target(summary):
+        rows={(s['candidate'],s['layers']):s for s in summary
+              if (s.get('query_rows'),s['rows'])==(1024,1024)}
+        if set(rows)!={(v,l) for v in (9,14,15) for l in (1,24)}:
+            raise ValueError('projection selection requires every target comparison')
+        return rows
+    block,kernel=target(block_summary),target(kernel_summary)
+    eligible=[v for v in (14,15) if all(table[v,l]['decision']=='faster'
+              for table in (block,kernel) for l in (1,24))]
+    return min(eligible,key=lambda v:(max(block[v,l]['ratio'] for l in (1,24)),v)) if eligible else None
+
+
 def workloads(spec):
     return spec.get('workloads', [dict(rows=r) for r in spec.get('rows', [])])
 
@@ -171,7 +220,7 @@ def read_samples(path):
                  for k, v in row.items()} for row in reader]
 
 
-def parse_output(output, control, candidate, first, *, rows, layers, seed, operation, query_rows=None):
+def parse_output(output, control, candidate, first, *, rows, layers, seed, operation, query_rows=None, measurement=None):
     lines = output.splitlines()
     expected_headers = [f'shape: {rows} {layers} seed: {seed}',
                         f'variants: {control} {candidate} candidate-first: {int(first)}',
@@ -180,6 +229,8 @@ def parse_output(output, control, candidate, first, *, rows, layers, seed, opera
         if type(query_rows) is not int or not 1 <= query_rows <= rows:
             raise ValueError('invalid prefill query rows')
         expected_headers.append(f'query rows: {query_rows}')
+    if measurement is not None:
+        expected_headers.append(f'measurement: {measurement}')
     if operation != 'gqa_decode':
         expected_headers.append(f'operation: {operation}')
     if any(lines.count(h) != 1 for h in expected_headers) or not output.rstrip().endswith('BENCHMARK_COMPLETE'):
@@ -201,7 +252,8 @@ def parse_output(output, control, candidate, first, *, rows, layers, seed, opera
     expected = [(arm, variant, r) for arm, variant in arms for r in range(REPETITIONS)]
     if [(s['arm'], s['variant'], s['repetition']) for s in samples] != expected:
         raise ValueError('wrong implementation, sample count or execution order')
-    return dict(device=devices[0], api='metal', correctness='passed'), samples
+    return dict(device=devices[0], api='metal', correctness='passed',
+                **({'measurement':measurement} if measurement is not None else {})), samples
 
 
 def summarize(samples, spec):

@@ -7,10 +7,34 @@ import unittest
 
 from llm_mojo.benchmarks.study import (parse_output, summarize, encode_samples, read_samples,
                               load_run, sha, write_json, REPETITIONS,
-                              select_parallelism_finalists)
+                              select_parallelism_finalists, select_projection_tile)
 
 
 class StudyTests(unittest.TestCase):
+    def test_projection_selection_requires_both_boundaries_and_modes(self):
+        block = [dict(query_rows=1024,rows=1024,candidate=v,layers=l,
+                      decision='calibration' if v==9 else 'faster',ratio=.8)
+                 for v in (9,14,15) for l in (1,24)]
+        kernel = copy.deepcopy(block)
+        self.assertEqual(select_projection_tile(block,kernel),14)
+        kernel[2]['decision']='inconclusive'
+        self.assertEqual(select_projection_tile(block,kernel),15)
+        block[-1]['decision']='inconclusive'
+        self.assertIsNone(select_projection_tile(block,kernel))
+        with self.assertRaises(ValueError):
+            select_projection_tile(block[:-1],kernel)
+
+    def test_measurement_boundary_cannot_be_silently_swapped(self):
+        output=self.output()+'\nmeasurement: isolated_wo\n'
+        # Keep the completion sentinel last, as the real instrument does.
+        output=output.replace('BENCHMARK_COMPLETE\n','')+'BENCHMARK_COMPLETE\n'
+        args=dict(rows=16,layers=24,seed=53,operation='linear')
+        identity,_=parse_output(output,0,1,False,measurement='isolated_wo',**args)
+        self.assertEqual(identity['measurement'],'isolated_wo')
+        for boundary in ('whole_attention','whole_attention_buffered'):
+            with self.assertRaises(ValueError):
+                parse_output(output,0,1,False,measurement=boundary,**args)
+
     def test_parallelism_selection_requires_both_modes_and_respects_family_budget(self):
         rows = [dict(query_rows=64,rows=4096,candidate=v,layers=l,
                      decision='calibration' if v == 9 else 'faster',ratio=.8)

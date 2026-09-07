@@ -9,6 +9,7 @@ from llm_mojo.attention_sublayer import AttentionWeights, AttentionWorkspace, _e
 from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.linear import (
     enqueue_linear_apple_gpu, enqueue_linear_prefill_mma_8x16_apple_gpu,
+    enqueue_linear_prefill_mma_tile_apple_gpu,
 )
 from llm_mojo.rope import enqueue_rope_apple_gpu
 from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
@@ -138,7 +139,7 @@ def _operations(case_id: Int, nq: Int, nk: Int, d: Int, t: Int, precision: Bool 
     if precision:
         # Both existing packed kernels consume exactly upstream's normalized X.
         # The production layout handoff is included in these stage gates.
-        for mapping in [1, 2]:
+        for mapping in [1, 2, 3, 4]:
             work.packed.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
             work.raw_query.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
             work.raw_key.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
@@ -289,6 +290,14 @@ def _operations(case_id: Int, nq: Int, nk: Int, d: Int, t: Int, precision: Bool 
         assert_sublayer_fixture(
             work.projected, case_id, "projected", 0, t, h, 0.03125, True, reference
         )
+        comptime for mapping in range(2):
+            work.projected.enqueue_fill(123)
+            enqueue_linear_prefill_mma_tile_apple_gpu[16 if mapping == 0 else 8, 16 if mapping == 0 else 32](
+                ctx, TileTensor(work.attention, row_major(t, h)),
+                TileTensor(weights.output, row_major(h, h)), projected)
+            print("local Wo tile mapping", mapping + 1)
+            assert_sublayer_fixture(
+                work.projected, case_id, "projected", 0, t, h, 0.03125, True, reference)
     load_sublayer_fixture(work.projected, case_id, "projected", True, reference)
     enqueue_residual_apple_gpu(
         ctx, x, projected, TileTensor(work.output, row_major(t, h))

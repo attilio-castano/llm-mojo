@@ -828,3 +828,58 @@ control, and decode retains G32. The bounded candidate budget is complete.
 The [parallelism report](../studies/attention_sublayer/README.md#gqa-parallelism-on-the-integrated-block)
 retains all raw observations, source/selection identities, numerical validation,
 negative results and the next questions suggested by earlier projection studies.
+
+## Contained projection tiles and split-domain follow-up
+
+The approved next experiment keeps the integrated 8x16 projection kernel and
+FP32 GQA as control 9. Two candidates give one SIMD group four Apple 8x8 MMA
+fragments: Wo 16x16 (14) and Wo 8x32 (15). Each lane owns eight FP32 accumulator
+values instead of four. The former reuses weights across sixteen token rows;
+the latter reuses inputs across thirty-two output features. No shared staging,
+barriers, reduction splitting or new BF16 boundary is added. The original
+8x16 kernel remains intact. The source accumulator count is not a physical
+register allocation claim.
+
+Validate exact upstream Wo inputs, ragged/exact matrix tiles, bias-free guards,
+full/chunked attention and repeated asynchronous calls across 15/16/17 rows.
+Validate both tile implementations with packed QKV bias and its layout handoff
+as well, before any conditional performance transfer. Keep all numerical
+limits and frozen fixture hashes unchanged, including checkpoint comparisons.
+New projection choices are explicit and change one projection at a time;
+R<16 retains the existing rowwise policy.
+
+The screen compares 9/14/15 at full 16, 64 and 1024 and chunk (64,4096), in both
+hot and ring24 modes. Run the same four-block, ten-warmup, ten-sample protocol
+at two boundaries: isolated Wo on frozen BF16 upstream attention values, and
+the complete integrated attention block. Each retains 1,920 observations.
+An eligible tile must qualify as faster at full 1024 in both modes at both
+boundaries under the existing 5%/self-pair-noise rule. Select at most one,
+minimizing the worse whole-block ratio; exact ties prefer 16x16. The shared
+runner binds both complete screens to the same source/build.
+
+Only an eligible tile advances to the existing fifteen-workload whole-Wo
+matrix (4,800 observations). Then test that same tile in packed QKV, keeping
+Wo at the 8x16 control: candidate 16 or 17 at full 16/64/256/1024/4096 and
+chunk (64,4096), retaining 1,920 observations. No eligible tile ends this family
+at its two screens. Keep all negative and inconclusive results; no automatic
+projection selector follows from this bounded comparison.
+
+Separately, compare the already implemented unsplit/split8 mappings (9/13)
+at R=16/64/256 and T=1024/4096, retaining 1,920 observations. This changes the
+workload grid, not the GQA algorithms or projection policy. Before interpreting
+a crossover, investigate the earlier short-call variation using control-only
+self-pairs at full 16, full 64 and chunk (64,1024). Compare the original
+per-sample printing with buffered sample emission after both arms, retaining
+480 observations per method. Both preserve enqueue-through-completion timing;
+buffering removes printing between samples, not synchronization or work.
+The measurement boundary is emitted and checked by the parser. This diagnostic
+can identify sensitivity to sample emission; it does not pin GPU clocks or
+prove that printing caused historical variation. Keep the domain comparison
+on the original protocol and retain noisy outcomes rather than repeat them.
+
+Freeze validated source before measurement. Retain compact `tiles_`,
+`tiles_kernel_screen_`, `tiles_screen_`, conditional `tiles_qkv_`, `split_domain_`
+and `timing_`/`timing_buffered_` evidence in the existing attention study.
+Use the same package runner and offline plotter. Explain measured domain and
+remaining uncertainty before proposing a dispatch rule; conclude with local
+commits and no remote publication.

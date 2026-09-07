@@ -57,6 +57,28 @@ For profile curation, use `--attention-sublayer --parallelism-variants 9 FINALIS
 at `(64,4096)` and `(1024,1024)`, with 25 measured iterations and ten warmups.
 `src/llm_mojo/benchmarks/smoke.py` exercises the other measurement routes and output gates.
 
+The projection-tile follow-up starts with
+`--studies attention_sublayer_tiles_screen attention_sublayer_tiles_kernel_screen`.
+Both compare 9/14/15; the first times the complete block and the second only
+Wo on frozen upstream attention inputs. After both complete, use
+`--studies attention_sublayer_tiles attention_sublayer_tiles_qkv`
+with `--tile-screen /path/to/attention_sublayer_tiles_screen` and
+`--tile-kernel-screen /path/to/attention_sublayer_tiles_kernel_screen`.
+The runner requires a tile to qualify at both boundaries in both modes at
+full 1024, binds the screens to this build, and selects at most one. No winner
+means stop this family after screening. QKV transfer changes only QKV, leaving
+Wo at the control mapping. All these studies are opt-in.
+
+The independent `attention_sublayer_split_domain` study compares existing 9/13
+at R=16/64/256 and T=1024/4096. Run control-only `attention_sublayer_timing` and
+`attention_sublayer_timing_buffered` beforehand to diagnose sensitivity to
+printing between samples. The latter buffers observations until both arms
+finish; timing still includes enqueue through completion. The parser verifies
+each requested measurement boundary. The [bounded plan](../../../docs/attention-sublayer.md#contained-projection-tiles-and-split-domain-follow-up)
+defines the matrices, selection and interpretation. Retain these files under
+their matching `tiles_`, `split_domain_` and `timing_` prefixes in the existing
+attention study; the common plotter reconstructs all tables and figures.
+
 Hot measures one operation through completion. Ring24 measures 24 distinct
 input buffers (RMSNorm/RoPE/GQA) or weight buffers (linear), one synchronization,
 and divides by 24. Output and scratch are reused. These modes have different

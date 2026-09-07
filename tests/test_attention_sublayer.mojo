@@ -23,6 +23,7 @@ def _case(
     reference: String = "upstream", require_close: Bool = True,
     wo_mma: Bool = False,
     qkv_mapping: Int = 0, integrated: Bool = False, gqa_mapping: Int = 0,
+    projection_mapping: Int = 0,
 ) raises:
     var ctx = DeviceContext()
     assert_equal(ctx.api(), "metal")
@@ -39,7 +40,7 @@ def _case(
         chunks,
         "Wo MMA",
         wo_mma,
-        "QKV mapping", qkv_mapping, "integrated", integrated, "GQA mapping", gqa_mapping,
+        "QKV mapping", qkv_mapping, "integrated", integrated, "GQA mapping", gqa_mapping, "projection mapping", projection_mapping,
     )
     var h = nq * d
     var k = nk * d
@@ -89,7 +90,7 @@ def _case(
         )
         if integrated:
             assert_equal(enqueue_attention_sublayer_integrated(
-                ctx, weights, cache, work, view, gqa_mapping
+                ctx, weights, cache, work, view, gqa_mapping, projection_mapping
             ), 4 if r == 1 else 6 + gqa_mapping)
         elif route == 3:
             # All FP32 accuracy cases also exercise the public default route.
@@ -164,8 +165,17 @@ def _case(
         )
     with assert_raises(contains="QKV projection mapping"):
         _ = enqueue_attention_sublayer(
-            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), qkv_mapping=3
+            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), qkv_mapping=5
         )
+    with assert_raises(contains="unknown integrated projection mapping"):
+        _ = enqueue_attention_sublayer_integrated(
+            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), 0, 5)
+    with assert_raises(contains="requires control GQA"):
+        _ = enqueue_attention_sublayer_integrated(
+            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), 1, 1)
+    with assert_raises(contains="unknown Wo tile"):
+        _ = enqueue_attention_sublayer(
+            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), wo_tile=3)
     assert_equal(cache.length, t)
     cache.reset(ctx)
     assert_equal(cache.length, 0)
@@ -234,8 +244,8 @@ def test_repeated_asynchronous_use() raises:
     load_sublayer_fixture(weights.norm, 5, "norm_weight")
     load_sublayer_fixture(weights.output, 5, "output_weight")
     load_sublayer_fixture(input, 5, "input")
-    for implementation in range(14):
-        var route = implementation - 3 if implementation >= 10 else (6 if implementation >= 8 else (3 if implementation == 4 else (implementation - 1 if implementation >= 5 else implementation)))
+    for implementation in range(18):
+        var route = 6 if implementation >= 14 else (implementation - 3 if implementation >= 10 else (6 if implementation >= 8 else (3 if implementation == 4 else (implementation - 1 if implementation >= 5 else implementation))))
         var wo_mma = implementation == 4 or implementation == 7
         # Optimized FP32 decode must also work without probability storage.
         var work = AttentionWorkspace(ctx, 65, 65, materialized=route == 0,
@@ -256,7 +266,9 @@ def test_repeated_asynchronous_use() raises:
                     rows = 15 if p == 0 else (16 if p == 15 or p == 48 else (17 if p == 31 else 1))
                 var view = TileTensor(input.unsafe_ptr().unsafe_offset(p * 896), row_major(rows, 896))
                 var launched: Int
-                if implementation >= 9:
+                if implementation >= 14:
+                    launched = enqueue_attention_sublayer_integrated(ctx, weights, cache, work, view, 0, implementation - 13)
+                elif implementation >= 9:
                     launched = enqueue_attention_sublayer_integrated(ctx, weights, cache, work, view, implementation - 9)
                 else:
                     launched = enqueue_attention_sublayer(
