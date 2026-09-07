@@ -70,13 +70,46 @@ class EvidenceTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError,'incomplete'):
                         load_profile(directory,prefix)
 
+    def test_split_combined_evidence_binds_both_comparisons_to_validated_source(self):
+        directory=ROOT / 'studies/attention_sublayer'
+        validation=json.loads((directory/'split_combined_validation.json').read_text())
+        builds=[]
+        expected=[(16,256),*[(r,t) for r in (16,64,256) for t in (1024,4096)]]
+        for suffix,control in (('projections',13),('gqa',18)):
+            record,samples,_=load_run(directory,'split_combined_'+suffix+'_')
+            self.assertEqual(len(samples),2240)
+            self.assertEqual(record['study'],'attention_sublayer_split_combined_'+suffix)
+            self.assertEqual(record['specification']['control'],control)
+            self.assertEqual(record['specification']['candidates'],[control,19])
+            self.assertEqual([(w['query_rows'],w['rows']) for w in record['specification']['workloads']],expected)
+            self.assertEqual(record['runtime']['measurement'],'whole_attention')
+            self.assertEqual(record['repository']['commit'],validation['source_commit'])
+            self.assertEqual(record['runtime']['device'],validation['device'])
+            for name,digest in validation['source_sha256'].items():
+                if name in record['build']['sources']:
+                    self.assertEqual(digest,record['build']['sources'][name])
+            builds.append(record['build'])
+        self.assertEqual(builds[0],builds[1])
+        self.assertEqual(validation['tests']['asynchronous_configurations'],20)
+        self.assertEqual(validation['tests']['asynchronous_sequences_per_configuration'],12)
+        self.assertEqual(validation['limits']['projected_and_final'],0.03125)
+        self.assertEqual(validation['limits']['cache'],'exact BF16 bits')
+        self.assertTrue(all(c['returncode']==0 and c['sources_unchanged'] for c in validation['commands']))
+        for dataset in validation['numerics'].values():
+            self.assertEqual(set(dataset),{'13','18','19'})
+            for fields in dataset.values():
+                self.assertEqual(set(fields),{'projected','output'})
+                for value in fields.values():
+                    self.assertGreater(value['checks'],0)
+                    self.assertLessEqual(value['maximum_scaled_error'],0.03125)
+
     def test_retained_studies_are_complete(self):
         count = 0
         for directory in (ROOT / 'studies').glob('*/'):
             for record in directory.glob('*run.json'):
                 _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
-        self.assertEqual(count, 82720)
+        self.assertEqual(count, 87200)
         profile = load_profile(ROOT / 'studies/gqa_decode')
         self.assertEqual(sum(row['count'] for row in profile), 3000)
         profile = load_profile(ROOT / 'studies/gqa_prefill')

@@ -1,14 +1,23 @@
 # Qwen attention sublayer
 
-The complete attention block has now been timed and profiled with **16x16
+The **split8 plus 16x16 QKV/Wo integration gap is closed**: the composition is
+validated and measured through residual addition. At context 1024, the new
+projections lower whole-block time by **7.5–9.5% for 64-row chunks** and
+**11.3–11.8% for 256-row chunks**, relative to split8 with old projections.
+With new projections fixed, split8 improves all fourteen tested cells.
+Some 16-row chunks regress when adding the new projection tiles, so these
+remain explicit workload-specific choices. The [closure results](#split8-with-both-projection-tiles-integration-closure)
+retain all 4,480 observations, including regressions and inconclusive cells.
+
+The preceding complete attention block comparison timed and profiled **16x16
 QKV and Wo enabled together**. Against the integrated 8x16 control on Apple
 M4 Pro / Metal, whole-block latency falls **16.5–18.8% at full 256**, **15.4–16.1%
 at full 1024**, and **about 9.1% at full 4096**. A 16-token chunk at context 256
 regresses 13.91% in ring24, so the combined mapping remains an explicit option.
 The [combined results](#combined-qkv-and-wo-complete-attention-timing-and-profiling)
 retain 4,800 fresh timing observations and eight validated stage captures.
-GQA accounts for 71% of active time at full 4096 and 89% in the long cached
-chunk; at full 1024, GQA and the two projections have comparable shares.
+With unsplit GQA, those captures show 71% of active time at full 4096 and
+89% in the long cached chunk; at full 1024, GQA and the two projections have comparable shares.
 
 The preceding projection-tile study found more headroom in the already
 integrated attention block. At full 1024 on Apple M4 Pro / Metal, **16x16 Wo
@@ -69,6 +78,139 @@ and [FP32 comparison](precision_numerics.json) retain the precision decision,
 independent gates and provenance. The original baseline's measured engine and
 fixtures match its validation hashes; only the runner's per-process timeout
 changed afterward.
+
+## Split8 with both projection tiles: integration closure
+
+The previously separate winners now compose through
+`enqueue_attention_sublayer_integrated(..., gqa_mapping=4, projection_mapping=5)`,
+benchmark variant **19**. Its controls are **13** (split8 with 8x16 QKV/Wo)
+and **18** (unsplit GQA with 16x16 QKV/Wo). This is an explicit study option;
+no automatic selector or default changes. Projection mappings 1–4 remain
+restricted to unsplit control GQA; only the studied 5/4 combination is added.
+
+For R>=16, both projections use their existing 16x16 mappings. R<16 keeps
+rowwise projections, and R=1 keeps G32 decode. Multi-row split8 requires
+caller-owned `AttentionWorkspace(..., fp32_materialized=False, prefill_splits=8)`
+with sufficient row/context capacity and initialized RoPE tables. Missing
+partial storage fails before any enqueue or cache/output change. The complete
+call includes ten GPU dispatches, including the split-state merge, ending at
+the residual addition; decode uses nine. It allocates and synchronizes nothing.
+
+### Correctness and measurement boundary
+
+At measured source **963d112**, the full workflow passed **93 Mojo and 48
+Python tests**, the frozen 17-case synthetic suite, three checkpoint cases,
+and actual benchmark routes in both modes. Normal-mode stress passed twenty
+configurations with twelve consecutive sequences each. The new combination
+crosses the 15/16/17-row boundary and finishes with decode, with poisoned
+scratch/output checks and unchanged exact cache gates.
+
+For each of variants 13/18/19, the maximum scaled projected/final errors were
+**0.005181347 / 0.011627907** on synthetic data (113 checks per field) and
+**0.0014124294 / 0.0013793104** on checkpoint data (49 checks per field).
+All pass the unchanged 0.03125 gate, `abs(got-want)/(1+abs(want))`; cache
+checks compare exact BF16 bits. Equal maxima do not imply bitwise-identical
+outputs. [split_combined_validation.json](split_combined_validation.json)
+retains commands, source hashes and numerical summaries.
+
+Both comparisons ran once on the same compiled source on Apple M4 Pro /
+Metal, retaining **4,480 observations**. Each includes its own control self-pairs,
+four paired blocks, ten warmups and ten samples per arm, hot and ring24.
+The workloads are the six prior split-domain chunks plus (16,256), the
+previously observed short projection regression. Positive percentages below
+mean lower whole-attention latency; negative percentages mean higher latency.
+The decision uses all four block ratios and the larger of 5% or matching
+self-pair variation. Ratios come from within-block pairs; do not multiply
+results across comparisons or rank controls from separate runs by raw medians.
+
+### Do the projection gains survive with split8 fixed?
+
+Compare **13 versus 19**, changing both projection tiles while holding split8
+fixed. The result is **five faster, three slower, six inconclusive cells**.
+
+| Chunk R, context T | Hot reduction | Ring24 reduction |
+|---|---:|---:|
+| 16, 256 | -13.60%, inconclusive | -10.64%, inconclusive |
+| 16, 1024 | -8.28%, slower | -3.72%, inconclusive |
+| 16, 4096 | -5.57%, slower | -5.30%, slower |
+| 64, 1024 | 7.50%, faster | 9.49%, faster |
+| 64, 4096 | 4.47%, inconclusive | 4.21%, inconclusive |
+| 256, 1024 | 11.27%, faster | 11.77%, faster |
+| 256, 4096 | 4.83%, inconclusive | 5.08%, faster |
+
+At (64,1024) and (256,1024), the combined tiles qualify in both modes. At
+(64,4096), all four projection ratios improve, but their 4.2–4.5% median
+reductions are below the predeclared 5% floor. At (256,4096), only ring24
+qualifies, narrowly at 5.08%. These limits remain in the report.
+
+The R=16 cases caution against blindly composing winners: old 8x16 projections
+are faster at T=4096 in both modes and at T=1024 in hot mode. The short
+(16,256) comparison is inconclusive because control self-pair deviations reach
+53.35% hot and 20.70% ring24. That does not erase its previous regression or
+establish a fresh one. No samples were discarded or selectively rerun.
+
+![Projection gain with split8 fixed](split_combined_projections.png)
+
+### Does split8 still help with both new projections fixed?
+
+Compare **18 versus 19**, holding both 16x16 projections fixed and adding
+split8 with its merge. **All fourteen cells qualify as faster.**
+
+| Chunk R, context T | Hot reduction | Ring24 reduction |
+|---|---:|---:|
+| 16, 256 | 17.24%, faster | 14.74%, faster |
+| 16, 1024 | 40.41%, faster | 49.45%, faster |
+| 16, 4096 | 61.87%, faster | 66.88%, faster |
+| 64, 1024 | 24.73%, faster | 30.82%, faster |
+| 64, 4096 | 41.16%, faster | 47.84%, faster |
+| 256, 1024 | 7.03%, faster | 7.69%, faster |
+| 256, 4096 | 14.44%, faster | 14.31%, faster |
+
+For the long (64,4096) chunk, split8 lowers complete attention time by
+41.16% hot and 47.84% ring24, consistent with the earlier split8 lesson.
+The new projection tiles add little at this workload; splitting remains
+the larger contribution. At (256,1024), both contributions qualify separately:
+7.03–7.69% from split8 with new projections fixed, and 11.27–11.77% from the
+projection change with split8 fixed. These are distinct paired comparisons,
+not additive components of a single speedup.
+
+![Split8 gain with the new projections fixed](split_combined_gqa.png)
+
+### What closes this milestone
+
+The combination is correct and measured end to end. For the measured cached
+chunks (64,1024) and (256,1024), variant 19 beats both component configurations
+in both modes. For R=16 at T=1024/4096, retain the old projection tiles with
+split8 where the new tiles regress; (64,4096) has no qualifying extra projection
+gain, and (256,4096) establishes that extra gain only in ring24. The earlier
+unsplit 16x16 full-prefill results remain a separate supported option; this
+closure measured cached chunks and does not establish a new full-prefill rule.
+
+This is enough to close the bounded attention integration study and move to
+the next decoder component. Further attention optimization should be motivated
+by a specific workload or later decoder measurements. We have not demonstrated
+a hardware ceiling. There are no new profiler captures or hardware counters
+in this closure; the prior unsplit stage shares must not be presented as a
+profile of variant 19. Source reuse and accumulator counts do not establish
+physical bandwidth or occupancy, nor explain the short-row regressions alone.
+
+The projection run spans **2026-09-07 11:27:51–11:29:43 UTC**; the GQA run spans
+**11:29:44–11:31:58 UTC**. Both use the same frozen case-7 suffixes, source,
+binary, and software: macOS 26.6.2, Xcode 26.6, Mojo 1.0.0 and MAX 26.5.0.
+Conditions were checked before and after each block: AC power, Low Power Mode
+off, and no reported thermal/performance warnings. Clocks were not pinned and
+background activity was not excluded. Ring24 owns distinct weights, inputs
+and caches but shares scratch/output; it amortizes synchronization and is not
+a 24-layer model or guaranteed cold-memory measurement.
+
+Reproduce from measured source 963d112 using the build/run workflow in
+[the benchmark guide](../../src/llm_mojo/benchmarks/README.md), selecting
+`attention_sublayer_split_combined_projections attention_sublayer_split_combined_gqa`.
+The two prefixed `run.json` and `samples.csv.gz` pairs bind each observation to
+its frozen matrix and provenance. The ordinary plotter regenerates both
+summary tables and figures without GPU execution. After retention, all 49
+Python tooling/evidence checks passed. All 78 retained tables and figures
+reproduce byte for byte, including the 74 unchanged historical artifacts.
 
 ## Combined QKV and Wo: complete attention timing and profiling
 
@@ -211,11 +353,11 @@ should name its workload rather than assume one global attention bottleneck.
 
 The earlier split8 study remains directly relevant to cached chunks: it already
 showed large gains where these projection changes barely affect latency.
-A subsequent integration check can combine the selected projection policy
-with split8 and compare it against split8 with the old projections. Full-4096
-GQA needs its own bounded question, because the earlier split8 comparison did
-not qualify there. This study does not add that combination or claim a hardware
-ceiling. The approved projection-composition and profiling experiment is complete.
+The [subsequent integration closure](#split8-with-both-projection-tiles-integration-closure)
+now measures the combined projection policy with split8 against each component
+configuration. Full-4096 GQA would still need its own bounded question, because
+the earlier split8 comparison did not qualify there. These unsplit captures
+remain historical evidence; neither experiment establishes a hardware ceiling.
 
 ## Projection tile ownership
 

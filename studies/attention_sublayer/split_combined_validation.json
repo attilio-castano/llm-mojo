@@ -1,0 +1,185 @@
+{
+  "schema": 1,
+  "purpose": "Compose validated 16x16 QKV/Wo with split8 FP32 GQA; measure both incremental gains through the complete attention block.",
+  "source_commit": "963d11219c3c683d9947fb95f0a67bba6fc04a6f",
+  "device": "Apple M4 Pro",
+  "backend": "metal",
+  "limits": {
+    "scaled_error": "abs(got-want)/(1+abs(want))",
+    "projected_and_final": 0.03125,
+    "cache": "exact BF16 bits"
+  },
+  "variants": {
+    "13": "split8 + 8x16 projections",
+    "18": "unsplit + 16x16 projections",
+    "19": "split8 + 16x16 projections"
+  },
+  "tests": {
+    "mojo": 93,
+    "python": 48,
+    "synthetic_cases": 17,
+    "checkpoint_cases": 3,
+    "synthetic_arrays": 510,
+    "checkpoint_arrays": 63,
+    "asynchronous_configurations": 20,
+    "asynchronous_sequences_per_configuration": 12
+  },
+  "commands": [
+    {
+      "name": "full",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "-m",
+        "llm_mojo.validate"
+      ],
+      "started_utc": "2026-09-07T11:11:27.807343+00:00",
+      "completed_utc": "2026-09-07T11:24:52.086154+00:00",
+      "returncode": 0,
+      "device_sync_mode": true,
+      "sources_unchanged": true
+    },
+    {
+      "name": "checkpoint-fixtures",
+      "command": [
+        "uv",
+        "run",
+        "--script",
+        "tests/fixtures/attention_sublayer/checkpoint.py",
+        "--attention-prefix"
+      ],
+      "started_utc": "2026-09-07T11:24:52.108870+00:00",
+      "completed_utc": "2026-09-07T11:25:19.637663+00:00",
+      "returncode": 0,
+      "device_sync_mode": false,
+      "sources_unchanged": true
+    },
+    {
+      "name": "checkpoint",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "mojo",
+        "run",
+        "-D",
+        "PRECISION_CHECKPOINT=1",
+        "-I",
+        "src",
+        "-I",
+        "build",
+        "-I",
+        "tests",
+        "tests/test_attention_precision.mojo"
+      ],
+      "started_utc": "2026-09-07T11:25:19.637985+00:00",
+      "completed_utc": "2026-09-07T11:26:03.068055+00:00",
+      "returncode": 0,
+      "device_sync_mode": true,
+      "sources_unchanged": true
+    },
+    {
+      "name": "asynchronous",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "mojo",
+        "run",
+        "-D",
+        "SUBLAYER_REPEAT=12",
+        "-I",
+        "src",
+        "-I",
+        "build",
+        "-I",
+        "tests",
+        "tests/test_attention_sublayer.mojo"
+      ],
+      "started_utc": "2026-09-07T11:26:03.068945+00:00",
+      "completed_utc": "2026-09-07T11:26:38.239707+00:00",
+      "returncode": 0,
+      "device_sync_mode": false,
+      "sources_unchanged": true
+    }
+  ],
+  "source_sha256": {
+    "src/llm_mojo/linear.mojo": "e8f25c8cd98b0141ba917e2492360d2a7bc58ff4194f886a6f26555a43643ac4",
+    "src/llm_mojo/attention_sublayer.mojo": "7a5b80794a148885f5ea6f64ba6328804ac5ccbfe971be7a860eeca0e6352f9d",
+    "src/llm_mojo/attention_prefill.mojo": "5ee18f967ca73a17d5ea8a32f1e70c1c69de0174a644931796d3c044bb8f204c",
+    "src/llm_mojo/attention_decode.mojo": "0f240c7571344c619e400fa108b62027a32ff0c4e77c4df261ea16a8d7f441e6",
+    "src/llm_mojo/benchmarks/attention_sublayer.mojo": "48fb1167d9bfac753233ef6b71d9d692ab499cd012999381b5d7f0ec3f95ca7d",
+    "src/llm_mojo/benchmarks/smoke.py": "f65f89a266dbad5b4304ccf77f753834af6b000bad1fd7ec1835b123c531df2c",
+    "tests/test_attention_sublayer.mojo": "1a8a241a7b00db1db50fdeddf3c3d136279b80266027c106c3fbde2f9c2745c7",
+    "tests/test_attention_precision.mojo": "8c257190a92efed63ce2b5a96d1aafbfa38e55460b98d6c79d2d9b25f0034ab8",
+    "tests/test_attention_sublayer_operations.mojo": "2749f073e175d4b944694598ae9584ab87412453a82e06bad2183c532cc46588"
+  },
+  "numerics": {
+    "synthetic": {
+      "13": {
+        "projected": {
+          "checks": 113,
+          "maximum_scaled_error": 0.005181347
+        },
+        "output": {
+          "checks": 113,
+          "maximum_scaled_error": 0.011627907
+        }
+      },
+      "18": {
+        "projected": {
+          "checks": 113,
+          "maximum_scaled_error": 0.005181347
+        },
+        "output": {
+          "checks": 113,
+          "maximum_scaled_error": 0.011627907
+        }
+      },
+      "19": {
+        "projected": {
+          "checks": 113,
+          "maximum_scaled_error": 0.005181347
+        },
+        "output": {
+          "checks": 113,
+          "maximum_scaled_error": 0.011627907
+        }
+      }
+    },
+    "checkpoint": {
+      "13": {
+        "projected": {
+          "checks": 49,
+          "maximum_scaled_error": 0.0014124294
+        },
+        "output": {
+          "checks": 49,
+          "maximum_scaled_error": 0.0013793104
+        }
+      },
+      "18": {
+        "projected": {
+          "checks": 49,
+          "maximum_scaled_error": 0.0014124294
+        },
+        "output": {
+          "checks": 49,
+          "maximum_scaled_error": 0.0013793104
+        }
+      },
+      "19": {
+        "projected": {
+          "checks": 49,
+          "maximum_scaled_error": 0.0014124294
+        },
+        "output": {
+          "checks": 49,
+          "maximum_scaled_error": 0.0013793104
+        }
+      }
+    }
+  }
+}

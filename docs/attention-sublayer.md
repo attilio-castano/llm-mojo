@@ -1019,3 +1019,25 @@ provenance, plus `split_combined_validation.json`, in the existing attention
 study. The usual plotter must regenerate all tables and figures, including
 unchanged historical artifacts. Interpret each comparison directly; do not
 multiply old speed ratios to claim a new combined gain.
+
+
+## Completed split8 and projection closure
+
+Measured source `963d112` enables `gqa_mapping=4, projection_mapping=5`
+(benchmark 19), with unchanged numerical gates and caller-owned split storage.
+The full workflow passed 93 Mojo / 48 Python tests, three checkpoint cases,
+all actual benchmark routes, and twenty asynchronous configurations repeated
+twelve times. All source hashes stayed fixed through validation and measurement.
+
+Two complete paired runs retain 4,480 observations. With split8 fixed (13/19),
+the new projection tiles yield five gains, three regressions and six
+inconclusive cells. At (64,1024) they reduce whole-attention time by 7.50% hot /
+9.49% ring24; at (256,1024), 11.27% / 11.77%. They regress for (16,4096) in
+both modes and (16,1024) hot. With the new projections fixed (18/19), split8
+qualifies in all fourteen cells, including 41.16% / 47.84% at (64,4096).
+
+The gap is closed by a correct, measured composition and explicit domain
+limits. No universal selector, new numerical policy, new profiler capture,
+full-decoder measurement or hardware-ceiling claim was added. See the
+[closure report](../studies/attention_sublayer/README.md#split8-with-both-projection-tiles-integration-closure)
+for all cells, numerical summaries, provenance, and reproduction commands.
