@@ -657,18 +657,23 @@ def render_mlp(directory, record, samples, summary):
                 title='Whole MLP: enqueue through completion')
     axes[0].legend(fontsize=8)
     stage_results = []
+    sample_count = len(samples)
     for stage,label in enumerate(STAGES):
-        stage_record,_,rows = load_run(directory,prefix=f'stage_{stage}_')
+        stage_record,stage_samples,rows = load_run(directory,prefix=f'stage_{stage}_')
         if stage_record['build'] != record['build']:
             raise ValueError('MLP stages and whole block must share a build')
         stage_results += [dict(stage=label,**row) for row in rows]
+        sample_count += len(stage_samples)
         axes[1].plot([r['rows'] for r in rows],[r['control_us'] for r in rows],marker='o',label=label)
     table(directory,'stage_summary.csv',stage_results)
     axes[1].set(xscale='log',yscale='log',xlabel='Rows R',ylabel='Microseconds per isolated call',
                 title='Stage calls on exact upstream operands')
     axes[1].legend(fontsize=8)
-    fig.text(.5,.01,'Control-arm medians across four blocks; stage times are separate calls and need not sum to whole-block latency.',ha='center',fontsize=8)
-    fig.tight_layout(rect=(0,.04,1,1));fig.savefig(figure_directory(directory)/'latency.png',dpi=160);plt.close(fig)
+    fig.text(.5,.015,
+        f'{record["runtime"]["device"]} / Metal · BF16 stores, FP32 arithmetic · source {record["repository"]["commit"][:7]}.\n'
+        f'{sample_count:,} retained samples; control-arm medians across four blocks. Calibration ranges are in the CSV tables.\n'
+        'Stage calls have separate synchronization boundaries and need not sum to whole-block latency.',ha='center',fontsize=8)
+    fig.tight_layout(rect=(0,.12,1,1));fig.savefig(figure_directory(directory)/'latency.png',dpi=160);plt.close(fig)
     profile_path = directory/'profiles.json'
     if profile_path.exists():
         profile = json.loads(profile_path.read_text())
@@ -702,7 +707,11 @@ def render_mlp(directory, record, samples, summary):
         table(directory,'profile_summary.csv',aggregated)
         ax.set(xlabel='Rows R',ylabel='Share of active GPU dispatch time (%)',title='Where does the materialized MLP spend GPU time?')
         ax.legend(bbox_to_anchor=(1.02,1),loc='upper left',fontsize=8)
-        fig.tight_layout();fig.savefig(figure_directory(directory)/'profile.png',dpi=160);plt.close(fig)
+        fig.text(.5,.015,
+            f'{record["runtime"]["device"]} / Metal · BF16 stores, FP32 arithmetic · source {record["repository"]["commit"][:7]}.\n'
+            f'{len(profile_rows):,} measured dispatches in four single captures; active time excludes preemption gaps.\n'
+            'Profiling is separate from the paired latency runs; optional limiter counters were not analyzed.',ha='center',fontsize=8)
+        fig.tight_layout(rect=(0,.12,1,1));fig.savefig(figure_directory(directory)/'profile.png',dpi=160);plt.close(fig)
     print('MLP raw samples verified; latency and profile figures regenerated')
 
 

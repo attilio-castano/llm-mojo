@@ -68,15 +68,16 @@ def multiply_bits(a: UInt16, b: UInt16) -> UInt16:
 def add_bits(a: UInt16, b: UInt16) -> UInt16:
     var ea = (UInt32(a) >> 7) & 255
     var eb = (UInt32(b) >> 7) & 255
-    if ea > 8 or eb > 8:
+    if ea > 9 or eb > 9:
         var x = bitcast[DType.float32](UInt32(a) << 16)
         var y = bitcast[DType.float32](UInt32(b) << 16)
         return bitcast[DType.uint16]((x + y).cast[DType.bfloat16]())
-    # Below exponent 9 both operands are integer multiples of 2^-133 and
-    # their sum fits in seventeen signed bits. This also covers cancellation
-    # from normal inputs into a subnormal result. At larger exponents, an
-    # input subnormal cannot change the BF16-rounded sum, and any nonzero
-    # cancellation result is FP32-normal.
+    # Below exponent 10 both operands are integer multiples of 2^-133 and
+    # their sum fits in eighteen signed bits. Exponent 9 is needed because
+    # spacing halves immediately below a power of two: 0x0480 + 0x807f must
+    # round to 0x047f. At larger exponents even that half-binade boundary
+    # cannot be crossed by an input subnormal; nonzero cancellation results
+    # are also FP32-normal.
     var ma = UInt32(a) & 127
     var mb = UInt32(b) & 127
     if ea != 0:

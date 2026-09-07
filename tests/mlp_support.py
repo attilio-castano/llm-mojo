@@ -202,10 +202,21 @@ def residual_cases(address_a, address_b, count):
     FULL['residual'] = round_bf16(from_bits(a).astype(np.float64) + from_bits(b).astype(np.float64))
 
 
-def residual_cases_check(address, count):
+def residual_subnormal_cases(address_a, address_b):
+    finite = np.arange(65536,dtype=np.uint16)
+    finite = finite[(finite & 0x7f80) != 0x7f80]
+    tiny = np.arange(128,dtype=np.uint16)
+    tiny = np.concatenate((tiny,tiny | 0x8000))
+    a, b = np.repeat(finite,len(tiny)), np.tile(tiny,len(finite))
+    bits_at(address_a,a.size)[:] = a
+    bits_at(address_b,b.size)[:] = b
+    FULL['residual'] = round_bf16(from_bits(a).astype(np.float64) + from_bits(b).astype(np.float64))
+
+
+def residual_cases_check(address, count, probe='residual_finite_operands'):
     actual = from_bits(bits_at(address,count).copy())
     expected = FULL.pop('residual')
     finite = np.isfinite(expected)
     result = differences(actual[finite],expected[finite],BUDGETS['operation']['Y'])
-    record(dict(probe='residual_finite_operands', overflow=int((~finite).sum()), **result))
+    record(dict(probe=probe, overflow=int((~finite).sum()), **result))
     assert not result['failed'], result

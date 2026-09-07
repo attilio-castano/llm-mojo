@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from llm_mojo.benchmarks import mlp_contract as mlp
-from llm_mojo.benchmarks import capture_trace, study, run as runner
+from llm_mojo.benchmarks import analyze_trace, capture_trace, study, run as runner
 
 
 class MLPToolingTests(unittest.TestCase):
@@ -48,7 +48,9 @@ PROFILE_REGION_END
         self.assertEqual(parsed['intermediate_size'],4864)
         with self.assertRaises(ValueError):
             capture_trace.validate_target_identity(capture_trace.parse_target_identity(output.replace('iteration: 7','iteration: 6')),identity,dict(chip='Apple Test GPU',gpu_api='metal'))
-        self.assertRegex(capture_trace.new_capture_id('mlp'),r'^mlp-[0-9a-f]{32}$')
+        capture_id=capture_trace.new_capture_id('mlp')
+        self.assertRegex(capture_id,r'^mlp-[0-9a-f]{32}$')
+        self.assertIsNotNone(analyze_trace.CAPTURE_ID.fullmatch(capture_id))
 
     def test_stage_grid_is_hot_only_and_requires_every_sample(self):
         spec=copy.deepcopy(study.STUDIES['mlp_stage_0'])

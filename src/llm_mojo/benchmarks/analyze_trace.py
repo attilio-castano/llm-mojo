@@ -25,7 +25,7 @@ from .attention_contract import (
 
 
 Cell = tuple[str, str]
-CAPTURE_ID = re.compile(r"^(?:rmsnorm|linear|attention)-[0-9a-f]{32}$")
+CAPTURE_ID = re.compile(r"^(?:rmsnorm|linear|attention|mlp)-[0-9a-f]{32}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 IMPLEMENTATION_ENTRYPOINTS = {
     "apple_gpu_shared_tree_v0": "enqueue_rms_norm_apple_gpu_shared_tree",

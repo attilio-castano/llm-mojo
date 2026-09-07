@@ -7,12 +7,16 @@ R counts new rows and has no KV-cache-length axis. The
 The implementation is in `src/llm_mojo/mlp.mojo`; each invocation enqueues seven
 kernels using caller-owned storage and one ordered stream.
 
-Numerical acceptance is complete at source `afbe288`: all 43 synthetic and
+Initial fixture acceptance at source `afbe288` covered all 43 synthetic and
 three checkpoint development cases, followed by six synthetic holdouts and
 one reserved checkpoint prompt, passed the frozen gates on Apple M4 Pro/Metal.
 All GPU full/chunked comparisons were bit-exact. Normal-mode checkpoint and
 holdout runs also passed the invalid-call and twelve-call asynchronous reuse
-checks. Timing and profiles are pending.
+checks. A subsequent exhaustive residual probe found the cutoff defect below.
+Its repair passed full validation: 102 Mojo tests, 59 Python tooling tests,
+eleven pinned reference tests and every benchmark route, with no source drift.
+Checkpoint/holdout regression on the corrected frozen binary and fresh
+measurements follow this validation.
 
 [The numerical summary](data/numerical.json) links a lossless compressed record
 of every check, source identity, holdout fixture hash and execution receipt.
@@ -27,6 +31,10 @@ protocol requires 960 complete MLP invocations there. Its replacement allows
 warmups and samples are unchanged. The incomplete attempt is recorded in
 [measurement_attempt.json](data/measurement_attempt.json), outside the accepted
 latency comparison.
+
+The second attempt was stopped after 440 retained observations when a broader
+residual check exposed a one-bit error. Its incomplete run and raw samples are
+retained with the `interrupted_` prefix and are excluded from the final campaign.
 
 ## What the primitive checks established
 
@@ -49,6 +57,15 @@ probe. The shared residual operation now preserves BF16 subnormal operands and
 cancellation results with exact integer addition in the narrow low-exponent
 range. Ordinary values retain FP32 addition. This correctness repair is covered
 by the full attention regression suites as well as the new MLP checks.
+
+Further review found that the integer range must include exponent field 9:
+spacing halves immediately below a power of two, so BF16 `0x0480 + 0x807f`
+must produce `0x047f`. The old fast path flushed the second operand and returned
+`0x0480`. Exhaustively pairing all 65,280 finite BF16 values with all 256 signed
+subnormal/zero bit patterns exposed 126 failures. All 16,711,680 pairs pass with
+the extended cutoff. The [before/after evidence](data/residual_boundary.json)
+retains every failed check and both source identities. The absolute error is
+tiny, but the declared residual gate is exact BF16 agreement.
 
 The Mojo host exponential overflowed at -G=88.5 where the pinned upstream still
 returns a nonzero SiLU result. The host reference uses FP32 `expf` from libm;

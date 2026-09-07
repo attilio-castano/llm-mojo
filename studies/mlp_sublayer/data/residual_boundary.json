@@ -1,0 +1,16 @@
+{
+  "format": "lossless-json-gzip-v1",
+  "record": "residual_boundary.json.gz",
+  "sha256": "b67824cca01e009665aae2e11d282666062ba7fdbe0428a3c53c1bb50cd18265",
+  "uncompressed_sha256": "0973989cfef929ceb3609e492f695fb800f1404580586693233d57dbb67f7aa8",
+  "counterexample": {
+    "a_bits": "0x0480",
+    "b_bits": "0x807f",
+    "expected_bits": "0x047f",
+    "observed_before_bits": "0x0480"
+  },
+  "pairs": 16711680,
+  "failed_before": 126,
+  "failed_after": 0,
+  "repair": "Exact integer range extended through exponent field 9; spacing immediately below a power of two is half the spacing above it. Numerical policy unchanged."
+}

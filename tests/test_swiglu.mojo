@@ -184,3 +184,31 @@ def test_host_multiply_reference() raises:
                     TileTensor(ym, row_major(1, count)),
                 )
                 support.product_cases_check(Int(ym.unsafe_ptr()), count)
+
+
+def test_every_finite_bf16_plus_every_subnormal() raises:
+    from llm_mojo.residual import enqueue_residual_apple_gpu
+
+    var sys = Python.import_module("sys")
+    sys.path.insert(0, "tests")
+    var support = Python.import_module("mlp_support")
+    var ctx = DeviceContext()
+    var count = 65280 * 256
+    var a = ctx.enqueue_create_buffer[DType.bfloat16](count)
+    var b = ctx.enqueue_create_buffer[DType.bfloat16](count)
+    var y = ctx.enqueue_create_buffer[DType.bfloat16](count)
+    with a.map_to_host() as am:
+        with b.map_to_host() as bm:
+            support.residual_subnormal_cases(
+                Int(am.unsafe_ptr()), Int(bm.unsafe_ptr())
+            )
+    enqueue_residual_apple_gpu(
+        ctx,
+        TileTensor(a, row_major(1, count)),
+        TileTensor(b, row_major(1, count)),
+        TileTensor(y, row_major(1, count)),
+    )
+    with y.map_to_host() as mapped:
+        support.residual_cases_check(
+            Int(mapped.unsafe_ptr()), count, "finite_bf16_by_every_subnormal"
+        )
