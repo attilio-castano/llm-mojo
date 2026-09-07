@@ -111,7 +111,7 @@ def main() raises:
     print("api:", ctx.api())
     print("operation: mlp")
     print("shape:", rows, layers, "seed: 1601")
-    print("variants:", candidate, control, "candidate-first:", first)
+    print("variants:", control, candidate, "candidate-first:", first)
     var boundary = "whole_mlp" if stage == -1 else "mlp_stage_" + String(stage)
     print("measurement:", boundary)
     var work = MLPWorkspace(ctx, rows)

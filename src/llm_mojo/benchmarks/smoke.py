@@ -118,11 +118,20 @@ def main():
         result = subprocess.run(list(map(str,[target,rows,layers,variant,0,variant%2,1601,mode,1,0])),
                                 cwd=repository_root(),capture_output=True,text=True,env=env,check=True)
         boundary = 'whole_mlp' if mode=='bench' else 'mlp_stage_'+mode[5:]
-        if ('correctness: passed' not in result.stdout or f'measurement: {boundary}' not in result.stdout
+        if (f'variants: 0 {variant} candidate-first: {variant%2}' not in result.stdout
+            or 'correctness: passed' not in result.stdout or f'measurement: {boundary}' not in result.stdout
             or f'SAMPLE candidate {variant} 0 ' not in result.stdout
             or 'SAMPLE control 0 0 ' not in result.stdout
             or not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE')):
             raise RuntimeError('MLP benchmark route or output check failed')
+    # Exercise the reader itself on a non-self pair in both orders. The old
+    # candidate/control header reversal escaped substring-only route checks.
+    from .study import parse_output, REPETITIONS
+    for first in (0,1):
+        result = subprocess.run(list(map(str,[target,1,1,1,0,first,1601,'stage1',REPETITIONS,0])),
+                                cwd=repository_root(),capture_output=True,text=True,env=env,check=True)
+        parse_output(result.stdout,0,1,first,rows=1,layers=1,seed=1601,
+                     operation='mlp',measurement='mlp_stage_1')
     for rows,layers,variant,seed,mode in [(0,1,0,1601,'bench'),(4097,1,0,1601,'bench'),
         (1,2,0,1601,'bench'),(1,1,7,1601,'bench'),(1,1,0,53,'bench'),(1,1,0,1601,'stage7'),(1,24,0,1601,'stage0')]:
         result = subprocess.run(list(map(str,[target,rows,layers,variant,0,0,seed,mode,1,0])),

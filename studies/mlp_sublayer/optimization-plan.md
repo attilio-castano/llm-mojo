@@ -98,4 +98,11 @@ campaign. Pushes, PR publication and new asset downloads are separate actions.
 
 - Baseline inspected; branch created from `ee3b99f`.
 - Fresh recipes and reserved checkpoint tokens declared before candidate output.
-- Projection implementation and validation in progress.
+- Seven projection configurations passed 35,294 stage/reuse checks over the
+  53 existing cases, plus thirteen primitive-check records. Full validation:
+  102 Mojo, 62 tooling and eleven pinned reference tests; all route smokes.
+- The first screen stopped when the strict reader rejected reversed
+  candidate/control IDs in its header. The incomplete attempt remains in
+  `data/optimization_screen_attempt.json`. The header repair changes no
+  arithmetic; expanded smoke checks validate real non-self outputs in both
+  arm orders. Both complete screens restart from the repaired clean source.
