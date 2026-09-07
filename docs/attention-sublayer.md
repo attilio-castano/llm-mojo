@@ -983,3 +983,39 @@ a regression test. Post-measurement 47 Python checks validate retained evidence
 and reject profile corruption. All 26 tables and 25 figures regenerate offline.
 The [combined report](../studies/attention_sublayer/README.md#combined-qkv-and-wo-complete-attention-timing-and-profiling)
 records reproduction, precision, negative results and the remaining stage costs.
+
+## Closing the split8 and projection integration gap
+
+Enable only the additional pair `gqa_mapping=4, projection_mapping=5` in the
+integrated enqueue: existing split8 FP32 GQA with existing 16x16 packed QKV
+and Wo. Benchmark variant 19 names this composition. Variant 13 has split8
+with old 8x16 projections; variant 18 has the new projections with unsplit GQA.
+R<16 retains rowwise projections; R=1 retains FP32 G32 decode. Multi-row calls
+need caller-owned `prefill_splits=8` storage, checked before the first enqueue.
+The ten dispatches include the split-state merge. BF16 boundaries, FP32
+accumulation, exact cache checks, and final scaled-error gate 0.03125 stay fixed.
+
+Before measuring, run the full frozen validation, three existing checkpoint
+cases, actual benchmark smoke routes and twelve asynchronous sequences for
+all twenty configurations. Add the composition to full and incremental
+upstream-derived FP32 tests, and verify missing split storage leaves cache
+and output unchanged. Exercise both comparison controls, self-pairs, decode,
+and 15/16/17 row boundaries in the actual measurement instrument.
+
+Freeze a clean source commit, build once, then run exactly two paired studies:
+`attention_sublayer_split_combined_projections` (13 versus 19) measures the
+projection gain with split8 fixed; `attention_sublayer_split_combined_gqa`
+(18 versus 19) measures the split8 gain with new projections fixed. Each has
+its own control self-pair calibration. Both use R=16/64/256 crossed with
+T=1024/4096 plus (16,256), the previously observed short-chunk projection
+regression. Four paired blocks, ten warmups and ten samples per arm, hot and
+ring24 yield 2,240 observations per study, 4,480 total. Use the existing
+all-blocks and max(5%, self-pair deviation) rule; retain inconclusive and slower
+cells without selective reruns. No new tile screen, profiler campaign,
+automatic dispatch selector or full-decoder claim is part of this closure.
+
+Retain `split_combined_projections_` and `split_combined_gqa_` samples and
+provenance, plus `split_combined_validation.json`, in the existing attention
+study. The usual plotter must regenerate all tables and figures, including
+unchanged historical artifacts. Interpret each comparison directly; do not
+multiply old speed ratios to claim a new combined gain.

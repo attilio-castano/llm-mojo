@@ -244,13 +244,13 @@ def test_repeated_asynchronous_use() raises:
     load_sublayer_fixture(weights.norm, 5, "norm_weight")
     load_sublayer_fixture(weights.output, 5, "output_weight")
     load_sublayer_fixture(input, 5, "input")
-    for implementation in range(19):
-        var route = 6 if implementation >= 14 else (implementation - 3 if implementation >= 10 else (6 if implementation >= 8 else (3 if implementation == 4 else (implementation - 1 if implementation >= 5 else implementation))))
+    for implementation in range(20):
+        var route = 10 if implementation == 19 else (6 if implementation >= 14 else (implementation - 3 if implementation >= 10 else (6 if implementation >= 8 else (3 if implementation == 4 else (implementation - 1 if implementation >= 5 else implementation)))))
         var wo_mma = implementation == 4 or implementation == 7
         # Optimized FP32 decode must also work without probability storage.
         var work = AttentionWorkspace(ctx, 65, 65, materialized=route == 0,
                                       fp32_materialized=route == 3,
-                                      prefill_splits=8 if implementation == 13 else (4 if implementation == 12 else 1))
+                                      prefill_splits=8 if implementation == 13 or implementation == 19 else (4 if implementation == 12 else 1))
         load_sublayer_fixture(work.cosine, 5, "cosine", True)
         load_sublayer_fixture(work.sine, 5, "sine", True)
         for _ in range(get_defined_int["SUBLAYER_REPEAT", default=3]()):
@@ -266,7 +266,9 @@ def test_repeated_asynchronous_use() raises:
                     rows = 15 if p == 0 else (16 if p == 15 or p == 48 else (17 if p == 31 else 1))
                 var view = TileTensor(input.unsafe_ptr().unsafe_offset(p * 896), row_major(rows, 896))
                 var launched: Int
-                if implementation >= 14:
+                if implementation == 19:
+                    launched = enqueue_attention_sublayer_integrated(ctx, weights, cache, work, view, 4, 5)
+                elif implementation >= 14:
                     launched = enqueue_attention_sublayer_integrated(ctx, weights, cache, work, view, 0, implementation - 13)
                 elif implementation >= 9:
                     launched = enqueue_attention_sublayer_integrated(ctx, weights, cache, work, view, implementation - 9)
@@ -308,6 +310,11 @@ def test_partitioned_prefill_rejects_missing_storage_before_enqueue() raises:
                 ctx, weights, cache, work, TileTensor(input, row_major(17, 896)), mapping,
             )
         assert_equal(cache.length, 0)
+    with assert_raises(contains="caller-allocated partial storage"):
+        _ = enqueue_attention_sublayer_integrated(
+            ctx, weights, cache, work, TileTensor(input, row_major(17, 896)), 4, 5,
+        )
+    assert_equal(cache.length, 0)
     with assert_raises(contains="unknown integrated GQA mapping"):
         _ = enqueue_attention_sublayer_integrated(
             ctx, weights, cache, work, TileTensor(input, row_major(17, 896)), 5,

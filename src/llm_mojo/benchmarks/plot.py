@@ -243,8 +243,9 @@ def render_sublayer_parallelism(directory, prefix):
               f'Full R=T={w["rows"]}' if w['query_rows'] == w['rows'] else
               f'Chunk R={w["query_rows"]}, T={w["rows"]}' for w in spec['workloads']]
     colors = {10:'#167d9a',11:'#3c9e79',12:'#8064a2',13:'#ba7437',
-              14:'#167d9a',15:'#8064a2',16:'#167d9a',17:'#8064a2',18:'#167d9a'}
+              14:'#167d9a',15:'#8064a2',16:'#167d9a',17:'#8064a2',18:'#167d9a',19:'#167d9a'}
     isolated = spec.get('measurement') == 'isolated_wo'
+    split_combined = prefix.startswith('split_combined_')
     tiles = prefix.startswith('tiles') or prefix == 'combined_'
     boundary = 'Isolated Wo' if isolated else 'Whole-block'
     fig,axes = plt.subplots(1,2,figsize=(13,max(6,.6*len(labels)+2.4)),sharex=True,sharey=True)
@@ -266,7 +267,7 @@ def render_sublayer_parallelism(directory, prefix):
         ax.xaxis.set_minor_formatter(FuncFormatter(lambda value,_:''))
         ax.grid(axis='x',alpha=.18)
         ax.set_title('Hot call' if layers==1 else 'Ring24 per call')
-        ax.set_xlabel(boundary+' time / paired '+('8x16 MMA control' if isolated else 'integrated control')+' · log scale')
+        ax.set_xlabel(boundary+' time / paired '+('8x16 MMA control' if isolated else (spec['names'][str(spec['control'])] if split_combined else 'integrated control'))+' · log scale')
     data = [s for s in summary if s['candidate'] in variants]
     axes[0].set_xlim(min(s['ratio_min'] for s in data)/1.2,max(1,max(s['ratio_max'] for s in data))*1.2)
     axes[0].set_yticks(range(len(labels)),labels)
@@ -276,11 +277,23 @@ def render_sublayer_parallelism(directory, prefix):
     title = ('Qwen Wo · MMA tile ownership' if isolated else
              'Qwen attention · '+('QKV + Wo' if prefix == 'combined_' else ('QKV' if prefix == 'tiles_qkv_' else 'Wo'))+' tile ownership') if tiles else (
              'Qwen attention · KV split domain' if prefix == 'split_domain_' else 'Qwen attention · GQA work distribution')
+    if split_combined:
+        mechanism = ('Split8 fixed; both projection tiles change.\n' if spec['control'] == 13
+                     else 'Both projections fixed; split8 and merge added.\n')
+    elif isolated:
+        mechanism = 'Same frozen attention input; Wo only.\n'
+    elif tiles:
+        mechanism = ('GQA fixed; both projections use 16x16.\n' if prefix == 'combined_'
+                     else 'GQA fixed; one projection changes.\n')
+    else:
+        mechanism = 'QKV/Wo fixed; merge included.\n'
+    if split_combined:
+        title = 'Qwen attention · '+('projection gain with split8' if spec['control'] == 13 else 'split8 gain with 16x16 projections')
     fig.suptitle(title+(' · screen' if record['study'].endswith('_screen') else ''),
                  fontsize=16,fontweight='bold')
     fig.text(.04,.025,'Left of 1× is faster. Whiskers: four-block ratio range; open marks: inconclusive.\n'
              'Gain rule: all four blocks faster and > max(5%, matching self-pair deviation). '
-             +('Same frozen attention input; Wo only.\n' if isolated else (('GQA fixed; both projections use 16x16.\n' if prefix == 'combined_' else 'GQA fixed; one projection changes.\n') if tiles else 'QKV/Wo fixed; merge included.\n'))+
+             +mechanism+
              f'{len(samples):,} retained observations · {record["runtime"]["device"]} / Metal · BF16 I/O, FP32 '+('accumulation.\n' if isolated else 'attention.\n')+
              f'Source {record["repository"]["commit"][:7]}. Fixed cache prefix; allocation and correctness checks excluded.',
              fontsize=9,color='#555555')
@@ -642,7 +655,7 @@ def render_sublayer(directory, record, samples, summary):
             render_sublayer_wo(directory,prefix,integration=True)
     if (directory/'integrated_profiles.json').exists():
         render_sublayer_integrated_profile(directory)
-    for prefix in ('parallelism_screen_','parallelism_','tiles_screen_','tiles_kernel_screen_','tiles_','tiles_qkv_','split_domain_','combined_'):
+    for prefix in ('parallelism_screen_','parallelism_','tiles_screen_','tiles_kernel_screen_','tiles_','tiles_qkv_','split_domain_','combined_','split_combined_projections_','split_combined_gqa_'):
         if (directory/(prefix+'run.json')).exists():
             render_sublayer_parallelism(directory,prefix)
     if (directory/'timing_run.json').exists() and (directory/'timing_buffered_run.json').exists():

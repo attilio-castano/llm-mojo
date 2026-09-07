@@ -52,8 +52,8 @@ def main():
                    cwd=repository_root(),check=True)
     for r,t in ((1,64),(7,33),(33,33)):
         for layers in (1,24):
-            for variant in ((3,4,5,6,8,9,10,11,12,13,14,15,16,17,18) if r == 1 else (3,4,7,8,9,10,11,12,13,14,15,16,17,18)):
-                control = 9 if variant >= 10 else (8 if variant >= 8 else (4 if variant == 7 else 3))
+            for variant in ((3,4,5,6,8,9,10,11,12,13,14,15,16,17,18,19) if r == 1 else (3,4,7,8,9,10,11,12,13,14,15,16,17,18,19)):
+                control = 13 if variant == 19 else (9 if variant >= 10 else (8 if variant >= 8 else (4 if variant == 7 else 3)))
                 result = subprocess.run(list(map(str,[target,r,t,layers,variant,control,1,53,'bench',1,0])),
                                         cwd=repository_root(),text=True,capture_output=True,env=env,check=True)
                 if (f'query rows: {r}' not in result.stdout or
@@ -83,6 +83,17 @@ def main():
                                         cwd=repository_root(),text=True,capture_output=True,env=env,check=True)
                 if 'correctness: passed' not in result.stdout or not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE'):
                     raise RuntimeError('GQA parallelism benchmark boundary check failed')
+    # Both actual comparison controls, self-pairs and the projection threshold.
+    for r,t in ((1,64),(15,64),(16,64),(17,64),(64,4096)):
+        for layers in (1,24):
+            for control in (13,18):
+                for variant in (control,19):
+                    result=subprocess.run(list(map(str,[target,r,t,layers,variant,control,0,53,'bench',1,0])),
+                        cwd=repository_root(),text=True,capture_output=True,env=env,check=True)
+                    if ('correctness: passed' not in result.stdout
+                        or f'SAMPLE candidate {variant} 0 ' not in result.stdout
+                        or not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE')):
+                        raise RuntimeError('split8 plus projections benchmark boundary check failed')
     for mode, variants in [('wo',(9,14,15)),('buffered',(9,))]:
         for variant in variants:
             for layers in (1,24):

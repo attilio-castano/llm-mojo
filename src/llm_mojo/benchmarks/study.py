@@ -180,6 +180,19 @@ STUDIES['attention_sublayer_combined'] = dict(
     workloads=STUDIES['attention_sublayer']['workloads'])
 
 
+# Close the composition gap on the prior split domain plus the known short
+# projection regression. Two independent paired comparisons, no new selector.
+_SPLIT_COMBINED_WORKLOADS = [dict(query_rows=16,rows=256),
+                           *STUDIES['attention_sublayer_split_domain']['workloads']]
+for suffix,control in (('projections',13),('gqa',18)):
+    STUDIES['attention_sublayer_split_combined_'+suffix] = dict(
+        **_TILE_BASE,control=control,candidates=[control,19],opt_in=True,
+        measurement='whole_attention',
+        names={13:'split8 + 8x16 projections',18:'unsplit + 16x16 projections',
+               19:'split8 + 16x16 projections'},
+        workloads=_SPLIT_COMBINED_WORKLOADS)
+
+
 def select_projection_tile(block_summary, kernel_summary):
     """Require isolated and whole-block gains in both modes at full 1024."""
     def target(summary):

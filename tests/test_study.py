@@ -11,6 +11,19 @@ from llm_mojo.benchmarks.study import (parse_output, summarize, encode_samples, 
 
 
 class StudyTests(unittest.TestCase):
+    def test_split_combined_dispatch_contract_includes_merge_and_decode_fallback(self):
+        from llm_mojo.benchmarks.attention_sublayer_contract import (
+            STAGES_BY_VARIANT, specification)
+        from llm_mojo.benchmarks.profile import argument_parser
+        self.assertEqual(STAGES_BY_VARIANT[19], STAGES_BY_VARIANT[13])
+        self.assertEqual(specification(19,17,64)['dispatches_per_iteration'],10)
+        self.assertEqual(specification(19,1,64)['dispatches_per_iteration'],9)
+        args=argument_parser().parse_args(['--operation','attention_sublayer',
+            '--build-profile-binary','/private/tmp/not-built-by-this-test',
+            '--profile-variant','19','--profile-query-rows','64',
+            '--profile-rows','4096','--profile-iterations','25'])
+        self.assertEqual(args.profile_variant,19)
+
     def test_profile_cli_accepts_the_combined_attention_variant(self):
         from llm_mojo.benchmarks.profile import argument_parser
         args=argument_parser().parse_args(['--operation','attention_sublayer',

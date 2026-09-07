@@ -75,6 +75,11 @@ def _run_cases(composed: Bool) raises:
                               integrated=True, projection_mapping=mapping)
                     except:
                         failed_cases += 1
+                try:
+                    _case(case_id, nq, nk, d, t, 6, Bool(chunked), "fp32", True,
+                          integrated=True, gqa_mapping=4, projection_mapping=5)
+                except:
+                    failed_cases += 1
     if failed_cases:
         raise Error("FP32 attention failed its declared accuracy or exact cache gates")
 

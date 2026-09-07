@@ -5,9 +5,9 @@ import json
 from .._repository import repository_root
 
 OPERATION = 'attention_sublayer'
-VARIANTS = set(range(3,19))
+VARIANTS = set(range(3,20))
 ENTRYPOINTS = {f'attention_sublayer_{v}': 'enqueue_attention_sublayer' for v in VARIANTS}
-ENTRYPOINTS.update({f'attention_sublayer_{v}':'enqueue_attention_sublayer_integrated' for v in range(9,19)})
+ENTRYPOINTS.update({f'attention_sublayer_{v}':'enqueue_attention_sublayer_integrated' for v in range(9,20)})
 STAGES = ['RMSNorm', 'Q projection', 'K projection', 'V projection',
           'Q RoPE', 'K RoPE', 'KV append', 'QK', 'softmax', 'PV',
           'output projection', 'residual']
@@ -18,7 +18,7 @@ STAGES_BY_VARIANT = {3: STAGES, 4: STAGES,
                      8: STAGES[:7]+['FP32 GQA']+STAGES[-2:],
                      9: ['RMSNorm','packed QKV projection','QKV unpack']+STAGES[4:7]+['FP32 GQA']+STAGES[-2:]}
 STAGES_BY_VARIANT.update({v:STAGES_BY_VARIANT[9] for v in (10,11,14,15,16,17,18)})
-STAGES_BY_VARIANT.update({v:STAGES_BY_VARIANT[9][:-3]+['FP32 GQA split','FP32 GQA merge']+STAGES[-2:] for v in (12,13)})
+STAGES_BY_VARIANT.update({v:STAGES_BY_VARIANT[9][:-3]+['FP32 GQA split','FP32 GQA merge']+STAGES[-2:] for v in (12,13,19)})
 TARGET_FIELDS = ('profile_workload', 'dispatches_per_iteration', 'key_value_rows',
                  'query_heads', 'key_value_heads')
 PROFILE_WORKLOADS = [(1, 4096), (1024, 1024), (4096, 4096), (64, 4096)]
@@ -68,7 +68,7 @@ def specification(variant, query_rows, key_rows):
     return dict(profile_rows=query_rows, hidden_size=896, key_value_rows=key_rows,
                 query_heads=14, key_value_heads=2,
                 profile_workload=f'sublayer-r{query_rows}-t{key_rows}-v{variant}',
-                dispatches_per_iteration=9 if variant in (12,13) and query_rows == 1 else len(STAGES_BY_VARIANT[variant]))
+                dispatches_per_iteration=9 if variant in (12,13,19) and query_rows == 1 else len(STAGES_BY_VARIANT[variant]))
 
 
 def configuration(data):

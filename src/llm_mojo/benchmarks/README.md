@@ -255,3 +255,13 @@ at (256,256), (1024,1024), (4096,4096), (64,4096), with ten warmups and
 --attention-sublayer --combined-projections --prefix combined_`. Retain the
 run, samples, profiles and validation under that prefix; the normal plotter
 regenerates both latency and stage-time figures.
+
+The split8/projection closure uses
+`--studies attention_sublayer_split_combined_projections attention_sublayer_split_combined_gqa`.
+It compares 13/19 (projection gain with split8 fixed) and 18/19 (split8 gain
+with new projections fixed) over the seven predeclared cached-chunk workloads.
+Each comparison includes its own control self-pairs; both are opt-in. Keep
+results under `split_combined_projections_` and `split_combined_gqa_` in the
+existing attention study. No screen or new profile capture is required for
+this composition of existing kernels. See the
+[closure contract](../../../docs/attention-sublayer.md#closing-the-split8-and-projection-integration-gap).
