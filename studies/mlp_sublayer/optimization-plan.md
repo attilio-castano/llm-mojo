@@ -141,5 +141,31 @@ campaign. Pushes, PR publication and new asset downloads are separate actions.
   allocation of experiments, not proof that either technique never helps.
 - The final comparison is now declared as `mlp_final`: original 0 versus 7,
   all ten row counts and both modes, 3,200 observations with self-pairs. The
-  candidate is fixed before fresh holdout output access. Final validation,
-  fresh holdouts, the full latency campaign and eight final profiles remain.
+  candidate is fixed before fresh holdout output access.
+- Final source `1f263b2` passed the full workflow: 102 Mojo, 63 tooling and
+  eleven pinned-reference tests, primitive sweeps and all measurement routes.
+  All eight configurations passed normal-mode checkpoint and observed-holdout
+  regressions. The seven separately declared fresh holdouts were captured once
+  against the frozen binary; original 0 and final 7 passed. The final numerical
+  record retains 41,210 stage/reuse checks and thirteen primitive records.
+  All observed full/chunk comparisons were bit-exact. Numerical rules stayed fixed.
+- The complete 3,200-observation final run passed source/environment/grid
+  checks. At R=1024, hot/ring24 paired ratios are 0.0935/0.0911; at R=4096,
+  0.0889/0.0879. All measured R>=7 cases pass in both modes. R=1 ring24 is
+  2.23x slower, while hot is inconclusive. Variant 7 remains explicit and
+  variant 0 remains the default; no crossover rule was inferred.
+- Eight same-source final profiles retain 8,890 measured dispatches. The
+  optimized projection share is 91.45% at R=1024 and 90.99% at R=4096; one-row
+  down occupies 60.87%. Two measured control dispatches at R=1024 required
+  interval joining; no target spill event was reported in the final captures.
+  Optional limiter counters were not analyzed. All captures passed; a missing
+  local summary directory was created before repeating only the curation step.
+- Final numerics, complete samples and profiles are joined by
+  `data/optimization_final_acceptance.json`. The completed study preserves
+  all faster, slower and inconclusive outcomes and the earlier rejected header
+  attempt. The final 63-test tooling suite passes, including source binding,
+  complete coverage and corrupted-profile rejection. Tables and figures were
+  regenerated from retained samples and visually checked; local document links
+  resolve and the eight frozen reference-source hashes remain unchanged.
+  This closes the bounded campaign and its local writeback. Push, publication
+  and new model downloads remain separate actions.

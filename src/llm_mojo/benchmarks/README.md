@@ -275,7 +275,7 @@ existing attention study. No screen or new profile capture is required for
 this composition of existing kernels. See the
 [closure contract](../../../studies/attention_sublayer/plans.md#closing-the-split8-and-projection-integration-gap).
 
-## Materialized MLP baseline
+## MLP baseline and projection campaign
 
 After numerical acceptance and a clean source commit, `--studies mlp` runs the
 whole-block self-pair matrix. `mlp_stage_0` through `mlp_stage_6` measure the
@@ -294,3 +294,27 @@ sequence. Curate `rR-v0` directories with `profile_summary SOURCE OUTPUT --mlp`.
 Retain whole-block `run.json`/`samples.csv.gz`, isolated-stage files prefixed
 `stage_N_`, and profiles in `studies/mlp_sublayer/data/`. The common plot command
 regenerates the measurement tables and figures from those compact records.
+
+The explicit mapping IDs are 0 for all-rowwise, 1/2/3 for gate/up-only
+8x16/16x16/8x32, 4/5/6 for down-only with the same tile order, and 7 for
+16x16 gate/up/down. Mapping 0 remains the default; there is no row-count
+selector. Route smoke covers all configurations in both whole-MLP modes,
+the seven stages, isolated projection ring routes, and real non-self output
+parsing in both arm orders, including a nonzero control.
+
+The bounded studies extend the same runner. `mlp_gate_screen` and
+`mlp_down_screen` screen the mappings at R=1,16,17,1024 in both modes.
+`mlp_up_confirmation` checks the selected gate mapping on up's distinct weights.
+`mlp_gate_up` compares whole MLP 0 versus 2; `mlp_down_increment` compares 2
+versus 7. `mlp_final` directly compares 0 versus 7 over all ten row counts and
+both modes, retaining 3,200 observations with matched control self-pairs.
+Isolated projection ring24 shares one exact upstream operand across 24
+distinct weight copies. Whole-MLP ring24 also uses distinct input copies.
+
+The final profile grid uses variants 0 and 7 at the four row/iteration pairs
+above. Create the output directory, then curate the eight `rR-vV` capture
+directories with `profile_summary SOURCE OUTPUT --mlp --mlp-variants 0 7
+--mlp-rows 1 17 1024 4096 --prefix optimization_final_`. A declared subset of
+rows/variants supports intermediate profiles; the reader still requires the
+complete declared grid and exact seven-dispatch sequence. Retain final timing
+and profile files with `optimization_final_` in the existing study's `data/`.

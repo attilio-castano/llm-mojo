@@ -140,7 +140,49 @@ class EvidenceTests(unittest.TestCase):
             for record in evidence_directory(directory).glob('*run.json'):
                 _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
-        self.assertEqual(count, 100000)
+        self.assertEqual(count, 103200)
+        directory = ROOT / 'studies/mlp_sublayer/data'
+        final, samples, summary = load_run(directory, 'optimization_final_')
+        numerics = load_numerical_record(directory / 'final_numerics.json')
+        profiles = json.loads((directory / 'optimization_final_profiles.json').read_text())
+        acceptance = json.loads((directory / 'optimization_final_acceptance.json').read_text())
+        self.assertEqual(len(samples), 3200)
+        self.assertEqual(final['specification']['control'], 0)
+        self.assertEqual(final['specification']['candidates'], [0,7])
+        self.assertEqual(final['specification']['rows'], [1,7,15,16,17,33,65,257,1024,4096])
+        self.assertEqual(final['repository'], profiles['common']['repository'])
+        self.assertEqual(final['repository']['commit'], numerics['source_commit'])
+        self.assertEqual(final['build']['sources'], profiles['common']['source_sha256'])
+        self.assertEqual(final['build']['sources'], numerics['source_sha256'])
+        self.assertEqual(sum(s['count'] for s in load_profile(directory, 'optimization_final_')), 8890)
+        self.assertEqual({(c['rows'],c['variant']) for c in profiles['captures']},
+                         {(r,v) for r in (1,17,1024,4096) for v in (0,7)})
+        for capture in profiles['captures']:
+            self.assertEqual(capture['capture']['runtime']['device'], final['runtime']['device'])
+            self.assertEqual(capture['capture']['runtime']['backend'], final['runtime']['api'])
+            self.assertEqual(capture['counter_analysis']['status'], 'not_analyzed')
+            self.assertEqual(capture['counters'], [])
+        self.assertEqual(numerics['status'], 'accepted')
+        self.assertEqual(sum(len(rows) for rows in numerics['checks'].values()), 41210)
+        self.assertEqual(len(numerics['primitive_checks']), 13)
+        for split, cases in (('development',43),('checkpoint',3),('holdout',7),('optimization_holdout',7)):
+            coverage = numerics['coverage'][split]
+            self.assertEqual(set(coverage), {'0','7'} if split=='optimization_holdout' else {str(v) for v in range(8)})
+            for result in coverage.values():
+                self.assertEqual(result['case_count'], cases)
+                self.assertEqual(result['failed_elements'], 0)
+                self.assertEqual(result['full_chunk_bit_differences'], 0)
+        fresh = numerics['fresh_holdout_manifest']
+        self.assertEqual(fresh['candidate']['commit'], numerics['source_commit'])
+        self.assertEqual(fresh['candidate']['binary_sha256'], numerics['candidate_binary_sha256'])
+        self.assertEqual(fresh['candidate']['holdout_spec_sha256'], sha(ROOT / 'tests/fixtures/mlp_optimization_holdout.json'))
+        self.assertFalse(fresh['additional_holdout_specification']['model_outputs_observed_at_declaration'])
+        self.assertEqual(acceptance['source_commit'], numerics['source_commit'])
+        self.assertEqual(acceptance['latency']['run_sha256'], sha(directory / 'optimization_final_run.json'))
+        self.assertEqual(acceptance['profiles']['record_sha256'], sha(directory / 'optimization_final_profiles.json'))
+        self.assertEqual(acceptance['numerics']['summary_sha256'], sha(directory / 'final_numerics.json'))
+        self.assertEqual(acceptance['calibrated_r1024_gain_both_modes'],
+                         all(s['decision']=='faster' for s in summary if s['candidate']==7 and s['rows']==1024))
         profile = load_profile(ROOT / 'studies/gqa_decode')
         self.assertEqual(sum(row['count'] for row in profile), 3000)
         profile = load_profile(ROOT / 'studies/gqa_prefill')
@@ -305,6 +347,7 @@ class EvidenceTests(unittest.TestCase):
 
     def test_profile_corruption_and_duplicate_dispatch_rejected(self):
         for topic, prefix, groups in (('mlp_sublayer', '', 28),
+                                      ('mlp_sublayer', 'optimization_final_', 56),
                                       ('gqa_decode', '', 6),
                                       ('attention_sublayer', '', 48),
                                       ('attention_sublayer', 'wo_', 96),

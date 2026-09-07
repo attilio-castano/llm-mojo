@@ -1,0 +1,273 @@
+{
+  "status": "complete",
+  "source_commit": "1f263b26f6feab576cda690eb9915e70338b14f2",
+  "original_variant": 0,
+  "final_variant": 7,
+  "default_variant": 0,
+  "calibrated_r1024_gain_both_modes": true,
+  "numerics": {
+    "status": "accepted",
+    "summary_sha256": "1d480e3ca91007c2dfe34249682f7b137cc9e529a60071df88d78322334f4c65",
+    "stage_reuse_checks": 41210,
+    "primitive_records": 13,
+    "fresh_cases_per_variant": 7,
+    "fresh_variants": [
+      0,
+      7
+    ]
+  },
+  "latency": {
+    "run_sha256": "0cd3782a4a65d7d5fe489685786a6c3315dde87bd5e4d8d12802df6f08e171f8",
+    "samples_sha256": "ad40e2d78a6a8cb3a3b73fa21120fc21a23c9d7dbf61b8ccfec1225c98c2e706",
+    "observations": 3200,
+    "candidate_cells": [
+      {
+        "rows": 1,
+        "layers": 1,
+        "candidate": 7,
+        "control_us": 331.25,
+        "candidate_us": 560.75,
+        "ratio": 1.8786508025592097,
+        "ratio_min": 1.3680904522613064,
+        "ratio_max": 1.9916782246879334,
+        "noise_floor": 1.9148580968280466,
+        "decision": "inconclusive"
+      },
+      {
+        "rows": 1,
+        "layers": 24,
+        "candidate": 7,
+        "control_us": 197.84375,
+        "candidate_us": 441.8541666666667,
+        "ratio": 2.227671659256016,
+        "ratio_min": 1.929005722460658,
+        "ratio_max": 2.2385466034755135,
+        "noise_floor": 0.16048746996223817,
+        "decision": "slower"
+      },
+      {
+        "rows": 7,
+        "layers": 1,
+        "candidate": 7,
+        "control_us": 1035.0,
+        "candidate_us": 568.25,
+        "ratio": 0.5408081387085082,
+        "ratio_min": 0.5289485873089393,
+        "ratio_max": 0.5557720409157331,
+        "noise_floor": 0.29480346435709526,
+        "decision": "faster"
+      },
+      {
+        "rows": 7,
+        "layers": 24,
+        "candidate": 7,
+        "control_us": 928.6041666666667,
+        "candidate_us": 450.2291666666667,
+        "ratio": 0.4848451517554131,
+        "ratio_min": 0.4832207232485577,
+        "ratio_max": 0.5192177131468868,
+        "noise_floor": 0.05,
+        "decision": "faster"
+      },
+      {
+        "rows": 15,
+        "layers": 1,
+        "candidate": 7,
+        "control_us": 2114.5,
+        "candidate_us": 675.0,
+        "ratio": 0.3058001141273335,
+        "ratio_min": 0.25976430976430975,
+        "ratio_max": 0.3323084200567644,
+        "noise_floor": 0.07260138476755684,
+        "decision": "faster"
+      },
+      {
+        "rows": 15,
+        "layers": 24,
+        "candidate": 7,
+        "control_us": 1950.1666666666667,
+        "candidate_us": 521.4583333333334,
+        "ratio": 0.2661968946391098,
+        "ratio_min": 0.2646474571202768,
+        "ratio_max": 0.2686307195828258,
+        "noise_floor": 0.050293162402323954,
+        "decision": "faster"
+      },
+      {
+        "rows": 16,
+        "layers": 1,
+        "candidate": 7,
+        "control_us": 2223.25,
+        "candidate_us": 640.75,
+        "ratio": 0.28703422979734083,
+        "ratio_min": 0.28533273981749385,
+        "ratio_max": 0.29113636363636364,
+        "noise_floor": 0.06342088404868673,
+        "decision": "faster"
+      },
+      {
+        "rows": 16,
+        "layers": 24,
+        "candidate": 7,
+        "control_us": 2078.28125,
+        "candidate_us": 527.5729166666667,
+        "ratio": 0.25389972896017826,
+        "ratio_min": 0.251106450026595,
+        "ratio_max": 0.25630223484885345,
+        "noise_floor": 0.05,
+        "decision": "faster"
+      },
+      {
+        "rows": 17,
+        "layers": 1,
+        "candidate": 7,
+        "control_us": 2383.0,
+        "candidate_us": 732.5,
+        "ratio": 0.30430235886775525,
+        "ratio_min": 0.2703244622675902,
+        "ratio_max": 0.31350785340314136,
+        "noise_floor": 0.05,
+        "decision": "faster"
+      },
+      {
+        "rows": 17,
+        "layers": 24,
+        "candidate": 7,
+        "control_us": 2205.041666666667,
+        "candidate_us": 622.5416666666666,
+        "ratio": 0.28065619963329647,
+        "ratio_min": 0.2782312986532685,
+        "ratio_max": 0.2829524321977098,
+        "noise_floor": 0.05,
+        "decision": "faster"
+      },
+      {
+        "rows": 33,
+        "layers": 1,
+        "candidate": 7,
+        "control_us": 4445.0,
+        "candidate_us": 877.75,
+        "ratio": 0.19698945885958502,
+        "ratio_min": 0.19408377554476686,
+        "ratio_max": 0.1991482685195562,
+        "noise_floor": 0.05,
+        "decision": "faster"
+      },
+      {
+        "rows": 33,
+        "layers": 24,
+        "candidate": 7,
+        "control_us": 4281.645833333334,
+        "candidate_us": 761.1145833333334,
+        "ratio": 0.17724211566290712,
+        "ratio_min": 0.17669647085300616,
+        "ratio_max": 0.17827402377570672,
+        "noise_floor": 0.05,
+        "decision": "faster"
+      },
+      {
+        "rows": 65,
+        "layers": 1,
+        "candidate": 7,
+        "control_us": 8704.5,
+        "candidate_us": 1270.75,
+        "ratio": 0.1458687300181425,
+        "ratio_min": 0.1417772551654628,
+        "ratio_max": 0.14681535985283972,
+        "noise_floor": 0.05,
+        "decision": "faster"
+      },
+      {
+        "rows": 65,
+        "layers": 24,
+        "candidate": 7,
+        "control_us": 8775.135416666666,
+        "candidate_us": 1146.2604166666667,
+        "ratio": 0.1329387565161907,
+        "ratio_min": 0.12936664150446456,
+        "ratio_max": 0.13445647127812937,
+        "noise_floor": 0.05,
+        "decision": "faster"
+      },
+      {
+        "rows": 257,
+        "layers": 1,
+        "candidate": 7,
+        "control_us": 35461.5,
+        "candidate_us": 3762.0,
+        "ratio": 0.10545232410243566,
+        "ratio_min": 0.10525374284456186,
+        "ratio_max": 0.10773504395887626,
+        "noise_floor": 0.05,
+        "decision": "faster"
+      },
+      {
+        "rows": 257,
+        "layers": 24,
+        "candidate": 7,
+        "control_us": 35144.635416666664,
+        "candidate_us": 3625.364583333333,
+        "ratio": 0.10312827066963216,
+        "ratio_min": 0.10058185761767094,
+        "ratio_max": 0.1038748366771421,
+        "noise_floor": 0.05,
+        "decision": "faster"
+      },
+      {
+        "rows": 1024,
+        "layers": 1,
+        "candidate": 7,
+        "control_us": 146205.5,
+        "candidate_us": 13703.5,
+        "ratio": 0.09352734942575369,
+        "ratio_min": 0.09013557407145883,
+        "ratio_max": 0.09405436051809205,
+        "noise_floor": 0.05,
+        "decision": "faster"
+      },
+      {
+        "rows": 1024,
+        "layers": 24,
+        "candidate": 7,
+        "control_us": 150469.97916666666,
+        "candidate_us": 13552.5625,
+        "ratio": 0.09106293934442941,
+        "ratio_min": 0.08915489987462434,
+        "ratio_max": 0.09135767676406424,
+        "noise_floor": 0.05,
+        "decision": "faster"
+      },
+      {
+        "rows": 4096,
+        "layers": 1,
+        "candidate": 7,
+        "control_us": 603572.0,
+        "candidate_us": 54629.75,
+        "ratio": 0.0889224525909928,
+        "ratio_min": 0.08766284646512697,
+        "ratio_max": 0.09948782152479714,
+        "noise_floor": 0.05,
+        "decision": "faster"
+      },
+      {
+        "rows": 4096,
+        "layers": 24,
+        "candidate": 7,
+        "control_us": 602550.5625,
+        "candidate_us": 52967.30208333333,
+        "ratio": 0.08794137144433506,
+        "ratio_min": 0.08668330837395714,
+        "ratio_max": 0.08902474105452664,
+        "noise_floor": 0.05,
+        "decision": "faster"
+      }
+    ]
+  },
+  "profiles": {
+    "record_sha256": "f9a6c6bebb67792f75328ae3ac0671ca663a802db3ded472014f12ef4fab73eb",
+    "samples_sha256": "3d30d680ef372e39ed6f614ccd7a0338a71bb856ea9af077bde193ccb01bc305",
+    "captures": 8,
+    "measured_dispatches": 8890
+  },
+  "scope": "Direct complete MLP comparison, with the same frozen source for final numerics, timing and profiles. Explicit mapping; no row-count selector, decoder, KV-cache or token-generation claim. All valid slower and inconclusive cells remain retained."
+}

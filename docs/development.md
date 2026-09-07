@@ -140,8 +140,9 @@ validation download a model.
 The [MLP reference contract](mlp-sublayer.md) adds upstream development captures,
 independent FP64 diagnostics, and a finite BF16 SiLU sweep. Validation runs its
 fixture-tooling tests and verifies synthetic frozen evidence. Checkpoint
-reproduction uses an explicit local-asset argument; holdout outputs remain
-unopened. The materialized Mojo MLP adds operation/composition and BF16 boundary tests.
+reproduction uses an explicit local-asset argument; the ordinary workflow does
+not capture or evaluate the separate holdouts. The Mojo MLP adds
+operation/composition and BF16 boundary tests for all eight projection mappings.
 The explicit `tests/fixtures/mlp_acceptance.py` entrypoint uses the same pinned
 script lock through a symlink and opens holdouts only against a clean candidate.
 Normal-mode reuse can be checked with `MODULAR_DEBUG` unset and
@@ -149,6 +150,15 @@ Normal-mode reuse can be checked with `MODULAR_DEBUG` unset and
 Set `MLP_SPLIT=checkpoint` to run its three existing checkpoint cases. Holdouts
 are explicit with `MLP_SPLIT=holdout` after their initial capture; subsequent
 evaluations of observed holdouts are regression checks, not fresh holdouts.
+The completed optimization campaign also captured its separately declared
+holdouts. Evaluate those existing fixtures with
+`MLP_SPLIT=optimization_holdout MLP_VARIANTS=0,7`; `MLP_VARIANTS` can restrict
+any regression run to an explicit subset of mappings 0 through 7. During the
+initial frozen-candidate acceptance, `MLP_CANDIDATE_BINARY` additionally binds
+the binary hash and clean commit to the capture manifest. Leave it unset for
+later regression runs after source changes. The `--optimization` acceptance
+generator refuses to overwrite its existing output directory; replaying the
+same declared inputs does not make them independent holdouts again.
 
 Use `--prepare-only` to generate fixtures without running tests. For an individual
 Mojo suite, include `-I src -I build -I tests`. Generators and the

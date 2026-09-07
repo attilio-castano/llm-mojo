@@ -1,10 +1,13 @@
 # MLP numerical contract and upstream fixture specification
 
-Status: upstream reference package frozen; materialized Mojo MLP accepted and
-profiled on Apple M4 Pro/Metal. The initial budgets were selected before any
-Mojo MLP or holdout output and remain unchanged. The
-[MLP study](../studies/mlp_sublayer/README.md) records 53 accepted cases, the
-primitive rounding repairs, 3,840 latency observations and four Metal captures.
+Status: upstream reference package frozen; materialized and tiled Mojo MLP
+paths accepted and profiled on Apple M4 Pro/Metal. The initial budgets were
+selected before any Mojo MLP or holdout output and remain unchanged. The
+[MLP study](../studies/mlp_sublayer/README.md) retains the baseline and completed
+projection campaign: 53 regression cases across eight configurations, seven
+fresh holdouts for original/final, 12,160 optimization timing observations and
+eight final Metal captures. Explicit variant 7 uses 16x16 gate/up/down;
+variant 0 remains the rowwise default. All seven BF16 boundaries are preserved.
 Reference results below retain their original CPU scope.
 
 ## Scope and data flow
@@ -335,10 +338,13 @@ milestone is the Mojo correctness baseline described below.
 ## Ownership, provenance, and implementation follow-through
 
 The accepted Mojo baseline reuses RMSNorm, bias-free rowwise linear, and residual
-operations. New SiLU and gating operations have host references and separate
-GPU dispatches. No projection-tile selection or fusion experiment is part of
-this baseline. The caller owns weights, input, and reusable workspace; allocation
-and uploads occur before enqueue. The input must not overlap writable workspace.
+operations. SiLU and gating operations have host references and separate GPU
+dispatches. The follow-on projection campaign adds explicit mappings 1 through
+7, with the selected 16x16 mapping for all projections in variant 7. It keeps
+the same materialized boundaries and numerical gates; fusion and packing were
+skipped under the recorded profile decision. The caller owns weights, input,
+and reusable workspace; allocation and uploads occur before enqueue. The input
+must not overlap writable workspace.
 Enqueue validates positive dimensions, row capacity, compatible shapes, and
 Metal before launching any work; it allocates and synchronizes nothing. All
 resources remain alive on the same ordered stream until completion, and output
