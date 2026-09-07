@@ -390,14 +390,15 @@ def _mma[
             ]()
 
 
-# Fixed 32x32 / one-head ablations. The original _mma remains the control.
+# One-head ablations. BQ=32/SPLITS=1 preserves the prior tuned control.
 def _mma_tuned[
-    SCHEDULE: Int, QL: TensorLayout, KL: TensorLayout, FP32: Bool = False
+    SCHEDULE: Int, QL: TensorLayout, KL: TensorLayout, OL: TensorLayout,
+    FP32: Bool = False, BQ: Int = 32, SPLITS: Int = 1,
 ](
     q: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
     k: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
     v: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
-    output: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    output: TileTensor[DType.float32 if SPLITS > 1 else DType.bfloat16, OL, MutAnyOrigin],
     rows: Int32,
     tokens: Int32,
 ):
@@ -405,11 +406,13 @@ def _mma_tuned[
     comptime assert q.flat_rank == 3
     comptime assert k.flat_rank == 3
     comptime assert v.flat_rank == 3
-    comptime assert output.flat_rank == 3
-    comptime BQ = 32
+    comptime assert output.flat_rank == (4 if SPLITS > 1 else 3)
+    comptime assert BQ == 8 or BQ == 16 or BQ == 32
+    comptime assert SPLITS == 1 or (FP32 and SCHEDULE == 2 and BQ == 32)
+    comptime OTYPE = DType.float32 if SPLITS > 1 else DType.bfloat16
     comptime BK = 32
     comptime HEADS = 1
-    comptime W = 4
+    comptime W = BQ // 8
     # Apple's 8x8 fragment assigns two adjacent columns to each lane. Four
     # lanes share one row; XOR 1 and XOR 8 reduce that row without a block sum.
     var tid = thread_idx.x
@@ -426,6 +429,13 @@ def _mma_tuned[
     var valid = r < Int(rows) and h < kh * 7 + 7
     var past = Int(tokens) - Int(rows)
     var end = min(Int(tokens), past + block_idx.y * BQ + BQ)
+    var begin = 0
+    comptime if SPLITS > 1:
+        # Partition whole KV tiles: disjoint coverage, unchanged tile order
+        # inside a split, and potentially empty causal pieces for early rows.
+        var tiles = ceildiv(Int(tokens), BK)
+        begin = (tiles * block_idx.z // SPLITS) * BK
+        end = min(end, (tiles * (block_idx.z + 1) // SPLITS) * BK)
     var ks = stack_allocation[
         DType.bfloat16, address_space=AddressSpace.SHARED
     ](row_major[BK, 64]())
@@ -456,7 +466,7 @@ def _mma_tuned[
     )
     var m: Float32 = neg_inf[DType.float32]()
     var z: Float32 = 0
-    for base in range(0, end, BK):
+    for base in range(begin, end, BK):
         var lane_scores = SIMD[DType.float32, 8](0)
         for index in range(tid, BK * 64, W * 32):
             var t = base + index // 64
@@ -539,6 +549,11 @@ def _mma_tuned[
         # Rescale the old unnormalized output once per KV tile. Probabilities
         # retain FP32 for the accuracy path; m and z are always FP32.
         var alpha = exp(m - new_m)
+        comptime if SPLITS > 1:
+            # An all-masked row has m=new_m=-inf. Its neutral state must
+            # survive without exp(-inf - -inf) contaminating z or u.
+            if z == 0:
+                alpha = 0
         var tile_z: Float32 = 0
         comptime for j in range(BK // 8):
             comptime for c in range(2):
@@ -602,10 +617,19 @@ def _mma_tuned[
             comptime if SCHEDULE == 1:
                 u[ds * 2] = fragments[ds][0]
                 u[ds * 2 + 1] = fragments[ds][1]
-            output[r, h, ds * 8 + fc] = (u[ds * 2] / z).cast[DType.bfloat16]()
-            output[r, h, ds * 8 + fc + 1] = (u[ds * 2 + 1] / z).cast[
-                DType.bfloat16
-            ]()
+            comptime if SPLITS > 1:
+                comptime assert output.flat_rank == 4
+                output[r, h, block_idx.z, ds * 8 + fc] = u[ds * 2].cast[OTYPE]()
+                output[r, h, block_idx.z, ds * 8 + fc + 1] = u[ds * 2 + 1].cast[OTYPE]()
+            else:
+                comptime assert output.flat_rank == 3
+                output[r, h, ds * 8 + fc] = (u[ds * 2] / z).cast[OTYPE]()
+                output[r, h, ds * 8 + fc + 1] = (u[ds * 2 + 1] / z).cast[OTYPE]()
+        comptime if SPLITS > 1:
+            comptime assert output.flat_rank == 4
+            if fc == 0:
+                output[r, h, block_idx.z, 64] = m.cast[OTYPE]()
+                output[r, h, block_idx.z, 65] = z.cast[OTYPE]()
 
 
 def enqueue_grouped_query_attention_prefill_apple_gpu[
@@ -639,7 +663,8 @@ def enqueue_grouped_query_attention_prefill_apple_gpu[
     comptime assert not MMA or BQ >= 8
     comptime assert 0 <= SCHEDULE <= 5
     comptime assert SCHEDULE == 0 or (
-        MMA and BQ == 32 and BK == 32 and HEADS == 1
+        MMA and BK == 32 and HEADS == 1
+        and (BQ == 32 or (FP32 and SCHEDULE == 2))
     )
     comptime assert not FP32 or (MMA and SCHEDULE == 2)
     _validate_prefill(ctx, q, k, v, output)
@@ -648,7 +673,7 @@ def enqueue_grouped_query_attention_prefill_apple_gpu[
     comptime if MMA:
         comptime kernel = (
             _mma[BQ, BK, HEADS, QL, KL] if SCHEDULE
-            == 0 else _mma_tuned[SCHEDULE, QL, KL, FP32]
+            == 0 else _mma_tuned[SCHEDULE, QL, KL, QL, FP32, BQ]
         )
         ctx.enqueue_function[kernel](
             q,
@@ -672,3 +697,69 @@ def enqueue_grouped_query_attention_prefill_apple_gpu[
             grid_dim=(14, ceildiv(r, BQ)),
             block_dim=128,
         )
+
+
+def _merge_prefill_splits[SPLITS: Int, QL: TensorLayout, PL: TensorLayout](
+    partial: TileTensor[DType.float32, PL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    rows: Int32,
+):
+    comptime assert partial.flat_rank == 4
+    comptime assert output.flat_rank == 3
+    var row_head = block_idx.x * 4 + thread_idx.x // 32
+    var r = row_head // 14
+    var h = row_head % 14
+    var lane = Int(lane_id())
+    if r < Int(rows):
+        var m: Float32 = neg_inf[DType.float32]()
+        for s in range(SPLITS):
+            if partial[r, h, s, 65] > 0:
+                m = max(m, rebind[Float32](partial[r, h, s, 64]))
+        var z: Float32 = 0
+        var u0: Float32 = 0
+        var u1: Float32 = 0
+        for s in range(SPLITS):
+            var mass = rebind[Float32](partial[r, h, s, 65])
+            if mass > 0:
+                var weight = exp(rebind[Float32](partial[r, h, s, 64]) - m)
+                z += weight * mass
+                u0 += weight * rebind[Float32](partial[r, h, s, lane])
+                u1 += weight * rebind[Float32](partial[r, h, s, lane + 32])
+        output[r, h, lane] = (u0 / z).cast[DType.bfloat16]()
+        output[r, h, lane + 32] = (u1 / z).cast[DType.bfloat16]()
+
+
+def enqueue_grouped_query_attention_prefill_split_apple_gpu[
+    SPLITS: Int, QL: TensorLayout, KL: TensorLayout, PL: TensorLayout,
+](
+    ctx: DeviceContext,
+    q: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    k: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
+    v: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
+    partial: TileTensor[DType.float32, PL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+) raises:
+    """FP32 rolled-MMA partial states followed by one stable merge dispatch.
+
+    Borrow disjoint contiguous row-major views, including caller-owned partial
+    storage [R,14,SPLITS,66] = [weighted numerator[64], maximum, denominator].
+    Empty pieces write (0,-inf,0). No allocation, initialization or sync here.
+    """
+    comptime assert SPLITS == 4 or SPLITS == 8
+    comptime assert q.flat_rank == 3 and k.flat_rank == 3
+    comptime assert partial.flat_rank == 4
+    _validate_prefill(ctx, q, k, v, output)
+    var r = Int(q.dim[0]())
+    var t = Int(k.dim[0]())
+    if (Int(partial.dim[0]()) != r or Int(partial.dim[1]()) != 14
+        or Int(partial.dim[2]()) != SPLITS or Int(partial.dim[3]()) != 66):
+        raise Error("split prefill requires FP32 workspace [R,14,SPLITS,66]")
+    comptime kernel = _mma_tuned[2, QL, KL, PL, True, 32, SPLITS]
+    ctx.enqueue_function[kernel](
+        q, k, v, partial, Int32(r), Int32(t),
+        grid_dim=(14, ceildiv(r, 32), SPLITS), block_dim=128,
+    )
+    comptime merge = _merge_prefill_splits[SPLITS, QL, PL]
+    ctx.enqueue_function[merge](
+        partial, output, Int32(r), grid_dim=ceildiv(r * 14, 4), block_dim=128,
+    )

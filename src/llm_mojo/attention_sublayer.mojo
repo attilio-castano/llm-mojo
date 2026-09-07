@@ -19,6 +19,7 @@ from llm_mojo.attention_decode import (
 )
 from llm_mojo.attention_prefill import (
     enqueue_grouped_query_attention_prefill_apple_gpu,
+    enqueue_grouped_query_attention_prefill_split_apple_gpu,
 )
 from llm_mojo.residual import enqueue_residual_apple_gpu
 
@@ -130,6 +131,8 @@ struct AttentionWorkspace(Movable):
     var fp32_scratch: DeviceBuffer[DType.float32]
     var fp32_materialized: Bool
     var split: DeviceBuffer[DType.float32]
+    var prefill_partial: DeviceBuffer[DType.float32]
+    var prefill_splits: Int
     var cosine: DeviceBuffer[DType.bfloat16]
     var sine: DeviceBuffer[DType.bfloat16]
 
@@ -143,6 +146,7 @@ struct AttentionWorkspace(Movable):
         head_dim: Int = 64,
         materialized: Bool = False,
         fp32_materialized: Bool = True,
+        prefill_splits: Int = 1,
     ) raises:
         if (
             max_rows < 1
@@ -153,6 +157,7 @@ struct AttentionWorkspace(Movable):
             or query_heads % kv_heads != 0
             or head_dim <= 0
             or head_dim % 2 != 0
+            or (prefill_splits != 1 and prefill_splits != 4 and prefill_splits != 8)
         ):
             raise Error("invalid workspace shape")
         self.max_rows = max_rows
@@ -162,6 +167,7 @@ struct AttentionWorkspace(Movable):
         self.head_dim = head_dim
         self.materialized = materialized
         self.fp32_materialized = fp32_materialized
+        self.prefill_splits = prefill_splits
         var h = query_heads * head_dim
         var k = kv_heads * head_dim
         self.normalized = ctx.enqueue_create_buffer[DType.bfloat16](
@@ -187,6 +193,9 @@ struct AttentionWorkspace(Movable):
             max_rows * query_heads * capacity if fp32_materialized else 1
         )
         self.split = ctx.enqueue_create_buffer[DType.float32](14 * 64 * 66)
+        self.prefill_partial = ctx.enqueue_create_buffer[DType.float32](
+            max_rows * query_heads * prefill_splits * 66 if prefill_splits > 1 else 1
+        )
         self.cosine = ctx.enqueue_create_buffer[DType.bfloat16](
             capacity * head_dim
         )
@@ -313,6 +322,8 @@ def enqueue_attention_sublayer[
     Routes 4/5 use FP32 G32/split64-H4 decode for R=1; for R>1 they use
     materialized FP32 attention and return actual route 3. No length crossover.
     Route 6 uses FP32 rolled-MMA prefill and G32 decode (actual route 4).
+    Routes 7/8 use 16/8 query rows per FP32 tile; 9/10 use 4/8 KV splits
+    with a separate FP32 merge. All use G32 for R=1 (actual route 4).
     wo_mma selects only the bias-free output projection's 8x16 MMA mapping;
     it preserves BF16 projection output before the separate residual addition.
     It is an explicit experiment, independent of the GQA precision route.
@@ -330,12 +341,12 @@ def enqueue_attention_sublayer[
     var k = nk * d
     var p = cache.length
     var t = p + r
-    if route < 0 or route > 6:
+    if route < 0 or route > 10:
         raise Error("unknown attention sublayer route")
     if qkv_mapping < 0 or qkv_mapping > 2:
         raise Error("unknown QKV projection mapping")
     var launched_route = route
-    if route == 6 and r == 1:
+    if route >= 6 and r == 1:
         launched_route = 4
     elif (route == 4 or route == 5) and r != 1:
         launched_route = 3
@@ -360,6 +371,8 @@ def enqueue_attention_sublayer[
         raise Error("materialized route requires probability scratch")
     if launched_route == 3 and not work.fp32_materialized:
         raise Error("FP32 route requires FP32 probability scratch")
+    if launched_route >= 9 and work.prefill_splits < (4 if launched_route == 9 else 8):
+        raise Error("split prefill requires caller-allocated partial storage")
     if (route == 1 or route == 2 or route >= 4) and (nq != 14 or nk != 2 or d != 64):
         raise Error("optimized GQA requires Qwen dimensions")
     if ctx.api() != "metal":
@@ -422,6 +435,24 @@ def enqueue_attention_sublayer[
         enqueue_grouped_query_attention_prefill_apple_gpu[
             32, 32, MMA=True, SCHEDULE=2, FP32=True
         ](ctx, q, keys, values, a)
+    elif launched_route == 7:
+        enqueue_grouped_query_attention_prefill_apple_gpu[
+            16, 32, MMA=True, SCHEDULE=2, FP32=True
+        ](ctx, q, keys, values, a)
+    elif launched_route == 8:
+        enqueue_grouped_query_attention_prefill_apple_gpu[
+            8, 32, MMA=True, SCHEDULE=2, FP32=True
+        ](ctx, q, keys, values, a)
+    elif launched_route == 9:
+        enqueue_grouped_query_attention_prefill_split_apple_gpu[4](
+            ctx, q, keys, values,
+            TileTensor(work.prefill_partial, row_major(r, 14, 4, 66)), a,
+        )
+    elif launched_route == 10:
+        enqueue_grouped_query_attention_prefill_split_apple_gpu[8](
+            ctx, q, keys, values,
+            TileTensor(work.prefill_partial, row_major(r, 14, 8, 66)), a,
+        )
     elif launched_route == 4:
         enqueue_grouped_query_attention_decode_apple_gpu[32, 1, 1, fp32_scores=True](
             ctx, q, keys, values, a,
@@ -480,6 +511,7 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     ctx: DeviceContext, mut weights: AttentionWeights,
     mut cache: AttentionCache, mut work: AttentionWorkspace,
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
+    gqa_mapping: Int = 0,
 ) raises -> Int:
     """Compose the prior Qwen projection and FP32 GQA studies on Metal.
 
@@ -489,9 +521,14 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     Qwen dimensions only; no materialized probability workspace is required.
     The original enqueue remains the inspectable control. Both APIs preserve
     the same cache, lifetime, BF16 boundary and no-allocation enqueue contract.
+    Explicit GQA mappings 1/2 use 16/8 query rows; 3/4 use 4/8 KV splits
+    and require preallocated partial storage for multi-row calls. Mapping 0
+    preserves the integrated study control; this is not an automatic selector.
     """
     comptime assert x.flat_rank == 2
+    if gqa_mapping < 0 or gqa_mapping > 4:
+        raise Error("unknown integrated GQA mapping")
     var use_mma = Int(x.dim[0]()) >= 16
     return enqueue_attention_sublayer(
-        ctx, weights, cache, work, x, 6, use_mma, 2 if use_mma else 1,
+        ctx, weights, cache, work, x, 6 + gqa_mapping, use_mma, 2 if use_mma else 1,
     )

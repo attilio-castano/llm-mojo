@@ -44,6 +44,17 @@ full/incremental matrix is `--studies gqa_prefill`: it now pairs the original
 MMA route 8 with rolled QK route 12. The five-ablation follow-up screen is
 `--studies gqa_prefill_resources_screen`, also excluded from default runs.
 Historical matrices remain defined by their tagged sources and frozen records.
+The bounded GQA work-distribution study uses
+`--studies attention_sublayer_parallelism_screen`, comparing integrated control
+9 with BQ16/BQ8 (10/11) and KV split4/split8 (12/13). Run
+`--studies attention_sublayer_parallelism --parallelism-screen /path/to/attention_sublayer_parallelism_screen`
+only after the screen completes. The runner validates its build identity and
+selects at most one qualifying candidate per family using the frozen rule in
+[the contract](../../../docs/attention-sublayer.md#contained-gqa-parallelism-comparison).
+These two studies are excluded from the default run. Both stages include
+control self-pairs, complete attention calls and any partial-state merge.
+For profile curation, use `--attention-sublayer --parallelism-variants 9 FINALIST... --prefix parallelism_`
+at `(64,4096)` and `(1024,1024)`, with 25 measured iterations and ten warmups.
 `src/llm_mojo/benchmarks/smoke.py` exercises the other measurement routes and output gates.
 
 Hot measures one operation through completion. Ring24 measures 24 distinct

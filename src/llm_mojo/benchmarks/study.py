@@ -107,6 +107,35 @@ STUDIES['attention_sublayer_integrated'] = dict(
     **{k:v for k,v in STUDIES['attention_sublayer'].items() if k not in ('candidates','names')},
     candidates=[3,9], names={3:'original materialized FP32 / rowwise projections',9:'integrated packed QKV + FP32 GQA/Wo policy'})
 
+# Four candidates, fixed integrated control. The full run selects at most one
+# from each family from the completed screen; it never widens the search.
+PARALLELISM_NAMES = {9:'integrated BQ32',10:'query tile 16',11:'query tile 8',
+                     12:'KV split4',13:'KV split8'}
+STUDIES['attention_sublayer_parallelism'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer'].items() if k not in ('control','candidates','names')},
+    control=9, candidates=list(PARALLELISM_NAMES), names=PARALLELISM_NAMES)
+STUDIES['attention_sublayer_parallelism_screen'] = dict(
+    **{k:v for k,v in STUDIES['attention_sublayer_parallelism'].items() if k != 'workloads'},
+    workloads=[dict(query_rows=r,rows=t) for r,t in ((64,1024),(64,4096),(1024,1024))])
+
+
+def select_parallelism_finalists(summary):
+    """Both modes must qualify at (64,4096); prefer the weaker-mode gain.
+
+    Ties choose the lower candidate ID: BQ16 before BQ8, split4 before split8.
+    Selection consumes the complete, hash-validated screen via load_run.
+    """
+    target = {(r['candidate'],r['layers']):r for r in summary
+              if (r.get('query_rows'),r['rows']) == (64,4096)}
+    if set(target) != {(v,l) for v in PARALLELISM_NAMES for l in (1,24)}:
+        raise ValueError('parallelism selection requires every target comparison')
+    finalists = []
+    for family in ((10,11),(12,13)):
+        eligible = [v for v in family if all(target[v,l]['decision'] == 'faster' for l in (1,24))]
+        if eligible:
+            finalists.append(min(eligible, key=lambda v:(max(target[v,l]['ratio'] for l in (1,24)),v)))
+    return finalists
+
 
 def workloads(spec):
     return spec.get('workloads', [dict(rows=r) for r in spec.get('rows', [])])

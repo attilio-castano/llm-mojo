@@ -5,9 +5,9 @@ import json
 from .._repository import repository_root
 
 OPERATION = 'attention_sublayer'
-VARIANTS = {3,4,5,6,7,8,9}
+VARIANTS = {3,4,5,6,7,8,9,10,11,12,13}
 ENTRYPOINTS = {f'attention_sublayer_{v}': 'enqueue_attention_sublayer' for v in VARIANTS}
-ENTRYPOINTS['attention_sublayer_9'] = 'enqueue_attention_sublayer_integrated'
+ENTRYPOINTS.update({f'attention_sublayer_{v}':'enqueue_attention_sublayer_integrated' for v in range(9,14)})
 STAGES = ['RMSNorm', 'Q projection', 'K projection', 'V projection',
           'Q RoPE', 'K RoPE', 'KV append', 'QK', 'softmax', 'PV',
           'output projection', 'residual']
@@ -17,11 +17,14 @@ STAGES_BY_VARIANT = {3: STAGES, 4: STAGES,
                      7: STAGES[:7]+['GQA FP32 MMA']+STAGES[-2:],
                      8: STAGES[:7]+['FP32 GQA']+STAGES[-2:],
                      9: ['RMSNorm','packed QKV projection','QKV unpack']+STAGES[4:7]+['FP32 GQA']+STAGES[-2:]}
+STAGES_BY_VARIANT.update({v:STAGES_BY_VARIANT[9] for v in (10,11)})
+STAGES_BY_VARIANT.update({v:STAGES_BY_VARIANT[9][:-3]+['FP32 GQA split','FP32 GQA merge']+STAGES[-2:] for v in (12,13)})
 TARGET_FIELDS = ('profile_workload', 'dispatches_per_iteration', 'key_value_rows',
                  'query_heads', 'key_value_heads')
 PROFILE_WORKLOADS = [(1, 4096), (1024, 1024), (4096, 4096), (64, 4096)]
 DECODE_PROFILE_WORKLOADS = [(1,64),(1,4096)]
 PREFILL_PROFILE_WORKLOADS = [(1024,1024),(4096,4096),(64,4096)]
+PARALLELISM_PROFILE_WORKLOADS = [(64,4096),(1024,1024)]
 ARITHMETIC = ('BF16 weights/activations/cache/output; FP32 GQA scores, softmax '
               'probabilities and accumulation; GQA output rounded to BF16 before Wo.')
 INPUTS = ('Frozen synthetic case 7 (seed 53, T=4096); each workload uses suffix '
@@ -64,7 +67,7 @@ def specification(variant, query_rows, key_rows):
     return dict(profile_rows=query_rows, hidden_size=896, key_value_rows=key_rows,
                 query_heads=14, key_value_heads=2,
                 profile_workload=f'sublayer-r{query_rows}-t{key_rows}-v{variant}',
-                dispatches_per_iteration=len(STAGES_BY_VARIANT[variant]))
+                dispatches_per_iteration=9 if variant >= 12 and query_rows == 1 else len(STAGES_BY_VARIANT[variant]))
 
 
 def configuration(data):
@@ -88,10 +91,17 @@ def configuration(data):
 
 def profile_grid(spec):
     grid = [tuple(w) for w in spec['workloads']]
+    variants = spec['variants']
+    parallelism = (grid == PARALLELISM_PROFILE_WORKLOADS and variants[:1] == [9]
+                   and len(variants) in (2,3) and variants == sorted(set(variants))
+                   and set(variants[1:]) <= {10,11,12,13}
+                   and sum(v in (10,11) for v in variants) <= 1
+                   and sum(v in (12,13) for v in variants) <= 1)
     valid = ((spec['variants'] in ([3],[3,4]) and grid == PROFILE_WORKLOADS)
              or (spec['variants'] == [3,5,6] and grid == DECODE_PROFILE_WORKLOADS)
              or (spec['variants'] == [4,7] and grid == PREFILL_PROFILE_WORKLOADS)
-             or (spec['variants'] == [8,9] and grid == PROFILE_WORKLOADS))
+             or (spec['variants'] == [8,9] and grid == PROFILE_WORKLOADS)
+             or parallelism)
     if not valid:
         raise ValueError('invalid attention sublayer profile grid')
     return {v: STAGES_BY_VARIANT[v] for v in spec['variants']}, {(r,t,v) for r,t in grid for v in spec['variants']}

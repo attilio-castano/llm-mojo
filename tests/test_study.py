@@ -6,10 +6,30 @@ import tempfile
 import unittest
 
 from llm_mojo.benchmarks.study import (parse_output, summarize, encode_samples, read_samples,
-                              load_run, sha, write_json, REPETITIONS)
+                              load_run, sha, write_json, REPETITIONS,
+                              select_parallelism_finalists)
 
 
 class StudyTests(unittest.TestCase):
+    def test_parallelism_selection_requires_both_modes_and_respects_family_budget(self):
+        rows = [dict(query_rows=64,rows=4096,candidate=v,layers=l,
+                     decision='calibration' if v == 9 else 'faster',ratio=.8)
+                for v in range(9,14) for l in (1,24)]
+        self.assertEqual(select_parallelism_finalists(rows),[10,12])
+        # A spectacular hot result cannot conceal a weaker ring result.
+        for row in rows:
+            if row['candidate'] == 11:
+                row['ratio'] = .5 if row['layers'] == 1 else .9
+            if row['candidate'] == 12 and row['layers'] == 24:
+                row['decision'] = 'inconclusive'
+        self.assertEqual(select_parallelism_finalists(rows),[10,13])
+        for row in rows:
+            if row['candidate'] != 9:
+                row['decision'] = 'inconclusive'
+        self.assertEqual(select_parallelism_finalists(rows),[])
+        with self.assertRaises(ValueError):
+            select_parallelism_finalists(rows[:-1])
+
     spec = dict(control=0, candidates=[0, 1], rows=[16])
 
     def samples(self, ratio=0.8):

@@ -14,28 +14,32 @@ STAGES = {0: ['QK', 'softmax', 'PV'], 4: ['fused'], 9: ['decode', 'merge']}
 COUNTERS = {'Kernel Occupancy', 'Instruction Throughput Limiter', 'Last Level Cache Limiter'}
 
 
-def collect(source, output, prefill_variant=None, *, prefill_variants=None, prefix='', attention_sublayer=False, wo_comparison=False, decode_comparison=False, prefill_comparison=False, projection_comparison=False):
+def collect(source, output, prefill_variant=None, *, prefill_variants=None, prefix='', attention_sublayer=False, wo_comparison=False, decode_comparison=False, prefill_comparison=False, projection_comparison=False, parallelism_variants=None):
     records, samples = [], []
     common = None
     if prefill_variant is not None and prefill_variants is not None:
         raise ValueError('choose one prefill comparison')
     if attention_sublayer and (prefill_variant is not None or prefill_variants is not None):
         raise ValueError('choose one attention profile study')
-    if (wo_comparison or decode_comparison or prefill_comparison or projection_comparison) and not attention_sublayer:
+    if (wo_comparison or decode_comparison or prefill_comparison or projection_comparison or parallelism_variants is not None) and not attention_sublayer:
         raise ValueError('contained comparison requires the attention sublayer')
-    if sum((wo_comparison, decode_comparison, prefill_comparison, projection_comparison)) > 1:
+    if sum((wo_comparison, decode_comparison, prefill_comparison, projection_comparison, parallelism_variants is not None)) > 1:
         raise ValueError('choose one attention sublayer comparison')
     variants = ([3,4] if wo_comparison else ([3,5,6] if decode_comparison else [3])) if attention_sublayer else ([0,prefill_variant] if prefill_variant is not None else prefill_variants)
     if prefill_comparison:
         variants = [4,7]
     if projection_comparison:
         variants = [8,9]
+    if parallelism_variants is not None:
+        variants = parallelism_variants
     prefill = variants is not None
     grid = sublayer.PROFILE_WORKLOADS if attention_sublayer else PREFILL_PROFILE_WORKLOADS
     if decode_comparison:
         grid = sublayer.DECODE_PROFILE_WORKLOADS
     if prefill_comparison:
         grid = sublayer.PREFILL_PROFILE_WORKLOADS
+    if parallelism_variants is not None:
+        grid = sublayer.PARALLELISM_PROFILE_WORKLOADS
     spec = dict(workloads=grid,variants=list(variants)) if prefill else {}
     stage_map, _ = (sublayer.profile_grid(spec) if attention_sublayer else prefill_profile_grid(spec)) if prefill else (STAGES, None)
     captures = [(r,t,v,f'r{r}-t{t}-v{v}') for r,t in grid for v in variants] if prefill else [
@@ -130,8 +134,10 @@ if __name__ == '__main__':
     parser.add_argument('--decode-comparison',action='store_true')
     parser.add_argument('--prefill-comparison',action='store_true')
     parser.add_argument('--projection-comparison',action='store_true')
+    parser.add_argument('--parallelism-variants',type=int,nargs='+')
     args = parser.parse_args()
     collect(args.source, args.output, args.prefill_variant,
             prefill_variants=args.prefill_variants, prefix=args.prefix, attention_sublayer=args.attention_sublayer,
             wo_comparison=args.wo_comparison, decode_comparison=args.decode_comparison,
-            prefill_comparison=args.prefill_comparison, projection_comparison=args.projection_comparison)
+            prefill_comparison=args.prefill_comparison, projection_comparison=args.projection_comparison,
+            parallelism_variants=args.parallelism_variants)

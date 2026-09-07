@@ -696,6 +696,85 @@ source `07984fe`. Optional counter analysis is explicitly absent.
 These data do not establish a general dispatch crossover. The subsequent FP32
 decode, FP32 prefill and QKV/Wo integration comparisons are now complete.
 
+## Contained GQA parallelism comparison
+
+The approved follow-up keeps the integrated block as its control (benchmark
+9). Packed QKV, Wo, rotary positions, cache handling, FP32 attention arithmetic,
+BF16 boundaries and all numerical gates remain fixed. Only GQA ownership
+changes. The primary question is the `(R,T)=(64,4096)` cached chunk; its current
+32-row query tile exposes 28 threadgroups, although each group streams a long
+KV sequence. Group count is a mapping fact, not measured GPU utilization.
+
+| Benchmark | Integrated GQA mapping | Query tile | KV splits | Primary threadgroups at (64,4096) |
+| --- | --- | --- | --- | --- |
+| 9 | 0, existing control | 32 | 1 | 28 |
+| 10 | 1 | 16 | 1 | 56 |
+| 11 | 2 | 8 | 1 | 112 |
+| 12 | 3 | 32 | 4 | 112 plus merge |
+| 13 | 4 | 32 | 8 | 224 plus merge |
+
+All use the existing rolled QK reduction, BK=32, one head per query tile and
+FP32 PV. Smaller query tiles retain the same aggregate SIMD-group count at
+R=64 (112), but change independently schedulable groups, per-group shared
+storage and KV reuse. Shared storage is 16/12/10 KiB for BQ=32/16/8.
+The split family retains BQ=32 and divides whole KV tiles into four/eight
+disjoint ranges along a third grid dimension. It adds a second dispatch;
+the whole integrated block has ten dispatches instead of nine for R>1.
+Decode retains the existing G32 path for every mapping.
+
+Split scratch is caller-owned, contiguous FP32 `[R,14,S,66]`, holding 64
+unnormalized weighted values, maximum and denominator for each row/head/piece.
+Its footprint at R=64 is 0.90234375/1.8046875 MiB for S=4/8; at full 4096 it
+is 57.75/115.5 MiB. These are allocation sizes, not measured traffic. Allocate
+it through `AttentionWorkspace(..., prefill_splits=4 or 8)` before enqueue and
+timing. Both benchmark arms share the same scratch allocation. Missing storage
+or invalid selectors must reject before any enqueue or cache mutation.
+
+Empty causal pieces write `(u=0,m=-inf,z=0)`. The merge excludes zero-mass
+pieces, computes `M=max(m_s)`, and returns
+`sum(exp(m_s-M)*u_s) / sum(exp(m_s-M)*z_s)`, rounding only the final attention
+output to BF16. No atomic additions, probability matrix or new precision
+policy is introduced. The control specialization retains its existing
+arithmetic and synchronization; tile size and splits are compile-time choices.
+
+Before measurement, run the frozen upstream operation cases with identical
+Q/K/V, the existing materialized FP32 structural edge fixtures, and full/chunked
+attention composition on all 17 synthetic and three checkpoint cases. Preserve
+isolated GQA 0.0078125 and projected/final 0.03125 limits and exact cache checks.
+Test future perturbations, ragged queries/KV tiles, empty pieces, partial/output
+guard elements, and a merge with widely shifted maxima. Poison scratch and
+repeat asynchronous 15/16/17-row calls and final decode. Test every actual
+benchmark route in hot and ring24 modes. A failed numerical candidate is
+investigated or rejected; the gate is never widened to admit it.
+
+The single screen is `attention_sublayer_parallelism_screen`: all four
+candidates plus control self-pairs at `(64,1024),(64,4096),(1024,1024)`, both
+modes, four paired blocks, ten warmups and ten samples per arm. Retain all
+2,400 observations and include partial writes, merge, layout copy and the
+complete block through residual in timing. A finalist must satisfy the existing
+gain rule at `(64,4096)` in both modes: every block faster and median reduction
+greater than both 5% and the matching self-pair noise. Select at most one per
+family, minimizing the worse of its two median ratios; exact ties prefer BQ16
+or split4. Do not combine families or add head-reuse/barrier/BK ablations.
+
+The full `attention_sublayer_parallelism` matrix uses the existing fifteen
+workloads and only screen finalists plus control self-pairs: 4,800 observations
+for one finalist, 7,200 for two. Its runner requires the complete screen from
+the same clean source/build and records the selection and screen hashes.
+No finalist means stop at the screen. Retain every full-run result and use
+the new data to bound where a candidate is useful; no universal crossover is
+assumed. Do not repeat noisy measurements until a preferred result appears.
+
+Profile control and finalists at `(64,4096)` and `(1024,1024)`, with 25 measured
+iterations and ten warmups each. Four or six separate Metal captures diagnose
+GQA versus merge time and compiler spills. Optional counters may be absent;
+profiles do not establish speed claims or measured occupancy by themselves.
+Retain compact `parallelism_screen_`/`parallelism_` evidence and extend the
+existing plotter. Freeze clean measured source after validation; preserve raw
+samples, source/binary/input identities, device/backend and block conditions.
+Finish with a reproducible explanation and local commits, including negative
+results. The candidate budget ends with this screen and conditional follow-up.
+
 ## Completed projection integration
 
 Validated source `dc77016` composes existing packed QKV, bias-free Wo MMA and

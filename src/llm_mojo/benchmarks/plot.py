@@ -234,6 +234,90 @@ def render_sublayer_wo(directory, prefix, *, fp32_prefill=False, integration=Fal
     plt.close(fig)
 
 
+def render_sublayer_parallelism(directory, prefix):
+    record,samples,summary = load_run(directory,prefix)
+    table(directory,prefix+'summary.csv',summary)
+    spec = record['specification']
+    variants = [v for v in spec['candidates'] if v != spec['control']]
+    labels = [f'Decode T={w["rows"]}' if w['query_rows'] == 1 else
+              f'Full R=T={w["rows"]}' if w['query_rows'] == w['rows'] else
+              f'Chunk R={w["query_rows"]}, T={w["rows"]}' for w in spec['workloads']]
+    colors = {10:'#167d9a',11:'#3c9e79',12:'#8064a2',13:'#ba7437'}
+    fig,axes = plt.subplots(1,2,figsize=(13,max(6,.6*len(labels)+2.4)),sharex=True,sharey=True)
+    for ax,layers in zip(axes,(1,24)):
+        for index,variant in enumerate(variants):
+            offset = (index-(len(variants)-1)/2)*.17
+            values = [s for s in summary if s['candidate']==variant and s['layers']==layers]
+            for i,s in enumerate(values):
+                color = colors[variant]
+                ax.errorbar(s['ratio'],i+offset,
+                            xerr=[[s['ratio']-s['ratio_min']],[s['ratio_max']-s['ratio']]],
+                            fmt='o',color=color,capsize=3,markersize=5,
+                            markerfacecolor='white' if s['decision']=='inconclusive' else color,
+                            label=spec['names'][str(variant)] if i==0 else None)
+        ax.axvline(1,color='#333333',linewidth=1)
+        ax.set_xscale('log')
+        ax.xaxis.set_major_locator(LogLocator(base=10,subs=(1,2,5)))
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda value,_:f'{value:g}×'))
+        ax.xaxis.set_minor_formatter(FuncFormatter(lambda value,_:''))
+        ax.grid(axis='x',alpha=.18)
+        ax.set_title('Hot call' if layers==1 else 'Ring24 per call')
+        ax.set_xlabel('Whole-block time / paired integrated control · log scale')
+    data = [s for s in summary if s['candidate'] in variants]
+    axes[0].set_xlim(min(s['ratio_min'] for s in data)/1.2,max(1,max(s['ratio_max'] for s in data))*1.2)
+    axes[0].set_yticks(range(len(labels)),labels)
+    axes[0].invert_yaxis()
+    handles,names = axes[0].get_legend_handles_labels()
+    fig.legend(handles,names,loc='upper center',bbox_to_anchor=(.5,.93),ncol=len(variants),frameon=False)
+    fig.suptitle('Qwen attention · GQA work distribution'+(' · screen' if record['study'].endswith('_screen') else ''),
+                 fontsize=16,fontweight='bold')
+    fig.text(.04,.025,'Left of 1× is faster. Whiskers: four-block ratio range; open marks: inconclusive.\n'
+             'Gain rule: all four blocks faster and > max(5%, matching self-pair deviation). QKV/Wo fixed; merge included.\n'
+             f'{len(samples):,} retained observations · {record["runtime"]["device"]} / Metal · BF16 I/O, FP32 attention.\n'
+             f'Source {record["repository"]["commit"][:7]}. Fixed cache prefix; allocation and correctness checks excluded.',
+             fontsize=9,color='#555555')
+    fig.tight_layout(rect=(0,.18,1,.86))
+    fig.savefig(directory/(prefix.rstrip('_')+'.png'),dpi=160)
+    plt.close(fig)
+
+
+def render_sublayer_parallelism_profile(directory):
+    rows = load_profile(directory,'parallelism_')
+    record = json.loads((directory/'parallelism_profiles.json').read_text())
+    table(directory,'parallelism_profile_summary.csv',rows)
+    from .attention_sublayer_contract import STAGES_BY_VARIANT
+    from .study import PARALLELISM_NAMES
+    variants = record['specification']['variants']
+    stages = STAGES_BY_VARIANT[9][:-2]+['FP32 GQA split','FP32 GQA merge']+STAGES_BY_VARIANT[9][-2:]
+    colors = {9:'#777777',10:'#167d9a',11:'#3c9e79',12:'#8064a2',13:'#ba7437'}
+    fig,axes = plt.subplots(1,2,figsize=(13,7),sharey=True)
+    for ax,(r,t) in zip(axes,record['specification']['workloads']):
+        for index,variant in enumerate(variants):
+            offset = (index-(len(variants)-1)/2)*.23
+            lookup = {s['stage']:s['median_us'] for s in rows
+                      if (s['query_rows'],s['rows'],s['variant']) == (r,t,variant)}
+            present = [(i,lookup[stage]) for i,stage in enumerate(stages) if stage in lookup]
+            ax.barh([i+offset for i,_ in present],[v for _,v in present],height=.22,
+                    color=colors[variant],label=PARALLELISM_NAMES[variant])
+        ax.set_xscale('log')
+        ax.set_yticks(range(len(stages)),stages,fontsize=9)
+        ax.set_title(f'R={r}, T={t}')
+        ax.set_xlabel('Median active GPU time (µs) · log scale')
+        ax.grid(axis='x',alpha=.15)
+    axes[0].invert_yaxis()
+    handles,names = axes[0].get_legend_handles_labels()
+    fig.legend(handles,names,loc='upper center',bbox_to_anchor=(.5,.93),ncol=len(variants),frameon=False)
+    fig.suptitle('Integrated attention · GQA work and merge cost',fontsize=16,fontweight='bold')
+    fig.text(.04,.025,'QKV/Wo fixed; only GQA work distribution changes. Missing bars are stages that do not execute.\n'
+             'Separate instrumented captures; active durations exclude preemption and host gaps. Use paired latency for gains.\n'
+             f'{sum(s["count"] for s in rows):,} measured dispatch durations · '
+             f'{record["captures"][0]["capture"]["runtime"]["device"]} / Metal · FP32 attention · '
+             f'source {record["common"]["repository"]["commit"][:7]}.',fontsize=9,color='#555555')
+    fig.tight_layout(rect=(0,.14,1,.86))
+    fig.savefig(directory/'parallelism_profile.png',dpi=160)
+    plt.close(fig)
+
+
 def render_sublayer_integrated_profile(directory):
     rows = load_profile(directory, 'integrated_')
     record = json.loads((directory/'integrated_profiles.json').read_text())
@@ -483,6 +567,11 @@ def render_sublayer(directory, record, samples, summary):
             render_sublayer_wo(directory,prefix,integration=True)
     if (directory/'integrated_profiles.json').exists():
         render_sublayer_integrated_profile(directory)
+    for prefix in ('parallelism_screen_','parallelism_'):
+        if (directory/(prefix+'run.json')).exists():
+            render_sublayer_parallelism(directory,prefix)
+    if (directory/'parallelism_profiles.json').exists():
+        render_sublayer_parallelism_profile(directory)
     print(directory.name, len(samples), 'baseline observations verified; attention figures and retained comparisons regenerated')
 
 

@@ -22,7 +22,7 @@ def _case(
     case_id: Int, nq: Int, nk: Int, d: Int, t: Int, route: Int, chunks: Bool,
     reference: String = "upstream", require_close: Bool = True,
     wo_mma: Bool = False,
-    qkv_mapping: Int = 0, integrated: Bool = False,
+    qkv_mapping: Int = 0, integrated: Bool = False, gqa_mapping: Int = 0,
 ) raises:
     var ctx = DeviceContext()
     assert_equal(ctx.api(), "metal")
@@ -39,7 +39,7 @@ def _case(
         chunks,
         "Wo MMA",
         wo_mma,
-        "QKV mapping", qkv_mapping, "integrated", integrated,
+        "QKV mapping", qkv_mapping, "integrated", integrated, "GQA mapping", gqa_mapping,
     )
     var h = nq * d
     var k = nk * d
@@ -52,7 +52,9 @@ def _case(
     var cache = AttentionCache(ctx, capacity, nk, d)
     cache.key.enqueue_fill(123)
     cache.value.enqueue_fill(123)
-    var work = AttentionWorkspace(ctx, t, capacity, nq, nk, d, route == 0, route >= 3 and route != 6)
+    var work = AttentionWorkspace(ctx, t, capacity, nq, nk, d, route == 0,
+                                  route >= 3 and route < 6,
+                                  8 if gqa_mapping == 4 else (4 if gqa_mapping == 3 else 1))
     print("composition reference", reference, "strict", require_close)
     load_sublayer_fixture(work.cosine, case_id, "cosine", True)
     load_sublayer_fixture(work.sine, case_id, "sine", True)
@@ -79,6 +81,7 @@ def _case(
         work.raw_query.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
         work.raw_key.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
         work.raw_value.enqueue_fill(Float32(FloatLiteral.nan).cast[DType.bfloat16]())
+        work.prefill_partial.enqueue_fill(Float32(FloatLiteral.nan))
         var prefix_k = snapshot(cache.key, p * k)
         var prefix_v = snapshot(cache.value, p * k)
         var view = TileTensor(
@@ -86,8 +89,8 @@ def _case(
         )
         if integrated:
             assert_equal(enqueue_attention_sublayer_integrated(
-                ctx, weights, cache, work, view
-            ), 4 if r == 1 else 6)
+                ctx, weights, cache, work, view, gqa_mapping
+            ), 4 if r == 1 else 6 + gqa_mapping)
         elif route == 3:
             # All FP32 accuracy cases also exercise the public default route.
             assert_equal(enqueue_attention_sublayer(
@@ -231,17 +234,19 @@ def test_repeated_asynchronous_use() raises:
     load_sublayer_fixture(weights.norm, 5, "norm_weight")
     load_sublayer_fixture(weights.output, 5, "output_weight")
     load_sublayer_fixture(input, 5, "input")
-    for implementation in range(10):
-        var route = 6 if implementation >= 8 else (3 if implementation == 4 else (implementation - 1 if implementation >= 5 else implementation))
+    for implementation in range(14):
+        var route = implementation - 3 if implementation >= 10 else (6 if implementation >= 8 else (3 if implementation == 4 else (implementation - 1 if implementation >= 5 else implementation)))
         var wo_mma = implementation == 4 or implementation == 7
         # Optimized FP32 decode must also work without probability storage.
         var work = AttentionWorkspace(ctx, 65, 65, materialized=route == 0,
-                                      fp32_materialized=route == 3)
+                                      fp32_materialized=route == 3,
+                                      prefill_splits=8 if implementation == 13 else (4 if implementation == 12 else 1))
         load_sublayer_fixture(work.cosine, 5, "cosine", True)
         load_sublayer_fixture(work.sine, 5, "sine", True)
         for _ in range(get_defined_int["SUBLAYER_REPEAT", default=3]()):
             cache.reset(ctx)
             work.output.enqueue_fill(123)
+            work.prefill_partial.enqueue_fill(Float32(FloatLiteral.nan))
             var p = 0
             while p < 65:
                 # Route 6 alternates tiled prefill and final decode, without
@@ -251,14 +256,14 @@ def test_repeated_asynchronous_use() raises:
                     rows = 15 if p == 0 else (16 if p == 15 or p == 48 else (17 if p == 31 else 1))
                 var view = TileTensor(input.unsafe_ptr().unsafe_offset(p * 896), row_major(rows, 896))
                 var launched: Int
-                if implementation == 9:
-                    launched = enqueue_attention_sublayer_integrated(ctx, weights, cache, work, view)
+                if implementation >= 9:
+                    launched = enqueue_attention_sublayer_integrated(ctx, weights, cache, work, view, implementation - 9)
                 else:
                     launched = enqueue_attention_sublayer(
                         ctx, weights, cache, work, view, route,
                         rows >= 16 if implementation == 8 else wo_mma,
                     )
-                assert_equal(launched, 4 if route == 6 and rows == 1 else route)
+                assert_equal(launched, 4 if route >= 6 and rows == 1 else route)
                 p += rows
             ctx.synchronize()
             assert_equal(cache.length, 65)
@@ -273,6 +278,34 @@ def test_repeated_asynchronous_use() raises:
                     ctx, weights, cache, work, TileTensor(input, row_major(3, 896)), route
                 )
             assert_equal(cache.length, 0)
+
+
+def test_partitioned_prefill_rejects_missing_storage_before_enqueue() raises:
+    var ctx = DeviceContext()
+    var weights = AttentionWeights(ctx)
+    var cache = AttentionCache(ctx, 65)
+    var work = AttentionWorkspace(ctx, 17, 65, fp32_materialized=False)
+    var input = ctx.enqueue_create_buffer[DType.bfloat16](17 * 896)
+    cache.key.enqueue_fill(123)
+    work.output.enqueue_fill(123)
+    var before = snapshot(cache.key, 65 * 128)
+    var output_before = snapshot(work.output, 17 * 896)
+    for mapping in [3, 4]:
+        with assert_raises(contains="caller-allocated partial storage"):
+            _ = enqueue_attention_sublayer_integrated(
+                ctx, weights, cache, work, TileTensor(input, row_major(17, 896)), mapping,
+            )
+        assert_equal(cache.length, 0)
+    with assert_raises(contains="unknown integrated GQA mapping"):
+        _ = enqueue_attention_sublayer_integrated(
+            ctx, weights, cache, work, TileTensor(input, row_major(17, 896)), 5,
+        )
+    var after = snapshot(cache.key, 65 * 128)
+    for i in range(len(before)):
+        assert_equal(before[i], after[i])
+    var untouched = snapshot(work.output, 17 * 896)
+    for i in range(len(untouched)):
+        assert_equal(untouched[i], output_before[i])
 
 
 def test_cache_gate_checks_bits_including_signed_zero() raises:

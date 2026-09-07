@@ -13,6 +13,30 @@ from llm_mojo.benchmarks import attention_prefill_contract as prefill
 from llm_mojo.benchmarks import attention_sublayer_contract as sublayer
 
 class AttentionProfileTests(unittest.TestCase):
+    def test_partitioned_gqa_profiles_require_merge_only_for_multirow_splits(self):
+        for variant in range(10,14):
+            for rows in (1,64):
+                p = self.profile()
+                p.update(operation=sublayer.OPERATION,
+                         implementation=f'attention_sublayer_{variant}',
+                         entrypoint='enqueue_attention_sublayer_integrated', profile_iterations=25,
+                         **sublayer.specification(variant,rows,4096))
+                cfg,_,_ = profile_contract(p)
+                expected = 10 if variant >= 12 and rows > 1 else 9
+                self.assertEqual(cfg['dispatches_per_iteration'],expected)
+                for field,value in (('dispatches_per_iteration',19-expected),
+                                    ('profile_workload','sublayer-r64-t4096-v9'),
+                                    ('entrypoint','enqueue_attention_sublayer')):
+                    with self.assertRaises(ValueError):
+                        sublayer.configuration({**p,field:value})
+        stages,grid = sublayer.profile_grid(dict(variants=[9,10,13],
+                                                workloads=sublayer.PARALLELISM_PROFILE_WORKLOADS))
+        self.assertEqual(len(grid),6)
+        self.assertEqual(stages[13][-4:-2],['FP32 GQA split','FP32 GQA merge'])
+        for variants in ([10,13],[9,10,11],[9,12,13],[9,10,13,13]):
+            with self.assertRaises(ValueError):
+                sublayer.profile_grid(dict(variants=variants,workloads=sublayer.PARALLELISM_PROFILE_WORKLOADS))
+
     def test_sublayer_profile_binds_full_stage_sequence_and_causal_shape(self):
         p = self.profile()
         p.update(operation=sublayer.OPERATION, implementation='attention_sublayer_3',

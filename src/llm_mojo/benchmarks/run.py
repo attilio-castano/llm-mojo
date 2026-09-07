@@ -10,7 +10,8 @@ from .environment import (conditions_snapshot, ensure_record_location,
                          repository_state, require_ac, require_nominal_thermal_state,
                          stable_environment, utc_now)
 from .study import (STUDIES, BLOCKS, REPETITIONS, WARMUP, sha, write_json,
-                   encode_samples, parse_output, summarize, workloads)
+                   encode_samples, parse_output, summarize, workloads, load_run,
+                   select_parallelism_finalists)
 from .attention_sublayer_contract import fixture_identity
 
 
@@ -58,7 +59,7 @@ def checked_conditions():
     return conditions
 
 
-def run(build_dir, output, study_names):
+def run(build_dir, output, study_names, *, parallelism_screen=None):
     ensure_record_location(output)
     provenance = json.loads((build_dir / 'build.json').read_text())
     repo, sources = repository_state(), source_hashes()
@@ -74,6 +75,22 @@ def run(build_dir, output, study_names):
     env = {k: v for k, v in os.environ.items() if k != 'MODULAR_DEBUG'}
     for name in study_names:
         spec = STUDIES[name]
+        selection = None
+        if name == 'attention_sublayer_parallelism':
+            if parallelism_screen is None:
+                raise ValueError('parallelism full run requires its completed screen')
+            screen, _, summary = load_run(parallelism_screen)
+            declared = json.loads(json.dumps(STUDIES['attention_sublayer_parallelism_screen']))
+            if (screen['study'] != 'attention_sublayer_parallelism_screen'
+                or screen['specification'] != declared or screen['build'] != provenance):
+                raise ValueError('parallelism screen must match this specification and build')
+            finalists = select_parallelism_finalists(summary)
+            if not finalists:
+                raise ValueError('no parallelism candidate qualified; stop at the screen')
+            spec = {**spec,'candidates':[9,*finalists]}
+            selection = dict(finalists=finalists,screen_run_sha256=sha(parallelism_screen / 'run.json'),
+                             screen_samples_sha256=screen['samples_sha256'],
+                             rule='Both modes faster at (64,4096); minimum worst-mode ratio per family; lower-ID tie break.')
         if spec['operation'] == 'attention_sublayer' and fixture_identity() != provenance.get('attention_fixtures'):
             raise RuntimeError('attention benchmark input identity changed')
         directory = output / name
@@ -84,6 +101,8 @@ def run(build_dir, output, study_names):
                       timing=spec.get('timing','Host monotonic enqueue through one synchronization per sample; microseconds per call. 24 distinct input or weight buffers, divided by 24; output/scratch reused.'),
                       inputs=spec.get('inputs','GQA deterministic signed recipe, seed + 13*layer; other operations analytical constants varying by layer, see operations.mojo. Numerical suites cover nonuniform data.'),
                       started_utc=utc_now(), conditions=[])
+        if selection is not None:
+            record['selection'] = selection
         samples = []
         for block in range(1, BLOCKS + 1):
             before = checked_conditions()
@@ -133,17 +152,20 @@ def main():
     p.add_argument('command', choices=['build', 'run'])
     p.add_argument('--build-dir', type=Path, required=True)
     p.add_argument('--output', type=Path)
+    p.add_argument('--parallelism-screen', type=Path)
     p.add_argument('--studies', nargs='+', choices=list(STUDIES),
                    default=[name for name in STUDIES if not name.endswith('_screen')
                             and name not in ('attention_sublayer_wo','attention_sublayer_decode','attention_sublayer_prefill',
-                                             'attention_sublayer_projections','attention_sublayer_integrated')])
+                                             'attention_sublayer_projections','attention_sublayer_integrated',
+                                             'attention_sublayer_parallelism')])
     args = p.parse_args()
     if args.command == 'build':
         build(args.build_dir.resolve())
     elif args.output is None:
         p.error('run requires --output')
     else:
-        run(args.build_dir.resolve(), args.output.resolve(), args.studies)
+        run(args.build_dir.resolve(), args.output.resolve(), args.studies,
+            parallelism_screen=args.parallelism_screen.resolve() if args.parallelism_screen else None)
 
 
 if __name__ == '__main__':

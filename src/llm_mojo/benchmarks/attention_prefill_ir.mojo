@@ -28,7 +28,7 @@ def main() raises:
     comptime assert 0 <= schedule <= 5
     comptime kernel = _mma[
         32, 32, 1, type_of(ql), type_of(kl)
-    ] if schedule == 0 else _mma_tuned[schedule, type_of(ql), type_of(kl)]
+    ] if schedule == 0 else _mma_tuned[schedule, type_of(ql), type_of(kl), type_of(ql)]
     ctx.enqueue_function[kernel, dump_llvm=True, dump_asm=True](
         TileTensor(qb, ql),
         TileTensor(kb, kl),

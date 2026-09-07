@@ -18,6 +18,7 @@ from llm_mojo.attention_decode import (
 from llm_mojo.attention_prefill import (
     enqueue_grouped_query_attention_prefill_apple_gpu,
 )
+from test_attention_prefill import _fp32_candidate
 from llm_mojo.residual import enqueue_residual_apple_gpu
 from max.gpu.host import DeviceContext
 from layout import TileTensor, row_major
@@ -76,7 +77,8 @@ def _operations(case_id: Int, nq: Int, nk: Int, d: Int, t: Int, precision: Bool 
     var h = nq * d
     var k = nk * d
     var weights = AttentionWeights(ctx, nq, nk, d)
-    var work = AttentionWorkspace(ctx, t, t, nq, nk, d, True, precision)
+    var work = AttentionWorkspace(ctx, t, t, nq, nk, d, True, precision,
+                                  8 if precision and nq == 14 else 1)
     var input = ctx.enqueue_create_buffer[DType.bfloat16](t * h)
     load_sublayer_fixture(input, case_id, "input")
     load_sublayer_fixture(weights.qkv, case_id, "weight")
@@ -191,12 +193,13 @@ def _operations(case_id: Int, nq: Int, nk: Int, d: Int, t: Int, precision: Bool 
             row_major(r, nq, d),
         )
         var out = TileTensor(work.attention, row_major(r, nq, d))
-        for route in range(7 if precision else (3 if nq == 14 else 1)):
+        for route in range(11 if precision else (3 if nq == 14 else 1)):
             if route == 4 or route == 5:
                 continue  # Covered at the fixed decode prefixes below.
             if nq != 14 and route != 0 and route != 3:
                 continue
             work.attention.enqueue_fill(123)
+            work.prefill_partial.enqueue_fill(Float32(FloatLiteral.nan))
             if route == 0:
                 enqueue_grouped_query_attention_apple_gpu(
                     ctx,
@@ -211,10 +214,8 @@ def _operations(case_id: Int, nq: Int, nk: Int, d: Int, t: Int, precision: Bool 
                     ctx, q, keys, values,
                     TileTensor(work.fp32_scratch, row_major(r, nq, t)), out,
                 )
-            elif route == 6:
-                enqueue_grouped_query_attention_prefill_apple_gpu[
-                    32, 32, MMA=True, SCHEDULE=2, FP32=True
-                ](ctx, q, keys, values, out)
+            elif route >= 6:
+                _fp32_candidate(ctx, q, keys, values, out, work.prefill_partial, route - 6)
             elif r == 1:
                 if route == 1:
                     enqueue_grouped_query_attention_decode_apple_gpu[32, 1, 1](
