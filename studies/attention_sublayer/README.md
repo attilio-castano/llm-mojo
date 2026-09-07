@@ -1,6 +1,15 @@
 # Qwen attention sublayer
 
-The earlier packed-QKV, Wo and FP32 GQA studies now run together through one
+The latest contained experiment divides GQA's KV sequence into eight pieces
+while keeping packed QKV, Wo and FP32 attention fixed. On Apple M4 Pro / Metal,
+this reduces whole-attention latency by **39.69% hot and 47.96% ring24** for a
+64-token chunk at context 4096, compared with the already integrated block.
+Smaller query tiles were slower in the screen; splitting did not establish a
+general full-prefill gain. The [parallelism results below](#gqa-parallelism-on-the-integrated-block)
+retain all 7,200 observations, four diagnostic captures and the unchanged
+numerical gates. The split mapping is an explicit integrated-engine option.
+
+The preceding packed-QKV, Wo and FP32 GQA studies run together through one
 public Mojo enqueue. On Apple M4 Pro / Metal, the integrated path reduces
 whole-attention latency by **about 88% at full 1024-token prefill, 91% at full
 4096, 80% for a 64-token chunk at context 4096, and 89–92% for decode at context
@@ -40,6 +49,180 @@ and [FP32 comparison](precision_numerics.json) retain the precision decision,
 independent gates and provenance. The original baseline's measured engine and
 fixtures match its validation hashes; only the runner's per-process timeout
 changed afterward.
+
+## GQA parallelism on the integrated block
+
+This experiment changes how the existing fused FP32 GQA assigns work. Its
+control already has FlashAttention-style query tiling, online softmax, a
+rolled QK reduction, and FP32 PV. Packed QKV and the studied Wo mapping run in
+both arms. Benchmark 9 is that integrated control; 10/11 use query tiles of
+16/8, and 12/13 keep the 32-query tile with four/eight KV splits. The measured
+unit still ends at the residual addition, including the split merge.
+
+### Work ownership and storage
+
+At `(R,T)=(64,4096)`, fourteen query heads and two 32-row query tiles expose
+only 28 primary threadgroups. Each group streams the KV sequence. The two
+candidate families create more independently schedulable groups in different
+ways:
+
+| Mapping | Primary threadgroups | Total primary SIMD groups | Shared storage per group |
+| --- | ---: | ---: | ---: |
+| BQ32 control | 28 | 112 | 16 KiB |
+| BQ16 | 56 | 112 | 12 KiB |
+| BQ8 | 112 | 112 | 10 KiB |
+| BQ32, split4 | 112 | 448 | 16 KiB |
+| BQ32, split8 | 224 | 896 | 16 KiB |
+
+Smaller query tiles keep the aggregate SIMD-group count constant here. They
+also share each K/V tile across fewer queries and load it in more threadgroups.
+Splitting instead partitions whole 32-position KV tiles along a third grid
+dimension while retaining the 32-query reuse. These are source-level ownership
+and storage facts; group counts do not measure occupancy or memory bandwidth.
+
+Each split writes an FP32 weighted numerator, maximum and denominator.
+A second dispatch rescales the nonempty partials to a common maximum before
+combining them. Empty causal pieces contribute zero mass. Only the final
+attention output rounds to BF16, at the existing boundary before Wo.
+The integrated block therefore has ten dispatches for split prefill, versus
+nine for the control. Decode uses the same existing G32 route in every mapping.
+
+Caller-owned scratch is contiguous `[R,14,S,66]` FP32. Eight splits allocate
+**1.805 MiB at R=64, 28.875 MiB at R=1024, and 115.5 MiB at R=4096**; four
+splits need half as much. These are allocation sizes, not measured DRAM traffic.
+Allocation is outside enqueue and timing, and both arms share the same scratch
+allocation. Select the measured eight-split path with
+`AttentionWorkspace(..., fp32_materialized=False, prefill_splits=8)` and
+`enqueue_attention_sublayer_integrated(..., gqa_mapping=4)`.
+The default mapping remains the integrated BQ32 control; this bounded study
+does not establish an automatic crossover across unmeasured shapes.
+
+### Accuracy before timing
+
+All five mappings passed the frozen upstream-input GQA comparisons and
+full/chunked attention composition on 17 synthetic and three checkpoint cases.
+The selected reference and every gate above remain fixed. Across the five
+mappings, the largest observed scaled errors were:
+
+| Boundary | Synthetic maximum | Checkpoint maximum | Fixed limit |
+| --- | ---: | ---: | ---: |
+| Isolated GQA | 0.00625000 | 0.00045683 | 0.0078125 |
+| Projected branch | 0.00518135 | 0.00141243 | 0.03125 |
+| Final residual output | 0.01162791 | 0.00137931 | 0.03125 |
+
+Each mapping reached these same maxima; this does not assert bitwise equality
+between mappings. The [validation record](parallelism_validation.json) retains
+per-mapping counts, commands and source identities. All 510 frozen synthetic
+arrays and 63 checkpoint arrays matched their hashes. The full workflow passed
+**90 Mojo and 43 Python tests**, plus the maintained IR inspector, checkpoint
+validation and twelve asynchronous 65-token sequences per configuration.
+
+The standalone suite applies all mappings to 29 FP32 structural fixtures.
+Coverage includes ragged tiles, future-token perturbations, exact cache/prefix
+checks, poisoned partials, output guards, entirely empty causal pieces, and
+a stable merge with maxima 1000/999. Missing split scratch rejects before
+enqueue or cache mutation. Asynchronous calls cross the 15/16/17-row projection
+boundary and finish with decode; every benchmark route also passes its actual
+hot and ring24 correctness checks before timing.
+
+### Screen and full workload matrix
+
+The predeclared screen tests all four candidates at `(64,1024)`, `(64,4096)`
+and full 1024, in both modes and four paired blocks. A gain requires every
+block faster and median reduction above both 5% and the largest matching
+control self-pair deviation. At the target `(64,4096)`:
+
+| Candidate | Hot time / paired control | Ring24 time / paired control | Decision in both modes |
+| --- | ---: | ---: | --- |
+| BQ16 | 1.542x | 1.622x | Slower |
+| BQ8 | 2.555x | 2.777x | Slower |
+| Split4 | 0.650x | 0.567x | Faster |
+| Split8 | 0.604x | 0.520x | Faster |
+
+Across all 24 candidate/mode/workload cells, six qualify as faster, eleven
+as slower and seven are inconclusive. Eight splits is the sole finalist:
+both split candidates qualify at the target, and eight splits has the lower
+worse-mode median ratio under the declared selection rule. There was no
+direct paired split4-versus-split8 experiment. The smaller-query family did
+not advance. All 2,400 observations remain in the
+[screen record](parallelism_screen_run.json), [samples](parallelism_screen_samples.csv.gz)
+and [derived table](parallelism_screen_summary.csv).
+
+![Query-tile and KV-split screening ratios](parallelism_screen.png)
+
+The independent full matrix compares eight splits with the integrated control
+across all fifteen existing workloads, retaining 4,800 observations. Of thirty
+workload/mode cells, **three qualify as faster, one as slower and twenty-six
+are inconclusive**:
+
+| Workload R,T | Hot latency reduction | Ring24 per-call reduction |
+| --- | ---: | ---: |
+| Decode T=1,16,64,256,1024,4096 | All inconclusive | All inconclusive |
+| Full 16,16 | Inconclusive | Inconclusive |
+| Full 64,64 | Inconclusive | **5.64% slower** |
+| Full 256,256 | Inconclusive | Inconclusive |
+| Full 1024,1024 | Inconclusive | Inconclusive |
+| Full 4096,4096 | Inconclusive | Inconclusive |
+| Chunk 4,64 | Inconclusive | Inconclusive |
+| Chunk 16,256 | Inconclusive | Inconclusive |
+| Chunk 64,1024 | Inconclusive | **31.63%** |
+| Chunk 64,4096 | **39.69%** | **47.96%** |
+
+For the target chunk, hot latency is **1.917 to 1.155 ms** and ring24 per-call
+latency **1.949 to 1.014 ms**. Reductions use the median of within-block ratios;
+the displayed absolute times are medians of block medians. These summaries
+need not divide to exactly the same ratio.
+
+Fifteen of thirty matching self-pair noise floors exceed 5%. Hot `(64,1024)`
+shows a 23.16% point reduction but its 47.14% calibration floor leaves it
+inconclusive. Several short hot cells have much larger variation; the maximum
+floor is 255.70% at full 64. Those measurements cannot determine a crossover.
+Decode executes the same G32 implementation in both arms and serves as a
+control diagnostic. Full 1024 has only 1.29%/0.79% point reductions, while full
+4096 has 1.27%/1.22% point slowdowns, all below their 5% decision floors.
+No noisy cell was rerun to obtain a preferred outcome.
+
+![Eight KV splits across the complete attention matrix](parallelism.png)
+
+The [full record](parallelism_run.json), [samples](parallelism_samples.csv.gz)
+and [derived table](parallelism_summary.csv) preserve every classification.
+The run also binds the completed screen's hashes and selected finalist.
+
+### What the split and merge cost
+
+Four separate Metal captures compare control and split8 at the target chunk
+and full 1024, with 25 measured iterations after ten warmups each. All 950
+measured dispatch durations are retained and validated against the actual
+enqueue sequence. Median active GPU durations are:
+
+| R,T | Control GQA µs | Split kernel µs | Merge µs | Split plus merge µs |
+| --- | ---: | ---: | ---: | ---: |
+| 64,4096 | 1503.791 | 739.667 | 12.334 | 752.791 |
+| 1024,1024 | 1612.125 | 1461.042 | 132.625 | 1589.376 |
+
+The last column sums both stages within each iteration before taking the
+median; it is not the sum of the two displayed medians. At the long chunk,
+GQA including merge takes roughly half the control GQA duration. The merge
+is 1.29% of total candidate active time, and GQA's combined share falls from
+86.42% to 75.92%. At full 1024, merge consumes most of the split kernel's
+saving. QKV and Wo together remain about 55% of active time in both captures.
+
+![Active GPU stages including the split merge](parallelism_profile.png)
+
+The [capture record](parallelism_profiles.json), [raw dispatch durations](parallelism_profile_samples.csv.gz)
+and [derived stage table](parallelism_profile_summary.csv) preserve the
+instrumented evidence. Compiler spill events report maximum event sizes of
+48 bytes for control and 64 for split8 in both workloads, with 35 target events
+per capture including warmup. This increase coexists with the chunk latency
+gain; compiler event sizes alone do not measure spill traffic or its cost.
+Optional hardware counters were not exported or analyzed.
+
+These profiles diagnose where time moves. They are separate instrumented
+captures, so paired unprofiled latency establishes the performance claims.
+Do not subtract active durations from unprofiled latency to infer host overhead.
+The results support sequence parallelism for the measured long cached chunk;
+they do not establish measured occupancy, a universal dispatch policy, or a
+hardware ceiling.
 
 ## Integrating QKV and Wo with FP32 attention
 
@@ -715,21 +898,28 @@ RoPE/cache consumers, retaining the numerical boundaries, and measuring the
 result with Wo and FP32 GQA already present. The large incremental gains above
 show why composition should precede another round of isolated kernel tuning.
 
-The next experiment should follow the remaining workload-specific costs.
-For `(64,4096)`, GQA now accounts for 86% of recorded active time, while unpack
-is below 1%. Its 32-row query tile still exposes only 28 threadgroups. A bounded
-comparison of smaller query tiles or KV-sequence splitting has a concrete
-parallelism hypothesis, informed by the earlier decode work; increased KV
-loads, partial-state traffic and merge cost must be included. Repeating the
-older head-reuse or barrier ablations needs a fresh reason after their mixed
-results. Preserve FP32 scores/weights and the current gates.
+The completed parallelism experiment follows the cost exposed by integration:
+GQA occupied 86% of active time for `(64,4096)` but exposed only 28 primary
+threadgroups. The two tested ways of creating more groups behaved differently.
+Smaller query tiles lost, consistent with reduced reuse and more K/V tile
+loads in the source; no hardware counter identifies that as the physical
+bottleneck. KV splitting retained the larger tile and improved this chunk
+even after partial writes and merge. The earlier decode work supplied a useful
+ownership idea, while the new whole-block measurements established its scope.
 
-For full 1024, QKV and Wo together still consume about 55% of active time.
-The shared 8x16 linear MMA mapping therefore remains a separate useful target
-for operand reuse or tile ownership work. The current evidence does not select
-one universal next kernel across decode, full prefill and cached chunks.
-Any subsequent optimization should retain this integrated entrypoint as its
-whole-attention control and continue checking stages on exact upstream inputs.
+There are now two useful directions for later contained work. For full 1024,
+QKV and Wo together still consume about 55% of active time. Their shared 8x16
+linear MMA mapping is a concrete target for operand reuse and tile ownership.
+For the long cached chunk, split GQA plus merge still consumes about 76% of
+active time; a later GQA study should use split8 as an additional control and
+explain which live state or data movement it reduces. Full 4096 already has
+many query tiles, and the split8 comparison showed no qualifying gain there.
+
+This study does not justify widening the split count or combining candidates
+without a new bounded question. Repeating the older head-reuse or barrier
+ablations also needs a fresh reason after their mixed results. Preserve FP32
+scores/weights, the existing gates, exact upstream-input checks, and the
+integrated whole-attention measurement in any follow-up.
 
 These results show that the original materialized paths were far from the
 best mappings tested here. They do not establish a hardware ceiling, a universal
@@ -831,11 +1021,30 @@ dispatch durations: 50,25,10,25 measured iterations per variant at decode
 Capture provenance, dispatch identities, and optional-counter absence are
 validated. Source hashes match the numerical validation record.
 
-All 41 Python checks pass with the retained integration evidence. The complete
-attention study now reproduces **14 tables and 14 figures byte-for-byte**
+All 41 Python checks passed with the retained integration evidence. At that
+stage, the attention study reproduced **14 tables and 14 figures byte-for-byte**
 offline, including every prior figure. The final report/evidence changes do
 not alter the measured kernels, benchmark or numerical gates. Full traces,
 XML, binaries and generated fixtures remain outside Git.
+
+The GQA parallelism screen and full matrix use clean source
+`5778641918e256604e093f007cebcc1aa3606523`, on 2026-09-07 at
+01:00:15–01:04:03 and 01:04:04–01:11:48 UTC respectively. They retain 2,400
+and 4,800 observations in the `parallelism_screen_` and `parallelism_` files
+linked above. The full run uses the sole screen finalist and binds both
+screen hashes. All four profile binaries use that same clean source and
+retain 950 dispatch durations. Capture, build and numerical validation source
+hashes agree. Every block and capture recorded AC power, Low Power Mode off,
+and no reported thermal/performance warning; the observed calibration variation
+still applies. Optional counter analysis is explicitly absent.
+
+The complete workflow passed 90 Mojo and 43 Python tests before measurement.
+Post-measurement checks bind the retained screen, selection, full run,
+validation and profiles, and reject missing or duplicate dispatches. Reporting
+changes do not alter the measured kernels or numerical gates. All **17 tables
+and 17 figures** regenerate offline from compact evidence, preserving every
+previous table and figure byte-for-byte. Full traces/XML, binaries, checkpoint
+assets and generated arrays remain outside Git.
 
 Rebuild tables and figures without a GPU:
 

@@ -796,3 +796,35 @@ accounts for 64% at full 4096 and 86% for the long chunk; at full 1024, QKV
 and Wo together still account for about 55%. These are diagnostic shares,
 not a hardware ceiling. The [integrated report](../studies/attention_sublayer/README.md#integrating-qkv-and-wo-with-fp32-attention)
 retains all observations, validation, conditions, profiles and next-step reasoning.
+
+## Completed GQA parallelism comparison
+
+Validated source `5778641` adds the four approved GQA mappings to the integrated
+attention entrypoint. All 90 Mojo and 43 Python checks passed before timing,
+along with the maintained IR inspector, three checkpoint cases and twelve
+asynchronous sequences per configuration. All five mappings satisfy the existing
+isolated GQA and projected/final gates, including exact cache checks, ragged
+tiles, empty causal pieces, poisoned scratch and stable partial-state merging.
+No numerical limit changed.
+
+The 2,400-observation screen rejects both smaller query tiles at the target
+chunk. Four and eight KV splits qualify in both modes; eight splits advances
+under the declared worst-mode ratio rule. The 4,800-observation full matrix
+finds three qualifying gains, one regression and twenty-six inconclusive cells.
+For `(64,4096)`, whole-block reductions are 39.69% hot and 47.96% ring24 against
+the integrated control, including the merge. Chunk `(64,1024)` gains 31.63%
+in ring24. Full 64 is 5.64% slower in ring24; full 1024/4096 have no qualifying
+gain. Substantial short-workload calibration variation remains in the evidence.
+
+Four validated Metal captures retain 950 active dispatch durations. At the
+long chunk, median GQA including merge falls from 1503.791 to 752.791 µs, with
+a 12.334 µs median merge. At full 1024 the merge consumes most of the split
+kernel's saving. These stage durations diagnose the result; the paired latency
+trials establish the performance claims.
+
+Eight splits remains an explicit `gqa_mapping=4` option, requiring caller-owned
+`prefill_splits=8` workspace. The default integrated BQ32 mapping remains the
+control, and decode retains G32. The bounded candidate budget is complete.
+The [parallelism report](../studies/attention_sublayer/README.md#gqa-parallelism-on-the-integrated-block)
+retains all raw observations, source/selection identities, numerical validation,
+negative results and the next questions suggested by earlier projection studies.

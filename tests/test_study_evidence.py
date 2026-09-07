@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from llm_mojo.benchmarks import run as runner
-from llm_mojo.benchmarks.study import load_run, load_profile, sha, write_json
+from llm_mojo.benchmarks.study import load_run, load_profile, select_parallelism_finalists, sha, write_json
 from llm_mojo.benchmarks import attention_prefill_contract as prefill
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -76,7 +76,7 @@ class EvidenceTests(unittest.TestCase):
             for record in directory.glob('*run.json'):
                 _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
-        self.assertEqual(count, 57280)
+        self.assertEqual(count, 64480)
         profile = load_profile(ROOT / 'studies/gqa_decode')
         self.assertEqual(sum(row['count'] for row in profile), 3000)
         profile = load_profile(ROOT / 'studies/gqa_prefill')
@@ -128,6 +128,34 @@ class EvidenceTests(unittest.TestCase):
         for capture in integrated['captures']:
             self.assertEqual(capture['counter_analysis']['status'],'not_analyzed')
             self.assertEqual(capture['counters'],[])
+        directory = ROOT / 'studies/attention_sublayer'
+        screen, samples, summary = load_run(directory, 'parallelism_screen_')
+        self.assertEqual(len(samples), 2400)
+        finalists = select_parallelism_finalists(summary)
+        self.assertEqual(finalists, [13])
+        run, samples, _ = load_run(directory, 'parallelism_')
+        self.assertEqual(len(samples), 4800)
+        self.assertEqual(screen['specification']['control'], 9)
+        self.assertEqual(run['specification']['control'], 9)
+        self.assertEqual(run['specification']['candidates'], [9, *finalists])
+        self.assertEqual(run['selection']['finalists'], finalists)
+        self.assertEqual(run['selection']['screen_run_sha256'], sha(directory / 'parallelism_screen_run.json'))
+        self.assertEqual(run['selection']['screen_samples_sha256'], screen['samples_sha256'])
+        self.assertEqual(screen['build'], run['build'])
+        profile = load_profile(directory, 'parallelism_')
+        self.assertEqual(sum(row['count'] for row in profile), 950)
+        parallelism = json.loads((directory / 'parallelism_profiles.json').read_text())
+        validation = json.loads((directory / 'parallelism_validation.json').read_text())
+        self.assertEqual(parallelism['specification']['variants'], [9, *finalists])
+        self.assertEqual(parallelism['common']['repository'], run['repository'])
+        self.assertEqual(parallelism['common']['source_sha256'], run['build']['sources'])
+        self.assertEqual(validation['source_commit'], run['repository']['commit'])
+        for name, digest in validation['source_sha256'].items():
+            if name in run['build']['sources']:
+                self.assertEqual(digest, run['build']['sources'][name])
+        for capture in parallelism['captures']:
+            self.assertEqual(capture['counter_analysis']['status'], 'not_analyzed')
+            self.assertEqual(capture['counters'], [])
         record = json.loads((ROOT / 'studies/attention_sublayer/profiles.json').read_text())
         full = next(c for c in record['captures'] if c['query_rows'] == 4096)
         self.assertEqual(full['counter_analysis']['status'], 'not_analyzed')
@@ -140,7 +168,8 @@ class EvidenceTests(unittest.TestCase):
                                       ('attention_sublayer', 'wo_', 96),
                                       ('attention_sublayer', 'decode_', 66),
                                       ('attention_sublayer', 'prefill_', 66),
-                                      ('attention_sublayer', 'integrated_', 76)):
+                                      ('attention_sublayer', 'integrated_', 76),
+                                      ('attention_sublayer', 'parallelism_', 38)):
             source = ROOT / 'studies' / topic
             with self.subTest(topic=topic, prefix=prefix), tempfile.TemporaryDirectory() as tmp:
                 directory = Path(tmp)
