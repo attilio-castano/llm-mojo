@@ -39,12 +39,13 @@ def dispatch(
     mut x: DeviceBuffer[DType.bfloat16],
     rows: Int,
     stage: Int,
+    variant: Int,
 ) raises:
     var view = TileTensor(x, row_major(rows, 896))
     if stage == -1:
-        enqueue_mlp_apple_gpu(ctx, weights, work, view)
+        enqueue_mlp_apple_gpu(ctx, weights, work, view, variant)
     else:
-        enqueue_mlp_stage_apple_gpu(ctx, weights, work, view, stage)
+        enqueue_mlp_stage_apple_gpu(ctx, weights, work, view, stage, variant)
 
 
 def main() raises:
@@ -54,8 +55,8 @@ def main() raises:
             "profile",
             String(get_defined_int["GQA_PROFILE_ROWS"]()),
             "1",
-            "0",
-            "0",
+            String(get_defined_int["GQA_PROFILE_VARIANT", default=0]()),
+            String(get_defined_int["GQA_PROFILE_VARIANT", default=0]()),
             "0",
             "1601",
             "profile",
@@ -71,6 +72,8 @@ def main() raises:
         )
     var rows = Int(args[1])
     var layers = Int(args[2])
+    var candidate = Int(args[3])
+    var control = Int(args[4])
     var first = Int(args[5])
     var mode = args[7]
     var repetitions = Int(args[8])
@@ -86,14 +89,16 @@ def main() raises:
         rows < 1
         or rows > 4096
         or (layers != 1 and layers != 24)
-        or Int(args[3]) != 0
-        or Int(args[4]) != 0
+        or candidate < 0
+        or candidate > 6
+        or control < 0
+        or control > 6
         or (first != 0 and first != 1)
         or Int(args[6]) != 1601
         or repetitions < 1
         or warmup < 0
         or warmup > 100
-        or (stage >= 0 and layers != 1)
+        or (stage >= 0 and stage != 1 and stage != 2 and stage != 5 and layers != 1)
         or (mode == "profile" and (layers != 1 or repetitions * 7 > 5000))
     ):
         raise Error("invalid MLP measurement request")
@@ -106,7 +111,7 @@ def main() raises:
     print("api:", ctx.api())
     print("operation: mlp")
     print("shape:", rows, layers, "seed: 1601")
-    print("variants: 0 0 candidate-first:", first)
+    print("variants:", candidate, control, "candidate-first:", first)
     var boundary = "whole_mlp" if stage == -1 else "mlp_stage_" + String(stage)
     print("measurement:", boundary)
     var work = MLPWorkspace(ctx, rows)
@@ -129,72 +134,78 @@ def main() raises:
         load(work.activated, "A", rows * 4864)
         load(work.gated, "S", rows * 4864)
         load(work.down, "D", rows * 896)
-    for layer in range(layers):
-        var poison = Float32(FloatLiteral.nan).cast[DType.bfloat16]()
-        if stage == -1:
-            work.down.enqueue_fill(poison)
-            work.output.enqueue_fill(poison)
-        elif stage == 0:
-            work.normalized.enqueue_fill(poison)
-        elif stage == 1:
-            work.gate.enqueue_fill(poison)
-        elif stage == 2:
-            work.up.enqueue_fill(poison)
-        elif stage == 3:
-            work.activated.enqueue_fill(poison)
-        elif stage == 4:
-            work.gated.enqueue_fill(poison)
-        elif stage == 5:
-            work.down.enqueue_fill(poison)
-        else:
-            work.output.enqueue_fill(poison)
-        dispatch(ctx, weights[layer], work, inputs[layer], rows, stage)
-        if stage == -1:
-            check(work.down, "D", rows * 896, True)
-            check(work.output, "Y", rows * 896, True)
-        elif stage == 0:
-            check(work.normalized, "N", rows * 896)
-        elif stage == 1:
-            check(work.gate, "G", rows * 4864)
-        elif stage == 2:
-            check(work.up, "U", rows * 4864)
-        elif stage == 3:
-            check(work.activated, "A", rows * 4864)
-        elif stage == 4:
-            check(work.gated, "S", rows * 4864)
-        elif stage == 5:
-            check(work.down, "D", rows * 896)
-        else:
-            check(work.output, "Y", rows * 896)
+    var checked = List[Int]()
+    checked.append(control)
+    if candidate != control:
+        checked.append(candidate)
+    for variant in checked:
+        for layer in range(layers):
+            var poison = Float32(FloatLiteral.nan).cast[DType.bfloat16]()
+            if stage == -1:
+                work.down.enqueue_fill(poison)
+                work.output.enqueue_fill(poison)
+            elif stage == 0:
+                work.normalized.enqueue_fill(poison)
+            elif stage == 1:
+                work.gate.enqueue_fill(poison)
+            elif stage == 2:
+                work.up.enqueue_fill(poison)
+            elif stage == 3:
+                work.activated.enqueue_fill(poison)
+            elif stage == 4:
+                work.gated.enqueue_fill(poison)
+            elif stage == 5:
+                work.down.enqueue_fill(poison)
+            else:
+                work.output.enqueue_fill(poison)
+            dispatch(ctx, weights[layer], work, inputs[layer], rows, stage, variant)
+            if stage == -1:
+                check(work.down, "D", rows * 896, True)
+                check(work.output, "Y", rows * 896, True)
+            elif stage == 0:
+                check(work.normalized, "N", rows * 896)
+            elif stage == 1:
+                check(work.gate, "G", rows * 4864)
+            elif stage == 2:
+                check(work.up, "U", rows * 4864)
+            elif stage == 3:
+                check(work.activated, "A", rows * 4864)
+            elif stage == 4:
+                check(work.gated, "S", rows * 4864)
+            elif stage == 5:
+                check(work.down, "D", rows * 896)
+            else:
+                check(work.output, "Y", rows * 896)
     ctx.synchronize()
     print("correctness: passed")
     if mode == "profile":
         for _ in range(warmup):
-            dispatch(ctx, weights[0], work, inputs[0], rows, -1)
+            dispatch(ctx, weights[0], work, inputs[0], rows, -1, candidate)
         ctx.synchronize()
         print("profile implementation: enqueue_mlp_apple_gpu")
         print("entrypoint: enqueue_mlp_apple_gpu")
         print("rows:", rows)
         print("hidden: 896")
         print("intermediate size: 4864")
-        print("profile workload:", "mlp-r" + String(rows) + "-v0")
+        print("profile workload:", "mlp-r" + String(rows) + "-v" + String(candidate))
         print("profile dispatches per iteration: 7")
         print("warmup iterations:", warmup)
         print("profile iterations:", repetitions)
         print("post-profile idle milliseconds: 250")
         print("PROFILE_REGION_BEGIN")
         for _ in range(repetitions):
-            dispatch(ctx, weights[0], work, inputs[0], rows, -1)
+            dispatch(ctx, weights[0], work, inputs[0], rows, -1, candidate)
         ctx.synchronize()
         print("PROFILE_REGION_END")
         sleep(0.25)
         return
     var samples = List[Float64]()
-    for _ in range(2):
+    for arm in range(2):
+        var variant = candidate if ((arm == 0) == (first == 1)) else control
         for rep in range(warmup + repetitions):
             var start = perf_counter_ns()
             for layer in range(layers):
-                dispatch(ctx, weights[layer], work, inputs[layer], rows, stage)
+                dispatch(ctx, weights[layer], work, inputs[layer], rows, stage, variant)
             ctx.synchronize()
             var elapsed = (
                 Float64(perf_counter_ns() - start) / 1000.0 / Float64(layers)
@@ -204,6 +215,7 @@ def main() raises:
     # Keep output overhead outside both arms.
     for arm in range(2):
         var label = "candidate" if ((arm == 0) == (first == 1)) else "control"
+        var variant = candidate if label == "candidate" else control
         for rep in range(repetitions):
-            print("SAMPLE", label, 0, rep, samples[arm * repetitions + rep])
+            print("SAMPLE", label, variant, rep, samples[arm * repetitions + rep])
     print("BENCHMARK_COMPLETE")

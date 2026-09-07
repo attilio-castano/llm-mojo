@@ -27,6 +27,40 @@ class MLPToolingTests(unittest.TestCase):
             with self.subTest(key=key),self.assertRaises(ValueError):
                 mlp.configuration({**good,key:value})
 
+    def test_profile_variant_must_match_recorded_workload(self):
+        for variant in sorted(mlp.VARIANTS):
+            identity = {**self.identity(), **mlp.specification(variant,17),
+                        'implementation':f'mlp_{variant}'}
+            self.assertEqual(mlp.configuration(identity)['profile_workload'], f'mlp-r17-v{variant}')
+            with self.assertRaises(ValueError):
+                mlp.configuration({**identity,'profile_workload':'mlp-r17-v999'})
+
+    def test_projection_finalist_needs_both_modes_and_uses_weaker_mode(self):
+        variants=[0,1,2,3]
+        rows=[dict(rows=1024,layers=l,candidate=v,decision='faster',ratio=r)
+              for v,ratios in enumerate(((1,1),(.2,.8),(.4,.5),(.3,.4)))
+              for l,r in zip((1,24),ratios)]
+        rows[-1]['decision']='inconclusive'
+        self.assertEqual(study.select_mlp_projection(rows,variants),2)
+        rows[-1]['decision']='faster'
+        self.assertEqual(study.select_mlp_projection(rows,variants),3)
+        for row in rows:
+            row['decision']='inconclusive'
+        self.assertEqual(study.select_mlp_projection(rows,variants),0)
+        with self.assertRaises(ValueError):
+            study.select_mlp_projection(rows[:-1],variants)
+
+    def test_numerical_stream_retains_multiple_mappings_without_rewrite(self):
+        import mlp_support
+        with tempfile.TemporaryDirectory() as directory, patch.dict('os.environ',MLP_RECORD_DIR=directory):
+            for mapping in (0,2,0):
+                mlp_support.set_mapping(mapping)
+                mlp_support.record(dict(case='fixture',stage='D',failed=0))
+            paths=list(Path(directory).glob('*.jsonl'))
+            self.assertEqual(len(paths),1)
+            records=[json.loads(line) for line in paths[0].read_text().splitlines()]
+            self.assertEqual([r['mapping'] for r in records],[0,2,0])
+
     def test_runtime_receipt_requires_mlp_width_and_seven_dispatches(self):
         identity=self.identity()
         identity.update(implementation='mlp_0')

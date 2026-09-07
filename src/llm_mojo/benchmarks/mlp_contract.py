@@ -9,8 +9,12 @@ import numpy as np
 from .._repository import repository_root
 
 OPERATION = 'mlp'
-VARIANTS = {0}
-ENTRYPOINTS = {'mlp_0': 'enqueue_mlp_apple_gpu'}
+PROJECTION_MAPPINGS = {0:(0,0), 1:(1,0), 2:(2,0), 3:(3,0),
+                       4:(0,1), 5:(0,2), 6:(0,3)}
+VARIANTS = set(PROJECTION_MAPPINGS)
+ENTRYPOINTS = {f'mlp_{v}':'enqueue_mlp_apple_gpu' for v in VARIANTS}
+TILES = {0:'rowwise',1:'MMA 8x16',2:'MMA 16x16',3:'MMA 8x32'}
+NAMES = {v:f'gate/up {TILES[g]}; down {TILES[d]}' for v,(g,d) in PROJECTION_MAPPINGS.items()}
 STAGES = ['RMSNorm','gate projection','up projection','SiLU','multiply','down projection','residual']
 BOUNDARIES = ['N','G','U','A','S','D','Y']
 ROWS = [1,7,15,16,17,33,65,257,1024,4096]
@@ -80,16 +84,17 @@ def check(address, name, count, composed):
 
 
 def specification(variant, rows):
-    if variant != 0 or type(rows) is not int or not 1 <= rows <= 4096:
+    if type(variant) is not int or variant not in VARIANTS or type(rows) is not int or not 1 <= rows <= 4096:
         raise ValueError('invalid MLP profile shape/variant')
     return dict(profile_rows=rows,hidden_size=896,intermediate_size=4864,
-                profile_workload=f'mlp-r{rows}-v0',dispatches_per_iteration=7)
+                profile_workload=f'mlp-r{rows}-v{variant}',dispatches_per_iteration=7)
 
 
 def configuration(data):
-    if data.get('implementation') != 'mlp_0' or data.get('entrypoint') != ENTRYPOINTS['mlp_0']:
+    implementation = data.get('implementation')
+    if implementation not in ENTRYPOINTS or data.get('entrypoint') != ENTRYPOINTS[implementation]:
         raise ValueError('invalid MLP profile entrypoint')
-    expected = specification(0,data.get('profile_rows'))
+    expected = specification(int(implementation.removeprefix('mlp_')),data.get('profile_rows'))
     if any(data.get(k) != v or (type(v) is int and type(data.get(k)) is not int) for k,v in expected.items()):
         raise ValueError('MLP profile identity mismatch')
     if type(data.get('profile_iterations')) is not int or not 1 <= data['profile_iterations']*7 <= 5000:

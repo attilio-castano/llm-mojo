@@ -18,16 +18,21 @@ def read(path):
 
 
 def data_root(path):
+    if str(path).startswith('optimization_holdout_'):
+        return ROOT.parent / 'mlp_optimization_holdout'
     return ROOT.parent / 'mlp_holdout' if str(path).startswith('holdout_') else ROOT
 
 
-def holdout_catalog():
+def holdout_catalog(optimization=False):
     import subprocess
-    path = ROOT.parent / 'mlp_holdout/manifest.json'
+    path = ROOT.parent / ('mlp_optimization_holdout' if optimization else 'mlp_holdout') / 'manifest.json'
     data = json.loads(path.read_text())
     expected = data.pop('manifest_payload_sha256')
     assert hashlib.sha256(json.dumps(data,sort_keys=True).encode()).hexdigest() == expected
     assert data['status'] == 'complete'
+    if optimization:
+        declaration = Path(__file__).parent/'fixtures/mlp_optimization_holdout.json'
+        assert hashlib.sha256(declaration.read_bytes()).hexdigest() == data['candidate']['holdout_spec_sha256']
     if os.environ.get('MLP_CANDIDATE_BINARY'):
         binary = Path(os.environ['MLP_CANDIDATE_BINARY'])
         assert hashlib.sha256(binary.read_bytes()).hexdigest() == data['candidate']['binary_sha256']
@@ -76,6 +81,22 @@ import os
 
 RECORDS = []
 FULL = {}
+MAPPING = 0
+
+
+def projection_variants():
+    from llm_mojo.benchmarks.mlp_contract import VARIANTS
+    values = sorted(VARIANTS)
+    if os.environ.get('MLP_VARIANTS'):
+        values = [int(x) for x in os.environ['MLP_VARIANTS'].split(',')]
+    if not values or len(values) != len(set(values)) or not set(values) <= VARIANTS:
+        raise ValueError('invalid numerical MLP mapping selection')
+    return values
+
+
+def set_mapping(mapping):
+    global MAPPING
+    MAPPING = mapping
 
 def frozen():
     path = Path(__file__).parent / 'fixtures/mlp'
@@ -93,10 +114,10 @@ def frozen():
 def case_specifications():
     data = frozen()
     split = os.environ.get('MLP_SPLIT', 'development')
-    if split not in ('development', 'checkpoint', 'holdout'):
+    if split not in ('development', 'checkpoint', 'holdout', 'optimization_holdout'):
         raise ValueError('unsupported MLP case split')
-    if split == 'holdout':
-        data = holdout_catalog()
+    if split in ('holdout', 'optimization_holdout'):
+        data = holdout_catalog(split == 'optimization_holdout')
         names = list(data['cases'])
     else:
         names = [k for k in data['cases'] if k.startswith('checkpoint_') == (split == 'checkpoint')]
@@ -111,7 +132,7 @@ def case_specifications():
 
 def verify_case(case):
     FULL.clear()
-    data = holdout_catalog() if case.startswith('holdout_') else frozen()
+    data = holdout_catalog(True) if case.startswith('optimization_holdout_') else holdout_catalog() if case.startswith('holdout_') else frozen()
     for name, spec in data['arrays'].items():
         if name.startswith(case + '/'):
             assert hashlib.sha256((data_root(name) / name).read_bytes()).hexdigest() == spec['sha256'], name
@@ -129,10 +150,25 @@ def poison(address, active, capacity):
 
 
 def record(value):
+    if 'probe' not in value:
+        value = dict(mapping=MAPPING, **value)
+    if os.environ.get('MLP_RECORD_DIR'):
+        # Append each check durably without quadratic rewrites across variants.
+        # PID separates the MLP and primitive test processes in full validation.
+        directory = Path(os.environ['MLP_RECORD_DIR'])
+        directory.mkdir(parents=True, exist_ok=True)
+        group = 'probes' if 'probe' in value else 'mlp'
+        path = directory / f"{os.environ.get('MLP_SPLIT', 'development')}_{group}_{os.getpid()}.jsonl"
+        with path.open('a') as stream:
+            stream.write(json.dumps(value,allow_nan=False)+'\n')
+        return
     RECORDS.append(value)
     group = 'probes' if 'probe' in value else 'mlp'
     path = ROOT / ('metal_' + os.environ.get('MLP_SPLIT', 'development') + '_' + group + '_checks.json')
-    selected = [r for r in RECORDS if ('probe' in r) == ('probe' in value)]
+    if 'probe' not in value:
+        path = path.with_name(path.stem+f'_v{MAPPING}'+path.suffix)
+    selected = [r for r in RECORDS if ('probe' in r) == ('probe' in value)
+                and ('probe' in r or r.get('mapping') == MAPPING)]
     path.write_text(json.dumps(selected, indent=2, allow_nan=False) + '\n')
 
 

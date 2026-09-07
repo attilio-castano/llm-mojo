@@ -18,9 +18,12 @@ COUNTERS = {'Kernel Occupancy', 'Instruction Throughput Limiter', 'Last Level Ca
 def collect(source, output, prefill_variant=None, *, prefill_variants=None, prefix='',
             attention_sublayer=False, wo_comparison=False, decode_comparison=False,
             prefill_comparison=False, projection_comparison=False, parallelism_variants=None,
-            combined_projections=False, attention_study=None, mlp=False):
+            combined_projections=False, attention_study=None, mlp=False,
+            mlp_variants=None, mlp_rows=None):
     records, samples = [], []
     common = None
+    if not mlp and (mlp_variants is not None or mlp_rows is not None):
+        raise ValueError('MLP grid options require the MLP study')
     if prefill_variant is not None and prefill_variants is not None:
         raise ValueError('choose one prefill comparison')
     # Old flags remain aliases for recorded reproduction commands. Resolve them
@@ -41,8 +44,13 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
     if mlp and (attention_sublayer or prefill_variant is not None or prefill_variants is not None):
         raise ValueError('choose one profile study')
     if mlp:
-        variants, grid = [0], [(r,r) for r in mlp_contract.PROFILE_ROWS]
-        spec = dict(workloads=[dict(rows=r) for r in mlp_contract.PROFILE_ROWS],variants=[0])
+        variants = [0] if mlp_variants is None else mlp_variants
+        rows = mlp_contract.PROFILE_ROWS if mlp_rows is None else mlp_rows
+        if (not variants or len(set(variants)) != len(variants) or not set(variants) <= mlp_contract.VARIANTS
+            or not rows or len(set(rows)) != len(rows) or not set(rows) <= set(mlp_contract.PROFILE_ROWS)):
+            raise ValueError('invalid declared MLP profile grid')
+        grid = [(r,r) for r in rows]
+        spec = dict(workloads=[dict(rows=r) for r in rows],variants=variants)
     elif attention_sublayer:
         name = attention_study or (legacy[0] if legacy else 'baseline')
         spec = sublayer.profile_comparison(name, parallelism_variants)
@@ -52,8 +60,8 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
         grid = PREFILL_PROFILE_WORKLOADS
         spec = dict(workloads=grid, variants=list(variants)) if variants is not None else {}
     prefill = variants is not None
-    stage_map, _ = ({0:mlp_contract.STAGES}, None) if mlp else (sublayer.profile_grid(spec) if attention_sublayer else prefill_profile_grid(spec)) if prefill else (STAGES, None)
-    captures = [(r,r,0,f'r{r}-v0') for r in mlp_contract.PROFILE_ROWS] if mlp else [(r,t,v,f'r{r}-t{t}-v{v}') for r,t in grid for v in variants] if prefill else [
+    stage_map, _ = ({v:mlp_contract.STAGES for v in variants}, None) if mlp else (sublayer.profile_grid(spec) if attention_sublayer else prefill_profile_grid(spec)) if prefill else (STAGES, None)
+    captures = [(r,r,v,f'r{r}-v{v}') for r,_ in grid for v in variants] if mlp else [(r,t,v,f'r{r}-t{t}-v{v}') for r,t in grid for v in variants] if prefill else [
         (None,None,v,str(v)) for v in STAGES]
     for r,t,variant,folder in captures:
         stages = stage_map[variant]
@@ -90,7 +98,7 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
         intervals.sort(key=lambda r: integer(r, 'start'))
         workload = identity['workload']
         shape = dict(rows=r) if mlp else dict(query_rows=r,rows=t) if prefill else {}
-        if mlp and (workload['profile_rows'] != r or identity['implementation'] != 'mlp_0'):
+        if mlp and (workload['profile_rows'] != r or identity['implementation'] != f'mlp_{variant}'):
             raise ValueError('MLP profile differs from declared workload')
         if prefill and not mlp and (
             workload['profile_rows'] != r or workload['key_value_rows'] != t or
@@ -143,6 +151,8 @@ if __name__ == '__main__':
     group.add_argument('--prefill-variants',type=int,nargs='+')
     group.add_argument('--attention-sublayer',action='store_true')
     group.add_argument('--mlp',action='store_true')
+    parser.add_argument('--mlp-variants',type=int,nargs='+')
+    parser.add_argument('--mlp-rows',type=int,nargs='+')
     group.add_argument('--attention-study', choices=[*sublayer.PROFILE_COMPARISONS, 'parallelism'])
     parser.add_argument('--prefix',default='')
     parser.add_argument('--wo-comparison',action='store_true')
@@ -153,6 +163,7 @@ if __name__ == '__main__':
     parser.add_argument('--parallelism-variants',type=int,nargs='+')
     args = parser.parse_args()
     collect(args.source, args.output, args.prefill_variant, mlp=args.mlp,
+            mlp_variants=args.mlp_variants, mlp_rows=args.mlp_rows,
             prefill_variants=args.prefill_variants, prefix=args.prefix, attention_sublayer=args.attention_sublayer,
             wo_comparison=args.wo_comparison, decode_comparison=args.decode_comparison,
             prefill_comparison=args.prefill_comparison, projection_comparison=args.projection_comparison,

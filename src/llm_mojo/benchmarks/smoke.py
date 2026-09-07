@@ -110,20 +110,26 @@ def main():
     target = repository_root() / 'build/mlp-smoke'
     subprocess.run([environment_tool('mojo'),'build','-I','src',
                     'src/llm_mojo/benchmarks/mlp.mojo','-o',str(target)],cwd=repository_root(),check=True)
-    for rows,layers,mode in [(1,1,'bench'),(17,24,'bench')]+[(17,1,f'stage{i}') for i in range(7)]:
-        result = subprocess.run(list(map(str,[target,rows,layers,0,0,1,1601,mode,1,0])),
+    from .mlp_contract import VARIANTS
+    routes = [(r,l,'bench',v) for v in sorted(VARIANTS) for r,l in ((1,1),(17,24))]
+    routes += [(17,1,f'stage{i}',0) for i in range(7)]
+    routes += [(17,l,f'stage{s}',v) for s,vs in ((1,(0,1,2,3)),(2,(0,1,2,3)),(5,(0,4,5,6))) for v in vs for l in (1,24)]
+    for rows,layers,mode,variant in routes:
+        result = subprocess.run(list(map(str,[target,rows,layers,variant,0,variant%2,1601,mode,1,0])),
                                 cwd=repository_root(),capture_output=True,text=True,env=env,check=True)
         boundary = 'whole_mlp' if mode=='bench' else 'mlp_stage_'+mode[5:]
         if ('correctness: passed' not in result.stdout or f'measurement: {boundary}' not in result.stdout
+            or f'SAMPLE candidate {variant} 0 ' not in result.stdout
+            or 'SAMPLE control 0 0 ' not in result.stdout
             or not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE')):
             raise RuntimeError('MLP benchmark route or output check failed')
     for rows,layers,variant,seed,mode in [(0,1,0,1601,'bench'),(4097,1,0,1601,'bench'),
-        (1,2,0,1601,'bench'),(1,1,1,1601,'bench'),(1,1,0,53,'bench'),(1,1,0,1601,'stage7'),(1,24,0,1601,'stage0')]:
+        (1,2,0,1601,'bench'),(1,1,7,1601,'bench'),(1,1,0,53,'bench'),(1,1,0,1601,'stage7'),(1,24,0,1601,'stage0')]:
         result = subprocess.run(list(map(str,[target,rows,layers,variant,0,0,seed,mode,1,0])),
                                 cwd=repository_root(),capture_output=True,env=env)
         if result.returncode == 0:
             raise RuntimeError('invalid MLP benchmark request accepted')
-    print('MLP whole block in both modes and all seven isolated stages passed',flush=True)
+    print('MLP projection variants in both modes, all seven stages and isolated projection ring routes passed',flush=True)
 
 
 

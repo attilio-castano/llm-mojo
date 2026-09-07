@@ -217,6 +217,22 @@ for stage in range(7):
         'layers':[1], 'mode':f'stage{stage}', 'measurement':f'mlp_stage_{stage}',
         'timing':'Host enqueue through completion of one isolated stage on exact upstream operands; allocation, upload and checks excluded.'}
 
+for name,stage,variants in [('gate',1,[0,1,2,3]),('down',5,[0,4,5,6])]:
+    STUDIES[f'mlp_{name}_screen'] = {
+        **STUDIES[f'mlp_stage_{stage}'], 'rows':[1,16,17,1024], 'layers':[1,24],
+        'candidates':variants, 'names':{v:mlp.NAMES[v] for v in variants},
+        'timing':'Isolated projection enqueue through completion on exact upstream operands; hot or 24 distinct weight copies with shared upstream input and one sync. Allocation, upload, checks and printing excluded.'}
+
+
+def select_mlp_projection(summary, variants):
+    """Qualify at R=1024 in both modes; minimize the worse mode, then tile ID."""
+    target = {(r['candidate'],r['layers']):r for r in summary if r['rows']==1024}
+    if set(target) != {(v,l) for v in variants for l in (1,24)}:
+        raise ValueError('MLP selection needs the complete declared screen')
+    eligible = [v for v in variants if v != 0 and
+                all(target[v,l]['decision']=='faster' for l in (1,24))]
+    return min(eligible,key=lambda v:(max(target[v,l]['ratio'] for l in (1,24)),v)) if eligible else 0
+
 
 def workloads(spec):
     return spec.get('workloads', [dict(rows=r) for r in spec.get('rows', [])])

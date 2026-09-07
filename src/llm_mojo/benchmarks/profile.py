@@ -111,7 +111,7 @@ def build_profile(args):
         **stable_environment(),
         "created_utc": utc_now(),
         "implementation": f'{operation}_{args.profile_variant}',
-        "entrypoint": mlp.ENTRYPOINTS['mlp_0'] if is_mlp else sublayer.ENTRYPOINTS[f'attention_sublayer_{args.profile_variant}'] if is_sublayer else prefill.ENTRYPOINTS[f'gqa_prefill_{args.profile_variant}'] if is_prefill else (
+        "entrypoint": mlp.ENTRYPOINTS[f'mlp_{args.profile_variant}'] if is_mlp else sublayer.ENTRYPOINTS[f'attention_sublayer_{args.profile_variant}'] if is_sublayer else prefill.ENTRYPOINTS[f'gqa_prefill_{args.profile_variant}'] if is_prefill else (
             "enqueue_grouped_query_attention_apple_gpu" if args.profile_variant==0 else "enqueue_grouped_query_attention_decode_apple_gpu"),
         "profile_rows": 1,
         "hidden_size": 64,

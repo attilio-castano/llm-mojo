@@ -2,9 +2,43 @@
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
 from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
-from llm_mojo.linear import enqueue_linear_apple_gpu
+from llm_mojo.linear import (
+    enqueue_linear_apple_gpu,
+    enqueue_linear_prefill_mma_8x16_apple_gpu,
+    enqueue_linear_prefill_mma_tile_apple_gpu,
+)
 from llm_mojo.swiglu import enqueue_silu_apple_gpu, enqueue_multiply_apple_gpu
 from llm_mojo.residual import enqueue_residual_apple_gpu
+
+
+def mlp_projection_mapping(mapping: Int, stage: Int) -> Int:
+    """0 rowwise; 1/2/3 tile gate/up; 4/5/6 tile down independently.
+
+    Tile IDs 1/2/3 mean 8x16, 16x16, 8x32. No row-count selector.
+    Public entrypoints validate the configuration before enqueue.
+    """
+    if (stage == 1 or stage == 2) and mapping <= 3:
+        return mapping
+    if stage == 5 and mapping >= 4:
+        return mapping - 3
+    return 0
+
+
+def _enqueue_projection[IL: TensorLayout, WL: TensorLayout, OL: TensorLayout](
+    ctx: DeviceContext,
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+    mapping: Int,
+) raises:
+    if mapping == 0:
+        enqueue_linear_apple_gpu(ctx, input, weight, output)
+    elif mapping == 1:
+        enqueue_linear_prefill_mma_8x16_apple_gpu(ctx, input, weight, output)
+    elif mapping == 2:
+        enqueue_linear_prefill_mma_tile_apple_gpu[16, 16](ctx, input, weight, output)
+    else:
+        enqueue_linear_prefill_mma_tile_apple_gpu[8, 32](ctx, input, weight, output)
 
 
 struct MLPWeights(Movable):
@@ -100,8 +134,11 @@ def _validate_mlp[
     weights: MLPWeights,
     work: MLPWorkspace,
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
+    mapping: Int,
 ) raises:
     comptime assert x.flat_rank == 2
+    if mapping < 0 or mapping > 6:
+        raise Error("unknown MLP projection mapping")
     var r = Int(x.dim[0]())
     if (
         r <= 0
@@ -123,6 +160,7 @@ def _enqueue_mlp_stage[
     mut work: MLPWorkspace,
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     stage: Int,
+    mapping: Int,
 ) raises:
     """Internal stage dispatch after preflight. Stage inputs are caller-visible."""
     var r = Int(x.dim[0]())
@@ -139,20 +177,23 @@ def _enqueue_mlp_stage[
             ctx, x, TileTensor(weights.norm, row_major(h)), normal
         )
     elif stage == 1:
-        enqueue_linear_apple_gpu(
-            ctx, normal, TileTensor(weights.gate, row_major(i, h)), gate
+        _enqueue_projection(
+            ctx, normal, TileTensor(weights.gate, row_major(i, h)), gate,
+            mlp_projection_mapping(mapping, stage),
         )
     elif stage == 2:
-        enqueue_linear_apple_gpu(
-            ctx, normal, TileTensor(weights.up, row_major(i, h)), up
+        _enqueue_projection(
+            ctx, normal, TileTensor(weights.up, row_major(i, h)), up,
+            mlp_projection_mapping(mapping, stage),
         )
     elif stage == 3:
         enqueue_silu_apple_gpu(ctx, gate, activated)
     elif stage == 4:
         enqueue_multiply_apple_gpu(ctx, activated, up, gated)
     elif stage == 5:
-        enqueue_linear_apple_gpu(
-            ctx, gated, TileTensor(weights.down, row_major(h, i)), down
+        _enqueue_projection(
+            ctx, gated, TileTensor(weights.down, row_major(h, i)), down,
+            mlp_projection_mapping(mapping, stage),
         )
     elif stage == 6:
         enqueue_residual_apple_gpu(
@@ -168,12 +209,13 @@ def enqueue_mlp_stage_apple_gpu[
     mut work: MLPWorkspace,
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     stage: Int,
+    mapping: Int = 0,
 ) raises:
     """Isolated operation on workspace inputs, for numerical checks and study."""
     if stage < 0 or stage > 6:
         raise Error("unknown MLP stage")
-    _validate_mlp(ctx, weights, work, x)
-    _enqueue_mlp_stage(ctx, weights, work, x, stage)
+    _validate_mlp(ctx, weights, work, x, mapping)
+    _enqueue_mlp_stage(ctx, weights, work, x, stage, mapping)
 
 
 def enqueue_mlp_apple_gpu[
@@ -183,12 +225,15 @@ def enqueue_mlp_apple_gpu[
     mut weights: MLPWeights,
     mut work: MLPWorkspace,
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
+    mapping: Int = 0,
 ) raises:
     """Seven ordered dispatches; no allocation, upload, or synchronization.
 
     X and weights must not overlap any writable workspace. All buffers live on
     this stream through completion. Consume output before workspace reuse.
+    Mapping 0 retains rowwise projections. 1/2/3 change only gate/up and
+    4/5/6 change only down to 8x16/16x16/8x32 MMA, at every row count.
     """
-    _validate_mlp(ctx, weights, work, x)
+    _validate_mlp(ctx, weights, work, x, mapping)
     for stage in range(7):
-        _enqueue_mlp_stage(ctx, weights, work, x, stage)
+        _enqueue_mlp_stage(ctx, weights, work, x, stage, mapping)
