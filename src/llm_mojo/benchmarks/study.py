@@ -448,7 +448,7 @@ def load_mlp_profile(directory,prefix=''):
         if (identity['operation']!='mlp' or identity['implementation']!=f'mlp_{v}'
             or workload['profile_rows']!=r or workload['rows']!=r):
             raise ValueError('MLP profile shape or implementation mismatch')
-        stages=mlp.STAGES
+        stages=mlp.stages(v)
         expected.update((r,v,j,stage) for j in range(workload['profile_iterations']) for stage in stages)
     observed=set();grouped=defaultdict(list);totals=defaultdict(float)
     with gzip.open(path,'rt',newline='') as stream:
@@ -531,3 +531,30 @@ def load_profile(directory, prefix=''):
     return [dict(**(dict(query_rows=r,rows=t) if prefill else {}),variant=variant, stage=stage, count=len(values),
                  median_us=statistics.median(values), minimum_us=min(values), maximum_us=max(values))
             for (r,t,variant,stage), values in grouped.items()]
+
+
+# Frozen single-token decode screens: separate families against rowwise MLP.
+for family, variants in [('gate_up',[0,8,9,10]), ('down',[0,11,12])]:
+    STUDIES['mlp_decode_'+family] = {
+        **STUDIES['mlp'], 'rows':[1], 'layers':[1,24], 'candidates':variants,
+        'names':{v:mlp.NAMES[v] for v in variants}}
+
+
+def select_mlp_decode(summary, variants):
+    target = {(r['candidate'],r['layers']):r for r in summary if r['rows']==1}
+    if set(target) != {(v,l) for v in variants for l in (1,24)}:
+        raise ValueError('decode selection requires complete declared screen')
+    eligible = [v for v in variants if v != 0 and all(target[v,l]['decision']=='faster' for l in (1,24))]
+    return min(eligible,key=lambda v:(max(target[v,l]['ratio'] for l in (1,24)),v)) if eligible else 0
+
+
+STUDIES['mlp_decode_final'] = {
+    **STUDIES['mlp'], 'rows':[1], 'layers':[1,24], 'candidates':[0],
+    'names':mlp.NAMES}
+
+
+def mlp_decode_finalists(gate, down):
+    if gate not in (0,8,9,10) or down not in (0,11,12):
+        raise ValueError('invalid decode family finalists')
+    return [0] + ([gate] if gate else []) + ([down] if down else []) + (
+        [13+(gate-8)*2+(down-11)] if gate and down else [])

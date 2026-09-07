@@ -92,7 +92,7 @@ def test_mlp_development() raises:
             var case_id = cases[j]
             run_case(
                 String(py=case_id[0]),
-                Int(py=case_id[1]),
+                1 if Int(py=variants[v]) >= 8 else Int(py=case_id[1]),
                 Int(py=case_id[2]),
                 Int(py=case_id[3]),
                 Int(py=variants[v]),
@@ -131,10 +131,19 @@ def run_invalid_calls_and_async_reuse(mapping: Int) raises:
         enqueue_mlp_stage_apple_gpu(
             ctx, weights, work, TileTensor(xb, row_major(1, 896)), 7
         )
-    for bad_mapping in [-1, 8]:
+    for bad_mapping in [-1, 19]:
         with assert_raises():
             enqueue_mlp_apple_gpu(
-                ctx, weights, work, TileTensor(xb, row_major(1, 896)), bad_mapping
+                ctx,
+                weights,
+                work,
+                TileTensor(xb, row_major(1, 896)),
+                bad_mapping,
+            )
+    if mapping >= 8:
+        with assert_raises():
+            enqueue_mlp_apple_gpu(
+                ctx, weights, work, TileTensor(xb, row_major(2, 896)), mapping
             )
     work.hidden = 895
     with assert_raises():
@@ -149,6 +158,8 @@ def run_invalid_calls_and_async_reuse(mapping: Int) raises:
     var saved_d = List[DeviceBuffer[DType.bfloat16]]()
     var saved_y = List[DeviceBuffer[DType.bfloat16]]()
     var lengths = [17, 1, 7, 15, 16, 1, 17, 7, 1, 16, 15, 1]
+    if mapping >= 8:
+        lengths = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
     for _ in range(len(lengths)):
         saved_d.append(ctx.enqueue_create_buffer[DType.bfloat16](17 * 896))
         saved_y.append(ctx.enqueue_create_buffer[DType.bfloat16](17 * 896))

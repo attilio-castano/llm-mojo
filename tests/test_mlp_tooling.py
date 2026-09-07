@@ -29,11 +29,46 @@ class MLPToolingTests(unittest.TestCase):
 
     def test_profile_variant_must_match_recorded_workload(self):
         for variant in sorted(mlp.VARIANTS):
-            identity = {**self.identity(), **mlp.specification(variant,17),
+            identity = {**self.identity(), **mlp.specification(variant,1 if variant >= 8 else 17),
                         'implementation':f'mlp_{variant}'}
-            self.assertEqual(mlp.configuration(identity)['profile_workload'], f'mlp-r17-v{variant}')
+            self.assertEqual(mlp.configuration(identity)['profile_workload'], f'mlp-r{1 if variant >= 8 else 17}-v{variant}')
             with self.assertRaises(ValueError):
                 mlp.configuration({**identity,'profile_workload':'mlp-r17-v999'})
+
+    def test_decode_profiles_require_actual_six_or_seven_dispatches(self):
+        for variant in range(8,19):
+            with self.assertRaises(ValueError):
+                mlp.specification(variant,2)
+            identity = {**self.identity(), **mlp.specification(variant,1),
+                        'implementation':f'mlp_{variant}', 'profile_iterations':500}
+            expected = 6 if variant in (8,10,13,14,17,18) else 7
+            self.assertEqual(mlp.configuration(identity)['dispatches_per_iteration'],expected)
+            with self.assertRaises(ValueError):
+                mlp.configuration({**identity,'dispatches_per_iteration':13-expected})
+            mlp.configuration({**identity,'profile_iterations':5000//expected})
+            with self.assertRaises(ValueError):
+                mlp.configuration({**identity,'profile_iterations':5000//expected+1})
+
+    def test_decode_selection_rejects_one_mode_win_and_incomplete_matrix(self):
+        variants = [0,8,9,10]
+        rows = [dict(candidate=v,layers=l,rows=1,decision='faster' if v else 'inconclusive',
+                     ratio={0:1,8:0.8,9:0.7,10:0.75}[v]) for v in variants for l in (1,24)]
+        self.assertEqual(study.select_mlp_decode(rows,variants),9)
+        rows[4]['decision']='inconclusive'
+        self.assertEqual(study.select_mlp_decode(rows,variants),10)
+        for row in rows:
+            row['decision']='inconclusive'
+        self.assertEqual(study.select_mlp_decode(rows,variants),0)
+        with self.assertRaises(ValueError):
+            study.select_mlp_decode(rows[:-1],variants)
+
+    def test_decode_composition_contains_only_qualified_components(self):
+        self.assertEqual(study.mlp_decode_finalists(0,0),[0])
+        self.assertEqual(study.mlp_decode_finalists(8,0),[0,8])
+        self.assertEqual(study.mlp_decode_finalists(0,12),[0,12])
+        self.assertEqual(study.mlp_decode_finalists(10,12),[0,10,12,18])
+        with self.assertRaises(ValueError):
+            study.mlp_decode_finalists(7,11)
 
     def test_retained_mlp_profile_rejects_false_capture_identity(self):
         source=Path(__file__).resolve().parents[1]/'studies/mlp_sublayer/data'

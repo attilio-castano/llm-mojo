@@ -4,6 +4,9 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.linear import (
     enqueue_linear_apple_gpu,
+    enqueue_linear_apple_gpu_two_output,
+    enqueue_linear_pair_decode_apple_gpu,
+    enqueue_linear_cooperative_decode_apple_gpu,
     enqueue_linear_prefill_mma_8x16_apple_gpu,
     enqueue_linear_prefill_mma_tile_apple_gpu,
 )
@@ -17,6 +20,17 @@ def mlp_projection_mapping(mapping: Int, stage: Int) -> Int:
     Tile IDs 1/2/3 mean 8x16, 16x16, 8x32. No row-count selector.
     Public entrypoints validate the configuration before enqueue.
     """
+    if mapping >= 8:
+        var gate_mapping = mapping if mapping <= 10 else 0
+        var down_mapping = mapping if mapping == 11 or mapping == 12 else 0
+        if mapping >= 13:
+            gate_mapping = 8 + (mapping - 13) // 2
+            down_mapping = 11 + (mapping - 13) % 2
+        if stage == 1 or stage == 2:
+            return 4 if gate_mapping == 9 or gate_mapping == 10 else 0
+        if stage == 5:
+            return down_mapping - 6 if down_mapping else 0
+        return 0
     if mapping == 7 and (stage == 1 or stage == 2 or stage == 5):
         return 2  # Both independent screens selected 16x16.
     if (stage == 1 or stage == 2) and mapping <= 3:
@@ -26,7 +40,9 @@ def mlp_projection_mapping(mapping: Int, stage: Int) -> Int:
     return 0
 
 
-def _enqueue_projection[IL: TensorLayout, WL: TensorLayout, OL: TensorLayout](
+def _enqueue_projection[
+    IL: TensorLayout, WL: TensorLayout, OL: TensorLayout
+](
     ctx: DeviceContext,
     input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
     weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
@@ -38,9 +54,29 @@ def _enqueue_projection[IL: TensorLayout, WL: TensorLayout, OL: TensorLayout](
     elif mapping == 1:
         enqueue_linear_prefill_mma_8x16_apple_gpu(ctx, input, weight, output)
     elif mapping == 2:
-        enqueue_linear_prefill_mma_tile_apple_gpu[16, 16](ctx, input, weight, output)
-    else:
-        enqueue_linear_prefill_mma_tile_apple_gpu[8, 32](ctx, input, weight, output)
+        enqueue_linear_prefill_mma_tile_apple_gpu[16, 16](
+            ctx, input, weight, output
+        )
+    elif mapping == 3:
+        enqueue_linear_prefill_mma_tile_apple_gpu[8, 32](
+            ctx, input, weight, output
+        )
+
+    elif mapping == 4:
+        enqueue_linear_apple_gpu_two_output(ctx, input, weight, output)
+    elif mapping == 5:
+        enqueue_linear_cooperative_decode_apple_gpu[2](
+            ctx, input, weight, output
+        )
+    elif mapping == 6:
+        enqueue_linear_cooperative_decode_apple_gpu[4](
+            ctx, input, weight, output
+        )
+
+
+def mlp_combines_gate_up(mapping: Int) -> Bool:
+    var gate_mapping = 8 + (mapping - 13) // 2 if mapping >= 13 else mapping
+    return gate_mapping == 8 or gate_mapping == 10
 
 
 struct MLPWeights(Movable):
@@ -139,9 +175,11 @@ def _validate_mlp[
     mapping: Int,
 ) raises:
     comptime assert x.flat_rank == 2
-    if mapping < 0 or mapping > 7:
+    if mapping < 0 or mapping > 18:
         raise Error("unknown MLP projection mapping")
     var r = Int(x.dim[0]())
+    if mapping >= 8 and r != 1:
+        raise Error("MLP decode mapping requires one row")
     if (
         r <= 0
         or r > work.max_rows
@@ -164,7 +202,8 @@ def _enqueue_mlp_stage[
     stage: Int,
     mapping: Int,
 ) raises:
-    """Internal stage dispatch after preflight. Stage inputs are caller-visible."""
+    """Internal stage dispatch after preflight. Stage inputs are caller-visible.
+    """
     var r = Int(x.dim[0]())
     var h = weights.hidden
     var i = weights.intermediate
@@ -180,12 +219,18 @@ def _enqueue_mlp_stage[
         )
     elif stage == 1:
         _enqueue_projection(
-            ctx, normal, TileTensor(weights.gate, row_major(i, h)), gate,
+            ctx,
+            normal,
+            TileTensor(weights.gate, row_major(i, h)),
+            gate,
             mlp_projection_mapping(mapping, stage),
         )
     elif stage == 2:
         _enqueue_projection(
-            ctx, normal, TileTensor(weights.up, row_major(i, h)), up,
+            ctx,
+            normal,
+            TileTensor(weights.up, row_major(i, h)),
+            up,
             mlp_projection_mapping(mapping, stage),
         )
     elif stage == 3:
@@ -194,7 +239,10 @@ def _enqueue_mlp_stage[
         enqueue_multiply_apple_gpu(ctx, activated, up, gated)
     elif stage == 5:
         _enqueue_projection(
-            ctx, gated, TileTensor(weights.down, row_major(h, i)), down,
+            ctx,
+            gated,
+            TileTensor(weights.down, row_major(h, i)),
+            down,
             mlp_projection_mapping(mapping, stage),
         )
     elif stage == 6:
@@ -213,7 +261,8 @@ def enqueue_mlp_stage_apple_gpu[
     stage: Int,
     mapping: Int = 0,
 ) raises:
-    """Isolated operation on workspace inputs, for numerical checks and study."""
+    """Isolated operation on workspace inputs, for numerical checks and study.
+    """
     if stage < 0 or stage > 6:
         raise Error("unknown MLP stage")
     _validate_mlp(ctx, weights, work, x, mapping)
@@ -229,14 +278,35 @@ def enqueue_mlp_apple_gpu[
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     mapping: Int = 0,
 ) raises:
-    """Seven ordered dispatches; no allocation, upload, or synchronization.
+    """Six or seven ordered dispatches; no allocation, upload, or synchronization.
 
     X and weights must not overlap any writable workspace. All buffers live on
     this stream through completion. Consume output before workspace reuse.
     Mapping 0 retains rowwise projections. 1/2/3 change only gate/up and
     4/5/6 change only down to 8x16/16x16/8x32 MMA, at every row count.
     Mapping 7 uses the independently selected 16x16 tile for all projections.
+    Decode-only 8/9/10 combine gate/up launches and/or use two outputs/group;
+    11/12 cooperate with two/four groups per down output. 13..18 compose them.
+    Isolated stage APIs always enqueue exactly that stage, even for a combined
+    mapping; the complete entrypoint combines stages 1/2 into one dispatch.
     """
     _validate_mlp(ctx, weights, work, x, mapping)
     for stage in range(7):
-        _enqueue_mlp_stage(ctx, weights, work, x, stage, mapping)
+        if stage == 1 and mlp_combines_gate_up(mapping):
+            var h = weights.hidden
+            var i = weights.intermediate
+            var normal = TileTensor(work.normalized, row_major(1, h))
+            var wg = TileTensor(weights.gate, row_major(i, h))
+            var wu = TileTensor(weights.up, row_major(i, h))
+            var g = TileTensor(work.gate, row_major(1, i))
+            var u = TileTensor(work.up, row_major(1, i))
+            if mlp_projection_mapping(mapping, 1) == 4:
+                enqueue_linear_pair_decode_apple_gpu[True](
+                    ctx, normal, wg, wu, g, u
+                )
+            else:
+                enqueue_linear_pair_decode_apple_gpu[False](
+                    ctx, normal, wg, wu, g, u
+                )
+        elif stage != 2 or not mlp_combines_gate_up(mapping):
+            _enqueue_mlp_stage(ctx, weights, work, x, stage, mapping)

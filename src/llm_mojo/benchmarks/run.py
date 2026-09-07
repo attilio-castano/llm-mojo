@@ -11,7 +11,7 @@ from .environment import (conditions_snapshot, ensure_record_location,
                          stable_environment, utc_now)
 from .study import (STUDIES, BLOCKS, REPETITIONS, WARMUP, sha, write_json,
                    encode_samples, parse_output, summarize, workloads, load_run,
-                   select_parallelism_finalists, select_projection_tile)
+                   select_parallelism_finalists, select_projection_tile, select_mlp_decode, mlp_decode_finalists)
 from .attention_sublayer_contract import fixture_identity
 from .mlp_contract import fixture_identity as mlp_fixture_identity
 
@@ -62,7 +62,7 @@ def checked_conditions():
     return conditions
 
 
-def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=None, tile_kernel_screen=None):
+def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=None, tile_kernel_screen=None, mlp_decode_screen=None):
     ensure_record_location(output)
     provenance = json.loads((build_dir / 'build.json').read_text())
     repo, sources = repository_state(), source_hashes()
@@ -82,6 +82,22 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
         if spec['operation'] == 'mlp' and mlp_fixture_identity() != provenance.get('mlp_fixtures'):
             raise RuntimeError('MLP benchmark inputs changed')
         selection = None
+        if name == 'mlp_decode_final':
+            if mlp_decode_screen is None:
+                raise ValueError('decode confirmation requires both completed screens')
+            winners, records = [], []
+            for family in ('gate_up','down'):
+                study_name = 'mlp_decode_'+family
+                path = mlp_decode_screen / study_name
+                screen, _, summary = load_run(path)
+                if (screen['study'] != study_name or screen['build'] != provenance
+                    or screen['specification'] != json.loads(json.dumps(STUDIES[study_name]))):
+                    raise ValueError('decode screen must match declared specification and build')
+                winners.append(select_mlp_decode(summary,STUDIES[study_name]['candidates']))
+                records.append(dict(study=study_name,run_sha256=sha(path/'run.json'),samples_sha256=screen['samples_sha256']))
+            spec = {**spec,'candidates':mlp_decode_finalists(*winners)}
+            selection = dict(gate_up=winners[0],down=winners[1],screens=records,
+                rule='Both modes faster under frozen calibrated rule; minimize worst-mode ratio then ID per family. No qualifying family leaves the control.')
         if name == 'attention_sublayer_parallelism':
             if parallelism_screen is None:
                 raise ValueError('parallelism full run requires its completed screen')
@@ -189,6 +205,7 @@ def main():
     p.add_argument('--parallelism-screen', type=Path)
     p.add_argument('--tile-screen', type=Path)
     p.add_argument('--tile-kernel-screen', type=Path)
+    p.add_argument('--mlp-decode-screen', type=Path)
     p.add_argument('--studies', nargs='+', choices=list(STUDIES),
                    default=[name for name in STUDIES if not name.endswith('_screen') and not STUDIES[name].get('opt_in')
                             and name not in ('attention_sublayer_wo','attention_sublayer_decode','attention_sublayer_prefill',
@@ -203,7 +220,8 @@ def main():
         run(args.build_dir.resolve(), args.output.resolve(), args.studies,
             parallelism_screen=args.parallelism_screen.resolve() if args.parallelism_screen else None,
             tile_screen=args.tile_screen.resolve() if args.tile_screen else None,
-            tile_kernel_screen=args.tile_kernel_screen.resolve() if args.tile_kernel_screen else None)
+            tile_kernel_screen=args.tile_kernel_screen.resolve() if args.tile_kernel_screen else None,
+            mlp_decode_screen=args.mlp_decode_screen.resolve() if args.mlp_decode_screen else None)
 
 
 if __name__ == '__main__':

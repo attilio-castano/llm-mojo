@@ -716,11 +716,48 @@ def render_mlp_optimization_profiles(directory,prefix,latency_prefix):
            ylabel='Share of active GPU dispatch time (%)',title='Which stages remain expensive after projection changes?')
     ax.legend(bbox_to_anchor=(1.02,1),loc='upper left',fontsize=8)
     device=record['captures'][0]['capture']['runtime']['device']
-    fig.text(.5,.015,f'{device} / Metal; BF16 I/O, FP32 arithmetic; v0=rowwise, v7=16x16 projections.\n'
+    mapping_note = 'variant labels identify the explicit projection mappings' if any(v >= 8 for v in variants) else 'v0=rowwise, v7=16x16 projections'
+    fig.text(.5,.015,f'{device} / Metal; BF16 I/O, FP32 arithmetic; {mapping_note}.\n'
              f'{sum(s["count"] for s in summary):,} measured dispatch durations; source {record["common"]["repository"]["commit"][:7]}.\n'
              'Single instrumented captures; preemption gaps excluded. These shares do not establish latency gains.',ha='center',fontsize=8)
     fig.tight_layout(rect=(0,.13,1,1));fig.savefig(figure_directory(directory)/(prefix+'profile.png'),dpi=160);plt.close(fig)
 
+
+
+def render_mlp_decode(directory):
+    """Regenerate all decode decisions from complete retained paired samples."""
+    from .mlp_contract import NAMES
+    runs = []
+    for path in sorted(directory.glob('decode_*run.json')):
+        prefix = path.name.removesuffix('run.json')
+        record, samples, summary = load_run(directory, prefix)
+        if record['specification']['operation'] != 'mlp' or record['specification']['rows'] != [1]:
+            raise ValueError('decode plot requires single-token MLP records')
+        table(directory, prefix+'summary.csv', summary)
+        runs.append((prefix, record, samples, summary))
+    for prefix, record, samples, summary in runs:
+        variants = [v for v in record['specification']['candidates'] if v != 0]
+        if not variants:
+            continue
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4.7))
+        labels = [NAMES[v].replace('; ', '\n') for v in variants]
+        for ax, layers, mode in zip(axes, (1,24), ('Hot', 'Ring24')):
+            for j, variant in enumerate(variants):
+                row = next(s for s in summary if s['candidate']==variant and s['layers']==layers)
+                color = {'faster':'#2166ac','slower':'#b35806','inconclusive':'#666666'}[row['decision']]
+                ax.errorbar(j,row['ratio'],yerr=[[row['ratio']-row['ratio_min']],[row['ratio_max']-row['ratio']]],
+                    fmt='o',color=color,markerfacecolor=color if row['decision']=='faster' else 'white',capsize=4)
+                ax.annotate(row['decision'],(j,row['ratio']),xytext=(0,10),textcoords='offset points',ha='center',fontsize=8)
+            ax.axhline(1,color='#555555',linewidth=1)
+            ax.set(xticks=range(len(variants)),xticklabels=labels,ylabel='Candidate / rowwise paired latency',title=mode)
+            ax.tick_params(axis='x',labelsize=7)
+        fig.text(.5,.015,f'{record["runtime"]["device"]} / Metal; R=1, H=896, I=4864; source {record["repository"]["commit"][:7]}.\n'
+            f'{len(samples):,} observations. Whiskers span four block ratios, not confidence intervals.\n'
+            'Filled points pass the frozen noise-calibrated gain rule. Lower is faster; whole MLP, not full decoder.',ha='center',fontsize=8)
+        fig.tight_layout(rect=(0,.14,1,1));fig.savefig(figure_directory(directory)/(prefix+'latency.png'),dpi=160);plt.close(fig)
+    if (directory/'decode_profiles.json').exists():
+        latency_prefix = 'decode_final_' if (directory/'decode_final_run.json').exists() else 'decode_down_'
+        render_mlp_optimization_profiles(directory, 'decode_', latency_prefix)
 
 
 def render_mlp(directory, record, samples, summary):
@@ -795,6 +832,7 @@ def render_mlp(directory, record, samples, summary):
             f'{len(profile_rows):,} measured dispatches in four single captures; active time excludes preemption gaps.\n'
             'Profiling is separate from the paired latency runs; optional limiter counters were not analyzed.',ha='center',fontsize=8)
         fig.tight_layout(rect=(0,.12,1,1));fig.savefig(figure_directory(directory)/'profile.png',dpi=160);plt.close(fig)
+    render_mlp_decode(directory)
     render_mlp_optimization(directory)
     for prefix,latency_prefix in [('optimization_projection_','optimization_down_increment_'),('optimization_final_','optimization_final_')]:
         if (directory/(prefix+'profiles.json')).exists():

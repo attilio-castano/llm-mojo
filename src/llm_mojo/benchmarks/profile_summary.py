@@ -60,7 +60,7 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
         grid = PREFILL_PROFILE_WORKLOADS
         spec = dict(workloads=grid, variants=list(variants)) if variants is not None else {}
     prefill = variants is not None
-    stage_map, _ = ({v:mlp_contract.STAGES for v in variants}, None) if mlp else (sublayer.profile_grid(spec) if attention_sublayer else prefill_profile_grid(spec)) if prefill else (STAGES, None)
+    stage_map, _ = ({v:mlp_contract.stages(v) for v in variants}, None) if mlp else (sublayer.profile_grid(spec) if attention_sublayer else prefill_profile_grid(spec)) if prefill else (STAGES, None)
     captures = [(r,r,v,f'r{r}-v{v}') for r,_ in grid for v in variants] if mlp else [(r,t,v,f'r{r}-t{t}-v{v}') for r,t in grid for v in variants] if prefill else [
         (None,None,v,str(v)) for v in STAGES]
     for r,t,variant,folder in captures:

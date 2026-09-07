@@ -18,20 +18,22 @@ def read(path):
 
 
 def data_root(path):
+    if str(path).startswith('decode_holdout_'):
+        return ROOT.parent / 'mlp_decode_holdout'
     if str(path).startswith('optimization_holdout_'):
         return ROOT.parent / 'mlp_optimization_holdout'
     return ROOT.parent / 'mlp_holdout' if str(path).startswith('holdout_') else ROOT
 
 
-def holdout_catalog(optimization=False):
+def holdout_catalog(optimization=False, decode=False):
     import subprocess
-    path = ROOT.parent / ('mlp_optimization_holdout' if optimization else 'mlp_holdout') / 'manifest.json'
+    path = ROOT.parent / ('mlp_decode_holdout' if decode else 'mlp_optimization_holdout' if optimization else 'mlp_holdout') / 'manifest.json'
     data = json.loads(path.read_text())
     expected = data.pop('manifest_payload_sha256')
     assert hashlib.sha256(json.dumps(data,sort_keys=True).encode()).hexdigest() == expected
     assert data['status'] == 'complete'
-    if optimization:
-        declaration = Path(__file__).parent/'fixtures/mlp_optimization_holdout.json'
+    if optimization or decode:
+        declaration = Path(__file__).parent/'fixtures'/('mlp_decode_holdout.json' if decode else 'mlp_optimization_holdout.json')
         assert hashlib.sha256(declaration.read_bytes()).hexdigest() == data['candidate']['holdout_spec_sha256']
     if os.environ.get('MLP_CANDIDATE_BINARY'):
         binary = Path(os.environ['MLP_CANDIDATE_BINARY'])
@@ -114,10 +116,10 @@ def frozen():
 def case_specifications():
     data = frozen()
     split = os.environ.get('MLP_SPLIT', 'development')
-    if split not in ('development', 'checkpoint', 'holdout', 'optimization_holdout'):
+    if split not in ('development', 'checkpoint', 'holdout', 'optimization_holdout', 'decode_holdout'):
         raise ValueError('unsupported MLP case split')
-    if split in ('holdout', 'optimization_holdout'):
-        data = holdout_catalog(split == 'optimization_holdout')
+    if split in ('holdout', 'optimization_holdout', 'decode_holdout'):
+        data = holdout_catalog(split == 'optimization_holdout', split == 'decode_holdout')
         names = list(data['cases'])
     else:
         names = [k for k in data['cases'] if k.startswith('checkpoint_') == (split == 'checkpoint')]
@@ -132,7 +134,7 @@ def case_specifications():
 
 def verify_case(case):
     FULL.clear()
-    data = holdout_catalog(True) if case.startswith('optimization_holdout_') else holdout_catalog() if case.startswith('holdout_') else frozen()
+    data = holdout_catalog(decode=True) if case.startswith('decode_holdout_') else holdout_catalog(True) if case.startswith('optimization_holdout_') else holdout_catalog() if case.startswith('holdout_') else frozen()
     for name, spec in data['arrays'].items():
         if name.startswith(case + '/'):
             assert hashlib.sha256((data_root(name) / name).read_bytes()).hexdigest() == spec['sha256'], name
@@ -195,7 +197,7 @@ def stage_check(address, case, stage, mode, start, rows, width, capacity):
 
 
 def unchanged(address, path, count):
-    assert np.array_equal(bits_at(address, count), bf16_bits(read(path)).reshape(-1)), path
+    assert np.array_equal(bits_at(address, count), bf16_bits(read(path)).reshape(-1)[:count]), path
 
 
 def multiplication_cases(address_a, address_b, count):

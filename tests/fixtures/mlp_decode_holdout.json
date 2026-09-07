@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "baseline_commit": "5d6a3ee",
+  "reference_sha256": "6de9811889f14c9ece9999b7e4ee6116dfc41bb3dfac95486ec86f3582ec43e7",
+  "cases": [
+    [
+      896,
+      4864,
+      1,
+      4051
+    ],
+    [
+      896,
+      4864,
+      1,
+      4057
+    ],
+    [
+      896,
+      4864,
+      1,
+      4073
+    ]
+  ],
+  "checkpoint_prompt": "Explain why a bicycle stays easier to balance while moving.",
+  "checkpoint_token_ids": [
+    151644,
+    8948,
+    198,
+    2610,
+    525,
+    264,
+    10950,
+    17847,
+    13,
+    151645,
+    198,
+    151644,
+    872,
+    198,
+    840,
+    20772,
+    3170,
+    264,
+    34986,
+    26558,
+    8661,
+    311,
+    8172,
+    1393,
+    7218,
+    13,
+    151645,
+    198,
+    151644,
+    77091,
+    198
+  ],
+  "checkpoint_row": "last",
+  "checkpoint_token_ids_sha256": "1f67d103b35ebb7961cd89910f7a6964095191fe36827e4d83d3f76a12fb04ca",
+  "model_outputs_observed_at_declaration": false
+}

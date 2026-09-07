@@ -11,10 +11,18 @@ from .._repository import repository_root
 OPERATION = 'mlp'
 PROJECTION_MAPPINGS = {0:(0,0), 1:(1,0), 2:(2,0), 3:(3,0),
                        4:(0,1), 5:(0,2), 6:(0,3), 7:(2,2)}
-VARIANTS = set(PROJECTION_MAPPINGS)
+VARIANTS = set(range(19))
 ENTRYPOINTS = {f'mlp_{v}':'enqueue_mlp_apple_gpu' for v in VARIANTS}
 TILES = {0:'rowwise',1:'MMA 8x16',2:'MMA 16x16',3:'MMA 8x32'}
 NAMES = {v:f'gate/up {TILES[g]}; down {TILES[d]}' for v,(g,d) in PROJECTION_MAPPINGS.items()}
+NAMES.update({8:'combined gate/up launch', 9:'separate two-output gate/up', 10:'combined two-output gate/up', 11:'cooperative down G2', 12:'cooperative down G4'})
+for v in range(13,19):
+    NAMES[v] = NAMES[8+(v-13)//2] + '; ' + NAMES[11+(v-13)%2]
+
+def stages(variant):
+    gate = 8+(variant-13)//2 if variant >= 13 else variant
+    return [STAGES[0], 'gate/up projections', *STAGES[3:]] if gate in (8,10) else STAGES
+
 STAGES = ['RMSNorm','gate projection','up projection','SiLU','multiply','down projection','residual']
 BOUNDARIES = ['N','G','U','A','S','D','Y']
 ROWS = [1,7,15,16,17,33,65,257,1024,4096]
@@ -86,8 +94,10 @@ def check(address, name, count, composed):
 def specification(variant, rows):
     if type(variant) is not int or variant not in VARIANTS or type(rows) is not int or not 1 <= rows <= 4096:
         raise ValueError('invalid MLP profile shape/variant')
+    if variant >= 8 and rows != 1:
+        raise ValueError('MLP decode mapping requires one row')
     return dict(profile_rows=rows,hidden_size=896,intermediate_size=4864,
-                profile_workload=f'mlp-r{rows}-v{variant}',dispatches_per_iteration=7)
+                profile_workload=f'mlp-r{rows}-v{variant}',dispatches_per_iteration=len(stages(variant)))
 
 
 def configuration(data):
@@ -97,6 +107,6 @@ def configuration(data):
     expected = specification(int(implementation.removeprefix('mlp_')),data.get('profile_rows'))
     if any(data.get(k) != v or (type(v) is int and type(data.get(k)) is not int) for k,v in expected.items()):
         raise ValueError('MLP profile identity mismatch')
-    if type(data.get('profile_iterations')) is not int or not 1 <= data['profile_iterations']*7 <= 5000:
+    if type(data.get('profile_iterations')) is not int or not 1 <= data['profile_iterations']*expected['dispatches_per_iteration'] <= 5000:
         raise ValueError('MLP profile exceeds dispatch budget')
     return expected

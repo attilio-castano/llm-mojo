@@ -3,6 +3,7 @@ from layout import TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
 from llm_mojo.mlp import (
     MLPWeights,
+    mlp_combines_gate_up,
     MLPWorkspace,
     enqueue_mlp_apple_gpu,
     enqueue_mlp_stage_apple_gpu,
@@ -68,7 +69,8 @@ def main() raises:
             args.append(String(arg))
     if len(args) != 10:
         raise Error(
-            "expected rows layers candidate control first seed mode repetitions warmup"
+            "expected rows layers candidate control first seed mode repetitions"
+            " warmup"
         )
     var rows = Int(args[1])
     var layers = Int(args[2])
@@ -90,16 +92,30 @@ def main() raises:
         or rows > 4096
         or (layers != 1 and layers != 24)
         or candidate < 0
-        or candidate > 7
+        or candidate > 18
+        or ((candidate >= 8 or control >= 8) and rows != 1)
         or control < 0
-        or control > 7
+        or control > 18
         or (first != 0 and first != 1)
         or Int(args[6]) != 1601
         or repetitions < 1
         or warmup < 0
         or warmup > 100
-        or (stage >= 0 and stage != 1 and stage != 2 and stage != 5 and layers != 1)
-        or (mode == "profile" and (layers != 1 or repetitions * 7 > 5000))
+        or (
+            stage >= 0
+            and stage != 1
+            and stage != 2
+            and stage != 5
+            and layers != 1
+        )
+        or (
+            mode == "profile"
+            and (
+                layers != 1
+                or repetitions * (6 if mlp_combines_gate_up(candidate) else 7)
+                > 5000
+            )
+        )
     ):
         raise Error("invalid MLP measurement request")
     var helper = Python.import_module("llm_mojo.benchmarks.mlp_contract")
@@ -158,7 +174,9 @@ def main() raises:
                 work.down.enqueue_fill(poison)
             else:
                 work.output.enqueue_fill(poison)
-            dispatch(ctx, weights[layer], work, inputs[layer], rows, stage, variant)
+            dispatch(
+                ctx, weights[layer], work, inputs[layer], rows, stage, variant
+            )
             if stage == -1:
                 check(work.down, "D", rows * 896, True)
                 check(work.output, "Y", rows * 896, True)
@@ -187,8 +205,14 @@ def main() raises:
         print("rows:", rows)
         print("hidden: 896")
         print("intermediate size: 4864")
-        print("profile workload:", "mlp-r" + String(rows) + "-v" + String(candidate))
-        print("profile dispatches per iteration: 7")
+        print(
+            "profile workload:",
+            "mlp-r" + String(rows) + "-v" + String(candidate),
+        )
+        print(
+            "profile dispatches per iteration:",
+            6 if mlp_combines_gate_up(candidate) else 7,
+        )
         print("warmup iterations:", warmup)
         print("profile iterations:", repetitions)
         print("post-profile idle milliseconds: 250")
@@ -205,7 +229,15 @@ def main() raises:
         for rep in range(warmup + repetitions):
             var start = perf_counter_ns()
             for layer in range(layers):
-                dispatch(ctx, weights[layer], work, inputs[layer], rows, stage, variant)
+                dispatch(
+                    ctx,
+                    weights[layer],
+                    work,
+                    inputs[layer],
+                    rows,
+                    stage,
+                    variant,
+                )
             ctx.synchronize()
             var elapsed = (
                 Float64(perf_counter_ns() - start) / 1000.0 / Float64(layers)
@@ -217,5 +249,7 @@ def main() raises:
         var label = "candidate" if ((arm == 0) == (first == 1)) else "control"
         var variant = candidate if label == "candidate" else control
         for rep in range(repetitions):
-            print("SAMPLE", label, variant, rep, samples[arm * repetitions + rep])
+            print(
+                "SAMPLE", label, variant, rep, samples[arm * repetitions + rep]
+            )
     print("BENCHMARK_COMPLETE")

@@ -318,3 +318,46 @@ directories with `profile_summary SOURCE OUTPUT --mlp --mlp-variants 0 7
 rows/variants supports intermediate profiles; the reader still requires the
 complete declared grid and exact seven-dispatch sequence. Retain final timing
 and profile files with `optimization_final_` in the existing study's `data/`.
+
+## Single-token MLP decode
+
+The bounded follow-up is declared in
+[decode-plan.md](../../../studies/mlp_sublayer/decode-plan.md). Variants 8/9/10
+combine gate/up launches and/or use two outputs per SIMD group; 11/12 change
+only down to two/four cooperating groups per output. They reject R != 1
+before any enqueue. IDs 13..18 encode possible compositions; the confirmation
+runner measures at most one composition of independently qualified families.
+Mapping 0 remains the default. Combined launch variants keep separate weight
+and G/U buffers: there is no repacking, allocation or output copy.
+
+From a validated clean source, use the common builder and runner:
+
+```sh
+uv run --locked llm-mojo-bench build --build-dir /private/tmp/mlp-decode-build
+uv run --locked llm-mojo-bench run --build-dir /private/tmp/mlp-decode-build --output /private/tmp/mlp-decode-screen --studies mlp_decode_gate_up mlp_decode_down
+uv run --locked llm-mojo-bench run --build-dir /private/tmp/mlp-decode-build --output /private/tmp/mlp-decode-confirmation --studies mlp_decode_final --mlp-decode-screen /private/tmp/mlp-decode-screen
+```
+
+Both modes must qualify under the frozen calibrated rule. The confirmation
+runner verifies both screen specifications, samples and build identity before
+selecting the minimum worst-mode ratio per family. No qualified family leaves
+a control self-pair confirmation. Timing is whole MLP in every decode screen.
+Isolated stage APIs still enqueue only the named stage; launch combining occurs
+only in the complete MLP entrypoint.
+
+Profile control and selected (or explicitly diagnostic) variant at R=1 with
+10 warmups and 500 measured iterations. Combined gate/up has six dispatches;
+other mappings have seven. The shared receipt, analysis and curation tools
+validate that distinction. Curate using `profile_summary SOURCE OUTPUT --mlp
+--mlp-variants 0 V --mlp-rows 1 --prefix decode_`. Keep run/sample records under
+`decode_gate_up_`, `decode_down_`, `decode_final_` in the existing MLP data
+folder. The normal plot command regenerates decode tables and figures.
+
+The explicit `mlp_acceptance.py --decode` path captures only the declared
+fresh single-row holdouts, after a clean candidate/binary freeze. It requires
+the verified local checkpoint directory and refuses to overwrite its manifest.
+`MLP_SPLIT=decode_holdout MLP_VARIANTS=0,V MLP_CANDIDATE_BINARY=...` binds the
+numerical run to that candidate. Older splits remain regression data. Decode
+variants exercise row-one prefixes of all existing fixtures and varying input
+rows under asynchronous reuse; original variants still exercise full/chunked
+multi-row execution.
