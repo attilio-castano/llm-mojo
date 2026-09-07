@@ -3,7 +3,7 @@
 These studies explain how the existing Mojo operations map work onto the Apple
 M4 Pro. Start with the value and storage contracts in [model](../docs/model.md)
 and [layouts](../docs/layouts.md), then read a topic below. Each comparison is
-operation-level except for the composed attention sublayer; a working decoder
+operation-level except for the composed attention and MLP sublayers; a working decoder
 block and full-model generation remain next.
 
 | Topic | Question |
@@ -14,6 +14,7 @@ block and full-model generation remain next.
 | [RoPE](rope/README.md) | How much work and data movement does rotating a dimension pair require? |
 | [GQA decode](gqa_decode/README.md) | How do fusion, sequence parallelism and shared KV heads interact? |
 | [GQA prefill](gqa_prefill/README.md) | How do query tiling, online softmax and Apple matrix instructions interact? |
+| [MLP sublayer](mlp_sublayer/README.md) | Where does the materialized SwiGLU block spend time, under its frozen BF16 rounding contract? |
 | [Attention sublayer](attention_sublayer/README.md) | Where does time go in the complete block under the selected FP32 attention policy? |
 
 The attention-sublayer study uses the explicit CPU FP32 attention policy as

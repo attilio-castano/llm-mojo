@@ -207,6 +207,17 @@ def select_projection_tile(block_summary, kernel_summary):
     return min(eligible,key=lambda v:(max(block[v,l]['ratio'] for l in (1,24)),v)) if eligible else None
 
 
+from . import mlp_contract as mlp
+STUDIES['mlp'] = dict(operation='mlp',control=0,candidates=[0],rows=mlp.ROWS,
+    names={0:'materialized rowwise MLP'},layout='X/Y[R,896]; gate/up[I,H], down[H,I]; I=4864; row major',
+    arithmetic=mlp.ARITHMETIC,inputs=mlp.INPUTS,timing=mlp.TIMING,seed=1601,
+    measurement='whole_mlp',opt_in=True)
+for stage in range(7):
+    STUDIES[f'mlp_stage_{stage}'] = {**STUDIES['mlp'], 'rows':mlp.PROFILE_ROWS,
+        'layers':[1], 'mode':f'stage{stage}', 'measurement':f'mlp_stage_{stage}',
+        'timing':'Host enqueue through completion of one isolated stage on exact upstream operands; allocation, upload and checks excluded.'}
+
+
 def workloads(spec):
     return spec.get('workloads', [dict(rows=r) for r in spec.get('rows', [])])
 
@@ -291,7 +302,7 @@ def summarize(samples, spec):
             raise ValueError('sample implementation differs from requested arm')
         grouped[(s.get('query_rows',0),s['rows'], s['layers'], s['candidate'], s['block'], s['arm'])].append(s['us'])
     expected = {(w.get('query_rows',0), b, w['rows'], l, c, a, n) for b in range(1, BLOCKS + 1)
-                for w in workloads(spec) for l in (1, 24) for c in spec['candidates']
+                for w in workloads(spec) for l in spec.get('layers', (1, 24)) for c in spec['candidates']
                 for a in ('control', 'candidate') for n in range(REPETITIONS)}
     if observed != expected:
         raise ValueError('incomplete or unexpected study grid, including self-pair calibration')
@@ -299,7 +310,7 @@ def summarize(samples, spec):
     for workload in workloads(spec):
         rows = workload['rows']
         query_rows = workload.get('query_rows',0)
-        for layers in (1, 24):
+        for layers in spec.get('layers', (1, 24)):
             def medians(candidate, arm):
                 return [statistics.median(grouped[(query_rows,rows, layers, candidate, b, arm)]) for b in range(1, BLOCKS + 1)]
             noise_ratios = [a / b for a, b in zip(medians(spec['control'], 'candidate'), medians(spec['control'], 'control'))]

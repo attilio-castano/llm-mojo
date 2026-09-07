@@ -9,6 +9,7 @@ from pathlib import Path
 from .analyze_trace import (integer, read_table, segment_compute_commands, duration_summary, coalesce_compute_commands)
 from .study import sha, write_json, PREFILL_PROFILE_WORKLOADS, prefill_profile_grid
 from . import attention_sublayer_contract as sublayer
+from . import mlp_contract
 
 STAGES = {0: ['QK', 'softmax', 'PV'], 4: ['fused'], 9: ['decode', 'merge']}
 COUNTERS = {'Kernel Occupancy', 'Instruction Throughput Limiter', 'Last Level Cache Limiter'}
@@ -17,7 +18,7 @@ COUNTERS = {'Kernel Occupancy', 'Instruction Throughput Limiter', 'Last Level Ca
 def collect(source, output, prefill_variant=None, *, prefill_variants=None, prefix='',
             attention_sublayer=False, wo_comparison=False, decode_comparison=False,
             prefill_comparison=False, projection_comparison=False, parallelism_variants=None,
-            combined_projections=False, attention_study=None):
+            combined_projections=False, attention_study=None, mlp=False):
     records, samples = [], []
     common = None
     if prefill_variant is not None and prefill_variants is not None:
@@ -37,7 +38,12 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
     attention_sublayer = attention_sublayer or attention_study is not None
     if attention_sublayer and (prefill_variant is not None or prefill_variants is not None):
         raise ValueError('choose one attention profile study')
-    if attention_sublayer:
+    if mlp and (attention_sublayer or prefill_variant is not None or prefill_variants is not None):
+        raise ValueError('choose one profile study')
+    if mlp:
+        variants, grid = [0], [(r,r) for r in mlp_contract.PROFILE_ROWS]
+        spec = dict(workloads=[dict(rows=r) for r in mlp_contract.PROFILE_ROWS],variants=[0])
+    elif attention_sublayer:
         name = attention_study or (legacy[0] if legacy else 'baseline')
         spec = sublayer.profile_comparison(name, parallelism_variants)
         variants, grid = spec['variants'], spec['workloads']
@@ -46,8 +52,8 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
         grid = PREFILL_PROFILE_WORKLOADS
         spec = dict(workloads=grid, variants=list(variants)) if variants is not None else {}
     prefill = variants is not None
-    stage_map, _ = (sublayer.profile_grid(spec) if attention_sublayer else prefill_profile_grid(spec)) if prefill else (STAGES, None)
-    captures = [(r,t,v,f'r{r}-t{t}-v{v}') for r,t in grid for v in variants] if prefill else [
+    stage_map, _ = ({0:mlp_contract.STAGES}, None) if mlp else (sublayer.profile_grid(spec) if attention_sublayer else prefill_profile_grid(spec)) if prefill else (STAGES, None)
+    captures = [(r,r,0,f'r{r}-v0') for r in mlp_contract.PROFILE_ROWS] if mlp else [(r,t,v,f'r{r}-t{t}-v{v}') for r,t in grid for v in variants] if prefill else [
         (None,None,v,str(v)) for v in STAGES]
     for r,t,variant,folder in captures:
         stages = stage_map[variant]
@@ -83,8 +89,10 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
                      and r['channel-name'][0] == 'Compute' and ':Compute Command' in r['event-label'][1]]
         intervals.sort(key=lambda r: integer(r, 'start'))
         workload = identity['workload']
-        shape = dict(query_rows=r,rows=t) if prefill else {}
-        if prefill and (
+        shape = dict(rows=r) if mlp else dict(query_rows=r,rows=t) if prefill else {}
+        if mlp and (workload['profile_rows'] != r or identity['implementation'] != 'mlp_0'):
+            raise ValueError('MLP profile differs from declared workload')
+        if prefill and not mlp and (
             workload['profile_rows'] != r or workload['key_value_rows'] != t or
             identity['implementation'] != (f'attention_sublayer_{variant}' if attention_sublayer else f'gqa_prefill_{variant}')
         ):
@@ -119,7 +127,7 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
     writer.writeheader(); writer.writerows(samples)
     raw = output / (prefix+'profile_samples.csv.gz')
     raw.write_bytes(gzip.compress(stream.getvalue().encode(), mtime=0))
-    write_json(output / (prefix+'profiles.json'), dict(schema=3 if attention_sublayer else (2 if prefill else 1),
+    write_json(output / (prefix+'profiles.json'), dict(schema=4 if mlp else 3 if attention_sublayer else (2 if prefill else 1),
                 **(dict(specification=spec) if prefill else {}), common=common, captures=records,
                 samples_sha256=sha(raw),
                 boundary=f'Instrumented GPU active dispatch durations (non-overlapping segments summed, preemption gaps excluded); {len(captures)} single captures, not paired latency trials. Counter statistics are device-wide within each target window. Stage labels follow the validated source enqueue order.',
@@ -134,6 +142,7 @@ if __name__ == '__main__':
     group.add_argument('--prefill-variant',type=int)
     group.add_argument('--prefill-variants',type=int,nargs='+')
     group.add_argument('--attention-sublayer',action='store_true')
+    group.add_argument('--mlp',action='store_true')
     group.add_argument('--attention-study', choices=[*sublayer.PROFILE_COMPARISONS, 'parallelism'])
     parser.add_argument('--prefix',default='')
     parser.add_argument('--wo-comparison',action='store_true')
@@ -143,7 +152,7 @@ if __name__ == '__main__':
     parser.add_argument('--combined-projections',action='store_true')
     parser.add_argument('--parallelism-variants',type=int,nargs='+')
     args = parser.parse_args()
-    collect(args.source, args.output, args.prefill_variant,
+    collect(args.source, args.output, args.prefill_variant, mlp=args.mlp,
             prefill_variants=args.prefill_variants, prefix=args.prefix, attention_sublayer=args.attention_sublayer,
             wo_comparison=args.wo_comparison, decode_comparison=args.decode_comparison,
             prefill_comparison=args.prefill_comparison, projection_comparison=args.projection_comparison,

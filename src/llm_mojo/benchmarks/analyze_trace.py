@@ -860,7 +860,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         "schema_version": 3,
         "analysis": identity["operation"] + "_metal_trace",
         "analysis_source_sha256": {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
-            for name in ("analyze_trace.py", "attention_contract.py", "attention_decode_contract.py", "attention_prefill_contract.py", "attention_sublayer_contract.py")},
+            for name in ("analyze_trace.py", "attention_contract.py", "attention_decode_contract.py", "attention_prefill_contract.py", "attention_sublayer_contract.py", "mlp_contract.py")},
         "capture_identity": identity,
         "inputs": inputs,
         "trace": trace,

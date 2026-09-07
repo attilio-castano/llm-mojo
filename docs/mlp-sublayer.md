@@ -1,9 +1,9 @@
 # MLP numerical contract and upstream fixture specification
 
-Status: upstream reference tooling implemented; development numerics characterized
-on CPU. The initial acceptance budgets below were selected before any Mojo MLP
-or holdout output. The reference evidence and reproduction commands appear below.
-There is no Mojo MLP implementation or performance claim in this slice.
+Status: upstream reference package frozen; materialized Mojo MLP implemented and
+undergoing final acceptance. The initial budgets were selected before any Mojo
+MLP or holdout output. Reference results below retain their original CPU scope.
+The [MLP study](../studies/mlp_sublayer/README.md) records implementation and measurement progress.
 
 ## Scope and data flow
 
@@ -455,5 +455,33 @@ no generator-source or commit drift. `uv run --locked llm-mojo-validate` passed:
 11 pinned reference-tooling tests, 54 Python tooling tests, 93 existing Mojo
 tests on Apple M4 Pro/Metal, and every benchmark-route smoke check. The ordinary
 MLP preparation also independently verified its 43-case synthetic subset.
-No MLP holdout outputs were generated, no model assets were downloaded, and no
-Mojo MLP implementation or optimization was introduced.
+That reference-readiness run generated no MLP holdout outputs, downloaded no
+model assets, and introduced no Mojo MLP implementation or optimization.
+
+## Approved implementation and baseline study
+
+The next run is authorized for local implementation, validation, local commits,
+Metal measurement and trace capture, and study documentation using existing
+assets. Preserve this frozen reference package; new acceptance tooling records
+its own identity and does not rewrite the reference anchors.
+
+Implement and test materialized SiLU and multiply first, then compose RMSNorm,
+rowwise gate/up projections, SiLU, multiply, down projection and residual using
+caller-owned buffers. Accept operation and composition gates on all development
+cases, followed by the previously unopened holdouts. Include full/chunked and
+normal-mode asynchronous reuse, invalid-call, poison and guard tests.
+
+After full validation and benchmark-route checks, commit the source and build
+once from that clean identity. Whole-block timing uses R=1,7,15,16,17,33,65,257,
+1024,4096 in hot and ring24 modes with the existing four-block, ten-warmup,
+ten-sample self-pair protocol. Isolated stages and whole-block traces use
+R=1,17,1024,4096. Profile separately, within 5,000 measured dispatches per
+capture. Record backend/device, source/binary/fixture hashes, power/thermal
+conditions and exact allocation/synchronization boundaries. Preserve valid
+noisy observations. Finish with reproducible numerical and performance evidence
+and a ranked proposal for the next optimization.
+
+Routine implementation defects may be repaired under the fixed contract. Any
+required change to arithmetic, budgets, or supported inputs stops acceptance
+for a numerical-policy decision. Holdout failures remain recorded. Invalid
+measurement conditions pause collection rather than weaken its requirements.

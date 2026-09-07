@@ -640,11 +640,79 @@ def render_sublayer(directory, record, samples, summary):
     print(directory.name, len(samples), 'baseline observations verified; attention figures and retained comparisons regenerated')
 
 
+def render_mlp(directory, record, samples, summary):
+    import gzip
+    import io
+    import statistics
+    from .study import sha
+    from .mlp_contract import STAGES, PROFILE_ROWS
+    table(directory,'summary.csv',summary)
+    plt.rcParams.update({'font.family':'DejaVu Sans','font.size':10,
+                         'axes.spines.top':False,'axes.spines.right':False})
+    fig, axes = plt.subplots(1,2,figsize=(12,4.5))
+    for layers,label in [(1,'Hot call'),(24,'24 buffers; one sync per sweep')]:
+        values = sorted([x for x in summary if x['layers']==layers],key=lambda x:x['rows'])
+        axes[0].plot([x['rows'] for x in values],[x['control_us'] for x in values],marker='o',label=label)
+    axes[0].set(xscale='log',yscale='log',xlabel='Rows R',ylabel='Microseconds per MLP call',
+                title='Whole MLP: enqueue through completion')
+    axes[0].legend(fontsize=8)
+    stage_results = []
+    for stage,label in enumerate(STAGES):
+        stage_record,_,rows = load_run(directory,prefix=f'stage_{stage}_')
+        if stage_record['build'] != record['build']:
+            raise ValueError('MLP stages and whole block must share a build')
+        stage_results += [dict(stage=label,**row) for row in rows]
+        axes[1].plot([r['rows'] for r in rows],[r['control_us'] for r in rows],marker='o',label=label)
+    table(directory,'stage_summary.csv',stage_results)
+    axes[1].set(xscale='log',yscale='log',xlabel='Rows R',ylabel='Microseconds per isolated call',
+                title='Stage calls on exact upstream operands')
+    axes[1].legend(fontsize=8)
+    fig.text(.5,.01,'Control-arm medians across four blocks; stage times are separate calls and need not sum to whole-block latency.',ha='center',fontsize=8)
+    fig.tight_layout(rect=(0,.04,1,1));fig.savefig(figure_directory(directory)/'latency.png',dpi=160);plt.close(fig)
+    profile_path = directory/'profiles.json'
+    if profile_path.exists():
+        profile = json.loads(profile_path.read_text())
+        raw = directory/'profile_samples.csv.gz'
+        if profile['schema'] != 4 or sha(raw) != profile['samples_sha256'] or profile['common']['repository'] != record['repository']:
+            raise ValueError('MLP profile provenance or samples changed')
+        profile_rows = list(csv.DictReader(io.StringIO(gzip.decompress(raw.read_bytes()).decode())))
+        expected = set()
+        for capture in profile['captures']:
+            r = capture['rows']
+            if r not in PROFILE_ROWS:
+                raise ValueError('unexpected MLP profile workload')
+            n = capture['capture']['workload']['profile_iterations']
+            expected.update((r,0,j,stage) for j in range(n) for stage in STAGES)
+        observed = [(int(x['rows']),int(x['variant']),int(x['iteration']),x['stage']) for x in profile_rows]
+        if len(observed)!=len(set(observed)) or set(observed)!=expected or {x[0] for x in expected}!=set(PROFILE_ROWS):
+            raise ValueError('incomplete MLP stage profile grid')
+        aggregated=[]
+        fig,ax=plt.subplots(figsize=(9,4.5));bottom=[0.0]*len(PROFILE_ROWS)
+        for stage in STAGES:
+            shares=[]
+            for r in PROFILE_ROWS:
+                values=[int(x['duration_ns'])/1000 for x in profile_rows if int(x['rows'])==r and x['stage']==stage]
+                total=sum(int(x['duration_ns']) for x in profile_rows if int(x['rows'])==r)/1000
+                share=100*sum(values)/total
+                shares.append(share)
+                aggregated.append(dict(rows=r,stage=stage,median_us=statistics.median(values),
+                    mean_us=statistics.mean(values),min_us=min(values),max_us=max(values),active_share_percent=share))
+            ax.bar(list(map(str,PROFILE_ROWS)),shares,bottom=bottom,label=stage)
+            bottom=[a+b for a,b in zip(bottom,shares)]
+        table(directory,'profile_summary.csv',aggregated)
+        ax.set(xlabel='Rows R',ylabel='Share of active GPU dispatch time (%)',title='Where does the materialized MLP spend GPU time?')
+        ax.legend(bbox_to_anchor=(1.02,1),loc='upper left',fontsize=8)
+        fig.tight_layout();fig.savefig(figure_directory(directory)/'profile.png',dpi=160);plt.close(fig)
+    print('MLP raw samples verified; latency and profile figures regenerated')
+
+
 def render(directory):
     from .study import evidence_directory
     directory = evidence_directory(directory)
     record, samples, summary = load_run(directory)
     spec = record['specification']
+    if spec['operation'] == 'mlp':
+        return render_mlp(directory,record,samples,summary)
     if spec['operation'] == 'attention_sublayer':
         return render_sublayer(directory,record,samples,summary)
     if record['study'] in ('gqa_prefill_screen','gqa_prefill_resources_screen'):

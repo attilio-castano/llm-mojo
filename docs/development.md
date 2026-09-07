@@ -141,7 +141,14 @@ The [MLP reference contract](mlp-sublayer.md) adds upstream development captures
 independent FP64 diagnostics, and a finite BF16 SiLU sweep. Validation runs its
 fixture-tooling tests and verifies synthetic frozen evidence. Checkpoint
 reproduction uses an explicit local-asset argument; holdout outputs remain
-unopened. This prepares a numerical target, not a Mojo MLP implementation.
+unopened. The materialized Mojo MLP adds operation/composition and BF16 boundary tests.
+The explicit `tests/fixtures/mlp_acceptance.py` entrypoint uses the same pinned
+script lock through a symlink and opens holdouts only against a clean candidate.
+Normal-mode reuse can be checked with `MODULAR_DEBUG` unset and
+`MLP_CASE=h896_i4864_r17_s1601` when running `tests/test_mlp.mojo`.
+Set `MLP_SPLIT=checkpoint` to run its three existing checkpoint cases. Holdouts
+are explicit with `MLP_SPLIT=holdout` after their initial capture; subsequent
+evaluations of observed holdouts are regression checks, not fresh holdouts.
 
 Use `--prepare-only` to generate fixtures without running tests. For an individual
 Mojo suite, include `-I src -I build -I tests`. Generators and the

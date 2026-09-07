@@ -274,3 +274,23 @@ results under `split_combined_projections_` and `split_combined_gqa_` in the
 existing attention study. No screen or new profile capture is required for
 this composition of existing kernels. See the
 [closure contract](../../../studies/attention_sublayer/plans.md#closing-the-split8-and-projection-integration-gap).
+
+## Materialized MLP baseline
+
+After numerical acceptance and a clean source commit, `--studies mlp` runs the
+whole-block self-pair matrix. `mlp_stage_0` through `mlp_stage_6` measure the
+seven isolated stages on identical upstream operands, in hot mode only. The
+same builder includes `mlp.mojo`; ordinary route smoke verifies both full-block
+buffer modes, every stage, and invalid requests. Inputs are verified prefixes
+of the frozen 4,096-row development case, seed 1601. Ring24 owns distinct copies
+of inputs/weights and shares workspace; all Python transport and checks occur
+outside timing. The instrument buffers sample output until both arms finish.
+
+Profile with `--operation mlp --profile-variant 0 --profile-rows R`, where
+R is 1,17,1024,4096. Use ten warmups and respectively 500,100,25,10 measured
+iterations; each capture stays below 5,000 dispatches. The common capture and
+analyzer validate the MLP entrypoint, intermediate width, and seven-dispatch
+sequence. Curate `rR-v0` directories with `profile_summary SOURCE OUTPUT --mlp`.
+Retain whole-block `run.json`/`samples.csv.gz`, isolated-stage files prefixed
+`stage_N_`, and profiles in `studies/mlp_sublayer/data/`. The common plot command
+regenerates the measurement tables and figures from those compact records.
