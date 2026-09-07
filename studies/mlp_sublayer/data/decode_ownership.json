@@ -1,0 +1,55 @@
+{
+  "shape": {
+    "rows": 1,
+    "hidden": 896,
+    "intermediate": 4864
+  },
+  "bf16_bytes": 2,
+  "fp32_accumulators": true,
+  "weights_bytes": 26150656,
+  "input_bytes": 1792,
+  "workspace_bytes": 44288,
+  "ring24_total_bytes": 627703040,
+  "gate_up": {
+    "rowwise": {
+      "groups": 9728,
+      "blocks": 2432,
+      "products_per_lane": 28,
+      "requested_operand_bytes": 34865152
+    },
+    "two_output": {
+      "groups": 4864,
+      "blocks": 1216,
+      "products_per_accumulator": 28,
+      "accumulators_per_lane": 2,
+      "requested_operand_bytes": 26148864
+    }
+  },
+  "down": {
+    "1": {
+      "groups": 896,
+      "blocks": 224,
+      "products_per_lane": 152,
+      "shared_bytes_per_block": 0,
+      "barriers_per_block": 0,
+      "requested_operand_bytes": 17432576
+    },
+    "2": {
+      "groups": 1792,
+      "blocks": 448,
+      "products_per_lane": 76,
+      "shared_bytes_per_block": 16,
+      "barriers_per_block": 1,
+      "requested_operand_bytes": 17432576
+    },
+    "4": {
+      "groups": 3584,
+      "blocks": 896,
+      "products_per_lane": 38,
+      "shared_bytes_per_block": 16,
+      "barriers_per_block": 1,
+      "requested_operand_bytes": 17432576
+    }
+  },
+  "scope": "Source-level BF16 operand requests and logical allocation counts. Not DRAM traffic, physical registers, or measured occupancy."
+}

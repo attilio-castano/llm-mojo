@@ -140,8 +140,35 @@ class EvidenceTests(unittest.TestCase):
             for record in evidence_directory(directory).glob('*run.json'):
                 _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
-        self.assertEqual(count, 103200)
+        self.assertEqual(count, 104480)  # includes 1,280 bounded MLP decode samples
         directory = ROOT / 'studies/mlp_sublayer/data'
+        from llm_mojo.benchmarks.study import select_mlp_decode
+        decode_builds=[]
+        for prefix,expected in [('gate_up',640),('down',480),('final',160)]:
+            decode, observations, decisions = load_run(directory, 'decode_'+prefix+'_')
+            self.assertEqual(len(observations),expected)
+            self.assertEqual(decode['specification']['rows'],[1])
+            self.assertEqual(select_mlp_decode(decisions,decode['specification']['candidates']),0)
+            decode_builds.append(decode['build'])
+        self.assertEqual(decode['specification']['candidates'],[0])
+        self.assertTrue(all(build==decode_builds[0] for build in decode_builds))
+        decode_profiles=json.loads((directory/'decode_profiles.json').read_text())
+        self.assertEqual(decode_profiles['common']['source_sha256'],decode['build']['sources'])
+        self.assertEqual(decode_profiles['common']['repository'],decode['repository'])
+        self.assertEqual(sum(s['count'] for s in load_profile(directory,'decode_')),7000)
+        diagnostic=json.loads((directory/'decode_decision.json').read_text())
+        self.assertEqual((diagnostic['selected_variant'],diagnostic['diagnostic_variant']),(0,12))
+        self.assertFalse(diagnostic['holdouts_observed'])
+        decode_numerics=load_numerical_record(directory/'decode_numerics.json')
+        self.assertEqual(decode_numerics['candidate']['commit'],decode['repository']['commit'])
+        self.assertEqual(sum(c['checks'] for c in decode_numerics['coverage'].values()),58977)
+        for coverage in decode_numerics['coverage'].values():
+            self.assertEqual(coverage['failed_elements'],0)
+            self.assertEqual(coverage['full_chunk_bit_differences'],0)
+        self.assertEqual(decode_numerics['coverage']['fresh']['case_count'],4)
+        self.assertEqual(decode_numerics['coverage']['fresh']['variants'],[0,12])
+        self.assertEqual(decode_numerics['fresh_manifest']['candidate']['holdout_spec_sha256'],
+                         sha(ROOT/'tests/fixtures/mlp_decode_holdout.json'))
         final, samples, summary = load_run(directory, 'optimization_final_')
         numerics = load_numerical_record(directory / 'final_numerics.json')
         profiles = json.loads((directory / 'optimization_final_profiles.json').read_text())

@@ -14,6 +14,10 @@ inconclusive. Mapping selection stays explicit.
 R counts new rows; there is no KV-cache-length axis in this sublayer. Decoder
 composition, cache management and token generation remain separate work.
 
+**The single-token decode follow-up is also complete:** no candidate passed
+the predeclared promotion rule. See [decode results](#single-token-decode-follow-up)
+for the five candidates, noisy hot timing, diagnostic profile and fresh holdouts.
+
 ## Direct original-versus-final latency
 
 | Rows R | Hot original -> final (ms) | Hot ratio / decision | Ring24 original -> final (ms) | Ring24 ratio / decision |
@@ -319,3 +323,150 @@ Existing fresh fixtures can subsequently run as regressions with
 `MLP_SPLIT=optimization_holdout MLP_VARIANTS=0,7`. A new independent holdout
 requires a new declaration before output access. The existing acceptance
 generator refuses to overwrite either manifest.
+
+## Single-token decode follow-up
+
+**No candidate qualified for promotion.** The separate decode campaign at
+source `eb3169b` preserves rowwise variant 0 as the selected control. Variants
+8–12 remain explicit experimental choices; none is an automatic decode route.
+All numerical gates passed, including four fresh holdouts. This result does
+not establish that MLP decode is at its performance limit.
+
+The [predeclared plan](decode-plan.md) tested R=1, H=896, I=4864, with the
+same materialized N/G/U/A/S/D/Y boundaries. Both screens measured the complete
+MLP from RMSNorm through residual. Each used four paired blocks, ten warmups,
+ten samples per arm and matching control self-pairs in hot and ring24 modes.
+A candidate had to qualify in both modes before composition or promotion.
+
+| Variant | Change from rowwise | Ring24 paired latency change | Ring24 decision |
+| ---: | --- | ---: | --- |
+| 8 | Combine gate/up into one launch | −2.98% | Inconclusive |
+| 9 | Separate gate/up, two outputs per SIMD group | +12.83% | Slower |
+| 10 | Combined gate/up, two outputs per SIMD group | +7.98% | Slower |
+| 11 | Two cooperating groups per down output | +4.56% | Inconclusive |
+| 12 | Four cooperating groups per down output | −4.88% | Inconclusive |
+
+Negative changes mean lower latency. All ring24 self-pair deviations were
+below 5%, so the declared minimum 5% effect floor determined the decisions.
+Variant 12's ring24 block ratios were 0.9481–0.9552, with median 0.9512:
+consistent direction, but insufficient magnitude under the frozen rule.
+Its paired control/candidate latency medians were 195.28/185.82 µs. Dividing
+those medians does not exactly reproduce the median of block ratios.
+
+**Every hot candidate comparison was inconclusive.** The two hot screen
+calibrations had maximum self-pair deviations of 180.5% and 183.9%. Identical
+implementations therefore produced large apparent differences at this timing
+boundary. Device/route checks and nominal power/thermal checks passed; these
+records do not establish the cause of that variation. The closing control-only
+confirmation retained the same pattern: noisy hot self-pairs, stable ring24.
+No new candidate, repeated screen, relaxed floor or inferred crossover followed.
+
+The screens retain 640 gate/up and 480 down observations. With neither family
+qualified, the confirmation runner selected only control 0 and retained 160
+additional self-pair observations: **1,280 latency observations total**. No
+combined candidate was timed. The [selection record](data/decode_screen_selection.json)
+and [decision frozen before fresh holdouts](data/decode_decision.json) preserve
+that outcome. Raw samples, block ranges and calibration remain in the
+[gate/up table](data/decode_gate_up_summary.csv),
+[down table](data/decode_down_summary.csv), and
+[closing calibration](data/decode_final_summary.csv).
+
+![Gate/up decode candidates against complete rowwise MLP](figures/decode_gate_up_latency.png)
+
+![Down decode candidates against complete rowwise MLP](figures/decode_down_latency.png)
+
+### What the mappings establish
+
+Launch combining uses a second grid dimension to address the existing separate
+gate/up weights and outputs. It changes two dispatches into one, with the same
+dot products and BF16 stores. There is **no weight repacking, duplicate weight
+allocation, output copy or setup cost**. Isolated stage APIs still execute only
+the requested stage; the complete MLP combines gate/up. Both execution paths
+are checked, and profile identities distinguish six from seven dispatches.
+
+The one-output mapping has 4,864 SIMD groups for each gate/up projection;
+two-output ownership has 2,432, with two FP32 accumulators per lane. It halves
+requested input loads while retaining all weight loads: gate/up's combined
+source-level BF16 operand requests fall from 33.25 to 24.94 MiB. The measured
+whole-MLP regressions show that this tradeoff did not pay at these dimensions.
+These request counts are not measurements of DRAM traffic or register usage.
+
+Down starts with 896 output groups in 224 blocks, each lane accumulating 152
+products. Two/four cooperating groups use 448/896 blocks and 76/38 products per
+lane. A block stores four FP32 partials in 16 shared bytes, crosses one
+unconditional barrier, and merges in a fixed order. Requested input and weight
+loads are unchanged; there is no global partial buffer or extra dispatch.
+All variants have the same logical weights (26,150,656 bytes), R=1 workspace
+(44,288 bytes), and ring24 input/weight/workspace payload (627,703,040 bytes).
+See the [ownership counts](data/decode_ownership.json).
+
+### Diagnostic profile, not a selected optimization
+
+Variant 12 had the lowest worst-mode observed ratio among rejected candidates,
+so the declared diagnostic profile compared it with control 0. Each capture
+used ten warmups and 500 iterations on one input/weight set. Receipt and trace
+validation proved Metal execution and all seven dispatches per iteration,
+retaining **7,000 active GPU dispatch durations** from the same source as timing.
+
+| Stage | Control median GPU interval (µs) | Four-group-down median (µs) |
+| --- | ---: | ---: |
+| RMSNorm | 7.00 | 7.00 |
+| Gate | 51.33 | 51.62 |
+| Up | 50.69 | 50.33 |
+| SiLU | 3.71 | 3.71 |
+| Multiply | 3.29 | 3.29 |
+| Down | 58.83 | 52.67 |
+| Residual | 3.00 | 3.00 |
+
+The down interval is approximately 10.5% shorter in this instrumented capture,
+while gate/up remain nearly unchanged. Reducing per-lane products fourfold did
+not produce a fourfold kernel speedup: the implementation still requests all
+weights and pays synchronization/merge costs. This is consistent with a modest
+whole-MLP effect; it does not override the paired latency gate. Stage medians
+are not an additive end-to-end decomposition or a new speed claim.
+
+Gate/up account for 57.7% of the control's mean active GPU time and down 33.1%.
+The [profile table](data/decode_profile_summary.csv) retains medians, means,
+ranges and shares. No measured dispatch was fragmented and no target compiler
+spill event was reported. Optional limiter counters were not analyzed; no
+achieved-bandwidth, physical-register or occupancy claim follows.
+
+![Control v0 and diagnostic v12 stage shares](figures/decode_profile.png)
+
+### Correctness, evidence and reproduction
+
+The engine passed 102 Mojo tests, 66 final Python tooling tests, eleven
+pinned-reference tests and every benchmark route. Complete validation ran with
+unchanged source; its engine and numerical-test sources match the measured
+commit. Subsequent confirmation/plot tooling and the six-dispatch profile
+budget received the full Python suite and real benchmark-route checks.
+The [numerical record](data/decode_numerics.json) identifies those revisions
+explicitly and retains all checks and execution/source identities losslessly.
+
+All 19 supported mapping IDs passed the 43 development, three checkpoint and
+fourteen previously observed holdout cases. Decode mappings use R=1 prefixes;
+original mappings retain their full/chunked multi-row coverage. Tests include
+poisoned outputs, inactive guards, input preservation, rejected multi-row decode
+calls before enqueue, and twelve asynchronous calls using differing input rows.
+The six possible composition IDs exercise existing component kernels; they
+were numerically checked but did not enter the performance search.
+
+After selecting control 0 and diagnostic 12 and freezing their shared binary,
+the generator opened the three predeclared synthetic seeds and reserved
+checkpoint's last post-attention row exactly once. Both variants passed all
+four fresh cases. The record contains **58,977 checks**, including thirteen
+primitive checks; no frozen numerical gate failed and all recorded full/chunk
+comparisons were bit-exact. FP32 reduction order changes did not authorize
+changing any BF16 boundary, reference source or tolerance. One initial harness
+failure compared a one-row input prefix with a full fixture; its length check
+was corrected and rerun, with no kernel or numerical-policy change.
+
+Source `eb3169b` reproduces the measured implementation. The
+[benchmark tooling guide](../../src/llm_mojo/benchmarks/README.md#single-token-mlp-decode)
+contains build, screen, confirmation, capture and holdout commands. Regenerate
+these tables and figures with the existing plotting command above. Retained
+records contain dtype, shape/layout, synchronization boundaries, source/binary/
+fixture identities, hardware/software and run conditions. Arrays, binaries and
+full traces remain outside Git. Ring24 remains 24 distinct copies of one
+frozen MLP workload with shared workspace, not a decoder stack or guaranteed
+cold DRAM. Full-decoder throughput and model-level correctness remain unmeasured.

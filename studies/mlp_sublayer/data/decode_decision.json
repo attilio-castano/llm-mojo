@@ -1,0 +1,40 @@
+{
+  "source_commit": "eb3169bf7ae31f7505bec2f188bb09b5a8b6a980",
+  "candidate_binary_sha256": "83c9e286026491d93c32624060761332941be9266fb13e662f36b481c7f2cb48",
+  "selected_variant": 0,
+  "diagnostic_variant": 12,
+  "holdout_variants": [
+    0,
+    12
+  ],
+  "reason": "No screen candidate passed both modes. Variant 12 minimizes the worst-mode observed ratio among rejected candidates. Diagnostic only; not selected or promoted.",
+  "screen_selection_sha256": "db19e89c9dd3e05442c8fa03c521f83c7030b646b3f4eab45f79b427798767d9",
+  "confirmation_run_sha256": "b44c91ddb951c8a1ca94704e44b403c7c7bc45087e0cd6396d6558470160c3a2",
+  "confirmation_summary": [
+    {
+      "rows": 1,
+      "layers": 1,
+      "candidate": 0,
+      "control_us": 469.0,
+      "candidate_us": 427.0,
+      "ratio": 0.9661440473594841,
+      "ratio_min": 0.4752136752136752,
+      "ratio_max": 2.7713365539452495,
+      "noise_floor": 1.7713365539452495,
+      "decision": "calibration"
+    },
+    {
+      "rows": 1,
+      "layers": 24,
+      "candidate": 0,
+      "control_us": 194.86458333333331,
+      "candidate_us": 194.76041666666669,
+      "ratio": 0.998130158411688,
+      "ratio_min": 0.9956074566102422,
+      "ratio_max": 1.0021337885415555,
+      "noise_floor": 0.05,
+      "decision": "calibration"
+    }
+  ],
+  "holdouts_observed": false
+}
