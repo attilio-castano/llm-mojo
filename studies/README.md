@@ -3,8 +3,8 @@
 These studies explain how the existing Mojo operations map work onto the Apple
 M4 Pro. Start with the value and storage contracts in [model](../docs/model.md)
 and [layouts](../docs/layouts.md), then read a topic below. Each comparison is
-operation-level except for the composed attention and MLP sublayers; a working decoder
-block and full-model generation remain next.
+operation-level except for the composed attention/MLP sublayers and the accepted
+decoder layer. Full-model forward parity is next.
 
 | Topic | Question |
 | --- | --- |
@@ -16,6 +16,14 @@ block and full-model generation remain next.
 | [GQA prefill](gqa_prefill/README.md) | How do query tiling, online softmax and Apple matrix instructions interact? |
 | [MLP sublayer](mlp_sublayer/README.md) | How do tiled projections change complete SwiGLU latency under its frozen BF16 rounding contract? |
 | [Attention sublayer](attention_sublayer/README.md) | Where does time go in the complete block under the selected FP32 attention policy? |
+| [Decoder layer](decoder_layer/README.md) | How do complete layer costs shift between prefill, cached chunks and decode? |
+
+The decoder study composes both residual branches without an added copy or
+synchronization. Its seven reserved cases pass, and it retains 960 baseline
+latency observations and 2,400 measured dispatches. MLP contributes 79% of
+active time at full R=T=256; attention contributes 67% for R=64,T=4096. Decode
+noise and diagnostic gaps remain explicit. The next step is full-model logits
+parity, with no automatic optimization follow-up.
 
 The attention-sublayer study uses the explicit CPU FP32 attention policy as
 its accuracy baseline. It has 17 synthetic and three checkpoint cases; the

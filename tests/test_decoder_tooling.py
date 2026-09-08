@@ -91,7 +91,7 @@ class DecoderToolingTests(unittest.TestCase):
 class ProfileEvidenceTests(unittest.TestCase):
     def test_curator_accepts_decoder_identity_and_preserves_all_dispatches(self):
         from llm_mojo.benchmarks import profile_summary as curator
-        from llm_mojo.benchmarks.study import load_decoder_profile
+        from llm_mojo.benchmarks.study import load_decoder_profile, load_decoder_windows
         from llm_mojo.benchmarks.analyze_trace import coalesce_compute_commands, duration_summary
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);output=root/'output';output.mkdir();tables={}
@@ -124,6 +124,11 @@ class ProfileEvidenceTests(unittest.TestCase):
             with patch.object(curator,'read_table',side_effect=lambda path:tables[path]):
                 curator.collect(root,output,decoder_layer=True)
             self.assertEqual(len(load_decoder_profile(output)),48)
+            windows=load_decoder_windows(output)
+            self.assertEqual(sum(w['dispatches'] for w in windows),2400)
+            for window,(_,_,n) in zip(windows,contract.PROFILES):
+                self.assertEqual(window['active_us'],n*16*2/1000)
+                self.assertEqual(window['enclosing_us'],(n*16*3-1)/1000)
             result=json.loads((output/'profiles.json').read_text())
             self.assertTrue(all(c['spills']['status']=='not_analyzed' for c in result['captures']))
 

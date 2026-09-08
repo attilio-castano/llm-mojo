@@ -2,9 +2,10 @@
 
 Status: v1 upstream reference package qualified and frozen, based on merged
 source `7f16d6f`. The 43 synthetic development and three checkpoint cases pass
-the declared upstream full/chunk gates. The Mojo composition passes development
-and behavior checks; clean-candidate acceptance and retained performance results
-are still pending. Recipes and
+the declared upstream full/chunk gates. The Mojo composition passes development,
+behavior and seven reserved cases at frozen candidate `d67fd94`. The completed
+[layer study](../studies/decoder_layer/README.md) retains 960 latency observations
+and 2,400 measured profile dispatches. Recipes and
 initial acceptance targets were declared before the new layer outputs.
 The [execution plan](decoder-layer-plan.md) defines the local work scope,
 ordered evidence gates, measurement budget, and stop conditions.
@@ -395,7 +396,11 @@ error, then check the declared full/chunk schedules. The twelve-decode test
 retains all four boundaries before overwrite and compares with a separate
 workspace/cache execution. Eight negative controls establish sensitivity to
 wrong residuals, norm inputs/weights, absolute position, mask and cache prefix.
-These are development results; reserved candidate acceptance remains pending.
+Reserved acceptance subsequently passed all seven declared cases with the exact
+frozen binary: 2,468 core checks plus preservation and behavior records. Its
+largest whole-layer Y scaled error is 0.015504 against the 0.03125 gate. See the
+[numerical evidence](../studies/decoder_layer/numerics.json) for complete coverage,
+candidate/fixture identity and original checks.
 
 The registered `decoder_layer` benchmark uses one fixed policy (ID 0), the
 six declared shapes and control self-pairs. Prefix preparation executes the
@@ -406,3 +411,20 @@ adversarial check changes 24 hidden-coordinate sign patterns, absorbing each
 sign into the corresponding input/weight axes so upstream expected outputs
 transform by the same sign. This preserves arithmetic while detecting wrong
 allocation selection. It does not represent 24 learned model layers.
+
+## Completed baseline and next step
+
+The [study](../studies/decoder_layer/README.md) reports the full six-workload grid
+on Apple M4 Pro / Metal. At full R=T=256, MLP contributes 78.8% of captured
+active GPU time; for R=64,T=4096, attention contributes 66.8%. Decode has 16.1%
+gaps in the enclosing diagnostic window and substantial latency self-pair noise.
+These gaps do not isolate host overhead. No kernel optimization was selected.
+
+The one malformed decode capture was preserved and retried once after fixing
+the capture parser's rejection of valid MLP mapping 0 (`05e1def`). The retry
+used the same `d67fd94` binary; no engine or numerical policy changed. Full
+traces remain external, with compact samples and receipts retained in Git.
+
+The next milestone is full-model forward parity: compose embeddings, all 24
+layers, final normalization and LM head under a separately declared logits
+contract. This baseline does not yet establish model logits or generation.

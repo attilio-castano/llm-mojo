@@ -1,0 +1,220 @@
+{
+  "format": "lossless-json-gzip-v1",
+  "record": "numerics.json.gz",
+  "sha256": "1d8b8c8ec17ccc8f50172a89dbe163d73b7958f84e0fc5b342d3b3e7499ee440",
+  "uncompressed_sha256": "145bc9ccd64781e4e027f1fcf9847f2d1fe1dc51d8fa733289362a8fe03e90c6",
+  "candidate_commit": "d67fd94fa05f65b7d754d210cb38ba6eeb535549",
+  "candidate_binary_sha256": "b52eda84787e35f3c11c87ea0770c32dbfefd877c81673a3ae6b1e57fa52c93d",
+  "status": "passed",
+  "development_cases": 43,
+  "checkpoint_cases": 3,
+  "reserved_cases": 7,
+  "development_core_checks": 20924,
+  "checkpoint_core_checks": 636,
+  "reserved_core_checks": 2468,
+  "records": {
+    "development": 21739,
+    "checkpoint": 835,
+    "reserved": 2733
+  },
+  "runtime": {
+    "device": "Apple M4 Pro",
+    "backend": "metal"
+  },
+  "development_maxima": {
+    "B_att": {
+      "case": "h896_i4864_nq14_nk2_d64_t17_s4013_base",
+      "policy": 0,
+      "schedule": "full",
+      "mode": "layer",
+      "kind": "boundary",
+      "stage": "B_att",
+      "start": 0,
+      "rows": 17,
+      "inactive_exact": true,
+      "elements": 15232,
+      "bit_differences": 750,
+      "max_abs": 0.0078125,
+      "max_scaled": 0.003787878787878788,
+      "max_bf16_steps": 28545,
+      "zero_sign_differences": 0,
+      "worst_index": [
+        9,
+        546
+      ],
+      "actual": 1.0546875,
+      "reference": 1.0625,
+      "failed": 0
+    },
+    "Z": {
+      "case": "h896_i4864_nq14_nk2_d64_t17_s4001_large_x",
+      "policy": 0,
+      "schedule": "full",
+      "mode": "layer",
+      "kind": "boundary",
+      "stage": "Z",
+      "start": 0,
+      "rows": 17,
+      "inactive_exact": true,
+      "elements": 15232,
+      "bit_differences": 10,
+      "max_abs": 0.125,
+      "max_scaled": 0.006289308176100629,
+      "max_bf16_steps": 2,
+      "zero_sign_differences": 0,
+      "worst_index": [
+        8,
+        833
+      ],
+      "actual": -19.0,
+      "reference": -18.875,
+      "failed": 0
+    },
+    "B_mlp": {
+      "case": "h896_i4864_nq14_nk2_d64_t4096_s4001_base",
+      "policy": 0,
+      "schedule": "full",
+      "mode": "layer",
+      "kind": "boundary",
+      "stage": "B_mlp",
+      "start": 0,
+      "rows": 4096,
+      "inactive_exact": true,
+      "elements": 3670016,
+      "bit_differences": 1137097,
+      "max_abs": 0.015625,
+      "max_scaled": 0.009009009009009009,
+      "max_bf16_steps": 30372,
+      "zero_sign_differences": 0,
+      "worst_index": [
+        2870,
+        56
+      ],
+      "actual": -0.2890625,
+      "reference": -0.30078125,
+      "failed": 0
+    },
+    "Y": {
+      "case": "h896_i4864_nq14_nk2_d64_t4096_s4013_base",
+      "policy": 0,
+      "schedule": "full",
+      "mode": "layer",
+      "kind": "boundary",
+      "stage": "Y",
+      "start": 0,
+      "rows": 4096,
+      "inactive_exact": true,
+      "elements": 3670016,
+      "bit_differences": 638347,
+      "max_abs": 0.03125,
+      "max_scaled": 0.015267175572519083,
+      "max_bf16_steps": 30464,
+      "zero_sign_differences": 0,
+      "worst_index": [
+        1484,
+        334
+      ],
+      "actual": 0.0390625,
+      "reference": 0.0234375,
+      "failed": 0
+    }
+  },
+  "reserved_maxima": {
+    "B_att": {
+      "case": "h896_i4864_nq14_nk2_d64_t17_s5011_base",
+      "policy": 0,
+      "schedule": "full",
+      "mode": "layer",
+      "kind": "boundary",
+      "stage": "B_att",
+      "start": 0,
+      "rows": 17,
+      "inactive_exact": true,
+      "elements": 15232,
+      "bit_differences": 294,
+      "max_abs": 0.0078125,
+      "max_scaled": 0.0035842293906810036,
+      "max_bf16_steps": 251,
+      "zero_sign_differences": 0,
+      "worst_index": [
+        5,
+        707
+      ],
+      "actual": 1.171875,
+      "reference": 1.1796875,
+      "failed": 0
+    },
+    "Z": {
+      "case": "h896_i4864_nq14_nk2_d64_t17_s5011_base",
+      "policy": 0,
+      "schedule": "full",
+      "mode": "layer",
+      "kind": "boundary",
+      "stage": "Z",
+      "start": 0,
+      "rows": 17,
+      "inactive_exact": true,
+      "elements": 15232,
+      "bit_differences": 94,
+      "max_abs": 0.015625,
+      "max_scaled": 0.00558659217877095,
+      "max_bf16_steps": 16,
+      "zero_sign_differences": 0,
+      "worst_index": [
+        5,
+        707
+      ],
+      "actual": 0.390625,
+      "reference": 0.3984375,
+      "failed": 0
+    },
+    "B_mlp": {
+      "case": "h896_i4864_nq14_nk2_d64_t4096_s5011_base",
+      "policy": 0,
+      "schedule": "full",
+      "mode": "layer",
+      "kind": "boundary",
+      "stage": "B_mlp",
+      "start": 0,
+      "rows": 4096,
+      "inactive_exact": true,
+      "elements": 3670016,
+      "bit_differences": 1357518,
+      "max_abs": 0.015625,
+      "max_scaled": 0.007367916616748532,
+      "max_bf16_steps": 30402,
+      "zero_sign_differences": 0,
+      "worst_index": [
+        1394,
+        651
+      ],
+      "actual": 0.01141357421875,
+      "reference": 0.0189208984375,
+      "failed": 0
+    },
+    "Y": {
+      "case": "h896_i4864_nq14_nk2_d64_t4096_s5011_base",
+      "policy": 0,
+      "schedule": "full",
+      "mode": "layer",
+      "kind": "boundary",
+      "stage": "Y",
+      "start": 0,
+      "rows": 4096,
+      "inactive_exact": true,
+      "elements": 3670016,
+      "bit_differences": 663359,
+      "max_abs": 0.03125,
+      "max_scaled": 0.015503875968992248,
+      "max_bf16_steps": 30720,
+      "zero_sign_differences": 0,
+      "worst_index": [
+        1199,
+        292
+      ],
+      "actual": -0.0078125,
+      "reference": 0.0078125,
+      "failed": 0
+    }
+  }
+}

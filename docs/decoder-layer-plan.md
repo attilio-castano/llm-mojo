@@ -42,8 +42,7 @@ already in this worktree. The user approved execution on 2026-09-08.
   15 Mojo suites / 107 tests, all reference checks and benchmark smoke routes.
   The final checkpoint replay also passed all five decoder tests.
 - Task 4 routes pass: all six workloads in hot/ring24 and four adversarial
-  ring shapes. Profiles and numerical build/evaluation tools are implemented;
-  reserved capture is not yet run. Ten decoder tooling tests pass.
+  ring shapes. Profiles and numerical build/evaluation tools are implemented.
 - Preflight evidence combines exact sentinel preservation (including the first
   attention dispatch's normalization output) with inspection of the shared pure
   preflight before any enqueue. No runtime dispatch-counter API was introduced.
@@ -54,6 +53,24 @@ already in this worktree. The user approved execution on 2026-09-08.
 - Reserved run root: `/private/tmp/llm-mojo-decoder-20260908` (confirmed absent
   before allocation). The numerical candidate, benchmark binaries, three profile
   binaries, holdout capture and retained-run originals will live here.
+
+- Task 5 complete: candidate and all measurement binaries frozen at clean
+  `d67fd94`; all seven reserved cases pass on Apple M4 Pro / Metal. Evaluation
+  verifies 2,468 required core checks, 132 protected-storage checks and the
+  auxiliary behavior/negative-control records. Largest reserved Y scaled error
+  is 0.015504, below 0.03125; no numerical policy or candidate changed.
+- Task 6 complete: all 960 timing observations and three diagnostic profiles /
+  2,400 measured dispatches retained. The original decode capture was invalid
+  because its parser rejected MLP mapping 0. Capture-only repair `05e1def`
+  passes its regression and the single allowed retry uses the identical frozen
+  binary. The failed trace/receipt remains in `profiles/r1-t4096-v0-attempt1`.
+  No valid measurement was discarded or repeated.
+- Task 7 complete: compact numerical, timing and profile evidence, tables and
+  two inspected figures are in `studies/decoder_layer`. Offline readers bind
+  accepted source to measured source and verify complete grids; all 92 Python
+  checks pass. Capture-window derivation and report changes require no new GPU
+  run. The conclusion recommends full-model forward parity next, with no
+  automatic follow-up implementation.
 
 ## Execution scope
 
@@ -284,13 +301,13 @@ retained timing or reserved output has been collected.
   Add `decoder_acceptance.py` using the existing locked script environment and
   the same verified-local-asset contract. Refuse overwrite and require a clean,
   verified candidate receipt before any held-out model execution.
-- [ ] With Task 4 routes complete, run full validation and commit that source.
+- [x] With Task 4 routes complete, run full validation and commit that source.
   Freeze numerical and measurement binaries at this source so engine changes
   are not needed after opening holdouts. Set the run directory below, then build
   the measurement binary with the shared command shown here before capture.
   Build the three profile executables through the existing profile builder at
   this same source and retain their receipts as well.
-- [ ] Set `DECODER_RUN_ROOT` to a new absolute directory under `/private/tmp`,
+- [x] Set `DECODER_RUN_ROOT` to a new absolute directory under `/private/tmp`,
   record it in progress notes, and refuse existing outputs. Implement and run:
 
 ```sh
@@ -307,7 +324,7 @@ work under the policy above. Do not quietly replace the candidate or holdouts.
 
 ## Task 6: Collect the accepted baseline
 
-- [ ] Execute the registered study through the shared CLI:
+- [x] Execute the registered study through the shared CLI:
 
 ```sh
 uv run --locked llm-mojo-bench run --build-dir "$DECODER_RUN_ROOT/bench-build" --output "$DECODER_RUN_ROOT/timing" --studies decoder_layer
@@ -325,18 +342,18 @@ repeat a valid measurement. Hardware-condition failures pause collection.
 
 ## Task 7: Curate evidence and close the milestone
 
-- [ ] Create `studies/decoder_layer/` when evidence exists. Retain the readable
+- [x] Create `studies/decoder_layer/` when evidence exists. Retain the readable
   report, compact numerical records, run/profile identities, compressed raw
   samples, regenerated summaries and only the figures used by the report.
-- [ ] Test the evidence readers against missing/duplicate observations, modified
+- [x] Test the evidence readers against missing/duplicate observations, modified
   raw files, false route/device identity and incomplete dispatch sequences.
-- [ ] Extend the common plot command, then regenerate the tables/figures from
+- [x] Extend the common plot command, then regenerate the tables/figures from
   retained evidence without GPU execution. Confirm reproducible numerical
   summaries and complete sample counts.
-- [ ] Update the contract, study index and roadmap to the actual achieved state.
+- [x] Update the contract, study index and roadmap to the actual achieved state.
   Keep reference qualification, candidate acceptance and performance evidence
   distinct. Report memory ownership/footprint and ring24's limitations.
-- [ ] Run relevant tooling/evidence checks and `git diff --check`; rerun full
+- [x] Run relevant tooling/evidence checks and `git diff --check`; rerun full
   numerical validation only if engine/oracle changes since the last full pass
   require it. Commit the final report locally with its measured source identity.
 

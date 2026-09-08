@@ -842,7 +842,7 @@ def render_mlp(directory, record, samples, summary):
 
 
 def render_decoder(directory,record,samples,summary):
-    from .study import load_decoder_profile
+    from .study import load_decoder_profile, load_decoder_windows
     from .decoder_layer_contract import WORKLOADS, PROFILES, STAGES
     prefill_style()
     table(directory,'summary.csv',summary)
@@ -857,10 +857,12 @@ def render_decoder(directory,record,samples,summary):
     fig.savefig(directory/'latency.png',dpi=180);plt.close(fig)
     profile=load_decoder_profile(directory)
     table(directory,'profile_summary.csv',profile)
+    table(directory,'profile_windows.csv',load_decoder_windows(directory))
     fig,axes=plt.subplots(1,3,figsize=(13,6),layout='constrained')
     for ax,(r,t,n) in zip(axes,PROFILES):
         rows=[next(s for s in profile if s['query_rows']==r and s['rows']==t and s['stage']==stage) for stage in STAGES]
         ax.barh(STAGES,[s['active_share_percent'] for s in rows],color='#b65e3b')
+        ax.set_xlim(0,65)
         ax.invert_yaxis();ax.set_xlabel('share of captured GPU active time (%)');ax.set_title(f'R={r}, T={t} · {n} iterations')
     fig.suptitle('Where decoder GPU active time goes · one diagnostic capture per workload')
     fig.savefig(directory/'active_time.png',dpi=180);plt.close(fig)

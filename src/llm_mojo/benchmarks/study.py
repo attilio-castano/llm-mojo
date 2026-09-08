@@ -610,3 +610,24 @@ def load_decoder_profile(directory,prefix=''):
     return [dict(query_rows=r,rows=t,stage=s,count=len(v),median_us=statistics.median(v),
                  mean_us=statistics.mean(v),active_share_percent=100*sum(v)/totals[r,t])
             for (r,t,s),v in grouped.items()]
+
+
+def load_decoder_windows(directory):
+    """Enclose each complete capture; gaps include scheduling and preemption."""
+    directory=Path(directory)
+    load_decoder_profile(directory)
+    grouped=defaultdict(list)
+    with gzip.open(directory/'profile_samples.csv.gz','rt',newline='') as stream:
+        for row in csv.DictReader(stream):
+            grouped[int(row['query_rows']),int(row['rows'])].append(row)
+    result=[]
+    for r,t,n in decoder.PROFILES:
+        rows=grouped[r,t]
+        active=sum(int(row['duration_ns']) for row in rows)
+        span=max(int(row['end_ns']) for row in rows)-min(int(row['start_ns']) for row in rows)
+        if not 0<active<=span:
+            raise ValueError('decoder active time exceeds its enclosing window')
+        result.append(dict(query_rows=r,rows=t,iterations=n,dispatches=len(rows),
+            active_us=active/1000,enclosing_us=span/1000,gap_us=(span-active)/1000,
+            gap_share_percent=100*(span-active)/span))
+    return result

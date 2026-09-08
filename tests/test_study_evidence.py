@@ -16,6 +16,32 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_decoder_retained_acceptance_matches_measured_source(self):
+        from llm_mojo.decoder_validation import validate_results
+        from llm_mojo.benchmarks.study import load_decoder_windows
+        directory=ROOT/'studies/decoder_layer'
+        numerics=load_numerical_record(directory/'numerics.json')
+        acceptance=numerics['acceptance'];receipt=acceptance['receipt']
+        self.assertEqual(receipt['status'],'passed')
+        self.assertEqual(len(acceptance['manifest']['cases']),7)
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'checks.jsonl'
+            path.write_text(''.join(json.dumps(r)+'\n' for r in acceptance['checks']))
+            coverage=validate_results(path,acceptance['manifest']['cases'])
+        self.assertEqual(coverage['checks'],2468)
+        run,samples,_=load_run(directory)
+        self.assertEqual(len(samples),960)
+        self.assertEqual(run['repository'],receipt['build']['source']['repository'])
+        for name,digest in run['build']['sources'].items():
+            self.assertEqual(digest,receipt['build']['source']['sources'][name])
+        profiles=json.loads((directory/'profiles.json').read_text())
+        self.assertEqual(profiles['common']['repository'],run['repository'])
+        self.assertEqual(profiles['common']['source_sha256'],run['build']['sources'])
+        self.assertEqual(sum(r['count'] for r in load_profile(directory)),2400)
+        self.assertEqual(sum(r['dispatches'] for r in load_decoder_windows(directory)),2400)
+        for name,digest in numerics['development']['core_source_sha256'].items():
+            self.assertEqual(digest,receipt['build']['source']['sources'][name])
+
     def test_compact_numerical_records_preserve_original_and_reject_corruption(self):
         directory = ROOT / 'studies/attention_sublayer/data'
         for name in ('decode_validation', 'prefill_validation', 'wo_validation', 'precision_numerics'):
@@ -140,7 +166,7 @@ class EvidenceTests(unittest.TestCase):
             for record in evidence_directory(directory).glob('*run.json'):
                 _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
-        self.assertEqual(count, 104480)  # includes 1,280 bounded MLP decode samples
+        self.assertEqual(count, 105440)  # includes 960 decoder baseline samples
         directory = ROOT / 'studies/mlp_sublayer/data'
         from llm_mojo.benchmarks.study import select_mlp_decode
         decode_builds=[]
