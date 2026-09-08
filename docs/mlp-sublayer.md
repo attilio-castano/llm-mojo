@@ -362,6 +362,13 @@ gate/up mappings 8, 10, 13, 14, 17 and 18 enqueue six dispatches; all other mapp
 enqueue seven. Combining launches preserves separate gate/up storage and all
 seven BF16 boundaries. The isolated-stage API always enqueues only the named stage.
 
+Recorded holdout evaluation uses the [numerical execution runner](development.md#tests).
+A build receipt binds source and binary; fixture capture verifies that receipt
+before exposure. The evaluator launches the exact binary and requires complete
+numerical coverage before recording a pass. Capture completion and an environment
+variable naming a candidate do not prove candidate execution. Historical campaign
+receipts remain unchanged; later evaluations of these fixtures are regressions.
+
 The tests verify poisoned outputs are completely written, inactive
 workspace/guard regions remain untouched, and rejected calls leave buffers
 unchanged. Twelve repeated asynchronous calls retain each call's output before

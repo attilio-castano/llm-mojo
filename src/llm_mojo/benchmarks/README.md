@@ -356,8 +356,12 @@ folder. The normal plot command regenerates decode tables and figures.
 The explicit `mlp_acceptance.py --decode` path captures only the declared
 fresh single-row holdouts, after a clean candidate/binary freeze. It requires
 the verified local checkpoint directory and refuses to overwrite its manifest.
-`MLP_SPLIT=decode_holdout MLP_VARIANTS=0,V MLP_CANDIDATE_BINARY=...` binds the
-numerical run to that candidate. Older splits remain regression data. Decode
+The candidate must have a numerical build receipt. Use the
+[recorded numerical evaluation workflow](../../../docs/development.md#tests)
+to launch the exact candidate and bind complete results to its build and fixture
+hashes. Capture completion alone does not establish numerical acceptance, and
+`MLP_CANDIDATE_BINARY` is no longer accepted as proof of execution. Older splits
+remain regression data. Decode
 variants exercise row-one prefixes of all existing fixtures and varying input
 rows under asynchronous reuse; original variants still exercise full/chunked
 multi-row execution.

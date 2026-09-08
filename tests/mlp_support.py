@@ -26,7 +26,9 @@ def data_root(path):
 
 
 def holdout_catalog(optimization=False, decode=False):
-    import subprocess
+    if os.environ.get('MLP_CANDIDATE_BINARY'):
+        raise ValueError('MLP_CANDIDATE_BINARY cannot identify the running executable; '
+                         'use python -m llm_mojo.mlp_validation evaluate')
     path = ROOT.parent / ('mlp_decode_holdout' if decode else 'mlp_optimization_holdout' if optimization else 'mlp_holdout') / 'manifest.json'
     data = json.loads(path.read_text())
     expected = data.pop('manifest_payload_sha256')
@@ -35,11 +37,6 @@ def holdout_catalog(optimization=False, decode=False):
     if optimization or decode:
         declaration = Path(__file__).parent/'fixtures'/('mlp_decode_holdout.json' if decode else 'mlp_optimization_holdout.json')
         assert hashlib.sha256(declaration.read_bytes()).hexdigest() == data['candidate']['holdout_spec_sha256']
-    if os.environ.get('MLP_CANDIDATE_BINARY'):
-        binary = Path(os.environ['MLP_CANDIDATE_BINARY'])
-        assert hashlib.sha256(binary.read_bytes()).hexdigest() == data['candidate']['binary_sha256']
-        assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip() == data['candidate']['commit']
-        assert not subprocess.check_output(['git','status','--porcelain'],text=True).strip()
     return data
 
 

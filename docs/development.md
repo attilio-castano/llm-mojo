@@ -160,9 +160,31 @@ decode campaign's four observed holdouts can be checked with
 `MLP_SPLIT=decode_holdout MLP_VARIANTS=0,12`; variant 12 is a diagnostic candidate,
 not a promoted route.
 
-During the initial frozen-candidate acceptance, `MLP_CANDIDATE_BINARY` additionally binds
-the binary hash and clean commit to the capture manifest. Leave it unset for
-later regression runs after source changes. The `--optimization` acceptance
+For recorded evaluation, build and launch the numerical candidate through the
+project environment:
+
+```bash
+uv run --locked python -m llm_mojo.mlp_validation build --binary /private/tmp/mlp-numerical-candidate
+uv run --locked python -m llm_mojo.mlp_validation evaluate --binary /private/tmp/mlp-numerical-candidate --output /private/tmp/mlp-numerical-regression --split decode_holdout --variants 0 12 --regression
+```
+
+The build requires clean source and writes an adjacent `.provenance.json`.
+Evaluation launches that exact executable, verifies build/fixture stability,
+checks complete case/mapping/stage/reuse coverage and Metal identity, and retains
+an `evaluation.json`, output log and numerical records in a new output directory.
+It removes inherited `MLP_*` filters and debug synchronization. `--regression`
+labels already observed fixtures and permits a new candidate; without it, the
+binary and commit must also match the candidate frozen in the capture manifest.
+This match alone does not make previously observed fixtures fresh again.
+
+For a new declared holdout capture, pass the receipted binary to
+`tests/fixtures/mlp_acceptance.py --candidate-binary ...`. Capture verifies the
+build before exposure and only generates fixtures; its `complete` status is
+not numerical acceptance. Run the evaluator afterward without `--regression`.
+The former `MLP_CANDIDATE_BINARY` environment shortcut is rejected: naming a
+file cannot establish that it produced the test results. Direct `MLP_SPLIT`
+suite runs remain useful regression checks but do not create execution receipts.
+The `--optimization` acceptance
 generator refuses to overwrite its existing output directory; replaying the
 same declared inputs does not make them independent holdouts again.
 

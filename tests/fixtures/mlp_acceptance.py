@@ -10,6 +10,8 @@
 
 The adjacent lock is a symlink to the existing reference script lock. This
 entrypoint extends evaluation without modifying any frozen reference source.
+Completion means fixtures were captured; candidate execution is recorded
+separately by llm_mojo.mlp_validation in the locked project environment.
 """
 import os
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
@@ -181,6 +183,11 @@ def main():
         p.error('explicit candidate binary and local checkpoint directory are required')
     if git('status', '--porcelain'):
         raise RuntimeError('holdouts require a clean frozen candidate')
+    # Read the numerical build receipt before any holdout exposure. The
+    # verifier uses only stdlib dependencies in this isolated reference env.
+    sys.path.insert(0, str(REPO / 'src'))
+    from llm_mojo.mlp_validation import verify_build
+    build_record = verify_build(args.candidate_binary)
     candidate = dict(commit=git('rev-parse','HEAD'), binary_sha256=sha(args.candidate_binary),
                      generator_sha256=sha(__file__), reference_sha256=sha(HERE/'mlp/checksums.json'))
     declaration = HERE / ('mlp_decode_holdout.json' if args.decode else 'mlp_optimization_holdout.json')
@@ -191,6 +198,7 @@ def main():
     # Write the exposure event before any holdout model computation.
     record = dict(candidate=candidate, upstream=origin, specification=specification(),
                   status='started', holdout_outputs_observed=True, arrays={}, cases={})
+    record['candidate_build'] = build_record
     if extra is not None:
         record['additional_holdout_specification'] = extra
     def save_record():
@@ -227,6 +235,7 @@ def main():
         print('captured',name,flush=True)
     assert not git('status','--porcelain') and git('rev-parse','HEAD') == candidate['commit']
     assert sha(args.candidate_binary) == candidate['binary_sha256']
+    assert verify_build(args.candidate_binary) == build_record
     assert sha(__file__) == candidate['generator_sha256']
     if extra is not None:
         assert sha(declaration) == candidate['holdout_spec_sha256']
