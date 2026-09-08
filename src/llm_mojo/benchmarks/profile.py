@@ -53,7 +53,7 @@ def build_profile(args):
     allowed = decoder.VARIANTS if is_decoder else mlp.VARIANTS if is_mlp else sublayer.VARIANTS if is_sublayer else (prefill.VARIANTS if is_prefill else VARIANTS)
     if args.profile_variant not in allowed:
         raise RuntimeError('unknown profile variant for operation')
-    spec = (dict(dispatches=16) if is_decoder else dict(dispatches=mlp.specification(args.profile_variant,args.profile_rows)['dispatches_per_iteration']) if is_mlp else dict(dispatches=sublayer.specification(args.profile_variant,query_rows,args.profile_rows)['dispatches_per_iteration']) if is_sublayer else
+    spec = (dict(dispatches=decoder.specification(args.profile_variant,query_rows,args.profile_rows)["dispatches_per_iteration"]) if is_decoder else dict(dispatches=mlp.specification(args.profile_variant,args.profile_rows)['dispatches_per_iteration']) if is_mlp else dict(dispatches=sublayer.specification(args.profile_variant,query_rows,args.profile_rows)['dispatches_per_iteration']) if is_sublayer else
             dict(dispatches=3 if args.profile_variant<=1 else 1) if is_prefill
             else specification(args.profile_variant, args.profile_rows))
     if (

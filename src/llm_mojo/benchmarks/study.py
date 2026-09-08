@@ -334,7 +334,7 @@ def summarize(samples, spec):
             raise ValueError('sample implementation differs from requested arm')
         grouped[(s.get('query_rows',0),s['rows'], s['layers'], s['candidate'], s['block'], s['arm'])].append(s['us'])
     expected = {(w.get('query_rows',0), b, w['rows'], l, c, a, n) for b in range(1, BLOCKS + 1)
-                for w in workloads(spec) for l in spec.get('layers', (1, 24)) for c in spec['candidates']
+                for w,l,c in comparisons(spec)
                 for a in ('control', 'candidate') for n in range(REPETITIONS)}
     if observed != expected:
         raise ValueError('incomplete or unexpected study grid, including self-pair calibration')
@@ -347,7 +347,7 @@ def summarize(samples, spec):
                 return [statistics.median(grouped[(query_rows,rows, layers, candidate, b, arm)]) for b in range(1, BLOCKS + 1)]
             noise_ratios = [a / b for a, b in zip(medians(spec['control'], 'candidate'), medians(spec['control'], 'control'))]
             floor = max(0.05, max(abs(1 - r) for r in noise_ratios))
-            for candidate in spec['candidates']:
+            for candidate in candidates_for(spec,workload,layers):
                 a, b = medians(candidate, 'candidate'), medians(candidate, 'control')
                 ratios = [x / y for x, y in zip(a, b)]
                 ratio = statistics.median(ratios)
@@ -473,7 +473,7 @@ def load_profile(directory, prefix=''):
     directory = evidence_directory(directory)
     record = json.loads((directory / (prefix+'profiles.json')).read_text())
     path = directory / (prefix+'profile_samples.csv.gz')
-    if record.get('schema') == 5:
+    if record.get('schema') in (5,6):
         return load_decoder_profile(directory,prefix)
     if record.get('schema') == 4:
         return load_mlp_profile(directory,prefix)
@@ -575,41 +575,51 @@ def load_decoder_profile(directory,prefix=''):
     directory=Path(directory)
     record=json.loads((directory/(prefix+'profiles.json')).read_text())
     path=directory/(prefix+'profile_samples.csv.gz')
-    if record.get('schema')!=5 or sha(path)!=record['samples_sha256']:
+    selected=record.get('schema')==6
+    if record.get('schema') not in (5,6) or sha(path)!=record['samples_sha256']:
         raise ValueError('decoder profile evidence changed')
-    if record.get('specification')!={'workloads':[[r,t] for r,t,n in decoder.PROFILES],'variants':[0]}:
-        raise ValueError('decoder profile specification changed')
-    grid={(r,t,0) for r,t,n in decoder.PROFILES}
+    if selected:
+        spec=record['specification']
+        if hashlib.sha256((json.dumps(spec['selection'],indent=2)+'\n').encode()).hexdigest()!=spec['selection_sha256']:
+            raise ValueError('decoder profile selection identity changed')
+        grid=set(decoder.profile_selection(spec['selection']))
+        if sorted(map(list,grid))!=sorted(record['specification']['captures']):
+            raise ValueError('decoder selected profile grid changed')
+    else:
+        if record.get('specification')!={'workloads':[[r,t] for r,t,n in decoder.PROFILES],'variants':[0]}:
+            raise ValueError('decoder profile specification changed')
+        grid={(r,t,0) for r,t,n in decoder.PROFILES}
     captures=record['captures']
-    if len(captures)!=3 or {(c['query_rows'],c['rows'],c['variant']) for c in captures}!=grid:
+    if len(captures)!=len(grid) or {(c['query_rows'],c['rows'],c['variant']) for c in captures}!=grid:
         raise ValueError('decoder profile capture census changed')
     expected=set()
     for c in captures:
-        r,t=c['query_rows'],c['rows'];identity=c['capture'];w=identity['workload']
+        r,t,v=c['query_rows'],c['rows'],c['variant'];identity=c['capture'];w=identity['workload']
         if identity['repository']!=record['common']['repository'] or identity['repository']['dirty']:
             raise ValueError('decoder profile source changed')
         if identity['operation']!='decoder_layer' or identity['runtime']['backend']!='metal' or not identity['runtime']['device'].startswith('Apple '):
             raise ValueError('decoder profile runtime changed')
+        if identity['implementation']!=f'decoder_layer_{v}':raise ValueError('decoder profile variant changed')
         decoder.configuration({**identity,**w,'profile_warmup_iterations':w['warmup_iterations']})
         n=next(n for rr,tt,n in decoder.PROFILES if (rr,tt)==(r,t))
         if w['profile_rows']!=r or w['key_value_rows']!=t or w['profile_iterations']!=n or w['warmup_iterations']!=10:
             raise ValueError('decoder profile workload changed')
-        expected.update((r,t,j,stage) for j in range(n) for stage in decoder.STAGES)
+        expected.update((r,t,v,j,stage) for j in range(n) for stage in decoder.stages(v,r))
     observed=set();grouped=defaultdict(list);totals=defaultdict(float)
     with gzip.open(path,'rt',newline='') as stream:
         for row in csv.DictReader(stream):
-            key=(int(row['query_rows']),int(row['rows']),int(row['iteration']),row['stage'])
+            key=(int(row['query_rows']),int(row['rows']),int(row['variant']),int(row['iteration']),row['stage'])
             duration=int(row['duration_ns'])
             if int(row['end_ns'])<int(row['start_ns'])+duration:
                 raise ValueError('decoder profile interval is invalid')
-            if key in observed or duration<=0 or int(row['variant'])!=0:
+            if key in observed or duration<=0:
                 raise ValueError('decoder duplicate or invalid dispatch')
-            observed.add(key);grouped[key[0],key[1],key[3]].append(duration/1000)
-            totals[key[0],key[1]]+=duration/1000
+            observed.add(key);grouped[key[0],key[1],key[2],key[4]].append(duration/1000)
+            totals[key[0],key[1],key[2]]+=duration/1000
     if observed!=expected:raise ValueError('decoder incomplete profile sequence')
-    return [dict(query_rows=r,rows=t,stage=s,count=len(v),median_us=statistics.median(v),
-                 mean_us=statistics.mean(v),active_share_percent=100*sum(v)/totals[r,t])
-            for (r,t,s),v in grouped.items()]
+    return [dict(query_rows=r,rows=t,**(dict(variant=variant) if selected else {}),stage=s,count=len(v),median_us=statistics.median(v),
+                 mean_us=statistics.mean(v),active_share_percent=100*sum(v)/totals[r,t,variant])
+            for (r,t,variant,s),v in grouped.items()]
 
 
 def load_decoder_windows(directory):
@@ -631,3 +641,35 @@ def load_decoder_windows(directory):
             active_us=active/1000,enclosing_us=span/1000,gap_us=(span-active)/1000,
             gap_share_percent=100*(span-active)/span))
     return result
+
+
+def candidates_for(spec,workload,layers):
+    if 'comparisons' not in spec:return spec['candidates']
+    return [c['candidate'] for c in spec['comparisons']
+            if c['query_rows']==workload['query_rows'] and c['rows']==workload['rows'] and c['layers']==layers]
+
+
+def comparisons(spec):
+    result=[(w,l,c) for w in workloads(spec) for l in spec.get('layers',(1,24))
+            for c in candidates_for(spec,w,l)]
+    if 'comparisons' in spec:
+        actual=[dict(**w,layers=l,candidate=c) for w,l,c in result]
+        if len(actual)!=len(spec['comparisons']) or any(actual.count(c)!=1 for c in actual):
+            raise ValueError('duplicate or unknown comparison cell')
+        for w in workloads(spec):
+            for l in spec.get('layers',(1,24)):
+                if spec['control'] not in candidates_for(spec,w,l):
+                    raise ValueError('missing per-cell self-pair')
+    return result
+
+
+for _family,(_grid,_variants) in decoder.SCREEN_GRIDS.items():
+    _base={**STUDIES['decoder_layer'], 'workloads':[dict(query_rows=r,rows=t) for r,t in _grid],
+           'candidates':_variants,'names':{v:decoder.NAMES[v] for v in _variants}}
+    STUDIES['decoder_selection_'+_family+'_screen']=_base
+    STUDIES['decoder_selection_'+_family+'_confirmation']={**_base,'requires_selection':True}
+STUDIES['decoder_selection_calibration']={**STUDIES['decoder_layer'],
+    'workloads':[dict(query_rows=1,rows=t) for t in (256,4096)]}
+STUDIES['decoder_selection_buffered']={**STUDIES['decoder_selection_calibration'],
+    'layers':[1],'mode':'buffered','measurement':'whole_decoder_buffered',
+    'timing':'Diagnostic only: 16 ordered hot decoder calls and one synchronization, divided by 16. Fixed suffix overwrite; setup excluded. Cannot promote raw hot performance.'}

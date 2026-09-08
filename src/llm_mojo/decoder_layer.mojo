@@ -14,6 +14,23 @@ from llm_mojo.attention_sublayer import (
 from llm_mojo.mlp import MLPWeights, MLPWorkspace, _validate_mlp, enqueue_mlp_apple_gpu
 
 
+def decoder_mappings(variant: Int, rows: Int) raises -> SIMD[DType.int64, 4]:
+    """Explicit study ID -> GQA, projections, MLP, required prefill splits.
+
+    This is a configuration registry, not a performance-based selector.
+    """
+    if rows < 1 or (variant != 0 and variant != 1 and variant != 2
+        and variant != 3 and variant != 4 and variant != 8
+        and variant != 12 and variant != 14):
+        raise Error("unknown decoder configuration or invalid rows")
+    var gqa = 4 if variant == 2 or variant == 3 else 0
+    var projections = 5 if variant == 1 or variant == 3 else 0
+    var mlp = 0 if rows == 1 or variant == 4 else 7
+    if rows == 1 and variant >= 8:
+        mlp = variant
+    return SIMD[DType.int64, 4](Int64(gqa), Int64(projections), Int64(mlp), Int64(8 if gqa == 4 else 1))
+
+
 def _region[dtype: DType](
     buffer: DeviceBuffer[dtype], required: Int, element_bytes: Int = 2,
 ) raises -> SIMD[DType.uint64, 2]:
@@ -38,18 +55,21 @@ def _decoder_preflight[XL: TensorLayout](
         or cache.capacity < 1 or cache.capacity > 4096
         or a.capacity < 1 or a.capacity > 4096):
         raise Error("decoder geometry or capacity is invalid")
-    if gqa_mapping != 0 or projection_mapping != 0:
-        raise Error("decoder baseline requires integrated attention mappings zero")
-    if mlp_mapping != 0 and mlp_mapping != 7:
-        raise Error("decoder baseline supports MLP mappings zero and seven")
+    if (gqa_mapping != 0 and gqa_mapping != 4) or (projection_mapping != 0 and projection_mapping != 5):
+        raise Error("decoder supports declared integrated attention mappings only")
+    if not integrated and (gqa_mapping != 0 or projection_mapping != 0):
+        raise Error("tiny decoder requires attention mappings zero")
+    if mlp_mapping != 0 and mlp_mapping != 7 and mlp_mapping != 8 and mlp_mapping != 12 and mlp_mapping != 14:
+        raise Error("decoder supports declared MLP mappings only")
     if mlp_mapping == 7 and r == 1:
         raise Error("decoder single-row baseline requires MLP mapping zero")
     comptime assert x.rank == 2
     if Int(x.layout.stride[0]().product()) != h or Int(x.layout.stride[1]().product()) != 1:
         raise Error("decoder requires contiguous row-major input")
     _ = _validate_attention_sublayer(ctx, aw, cache, a, x,
-                                    6 if integrated else 3,
-                                    (2 if r >= 16 else 1) if integrated else 0)
+                                    6 + gqa_mapping if integrated else 3,
+                                    ((3 if projection_mapping == 5 else 2) if r >= 16 else 1) if integrated else 0,
+                                    1 if projection_mapping == 5 else 0)
     _validate_mlp(ctx, mw, m, TileTensor(a.output, row_major(r, h)), mlp_mapping)
     var n = a.max_rows
     var k = aw.kv_heads * aw.head_dim
@@ -117,10 +137,21 @@ def enqueue_decoder_layer[XL: TensorLayout](
                        integrated, gqa_mapping, projection_mapping, mlp_mapping)
     var actual_route: Int
     if integrated:
-        actual_route = enqueue_attention_sublayer_integrated(ctx, aw, cache, attention, x)
+        actual_route = enqueue_attention_sublayer_integrated(ctx, aw, cache, attention, x,
+                                                           gqa_mapping, projection_mapping)
     else:
         actual_route = enqueue_attention_sublayer(ctx, aw, cache, attention, x, 3)
     enqueue_mlp_apple_gpu(ctx, mw, mlp,
                          TileTensor(attention.output, row_major(Int(x.dim[0]()), aw.hidden)),
                          mlp_mapping)
     return actual_route
+
+
+def enqueue_decoder_layer_configuration[XL: TensorLayout](
+    ctx: DeviceContext, mut aw: AttentionWeights, mut cache: AttentionCache,
+    mut attention: AttentionWorkspace, mut mw: MLPWeights, mut mlp: MLPWorkspace,
+    x: TileTensor[DType.bfloat16, XL, MutAnyOrigin], variant: Int,
+) raises -> Int:
+    var mappings = decoder_mappings(variant, Int(x.dim[0]()))
+    return enqueue_decoder_layer(ctx,aw,cache,attention,mw,mlp,x,
+        Int(mappings[2]),True,Int(mappings[0]),Int(mappings[1]))

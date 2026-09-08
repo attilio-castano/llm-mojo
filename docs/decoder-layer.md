@@ -425,6 +425,27 @@ the capture parser's rejection of valid MLP mapping 0 (`05e1def`). The retry
 used the same `d67fd94` binary; no engine or numerical policy changed. Full
 traces remain external, with compact samples and receipts retained in Git.
 
-The next milestone is full-model forward parity: compose embeddings, all 24
+A later milestone is full-model forward parity: compose embeddings, all 24
 layers, final normalization and LM head under a separately declared logits
 contract. This baseline does not yet establish model logits or generation.
+
+## Configuration selection study
+
+The approved next milestone is the bounded [configuration selection
+study](../studies/decoder_layer/selection-plan.md), before full-model work.
+`enqueue_decoder_layer_configuration(..., variant)` exposes IDs 0, 1, 2, 3,
+4, 8, 12 and 14 by reusing implemented attention and MLP kernels. Its registry
+is explicit; it does not infer a performance winner from shape. The table in
+the plan defines each ID, including prefix preparation and single-row fallback.
+Split8 configurations require `AttentionWorkspace(..., prefill_splits=8)`;
+preflight rejects missing or undersized partial storage before enqueue.
+
+Screen and confirmation runs use independent hot and ring24 cells. Each arm
+prepares its own KV prefix outside timing. Both arms have identical allocation
+geometry, with scratch sized for either configuration; shared scratch remains
+live until all queued consumers complete. Profiles derive their 15/16/17
+launch counts from the actual configuration and row count. A fixed hot batch
+of 16 calls is a separately labeled calibration diagnostic and cannot select
+a raw-hot winner. Existing BF16 rounding boundaries and acceptance gates apply
+to every configuration. Fresh reserved outputs require a clean candidate bound
+to the separately declared seeds and checkpoint token IDs.

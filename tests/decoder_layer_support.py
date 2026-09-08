@@ -51,7 +51,7 @@ def manifest():
         for path,digest in frozen['sources'].items():
             if sha(REPO/path)!=digest:
                 raise ValueError('decoder reference source changed: '+path)
-        if record.get('kind')=='decoder_holdout':
+        if record.get('kind') in ('decoder_holdout','decoder_selection_holdout'):
             from llm_mojo.decoder_validation import holdout_manifest
             holdout_manifest(ROOT)
             EXPECTED_CASES=set(record['cases'])
@@ -77,6 +77,16 @@ def cases():
             raise ValueError('case is not in selected split')
         selected=[name]
     return [(name,*(manifest()['cases'][name]['spec'][k] for k in ('rows','h','nq','nk','d','i'))) for name in selected]
+
+
+def selection_variants():
+    from llm_mojo.benchmarks.decoder_layer_contract import VARIANTS
+    selected=sorted(VARIANTS)
+    if os.environ.get('DECODER_VARIANTS'):
+        selected=[int(v) for v in os.environ['DECODER_VARIANTS'].split(',')]
+        if len(set(selected))!=len(selected) or not set(selected)<=VARIANTS:
+            raise ValueError('invalid decoder selection variants')
+    return selected
 
 
 def verify_case(name):

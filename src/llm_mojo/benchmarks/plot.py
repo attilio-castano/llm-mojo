@@ -841,9 +841,42 @@ def render_mlp(directory, record, samples, summary):
 
 
 
+def render_decoder_selection(directory):
+    from .decoder_layer_contract import SCREEN_GRIDS,screen_decision,confirmed_selection
+    selected=json.loads((directory/'selection-confirmed.json').read_text())
+    build=load_run(directory,'decoder_selection_full_screen_')[0]['build']
+    decision=screen_decision(directory,build)
+    if selected!=confirmed_selection(decision,directory):raise ValueError('decoder selection is not reproduced by retained evidence')
+    for path in sorted(directory.glob('decoder_selection_*run.json')):
+        prefix=path.name.removesuffix('run.json')
+        _,_,summary=load_run(directory,prefix)
+        table(directory,prefix+'summary.csv',summary)
+    table(directory,'selection_lookup.csv',selected['lookup'])
+    prefill_style()
+    fig,axes=plt.subplots(2,2,figsize=(14,10),layout='constrained')
+    for ax,family in zip(axes.flat,SCREEN_GRIDS):
+        cells=[c for c in selected['cells'] if c['family']==family]
+        shapes=list(dict.fromkeys((c['query_rows'],c['rows']) for c in cells))
+        for offset,l,color,label in ((-.18,1,'#237a80','hot'),(.18,24,'#b65e3b','ring24')):
+            rows=[next(c for c in cells if (c['query_rows'],c['rows'],c['layers'])==(r,t,l)) for r,t in shapes]
+            gains=[100*(1-c['confirmation']['ratio']) if c['accepted'] else 0 for c in rows]
+            ax.barh([i+offset for i in range(len(rows))],gains,height=.32,color=color,label=label)
+            for i,(c,gain) in enumerate(zip(rows,gains)):
+                ax.text(gain+.3,i+offset,'v'+str(c['accepted']),va='center',fontsize=7)
+        ax.set_yticks(range(len(shapes)),[f'R={r}, T={t}' for r,t in shapes]);ax.invert_yaxis()
+        ax.set_xlim(0,max(10,ax.get_xlim()[1]+4));ax.set_xlabel('confirmed latency reduction versus ID 0 (%)')
+        ax.set_title(family+' · neighboring shapes included');ax.legend(fontsize=8)
+    fig.suptitle('Best demonstrated decoder configurations · exact shape and execution mode\nID 0 means retain baseline; failed confirmation does not reopen selection')
+    fig.savefig(directory/'selection_latency.png',dpi=180);plt.close(fig)
+    if (directory/'selection_profiles.json').exists():
+        profile=load_profile(directory,'selection_')
+        table(directory,'selection_profile_summary.csv',profile)
+
+
 def render_decoder(directory,record,samples,summary):
     from .study import load_decoder_profile, load_decoder_windows
     from .decoder_layer_contract import WORKLOADS, PROFILES, STAGES
+    if (directory/'selection-confirmed.json').exists():render_decoder_selection(directory)
     prefill_style()
     table(directory,'summary.csv',summary)
     labels=[f'R={r} / T={t}' for r,t in WORKLOADS]

@@ -1,5 +1,5 @@
 """One fixed, receipt-bound decoder workload; host fixture work precedes timing."""
-from llm_mojo.decoder_layer import enqueue_decoder_layer
+from llm_mojo.decoder_layer import enqueue_decoder_layer, enqueue_decoder_layer_configuration, decoder_mappings
 from llm_mojo.attention_sublayer import AttentionWeights, AttentionCache, AttentionWorkspace
 from llm_mojo.mlp import MLPWeights, MLPWorkspace
 from layout import TileTensor, row_major
@@ -25,12 +25,12 @@ def _check(mut buffer: DeviceBuffer[DType.bfloat16], stage: String, p: Int, r: I
 
 def _enqueue(ctx: DeviceContext, mut aw: AttentionWeights, mut cache: AttentionCache,
              mut a: AttentionWorkspace, mut mw: MLPWeights, mut m: MLPWorkspace,
-             mut input: DeviceBuffer[DType.bfloat16], r: Int, t: Int) raises:
+             mut input: DeviceBuffer[DType.bfloat16], r: Int, t: Int, variant: Int) raises:
     cache.length = t-r
-    var actual = enqueue_decoder_layer(ctx,aw,cache,a,mw,m,
+    var actual = enqueue_decoder_layer_configuration(ctx,aw,cache,a,mw,m,
         TileTensor(input.unsafe_ptr().unsafe_offset((t-r)*896),row_major(r,896)),
-        7 if r > 1 else 0)
-    if actual != (6 if r > 1 else 4) or cache.length != t:
+        variant)
+    if actual != (6+Int(decoder_mappings(variant,r)[0]) if r > 1 else 4) or cache.length != t:
         raise Error("decoder benchmark route/cache identity mismatch")
 
 
@@ -38,7 +38,7 @@ def main() raises:
     var args = List[String]()
     comptime if is_defined["GQA_PROFILE_ROWS"]():
         args = ["decoder",String(get_defined_int["GQA_PROFILE_QUERY_ROWS"]()),
-                String(get_defined_int["GQA_PROFILE_ROWS"]()),"1","0","0","0","4001","profile",
+                String(get_defined_int["GQA_PROFILE_ROWS"]()),"1",String(get_defined_int["GQA_PROFILE_VARIANT"]()),String(get_defined_int["GQA_PROFILE_VARIANT"]()),"0","4001","profile",
                 String(get_defined_int["GQA_PROFILE_ITERATIONS"]()),String(get_defined_int["GQA_PROFILE_WARMUP"]())]
     else:
         for arg in argv():
@@ -55,11 +55,15 @@ def main() raises:
     var mode = args[8]
     var repetitions = Int(args[9])
     var warmup = Int(args[10])
+    var cm = decoder_mappings(candidate,r)
+    var bm = decoder_mappings(control,r)
+    var dispatches = 16 + (1 if Int(cm[0]) == 4 and r > 1 else 0) - (1 if r == 1 and (candidate == 8 or candidate == 14) else 0)
     if (r < 1 or r > t or t > 4096 or (layers != 1 and layers != 24)
-        or candidate != 0 or control != 0 or seed != 4001
+        or seed != 4001
         or (first != 0 and first != 1) or repetitions < 1 or warmup < 0 or warmup > 100
-        or (mode != "bench" and mode != "profile" and mode != "adversarial")
-        or (mode == "profile" and (layers != 1 or repetitions*16 > 5000))):
+        or (mode != "bench" and mode != "profile" and mode != "adversarial" and mode != "buffered")
+        or (mode == "buffered" and (layers != 1 or r != 1 or candidate != 0 or control != 0))
+        or (mode == "profile" and (layers != 1 or candidate != control or repetitions*dispatches > 5000))):
         raise Error("invalid decoder benchmark shape, mapping or budget")
     var support = Python.import_module("llm_mojo.benchmarks.decoder_layer_contract")
     support.fixture_identity()
@@ -70,11 +74,11 @@ def main() raises:
     print("device:",ctx.name())
     print("api:",ctx.api())
     print("operation: decoder_layer")
-    print("measurement: whole_decoder")
+    print("measurement:","whole_decoder_buffered" if mode == "buffered" else "whole_decoder")
     print("query rows:",r)
     print("shape:",t,layers,"seed:",seed)
     print("variants:",control,candidate,"candidate-first:",first)
-    var a = AttentionWorkspace(ctx,t,t,14,2,64,False,False)
+    var a = AttentionWorkspace(ctx,t,t,14,2,64,False,False,8 if Int(cm[0]) == 4 or Int(bm[0]) == 4 else 1)
     var m = MLPWorkspace(ctx,t)
     _load(a.cosine,"full_cosine",t*64)
     _load(a.sine,"full_sine",t*64)
@@ -96,16 +100,6 @@ def main() raises:
         _load(mw.gate,"input_gate",4864*896,adversarial,layer)
         _load(mw.up,"input_up",4864*896,adversarial,layer)
         _load(mw.down,"input_down",896*4864,adversarial,layer)
-        if t > r:
-            _ = enqueue_decoder_layer(ctx,aw,cache,a,mw,m,
-                TileTensor(input,row_major(t-r,896)),7 if t-r > 1 else 0)
-            ctx.synchronize()
-        _enqueue(ctx,aw,cache,a,mw,m,input,r,t)
-        ctx.synchronize()
-        _check(a.projected,"B_att",t-r,r,adversarial,layer)
-        _check(a.output,"Z",t-r,r,adversarial,layer)
-        _check(m.down,"B_mlp",t-r,r,adversarial,layer)
-        _check(m.output,"Y",t-r,r,adversarial,layer)
         att_weights.append(aw^)
         mlp_weights.append(mw^)
         caches.append(cache^)
@@ -114,19 +108,49 @@ def main() raises:
     var saved = List[DeviceBuffer[DType.bfloat16]]()
     for _ in range(layers):
         saved.append(ctx.enqueue_create_buffer[DType.bfloat16](t*896))
-    for layer in range(layers):
-        _enqueue(ctx,att_weights[layer],caches[layer],a,mlp_weights[layer],m,inputs[layer],r,t)
-        ctx.enqueue_copy(dst_buf=saved[layer],src_buf=m.output)
-    ctx.synchronize()
-    for layer in range(layers):
-        _check(saved[layer],"Y",t-r,r,adversarial,layer)
+    # Each arm constructs its own cache prefix with that configuration before timing.
+    # Both arms share allocation geometry, including maximum required split scratch.
+    var arms = 1 if mode == "profile" else 2
+    for arm in range(arms):
+        var is_candidate = (arm == 0) == (first == 1)
+        var variant = candidate if mode == "profile" or is_candidate else control
+        for layer in range(layers):
+            caches[layer].length = 0
+            if t > r:
+                _ = enqueue_decoder_layer_configuration(ctx,att_weights[layer],caches[layer],a,mlp_weights[layer],m,
+                    TileTensor(inputs[layer],row_major(t-r,896)),variant)
+                ctx.synchronize()
+            _enqueue(ctx,att_weights[layer],caches[layer],a,mlp_weights[layer],m,inputs[layer],r,t,variant)
+            ctx.synchronize()
+            _check(a.projected,"B_att",t-r,r,adversarial,layer)
+            _check(a.output,"Z",t-r,r,adversarial,layer)
+            _check(m.down,"B_mlp",t-r,r,adversarial,layer)
+            _check(m.output,"Y",t-r,r,adversarial,layer)
+        for layer in range(layers):
+            _enqueue(ctx,att_weights[layer],caches[layer],a,mlp_weights[layer],m,inputs[layer],r,t,variant)
+            ctx.enqueue_copy(dst_buf=saved[layer],src_buf=m.output)
+        ctx.synchronize()
+        for layer in range(layers):
+            _check(saved[layer],"Y",t-r,r,adversarial,layer)
+        if mode == "profile":
+            break
+        if adversarial:
+            continue
+        var label = "candidate" if is_candidate else "control"
+        var batch = 16 if mode == "buffered" else 1
+        for sample in range(warmup+repetitions):
+            var start = perf_counter_ns()
+            for _ in range(batch):
+                for layer in range(layers):
+                    _enqueue(ctx,att_weights[layer],caches[layer],a,mlp_weights[layer],m,inputs[layer],r,t,variant)
+            ctx.synchronize()
+            var us = Float64(perf_counter_ns()-start)/Float64(1000*layers*batch)
+            if sample >= warmup:
+                print("SAMPLE",label,variant,sample-warmup,us)
     print("correctness: passed")
-    if adversarial:
-        print("BENCHMARK_COMPLETE")
-        return
     if mode == "profile":
         for _ in range(warmup):
-            _enqueue(ctx,att_weights[0],caches[0],a,mlp_weights[0],m,inputs[0],r,t)
+            _enqueue(ctx,att_weights[0],caches[0],a,mlp_weights[0],m,inputs[0],r,t,candidate)
         ctx.synchronize()
         print("profile implementation: enqueue_decoder_layer")
         print("rows:",r)
@@ -135,28 +159,17 @@ def main() raises:
         print("query heads: 14")
         print("key value heads: 2")
         print("intermediate size: 4864")
-        print("mlp mapping:",7 if r > 1 else 0)
-        print("profile workload:","decoder-r"+String(r)+"-t"+String(t)+"-v0")
-        print("profile dispatches per iteration: 16")
+        print("mlp mapping:",Int(cm[2]))
+        print("profile workload:","decoder-r"+String(r)+"-t"+String(t)+"-v"+String(candidate))
+        print("profile dispatches per iteration:",dispatches)
         print("warmup iterations:",warmup)
         print("profile iterations:",repetitions)
         print("post-profile idle milliseconds: 250")
         print("PROFILE_REGION_BEGIN")
         for _ in range(repetitions):
-            _enqueue(ctx,att_weights[0],caches[0],a,mlp_weights[0],m,inputs[0],r,t)
+            _enqueue(ctx,att_weights[0],caches[0],a,mlp_weights[0],m,inputs[0],r,t,candidate)
         ctx.synchronize()
         print("PROFILE_REGION_END")
         sleep(0.25)
         return
-    for arm in range(2):
-        var is_candidate = (arm == 0) == (first == 1)
-        var label = "candidate" if is_candidate else "control"
-        for sample in range(warmup+repetitions):
-            var start = perf_counter_ns()
-            for layer in range(layers):
-                _enqueue(ctx,att_weights[layer],caches[layer],a,mlp_weights[layer],m,inputs[layer],r,t)
-            ctx.synchronize()
-            var us = Float64(perf_counter_ns()-start)/Float64(1000*layers)
-            if sample >= warmup:
-                print("SAMPLE",label,0,sample-warmup,us)
     print("BENCHMARK_COMPLETE")

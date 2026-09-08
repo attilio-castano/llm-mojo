@@ -42,6 +42,45 @@ class EvidenceTests(unittest.TestCase):
         for name,digest in numerics['development']['core_source_sha256'].items():
             self.assertEqual(digest,receipt['build']['source']['sources'][name])
 
+    @unittest.skipUnless((ROOT/'studies/decoder_layer/selection_numerics.json').exists(),'selection evidence not yet collected')
+    def test_decoder_selection_is_bound_to_acceptance_and_complete_trials(self):
+        from llm_mojo import decoder_validation
+        from llm_mojo.benchmarks import decoder_layer_contract as contract
+        from llm_mojo.benchmarks.study import STUDIES,comparisons
+        directory=ROOT/'studies/decoder_layer'
+        numerics=load_numerical_record(directory/'selection_numerics.json')
+        acceptance=numerics['acceptance'];receipt=acceptance['receipt']
+        self.assertEqual(receipt['status'],'passed');self.assertEqual(len(acceptance['manifest']['cases']),9)
+        self.assertTrue(receipt['build']['selection'])
+        self.assertEqual(acceptance['manifest']['selection'],contract.selection_declaration())
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'checks.jsonl';path.write_text(''.join(json.dumps(r)+'\n' for r in acceptance['checks']))
+            coverage=decoder_validation.validate_results(path,acceptance['manifest']['cases'],True)
+        self.assertEqual(coverage['checks'],receipt['checks'])
+        names=['decoder_selection_'+f+'_'+phase for f in contract.SCREEN_GRIDS for phase in ('screen','confirmation')]
+        names+=['decoder_selection_calibration','decoder_selection_buffered']
+        self.assertEqual({p.name for p in directory.glob('decoder_selection_*run.json')},{n+'_run.json' for n in names})
+        total=0;build=None
+        for name in names:
+            run,samples,_=load_run(directory,name+'_');total+=len(samples)
+            self.assertEqual(run['repository'],receipt['build']['source']['repository'])
+            for path,digest in run['build']['sources'].items():self.assertEqual(digest,receipt['build']['source']['sources'][path])
+            if build is not None:self.assertEqual(build,run['build'])
+            build=run['build']
+        self.assertLessEqual(total,23840)
+        decision=contract.screen_decision(directory,build)
+        selected=json.loads((directory/'selection-confirmed.json').read_text())
+        self.assertEqual(selected,contract.confirmed_selection(decision,directory))
+        expected=10400+sum(80*len(comparisons(contract.confirmation_spec(f,decision))) for f in contract.SCREEN_GRIDS)
+        self.assertEqual(total,expected)
+        profiles=json.loads((directory/'selection_profiles.json').read_text())
+        self.assertEqual(profiles['specification']['selection'],selected)
+        self.assertEqual(profiles['common']['repository'],run['repository'])
+        self.assertEqual(profiles['common']['source_sha256'],build['sources'])
+        expected_dispatches=sum(next(n for rr,tt,n in contract.PROFILES if (rr,tt)==(r,t))*len(contract.stages(v,r))
+                                for r,t,v in contract.profile_selection(selected))
+        self.assertEqual(sum(x['count'] for x in load_profile(directory,'selection_')),expected_dispatches)
+
     def test_compact_numerical_records_preserve_original_and_reject_corruption(self):
         directory = ROOT / 'studies/attention_sublayer/data'
         for name in ('decode_validation', 'prefill_validation', 'wo_validation', 'precision_numerics'):
@@ -166,7 +205,14 @@ class EvidenceTests(unittest.TestCase):
             for record in evidence_directory(directory).glob('*run.json'):
                 _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
-        self.assertEqual(count, 105440)  # includes 960 decoder baseline samples
+        selection=ROOT/'studies/decoder_layer/selection-confirmed.json'
+        extra=0
+        if selection.exists():
+            from llm_mojo.benchmarks import decoder_layer_contract as contract
+            from llm_mojo.benchmarks.study import comparisons
+            decision=json.loads(selection.read_text())['selection']
+            extra=10400+sum(80*len(comparisons(contract.confirmation_spec(f,decision))) for f in contract.SCREEN_GRIDS)
+        self.assertEqual(count,105440+extra)  # original studies plus complete declared selection trials
         directory = ROOT / 'studies/mlp_sublayer/data'
         from llm_mojo.benchmarks.study import select_mlp_decode
         decode_builds=[]

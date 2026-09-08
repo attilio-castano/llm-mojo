@@ -20,7 +20,7 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
             attention_sublayer=False, wo_comparison=False, decode_comparison=False,
             prefill_comparison=False, projection_comparison=False, parallelism_variants=None,
             combined_projections=False, attention_study=None, mlp=False,
-            mlp_variants=None, mlp_rows=None, decoder_layer=False):
+            mlp_variants=None, mlp_rows=None, decoder_layer=False, decoder_selection=None):
     records, samples = [], []
     common = None
     if not mlp and (mlp_variants is not None or mlp_rows is not None):
@@ -50,6 +50,10 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
         variants=[0]
         grid=[(r,t) for r,t,_ in decoder_contract.PROFILES]
         spec=dict(workloads=grid,variants=variants)
+        if decoder_selection is not None:
+            selected=json.loads(Path(decoder_selection).read_text())
+            spec=dict(selection=selected,selection_sha256=sha(decoder_selection),
+                      captures=decoder_contract.profile_selection(selected))
     elif mlp:
         variants = [0] if mlp_variants is None else mlp_variants
         rows = mlp_contract.PROFILE_ROWS if mlp_rows is None else mlp_rows
@@ -70,8 +74,11 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
     stage_map, _ = ({0:decoder_contract.STAGES},None) if decoder_layer else ({v:mlp_contract.stages(v) for v in variants}, None) if mlp else (sublayer.profile_grid(spec) if attention_sublayer else prefill_profile_grid(spec)) if prefill else (STAGES, None)
     captures = [(r,r,v,f'r{r}-v{v}') for r,_ in grid for v in variants] if mlp else [(r,t,v,f'r{r}-t{t}-v{v}') for r,t in grid for v in variants] if prefill else [
         (None,None,v,str(v)) for v in STAGES]
+    if decoder_selection is not None:
+        if not decoder_layer:raise ValueError('decoder selection requires decoder profiles')
+        captures=[(r,t,v,f'r{r}-t{t}-v{v}') for r,t,v in spec['captures']]
     for r,t,variant,folder in captures:
-        stages = stage_map[variant]
+        stages = decoder_contract.stages(variant,r) if decoder_layer else stage_map[variant]
         directory = source / folder
         report = json.loads((directory / 'summary.json').read_text())
         provenance = json.loads((directory / 'profile.provenance.json').read_text())
@@ -143,7 +150,7 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
     writer.writeheader(); writer.writerows(samples)
     raw = output / (prefix+'profile_samples.csv.gz')
     raw.write_bytes(gzip.compress(stream.getvalue().encode(), mtime=0))
-    write_json(output / (prefix+'profiles.json'), dict(schema=5 if decoder_layer else 4 if mlp else 3 if attention_sublayer else (2 if prefill else 1),
+    write_json(output / (prefix+'profiles.json'), dict(schema=6 if decoder_selection is not None else 5 if decoder_layer else 4 if mlp else 3 if attention_sublayer else (2 if prefill else 1),
                 **(dict(specification=spec) if prefill else {}), common=common, captures=records,
                 samples_sha256=sha(raw),
                 boundary=f'Instrumented GPU active dispatch durations (non-overlapping segments summed, preemption gaps excluded); {len(captures)} single captures, not paired latency trials. Counter statistics are device-wide within each target window. Stage labels follow the validated source enqueue order.',
@@ -160,6 +167,7 @@ if __name__ == '__main__':
     group.add_argument('--attention-sublayer',action='store_true')
     group.add_argument('--mlp',action='store_true')
     group.add_argument('--decoder-layer',action='store_true')
+    parser.add_argument('--decoder-selection',type=Path)
     parser.add_argument('--mlp-variants',type=int,nargs='+')
     parser.add_argument('--mlp-rows',type=int,nargs='+')
     group.add_argument('--attention-study', choices=[*sublayer.PROFILE_COMPARISONS, 'parallelism'])
@@ -171,7 +179,7 @@ if __name__ == '__main__':
     parser.add_argument('--combined-projections',action='store_true')
     parser.add_argument('--parallelism-variants',type=int,nargs='+')
     args = parser.parse_args()
-    collect(args.source, args.output, args.prefill_variant, mlp=args.mlp, decoder_layer=args.decoder_layer,
+    collect(args.source, args.output, args.prefill_variant, mlp=args.mlp, decoder_layer=args.decoder_layer, decoder_selection=args.decoder_selection,
             mlp_variants=args.mlp_variants, mlp_rows=args.mlp_rows,
             prefill_variants=args.prefill_variants, prefix=args.prefix, attention_sublayer=args.attention_sublayer,
             wo_comparison=args.wo_comparison, decode_comparison=args.decode_comparison,

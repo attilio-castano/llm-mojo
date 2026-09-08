@@ -5,12 +5,12 @@ from llm_mojo.rope import enqueue_rope_apple_gpu
 from llm_mojo.residual import enqueue_residual_apple_gpu
 from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
 from llm_mojo.attention_decode import enqueue_grouped_query_attention_decode_apple_gpu
-from llm_mojo.attention_prefill import enqueue_grouped_query_attention_prefill_apple_gpu
+from llm_mojo.attention_prefill import enqueue_grouped_query_attention_prefill_apple_gpu, enqueue_grouped_query_attention_prefill_split_apple_gpu
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.testing import TestSuite, assert_equal, assert_raises
 from llm_mojo.attention_sublayer import AttentionWeights, AttentionCache, AttentionWorkspace, _enqueue_attention_qkv, _enqueue_attention_wo
 from llm_mojo.mlp import MLPWeights, MLPWorkspace, enqueue_mlp_stage_apple_gpu, enqueue_mlp_apple_gpu
-from llm_mojo.decoder_layer import enqueue_decoder_layer
+from llm_mojo.decoder_layer import enqueue_decoder_layer, decoder_mappings
 from decoder_layer_support import decoder_support, load_decoder, check_decoder, poison_decoder, decoder_snapshot, exact_decoder, check_decoder_cache, check_decoder_active, check_decoder_slice
 
 
@@ -120,7 +120,7 @@ def _check_layer(mut a: AttentionWorkspace, mut m: MLPWorkspace, name: String,
 
 
 def _case(name: String, t: Int, h: Int, nq: Int, nk: Int, d: Int, i: Int,
-          policy: Int) raises:
+          policy: Int, selection: Bool = False) raises:
     var support = decoder_support()
     support.verify_case(name)
     var ctx = DeviceContext()
@@ -129,7 +129,10 @@ def _case(name: String, t: Int, h: Int, nq: Int, nk: Int, d: Int, i: Int,
     var cap = t + 1 if t < 4096 else t
     var aw = AttentionWeights(ctx, nq, nk, d)
     var mw = MLPWeights(ctx, h, i)
-    var a = AttentionWorkspace(ctx, cap, cap, nq, nk, d, False, nq != 14)
+    var gqa = Int(decoder_mappings(policy,t)[0]) if selection else 0
+    var projection = Int(decoder_mappings(policy,t)[1]) if selection else 0
+    var splits = 8 if gqa == 4 else 1
+    var a = AttentionWorkspace(ctx, cap, cap, nq, nk, d, False, nq != 14, splits)
     var m = MLPWorkspace(ctx, cap, h, i)
     var cache = AttentionCache(ctx, cap, nk, d)
     var xb = ctx.enqueue_create_buffer[DType.bfloat16](t*h)
@@ -157,15 +160,15 @@ def _case(name: String, t: Int, h: Int, nq: Int, nk: Int, d: Int, i: Int,
         for c in range(Int(py=calls.__len__())):
             var p = Int(py=calls[c][0])
             var r = Int(py=calls[c][1])
-            var mapping = policy if r > 1 else 0
+            var mapping = Int(decoder_mappings(policy,r)[2]) if selection else (policy if r > 1 else 0)
             assert_equal(cache.length, p)
             _poison(a, m, r)
             var prefix_k = decoder_snapshot(cache.key, p*nk*d)
             var prefix_v = decoder_snapshot(cache.value, p*nk*d)
             var route = enqueue_decoder_layer(ctx, aw, cache, a, mw, m,
                 TileTensor(xb.unsafe_ptr().unsafe_offset(p*h), row_major(r,h)),
-                mapping, nq == 14)
-            assert_equal(route, (4 if r == 1 else 6) if nq == 14 else 3)
+                mapping, nq == 14, gqa, projection)
+            assert_equal(route, (4 if r == 1 else 6+gqa) if nq == 14 else 3)
             assert_equal(cache.length, p+r)
             ctx.synchronize()
             support.route(route, mapping, p, r, ctx.name(), ctx.api())
@@ -186,8 +189,9 @@ def _case(name: String, t: Int, h: Int, nq: Int, nk: Int, d: Int, i: Int,
     exact_decoder(mw.down, saved_mw_down, "mw_down")
     exact_decoder(a.cosine, saved_a_cosine, "a_cosine")
     exact_decoder(a.sine, saved_a_sine, "a_sine")
-    _local_attention(ctx, aw, a, name, t, policy)
-    _local_mlp(ctx, mw, m, name, t, policy)
+    _local_attention(ctx, aw, a, name, t, policy, gqa, projection)
+    _local_mlp(ctx, mw, m, name, t,
+               Int(decoder_mappings(policy,t)[2]) if selection else policy, policy)
 
 
 def test_decoder_development() raises:
@@ -205,9 +209,10 @@ def test_decoder_development() raises:
 
 
 def _local_mlp(ctx: DeviceContext, mut w: MLPWeights, mut m: MLPWorkspace,
-               name: String, r: Int, mapping: Int) raises:
+               name: String, r: Int, mapping: Int, record_policy: Int = -1) raises:
     var support = decoder_support()
-    support.configure(name, mapping, "full", "operation")
+    var policy = mapping if record_policy < 0 else record_policy
+    support.configure(name, policy, "full", "operation")
     var h = w.hidden
     var i = w.intermediate
     var z = ctx.enqueue_create_buffer[DType.bfloat16](r*h)
@@ -240,7 +245,7 @@ def _local_mlp(ctx: DeviceContext, mut w: MLPWeights, mut m: MLPWorkspace,
     poison_decoder(m.output, r*h)
     enqueue_mlp_stage_apple_gpu(ctx,w,m,x,6,mapping)
     check_decoder(m.output,name,"Y","full",0,r,h,"operation")
-    support.configure(name, mapping, "full", "mlp")
+    support.configure(name, policy, "full", "mlp")
     poison_decoder(m.down,r*h)
     poison_decoder(m.output,r*h)
     enqueue_mlp_apple_gpu(ctx,w,m,x,mapping)
@@ -253,7 +258,8 @@ def main() raises:
 
 
 def _local_attention(ctx: DeviceContext, mut w: AttentionWeights,
-                     mut a: AttentionWorkspace, name: String, r: Int, policy: Int) raises:
+                     mut a: AttentionWorkspace, name: String, r: Int, policy: Int,
+                     gqa: Int = 0, projection: Int = 0) raises:
     var support = decoder_support()
     support.configure(name, policy, "full", "operation")
     var h = w.hidden
@@ -272,7 +278,7 @@ def _local_attention(ctx: DeviceContext, mut w: AttentionWeights,
     poison_decoder(a.raw_query,r*h)
     poison_decoder(a.raw_key,r*k)
     poison_decoder(a.raw_value,r*k)
-    _enqueue_attention_qkv(ctx,w,a,r,(2 if r >= 16 else 1) if nq == 14 else 0)
+    _enqueue_attention_qkv(ctx,w,a,r,((3 if projection == 5 else 2) if r >= 16 else 1) if nq == 14 else 0)
     check_decoder(a.raw_query,name,"Q_raw","full",0,r,h,"operation")
     check_decoder(a.raw_key,name,"K_raw","full",0,r,k,"operation")
     check_decoder(a.raw_value,name,"V_raw","full",0,r,k,"operation")
@@ -302,12 +308,15 @@ def _local_attention(ctx: DeviceContext, mut w: AttentionWeights,
     elif r == 1:
         enqueue_grouped_query_attention_decode_apple_gpu[32,1,1,fp32_scores=True](
             ctx,q,keys,values,out,TileTensor(a.split,row_major(14,1,66)))
+    elif gqa == 4:
+        enqueue_grouped_query_attention_prefill_split_apple_gpu[8](ctx,q,keys,values,
+            TileTensor(a.prefill_partial,row_major(r,14,8,66)),out)
     else:
         enqueue_grouped_query_attention_prefill_apple_gpu[32,32,MMA=True,SCHEDULE=2,FP32=True](ctx,q,keys,values,out)
     check_decoder(a.attention,name,"O","full",0,r,h,"operation")
     load_decoder(a.attention,name,"full_O",0,r*h)
     poison_decoder(a.projected,r*h)
-    _enqueue_attention_wo(ctx,w,a,r,nq == 14 and r >= 16,0)
+    _enqueue_attention_wo(ctx,w,a,r,nq == 14 and r >= 16,1 if projection == 5 else 0)
     check_decoder(a.projected,name,"B_att","full",0,r,h,"operation")
     load_decoder(a.projected,name,"full_B_att",0,r*h)
     poison_decoder(a.output,r*h)
@@ -387,15 +396,22 @@ def test_whole_call_preflight() raises:
 
 
 def test_asynchronous_twelve_decode_calls() raises:
+    _asynchronous_decoder()
+
+
+def _asynchronous_decoder(variant: Int = -1) raises:
     var name = String("h896_i4864_nq14_nk2_d64_t65_s4001_base")
     var support = decoder_support()
     support.verify_case(name)
-    support.configure(name,7,"reuse","async")
+    support.configure(name,variant if variant >= 0 else 7,"reuse","async")
     var ctx = DeviceContext()
     assert_equal(ctx.api(),"metal")
     var aw = AttentionWeights(ctx)
     var mw = MLPWeights(ctx)
-    var a = AttentionWorkspace(ctx,65,66,14,2,64,False,False)
+    var gqa = Int(decoder_mappings(variant,53)[0]) if variant >= 0 else 0
+    var projection = Int(decoder_mappings(variant,53)[1]) if variant >= 0 else 0
+    var splits = 8 if gqa == 4 else 1
+    var a = AttentionWorkspace(ctx,65,66,14,2,64,False,False,splits)
     var m = MLPWorkspace(ctx,65)
     var cache = AttentionCache(ctx,66)
     var xb = ctx.enqueue_create_buffer[DType.bfloat16](65*896)
@@ -420,8 +436,9 @@ def test_asynchronous_twelve_decode_calls() raises:
         assert_equal(cache.length,p)
         var route = enqueue_decoder_layer(ctx,aw,cache,a,mw,m,
             TileTensor(xb.unsafe_ptr().unsafe_offset(p*896),row_major(r,896)),
-            7 if r > 1 else 0)
-        assert_equal(route,6 if r > 1 else 4)
+            Int(decoder_mappings(variant,r)[2]) if variant >= 0 else (7 if r > 1 else 0),
+            True,gqa,projection)
+        assert_equal(route,6+gqa if r > 1 else 4)
         assert_equal(cache.length,p+r)
         ctx.enqueue_copy(dst_buf=outputs[j],src_buf=m.output)
         ctx.enqueue_copy(dst_buf=branches[j],src_buf=m.down)
@@ -436,7 +453,7 @@ def test_asynchronous_twelve_decode_calls() raises:
         check_decoder_active(att_outputs[j],name,"Z","reuse",p,r,896)
         check_decoder_active(att_branches[j],name,"B_att","reuse",p,r,896)
     # A second cache and workspace execute the same schedule with explicit waits.
-    var separate_a = AttentionWorkspace(ctx,65,66,14,2,64,False,False)
+    var separate_a = AttentionWorkspace(ctx,65,66,14,2,64,False,False,splits)
     var separate_m = MLPWorkspace(ctx,65)
     var separate_cache = AttentionCache(ctx,66)
     _load_weights(aw,mw,separate_a,name,65)
@@ -447,7 +464,8 @@ def test_asynchronous_twelve_decode_calls() raises:
         var r = 53 if j == 0 else 1
         _ = enqueue_decoder_layer(ctx,aw,separate_cache,separate_a,mw,separate_m,
             TileTensor(xb.unsafe_ptr().unsafe_offset(p*896),row_major(r,896)),
-            7 if r > 1 else 0)
+            Int(decoder_mappings(variant,r)[2]) if variant >= 0 else (7 if r > 1 else 0),
+            True,gqa,projection)
         ctx.synchronize()
         exact_decoder(separate_m.output,decoder_snapshot(outputs[j],r*896),"async Y vs separate workspace")
         exact_decoder(separate_m.down,decoder_snapshot(branches[j],r*896),"async B_mlp vs separate workspace")
@@ -457,7 +475,8 @@ def test_asynchronous_twelve_decode_calls() raises:
     exact_decoder(cache.value,decoder_snapshot(separate_cache.value,66*128),"async cache value")
     cache.reset(ctx)
     assert_equal(cache.length,0)
-    _ = enqueue_decoder_layer(ctx,aw,cache,a,mw,m,TileTensor(xb,row_major(1,896)))
+    _ = enqueue_decoder_layer(ctx,aw,cache,a,mw,m,TileTensor(xb,row_major(1,896)),
+        Int(decoder_mappings(variant,1)[2]) if variant >= 0 else 0,True,gqa,projection)
     ctx.synchronize()
     check_decoder_active(m.output,name,"Y","full_slice",0,1,896)
 

@@ -8,8 +8,9 @@ from pathlib import Path
 import subprocess
 
 from ._repository import environment_tool, repository_root
-from .mlp_validation import sha, write, source_identity
+from .mlp_validation import sha, write, source_identity as base_source_identity
 from .benchmarks.environment import ensure_record_location, utc_now
+from .benchmarks import decoder_layer_contract as selection_contract
 
 BOUNDARIES=('B_att','Z','B_mlp','Y')
 STAGES=('N_att','Q_raw','K_raw','V_raw','Q','K_rot','O','B_att','Z','N_mlp','G','U','A','S','B_mlp','Y')
@@ -19,7 +20,14 @@ def environment():
     return {k:v for k,v in os.environ.items() if not k.startswith('DECODER_') and k!='MODULAR_DEBUG'}
 
 
-def build(binary):
+def source_identity():
+    record=base_source_identity()
+    path=repository_root()/selection_contract.SELECTION_PATH
+    if path.exists():record['sources'][selection_contract.SELECTION_PATH]=sha(path)
+    return record
+
+
+def build(binary,selection=False):
     binary=Path(binary).resolve();ensure_record_location(binary)
     receipt=Path(str(binary)+'.provenance.json')
     if binary.exists() or receipt.exists():
@@ -28,11 +36,12 @@ def build(binary):
     if source['repository']['dirty']:
         raise ValueError('decoder build requires clean source')
     binary.parent.mkdir(parents=True,exist_ok=True)
-    command=[environment_tool('mojo'),'build','-I','src','-I','tests','tests/test_decoder_layer.mojo','-o',str(binary)]
+    test='tests/test_decoder_selection.mojo' if selection else 'tests/test_decoder_layer.mojo'
+    command=[environment_tool('mojo'),'build','-I','src','-I','tests',test,'-o',str(binary)]
     subprocess.run(command,cwd=repository_root(),env=environment(),check=True)
     if source_identity()!=source:
         raise ValueError('decoder source changed during build')
-    write(receipt,dict(schema=1,kind='decoder_numerical_build',source=source,
+    write(receipt,dict(schema=1,kind='decoder_numerical_build',source=source,selection=selection,
           binary_sha256=sha(binary),command=command,created_utc=utc_now()))
 
 
@@ -50,7 +59,8 @@ def holdout_manifest(root,verify_arrays=True):
     root=Path(root);record=json.loads((root/'manifest.json').read_text())
     payload={k:v for k,v in record.items() if k!='payload_sha256'}
     import hashlib
-    if (record.get('status')!='complete' or record.get('kind')!='decoder_holdout'
+    selection=record.get('kind')=='decoder_selection_holdout'
+    if (record.get('status')!='complete' or record.get('kind') not in ('decoder_holdout','decoder_selection_holdout')
         or hashlib.sha256(json.dumps(payload,sort_keys=True).encode()).hexdigest()!=record.get('payload_sha256')):
         raise ValueError('decoder holdout is incomplete or changed')
     repo=repository_root();anchor=json.loads((repo/'tests/fixtures/decoder_layer/checksums.json').read_text())
@@ -58,11 +68,18 @@ def holdout_manifest(root,verify_arrays=True):
         raise ValueError('decoder reference identity changed')
     expected={'h{h}_i{i}_nq{nq}_nk{nk}_d{d}_t{rows}_s{seed}_{mutation}'.format(**s):s
               for s in anchor['specification']['holdout']}
-    expected['checkpoint_holdout']=dict(h=896,nq=14,nk=2,d=64,i=4864,
-        rows=len(anchor['checkpoint']['holdout_token_ids']),seed=0,mutation='base')
+    ids=anchor['checkpoint']['holdout_token_ids'];checkpoint_name='checkpoint_holdout'
+    if selection:
+        declared=selection_contract.selection_declaration()
+        if record.get('selection')!=declared:raise ValueError('selection holdout declaration changed')
+        ids=declared['checkpoint_token_ids'];checkpoint_name='checkpoint_selection_holdout'
+        expected={f'h896_i4864_nq14_nk2_d64_t{t}_s{seed}_base':dict(h=896,nq=14,nk=2,d=64,i=4864,rows=t,seed=seed,mutation='base')
+                  for seed in declared['seeds'] for t in declared['rows']}
+    expected[checkpoint_name]=dict(h=896,nq=14,nk=2,d=64,i=4864,
+        rows=len(ids),seed=0,mutation='base')
     if {name:case['spec'] for name,case in record['cases'].items()}!=expected:
         raise ValueError('decoder reserved case census changed')
-    if record['checkpoint']!=anchor['checkpoint'] or record['cases']['checkpoint_holdout']['token_ids']!=anchor['checkpoint']['holdout_token_ids']:
+    if record['checkpoint']!=anchor['checkpoint'] or record['cases'][checkpoint_name]['token_ids']!=ids:
         raise ValueError('decoder reserved checkpoint identity changed')
     if record['specification']!=anchor['specification'] or record['sources']!=anchor['sources'] or record['upstream']!=anchor['upstream']:
         raise ValueError('decoder reserved reference policy changed')
@@ -97,12 +114,15 @@ def holdout_manifest(root,verify_arrays=True):
     return record,hashes
 
 
-def expected_checks(cases):
+def policies(spec,selection):
+    return sorted(selection_contract.VARIANTS) if selection else [0,7] if spec['nq']==14 and spec['rows']>1 else [0]
+
+
+def expected_checks(cases,selection=False):
     expected=Counter()
     for name,case in cases.items():
         spec=case['spec'];t=spec['rows']
-        policies=[0,7] if spec['nq']==14 and t>1 else [0]
-        for policy in policies:
+        for policy in policies(spec,selection):
             for schedule,calls in case['schedules'].items():
                 for call in calls:
                     p,r=call['start'],call['rows']
@@ -122,7 +142,7 @@ def expected_checks(cases):
     return expected
 
 
-def validate_results(path,cases):
+def validate_results(path,cases,selection=False):
     records=[json.loads(line) for line in Path(path).read_text().splitlines()]
     observed=Counter();runtimes=set();aux=Counter();protected=Counter()
     for row in records:
@@ -148,7 +168,8 @@ def validate_results(path,cases):
         observed[key]+=1
         spec=cases[row['case']]['spec'];r=row['rows'];h=spec['h'];stage=row.get('stage','')
         if kind=='route':
-            if row['attention']!=(4 if r==1 else 6) or row['mlp']!=(row['policy'] if r>1 else 0):
+            gqa,_,mlp=selection_contract.mappings(row['policy'],r) if selection else (0,0,row['policy'] if r>1 else 0)
+            if row['attention']!=(4 if r==1 else 6+gqa) or row['mlp']!=mlp:
                 raise ValueError('decoder route changed')
             if row['backend']!='metal' or not row['device'].startswith('Apple '):
                 raise ValueError('decoder execution did not prove Metal')
@@ -166,16 +187,33 @@ def validate_results(path,cases):
                 raise ValueError('missing decoder gate')
     labels=('xb','aw_norm','aw_qkv','aw_bias','aw_output','mw_norm','mw_gate','mw_up','mw_down','a_cosine','a_sine')
     expected_protected=Counter((name,policy,label) for name,case in cases.items()
-        for policy in ([0,7] if case['spec']['nq']==14 and case['spec']['rows']>1 else [0]) for label in labels)
+        for policy in policies(case['spec'],selection) for label in labels)
     if protected!=expected_protected:
         raise ValueError('incomplete protected decoder storage coverage')
-    if observed!=expected_checks(cases) or len(runtimes)!=1:
+    if observed!=expected_checks(cases,selection) or len(runtimes)!=1:
         raise ValueError('decoder missing, duplicate or unexpected numerical coverage')
     negatives={'second residual uses X','second residual omitted','first residual omitted',
                'second norm uses X','wrong norm weights','wrong absolute RoPE position',
                'mask exposes future rows','cache prefix changed'}
     if aux!=Counter({n:1 for n in negatives}):
         raise ValueError('incomplete decoder negative controls')
+    if selection:
+        async_rows=[r for r in records if r.get('mode')=='async']
+        for row in async_rows:
+            if row.get('failed')!=0 or row.get('elements',0)<=0:
+                raise ValueError('missing selection asynchronous gate')
+            if row['kind']=='boundary' and row['elements']!=row['rows']*896:
+                raise ValueError('incomplete asynchronous elements')
+        expected=Counter()
+        for v in selection_contract.VARIANTS:
+            for j in range(13):
+                start,rows=(0,53) if j==0 else (52+j,1)
+                for stage in BOUNDARIES:expected[v,'boundary',stage,start,rows]+=1
+            expected[v,'boundary','Y',0,1]+=1
+            for stage in BOUNDARIES:expected[v,'exact','async '+stage+' vs separate workspace','', '']+=13
+            for label in ('async cache key','async cache value'):expected[v,'exact',label,'','']+=1
+        actual=Counter((r['policy'],r['kind'],r.get('stage',r.get('label')),r.get('start',''),r.get('rows','')) for r in async_rows)
+        if actual!=expected:raise ValueError('incomplete selection asynchronous coverage')
     return dict(checks=sum(observed.values()),runtime=dict(zip(('device','backend'),next(iter(runtimes)))))
 
 
@@ -183,6 +221,8 @@ def evaluate(binary,fixtures,output):
     binary,fixtures,output=map(lambda p:Path(p).resolve(),(binary,fixtures,output))
     ensure_record_location(output);candidate=verify_build(binary)
     manifest,hashes=holdout_manifest(fixtures)
+    selection=bool(candidate.get('selection'))
+    if selection!=(manifest['kind']=='decoder_selection_holdout'):raise ValueError('wrong reserved candidate kind')
     if manifest['candidate']['binary_sha256']!=candidate['binary_sha256'] or manifest['candidate']['commit']!=candidate['source']['repository']['commit']:
         raise ValueError('decoder holdout names a different candidate')
     output.mkdir(parents=True,exist_ok=False)
@@ -197,7 +237,7 @@ def evaluate(binary,fixtures,output):
             raise ValueError('decoder candidate or inputs changed during evaluation')
         if process.returncode or '0 failed , 0 skipped' not in log.read_text():
             raise ValueError('decoder numerical suite failed or truncated')
-        record.update(validate_results(results,manifest['cases']),status='passed')
+        record.update(validate_results(results,manifest['cases'],selection),status='passed')
     except Exception as error:
         record.update(status='failed',error=str(error));raise
     finally:
@@ -209,12 +249,12 @@ def evaluate(binary,fixtures,output):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);sub=p.add_subparsers(dest='command',required=True)
-    b=sub.add_parser('build');b.add_argument('--binary',type=Path,required=True)
+    b=sub.add_parser('build');b.add_argument('--binary',type=Path,required=True);b.add_argument('--selection',action='store_true')
     e=sub.add_parser('evaluate')
     for flag in ('binary','fixtures','output'):
         e.add_argument('--'+flag,type=Path,required=True)
     args=p.parse_args()
-    if args.command=='build':build(args.binary)
+    if args.command=='build':build(args.binary,args.selection)
     else:evaluate(args.binary,args.fixtures,args.output)
 
 
