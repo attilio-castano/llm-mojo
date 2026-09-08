@@ -1,0 +1,543 @@
+{
+  "schema": 1,
+  "kind": "decoder_selection",
+  "build_sha256": "3060d5569cfec55110d3b64a8c8ff8e34f310a1dfbc5ad67b117d82201792805",
+  "declaration_sha256": "03f87c8ea116ffad09f44848efe659f7ed50f5ca3af0a0ff693d1e2b807852a5",
+  "screens": [
+    {
+      "study": "decoder_selection_full_screen",
+      "run_sha256": "61eaa5cc3e12725ed330d56213771a1856dc2d3560cd5a7a33a7a7a292f48c48",
+      "samples_sha256": "eeb4e2aac87c023e1b081acf0048cd68d2925e8dadb70d720eb9e309788cb658"
+    },
+    {
+      "study": "decoder_selection_short_screen",
+      "run_sha256": "d63e041d99c27b883ec13dd8801999eabab3c89b0b6cec32749868caf7a74511",
+      "samples_sha256": "d8b01b9b6811cef0678d7025fbda5604f28a6bf90d6963a44bc41e4ed1774cf4"
+    },
+    {
+      "study": "decoder_selection_cached_screen",
+      "run_sha256": "c7baca88dfe2a9d13ba8c94e1f9a099d900bf8ac57c831bbde46b1af1451d9e7",
+      "samples_sha256": "34076147eb33bd84fcc120b2dbef37fe750db5cbbc956e6b661051986a9a0515"
+    },
+    {
+      "study": "decoder_selection_decode_screen",
+      "run_sha256": "3bcd5826195bffd977af2b32c5ec36284f583bd72cca641b8a6edd693263ee10",
+      "samples_sha256": "9ac420c78027317628ed9f88f7bde91c2fde4682392563dd2782dc2d56250dc4"
+    }
+  ],
+  "proposals": [
+    {
+      "family": "full",
+      "query_rows": 16,
+      "rows": 16,
+      "layers": 1,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "full",
+      "query_rows": 16,
+      "rows": 16,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "full",
+      "query_rows": 64,
+      "rows": 64,
+      "layers": 1,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "full",
+      "query_rows": 64,
+      "rows": 64,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "full",
+      "query_rows": 256,
+      "rows": 256,
+      "layers": 1,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "full",
+      "query_rows": 256,
+      "rows": 256,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "full",
+      "query_rows": 1024,
+      "rows": 1024,
+      "layers": 1,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "full",
+      "query_rows": 1024,
+      "rows": 1024,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "full",
+      "query_rows": 4096,
+      "rows": 4096,
+      "layers": 1,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "full",
+      "query_rows": 4096,
+      "rows": 4096,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "full",
+      "query_rows": 257,
+      "rows": 257,
+      "layers": 1,
+      "candidate": 0,
+      "neighbor": true,
+      "from_shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "family": "full",
+      "query_rows": 257,
+      "rows": 257,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": true,
+      "from_shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "family": "full",
+      "query_rows": 1023,
+      "rows": 1023,
+      "layers": 1,
+      "candidate": 0,
+      "neighbor": true,
+      "from_shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "family": "full",
+      "query_rows": 1023,
+      "rows": 1023,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": true,
+      "from_shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "family": "short",
+      "query_rows": 7,
+      "rows": 7,
+      "layers": 1,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "short",
+      "query_rows": 7,
+      "rows": 7,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "short",
+      "query_rows": 15,
+      "rows": 15,
+      "layers": 1,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "short",
+      "query_rows": 15,
+      "rows": 15,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "short",
+      "query_rows": 16,
+      "rows": 16,
+      "layers": 1,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "short",
+      "query_rows": 16,
+      "rows": 16,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "short",
+      "query_rows": 17,
+      "rows": 17,
+      "layers": 1,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "short",
+      "query_rows": 17,
+      "rows": 17,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "cached",
+      "query_rows": 16,
+      "rows": 256,
+      "layers": 1,
+      "candidate": 2,
+      "neighbor": false
+    },
+    {
+      "family": "cached",
+      "query_rows": 16,
+      "rows": 256,
+      "layers": 24,
+      "candidate": 2,
+      "neighbor": false
+    },
+    {
+      "family": "cached",
+      "query_rows": 16,
+      "rows": 1024,
+      "layers": 1,
+      "candidate": 2,
+      "neighbor": false
+    },
+    {
+      "family": "cached",
+      "query_rows": 16,
+      "rows": 1024,
+      "layers": 24,
+      "candidate": 2,
+      "neighbor": false
+    },
+    {
+      "family": "cached",
+      "query_rows": 16,
+      "rows": 4096,
+      "layers": 1,
+      "candidate": 2,
+      "neighbor": false
+    },
+    {
+      "family": "cached",
+      "query_rows": 16,
+      "rows": 4096,
+      "layers": 24,
+      "candidate": 2,
+      "neighbor": false
+    },
+    {
+      "family": "cached",
+      "query_rows": 64,
+      "rows": 1024,
+      "layers": 1,
+      "candidate": 3,
+      "neighbor": false
+    },
+    {
+      "family": "cached",
+      "query_rows": 64,
+      "rows": 1024,
+      "layers": 24,
+      "candidate": 3,
+      "neighbor": false
+    },
+    {
+      "family": "cached",
+      "query_rows": 64,
+      "rows": 4096,
+      "layers": 1,
+      "candidate": 3,
+      "neighbor": false
+    },
+    {
+      "family": "cached",
+      "query_rows": 64,
+      "rows": 4096,
+      "layers": 24,
+      "candidate": 3,
+      "neighbor": false
+    },
+    {
+      "family": "cached",
+      "query_rows": 256,
+      "rows": 1024,
+      "layers": 1,
+      "candidate": 3,
+      "neighbor": false
+    },
+    {
+      "family": "cached",
+      "query_rows": 256,
+      "rows": 1024,
+      "layers": 24,
+      "candidate": 3,
+      "neighbor": false
+    },
+    {
+      "family": "cached",
+      "query_rows": 256,
+      "rows": 4096,
+      "layers": 1,
+      "candidate": 3,
+      "neighbor": false
+    },
+    {
+      "family": "cached",
+      "query_rows": 256,
+      "rows": 4096,
+      "layers": 24,
+      "candidate": 3,
+      "neighbor": false
+    },
+    {
+      "family": "cached",
+      "query_rows": 15,
+      "rows": 256,
+      "layers": 1,
+      "candidate": 2,
+      "neighbor": true,
+      "from_shape": [
+        16,
+        256
+      ]
+    },
+    {
+      "family": "cached",
+      "query_rows": 15,
+      "rows": 256,
+      "layers": 24,
+      "candidate": 2,
+      "neighbor": true,
+      "from_shape": [
+        16,
+        256
+      ]
+    },
+    {
+      "family": "cached",
+      "query_rows": 17,
+      "rows": 256,
+      "layers": 1,
+      "candidate": 2,
+      "neighbor": true,
+      "from_shape": [
+        16,
+        256
+      ]
+    },
+    {
+      "family": "cached",
+      "query_rows": 17,
+      "rows": 256,
+      "layers": 24,
+      "candidate": 2,
+      "neighbor": true,
+      "from_shape": [
+        16,
+        256
+      ]
+    },
+    {
+      "family": "cached",
+      "query_rows": 65,
+      "rows": 4096,
+      "layers": 1,
+      "candidate": 3,
+      "neighbor": true,
+      "from_shape": [
+        64,
+        4096
+      ]
+    },
+    {
+      "family": "cached",
+      "query_rows": 65,
+      "rows": 4096,
+      "layers": 24,
+      "candidate": 3,
+      "neighbor": true,
+      "from_shape": [
+        64,
+        4096
+      ]
+    },
+    {
+      "family": "cached",
+      "query_rows": 255,
+      "rows": 4096,
+      "layers": 1,
+      "candidate": 3,
+      "neighbor": true,
+      "from_shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "family": "cached",
+      "query_rows": 255,
+      "rows": 4096,
+      "layers": 24,
+      "candidate": 3,
+      "neighbor": true,
+      "from_shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "family": "decode",
+      "query_rows": 1,
+      "rows": 64,
+      "layers": 1,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "decode",
+      "query_rows": 1,
+      "rows": 64,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "decode",
+      "query_rows": 1,
+      "rows": 256,
+      "layers": 1,
+      "candidate": 12,
+      "neighbor": false
+    },
+    {
+      "family": "decode",
+      "query_rows": 1,
+      "rows": 256,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "decode",
+      "query_rows": 1,
+      "rows": 1024,
+      "layers": 1,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "decode",
+      "query_rows": 1,
+      "rows": 1024,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "decode",
+      "query_rows": 1,
+      "rows": 4096,
+      "layers": 1,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "decode",
+      "query_rows": 1,
+      "rows": 4096,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": false
+    },
+    {
+      "family": "decode",
+      "query_rows": 1,
+      "rows": 257,
+      "layers": 1,
+      "candidate": 12,
+      "neighbor": true,
+      "from_shape": [
+        1,
+        256
+      ]
+    },
+    {
+      "family": "decode",
+      "query_rows": 1,
+      "rows": 257,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": true,
+      "from_shape": [
+        1,
+        256
+      ]
+    },
+    {
+      "family": "decode",
+      "query_rows": 1,
+      "rows": 4095,
+      "layers": 1,
+      "candidate": 0,
+      "neighbor": true,
+      "from_shape": [
+        1,
+        4096
+      ]
+    },
+    {
+      "family": "decode",
+      "query_rows": 1,
+      "rows": 4095,
+      "layers": 24,
+      "candidate": 0,
+      "neighbor": true,
+      "from_shape": [
+        1,
+        4096
+      ]
+    }
+  ],
+  "rule": "Per exact shape and mode: all four ratios below one and median reduction exceeds calibrated max(5%, self-pair deviation); lowest qualifying median ratio then ID. Nearest declared neighbor, baseline fallback."
+}

@@ -622,22 +622,33 @@ def load_decoder_profile(directory,prefix=''):
             for (r,t,variant,s),v in grouped.items()]
 
 
-def load_decoder_windows(directory):
+def load_decoder_windows(directory,prefix=''):
     """Enclose each complete capture; gaps include scheduling and preemption."""
     directory=Path(directory)
-    load_decoder_profile(directory)
+    load_decoder_profile(directory,prefix)
+    record=json.loads((directory/(prefix+'profiles.json')).read_text())
+    selected=record['schema']==6
+    grid=decoder.profile_selection(record['specification']['selection']) if selected else [(r,t,0) for r,t,_ in decoder.PROFILES]
     grouped=defaultdict(list)
-    with gzip.open(directory/'profile_samples.csv.gz','rt',newline='') as stream:
+    with gzip.open(directory/(prefix+'profile_samples.csv.gz'),'rt',newline='') as stream:
         for row in csv.DictReader(stream):
-            grouped[int(row['query_rows']),int(row['rows'])].append(row)
+            grouped[int(row['query_rows']),int(row['rows']),int(row['variant'])].append(row)
     result=[]
-    for r,t,n in decoder.PROFILES:
-        rows=grouped[r,t]
+    for r,t,v in grid:
+        n=next(n for rr,tt,n in decoder.PROFILES if (r,t)==(rr,tt))
+        rows=grouped[r,t,v]
         active=sum(int(row['duration_ns']) for row in rows)
         span=max(int(row['end_ns']) for row in rows)-min(int(row['start_ns']) for row in rows)
         if not 0<active<=span:
             raise ValueError('decoder active time exceeds its enclosing window')
-        result.append(dict(query_rows=r,rows=t,iterations=n,dispatches=len(rows),
+        extra={}
+        if selected:
+            stages=decoder.stages(v,r)
+            mlp_stages=set(stages[stages.index('MLP RMSNorm'):])
+            extra=dict(variant=v,active_us_per_call=active/n/1000,
+                gqa_share_percent=100*sum(int(row['duration_ns']) for row in rows if row['stage'].startswith('FP32 GQA'))/active,
+                mlp_share_percent=100*sum(int(row['duration_ns']) for row in rows if row['stage'] in mlp_stages)/active)
+        result.append(dict(query_rows=r,rows=t,**extra,iterations=n,dispatches=len(rows),
             active_us=active/1000,enclosing_us=span/1000,gap_us=(span-active)/1000,
             gap_share_percent=100*(span-active)/span))
     return result

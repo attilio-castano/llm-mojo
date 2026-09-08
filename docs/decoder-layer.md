@@ -431,8 +431,10 @@ contract. This baseline does not yet establish model logits or generation.
 
 ## Configuration selection study
 
-The approved next milestone is the bounded [configuration selection
-study](../studies/decoder_layer/selection-plan.md), before full-model work.
+The completed [configuration selection study](../studies/decoder_layer/selection.md)
+confirms cached-prefill gains up to 52.9% on the declared grid. Full/short
+prefill and decode retain decoder ID 0 under the frozen promotion rule. The
+[plan](../studies/decoder_layer/selection-plan.md) records its scope and gates.
 `enqueue_decoder_layer_configuration(..., variant)` exposes IDs 0, 1, 2, 3,
 4, 8, 12 and 14 by reusing implemented attention and MLP kernels. Its registry
 is explicit; it does not infer a performance winner from shape. The table in

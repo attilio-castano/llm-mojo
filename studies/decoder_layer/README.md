@@ -1,5 +1,9 @@
 # One Qwen decoder layer
 
+The follow-up [configuration selection study](selection.md) confirms cached-prefill
+gains up to 52.9% and records exact choices for full prefill, cached prefill and
+decode. This report preserves the original decoder ID 0 baseline evidence.
+
 The decoder composition passes its independent reserved acceptance. Profiling
 the whole layer adds useful context: **MLP occupies 79% of active GPU time at
 full R=T=256; attention occupies 67% for a cached R=64, T=4096 chunk.** At

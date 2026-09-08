@@ -104,6 +104,10 @@ class SelectionTests(unittest.TestCase):
                 record['samples_sha256']=hashlib.sha256(raw).hexdigest();(root/'profiles.json').write_text(json.dumps(record))
                 return study.load_decoder_profile(root)
             self.assertEqual(sum(x['count'] for x in check(rows)),4325)
+            windows=study.load_decoder_windows(root)
+            self.assertEqual(sum(w['dispatches'] for w in windows),4325)
+            self.assertEqual({(w['query_rows'],w['rows'],w['variant']) for w in windows},set(grid))
+            self.assertTrue(all(w['active_us']==w['dispatches']/1000 for w in windows))
             for bad in (rows[:-1],rows+[rows[-1]],[r for r in rows if r['stage']!='FP32 GQA merge']):
                 with self.assertRaises(ValueError):check(bad)
 

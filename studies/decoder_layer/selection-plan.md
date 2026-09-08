@@ -122,10 +122,10 @@ they do not replace paired latency.
 - [x] Freeze executable declaration and reserved token identity.
 - [x] Implement route/preflight/measurement extensions and meaningful tests.
 - [x] Pass development/checkpoint/asynchronous checks and full validation.
-- [ ] Freeze clean binaries and pass all fresh reserved acceptance gates.
-- [ ] Collect calibration/screens and freeze workload-specific proposals.
-- [ ] Confirm proposals/neighbors and collect selected diagnostic profiles.
-- [ ] Retain reproducible evidence, selection lookup and explanation; final
+- [x] Freeze clean binaries and pass all fresh reserved acceptance gates.
+- [x] Collect calibration/screens and freeze workload-specific proposals.
+- [x] Confirm proposals/neighbors and collect selected diagnostic profiles.
+- [x] Retain reproducible evidence, selection lookup and explanation; final
   checks and local commit, leaving a clean worktree.
 
 Validation before candidate freeze: 111 Mojo tests in 16 suites; 98 Python
@@ -133,3 +133,14 @@ tests (one retained-selection test awaits collection); all frozen oracle checks
 and benchmark smoke routes passed. All eight IDs passed 51,296 synthetic,
 2,544 checkpoint and 10,352 previously opened holdout core checks, plus exact
 storage and asynchronous checks. No numerical policy was changed.
+
+Completed measurements: 16,800 observations (480 calibration, 9,920 screening,
+6,400 confirmation); 21 accepted mode-specific cached cells and ten shared
+choices. Full/short prefill and decode retain ID 0. Four successful diagnostic
+captures retain 2,825 measured dispatches; no capture retries or valid-trial
+reruns occurred. Final curation includes a reusable selected-window reader and
+a clearer graph; all inference/measurement evidence remains bound to `b88ca50`.
+
+Final curation verification: all 98 Python tests pass with no skips; all 19
+generated PNG/CSV artifacts reproduce byte-for-byte, including the historical
+baseline artifacts. Local documentation links and `git diff --check` pass.
