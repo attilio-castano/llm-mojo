@@ -1,4 +1,4 @@
-"""Build a bounded GQA profile binary for receipt-verified Metal capture."""
+"""Build a bounded attention or MLP binary for receipt-verified Metal capture."""
 import argparse
 import json
 import os
@@ -144,7 +144,7 @@ def argument_parser():
     p.add_argument('--profile-query-rows', type=int, default=1)
     p.add_argument('--profile-warmup', type=int, default=100)
     p.add_argument('--build-profile-binary', type=Path, required=True)
-    p.add_argument('--profile-variant', type=int, choices=sorted(set(VARIANTS)|set(prefill.VARIANTS)|set(sublayer.VARIANTS)), default=9)
+    p.add_argument('--profile-variant', type=int, choices=sorted(set(VARIANTS)|set(prefill.VARIANTS)|set(sublayer.VARIANTS)|mlp.VARIANTS), default=9)
     p.add_argument('--profile-rows', type=int, default=4096)
     p.add_argument('--profile-iterations', type=int, default=500)
     return p

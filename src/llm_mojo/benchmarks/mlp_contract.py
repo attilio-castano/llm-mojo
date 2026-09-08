@@ -1,4 +1,4 @@
-"""Frozen MLP measurement inputs, boundaries and seven-dispatch identity."""
+"""Frozen MLP inputs and BF16 boundaries, with six/seven-dispatch identities."""
 import ctypes
 import gzip
 import hashlib

@@ -8,6 +8,10 @@ projection campaign: 53 regression cases across eight configurations, seven
 fresh holdouts for original/final, 12,160 optimization timing observations and
 eight final Metal captures. Explicit variant 7 uses 16x16 gate/up/down;
 variant 0 remains the rowwise default. All seven BF16 boundaries are preserved.
+The subsequent [single-token decode study](../studies/mlp_sublayer/README.md#single-token-decode-follow-up)
+validated experimental mappings 8 through 18, but no candidate qualified for
+promotion. It retains four additional holdouts, 1,280 timing observations and
+two Metal captures. Those results leave the same default and numerical contract.
 Reference results below retain their original CPU scope.
 
 ## Scope and data flow
@@ -246,7 +250,10 @@ requires fresh declared holdouts. Do not widen thresholds repeatedly or relabel
 compatibility failures as passes. Until budgets are frozen and all required
 gates pass, there is no accepted MLP baseline and profiling does not begin.
 
-## Autonomous execution plan: reference readiness
+## Original reference-readiness plan (completed)
+
+The following plan records the predeclared reference milestone. Its results and
+reproduction commands follow below; it is not an outstanding implementation task.
 
 This plan governs the reference-readiness work recorded below. The run ends with a reproducible
 upstream reference package and frozen numerical acceptance rules, ready for
@@ -349,6 +356,11 @@ Enqueue validates positive dimensions, row capacity, compatible shapes, and
 Metal before launching any work; it allocates and synchronizes nothing. All
 resources remain alive on the same ordered stream until completion, and output
 is consumed before the next invocation overwrites it.
+
+The decode follow-up adds mappings 8 through 18, restricted to one row. Combined
+gate/up mappings 8, 10, 13, 14, 17 and 18 enqueue six dispatches; all other mappings
+enqueue seven. Combining launches preserves separate gate/up storage and all
+seven BF16 boundaries. The isolated-stage API always enqueues only the named stage.
 
 The tests verify poisoned outputs are completely written, inactive
 workspace/guard regions remain untouched, and rejected calls leave buffers
@@ -469,7 +481,10 @@ MLP preparation also independently verified its 43-case synthetic subset.
 That reference-readiness run generated no MLP holdout outputs, downloaded no
 model assets, and introduced no Mojo MLP implementation or optimization.
 
-## Approved implementation and baseline study
+## Original implementation and baseline plan (completed)
+
+The implementation and measurements below are complete. This section preserves
+their original scope and stop conditions; the study records subsequent campaigns.
 
 Initial fixture acceptance completed on 2026-09-07 at local source `afbe288`.
 All 43 synthetic and three checkpoint development cases passed, followed by
@@ -479,7 +494,7 @@ bit-exact. No numerical budget or supported input domain changed. See the
 [MLP study](../studies/mlp_sublayer/README.md) for the retained checks and
 the subsequent residual cutoff repair and baseline measurement results.
 
-The next run is authorized for local implementation, validation, local commits,
+The original run was authorized for local implementation, validation, local commits,
 Metal measurement and trace capture, and study documentation using existing
 assets. Preserve this frozen reference package; new acceptance tooling records
 its own identity and does not rewrite the reference anchors.

@@ -142,7 +142,9 @@ independent FP64 diagnostics, and a finite BF16 SiLU sweep. Validation runs its
 fixture-tooling tests and verifies synthetic frozen evidence. Checkpoint
 reproduction uses an explicit local-asset argument; the ordinary workflow does
 not capture or evaluate the separate holdouts. The Mojo MLP adds
-operation/composition and BF16 boundary tests for all eight projection mappings.
+operation/composition and BF16 boundary tests for all nineteen projection mappings.
+Mappings 0 through 7 cover full and chunked rows; decode-only mappings 8 through
+18 use each fixture's first row and reject multi-row calls.
 The explicit `tests/fixtures/mlp_acceptance.py` entrypoint uses the same pinned
 script lock through a symlink and opens holdouts only against a clean candidate.
 Normal-mode reuse can be checked with `MODULAR_DEBUG` unset and
@@ -153,8 +155,12 @@ evaluations of observed holdouts are regression checks, not fresh holdouts.
 The completed optimization campaign also captured its separately declared
 holdouts. Evaluate those existing fixtures with
 `MLP_SPLIT=optimization_holdout MLP_VARIANTS=0,7`; `MLP_VARIANTS` can restrict
-any regression run to an explicit subset of mappings 0 through 7. During the
-initial frozen-candidate acceptance, `MLP_CANDIDATE_BINARY` additionally binds
+any regression run to an explicit subset of mappings 0 through 18. The completed
+decode campaign's four observed holdouts can be checked with
+`MLP_SPLIT=decode_holdout MLP_VARIANTS=0,12`; variant 12 is a diagnostic candidate,
+not a promoted route.
+
+During the initial frozen-candidate acceptance, `MLP_CANDIDATE_BINARY` additionally binds
 the binary hash and clean commit to the capture manifest. Leave it unset for
 later regression runs after source changes. The `--optimization` acceptance
 generator refuses to overwrite its existing output directory; replaying the

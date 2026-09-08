@@ -254,9 +254,12 @@ same autoregressive path as any other response.
 
 The [MLP numerical contract and upstream fixture specification](mlp-sublayer.md)
 defines post-attention RMSNorm, SwiGLU, and the second residual boundary.
-The CPU upstream development fixtures and initial numerical budgets are
-characterized and frozen there. A Mojo MLP baseline and its holdout validation
-remain the next implementation milestone.
+The upstream fixtures and numerical budgets are frozen. The materialized Mojo
+baseline, tiled prefill projections, and bounded decode experiments have passed
+their numerical checks and are documented in the [MLP study](../studies/mlp_sublayer/README.md).
+Rowwise mapping 0 remains the default; tiled mapping 7 is an explicit prefill
+option, and no decode candidate qualified for promotion. Composing attention
+and MLP into a complete decoder block remains the next implementation milestone.
 
 ## Conversation semantics
 
