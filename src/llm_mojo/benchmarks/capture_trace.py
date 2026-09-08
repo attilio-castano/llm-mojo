@@ -291,7 +291,7 @@ def parse_target_identity(output: str) -> dict[str, Any]:
         ):
             value = output_field(output, label)
             if re.fullmatch(r"[0-9]+", value) is None or (
-                int(value) <= 0 and key not in ("groups", "heads", "splits", "query_tile", "key_tile")
+                int(value) <= 0 and key not in ("groups", "heads", "splits", "query_tile", "key_tile", "mlp_mapping")
             ):
                 raise ValueError(f"target {label} is not a positive integer")
             identity[key] = int(value)

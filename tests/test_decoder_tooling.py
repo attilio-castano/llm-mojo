@@ -35,6 +35,24 @@ class DecoderToolingTests(unittest.TestCase):
             for field,value in [('mlp_mapping',14),('key_value_rows',0),('dispatches_per_iteration',15),('profile_iterations',313)]:
                 with self.assertRaises(ValueError):contract.configuration({**data,field:value})
 
+    def test_capture_accepts_zero_decode_mapping_but_rejects_zero_dimensions(self):
+        from llm_mojo.benchmarks.capture_trace import validate_target_identity
+        output='\n'.join(['profile implementation: enqueue_decoder_layer',
+            'device: Apple M4 Pro','api: metal','rows: 1','hidden: 896',
+            'warmup iterations: 10','profile iterations: 100',
+            'post-profile idle milliseconds: 250','profile workload: decoder-r1-t4096-v0',
+            'key value rows: 4096','query heads: 14','key value heads: 2',
+            'intermediate size: 4864','mlp mapping: 0','profile dispatches per iteration: 16'])
+        identity=parse_target_identity(output)
+        configuration=dict(operation='decoder_layer',implementation='decoder_layer_0',entrypoint='enqueue_decoder_layer',
+            profile_warmup_iterations=10,profile_iterations=100,profile_post_idle_milliseconds=250,
+            **contract.specification(0,1,4096))
+        hardware=dict(chip='Apple M4 Pro',gpu_api='metal')
+        self.assertEqual(validate_target_identity(identity,configuration,hardware)['mlp_mapping'],0)
+        for bad in (output.replace('mlp mapping: 0','mlp mapping: -1'),output.replace('query heads: 14','query heads: 0')):
+            with self.assertRaises(ValueError):parse_target_identity(bad)
+        with self.assertRaises(ValueError):validate_target_identity({**identity,'mlp_mapping':7},configuration,hardware)
+
     def test_benchmark_runtime_rejects_wrong_rows_backend_and_truncation(self):
         output='\n'.join(['device: Apple M4 Pro','api: metal','operation: decoder_layer',
             'measurement: whole_decoder','query rows: 16','shape: 256 24 seed: 4001',
