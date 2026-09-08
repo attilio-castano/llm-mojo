@@ -653,6 +653,7 @@ def _linear_two_output_apple_gpu_kernel[
     WeightLayout: TensorLayout,
     BiasLayout: TensorLayout,
     OutputLayout: TensorLayout,
+    HAS_BIAS: Bool = True,
 ](
     input: TileTensor[DType.bfloat16, InputLayout, MutAnyOrigin],
     weight: TileTensor[DType.bfloat16, WeightLayout, MutAnyOrigin],
@@ -703,17 +704,21 @@ def _linear_two_output_apple_gpu_kernel[
         var first_sum = warp.sum(first_accumulator)
         var second_sum = warp.sum(second_accumulator)
         if lane == 0:
-            var first_bias = rebind[Scalar[DType.bfloat16]](
-                bias[first_output_feature]
-            ).cast[DType.float32]()
+            var first_bias: Float32 = 0
+            comptime if HAS_BIAS:
+                first_bias = rebind[Scalar[DType.bfloat16]](
+                    bias[first_output_feature]
+                ).cast[DType.float32]()
             var first_result = (first_sum + first_bias).cast[DType.bfloat16]()
             output[0, first_output_feature] = rebind[output.ElementType](
                 first_result
             )
             if second_output_feature < output_count:
-                var second_bias = rebind[Scalar[DType.bfloat16]](
-                    bias[second_output_feature]
-                ).cast[DType.float32]()
+                var second_bias: Float32 = 0
+                comptime if HAS_BIAS:
+                    second_bias = rebind[Scalar[DType.bfloat16]](
+                        bias[second_output_feature]
+                    ).cast[DType.float32]()
                 var second_result = (second_sum + second_bias).cast[
                     DType.bfloat16
                 ]()
@@ -906,47 +911,70 @@ def enqueue_linear_prefill_mma_8x16_apple_gpu[
 
 
 @always_inline
-def _linear_mma_fragment[TRANSPOSE: Bool, L: TensorLayout](
+def _linear_mma_fragment[
+    TRANSPOSE: Bool, L: TensorLayout
+](
     tensor: TileTensor[DType.bfloat16, L, MutAnyOrigin],
-    row: Int, column: Int, rows: Int, columns: Int,
+    row: Int,
+    column: Int,
+    rows: Int,
+    columns: Int,
 ) -> SIMD[DType.bfloat16, 2]:
     comptime assert tensor.flat_rank == 2
     var fragment = SIMD[DType.bfloat16, 2](0)
     comptime for e in range(2):
         if row < rows and column + e < columns:
             comptime if TRANSPOSE:
-                fragment[e] = rebind[Scalar[DType.bfloat16]](tensor[column + e, row])
+                fragment[e] = rebind[Scalar[DType.bfloat16]](
+                    tensor[column + e, row]
+                )
             else:
-                fragment[e] = rebind[Scalar[DType.bfloat16]](tensor[row, column + e])
+                fragment[e] = rebind[Scalar[DType.bfloat16]](
+                    tensor[row, column + e]
+                )
     return fragment
 
 
 @always_inline
-def _linear_mma_store[HAS_BIAS: Bool, BL: TensorLayout, OL: TensorLayout](
+def _linear_mma_store[
+    HAS_BIAS: Bool, BL: TensorLayout, OL: TensorLayout
+](
     bias: TileTensor[DType.bfloat16, BL, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
     accumulator: SIMD[DType.float32, 2],
-    row: Int, column: Int, rows: Int, columns: Int,
+    row: Int,
+    column: Int,
+    rows: Int,
+    columns: Int,
 ):
     comptime assert bias.flat_rank == 1 and output.flat_rank == 2
     comptime for e in range(2):
         if row < rows and column + e < columns:
             var b: Float32 = 0
             comptime if HAS_BIAS:
-                b = rebind[Scalar[DType.bfloat16]](bias[column + e]).cast[DType.float32]()
+                b = rebind[Scalar[DType.bfloat16]](bias[column + e]).cast[
+                    DType.float32
+                ]()
             var value = (accumulator[e] + b).cast[DType.bfloat16]()
             output[row, column + e] = rebind[output.ElementType](value)
 
 
 def _linear_mma_tile[
-    BM: Int, BN: Int, IL: TensorLayout, WL: TensorLayout,
-    BL: TensorLayout, OL: TensorLayout, HAS_BIAS: Bool,
+    BM: Int,
+    BN: Int,
+    IL: TensorLayout,
+    WL: TensorLayout,
+    BL: TensorLayout,
+    OL: TensorLayout,
+    HAS_BIAS: Bool,
 ](
     input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
     weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
     bias: TileTensor[DType.bfloat16, BL, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
-    row_count: Int32, input_count: Int32, output_count: Int32,
+    row_count: Int32,
+    input_count: Int32,
+    output_count: Int32,
 ):
     """One SIMD group owns four 8x8 fragments: eight FP32 values per lane.
 
@@ -971,8 +999,12 @@ def _linear_mma_tile[
     var k = 0
     while k < inputs:
         var a0 = _linear_mma_fragment[False](input, row, k + fc, rows, inputs)
-        var b0 = _linear_mma_fragment[True](weight, k + fr, column, inputs, outputs)
-        var b1 = _linear_mma_fragment[True](weight, k + fr, column + 8, inputs, outputs)
+        var b0 = _linear_mma_fragment[True](
+            weight, k + fr, column, inputs, outputs
+        )
+        var b1 = _linear_mma_fragment[True](
+            weight, k + fr, column + 8, inputs, outputs
+        )
         var p0 = c0
         var p1 = c1
         var p2 = c2
@@ -980,28 +1012,49 @@ def _linear_mma_tile[
         _mma_apple_8x8(c0, a0, b0, p0)
         _mma_apple_8x8(c1, a0, b1, p1)
         comptime if BM == 16:
-            var a1 = _linear_mma_fragment[False](input, row + 8, k + fc, rows, inputs)
+            var a1 = _linear_mma_fragment[False](
+                input, row + 8, k + fc, rows, inputs
+            )
             _mma_apple_8x8(c2, a1, b0, p2)
             _mma_apple_8x8(c3, a1, b1, p3)
         else:
-            var b2 = _linear_mma_fragment[True](weight, k + fr, column + 16, inputs, outputs)
-            var b3 = _linear_mma_fragment[True](weight, k + fr, column + 24, inputs, outputs)
+            var b2 = _linear_mma_fragment[True](
+                weight, k + fr, column + 16, inputs, outputs
+            )
+            var b3 = _linear_mma_fragment[True](
+                weight, k + fr, column + 24, inputs, outputs
+            )
             _mma_apple_8x8(c2, a0, b2, p2)
             _mma_apple_8x8(c3, a0, b3, p3)
         k += 8
     _linear_mma_store[HAS_BIAS](bias, output, c0, row, column, rows, outputs)
-    _linear_mma_store[HAS_BIAS](bias, output, c1, row, column + 8, rows, outputs)
+    _linear_mma_store[HAS_BIAS](
+        bias, output, c1, row, column + 8, rows, outputs
+    )
     comptime if BM == 16:
-        _linear_mma_store[HAS_BIAS](bias, output, c2, row + 8, column, rows, outputs)
-        _linear_mma_store[HAS_BIAS](bias, output, c3, row + 8, column + 8, rows, outputs)
+        _linear_mma_store[HAS_BIAS](
+            bias, output, c2, row + 8, column, rows, outputs
+        )
+        _linear_mma_store[HAS_BIAS](
+            bias, output, c3, row + 8, column + 8, rows, outputs
+        )
     else:
-        _linear_mma_store[HAS_BIAS](bias, output, c2, row, column + 16, rows, outputs)
-        _linear_mma_store[HAS_BIAS](bias, output, c3, row, column + 24, rows, outputs)
+        _linear_mma_store[HAS_BIAS](
+            bias, output, c2, row, column + 16, rows, outputs
+        )
+        _linear_mma_store[HAS_BIAS](
+            bias, output, c3, row, column + 24, rows, outputs
+        )
 
 
 def enqueue_linear_prefill_mma_tile_apple_gpu[
-    BM: Int, BN: Int, IL: TensorLayout, WL: TensorLayout,
-    BL: TensorLayout, OL: TensorLayout, HAS_BIAS: Bool = True,
+    BM: Int,
+    BN: Int,
+    IL: TensorLayout,
+    WL: TensorLayout,
+    BL: TensorLayout,
+    OL: TensorLayout,
+    HAS_BIAS: Bool = True,
 ](
     context: DeviceContext,
     input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
@@ -1018,12 +1071,25 @@ def enqueue_linear_prefill_mma_tile_apple_gpu[
     var k = Int(input.dim[1]())
     var n = Int(weight.dim[0]())
     comptime kernel = _linear_mma_tile[BM, BN, IL, WL, BL, OL, HAS_BIAS]
-    context.enqueue_function[kernel](input, weight, bias, output, Int32(r), Int32(k), Int32(n),
-        grid_dim=(ceildiv(n, BN), ceildiv(r, BM)), block_dim=WARP_SIZE)
+    context.enqueue_function[kernel](
+        input,
+        weight,
+        bias,
+        output,
+        Int32(r),
+        Int32(k),
+        Int32(n),
+        grid_dim=(ceildiv(n, BN), ceildiv(r, BM)),
+        block_dim=WARP_SIZE,
+    )
 
 
 def enqueue_linear_prefill_mma_tile_apple_gpu[
-    BM: Int, BN: Int, IL: TensorLayout, WL: TensorLayout, OL: TensorLayout,
+    BM: Int,
+    BN: Int,
+    IL: TensorLayout,
+    WL: TensorLayout,
+    OL: TensorLayout,
 ](
     context: DeviceContext,
     input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
@@ -1111,6 +1177,7 @@ def enqueue_linear_apple_gpu_two_output[
     WeightLayout: TensorLayout,
     BiasLayout: TensorLayout,
     OutputLayout: TensorLayout,
+    HAS_BIAS: Bool = True,
 ](
     context: DeviceContext,
     input: TileTensor[DType.bfloat16, InputLayout, MutAnyOrigin],
@@ -1124,7 +1191,9 @@ def enqueue_linear_apple_gpu_two_output[
     comptime assert weight.flat_rank == 2, "weight must have rank 2"
     comptime assert bias.flat_rank == 1, "bias must have rank 1"
     comptime assert output.flat_rank == 2, "output must have rank 2"
-    _validate_linear(input, weight, bias, output)
+    _validate_linear[
+        InputLayout, WeightLayout, BiasLayout, OutputLayout, HAS_BIAS
+    ](input, weight, bias, output)
     if context.api() != "metal":
         raise Error("Apple GPU linear projection requires the Metal device API")
 
@@ -1137,7 +1206,7 @@ def enqueue_linear_apple_gpu_two_output[
         output_features, LINEAR_APPLE_GPU_TWO_OUTPUTS_PER_SIMD_GROUP
     )
     comptime kernel = _linear_two_output_apple_gpu_kernel[
-        InputLayout, WeightLayout, BiasLayout, OutputLayout
+        InputLayout, WeightLayout, BiasLayout, OutputLayout, HAS_BIAS
     ]
     context.enqueue_function[kernel](
         input,
@@ -1216,3 +1285,171 @@ def enqueue_linear_prefill_mma_8x16_apple_gpu[
     enqueue_linear_prefill_mma_8x16_apple_gpu[
         IL, WL, type_of(unused_bias.layout), OL, False
     ](context, input, weight, unused_bias, output)
+
+
+def enqueue_linear_apple_gpu_two_output[
+    IL: TensorLayout,
+    WL: TensorLayout,
+    OL: TensorLayout,
+](
+    ctx: DeviceContext,
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+) raises:
+    var unused = TileTensor(output.ptr, row_major(1))
+    enqueue_linear_apple_gpu_two_output[
+        IL, WL, type_of(unused.layout), OL, False
+    ](ctx, input, weight, unused, output)
+
+
+def _linear_pair_decode_kernel[
+    TWO: Bool,
+    IL: TensorLayout,
+    WL: TensorLayout,
+    OL: TensorLayout,
+](
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    gate_weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    up_weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    gate: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+    up: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+    k: Int32,
+    n: Int32,
+):
+    # A whole block selects one projection. The inner kernel retains its
+    # original x-grid ownership and reduction; y only combines launches.
+    var weight = gate_weight if block_idx.y == 0 else up_weight
+    var output = gate if block_idx.y == 0 else up
+    var unused = TileTensor(output.ptr, row_major(1))
+    comptime if TWO:
+        _linear_two_output_apple_gpu_kernel[
+            IL, WL, type_of(unused.layout), OL, False
+        ](input, weight, unused, output, k, n)
+    else:
+        _linear_rowwise_apple_gpu_kernel[
+            IL, WL, type_of(unused.layout), OL, False
+        ](input, weight, unused, output, 1, k, n)
+
+
+def enqueue_linear_pair_decode_apple_gpu[
+    TWO: Bool,
+    IL: TensorLayout,
+    WL: TensorLayout,
+    OL: TensorLayout,
+](
+    ctx: DeviceContext,
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    gate_weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    up_weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    gate: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+    up: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+) raises:
+    var unused = TileTensor(gate.ptr, row_major(1))
+    _validate_linear[IL, WL, type_of(unused.layout), OL, False](
+        input, gate_weight, unused, gate
+    )
+    _validate_linear[IL, WL, type_of(unused.layout), OL, False](
+        input, up_weight, unused, up
+    )
+    if (
+        ctx.api() != "metal"
+        or Int(input.dim[0]()) != 1
+        or Int(gate_weight.dim[0]()) != Int(up_weight.dim[0]())
+    ):
+        raise Error(
+            "paired decode requires Metal, one row and equal output widths"
+        )
+    var n = Int(gate_weight.dim[0]())
+    comptime kernel = _linear_pair_decode_kernel[TWO, IL, WL, OL]
+    ctx.enqueue_function[kernel](
+        input,
+        gate_weight,
+        up_weight,
+        gate,
+        up,
+        Int32(input.dim[1]()),
+        Int32(n),
+        grid_dim=(ceildiv(n, 8 if TWO else 4), 2),
+        block_dim=128,
+    )
+
+
+def _linear_cooperative_decode_kernel[
+    GROUPS: Int,
+    IL: TensorLayout,
+    WL: TensorLayout,
+    OL: TensorLayout,
+](
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+    k: Int32,
+    n: Int32,
+):
+    comptime assert is_apple_gpu()
+    comptime assert GROUPS == 2 or GROUPS == 4
+    comptime assert (
+        input.flat_rank == 2 and weight.flat_rank == 2 and output.flat_rank == 2
+    )
+    var lane = lane_id()
+    var group = thread_idx.x // WARP_SIZE
+    var column = block_idx.x * (4 // GROUPS) + group // GROUPS
+    var part = group % GROUPS
+    var partials = stack_allocation[
+        DType.float32, address_space=AddressSpace.SHARED
+    ](row_major[4]())
+    var accumulator: Float32 = 0
+    var index = part * WARP_SIZE + lane
+    if column < Int(n):
+        while index < Int(k):
+            accumulator += (
+                rebind[Scalar[DType.bfloat16]](input[0, index]).cast[
+                    DType.float32
+                ]()
+                * rebind[Scalar[DType.bfloat16]](weight[column, index]).cast[
+                    DType.float32
+                ]()
+            )
+            index += GROUPS * WARP_SIZE
+    var subtotal = warp.sum(accumulator)
+    if lane == 0:
+        partials[group] = subtotal
+    barrier()
+    if part == 0 and lane == 0 and column < Int(n):
+        var total: Float32 = 0
+        comptime for j in range(GROUPS):
+            total += partials[group + j]
+        output[0, column] = rebind[output.ElementType](
+            total.cast[DType.bfloat16]()
+        )
+
+
+def enqueue_linear_cooperative_decode_apple_gpu[
+    GROUPS: Int,
+    IL: TensorLayout,
+    WL: TensorLayout,
+    OL: TensorLayout,
+](
+    ctx: DeviceContext,
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+) raises:
+    comptime assert GROUPS == 2 or GROUPS == 4
+    var unused = TileTensor(output.ptr, row_major(1))
+    _validate_linear[IL, WL, type_of(unused.layout), OL, False](
+        input, weight, unused, output
+    )
+    if ctx.api() != "metal" or Int(input.dim[0]()) != 1:
+        raise Error("cooperative decode requires Metal and one row")
+    comptime kernel = _linear_cooperative_decode_kernel[GROUPS, IL, WL, OL]
+    ctx.enqueue_function[kernel](
+        input,
+        weight,
+        output,
+        Int32(input.dim[1]()),
+        Int32(weight.dim[0]()),
+        grid_dim=ceildiv(Int(weight.dim[0]()), 4 // GROUPS),
+        block_dim=128,
+    )

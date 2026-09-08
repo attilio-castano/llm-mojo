@@ -1,0 +1,263 @@
+{
+  "specification": {
+    "version": "mlp-reference-v1",
+    "development": [
+      [
+        8,
+        12,
+        1,
+        1601
+      ],
+      [
+        8,
+        12,
+        7,
+        1601
+      ],
+      [
+        8,
+        12,
+        17,
+        1601
+      ],
+      [
+        7,
+        11,
+        1,
+        1601
+      ],
+      [
+        7,
+        11,
+        7,
+        1601
+      ],
+      [
+        7,
+        11,
+        17,
+        1601
+      ],
+      [
+        896,
+        4864,
+        1,
+        1601
+      ],
+      [
+        896,
+        4864,
+        7,
+        1601
+      ],
+      [
+        896,
+        4864,
+        15,
+        1601
+      ],
+      [
+        896,
+        4864,
+        16,
+        1601
+      ],
+      [
+        896,
+        4864,
+        17,
+        1601
+      ],
+      [
+        896,
+        4864,
+        33,
+        1601
+      ],
+      [
+        896,
+        4864,
+        65,
+        1601
+      ],
+      [
+        896,
+        4864,
+        257,
+        1601
+      ],
+      [
+        896,
+        4864,
+        1024,
+        1601
+      ],
+      [
+        896,
+        4864,
+        4096,
+        1601
+      ],
+      [
+        896,
+        4864,
+        1,
+        1613
+      ],
+      [
+        896,
+        4864,
+        17,
+        1613
+      ],
+      [
+        896,
+        4864,
+        4096,
+        1613
+      ]
+    ],
+    "holdout": [
+      [
+        896,
+        4864,
+        1,
+        2017
+      ],
+      [
+        896,
+        4864,
+        17,
+        2017
+      ],
+      [
+        896,
+        4864,
+        4096,
+        2017
+      ],
+      [
+        896,
+        4864,
+        1,
+        2027
+      ],
+      [
+        896,
+        4864,
+        17,
+        2027
+      ],
+      [
+        896,
+        4864,
+        4096,
+        2027
+      ]
+    ],
+    "holdout_prompt": "Explain why multiplying two negative numbers gives a positive number, using a numerical example.",
+    "mutations": [
+      "zero_input",
+      "zero_gate",
+      "zero_up",
+      "zero_down",
+      "swap_gate_up",
+      "small_input",
+      "large_input",
+      "cancellation"
+    ],
+    "up_values": [
+      -16,
+      -1,
+      -0.015625,
+      0,
+      0.015625,
+      1,
+      16
+    ],
+    "storage": "BF16; arrays stored losslessly as FP32",
+    "arithmetic": "FP32 reductions and SiLU; BF16 N/G/U/A/S/D/Y boundaries",
+    "reference": "Qwen2MLP and Qwen2RMSNorm; Torch 2.4.0 CPU eager; Transformers 4.43.1",
+    "recipe": "PCG64 SeedSequence([seed,H,I,tag]); FP64 normal; scale then FP32 then BF16",
+    "chunks": "single rows for R<=17; [R-18,17,1] otherwise",
+    "budgets": {
+      "operation": {
+        "N": {
+          "atol": 0.0078125,
+          "rtol": 0.0078125
+        },
+        "G": {
+          "atol": 0.0078125,
+          "rtol": 0.0078125
+        },
+        "U": {
+          "atol": 0.0078125,
+          "rtol": 0.0078125
+        },
+        "A": {
+          "atol": 9.183549615799121e-41,
+          "rtol": 0.0078125,
+          "max_bf16_steps": 1,
+          "exact_reference_zero": true
+        },
+        "S": {
+          "atol": 0,
+          "rtol": 0,
+          "exact_bits": true
+        },
+        "D": {
+          "atol": 0.0078125,
+          "rtol": 0.0078125
+        },
+        "Y": {
+          "atol": 0,
+          "rtol": 0,
+          "exact_bits": true
+        }
+      },
+      "composition": {
+        "D": {
+          "atol": 0.015625,
+          "rtol": 0.015625
+        },
+        "Y": {
+          "atol": 0.03125,
+          "rtol": 0.03125
+        }
+      },
+      "silu_tail": "Match pinned FP32-exp SiLU: G<=-89 yields negative zero; no FP64-tail substitution",
+      "zero_subnormal": "Exact sign when reference is zero; otherwise at most one BF16 step with the stated abs/rel gate"
+    },
+    "holdout_outputs_observed": false
+  },
+  "upstream": {
+    "torch": "2.4.0",
+    "transformers": "4.43.1",
+    "numpy": "1.26.4",
+    "python": "3.12.14",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "device": "cpu",
+    "backend": "eager",
+    "threads": 1,
+    "module_sha256": "06a9e704e9ec103c47c44fc974519dc93480aa325b9ad7d047239200bcf6fa69",
+    "torch_build": "PyTorch built with:\n  - GCC 4.2\n  - C++ Version: 201703\n  - clang 14.0.3\n  - OpenMP 201811\n  - LAPACK is enabled (usually provided by MKL)\n  - NNPACK is enabled\n  - CPU capability usage: NO AVX\n  - Build settings: BLAS_INFO=accelerate, BUILD_TYPE=Release, CXX_COMPILER=/Applications/Xcode_14.3.1.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++, CXX_FLAGS= -fvisibility-inlines-hidden -DUSE_PTHREADPOOL -DNDEBUG -DUSE_KINETO -DLIBKINETO_NOCUPTI -DLIBKINETO_NOROCTRACER -DUSE_PYTORCH_QNNPACK -DAT_BUILD_ARM_VEC256_WITH_SLEEF -DUSE_XNNPACK -DUSE_PYTORCH_METAL_EXPORT -DSYMBOLICATE_MOBILE_DEBUG_HANDLE -DUSE_COREML_DELEGATE -O2 -fPIC -Wall -Wextra -Werror=return-type -Werror=non-virtual-dtor -Werror=braced-scalar-init -Werror=range-loop-construct -Werror=bool-operation -Wnarrowing -Wno-missing-field-initializers -Wno-type-limits -Wno-array-bounds -Wno-unknown-pragmas -Wno-unused-parameter -Wno-unused-function -Wno-unused-result -Wno-strict-overflow -Wno-strict-aliasing -Wvla-extension -Wsuggest-override -Wnewline-eof -Winconsistent-missing-override -Winconsistent-missing-destructor-override -Wno-pass-failed -Wno-error=pedantic -Wno-error=old-style-cast -Wno-error=inconsistent-missing-override -Wno-error=inconsistent-missing-destructor-override -Wconstant-conversion -Wno-invalid-partial-specialization -Wno-missing-braces -Qunused-arguments -fcolor-diagnostics -faligned-new -Wno-unused-but-set-variable -fno-math-errno -fno-trapping-math -Werror=format -DUSE_MPS -Wno-unused-private-field -Wno-missing-braces, LAPACK_INFO=accelerate, TORCH_VERSION=2.4.0, USE_CUDA=OFF, USE_CUDNN=OFF, USE_CUSPARSELT=OFF, USE_EIGEN_FOR_BLAS=ON, USE_EXCEPTION_PTR=1, USE_GFLAGS=OFF, USE_GLOG=OFF, USE_GLOO=ON, USE_MKL=OFF, USE_MKLDNN=OFF, USE_MPI=OFF, USE_NCCL=OFF, USE_NNPACK=ON, USE_OPENMP=ON, USE_ROCM=OFF, USE_ROCM_KERNEL_ASSERT=OFF, \n",
+    "training_arithmetic_reproduced": false
+  },
+  "source_sha256": {
+    "tests/fixtures/attention_sublayer/checkpoint_checksums.json": "a6730403ed7a3ae4becc02e39a1910bdb5781c3846b0bdd71eca20fc26a6cb20",
+    "tests/fixtures/attention_sublayer/upstream.py": "e6228d7ecfa07976479372758d28fc10a99cf9391a1b3cf18955be419dcac02b",
+    "tests/fixtures/generate.py": "4638cd68d5b5cc54f94c68581e6be3f0bfbb3abf71d81160930794dcfccb4047",
+    "tests/fixtures/mlp/contract.py": "439686ec0dfd22d6cc3d4427f5b6f622c4b20bdb5ff609cc04bf762b6c0cc155",
+    "tests/fixtures/mlp/generate.py": "f9f8e2fe4031929922891090c5ed99c4f20ab52567729e93d011cf76afc95459",
+    "tests/fixtures/mlp/numerics.py": "ae713d7ec1754884524bac9bbd59b902b7fcc3edc012a72156ef7f1d41fd7f7d",
+    "tests/fixtures/mlp/reference.py": "c02a4ab733ad6702b663aecc3593b72a68c6d419797a6fc06f1e60d6a995851f",
+    "tests/fixtures/mlp/test_reference.py": "c1b759ce27855d955e1662781ecdd100423c25168d3dbe36c7ed83b4d262ed1f"
+  },
+  "evidence_file": "development.json.gz",
+  "evidence_sha256": "20409161073dbf8ff5b6f7d78375a3f1ecfcd598d13ed201aaa9f2e261fcc69f",
+  "uncompressed_sha256": "f920fe2a29fe37a0c85065fc7271040f19acb6439ea20548b6770a783b63f6c3",
+  "development_case_count": 46,
+  "array_count": 557,
+  "holdout_outputs_observed": false
+}

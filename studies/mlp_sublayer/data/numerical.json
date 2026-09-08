@@ -1,0 +1,173 @@
+{
+  "format": "lossless-json-gzip-v1",
+  "record": "numerical.json.gz",
+  "sha256": "8e9a9ad6d42e95dd34774deff501919ef76749eaf651db9cf7eae63128776f6c",
+  "uncompressed_sha256": "a63fe800bb8f2d15d8f19a62eab4b752dbdda8a6782a1886f7a8d4d153f21717",
+  "status": "accepted",
+  "candidate": {
+    "commit": "afb54fa1a3000f4aac5ca450f4f94d999125e97e",
+    "binary_sha256": "787c7776567c9f69da1a5daa439fd37ebe47f657e89dbfeab48a3b897a454cb2",
+    "reference_sha256": "6de9811889f14c9ece9999b7e4ee6116dfc41bb3dfac95486ec86f3582ec43e7"
+  },
+  "coverage": {
+    "development": {
+      "cases": [
+        "h7_i11_cancellation",
+        "h7_i11_large_input",
+        "h7_i11_r17_s1601",
+        "h7_i11_r1_s1601",
+        "h7_i11_r7_s1601",
+        "h7_i11_small_input",
+        "h7_i11_swap_gate_up",
+        "h7_i11_zero_down",
+        "h7_i11_zero_gate",
+        "h7_i11_zero_input",
+        "h7_i11_zero_up",
+        "h896_i4864_cancellation",
+        "h896_i4864_large_input",
+        "h896_i4864_r1024_s1601",
+        "h896_i4864_r15_s1601",
+        "h896_i4864_r16_s1601",
+        "h896_i4864_r17_s1601",
+        "h896_i4864_r17_s1613",
+        "h896_i4864_r1_s1601",
+        "h896_i4864_r1_s1613",
+        "h896_i4864_r257_s1601",
+        "h896_i4864_r33_s1601",
+        "h896_i4864_r4096_s1601",
+        "h896_i4864_r4096_s1613",
+        "h896_i4864_r65_s1601",
+        "h896_i4864_r7_s1601",
+        "h896_i4864_small_input",
+        "h896_i4864_swap_gate_up",
+        "h896_i4864_zero_down",
+        "h896_i4864_zero_gate",
+        "h896_i4864_zero_input",
+        "h896_i4864_zero_up",
+        "h8_i12_cancellation",
+        "h8_i12_large_input",
+        "h8_i12_r17_s1601",
+        "h8_i12_r1_s1601",
+        "h8_i12_r7_s1601",
+        "h8_i12_small_input",
+        "h8_i12_swap_gate_up",
+        "h8_i12_zero_down",
+        "h8_i12_zero_gate",
+        "h8_i12_zero_input",
+        "h8_i12_zero_up"
+      ],
+      "case_count": 43,
+      "check_count": 4476,
+      "checks_by_mode": {
+        "local": 301,
+        "full": 301,
+        "chunk": 3850,
+        "reuse": 24
+      },
+      "failed_elements": 0,
+      "gpu_full_chunk_bit_differences": 0,
+      "max_scaled_by_stage": {
+        "N": 0.004608294930875576,
+        "G": 0.0051813471502590676,
+        "U": 0.005208333333333333,
+        "A": 0.008,
+        "S": 0.0081799591002045,
+        "D": 0.009259259259259259,
+        "Y": 0.015037593984962405
+      }
+    },
+    "checkpoint": {
+      "cases": [
+        "checkpoint_0",
+        "checkpoint_1",
+        "checkpoint_2"
+      ],
+      "case_count": 3,
+      "check_count": 129,
+      "checks_by_mode": {
+        "local": 21,
+        "full": 21,
+        "chunk": 63,
+        "reuse": 24
+      },
+      "failed_elements": 0,
+      "gpu_full_chunk_bit_differences": 0,
+      "max_scaled_by_stage": {
+        "N": 0.003976143141153081,
+        "G": 0.004830917874396135,
+        "U": 0.0038910505836575876,
+        "A": 0.004514672686230248,
+        "S": 0.003401360544217687,
+        "D": 0.003401360544217687,
+        "Y": 0.003367003367003367
+      }
+    },
+    "holdout": {
+      "cases": [
+        "holdout_checkpoint",
+        "holdout_h896_i4864_r17_s2017",
+        "holdout_h896_i4864_r17_s2027",
+        "holdout_h896_i4864_r1_s2017",
+        "holdout_h896_i4864_r1_s2027",
+        "holdout_h896_i4864_r4096_s2017",
+        "holdout_h896_i4864_r4096_s2027"
+      ],
+      "case_count": 7,
+      "check_count": 437,
+      "checks_by_mode": {
+        "local": 49,
+        "full": 49,
+        "chunk": 315,
+        "reuse": 24
+      },
+      "failed_elements": 0,
+      "gpu_full_chunk_bit_differences": 0,
+      "max_scaled_by_stage": {
+        "N": 0.005208333333333333,
+        "G": 0.005208333333333333,
+        "U": 0.0051813471502590676,
+        "A": 0.010101010101010102,
+        "S": 0.010948905109489052,
+        "D": 0.0051813471502590676,
+        "Y": 0.007692307692307693
+      }
+    }
+  },
+  "validation": {
+    "mojo_tests": 102,
+    "python_tests": 59,
+    "pinned_reference_tests": 11,
+    "all_route_smokes_passed": true,
+    "full_validation_source_unchanged": true,
+    "candidate_sources_match_full_validation": true,
+    "exact_addition_pairs": 16711680,
+    "exact_addition_failures": 0
+  },
+  "history": {
+    "initial_fixture_acceptance": {
+      "commit": "e1acb8b",
+      "path": "studies/mlp_sublayer/data/numerical.json.gz",
+      "sha256": "9c5c031c409780d5171d7e287b7b1927fd0d63293467d082d449f9acccb59dbc"
+    },
+    "residual_repair": {
+      "format": "lossless-json-gzip-v1",
+      "record": "residual_boundary.json.gz",
+      "sha256": "b67824cca01e009665aae2e11d282666062ba7fdbe0428a3c53c1bb50cd18265",
+      "uncompressed_sha256": "0973989cfef929ceb3609e492f695fb800f1404580586693233d57dbb67f7aa8",
+      "counterexample": {
+        "a_bits": "0x0480",
+        "b_bits": "0x807f",
+        "expected_bits": "0x047f",
+        "observed_before_bits": "0x0480"
+      },
+      "pairs": 16711680,
+      "failed_before": 126,
+      "failed_after": 0,
+      "repair": "Exact integer range extended through exponent field 9; spacing immediately below a power of two is half the spacing above it. Numerical policy unchanged."
+    },
+    "holdout_scope": "Predeclared outputs first opened at afbe288 and passed. Reused unchanged after the extra residual probe and repair; this is a regression check, not a new independent holdout."
+  },
+  "primitive_checks": 13,
+  "all_recorded_numerical_gates_passed": true,
+  "retention": "Every final numerical check, holdout array hash, execution record and source identity is retained losslessly. Prior cutoff failures remain in residual_boundary.json.gz; raw arrays, binaries and console logs remain outside Git."
+}

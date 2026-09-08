@@ -107,6 +107,51 @@ def main():
                     or not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE')):
                     raise RuntimeError('contained projection/timing boundary check failed')
     print('attention sublayer FP32, projections, GQA parallelism and decode measurement routes passed in both modes',flush=True)
+    target = repository_root() / 'build/mlp-smoke'
+    subprocess.run([environment_tool('mojo'),'build','-I','src',
+                    'src/llm_mojo/benchmarks/mlp.mojo','-o',str(target)],cwd=repository_root(),check=True)
+    from .mlp_contract import VARIANTS
+    routes = [(r,l,'bench',v) for v in sorted(VARIANTS) for r,l in ((1,1),(1 if v >= 8 else 17,24))]
+    routes += [(17,1,f'stage{i}',0) for i in range(7)]
+    routes += [(17,l,f'stage{s}',v) for s,vs in ((1,(0,1,2,3)),(2,(0,1,2,3)),(5,(0,4,5,6))) for v in vs for l in (1,24)]
+    routes += [(1,l,f'stage{s}',v) for s in (1,2,5) for v in range(8,19) for l in (1,24)]
+    for rows,layers,mode,variant in routes:
+        result = subprocess.run(list(map(str,[target,rows,layers,variant,0,variant%2,1601,mode,1,0])),
+                                cwd=repository_root(),capture_output=True,text=True,env=env,check=True)
+        boundary = 'whole_mlp' if mode=='bench' else 'mlp_stage_'+mode[5:]
+        if (f'variants: 0 {variant} candidate-first: {variant%2}' not in result.stdout
+            or 'correctness: passed' not in result.stdout or f'measurement: {boundary}' not in result.stdout
+            or f'SAMPLE candidate {variant} 0 ' not in result.stdout
+            or 'SAMPLE control 0 0 ' not in result.stdout
+            or not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE')):
+            raise RuntimeError('MLP benchmark route or output check failed')
+    # Exercise the reader itself on a non-self pair in both orders. The old
+    # candidate/control header reversal escaped substring-only route checks.
+    from .study import parse_output, REPETITIONS
+    for candidate,control,mode,measurement in [(1,0,'stage1','mlp_stage_1'),(7,2,'bench','whole_mlp'),(10,8,'bench','whole_mlp')]:
+        for first in (0,1):
+            result = subprocess.run(list(map(str,[target,1,1,candidate,control,first,1601,mode,REPETITIONS,0])),
+                                    cwd=repository_root(),capture_output=True,text=True,env=env,check=True)
+            parse_output(result.stdout,control,candidate,first,rows=1,layers=1,seed=1601,
+                         operation='mlp',measurement=measurement)
+    for rows,layers,variant,seed,mode in [(0,1,0,1601,'bench'),(4097,1,0,1601,'bench'),
+        (1,2,0,1601,'bench'),(1,1,19,1601,'bench'),(2,1,8,1601,'bench'),(1,1,0,53,'bench'),(1,1,0,1601,'stage7'),(1,24,0,1601,'stage0')]:
+        result = subprocess.run(list(map(str,[target,rows,layers,variant,0,0,seed,mode,1,0])),
+                                cwd=repository_root(),capture_output=True,env=env)
+        if result.returncode == 0:
+            raise RuntimeError('invalid MLP benchmark request accepted')
+    for variant,count in ((0,7),(8,6)):
+        limit=5000//count
+        result=subprocess.run(list(map(str,[target,1,1,variant,variant,0,1601,'profile',limit,0])),
+            cwd=repository_root(),capture_output=True,text=True,env=env,check=True)
+        if f'profile dispatches per iteration: {count}' not in result.stdout:
+            raise RuntimeError('incorrect MLP profile dispatch count')
+        result=subprocess.run(list(map(str,[target,1,1,variant,variant,0,1601,'profile',limit+1,0])),
+            cwd=repository_root(),capture_output=True,env=env)
+        if result.returncode == 0:
+            raise RuntimeError('MLP profile exceeded actual dispatch budget')
+    print('MLP projection variants in both modes, all seven stages and isolated projection ring routes passed',flush=True)
+
 
 
 if __name__ == '__main__':

@@ -207,6 +207,49 @@ def select_projection_tile(block_summary, kernel_summary):
     return min(eligible,key=lambda v:(max(block[v,l]['ratio'] for l in (1,24)),v)) if eligible else None
 
 
+from . import mlp_contract as mlp
+STUDIES['mlp'] = dict(operation='mlp',control=0,candidates=[0],rows=mlp.ROWS,
+    names={0:'materialized rowwise MLP'},layout='X/Y[R,896]; gate/up[I,H], down[H,I]; I=4864; row major',
+    arithmetic=mlp.ARITHMETIC,inputs=mlp.INPUTS,timing=mlp.TIMING,seed=1601,
+    measurement='whole_mlp',opt_in=True)
+for stage in range(7):
+    STUDIES[f'mlp_stage_{stage}'] = {**STUDIES['mlp'], 'rows':mlp.PROFILE_ROWS,
+        'layers':[1], 'mode':f'stage{stage}', 'measurement':f'mlp_stage_{stage}',
+        'timing':'Host enqueue through completion of one isolated stage on exact upstream operands; allocation, upload and checks excluded.'}
+
+for name,stage,variants in [('gate',1,[0,1,2,3]),('down',5,[0,4,5,6])]:
+    STUDIES[f'mlp_{name}_screen'] = {
+        **STUDIES[f'mlp_stage_{stage}'], 'rows':[1,16,17,1024], 'layers':[1,24],
+        'candidates':variants, 'names':{v:mlp.NAMES[v] for v in variants},
+        'timing':'Isolated projection enqueue through completion on exact upstream operands; hot or 24 distinct weight copies with shared upstream input and one sync. Allocation, upload, checks and printing excluded.'}
+
+
+def select_mlp_projection(summary, variants):
+    """Qualify at R=1024 in both modes; minimize the worse mode, then tile ID."""
+    target = {(r['candidate'],r['layers']):r for r in summary if r['rows']==1024}
+    if set(target) != {(v,l) for v in variants for l in (1,24)}:
+        raise ValueError('MLP selection needs the complete declared screen')
+    eligible = [v for v in variants if v != 0 and
+                all(target[v,l]['decision']=='faster' for l in (1,24))]
+    return min(eligible,key=lambda v:(max(target[v,l]['ratio'] for l in (1,24)),v)) if eligible else 0
+
+
+# Frozen after the complete gate/down screens at source a8b62cd: both selected
+# 16x16. These are direct follow-ups, with matched control self-pairs.
+STUDIES['mlp_up_confirmation'] = {
+    **STUDIES['mlp_gate_screen'], 'candidates':[0,2], 'mode':'stage2',
+    'measurement':'mlp_stage_2', 'names':{v:mlp.NAMES[v] for v in (0,2)}}
+for name,control,candidate in [('gate_up',0,2),('down_increment',2,7)]:
+    STUDIES[f'mlp_{name}'] = {
+        **STUDIES['mlp'], 'rows':[1,16,17,1024], 'layers':[1,24],
+        'control':control, 'candidates':[control,candidate],
+        'names':{v:mlp.NAMES[v] for v in (control,candidate)}}
+
+STUDIES['mlp_final'] = {
+    **STUDIES['mlp'], 'control':0, 'candidates':[0,7], 'layers':[1,24],
+    'names':{v:mlp.NAMES[v] for v in (0,7)}}
+
+
 def workloads(spec):
     return spec.get('workloads', [dict(rows=r) for r in spec.get('rows', [])])
 
@@ -291,7 +334,7 @@ def summarize(samples, spec):
             raise ValueError('sample implementation differs from requested arm')
         grouped[(s.get('query_rows',0),s['rows'], s['layers'], s['candidate'], s['block'], s['arm'])].append(s['us'])
     expected = {(w.get('query_rows',0), b, w['rows'], l, c, a, n) for b in range(1, BLOCKS + 1)
-                for w in workloads(spec) for l in (1, 24) for c in spec['candidates']
+                for w in workloads(spec) for l in spec.get('layers', (1, 24)) for c in spec['candidates']
                 for a in ('control', 'candidate') for n in range(REPETITIONS)}
     if observed != expected:
         raise ValueError('incomplete or unexpected study grid, including self-pair calibration')
@@ -299,7 +342,7 @@ def summarize(samples, spec):
     for workload in workloads(spec):
         rows = workload['rows']
         query_rows = workload.get('query_rows',0)
-        for layers in (1, 24):
+        for layers in spec.get('layers', (1, 24)):
             def medians(candidate, arm):
                 return [statistics.median(grouped[(query_rows,rows, layers, candidate, b, arm)]) for b in range(1, BLOCKS + 1)]
             noise_ratios = [a / b for a, b in zip(medians(spec['control'], 'candidate'), medians(spec['control'], 'control'))]
@@ -377,11 +420,61 @@ def prefill_profile_grid(spec):
     return stages, {(r,t,v) for r,t in spec['workloads'] for v in variants}
 
 
+def load_mlp_profile(directory,prefix=''):
+    directory=Path(directory)
+    record=json.loads((directory/(prefix+'profiles.json')).read_text())
+    path=directory/(prefix+'profile_samples.csv.gz')
+    if record.get('schema')!=4 or record['samples_sha256']!=sha(path):
+        raise ValueError('MLP profile sample hash/schema mismatch')
+    spec=record['specification'];variants=spec['variants']
+    rows=[w['rows'] for w in spec['workloads']]
+    if (not variants or any(type(v)is not int or v not in mlp.VARIANTS for v in variants)
+        or len(set(variants))!=len(variants) or not rows
+        or any(type(r)is not int or r not in mlp.PROFILE_ROWS for r in rows)
+        or len(set(rows))!=len(rows)):
+        raise ValueError('invalid declared MLP profile grid')
+    grid={(r,v) for r in rows for v in variants}
+    if len(record['captures'])!=len(grid) or {(c['rows'],c['variant']) for c in record['captures']}!=grid:
+        raise ValueError('missing or duplicate MLP profile capture')
+    expected=set()
+    for capture in record['captures']:
+        r,v=capture['rows'],capture['variant'];identity=capture['capture']
+        if identity['repository']!=record['common']['repository'] or identity['repository']['dirty']:
+            raise ValueError('MLP profile source mismatch')
+        if identity['runtime']['backend']!='metal' or not identity['runtime']['device'].startswith('Apple '):
+            raise ValueError('MLP profile runtime mismatch')
+        workload=identity['workload']
+        mlp.configuration({**identity,**workload,'profile_warmup_iterations':workload['warmup_iterations']})
+        if (identity['operation']!='mlp' or identity['implementation']!=f'mlp_{v}'
+            or workload['profile_rows']!=r or workload['rows']!=r):
+            raise ValueError('MLP profile shape or implementation mismatch')
+        stages=mlp.stages(v)
+        expected.update((r,v,j,stage) for j in range(workload['profile_iterations']) for stage in stages)
+    observed=set();grouped=defaultdict(list);totals=defaultdict(float)
+    with gzip.open(path,'rt',newline='') as stream:
+        for row in csv.DictReader(stream):
+            key=(int(row['rows']),int(row['variant']),int(row['iteration']),row['stage'])
+            duration=int(row['duration_ns'])
+            if key in observed or duration<=0:
+                raise ValueError('invalid/duplicate MLP profile dispatch')
+            observed.add(key);grouped[key[0],key[1],key[3]].append(duration/1000)
+            totals[key[0],key[1]]+=duration/1000
+    if observed!=expected:
+        raise ValueError('incomplete MLP profile dispatch sequence')
+    return [dict(rows=r,variant=v,stage=stage,count=len(values),
+                 median_us=statistics.median(values),mean_us=statistics.mean(values),
+                 minimum_us=min(values),maximum_us=max(values),
+                 active_share_percent=100*sum(values)/totals[r,v])
+            for (r,v,stage),values in grouped.items()]
+
+
 def load_profile(directory, prefix=''):
     directory = Path(directory)
     directory = evidence_directory(directory)
     record = json.loads((directory / (prefix+'profiles.json')).read_text())
     path = directory / (prefix+'profile_samples.csv.gz')
+    if record.get('schema') == 4:
+        return load_mlp_profile(directory,prefix)
     if record.get('schema') not in (1,2,3) or record['samples_sha256'] != sha(path):
         raise ValueError('profile sample hash/schema mismatch')
     sublayer = record['schema'] == 3
@@ -438,3 +531,30 @@ def load_profile(directory, prefix=''):
     return [dict(**(dict(query_rows=r,rows=t) if prefill else {}),variant=variant, stage=stage, count=len(values),
                  median_us=statistics.median(values), minimum_us=min(values), maximum_us=max(values))
             for (r,t,variant,stage), values in grouped.items()]
+
+
+# Frozen single-token decode screens: separate families against rowwise MLP.
+for family, variants in [('gate_up',[0,8,9,10]), ('down',[0,11,12])]:
+    STUDIES['mlp_decode_'+family] = {
+        **STUDIES['mlp'], 'rows':[1], 'layers':[1,24], 'candidates':variants,
+        'names':{v:mlp.NAMES[v] for v in variants}}
+
+
+def select_mlp_decode(summary, variants):
+    target = {(r['candidate'],r['layers']):r for r in summary if r['rows']==1}
+    if set(target) != {(v,l) for v in variants for l in (1,24)}:
+        raise ValueError('decode selection requires complete declared screen')
+    eligible = [v for v in variants if v != 0 and all(target[v,l]['decision']=='faster' for l in (1,24))]
+    return min(eligible,key=lambda v:(max(target[v,l]['ratio'] for l in (1,24)),v)) if eligible else 0
+
+
+STUDIES['mlp_decode_final'] = {
+    **STUDIES['mlp'], 'rows':[1], 'layers':[1,24], 'candidates':[0],
+    'names':mlp.NAMES}
+
+
+def mlp_decode_finalists(gate, down):
+    if gate not in (0,8,9,10) or down not in (0,11,12):
+        raise ValueError('invalid decode family finalists')
+    return [0] + ([gate] if gate else []) + ([down] if down else []) + (
+        [13+(gate-8)*2+(down-11)] if gate and down else [])

@@ -31,7 +31,7 @@ DEFAULT_TIME_LIMIT = "1s"
 PROFILE_REGION_BEGIN = "PROFILE_REGION_BEGIN"
 PROFILE_REGION_END = "PROFILE_REGION_END"
 TIME_LIMIT = re.compile(r"^[1-9][0-9]*(?:ms|s|m|h)$")
-CAPTURE_ID = re.compile(r"^(?:rmsnorm|linear|attention)-[0-9a-f]{32}$")
+CAPTURE_ID = re.compile(r"^(?:rmsnorm|linear|attention|mlp)-[0-9a-f]{32}$")
 IMPLEMENTATION_ENTRYPOINTS = {
     "apple_gpu_shared_tree_v0": "enqueue_rms_norm_apple_gpu_shared_tree",
     "apple_gpu_simdgroup_v1": "enqueue_rms_norm_apple_gpu",
@@ -50,7 +50,7 @@ def utc_now() -> str:
 
 
 def new_capture_id(operation: str = "rms_norm") -> str:
-    prefix = "attention" if operation in ATTENTION_OPERATIONS else (
+    prefix = "mlp" if operation == "mlp" else "attention" if operation in ATTENTION_OPERATIONS else (
         "linear" if operation == "linear_projection" else "rmsnorm"
     )
     return f"{prefix}-{uuid4().hex}"
@@ -276,8 +276,8 @@ def parse_target_identity(output: str) -> dict[str, Any]:
             raise ValueError("expected exactly one 'profile workload' line")
         identity["profile_workload"] = workload_matches[0]
         extra_fields = (("output features", "output_features"),)
-        if workload_matches[0].startswith(("decode-", "prefill-", "sublayer-")):
-            operation = ("attention_sublayer" if workload_matches[0].startswith("sublayer-") else
+        if workload_matches[0].startswith(("decode-", "prefill-", "sublayer-", "mlp-")):
+            operation = ("mlp" if workload_matches[0].startswith("mlp-") else "attention_sublayer" if workload_matches[0].startswith("sublayer-") else
                          "grouped_query_attention_prefill" if workload_matches[0].startswith("prefill-") else
                          "grouped_query_attention_decode")
             extra_fields = tuple(
@@ -466,6 +466,10 @@ def capture_trace(
         from .attention_sublayer_contract import fixture_identity
         if fixture_identity() != provenance.get('attention_fixtures'):
             raise RuntimeError('attention profile fixture identity changed')
+    if configuration['operation'] == 'mlp':
+        from .mlp_contract import fixture_identity as mlp_fixture_identity
+        if mlp_fixture_identity() != provenance.get('mlp_fixtures'):
+            raise RuntimeError('MLP profile fixture identity changed')
     capture_id = new_capture_id(configuration["operation"])
     if CAPTURE_ID.fullmatch(capture_id) is None:
         raise RuntimeError("generated capture ID is invalid")
@@ -570,6 +574,8 @@ def capture_trace(
         if fixture_identity() != provenance['attention_fixtures']:
             failures.append('attention profile inputs changed during capture')
 
+    if configuration['operation'] == 'mlp' and mlp_fixture_identity() != provenance['mlp_fixtures']:
+        failures.append('MLP profile inputs changed during capture')
     output_bytes = capture_output.encode()
     receipt = {
         "schema_version": 2,

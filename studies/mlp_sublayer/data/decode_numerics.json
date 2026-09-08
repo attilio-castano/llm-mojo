@@ -1,0 +1,268 @@
+{
+  "format": "lossless-json-gzip-v1",
+  "record": "decode_numerics.json.gz",
+  "sha256": "35604dec00d122ecc3f7004e25d40b08f60f9da27f29e010d7209a7839b492d0",
+  "uncompressed_sha256": "7bc8fb2247cb349e602f7afcd886a9e0b0af4be5f2c76240a2c251756e092b1b",
+  "status": "accepted_numerics_no_performance_candidate",
+  "candidate": {
+    "commit": "eb3169bf7ae31f7505bec2f188bb09b5a8b6a980",
+    "binary_sha256": "83c9e286026491d93c32624060761332941be9266fb13e662f36b481c7f2cb48",
+    "reference_sha256": "6de9811889f14c9ece9999b7e4ee6116dfc41bb3dfac95486ec86f3582ec43e7"
+  },
+  "coverage": {
+    "development": {
+      "case_count": 43,
+      "cases": [
+        "h7_i11_cancellation",
+        "h7_i11_large_input",
+        "h7_i11_r17_s1601",
+        "h7_i11_r1_s1601",
+        "h7_i11_r7_s1601",
+        "h7_i11_small_input",
+        "h7_i11_swap_gate_up",
+        "h7_i11_zero_down",
+        "h7_i11_zero_gate",
+        "h7_i11_zero_input",
+        "h7_i11_zero_up",
+        "h896_i4864_cancellation",
+        "h896_i4864_large_input",
+        "h896_i4864_r1024_s1601",
+        "h896_i4864_r15_s1601",
+        "h896_i4864_r16_s1601",
+        "h896_i4864_r17_s1601",
+        "h896_i4864_r17_s1613",
+        "h896_i4864_r1_s1601",
+        "h896_i4864_r1_s1613",
+        "h896_i4864_r257_s1601",
+        "h896_i4864_r33_s1601",
+        "h896_i4864_r4096_s1601",
+        "h896_i4864_r4096_s1613",
+        "h896_i4864_r65_s1601",
+        "h896_i4864_r7_s1601",
+        "h896_i4864_small_input",
+        "h896_i4864_swap_gate_up",
+        "h896_i4864_zero_down",
+        "h896_i4864_zero_gate",
+        "h896_i4864_zero_input",
+        "h896_i4864_zero_up",
+        "h8_i12_cancellation",
+        "h8_i12_large_input",
+        "h8_i12_r17_s1601",
+        "h8_i12_r1_s1601",
+        "h8_i12_r7_s1601",
+        "h8_i12_small_input",
+        "h8_i12_swap_gate_up",
+        "h8_i12_zero_down",
+        "h8_i12_zero_gate",
+        "h8_i12_zero_input",
+        "h8_i12_zero_up"
+      ],
+      "variants": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ],
+      "checks": 46018,
+      "failed_elements": 0,
+      "full_chunk_bit_differences": 0,
+      "checks_by_mode": {
+        "local": 5719,
+        "full": 5719,
+        "chunk": 34111,
+        "reuse": 456,
+        "primitive": 13
+      }
+    },
+    "checkpoint": {
+      "case_count": 3,
+      "cases": [
+        "checkpoint_0",
+        "checkpoint_1",
+        "checkpoint_2"
+      ],
+      "variants": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ],
+      "checks": 1989,
+      "failed_elements": 0,
+      "full_chunk_bit_differences": 0,
+      "checks_by_mode": {
+        "local": 399,
+        "full": 399,
+        "chunk": 735,
+        "reuse": 456
+      }
+    },
+    "old_holdout": {
+      "case_count": 7,
+      "cases": [
+        "holdout_checkpoint",
+        "holdout_h896_i4864_r17_s2017",
+        "holdout_h896_i4864_r17_s2027",
+        "holdout_h896_i4864_r1_s2017",
+        "holdout_h896_i4864_r1_s2027",
+        "holdout_h896_i4864_r4096_s2017",
+        "holdout_h896_i4864_r4096_s2027"
+      ],
+      "variants": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ],
+      "checks": 5377,
+      "failed_elements": 0,
+      "full_chunk_bit_differences": 0,
+      "checks_by_mode": {
+        "local": 931,
+        "full": 931,
+        "chunk": 3059,
+        "reuse": 456
+      }
+    },
+    "old_optimization_holdout": {
+      "case_count": 7,
+      "cases": [
+        "optimization_holdout_checkpoint",
+        "optimization_holdout_h896_i4864_r17_s3037",
+        "optimization_holdout_h896_i4864_r17_s3041",
+        "optimization_holdout_h896_i4864_r1_s3037",
+        "optimization_holdout_h896_i4864_r1_s3041",
+        "optimization_holdout_h896_i4864_r4096_s3037",
+        "optimization_holdout_h896_i4864_r4096_s3041"
+      ],
+      "variants": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ],
+      "checks": 5377,
+      "failed_elements": 0,
+      "full_chunk_bit_differences": 0,
+      "checks_by_mode": {
+        "local": 931,
+        "full": 931,
+        "chunk": 3059,
+        "reuse": 456
+      }
+    },
+    "fresh": {
+      "case_count": 4,
+      "cases": [
+        "decode_holdout_checkpoint",
+        "decode_holdout_h896_i4864_r1_s4051",
+        "decode_holdout_h896_i4864_r1_s4057",
+        "decode_holdout_h896_i4864_r1_s4073"
+      ],
+      "variants": [
+        0,
+        12
+      ],
+      "checks": 216,
+      "failed_elements": 0,
+      "full_chunk_bit_differences": 0,
+      "checks_by_mode": {
+        "local": 56,
+        "full": 56,
+        "chunk": 56,
+        "reuse": 48
+      }
+    }
+  },
+  "validation": {
+    "mojo_tests": 102,
+    "python_tests": 66,
+    "pinned_reference_tests": 11,
+    "all_route_smokes_passed": true,
+    "full_validation_source_unchanged": true,
+    "engine_and_numerical_tests_unchanged_after_full_validation": true,
+    "post_full_validation_files": [
+      "src/llm_mojo/benchmarks/mlp.mojo",
+      "src/llm_mojo/benchmarks/plot.py",
+      "src/llm_mojo/benchmarks/run.py",
+      "src/llm_mojo/benchmarks/smoke.py",
+      "src/llm_mojo/benchmarks/study.py",
+      "tests/test_mlp_tooling.py"
+    ],
+    "post_full_validation_scope": "Confirmation selection, plotting, and six-dispatch profile budget only; all Python tests and real benchmark routes rerun. Engine/reference/test_mlp sources identical to complete validation.",
+    "post_full_validation_logs": {
+      "python": "30a0bd57538cbd14193a1863beb7bc7c462d8f52dbee3e450ad6d2f9724acf82",
+      "smoke": "ede96892e703644db1ca11cfa17fe884d16e8010b333cad091e3a7646b178066"
+    }
+  },
+  "history": {
+    "initial_prefix_assertion": {
+      "log_sha256": "b47cea56571eb25a954f24ee514b7624ad2c456a18e9de260c605f838b89546a",
+      "reason": "Input preservation assertion compared an R=1 prefix with the full fixture. Corrected the assertion length; no kernel, oracle or numerical gate change.",
+      "status": "failed harness attempt, excluded from accepted evidence"
+    },
+    "rerun_log_sha256": "2c29a75f7afee09bbf491839d578271bef1999d51f3251a097b2a82277d77fc4",
+    "fresh_holdouts_scope": "Control 0 and diagnostic 12 frozen after no candidate qualified. Holdouts do not promote the diagnostic variant or alter the performance decision."
+  },
+  "all_recorded_numerical_gates_passed": true
+}

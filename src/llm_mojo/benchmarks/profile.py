@@ -1,4 +1,4 @@
-"""Build a bounded GQA profile binary for receipt-verified Metal capture."""
+"""Build a bounded attention or MLP binary for receipt-verified Metal capture."""
 import argparse
 import json
 import os
@@ -8,6 +8,7 @@ from .._repository import environment_tool, repository_root
 from .attention_decode_contract import VARIANTS
 from . import attention_prefill_contract as prefill
 from . import attention_sublayer_contract as sublayer
+from . import mlp_contract as mlp
 from .environment import ensure_record_location, repository_state, stable_environment, utc_now
 from .study import sha
 from .run import source_hashes
@@ -44,12 +45,13 @@ def build_profile(args):
     query_rows = getattr(args,'profile_query_rows',1)
     is_prefill = operation=='gqa_prefill'
     is_sublayer = operation == sublayer.OPERATION
+    is_mlp = operation == mlp.OPERATION
     rectangular = is_prefill or is_sublayer
     warmup = getattr(args,'profile_warmup',100)
-    allowed = sublayer.VARIANTS if is_sublayer else (prefill.VARIANTS if is_prefill else VARIANTS)
+    allowed = mlp.VARIANTS if is_mlp else sublayer.VARIANTS if is_sublayer else (prefill.VARIANTS if is_prefill else VARIANTS)
     if args.profile_variant not in allowed:
         raise RuntimeError('unknown profile variant for operation')
-    spec = (dict(dispatches=sublayer.specification(args.profile_variant,query_rows,args.profile_rows)['dispatches_per_iteration']) if is_sublayer else
+    spec = (dict(dispatches=mlp.specification(args.profile_variant,args.profile_rows)['dispatches_per_iteration']) if is_mlp else dict(dispatches=sublayer.specification(args.profile_variant,query_rows,args.profile_rows)['dispatches_per_iteration']) if is_sublayer else
             dict(dispatches=3 if args.profile_variant<=1 else 1) if is_prefill
             else specification(args.profile_variant, args.profile_rows))
     if (
@@ -67,7 +69,7 @@ def build_profile(args):
             "profile requires clean source, bounded shape and dispatch count"
         )
     sources = source_hashes()
-    fixtures = sublayer.fixture_identity() if is_sublayer else None
+    fixtures = mlp.fixture_identity() if is_mlp else sublayer.fixture_identity() if is_sublayer else None
     binary.parent.mkdir(parents=True, exist_ok=True)
     command = [
         environment_tool("mojo"),
@@ -84,7 +86,7 @@ def build_profile(args):
         f'GQA_PROFILE_QUERY_ROWS={query_rows}',
         "-D",
         f'GQA_PROFILE_WARMUP={warmup}',
-        "src/llm_mojo/benchmarks/attention_sublayer.mojo" if is_sublayer else (
+        "src/llm_mojo/benchmarks/mlp.mojo" if is_mlp else "src/llm_mojo/benchmarks/attention_sublayer.mojo" if is_sublayer else (
             "src/llm_mojo/benchmarks/attention_prefill.mojo" if is_prefill else "src/llm_mojo/benchmarks/attention_decode.mojo"),
         "-o",
         str(binary),
@@ -96,18 +98,20 @@ def build_profile(args):
         raise RuntimeError("source changed during profile build")
     if is_sublayer and sublayer.fixture_identity() != fixtures:
         raise RuntimeError('attention fixtures changed during profile build')
-    workload = (sublayer.specification(args.profile_variant,query_rows,args.profile_rows) if is_sublayer else
+    if is_mlp and mlp.fixture_identity() != fixtures:
+        raise RuntimeError('MLP fixtures changed during profile build')
+    workload = (mlp.specification(args.profile_variant,args.profile_rows) if is_mlp else sublayer.specification(args.profile_variant,query_rows,args.profile_rows) if is_sublayer else
                 prefill.specification(args.profile_variant,query_rows,args.profile_rows) if is_prefill else {
         "groups": spec["groups"], "heads": spec["heads"], "splits": spec["splits"],
         "conditional_rescale": spec["conditional_rescale"]})
     record = {
         "schema_version": 1,
-        "operation": sublayer.OPERATION if is_sublayer else (prefill.OPERATION if is_prefill else "grouped_query_attention_decode"),
+        "operation": mlp.OPERATION if is_mlp else sublayer.OPERATION if is_sublayer else (prefill.OPERATION if is_prefill else "grouped_query_attention_decode"),
         "repository": repo,
         **stable_environment(),
         "created_utc": utc_now(),
         "implementation": f'{operation}_{args.profile_variant}',
-        "entrypoint": sublayer.ENTRYPOINTS[f'attention_sublayer_{args.profile_variant}'] if is_sublayer else prefill.ENTRYPOINTS[f'gqa_prefill_{args.profile_variant}'] if is_prefill else (
+        "entrypoint": mlp.ENTRYPOINTS[f'mlp_{args.profile_variant}'] if is_mlp else sublayer.ENTRYPOINTS[f'attention_sublayer_{args.profile_variant}'] if is_sublayer else prefill.ENTRYPOINTS[f'gqa_prefill_{args.profile_variant}'] if is_prefill else (
             "enqueue_grouped_query_attention_apple_gpu" if args.profile_variant==0 else "enqueue_grouped_query_attention_decode_apple_gpu"),
         "profile_rows": 1,
         "hidden_size": 64,
@@ -126,17 +130,21 @@ def build_profile(args):
     }
     if is_sublayer:
         record['attention_fixtures'] = fixtures
+    if is_mlp:
+        for key in ('key_value_rows','query_heads','key_value_heads'):
+            record.pop(key)
+        record['mlp_fixtures'] = fixtures
     Path(str(binary) + ".provenance.json").write_text(
         json.dumps(record, indent=2) + "\n"
     )
 
 def argument_parser():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--operation', choices=['gqa_decode','gqa_prefill','attention_sublayer'], default='gqa_decode')
+    p.add_argument('--operation', choices=['gqa_decode','gqa_prefill','attention_sublayer','mlp'], default='gqa_decode')
     p.add_argument('--profile-query-rows', type=int, default=1)
     p.add_argument('--profile-warmup', type=int, default=100)
     p.add_argument('--build-profile-binary', type=Path, required=True)
-    p.add_argument('--profile-variant', type=int, choices=sorted(set(VARIANTS)|set(prefill.VARIANTS)|set(sublayer.VARIANTS)), default=9)
+    p.add_argument('--profile-variant', type=int, choices=sorted(set(VARIANTS)|set(prefill.VARIANTS)|set(sublayer.VARIANTS)|mlp.VARIANTS), default=9)
     p.add_argument('--profile-rows', type=int, default=4096)
     p.add_argument('--profile-iterations', type=int, default=500)
     return p

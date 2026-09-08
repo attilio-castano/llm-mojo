@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "status": "decision_recorded_before_followup_implementation",
+  "final_variant": 7,
+  "source_commit": "2760400b8d8fd457f7a88148518ca87c4627e2f8",
+  "admitted_optional_configurations": [],
+  "profile_record_sha256": "4e00df5b19dd8df0926a5d930e9630e914a97861e60c5bf5ece58bcd2c5d5125",
+  "profile_samples_sha256": "d94b1c70715d43fdc824c8fa6c21adf9e1f27d456679181a5b970068358b0540",
+  "profiles": {
+    "1": {
+      "mean_active_gpu_us": 460.01608,
+      "projection_share_percent": 94.71687641875471,
+      "silu_multiply_share_percent": 1.7786778236099918,
+      "down_share_percent": 59.610748824258465
+    },
+    "1024": {
+      "mean_active_gpu_us": 13272.23188,
+      "projection_share_percent": 91.4376489932151,
+      "silu_multiply_share_percent": 7.6995722289927295,
+      "down_share_percent": 30.728165065783937
+    }
+  },
+  "fusion": {
+    "decision": "skip_in_this_campaign",
+    "removed_source_bytes": "A store/read: 4*R*I bytes, out of 10*R*I pointwise operand/output bytes; exponential and multiply arithmetic remain.",
+    "traffic_scaled_estimate_percent_of_total_active_gpu_time": 3.079828891597092,
+    "interpretation": "About 3.08% only if stage time scaled with this source traffic fraction; an estimate, not a measured result or upper bound. It excludes compiler and host-submission effects. No strong hypothesis to clear the fixed 5% latency floor here."
+  },
+  "packing": {
+    "decision": "skip_in_this_campaign",
+    "reason": "With the existing 16x16 tile and I divisible by 16, packing gate/up into [R,2I] preserves their total matrix arithmetic, output stores and source operand request count. It removes a launch and changes traversal/layout. The captures provide no strong launch-cost hypothesis; one-row time is dominated by the 608-step, 56-group down mapping. No claim that packing is universally unhelpful."
+  },
+  "next_phase": {
+    "candidate": 7,
+    "control": 0,
+    "rows": [
+      1,
+      7,
+      15,
+      16,
+      17,
+      33,
+      65,
+      257,
+      1024,
+      4096
+    ],
+    "layers": [
+      1,
+      24
+    ],
+    "observations": 3200,
+    "require_fresh_holdouts_before_timing": true,
+    "mapping_policy": "Explicit configuration; default 0 remains. No inferred row threshold."
+  },
+  "scope": "Stop this bounded search at the validated projection configuration and finish the direct full matrix and paired-source diagnostic captures. Rejected/noisy observations remain retained; no tolerance or input-domain change."
+}

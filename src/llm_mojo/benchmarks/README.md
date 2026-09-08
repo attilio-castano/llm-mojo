@@ -274,3 +274,94 @@ results under `split_combined_projections_` and `split_combined_gqa_` in the
 existing attention study. No screen or new profile capture is required for
 this composition of existing kernels. See the
 [closure contract](../../../studies/attention_sublayer/plans.md#closing-the-split8-and-projection-integration-gap).
+
+## MLP baseline and projection campaign
+
+After numerical acceptance and a clean source commit, `--studies mlp` runs the
+whole-block self-pair matrix. `mlp_stage_0` through `mlp_stage_6` measure the
+seven isolated stages on identical upstream operands, in hot mode only. The
+same builder includes `mlp.mojo`; ordinary route smoke verifies both full-block
+buffer modes, every stage, and invalid requests. Inputs are verified prefixes
+of the frozen 4,096-row development case, seed 1601. Ring24 owns distinct copies
+of inputs/weights and shares workspace; all Python transport and checks occur
+outside timing. The instrument buffers sample output until both arms finish.
+
+Profile with `--operation mlp --profile-variant 0 --profile-rows R`, where
+R is 1,17,1024,4096. Use ten warmups and respectively 500,100,25,10 measured
+iterations; each capture stays below 5,000 dispatches. The common capture and
+analyzer validate the MLP entrypoint, intermediate width, and seven-dispatch
+sequence. Curate `rR-v0` directories with `profile_summary SOURCE OUTPUT --mlp`.
+Retain whole-block `run.json`/`samples.csv.gz`, isolated-stage files prefixed
+`stage_N_`, and profiles in `studies/mlp_sublayer/data/`. The common plot command
+regenerates the measurement tables and figures from those compact records.
+
+The explicit mapping IDs are 0 for all-rowwise, 1/2/3 for gate/up-only
+8x16/16x16/8x32, 4/5/6 for down-only with the same tile order, and 7 for
+16x16 gate/up/down. Mapping 0 remains the default; there is no row-count
+selector. Route smoke covers all configurations in both whole-MLP modes,
+the seven stages, isolated projection ring routes, and real non-self output
+parsing in both arm orders, including a nonzero control.
+
+The bounded studies extend the same runner. `mlp_gate_screen` and
+`mlp_down_screen` screen the mappings at R=1,16,17,1024 in both modes.
+`mlp_up_confirmation` checks the selected gate mapping on up's distinct weights.
+`mlp_gate_up` compares whole MLP 0 versus 2; `mlp_down_increment` compares 2
+versus 7. `mlp_final` directly compares 0 versus 7 over all ten row counts and
+both modes, retaining 3,200 observations with matched control self-pairs.
+Isolated projection ring24 shares one exact upstream operand across 24
+distinct weight copies. Whole-MLP ring24 also uses distinct input copies.
+
+The final profile grid uses variants 0 and 7 at the four row/iteration pairs
+above. Create the output directory, then curate the eight `rR-vV` capture
+directories with `profile_summary SOURCE OUTPUT --mlp --mlp-variants 0 7
+--mlp-rows 1 17 1024 4096 --prefix optimization_final_`. A declared subset of
+rows/variants supports intermediate profiles; the reader still requires the
+complete declared grid and exact seven-dispatch sequence. Retain final timing
+and profile files with `optimization_final_` in the existing study's `data/`.
+
+## Single-token MLP decode
+
+The bounded follow-up is declared in
+[decode-plan.md](../../../studies/mlp_sublayer/decode-plan.md). Variants 8/9/10
+combine gate/up launches and/or use two outputs per SIMD group; 11/12 change
+only down to two/four cooperating groups per output. They reject R != 1
+before any enqueue. IDs 13..18 encode possible compositions; the confirmation
+runner measures at most one composition of independently qualified families.
+Mapping 0 remains the default. Combined launch variants keep separate weight
+and G/U buffers: there is no repacking, allocation or output copy.
+
+From a validated clean source, use the common builder and runner:
+
+```sh
+uv run --locked llm-mojo-bench build --build-dir /private/tmp/mlp-decode-build
+uv run --locked llm-mojo-bench run --build-dir /private/tmp/mlp-decode-build --output /private/tmp/mlp-decode-screen --studies mlp_decode_gate_up mlp_decode_down
+uv run --locked llm-mojo-bench run --build-dir /private/tmp/mlp-decode-build --output /private/tmp/mlp-decode-confirmation --studies mlp_decode_final --mlp-decode-screen /private/tmp/mlp-decode-screen
+```
+
+Both modes must qualify under the frozen calibrated rule. The confirmation
+runner verifies both screen specifications, samples and build identity before
+selecting the minimum worst-mode ratio per family. No qualified family leaves
+a control self-pair confirmation. Timing is whole MLP in every decode screen.
+Isolated stage APIs still enqueue only the named stage; launch combining occurs
+only in the complete MLP entrypoint.
+
+Profile control and selected (or explicitly diagnostic) variant at R=1 with
+10 warmups and 500 measured iterations. Combined gate/up has six dispatches;
+other mappings have seven. The shared receipt, analysis and curation tools
+validate that distinction. Curate using `profile_summary SOURCE OUTPUT --mlp
+--mlp-variants 0 V --mlp-rows 1 --prefix decode_`. Keep run/sample records under
+`decode_gate_up_`, `decode_down_`, `decode_final_` in the existing MLP data
+folder. The normal plot command regenerates decode tables and figures.
+
+The explicit `mlp_acceptance.py --decode` path captures only the declared
+fresh single-row holdouts, after a clean candidate/binary freeze. It requires
+the verified local checkpoint directory and refuses to overwrite its manifest.
+The candidate must have a numerical build receipt. Use the
+[recorded numerical evaluation workflow](../../../docs/development.md#tests)
+to launch the exact candidate and bind complete results to its build and fixture
+hashes. Capture completion alone does not establish numerical acceptance, and
+`MLP_CANDIDATE_BINARY` is no longer accepted as proof of execution. Older splits
+remain regression data. Decode
+variants exercise row-one prefixes of all existing fixtures and varying input
+rows under asynchronous reuse; original variants still exercise full/chunked
+multi-row execution.

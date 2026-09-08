@@ -1,0 +1,515 @@
+{
+  "schema": 1,
+  "study": "mlp_down_screen",
+  "specification": {
+    "operation": "mlp",
+    "control": 0,
+    "candidates": [
+      0,
+      4,
+      5,
+      6
+    ],
+    "rows": [
+      1,
+      16,
+      17,
+      1024
+    ],
+    "names": {
+      "0": "gate/up rowwise; down rowwise",
+      "4": "gate/up rowwise; down MMA 8x16",
+      "5": "gate/up rowwise; down MMA 16x16",
+      "6": "gate/up rowwise; down MMA 8x32"
+    },
+    "layout": "X/Y[R,896]; gate/up[I,H], down[H,I]; I=4864; row major",
+    "arithmetic": "BF16 weights and N/G/U/A/S/D/Y; FP32 reductions and SiLU; explicit BF16 stores between all seven stages.",
+    "inputs": "Prefixes of frozen development seed 1601, R=4096. Ring24 has 24 distinct copies of these nonuniform inputs and weights, sharing workspace. It is not a decoder stack or a claim of cold DRAM.",
+    "timing": "Isolated projection enqueue through completion on exact upstream operands; hot or 24 distinct weight copies with shared upstream input and one sync. Allocation, upload, checks and printing excluded.",
+    "seed": 1601,
+    "measurement": "mlp_stage_5",
+    "opt_in": true,
+    "layers": [
+      1,
+      24
+    ],
+    "mode": "stage5"
+  },
+  "repository": {
+    "commit": "a8b62cd73f366d495a517c0f5466f5d26fc9ed06",
+    "branch": "codex/mlp-optimization-study",
+    "dirty": false
+  },
+  "build": {
+    "repository": {
+      "commit": "a8b62cd73f366d495a517c0f5466f5d26fc9ed06",
+      "branch": "codex/mlp-optimization-study",
+      "dirty": false
+    },
+    "sources": {
+      "pyproject.toml": "87c540497dbc1214e8ca2a07e774fda28eaea48d3713a1a412b62401f564eff0",
+      "src/llm_mojo/__init__.mojo": "54ca844ca97d5f13084dae07021cbe9535b95cf3414d5133daec18787507d905",
+      "src/llm_mojo/__init__.py": "d45f08c560f8a501262a3c17663244a1a74fb76658d746e99a430dbc1f9935b7",
+      "src/llm_mojo/_repository.py": "51d920267e176f952b137d2f3e14dbbb3e9d9c39f59e386e9138b939fb5fbf7f",
+      "src/llm_mojo/attention.mojo": "3210f50d6850db60a6cacf4c30d860ca0b72177ad1c9b313c7ae7d92b79be973",
+      "src/llm_mojo/attention_decode.mojo": "0f240c7571344c619e400fa108b62027a32ff0c4e77c4df261ea16a8d7f441e6",
+      "src/llm_mojo/attention_prefill.mojo": "5ee18f967ca73a17d5ea8a32f1e70c1c69de0174a644931796d3c044bb8f204c",
+      "src/llm_mojo/attention_sublayer.mojo": "7a5b80794a148885f5ea6f64ba6328804ac5ccbfe971be7a860eeca0e6352f9d",
+      "src/llm_mojo/benchmarks/__init__.mojo": "b8a8f32ace824dd687bc6b2f87afeb3180f7b5ac78684ecefd669201a1e9801c",
+      "src/llm_mojo/benchmarks/__init__.py": "11fddc93cafb04100810b633bfea5b41fb2ba60a48383c9fecb3fdd1ae9cd00c",
+      "src/llm_mojo/benchmarks/analyze_trace.py": "29c2960a44d3997c7b0a73c3f617f4e5bf1500bb9ca3068c556fd986531943be",
+      "src/llm_mojo/benchmarks/attention_contract.py": "33cf2fc9d6d1bf95f02bb1ca1bbc170a8a94db559d10be80851123d243bfc950",
+      "src/llm_mojo/benchmarks/attention_decode.mojo": "983f00a4a01396cfa46f5064098b6155a893c0aa4c66d197f65d91b38bc6a76d",
+      "src/llm_mojo/benchmarks/attention_decode_contract.py": "36b34c75a5186931331d6ae9bab8da6e493e55f6c8a612614c26a6c613dbd201",
+      "src/llm_mojo/benchmarks/attention_decode_support.mojo": "55ad60c4cbf1379adfb0575e840db8726d8d64103d6d973c20d71366c32a9968",
+      "src/llm_mojo/benchmarks/attention_prefill.mojo": "9edb4b4761b99993ba3175e9dfc4f526f9c0820dad5badc5b7cf820aed322b06",
+      "src/llm_mojo/benchmarks/attention_prefill_contract.py": "8cd0df325ea4cbab884b3205e50832a0dc289d1d18194375bdd9f90ef8ac2578",
+      "src/llm_mojo/benchmarks/attention_prefill_ir.mojo": "7310f3328cdbcbd53230a4d40c7cb15629c1e96497630e940f5d02810af9a4d6",
+      "src/llm_mojo/benchmarks/attention_prefill_support.mojo": "85fea01a59589c62513221d2840610750a20f51977a775a0c99574c49df8aceb",
+      "src/llm_mojo/benchmarks/attention_sublayer.mojo": "33b0aa118704d01ee74653fe64645fd838901dac1bcc13238e7a29f4a1cabdd4",
+      "src/llm_mojo/benchmarks/attention_sublayer_contract.py": "a0bca7364c6de60ea2a726d223c7f50b3ffe9613390f83329018a5bb73e4dc40",
+      "src/llm_mojo/benchmarks/capture_trace.py": "19636b2126203f11785b41179f74e6dcfb573063a316b6425b5095edee1697fb",
+      "src/llm_mojo/benchmarks/environment.py": "815e2f79a5189a7dcf5b97fc2c159fb38e5924e3d388ec2c37650b9a92beb48c",
+      "src/llm_mojo/benchmarks/mlp.mojo": "fbad32a61bbc43557ebc2e6eb4f818f12b3ad3372f93e425f286d0f0bbc460b7",
+      "src/llm_mojo/benchmarks/mlp_contract.py": "473b3a5f38beb45409347cbdfedea04bf4fcdcaf75f6f1356220d3269e03b715",
+      "src/llm_mojo/benchmarks/operations.mojo": "3d3a96985d42cfbb314cda9fd7d4318a11e9fe841b3f52347b6402309d071561",
+      "src/llm_mojo/benchmarks/plot.py": "2fc1d4db375e8138988217e66dbeeaed322343a1c602f8648e9447f21ec44063",
+      "src/llm_mojo/benchmarks/profile.py": "efb22880fb1800ce5fa5e668f7e5ff1bd904120643791e0a43dac5e08f280a6f",
+      "src/llm_mojo/benchmarks/profile_summary.py": "0e4a78c0c5eaf5c79b9009d05632787584780b15f5713e47a3eb22fd1c451596",
+      "src/llm_mojo/benchmarks/run.py": "dc14d05327a5b1758e704edd8a8db3176ac4f45da90433145ab350baa9f27e02",
+      "src/llm_mojo/benchmarks/smoke.py": "bd016ad038b827f6ad40e71bef0aadbf1fb87dc9a920e5efa2e7ed6d1f503bfb",
+      "src/llm_mojo/benchmarks/study.py": "94b4ffaed198588cc74ef009edfd69cf06eb4e761e47389ed22c24ae7bb31326",
+      "src/llm_mojo/bf16_arithmetic.mojo": "e41319b3ea6239d3928ee49e2ec85944a9d328f983806e9dc44356cd757591be",
+      "src/llm_mojo/linear.mojo": "e8f25c8cd98b0141ba917e2492360d2a7bc58ff4194f886a6f26555a43643ac4",
+      "src/llm_mojo/mlp.mojo": "1ed310a4d4ba015a6e0b152c2d4385333c6967a906b79ff1320616049d48cb45",
+      "src/llm_mojo/residual.mojo": "0ff18151428c2cb0fde502217ebf18ae60e4a7c4b5effc8dd8f772b5be8f96a5",
+      "src/llm_mojo/rms_norm.mojo": "a555c33f86c6f893b780beab8033a9495ad62e502d0670753e7639850fba0f56",
+      "src/llm_mojo/rope.mojo": "12add6e982c6d1b500c1f346bf3733a9306acd1d15994fbaed8eb610904b289e",
+      "src/llm_mojo/swiglu.mojo": "22aa2a2911ef9a4c330ca6d67f6d3b58cc6d6cf343ca25bec10509eedc22b5e6",
+      "src/llm_mojo/validate.py": "270a1826cb5815a4febb267b51b0a17036569c4e16cb33b738ce75db2a607833",
+      "tests/fixtures/attention/generate.py": "587eb5ed0c63e2a05f3026c2dde839c7fd92c37ec9e7c8bdab22cb37bccf3ea4",
+      "tests/fixtures/attention/generate_decode.py": "dd82f833f9507cd54edfaf95c5b2ade7381fefb6f612547b8849711be503861a",
+      "tests/fixtures/attention/generate_prefill.py": "35193674d82c1b5ca18a642b452de298ad58dcc2a609396c895f8b2819a3f54e",
+      "tests/fixtures/attention_sublayer/checkpoint.py": "03485aaed630e273c89fcf5b8bfd8c51a32aca4d764202702f82b158a6e7367c",
+      "tests/fixtures/attention_sublayer/checkpoint_checksums.json": "a6730403ed7a3ae4becc02e39a1910bdb5781c3846b0bdd71eca20fc26a6cb20",
+      "tests/fixtures/attention_sublayer/checksums.json": "64bc40d13d26492880d7c848da237afb4e5406588a01f5f4575c1bee6dcf49de",
+      "tests/fixtures/attention_sublayer/generate.py": "bb48bf3b84ae87944685071d269f85690e81488fa3cebe5a055c9dd205235ec2",
+      "tests/fixtures/attention_sublayer/precision.py": "5a33b83d6bef9c3ff4824e1007591a3cca305225c3297667129f8d700280b5a2",
+      "tests/fixtures/attention_sublayer/precision_checksums.json": "3a4d9e6642be1729b206f18de7253b784bc70b455e3ead7bc1a3d402a21d7f84",
+      "tests/fixtures/attention_sublayer/upstream.py": "e6228d7ecfa07976479372758d28fc10a99cf9391a1b3cf18955be419dcac02b",
+      "tests/fixtures/checksums.json": "becd13cec305f11367f5523d4c80732052215f7862070c6635ad4b7cb59ab51b",
+      "tests/fixtures/generate.py": "4638cd68d5b5cc54f94c68581e6be3f0bfbb3abf71d81160930794dcfccb4047",
+      "tests/fixtures/generate.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+      "tests/fixtures/linear/generate.py": "f84abf1d3d798e9c5c798059c1cbb6f235e54e7b54b8a4f9b9a9dc426d67c348",
+      "tests/fixtures/mlp/checksums.json": "6de9811889f14c9ece9999b7e4ee6116dfc41bb3dfac95486ec86f3582ec43e7",
+      "tests/fixtures/mlp/contract.py": "439686ec0dfd22d6cc3d4427f5b6f622c4b20bdb5ff609cc04bf762b6c0cc155",
+      "tests/fixtures/mlp/generate.py": "f9f8e2fe4031929922891090c5ed99c4f20ab52567729e93d011cf76afc95459",
+      "tests/fixtures/mlp/numerics.py": "ae713d7ec1754884524bac9bbd59b902b7fcc3edc012a72156ef7f1d41fd7f7d",
+      "tests/fixtures/mlp/reference.py": "c02a4ab733ad6702b663aecc3593b72a68c6d419797a6fc06f1e60d6a995851f",
+      "tests/fixtures/mlp/test_reference.py": "c1b759ce27855d955e1662781ecdd100423c25168d3dbe36c7ed83b4d262ed1f",
+      "tests/fixtures/mlp_acceptance.py": "fde39b22ee730c6c2638625dae79fb827788f6a77c73527421b14c283c48acbb",
+      "tests/fixtures/mlp_acceptance.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+      "tests/fixtures/mlp_optimization_holdout.json": "b30d1e12d84f7249be2dc298efdc424548b661041dc901918d63c36463647440",
+      "tests/fixtures/rms_norm/generate.py": "3c2f8125fcb42e3002d8e2bf1863dfcb32c8148bf3e7f8ec7c99e5f227e2233f",
+      "tests/fixtures/rope/generate.py": "d774a3f319657349f82b415162cfadebc2be15ee7b905f08621ced785b92b708",
+      "uv.lock": "6b5778657912ae1f544a3f6e87ee7811e4570b53f772d2cd74d8c45c2db9286a"
+    },
+    "binaries": {
+      "operations": "7f317e62a9984664f836e107ae069f7aa12345efc45c7389adc4c96dea93b573",
+      "gqa_decode": "1e81dd68b17ad2fde95f93cf59c89e47fd3ba83028f5b4b6a533ba7ebddbeb42",
+      "gqa_prefill": "cce8e6caea616391e3d1ce622211d294e2bbe5f1c2166b058cfa8a97aafb8592",
+      "attention_sublayer": "d34b8ce963e39f3990f49822be39e426ecfbfcfd244152e2baee0e0b746f866d",
+      "mlp": "7d248022f41ac4acb31735aef154d6408e18894e83ab5c2242c5c416532323e3"
+    },
+    "commands": {
+      "operations": [
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/operations.mojo",
+        "-o",
+        "<binary>"
+      ],
+      "gqa_decode": [
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/attention_decode.mojo",
+        "-o",
+        "<binary>"
+      ],
+      "gqa_prefill": [
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/attention_prefill.mojo",
+        "-o",
+        "<binary>"
+      ],
+      "attention_sublayer": [
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/attention_sublayer.mojo",
+        "-o",
+        "<binary>"
+      ],
+      "mlp": [
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/mlp.mojo",
+        "-o",
+        "<binary>"
+      ]
+    },
+    "environment": {
+      "hardware": {
+        "model": "Mac16,7",
+        "chip": "Apple M4 Pro",
+        "logical_cpu_count": "14",
+        "gpu_api": "metal",
+        "gpu_target": "metal:4-metal4",
+        "physical_memory_bytes": 25769803776
+      },
+      "software": {
+        "macos": "26.6.2",
+        "macos_build": "25G83",
+        "darwin": "25.6.0",
+        "xcode": [
+          "Xcode 26.6",
+          "Build version 17F113"
+        ],
+        "metal": [
+          "Apple metal version 32023.883 (metalfe-32023.883)",
+          "Target: air64-apple-darwin25.6.0",
+          "Thread model: posix"
+        ],
+        "uv": "uv 0.12.5 (210d1f678 2026-08-14 aarch64-apple-darwin)",
+        "mojo": "1.0.0",
+        "max": "26.5.0"
+      }
+    },
+    "attention_fixtures": {
+      "case_id": 7,
+      "case": [
+        14,
+        2,
+        64,
+        4096,
+        53
+      ],
+      "array_sha256": {
+        "7_input.npy": "080f80cb7f9b45a0da943696fa3c085fe41a305b8ecce2dfdb0de57279453868",
+        "7_weight.npy": "fa880d7b8e092a36910a6938faf265e8d5e0a5bcbbeac014900c08881b05a502",
+        "7_bias.npy": "fdac1558ffc650e784089322a2ca5e1852a30a3dd1db4cc37f2c45198f7b1b9e",
+        "7_norm_weight.npy": "a3f6004fd80ff3f6fecce8d78281d56a1d7a7854193e8800fda7553f1cb7e37b",
+        "7_output_weight.npy": "27ea4f5c5318d9eda531faaea626236191c6d64d026cac954b6b427c291ed32d",
+        "upstream_7_cosine.npy": "d5b96f212afc101e3d6612daf3a287ef3fd63fa6dc053f8b7b7033a12be7c8a3",
+        "upstream_7_sine.npy": "5ab5d637f34465e5b372bd3c2baa47f0cebf0a51565bd83e023032f2e15bf540",
+        "upstream_7_cache_key.npy": "8f322530e084f946586b6d01b45bd36908c449f48fc8d212fe41dae27f540b67",
+        "upstream_7_cache_value.npy": "eb3f63e774da43afa4feeb263efec9e8b9dcfdff1c7cc5deac89d1e851dec21b",
+        "fp32_7_projected.npy": "1eea206ee30c358a8d5560cdbcad9f9ece896e282f6ee679202c10bd00c35843",
+        "fp32_7_output.npy": "a9d91fd52c3567ac46052bd1760d2c1e614e4dbb9d499f8acfeb3eec89263f3e",
+        "fp32_7_attention.npy": "e2d8c65361fd2a0d56c90280140edbcf45c930147961a6b49edfd2abd4c34f4b"
+      },
+      "recipe": "Frozen synthetic case 7 (seed 53, T=4096); each workload uses suffix [T-R,T), upstream cache prefix and causal full-prefix outputs. Ring24 owns 24 distinct weights/inputs/caches. Odd entries negate X, Wqkv and Wo, preserving Q/K/V and negating branch/output. Two sign patterns; not 24 model layers. Python reads arrays only before timing.",
+      "arithmetic": "BF16 weights/activations/cache/output; FP32 GQA scores, softmax probabilities and accumulation; GQA output rounded to BF16 before Wo."
+    },
+    "mlp_fixtures": {
+      "case": "h896_i4864_r4096_s1601",
+      "arrays": {
+        "h896_i4864_r4096_s1601/A.npy": "ac01daad9161a0863f089948cb17a862dc4bd14079c833be5cefe4b06be12f66",
+        "h896_i4864_r4096_s1601/D.npy": "152371575d28f5bbff51e276259364f31914ff16dc2870b33b7cb4336b9fd2af",
+        "h896_i4864_r4096_s1601/G.npy": "93a544abcff7fe4285446fe276d8c45770b5f02c4eeb14ef56d39a402628f54b",
+        "h896_i4864_r4096_s1601/N.npy": "270d98fa728b3f650df42206346ff7bfd641afcb83b4c078040ee30afe920f42",
+        "h896_i4864_r4096_s1601/S.npy": "3fe5d36d85ece8258a12b1b4912e40e82e3763fa401e413f3496025739a22a34",
+        "h896_i4864_r4096_s1601/U.npy": "1dc705389cae43e6d159ef0f7481f18db83ba9f8cf0ca66c27ab9787e81b9280",
+        "h896_i4864_r4096_s1601/X.npy": "f550b901ac013f6415cc913ae5eb49de1be9b054e54a7fdab7d8fa46417e70ac",
+        "h896_i4864_r4096_s1601/Y.npy": "0a9c5786722a3eec92d6cf38ba4e882fac8c3161d23ff561e3858d8fcc76072a",
+        "h896_i4864_r4096_s1601/down.npy": "0fefa8465c5e67cc93304d3a2800ffefb971802288605b6976da1e21afc838fd",
+        "h896_i4864_r4096_s1601/gate.npy": "a2749aa748e7c281b454dfef8c6cdc15d3fa1300f55bf4f688f0a103c6e2b5e6",
+        "h896_i4864_r4096_s1601/norm.npy": "c498c08a396670a9162180a7349d93d0ea1ac41781769a11b31ade7340cd6651",
+        "h896_i4864_r4096_s1601/up.npy": "2967fe3e4ee343a5fc5eb011171a900a8a75065ec0e4fe223945c6e812cc940a"
+      },
+      "anchor_sha256": "6de9811889f14c9ece9999b7e4ee6116dfc41bb3dfac95486ec86f3582ec43e7",
+      "arithmetic": "BF16 weights and N/G/U/A/S/D/Y; FP32 reductions and SiLU; explicit BF16 stores between all seven stages.",
+      "inputs": "Prefixes of frozen development seed 1601, R=4096. Ring24 has 24 distinct copies of these nonuniform inputs and weights, sharing workspace. It is not a decoder stack or a claim of cold DRAM."
+    }
+  },
+  "seed": 1601,
+  "repetitions": 10,
+  "warmup": 10,
+  "blocks": 4,
+  "dtype": "BF16 weights and N/G/U/A/S/D/Y; FP32 reductions and SiLU; explicit BF16 stores between all seven stages.",
+  "timing": "Isolated projection enqueue through completion on exact upstream operands; hot or 24 distinct weight copies with shared upstream input and one sync. Allocation, upload, checks and printing excluded.",
+  "inputs": "Prefixes of frozen development seed 1601, R=4096. Ring24 has 24 distinct copies of these nonuniform inputs and weights, sharing workspace. It is not a decoder stack or a claim of cold DRAM.",
+  "started_utc": "2026-09-07T18:26:49.396294+00:00",
+  "conditions": [
+    {
+      "block": 1,
+      "before": {
+        "timestamp_utc": "2026-09-07T18:26:49.396462+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 70
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-07T18:28:55.441684+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 70
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    },
+    {
+      "block": 2,
+      "before": {
+        "timestamp_utc": "2026-09-07T18:28:55.759913+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 70
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-07T18:31:01.886054+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 69
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    },
+    {
+      "block": 3,
+      "before": {
+        "timestamp_utc": "2026-09-07T18:31:02.280074+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 70
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-07T18:33:09.271583+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 69
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    },
+    {
+      "block": 4,
+      "before": {
+        "timestamp_utc": "2026-09-07T18:33:09.582641+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 69
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-07T18:35:16.184543+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 71
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    }
+  ],
+  "runtime": {
+    "device": "Apple M4 Pro",
+    "api": "metal",
+    "correctness": "passed",
+    "measurement": "mlp_stage_5"
+  },
+  "completed_utc": "2026-09-07T18:35:17.402269+00:00",
+  "samples_sha256": "f46b16e0fdd00373604d805f2c1f636657adfd8f2153006e3f4bf2b0a9dcbeac"
+}

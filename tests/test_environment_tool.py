@@ -28,6 +28,18 @@ class EnvironmentToolTests(unittest.TestCase):
 
 
 class FixtureDriverTests(unittest.TestCase):
+    def test_mlp_reference_command_preserves_the_explicit_local_asset_boundary(self):
+        module = self.driver()
+        for extra in ([], ['--self-test'], ['--checkpoint-dir', '/tmp/local-checkpoint']):
+            args = ['generate.py', 'mlp'] + (['--', *extra] if extra else [])
+            with patch.object(module.sys, 'argv', args), patch.object(module.subprocess, 'run') as run:
+                module.main()
+                command = run.call_args.args[0]
+                self.assertEqual(Path(command[1]).parent.name, 'mlp')
+                self.assertEqual(command[2:], extra)
+                self.assertNotIn('--holdout', command)
+                self.assertNotIn('--download', command)
+
     def driver(self):
         path = Path(__file__).resolve().parent / 'fixtures/generate.py'
         spec = importlib.util.spec_from_file_location('fixture_driver', path)

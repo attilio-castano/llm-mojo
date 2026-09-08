@@ -3,7 +3,7 @@
 These studies explain how the existing Mojo operations map work onto the Apple
 M4 Pro. Start with the value and storage contracts in [model](../docs/model.md)
 and [layouts](../docs/layouts.md), then read a topic below. Each comparison is
-operation-level except for the composed attention sublayer; a working decoder
+operation-level except for the composed attention and MLP sublayers; a working decoder
 block and full-model generation remain next.
 
 | Topic | Question |
@@ -14,6 +14,7 @@ block and full-model generation remain next.
 | [RoPE](rope/README.md) | How much work and data movement does rotating a dimension pair require? |
 | [GQA decode](gqa_decode/README.md) | How do fusion, sequence parallelism and shared KV heads interact? |
 | [GQA prefill](gqa_prefill/README.md) | How do query tiling, online softmax and Apple matrix instructions interact? |
+| [MLP sublayer](mlp_sublayer/README.md) | How do tiled projections change complete SwiGLU latency under its frozen BF16 rounding contract? |
 | [Attention sublayer](attention_sublayer/README.md) | Where does time go in the complete block under the selected FP32 attention policy? |
 
 The attention-sublayer study uses the explicit CPU FP32 attention policy as
@@ -24,6 +25,16 @@ retains the baseline, Wo, FP32 decode and FP32 prefill comparisons, and integrat
 the existing packed QKV and Wo mappings through one public Mojo entrypoint.
 It separates incremental QKV value from the whole block's combined gain.
 Small hot-call noise and omitted optional counter analysis remain explicit.
+
+The MLP study retains its materialized baseline and a completed projection
+campaign under the same BF16 rounding rules. All eight configurations pass
+53 regression cases; original and final also pass seven fresh holdouts. The
+direct 3,200-observation comparison gives 10.7x/11.2x hot speedups at
+1,024/4,096 rows for 16x16 gate/up/down. One-row ring24 is 2.23x slower and
+one-row hot is inconclusive, so selection remains explicit and rowwise stays
+the default. Eight final profiles retain 8,890 measured dispatches; projections
+still occupy about 91% of large-row active GPU time. The complete optimization
+campaign retains 12,160 latency observations, including screens and increments.
 The measurements below belong to the six operation studies.
 
 The six topics retain **31,200 latency observations**, eleven report figures,

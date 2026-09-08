@@ -1,0 +1,59 @@
+{
+  "schema": 2,
+  "attempts": [
+    {
+      "schema": 1,
+      "status": "incomplete_harness_timeout",
+      "repository": "afbe2888abe86294c6e52292ec31bd1caddaf4a0",
+      "started": "2026-09-07T14:40:25.011151+00:00",
+      "finished": "2026-09-07T14:49:26.127495+00:00",
+      "source_unchanged": true,
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "llm-mojo-bench",
+        "run",
+        "--build-dir",
+        "/private/tmp/mlp-baseline-build-20260907",
+        "--output",
+        "/private/tmp/mlp-baseline-run-20260907",
+        "--studies",
+        "mlp",
+        "mlp_stage_0",
+        "mlp_stage_1",
+        "mlp_stage_2",
+        "mlp_stage_3",
+        "mlp_stage_4",
+        "mlp_stage_5",
+        "mlp_stage_6"
+      ],
+      "exit_code": 1,
+      "failure": {
+        "rows": 4096,
+        "layers": 24,
+        "block": 1,
+        "timeout_seconds": 300,
+        "reason": "subprocess.TimeoutExpired before completing the first measurement block"
+      },
+      "completed_blocks": 0,
+      "accepted_samples": 0,
+      "last_completed_process_stdout": "device: Apple M4 Pro\napi: metal\noperation: mlp\nshape: 4096 1 seed: 1601\nvariants: 0 0 candidate-first: 0\nmeasurement: whole_mlp\ncorrectness: passed\nSAMPLE control 0 0 604476.0\nSAMPLE control 0 1 600012.0\nSAMPLE control 0 2 601960.0\nSAMPLE control 0 3 598044.0\nSAMPLE control 0 4 597803.0\nSAMPLE control 0 5 596849.0\nSAMPLE control 0 6 609012.0\nSAMPLE control 0 7 636663.0\nSAMPLE control 0 8 624040.0\nSAMPLE control 0 9 630420.0\nSAMPLE candidate 0 0 616275.0\nSAMPLE candidate 0 1 615050.0\nSAMPLE candidate 0 2 615100.0\nSAMPLE candidate 0 3 615156.0\nSAMPLE candidate 0 4 615535.0\nSAMPLE candidate 0 5 615609.0\nSAMPLE candidate 0 6 614905.0\nSAMPLE candidate 0 7 615180.0\nSAMPLE candidate 0 8 616718.0\nSAMPLE candidate 0 9 617277.0\nBENCHMARK_COMPLETE\n",
+      "retention": "No complete paired block was written by the old per-block recorder. The last completed case is retained here as a diagnostic only; full local execution logs remain in /private/tmp/mlp-latency-execution-20260907.",
+      "repair": "Timeout increased to 1200 seconds and completed cases persisted individually. Same matrix, warmups, samples, order, arithmetic and gates; fresh clean source build required."
+    },
+    {
+      "status": "interrupted_for_residual_correctness_regression",
+      "source": "e1acb8b13258c5b7389db67ed2ec0dd7f1bb7629",
+      "started": "2026-09-07T14:53:41.151562+00:00",
+      "finished": "2026-09-07T15:19:23.961189+00:00",
+      "source_unchanged": true,
+      "completed_blocks": 1,
+      "retained_samples": 440,
+      "run": "interrupted_attempt.json",
+      "samples": "interrupted_samples.csv.gz",
+      "samples_sha256": "bb5d13264ec282d5d009aa9ed5e91208eb294c677310962645a2eae82a7f5135",
+      "reason": "Stopped at block 2, R=1024 ring24 to verify the exponent-9 addition cutoff; all 440 completed observations retained but not a complete accepted campaign."
+    }
+  ]
+}

@@ -3,6 +3,7 @@ from layout import TensorLayout, TileTensor
 from max.gpu.host import DeviceContext
 from std.gpu import global_idx
 from std.math import ceildiv
+from llm_mojo.bf16_arithmetic import add_bits
 
 
 def residual_reference[
@@ -24,9 +25,11 @@ def residual_reference[
         raise Error("residual shapes must agree")
     for r in range(Int(x.dim[0]())):
         for d in range(Int(x.dim[1]())):
-            var a = rebind[Float32](x[r, d].cast[DType.float32]())
-            var b = rebind[Float32](branch[r, d].cast[DType.float32]())
-            y[r, d] = (a + b).cast[DType.bfloat16]()
+            var index = r * Int(x.dim[1]()) + d
+            y.ptr.unsafe_bitcast[UInt16]()[unsafe_offset=index] = add_bits(
+                x.ptr.unsafe_bitcast[UInt16]()[unsafe_offset=index],
+                branch.ptr.unsafe_bitcast[UInt16]()[unsafe_offset=index],
+            )
 
 
 def _residual[
@@ -45,9 +48,10 @@ def _residual[
     if i < Int(rows) * Int(hidden):
         var r = i // Int(hidden)
         var d = i % Int(hidden)
-        var a = rebind[Float32](x[r, d].cast[DType.float32]())
-        var b = rebind[Float32](branch[r, d].cast[DType.float32]())
-        y[r, d] = (a + b).cast[DType.bfloat16]()
+        y.ptr.unsafe_bitcast[UInt16]()[unsafe_offset=i] = add_bits(
+            x.ptr.unsafe_bitcast[UInt16]()[unsafe_offset=i],
+            branch.ptr.unsafe_bitcast[UInt16]()[unsafe_offset=i],
+        )
 
 
 def enqueue_residual_apple_gpu[
@@ -58,8 +62,7 @@ def enqueue_residual_apple_gpu[
     branch: TileTensor[DType.bfloat16, BL, MutAnyOrigin],
     y: TileTensor[DType.bfloat16, YL, MutAnyOrigin],
 ) raises:
-    """Borrow non-overlapping row-major views; enqueue without synchronization.
-    """
+    """Borrow non-overlapping row-major views; enqueue without synchronization."""
     comptime assert (
         x.flat_rank == 2 and branch.flat_rank == 2 and y.flat_rank == 2
     )

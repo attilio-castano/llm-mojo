@@ -45,6 +45,8 @@ def prepare():
         if hashlib.sha256((fixtures / 'attention_sublayer' / name).read_bytes()).hexdigest() != expected:
             raise RuntimeError(f'sublayer oracle array changed: {name}')
     run("uv", "run", "--locked", "--script", "tests/fixtures/generate.py", "attention_precision")
+    run("uv", "run", "--locked", "--script", "tests/fixtures/generate.py", "mlp", "--", "--self-test")
+    run("uv", "run", "--locked", "--script", "tests/fixtures/generate.py", "mlp")
     print("All generated oracles match the frozen anchors.", flush=True)
 
 
