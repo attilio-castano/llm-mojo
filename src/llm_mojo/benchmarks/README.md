@@ -365,3 +365,21 @@ remain regression data. Decode
 variants exercise row-one prefixes of all existing fixtures and varying input
 rows under asynchronous reuse; original variants still exercise full/chunked
 multi-row execution.
+
+## Decoder baseline and configuration selection
+
+The common builder includes the composed decoder. `--studies decoder_layer`
+runs its six-workload baseline in hot and ring24 modes. The opt-in
+`decoder_selection_*` studies reuse this runner for calibration, screening and
+independent confirmation of explicit decoder configurations. `select-decoder`
+freezes screen proposals; confirmation runs require `--decoder-screen`, and
+`confirm-decoder` records accepted exact shape/mode cells with ID 0 fallback.
+Decoder IDs differ from standalone attention and MLP mapping IDs.
+
+See the [selection plan](../../../studies/decoder_layer/selection-plan.md) for
+workloads and acceptance gates, and the [completed study](../../../studies/decoder_layer/selection.md)
+for retained evidence and offline reproduction. Profile with
+`--operation decoder_layer`; curate with `--decoder-layer` and, for selected configurations,
+`--decoder-selection FILE --prefix selection_`. Complete captures retain the
+actual 15/16/17-dispatch route. Diagnostic profile durations do not determine
+latency promotion.

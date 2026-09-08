@@ -32,7 +32,7 @@ class SelectionTests(unittest.TestCase):
             with self.assertRaises(ValueError):contract.mappings(v,1)
 
     def test_modes_select_independently_and_neighbors_are_frozen(self):
-        build={'frozen':True}
+        build={'frozen':True,'sources':{contract.SELECTION_PATH:'sha'}}
         def load(path,prefix=''):
             name=prefix.removesuffix('_') if prefix else Path(path).name;spec=study.STUDIES[name]
             data=observations(spec)

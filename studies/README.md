@@ -22,8 +22,11 @@ The decoder study composes both residual branches without an added copy or
 synchronization. Its seven reserved cases pass, and it retains 960 baseline
 latency observations and 2,400 measured dispatches. MLP contributes 79% of
 active time at full R=T=256; attention contributes 67% for R=64,T=4096. Decode
-noise and diagnostic gaps remain explicit. The next step is full-model logits
-parity, with no automatic optimization follow-up.
+noise and diagnostic gaps remain explicit. The follow-up
+[configuration study](decoder_layer/selection.md) retains 16,800 additional
+latency observations and confirms 5.6–52.9% lower decoder latency on the primary
+cached-prefill grid. Full/short prefill and decode retain the existing baseline.
+The next step is full-model logits parity.
 
 The attention-sublayer study uses the explicit CPU FP32 attention policy as
 its accuracy baseline. It has 17 synthetic and three checkpoint cases; the
@@ -100,5 +103,6 @@ The original GQA campaign did commit its individual samples.
 The reset preserves all engine implementations and all numerical cases. Large
 oracle arrays are regenerated and checked against their landed hashes. Fresh
 results identify their own source commit and conditions; old crossover claims
-are not silently carried forward. After these bounded studies, the next engine
-milestone is composing and verifying one complete decoder block.
+are not silently carried forward. The composed decoder and its configuration
+study now extend those results.
+Full-model forward parity remains the next engine milestone.

@@ -8,7 +8,10 @@ behavior and seven reserved cases at frozen candidate `d67fd94`. The completed
 and 2,400 measured profile dispatches. Recipes and
 initial acceptance targets were declared before the new layer outputs.
 The [execution plan](decoder-layer-plan.md) defines the local work scope,
-ordered evidence gates, measurement budget, and stop conditions.
+ordered evidence gates, measurement budget, and stop conditions. The subsequent
+[configuration selection](../studies/decoder_layer/selection.md) is also complete;
+it confirms cached-prefill improvements and retains the baseline for full/short
+prefill and decode.
 
 ## Scope
 
@@ -337,7 +340,10 @@ uv run --locked --script tests/fixtures/decoder_reference.py --self-test
 uv run --locked --script tests/fixtures/decoder_reference.py
 ```
 
-## Implementation handoff
+## Original implementation handoff
+
+This section preserves the reference-package handoff before Mojo composition.
+The completed implementation and configuration study are recorded below.
 
 Keep the new contract beside existing docs. When implementing the fixture
 package, add `tests/fixtures/decoder_layer/{contract,reference,generate}.py`
@@ -361,11 +367,11 @@ The ordered reference-package tasks are:
 - [x] Review the qualified reference package before implementing Mojo layer
   composition. Keep source/binary/fixture receipts separate from acceptance.
 
-The future Mojo implementation should extend the existing test/validation
-workflow and run `uv run --locked llm-mojo-validate`, explicit local checkpoint
-checks, and normal-mode asynchronous tests. The reference generator and its
-self-tests are now executable and integrated in ordinary validation; the Mojo
-decoder suite remains to be implemented.
+The handoff required the Mojo implementation to extend the existing
+test/validation workflow and run `uv run --locked llm-mojo-validate`, explicit
+local checkpoint checks, and normal-mode asynchronous tests. At that checkpoint,
+the reference generator and its self-tests were integrated in ordinary
+validation; Mojo composition followed under the execution plan.
 
 After layer acceptance, use the bounded six-workload profiling proposal:
 `(R,T)=(256,256),(4096,4096),(16,256),(64,4096),(1,256),(1,4096)`.

@@ -72,7 +72,8 @@
   "kind": "decoder_selection_evidence_index",
   "postprocessing_source_sha256": {
     "src/llm_mojo/benchmarks/study.py": "1e259318ed1662ee463bae2a10573da776ec9d9e78c8f290a419486a2142393f",
-    "src/llm_mojo/benchmarks/plot.py": "c984c6f2fe39a7d54555c421caf32555e4bfcaf8787cca001e4692a32394f3a7"
+    "src/llm_mojo/benchmarks/plot.py": "c984c6f2fe39a7d54555c421caf32555e4bfcaf8787cca001e4692a32394f3a7",
+    "src/llm_mojo/benchmarks/decoder_layer_contract.py": "0fa8a69fbec652659ac38a5ce7dc5a2d5d1f5af5ac9c88542c925e8b20c8a1cc"
   },
   "final_verification": {
     "python_tests": 98,
@@ -83,5 +84,17 @@
     "git_diff_check": "pass",
     "mojo_tests_before_candidate_freeze": 111,
     "mojo_suites_before_candidate_freeze": 16
+  },
+  "cleanup_verification": {
+    "python_tests": 99,
+    "python_skips": 0,
+    "python_log_sha256": "7982765afa2fe2b0d0f653c30e2c3a03a224af39390bb669a9576a3b3f48d2d8",
+    "offline_without_checkout": "19 generated PNG/CSV artifacts reproduce byte-for-byte",
+    "regression": "offline selection reconstruction fails before the fix and passes after it",
+    "mojo_tests": 111,
+    "mojo_suites": 16,
+    "mojo_skips": 0,
+    "full_validation": "passed: frozen oracle regeneration, Python and Mojo suites, all benchmark smoke checks",
+    "full_validation_log_sha256": "87d403446b26e0aecf2fe569293f705a9bdb2a8b70d7bad97898599905855c57"
   }
 }

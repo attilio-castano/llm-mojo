@@ -180,7 +180,9 @@ def screen_decision(directory,build):
             for layers in (1,24):
                 candidate=next(p['candidate'] for p in proposals if p['family']==family and (p['query_rows'],p['rows'],p['layers'])==(rr,tt,layers))
                 proposals.append(dict(family=family,query_rows=r,rows=t,layers=layers,candidate=candidate,neighbor=True,from_shape=[rr,tt]))
-    return dict(schema=1,kind='decoder_selection',build_sha256=hashlib.sha256(json.dumps(build,sort_keys=True).encode()).hexdigest(),declaration_sha256=sha(repository_root()/SELECTION_PATH),
+    # Offline reconstruction binds the declaration to the measured build,
+    # without requiring a source checkout or consulting its current files.
+    return dict(schema=1,kind='decoder_selection',build_sha256=hashlib.sha256(json.dumps(build,sort_keys=True).encode()).hexdigest(),declaration_sha256=build['sources'][SELECTION_PATH],
         screens=records,proposals=proposals,rule='Per exact shape and mode: all four ratios below one and median reduction exceeds calibrated max(5%, self-pair deviation); lowest qualifying median ratio then ID. Nearest declared neighbor, baseline fallback.')
 
 

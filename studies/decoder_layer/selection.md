@@ -200,7 +200,13 @@ model/session dispatcher or a mixed-policy generation trajectory. An actual
 Post-measurement changes extend the analysis reader to reproduce selected
 profile-window tables and refine the graph layout. Production kernels and
 measured binaries remain those bound to `b88ca50`; the run index records the
-post-processing source hashes separately.
+post-processing source hashes separately. Final PR review also corrected offline
+selection reconstruction to use the declaration hash in the measured build
+receipt, allowing analysis without a source checkout. A regression verifies
+that it reproduces the exact frozen screen and confirmation decisions. The final
+full validation passes 111 Mojo tests, 99 Python tests, frozen oracle checks and
+all benchmark smoke routes, with no skips. A package copy outside the checkout
+also reproduces all 19 decoder PNG/CSV artifacts byte-for-byte.
 
 Recompute all tables, decisions and plots without GPU execution:
 

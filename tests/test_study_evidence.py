@@ -81,6 +81,16 @@ class EvidenceTests(unittest.TestCase):
                                 for r,t,v in contract.profile_selection(selected))
         self.assertEqual(sum(x['count'] for x in load_profile(directory,'selection_')),expected_dispatches)
 
+    def test_decoder_selection_reproduces_without_source_checkout(self):
+        from llm_mojo.benchmarks import decoder_layer_contract as contract
+        directory = ROOT / 'studies/decoder_layer'
+        build = load_run(directory, 'decoder_selection_full_screen_')[0]['build']
+        selected = json.loads((directory / 'selection-confirmed.json').read_text())
+        with patch.object(contract, 'repository_root', side_effect=RuntimeError('no source checkout')):
+            decision = contract.screen_decision(directory, build)
+            self.assertEqual(decision, selected['selection'])
+            self.assertEqual(contract.confirmed_selection(decision, directory), selected)
+
     def test_compact_numerical_records_preserve_original_and_reject_corruption(self):
         directory = ROOT / 'studies/attention_sublayer/data'
         for name in ('decode_validation', 'prefill_validation', 'wo_validation', 'precision_numerics'):

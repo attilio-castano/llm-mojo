@@ -15,8 +15,10 @@ composes these operations with a persistent KV cache, output projection and
 residual addition. Its integrated Mojo entrypoint combines the earlier packed
 QKV, MMA projection and FP32 GQA studies. The [MLP sublayer](studies/mlp_sublayer/README.md)
 composes RMSNorm, SwiGLU and residual under a frozen BF16 contract, with
-validated rowwise and tiled projection paths. A complete decoder block and
-end-to-end model inference remain future work.
+validated rowwise and tiled projection paths. The [decoder layer](studies/decoder_layer/selection.md)
+composes both sublayers and confirms workload-specific kernel choices for
+full prefill, cached prefill and decode. End-to-end model inference remains
+future work.
 
 ## Explore the studies
 
@@ -33,6 +35,7 @@ limits of the result. Start with a question:
 | [GQA prefill](studies/gqa_prefill/README.md) | How do query tiling, online softmax and Apple matrix instructions interact? |
 | [Attention sublayer](studies/attention_sublayer/README.md) | Do the individual kernel gains survive composition through Wo and the residual? |
 | [MLP sublayer](studies/mlp_sublayer/README.md) | Do tiled projections improve the complete SwiGLU block while preserving its BF16 boundaries? |
+| [Decoder layer](studies/decoder_layer/selection.md) | Which kernel combinations improve the complete decoder in each execution mode? |
 
 ![Full and incremental GQA prefill latency on Apple M4 Pro](studies/gqa_prefill/latency.png)
 
