@@ -113,6 +113,8 @@ optimization and needs no performance claim. This is the current stage.
 Compose the operations into one deterministic Qwen-compatible decoder block
 using a deliberately tiny fixture whose intermediate tensors remain easy to
 inspect.
+The [decoder-layer specification](decoder-layer.md) defines the proposed
+rounding, ownership, upstream fixture, and acceptance boundaries for this step.
 
 Exit evidence: every block boundary and the final block output match the
 reference oracle, with shapes, layouts, dtypes, and allocations documented.
