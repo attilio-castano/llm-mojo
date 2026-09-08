@@ -142,6 +142,16 @@ def expected_checks(cases,selection=False):
     return expected
 
 
+def protected_extents(spec):
+    """Full allocations snapshotted by the decoder case, including rotary guards."""
+    t, h, i = spec['rows'], spec['h'], spec['i']
+    k, d = spec['nk'] * spec['d'], spec['d']
+    capacity = min(t + 1, 4096)
+    return dict(xb=t*h, aw_norm=h, aw_qkv=(h+2*k)*h, aw_bias=h+2*k,
+                aw_output=h*h, mw_norm=h, mw_gate=i*h, mw_up=i*h,
+                mw_down=h*i, a_cosine=capacity*d, a_sine=capacity*d)
+
+
 def validate_results(path,cases,selection=False):
     records=[json.loads(line) for line in Path(path).read_text().splitlines()]
     observed=Counter();runtimes=set();aux=Counter();protected=Counter()
@@ -160,9 +170,9 @@ def validate_results(path,cases,selection=False):
             continue
         kind=row['kind']
         if kind=='exact':
-            if row.get('failed')!=0 or row.get('elements',0)<=0:
+            if row.get('failed')!=0 or type(row.get('elements')) is not int or row['elements']<=0:
                 raise ValueError('missing exact preservation check')
-            protected[row['case'],row['policy'],row['label']]+=1
+            protected[row['case'],row['policy'],row['label'],row['elements']]+=1
             continue
         key=tuple(row.get(k,'') for k in ('case','policy','schedule','mode','kind','stage','start','rows'))
         observed[key]+=1
@@ -185,9 +195,9 @@ def validate_results(path,cases,selection=False):
                 raise ValueError('decoder incomplete element coverage')
             if (row['mode']=='operation' or stage in BOUNDARIES) and row.get('failed')!=0:
                 raise ValueError('missing decoder gate')
-    labels=('xb','aw_norm','aw_qkv','aw_bias','aw_output','mw_norm','mw_gate','mw_up','mw_down','a_cosine','a_sine')
-    expected_protected=Counter((name,policy,label) for name,case in cases.items()
-        for policy in policies(case['spec'],selection) for label in labels)
+    expected_protected=Counter((name,policy,label,elements) for name,case in cases.items()
+        for policy in policies(case['spec'],selection)
+        for label,elements in protected_extents(case['spec']).items())
     if protected!=expected_protected:
         raise ValueError('incomplete protected decoder storage coverage')
     if observed!=expected_checks(cases,selection) or len(runtimes)!=1:
@@ -200,7 +210,7 @@ def validate_results(path,cases,selection=False):
     if selection:
         async_rows=[r for r in records if r.get('mode')=='async']
         for row in async_rows:
-            if row.get('failed')!=0 or row.get('elements',0)<=0:
+            if row.get('failed')!=0 or type(row.get('elements')) is not int or row['elements']<=0:
                 raise ValueError('missing selection asynchronous gate')
             if row['kind']=='boundary' and row['elements']!=row['rows']*896:
                 raise ValueError('incomplete asynchronous elements')
@@ -208,11 +218,13 @@ def validate_results(path,cases,selection=False):
         for v in selection_contract.VARIANTS:
             for j in range(13):
                 start,rows=(0,53) if j==0 else (52+j,1)
-                for stage in BOUNDARIES:expected[v,'boundary',stage,start,rows]+=1
-            expected[v,'boundary','Y',0,1]+=1
-            for stage in BOUNDARIES:expected[v,'exact','async '+stage+' vs separate workspace','', '']+=13
-            for label in ('async cache key','async cache value'):expected[v,'exact',label,'','']+=1
-        actual=Counter((r['policy'],r['kind'],r.get('stage',r.get('label')),r.get('start',''),r.get('rows','')) for r in async_rows)
+                for stage in BOUNDARIES:
+                    expected[v,'boundary',stage,start,rows,rows*896]+=1
+                    expected[v,'exact','async '+stage+' vs separate workspace','','',rows*896]+=1
+            expected[v,'boundary','Y',0,1,896]+=1
+            for label in ('async cache key','async cache value'):
+                expected[v,'exact',label,'','',66*128]+=1
+        actual=Counter((r['policy'],r['kind'],r.get('stage',r.get('label')),r.get('start',''),r.get('rows',''),r['elements']) for r in async_rows)
         if actual!=expected:raise ValueError('incomplete selection asynchronous coverage')
     return dict(checks=sum(observed.values()),runtime=dict(zip(('device','backend'),next(iter(runtimes)))))
 

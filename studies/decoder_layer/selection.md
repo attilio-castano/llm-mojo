@@ -163,6 +163,17 @@ The largest reserved final-output scaled error was 0.015625 against the unchange
 reserved outputs. [Lossless numerical evidence](selection_numerics.json) binds
 these checks to the candidate binary, source, fixture identities and gate results.
 
+PR review tightened the Python acceptance reader to require the declaration's
+reference hash and an explicit declaration-time `reserved_outputs_observed=false`.
+That assertion is supported by the frozen source binding and recorded order of
+candidate build, reserved capture and evaluation; it is not a current observation
+flag or independent proof that outputs were unseen. Exact protected-storage
+records now include their full geometry-derived extents in the required census,
+including rotary guard rows. Selection asynchronous comparisons also require
+the full prefill/decode and cache extents. Replaying the original seven-case and
+selection nine-case records passes these stricter checks. This is an audit of
+retained evidence, not a new reserved execution or new performance measurement.
+
 The tokenizer here is the existing pinned fixture-generation tool. This study
 adds no native tokenizer, embeddings, model logits or generation runtime.
 

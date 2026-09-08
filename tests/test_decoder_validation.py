@@ -29,8 +29,11 @@ class NumericalReceiptTests(unittest.TestCase):
                        elements=128,prefix_exact=True,append_exact=True,inactive_exact=True)
         for stage in stages:check('full','operation','boundary',stage)
         for stage in ('B_mlp','Y'):check('full','mlp','boundary',stage)
-        for label in ('xb','aw_norm','aw_qkv','aw_bias','aw_output','mw_norm','mw_gate','mw_up','mw_down','a_cosine','a_sine'):
-            append('chunk','layer','exact',label=label,elements=1,failed=0)
+        sizes = dict(xb=896, aw_norm=896, aw_qkv=1152*896, aw_bias=1152,
+                     aw_output=896*896, mw_norm=896, mw_gate=4864*896,
+                     mw_up=4864*896, mw_down=896*4864, a_cosine=2*64, a_sine=2*64)
+        for label, elements in sizes.items():
+            append('chunk','layer','exact',label=label,elements=elements,failed=0)
         for label in ('second residual uses X','second residual omitted','first residual omitted',
                       'second norm uses X','wrong norm weights','wrong absolute RoPE position',
                       'mask exposes future rows','cache prefix changed'):
@@ -45,6 +48,23 @@ class NumericalReceiptTests(unittest.TestCase):
 
     def test_complete_receipt(self):
         self.assertEqual(self.validate(self.records)['checks'],60)
+
+    def test_protected_extents_must_match_complete_allocations(self):
+        for index, record in enumerate(self.records):
+            if record['kind'] != 'exact':
+                continue
+            for elements in (1, record['elements'] - 1, record['elements'] + 1,
+                             True, float(record['elements']), None):
+                with self.subTest(label=record['label'], elements=elements):
+                    bad = copy.deepcopy(self.records)
+                    bad[index]['elements'] = elements
+                    with self.assertRaises(ValueError):
+                        self.validate(bad)
+        # Checking only initialized rotary rows omits the allocated guard row.
+        bad = copy.deepcopy(self.records)
+        next(r for r in bad if r.get('label') == 'a_cosine')['elements'] = 64
+        with self.assertRaises(ValueError):
+            self.validate(bad)
 
     def test_missing_duplicate_wrong_route_and_backend(self):
         bads=[self.records[1:],self.records+[self.records[0]],self.records[:-1]]

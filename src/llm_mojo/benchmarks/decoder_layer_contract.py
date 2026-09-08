@@ -107,8 +107,10 @@ def selection_declaration():
     record=json.loads((repository_root()/SELECTION_PATH).read_text())
     expected=dict(variants=sorted(VARIANTS),seeds=list(SELECTION_SEEDS),rows=list(SELECTION_ROWS),
                   prompt=SELECTION_PROMPT,screen_grids=json.loads(json.dumps(SCREEN_GRIDS)),
-                  neighbors=json.loads(json.dumps(NEIGHBORS)))
-    if any(record.get(k)!=v for k,v in expected.items()):
+                  neighbors=json.loads(json.dumps(NEIGHBORS)),
+                  reference_sha256=sha(repository_root()/'tests/fixtures/decoder_layer/checksums.json'))
+    # This is the frozen declaration-time assertion, not current observation state.
+    if record.get('reserved_outputs_observed') is not False or any(record.get(k)!=v for k,v in expected.items()):
         raise ValueError('decoder selection declaration changed')
     import struct
     ids=record['checkpoint_token_ids']

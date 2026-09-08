@@ -31,6 +31,40 @@ class SelectionTests(unittest.TestCase):
         for v in (-1,7,9,True):
             with self.assertRaises(ValueError):contract.mappings(v,1)
 
+    def test_declaration_rejects_contradictory_provenance(self):
+        source = contract.repository_root()
+        declaration = contract.selection_declaration()
+        anchor = Path('tests/fixtures/decoder_layer/checksums.json')
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / anchor).parent.mkdir(parents=True)
+            (root / anchor).write_bytes((source / anchor).read_bytes())
+            path = root / contract.SELECTION_PATH
+            path.parent.mkdir(parents=True)
+            with patch.object(contract, 'repository_root', return_value=root):
+                path.write_text(json.dumps(declaration))
+                self.assertEqual(contract.selection_declaration(), declaration)
+                for field, value in (('reserved_outputs_observed', True),
+                                     ('reserved_outputs_observed', 0),
+                                     ('reserved_outputs_observed', None),
+                                     ('reference_sha256', '0' * 64),
+                                     ('reference_sha256', None)):
+                    with self.subTest(field=field, value=value):
+                        path.write_text(json.dumps({**declaration, field: value}))
+                        with self.assertRaises(ValueError):
+                            contract.selection_declaration()
+                for field in ('reserved_outputs_observed', 'reference_sha256'):
+                    bad = dict(declaration)
+                    del bad[field]
+                    path.write_text(json.dumps(bad))
+                    with self.assertRaises(ValueError):
+                        contract.selection_declaration()
+                path.write_text(json.dumps(declaration))
+                with (root / anchor).open('a') as stream:
+                    stream.write(' ')
+                with self.assertRaises(ValueError):
+                    contract.selection_declaration()
+
     def test_modes_select_independently_and_neighbors_are_frozen(self):
         build={'frozen':True,'sources':{contract.SELECTION_PATH:'sha'}}
         def load(path,prefix=''):
@@ -138,3 +172,18 @@ class SelectionTests(unittest.TestCase):
                 with self.assertRaises(ValueError):check(bad)
             bad=copy.deepcopy(records);del bad[-1]['failed']
             with self.assertRaises(ValueError):check(bad)
+
+            # All four branch comparisons and both cache snapshots need full extents.
+            labels = {r['label'] for r in records if r.get('mode') == 'async' and r['kind'] == 'exact'}
+            for label in labels:
+                for elements in (1, True, 8448.0, None):
+                    with self.subTest(async_label=label, elements=elements):
+                        bad = copy.deepcopy(records)
+                        next(r for r in bad if r.get('label') == label)['elements'] = elements
+                        with self.assertRaises(ValueError):
+                            check(bad)
+            # The 53-row prefill comparison cannot be replaced by a decode-sized one.
+            bad = copy.deepcopy(records)
+            next(r for r in bad if r.get('label') == 'async Y vs separate workspace')['elements'] = 896
+            with self.assertRaises(ValueError):
+                check(bad)

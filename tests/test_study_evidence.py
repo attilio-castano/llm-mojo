@@ -53,6 +53,14 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(receipt['status'],'passed');self.assertEqual(len(acceptance['manifest']['cases']),9)
         self.assertTrue(receipt['build']['selection'])
         self.assertEqual(acceptance['manifest']['selection'],contract.selection_declaration())
+        self.assertEqual(receipt['build']['source']['sources'][contract.SELECTION_PATH],
+                         sha(ROOT / contract.SELECTION_PATH))
+        from datetime import datetime
+        times = [receipt['build']['created_utc'], acceptance['manifest']['started_utc'],
+                 acceptance['manifest']['finished_utc'], receipt['started_utc'], receipt['finished_utc']]
+        instants = [datetime.fromisoformat(t) for t in times]
+        self.assertTrue(all(t.tzinfo is not None for t in instants))
+        self.assertTrue(all(a < b for a, b in zip(instants, instants[1:])))
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'checks.jsonl';path.write_text(''.join(json.dumps(r)+'\n' for r in acceptance['checks']))
             coverage=decoder_validation.validate_results(path,acceptance['manifest']['cases'],True)
