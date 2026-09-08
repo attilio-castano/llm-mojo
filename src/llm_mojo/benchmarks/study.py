@@ -289,7 +289,7 @@ def parse_output(output, control, candidate, first, *, rows, layers, seed, opera
     expected_headers = [f'shape: {rows} {layers} seed: {seed}',
                         f'variants: {control} {candidate} candidate-first: {int(first)}',
                         'api: metal', 'correctness: passed', 'BENCHMARK_COMPLETE']
-    if operation in ('gqa_prefill', 'attention_sublayer'):
+    if operation in ('gqa_prefill', 'attention_sublayer', 'decoder_layer'):
         if type(query_rows) is not int or not 1 <= query_rows <= rows:
             raise ValueError('invalid prefill query rows')
         expected_headers.append(f'query rows: {query_rows}')
@@ -473,6 +473,8 @@ def load_profile(directory, prefix=''):
     directory = evidence_directory(directory)
     record = json.loads((directory / (prefix+'profiles.json')).read_text())
     path = directory / (prefix+'profile_samples.csv.gz')
+    if record.get('schema') == 5:
+        return load_decoder_profile(directory,prefix)
     if record.get('schema') == 4:
         return load_mlp_profile(directory,prefix)
     if record.get('schema') not in (1,2,3) or record['samples_sha256'] != sha(path):
@@ -558,3 +560,53 @@ def mlp_decode_finalists(gate, down):
         raise ValueError('invalid decode family finalists')
     return [0] + ([gate] if gate else []) + ([down] if down else []) + (
         [13+(gate-8)*2+(down-11)] if gate and down else [])
+
+
+from . import decoder_layer_contract as decoder
+STUDIES['decoder_layer'] = dict(operation=decoder.OPERATION,control=0,candidates=[0],
+    names={0:'identical decoder baseline'},seed=4001,measurement='whole_decoder',opt_in=True,
+    workloads=[dict(query_rows=r,rows=t) for r,t in decoder.WORKLOADS],
+    arithmetic=decoder.ARITHMETIC,inputs=decoder.INPUTS,timing=decoder.TIMING,
+    layout='Row major X/Y[R,896], cache[T,2,64], weights[out,in], intermediate width 4864.')
+
+
+
+def load_decoder_profile(directory,prefix=''):
+    directory=Path(directory)
+    record=json.loads((directory/(prefix+'profiles.json')).read_text())
+    path=directory/(prefix+'profile_samples.csv.gz')
+    if record.get('schema')!=5 or sha(path)!=record['samples_sha256']:
+        raise ValueError('decoder profile evidence changed')
+    if record.get('specification')!={'workloads':[[r,t] for r,t,n in decoder.PROFILES],'variants':[0]}:
+        raise ValueError('decoder profile specification changed')
+    grid={(r,t,0) for r,t,n in decoder.PROFILES}
+    captures=record['captures']
+    if len(captures)!=3 or {(c['query_rows'],c['rows'],c['variant']) for c in captures}!=grid:
+        raise ValueError('decoder profile capture census changed')
+    expected=set()
+    for c in captures:
+        r,t=c['query_rows'],c['rows'];identity=c['capture'];w=identity['workload']
+        if identity['repository']!=record['common']['repository'] or identity['repository']['dirty']:
+            raise ValueError('decoder profile source changed')
+        if identity['operation']!='decoder_layer' or identity['runtime']['backend']!='metal' or not identity['runtime']['device'].startswith('Apple '):
+            raise ValueError('decoder profile runtime changed')
+        decoder.configuration({**identity,**w,'profile_warmup_iterations':w['warmup_iterations']})
+        n=next(n for rr,tt,n in decoder.PROFILES if (rr,tt)==(r,t))
+        if w['profile_rows']!=r or w['key_value_rows']!=t or w['profile_iterations']!=n or w['warmup_iterations']!=10:
+            raise ValueError('decoder profile workload changed')
+        expected.update((r,t,j,stage) for j in range(n) for stage in decoder.STAGES)
+    observed=set();grouped=defaultdict(list);totals=defaultdict(float)
+    with gzip.open(path,'rt',newline='') as stream:
+        for row in csv.DictReader(stream):
+            key=(int(row['query_rows']),int(row['rows']),int(row['iteration']),row['stage'])
+            duration=int(row['duration_ns'])
+            if int(row['end_ns'])<int(row['start_ns'])+duration:
+                raise ValueError('decoder profile interval is invalid')
+            if key in observed or duration<=0 or int(row['variant'])!=0:
+                raise ValueError('decoder duplicate or invalid dispatch')
+            observed.add(key);grouped[key[0],key[1],key[3]].append(duration/1000)
+            totals[key[0],key[1]]+=duration/1000
+    if observed!=expected:raise ValueError('decoder incomplete profile sequence')
+    return [dict(query_rows=r,rows=t,stage=s,count=len(v),median_us=statistics.median(v),
+                 mean_us=statistics.mean(v),active_share_percent=100*sum(v)/totals[r,t])
+            for (r,t,s),v in grouped.items()]

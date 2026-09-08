@@ -154,5 +154,27 @@ def main():
 
 
 
+def decoder_smoke():
+    from .decoder_layer_contract import WORKLOADS
+    target=repository_root()/'build/decoder-smoke'
+    subprocess.run([environment_tool('mojo'),'build','-I','src',
+        'src/llm_mojo/benchmarks/decoder_layer.mojo','-o',str(target)],cwd=repository_root(),check=True)
+    env={k:v for k,v in os.environ.items() if k!='MODULAR_DEBUG' and not k.startswith('DECODER_')}
+    for r,t in WORKLOADS:
+        for layers in (1,24):
+            result=subprocess.run(list(map(str,[target,r,t,layers,0,0,0,4001,'bench',1,0])),
+                cwd=repository_root(),text=True,capture_output=True,env=env,check=True)
+            if 'api: metal' not in result.stdout or 'correctness: passed' not in result.stdout or not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE'):
+                raise RuntimeError('decoder benchmark route smoke failed')
+    for r in (1,15,16,17):
+        subprocess.run(list(map(str,[target,r,65,24,0,0,0,4001,'adversarial',1,0])),
+            cwd=repository_root(),capture_output=True,env=env,check=True)
+    for r,t,l,c,seed in ((0,65,1,0,4001),(66,65,1,0,4001),(1,65,2,0,4001),(1,65,1,7,4001),(1,65,1,0,4002)):
+        result=subprocess.run(list(map(str,[target,r,t,l,c,0,0,seed,'bench',1,0])),cwd=repository_root(),capture_output=True,env=env)
+        if result.returncode==0:raise RuntimeError('invalid decoder benchmark accepted')
+    print('decoder complete workload grid and adversarial rings passed on Metal',flush=True)
+
+
 if __name__ == '__main__':
     main()
+    decoder_smoke()

@@ -328,40 +328,12 @@ def _enqueue_attention_wo(
         enqueue_linear_prefill_mma_tile_apple_gpu[8, 32](ctx, a, w, o)
 
 
-def enqueue_attention_sublayer[
-    XL: TensorLayout
-](
-    ctx: DeviceContext,
-    mut weights: AttentionWeights,
-    mut cache: AttentionCache,
-    mut work: AttentionWorkspace,
-    x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
-    route: Int = 3,
-    wo_mma: Bool = False,
-    qkv_mapping: Int = 0,
-    wo_tile: Int = 0,
+def _validate_attention_sublayer[XL: TensorLayout](
+    ctx: DeviceContext, weights: AttentionWeights, cache: AttentionCache,
+    work: AttentionWorkspace, x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
+    route: Int, qkv_mapping: Int = 0, wo_tile: Int = 0,
 ) raises -> Int:
-    """Enqueue one sublayer and advance cache length; return the launched route.
-
-    Default route 3 materializes FP32 scores/probabilities, with BF16 I/O.
-    Route 0 materializes BF16 GQA. Route 1 uses G32 decode / original MMA prefill;
-    route 2 uses split64 H4 decode / rolled-QK MMA prefill. Surroundings match.
-    Routes 0-2 remain explicit BF16 compatibility comparisons.
-    Routes 4/5 use FP32 G32/split64-H4 decode for R=1; for R>1 they use
-    materialized FP32 attention and return actual route 3. No length crossover.
-    Route 6 uses FP32 rolled-MMA prefill and G32 decode (actual route 4).
-    Routes 7/8 use 16/8 query rows per FP32 tile; 9/10 use 4/8 KV splits
-    with a separate FP32 merge. All use G32 for R=1 (actual route 4).
-    wo_mma selects only the bias-free output projection's 8x16 MMA mapping;
-    it preserves BF16 projection output before the separate residual addition.
-    It is an explicit experiment, independent of the GQA precision route.
-    qkv_mapping 0 keeps separate rowwise projections; 1/2 select the existing
-    packed rowwise/MMA projection, followed by a bit-preserving layout copy.
-    QKV mappings 3/4 select 16x16/8x32 MMA. When wo_mma is true, wo_tile 1/2
-    select those same larger tiles for Wo; zero preserves the 8x16 control.
-    X must not overlap any writable workspace/cache region. Read output from
-    work.output only after completion and before its next overwrite.
-    """
+    """Shared preflight with no enqueue or state mutation."""
     comptime assert x.flat_rank == 2
     var r = Int(x.dim[0]())
     var h = weights.hidden
@@ -409,6 +381,55 @@ def enqueue_attention_sublayer[
         raise Error("optimized GQA requires Qwen dimensions")
     if ctx.api() != "metal":
         raise Error("attention sublayer requires Metal")
+
+    return launched_route
+
+
+def enqueue_attention_sublayer[
+    XL: TensorLayout
+](
+    ctx: DeviceContext,
+    mut weights: AttentionWeights,
+    mut cache: AttentionCache,
+    mut work: AttentionWorkspace,
+    x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
+    route: Int = 3,
+    wo_mma: Bool = False,
+    qkv_mapping: Int = 0,
+    wo_tile: Int = 0,
+) raises -> Int:
+    """Enqueue one sublayer and advance cache length; return the launched route.
+
+    Default route 3 materializes FP32 scores/probabilities, with BF16 I/O.
+    Route 0 materializes BF16 GQA. Route 1 uses G32 decode / original MMA prefill;
+    route 2 uses split64 H4 decode / rolled-QK MMA prefill. Surroundings match.
+    Routes 0-2 remain explicit BF16 compatibility comparisons.
+    Routes 4/5 use FP32 G32/split64-H4 decode for R=1; for R>1 they use
+    materialized FP32 attention and return actual route 3. No length crossover.
+    Route 6 uses FP32 rolled-MMA prefill and G32 decode (actual route 4).
+    Routes 7/8 use 16/8 query rows per FP32 tile; 9/10 use 4/8 KV splits
+    with a separate FP32 merge. All use G32 for R=1 (actual route 4).
+    wo_mma selects only the bias-free output projection's 8x16 MMA mapping;
+    it preserves BF16 projection output before the separate residual addition.
+    It is an explicit experiment, independent of the GQA precision route.
+    qkv_mapping 0 keeps separate rowwise projections; 1/2 select the existing
+    packed rowwise/MMA projection, followed by a bit-preserving layout copy.
+    QKV mappings 3/4 select 16x16/8x32 MMA. When wo_mma is true, wo_tile 1/2
+    select those same larger tiles for Wo; zero preserves the 8x16 control.
+    X must not overlap any writable workspace/cache region. Read output from
+    work.output only after completion and before its next overwrite.
+    """
+    var launched_route = _validate_attention_sublayer(
+        ctx, weights, cache, work, x, route, qkv_mapping, wo_tile
+    )
+    var r = Int(x.dim[0]())
+    var h = weights.hidden
+    var d = weights.head_dim
+    var nq = weights.query_heads
+    var nk = weights.kv_heads
+    var k = nk * d
+    var p = cache.length
+    var t = p + r
 
     var normal = TileTensor(work.normalized, row_major(r, h))
     enqueue_rms_norm_apple_gpu(

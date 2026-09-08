@@ -14,6 +14,7 @@ from .study import (STUDIES, BLOCKS, REPETITIONS, WARMUP, sha, write_json,
                    select_parallelism_finalists, select_projection_tile, select_mlp_decode, mlp_decode_finalists)
 from .attention_sublayer_contract import fixture_identity
 from .mlp_contract import fixture_identity as mlp_fixture_identity
+from .decoder_layer_contract import fixture_identity as decoder_fixture_identity
 
 
 
@@ -21,7 +22,7 @@ def source_hashes():
     root = repository_root()
     paths = [*root.glob('src/**/*.mojo'), *root.glob('src/**/*.py'),
              *root.glob('tests/fixtures/**/*.py'), *root.glob('tests/fixtures/**/*.json'),
-             *root.glob('tests/fixtures/**/*.lock'), root / 'pyproject.toml', root / 'uv.lock']
+             *root.glob('tests/fixtures/**/*.lock'), *root.glob('tests/decoder_layer_support.*'), root / 'pyproject.toml', root / 'uv.lock']
     return {str(p.relative_to(root)): sha(p) for p in sorted(paths)}
 
 
@@ -35,18 +36,19 @@ def build(directory):
     sources = source_hashes()
     fixtures = fixture_identity()
     mlp_fixtures = mlp_fixture_identity()
+    decoder_fixtures = decoder_fixture_identity()
     commands, binaries = {}, {}
     env = {k: v for k, v in os.environ.items() if k != 'MODULAR_DEBUG'}
-    for name, source in [('operations', 'operations.mojo'), ('gqa_decode', 'attention_decode.mojo'), ('gqa_prefill','attention_prefill.mojo'), ('attention_sublayer','attention_sublayer.mojo'), ('mlp','mlp.mojo')]:
+    for name, source in [('operations', 'operations.mojo'), ('gqa_decode', 'attention_decode.mojo'), ('gqa_prefill','attention_prefill.mojo'), ('attention_sublayer','attention_sublayer.mojo'), ('mlp','mlp.mojo'), ('decoder_layer','decoder_layer.mojo')]:
         command = [environment_tool('mojo'), 'build', '-I', 'src',
                    f'src/llm_mojo/benchmarks/{source}', '-o', str(directory / name)]
         subprocess.run(command, cwd=repository_root(), env=env, check=True)
         binaries[name] = sha(directory / name)
         commands[name] = ['mojo', *command[1:-1], '<binary>']
-    if repository_state() != repo or source_hashes() != sources or fixture_identity() != fixtures or mlp_fixture_identity() != mlp_fixtures:
+    if repository_state() != repo or source_hashes() != sources or fixture_identity() != fixtures or mlp_fixture_identity() != mlp_fixtures or decoder_fixture_identity() != decoder_fixtures:
         raise RuntimeError('source changed during build')
     write_json(directory / 'build.json', dict(repository=repo, sources=sources, binaries=binaries,
-                                             commands=commands, environment=stable_environment(), attention_fixtures=fixtures, mlp_fixtures=mlp_fixtures))
+                                             commands=commands, environment=stable_environment(), attention_fixtures=fixtures, mlp_fixtures=mlp_fixtures, decoder_fixtures=decoder_fixtures))
 
 
 def checked_conditions():
@@ -81,6 +83,8 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
         seed = spec.get('seed',53)
         if spec['operation'] == 'mlp' and mlp_fixture_identity() != provenance.get('mlp_fixtures'):
             raise RuntimeError('MLP benchmark inputs changed')
+        if spec['operation'] == 'decoder_layer' and decoder_fixture_identity() != provenance.get('decoder_fixtures'):
+            raise RuntimeError('decoder benchmark inputs changed')
         selection = None
         if name == 'mlp_decode_final':
             if mlp_decode_screen is None:
@@ -156,17 +160,17 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
                 cases.reverse()
             for workload, layers, candidate in cases:
                 rows = workload['rows']
-                binary_name = spec['operation'] if spec['operation'].startswith('gqa_') or spec['operation'] in ('attention_sublayer','mlp') else 'operations'
+                binary_name = spec['operation'] if spec['operation'].startswith('gqa_') or spec['operation'] in ('attention_sublayer','mlp','decoder_layer') else 'operations'
                 command = [str(build_dir / binary_name)]
                 if binary_name == 'operations':
                     command.append(spec['operation'])
-                if binary_name in ('gqa_prefill', 'attention_sublayer'):
+                if binary_name in ('gqa_prefill', 'attention_sublayer', 'decoder_layer'):
                     command.append(str(workload['query_rows']))
                 command += list(map(str, [rows, layers, candidate, spec['control'], int(first), seed,
                                           spec.get('mode','bench'), REPETITIONS, WARMUP]))
                 # A 4096-row MLP ring process performs 960 complete blocks.
                 # The rowwise baseline needs about ten minutes on this host.
-                timeout = 1200 if spec['operation'] == 'mlp' else 600 if spec['operation'] == 'attention_sublayer' else 300
+                timeout = 1200 if spec['operation'] in ('mlp','decoder_layer') else 600 if spec['operation'] == 'attention_sublayer' else 300
                 process = subprocess.run(command, cwd=repository_root(), capture_output=True, text=True, env=env, timeout=timeout)
                 # Local diagnostic logs are useful during execution; compact samples are the retained evidence.
                 (directory / 'last-process.txt').write_text(process.stdout + process.stderr)
@@ -191,6 +195,8 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
             raise RuntimeError('attention benchmark inputs changed during measurement')
         if spec['operation'] == 'mlp' and mlp_fixture_identity() != provenance['mlp_fixtures']:
             raise RuntimeError('MLP inputs changed during measurement')
+        if spec['operation'] == 'decoder_layer' and decoder_fixture_identity() != provenance['decoder_fixtures']:
+            raise RuntimeError('decoder inputs changed during measurement')
         if repository_state() != repo or source_hashes() != sources or stable_environment() != environment:
             raise RuntimeError('source or hardware/software changed during measurement')
         record.update(completed_utc=utc_now(), samples_sha256=sha(directory / 'samples.csv.gz'))

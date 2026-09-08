@@ -840,11 +840,38 @@ def render_mlp(directory, record, samples, summary):
     print('MLP raw samples verified; latency and profile figures regenerated')
 
 
+
+def render_decoder(directory,record,samples,summary):
+    from .study import load_decoder_profile
+    from .decoder_layer_contract import WORKLOADS, PROFILES, STAGES
+    prefill_style()
+    table(directory,'summary.csv',summary)
+    labels=[f'R={r} / T={t}' for r,t in WORKLOADS]
+    fig,axes=plt.subplots(1,2,figsize=(12,4.8),layout='constrained')
+    for ax,l in zip(axes,(1,24)):
+        rows=[next(s for s in summary if (s['query_rows'],s['rows'],s['layers'])==(r,t,l)) for r,t in WORKLOADS]
+        ax.barh(labels,[s['control_us'] for s in rows],color='#237a80')
+        ax.set_xscale('log');ax.invert_yaxis();ax.set_xlabel('microseconds per decoder call · log scale')
+        ax.set_title('One hot call' if l==1 else '24 allocation sets · one sync per sweep')
+    fig.suptitle('Decoder layer latency · fixed attention and MLP policy')
+    fig.savefig(directory/'latency.png',dpi=180);plt.close(fig)
+    profile=load_decoder_profile(directory)
+    table(directory,'profile_summary.csv',profile)
+    fig,axes=plt.subplots(1,3,figsize=(13,6),layout='constrained')
+    for ax,(r,t,n) in zip(axes,PROFILES):
+        rows=[next(s for s in profile if s['query_rows']==r and s['rows']==t and s['stage']==stage) for stage in STAGES]
+        ax.barh(STAGES,[s['active_share_percent'] for s in rows],color='#b65e3b')
+        ax.invert_yaxis();ax.set_xlabel('share of captured GPU active time (%)');ax.set_title(f'R={r}, T={t} · {n} iterations')
+    fig.suptitle('Where decoder GPU active time goes · one diagnostic capture per workload')
+    fig.savefig(directory/'active_time.png',dpi=180);plt.close(fig)
+
 def render(directory):
     from .study import evidence_directory
     directory = evidence_directory(directory)
     record, samples, summary = load_run(directory)
     spec = record['specification']
+    if spec['operation'] == 'decoder_layer':
+        return render_decoder(directory,record,samples,summary)
     if spec['operation'] == 'mlp':
         return render_mlp(directory,record,samples,summary)
     if spec['operation'] == 'attention_sublayer':

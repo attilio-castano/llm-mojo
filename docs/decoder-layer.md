@@ -2,8 +2,9 @@
 
 Status: v1 upstream reference package qualified and frozen, based on merged
 source `7f16d6f`. The 43 synthetic development and three checkpoint cases pass
-the declared upstream full/chunk gates. No Mojo decoder-layer implementation,
-candidate acceptance, or performance result is established yet. Recipes and
+the declared upstream full/chunk gates. The Mojo composition passes development
+and behavior checks; clean-candidate acceptance and retained performance results
+are still pending. Recipes and
 initial acceptance targets were declared before the new layer outputs.
 The [execution plan](decoder-layer-plan.md) defines the local work scope,
 ordered evidence gates, measurement budget, and stop conditions.
@@ -377,3 +378,31 @@ are explained, following [experiments.md](experiments.md).
 The existing repository validation also passed: 79 Python tests, every existing
 Mojo suite, and all benchmark route smoke checks. This was the reference-package
 checkpoint; it does not yet qualify the newly added Mojo decoder wrapper.
+
+## Decoder implementation checkpoint
+
+`src/llm_mojo/decoder_layer.mojo` composes the existing attention and MLP
+entrypoints. A shared, side-effect-free attention preflight plus MLP preflight
+runs before the first dispatch. The wrapper rejects invalid geometry, layout,
+capacity, mapping, short buffers and overlapping writable storage. Attention's
+arithmetic and launch order are unchanged. The MLP reads Z directly from the
+attention workspace; Y remains in the MLP workspace.
+
+Development checks passed for all 43 synthetic and three checkpoint cases on
+Apple M4 Pro / Metal. Both MLP mappings are explicit, with mapping 0 for one
+row. Tests distinguish operation-local error, isolated MLP error and composed
+error, then check the declared full/chunk schedules. The twelve-decode test
+retains all four boundaries before overwrite and compares with a separate
+workspace/cache execution. Eight negative controls establish sensitivity to
+wrong residuals, norm inputs/weights, absolute position, mask and cache prefix.
+These are development results; reserved candidate acceptance remains pending.
+
+The registered `decoder_layer` benchmark uses one fixed policy (ID 0), the
+six declared shapes and control self-pairs. Prefix preparation executes the
+Mojo layer outside timing. Its shared workspaces have max_rows=T so they also
+serve prefix preparation; only R rows are written in measured calls. Ring24
+uses distinct allocations with identical timed contents. The untimed
+adversarial check changes 24 hidden-coordinate sign patterns, absorbing each
+sign into the corresponding input/weight axes so upstream expected outputs
+transform by the same sign. This preserves arithmetic while detecting wrong
+allocation selection. It does not represent 24 learned model layers.

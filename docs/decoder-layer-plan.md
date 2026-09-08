@@ -34,6 +34,27 @@ already in this worktree. The user approved execution on 2026-09-08.
   Preserve that file; `decoder_reference.py` shares `generate.py.lock` by
   symlink instead. Metadata round-trip repair changed no numerical outputs.
 
+- Task 3 numerical/behavior checks pass on Apple M4 Pro / Metal: all 43
+  synthetic cases and three checkpoint cases, operation-local and composed
+  boundaries, explicit mappings, exact cache and protected storage, invalid
+  preflight and asynchronous separate-workspace comparisons. Eight deliberate
+  negative controls are rejected. Final full repository validation passed:
+  15 Mojo suites / 107 tests, all reference checks and benchmark smoke routes.
+  The final checkpoint replay also passed all five decoder tests.
+- Task 4 routes pass: all six workloads in hot/ring24 and four adversarial
+  ring shapes. Profiles and numerical build/evaluation tools are implemented;
+  reserved capture is not yet run. Ten decoder tooling tests pass.
+- Preflight evidence combines exact sentinel preservation (including the first
+  attention dispatch's normalization output) with inspection of the shared pure
+  preflight before any enqueue. No runtime dispatch-counter API was introduced.
+- Verified measurement conditions: AC power, power mode 0, no thermal or
+  performance warning; 24 GiB unified memory. Instruments lists Metal System
+  Trace and the existing `LLM_Mojo_Metal_Limiters` template.
+
+- Reserved run root: `/private/tmp/llm-mojo-decoder-20260908` (confirmed absent
+  before allocation). The numerical candidate, benchmark binaries, three profile
+  binaries, holdout capture and retained-run originals will live here.
+
 ## Execution scope
 
 On instruction to execute this plan, proceed through all tasks without routine
@@ -163,34 +184,34 @@ This is the first numerical-policy stop point if the targets fail upstream.
 
 ## Task 3: Compose the layer and verify development behavior
 
-- [ ] Add the tiny fixture test first and demonstrate that the decoder entrypoint
+- [x] Add the tiny fixture test first and demonstrate that the decoder entrypoint
   is absent. Implement `enqueue_decoder_layer` with caller-owned attention
   weights/cache/workspace, MLP weights/workspace, X, and explicit mapping inputs.
   The entrypoint returns the actual attention route; Y remains in MLP output.
-- [ ] Extract side-effect-free attention/MLP preflight as necessary, call both
+- [x] Extract side-effect-free attention/MLP preflight as necessary, call both
   before submitting any work, and keep standalone entrypoints using the same
   checks. Preserve the existing enqueue arithmetic and dispatch sequence.
-- [ ] For tiny fixtures, use materialized FP32 attention route 3 and MLP 0.
+- [x] For tiny fixtures, use materialized FP32 attention route 3 and MLP 0.
   For Qwen, use integrated attention mappings `(0,0)`. Validate MLP 0 throughout
   and MLP 7 for every multi-row call. One-row calls always use MLP 0 in the
   measured configuration; this plan adds no global automatic mapping selector.
-- [ ] Enqueue attention, form a contiguous read-only view of its post-residual
+- [x] Enqueue attention, form a contiguous read-only view of its post-residual
   output Z, then enqueue MLP. Keep the two workspaces separate and allocate
   nothing inside the new entrypoint.
-- [ ] Test operation-local, sublayer-isolated and whole-layer comparisons
+- [x] Test operation-local, sublayer-isolated and whole-layer comparisons
   separately. Gate both branches and both residual outputs. Compare each Mojo
   schedule with its matching upstream schedule and with Mojo full execution.
-- [ ] Add the specification's invalid-call, overlap, poisoned-buffer, exact cache
+- [x] Add the specification's invalid-call, overlap, poisoned-buffer, exact cache
   append/prefix, capacity-edge and reset cases. A valid attention/invalid MLP
   call must leave cache length, bytes and dispatch count unchanged.
-- [ ] Exercise the twelve-decode asynchronous schedule, retaining each output
+- [x] Exercise the twelve-decode asynchronous schedule, retaining each output
   before overwrite. Verify source X slices, absolute positions and appended
   row counts so prefix recomputation cannot masquerade as cached execution.
-- [ ] Implement discriminating negative controls for wrong second residual,
+- [x] Implement discriminating negative controls for wrong second residual,
   wrong norm/input, missing residual, wrong position/mask and cache corruption.
   Retain the existing BF16 rounding regressions; show each new negative control
   fails the relevant exact or numerical check.
-- [ ] Register the suite with the existing workflow. Run the focused commands
+- [x] Register the suite with the existing workflow. Run the focused commands
   after implementation and the complete validator before the local checkpoint.
 
 ```sh
@@ -209,10 +230,10 @@ Record route, device and coverage; commit the implementation locally.
 Implement and validate the tools here; collect retained timings and profiles
 only after Task 5 acceptance passes.
 
-- [ ] Add one decoder operation to the existing benchmark dispatcher and study
+- [x] Add one decoder operation to the existing benchmark dispatcher and study
   registry. Reuse environment recording, paired sampling and profile receipts.
   Add route/census tests to the shared smoke and tooling workflow.
-- [ ] Freeze this workload table. Each row has one explicit configuration, not
+- [x] Freeze this workload table. Each row has one explicit configuration, not
   a candidate screen. Integrated attention mappings are `(0,0)` in every row.
 
 | Phase | R | T | MLP mapping |
@@ -224,26 +245,26 @@ only after Task 5 acceptance passes.
 | Decode | 1 | 256 | 0 |
 | Decode | 1 | 4096 | 0 |
 
-- [ ] Use synthetic seed 4001 from the qualified fixture recipe, and create
+- [x] Use synthetic seed 4001 from the qualified fixture recipe, and create
   prefixes by executing the accepted layer before timing. Prepare each repeated
   call at P=T-R. Rewind benchmark-owned logical length only after the preceding
   sample completes; preserve the prefix and overwrite the same suffix. Document
   this as repeated fixed-workload timing, not growing-context generation.
-- [ ] Hot measures one enqueue through completion. Ring24 uses 24 distinct
+- [x] Hot measures one enqueue through completion. Ring24 uses 24 distinct
   input/weight/cache sets and shared workspace, submits on one stream, and
   synchronizes once per sweep. Verify the full sequence numerically before
   timing. Use distinct nonuniform contents in a separate untimed adversarial
   smoke test to expose accidental buffer reuse; timed replicas all use the same
   seed-4001 fixture. Keep setup and prefix preparation outside the measured window.
-- [ ] Configure only control self-pairs in both modes: four paired blocks, ten
+- [x] Configure only control self-pairs in both modes: four paired blocks, ten
   warmups and ten samples per arm. Reverse arm/workload order as in the existing method.
   Expected retained census: `6 * 2 * 4 * 2 * 10 = 960` latency observations.
   The two arm labels execute identical configurations; no speedup is claimed.
-- [ ] Configure three separate diagnostic profiles: `(256,256)` for 25 measured
+- [x] Configure three separate diagnostic profiles: `(256,256)` for 25 measured
   iterations, `(64,4096)` for 25, and `(1,4096)` for 100, after ten warmups each.
   Validate the actual dispatch sequence and keep each capture under 5000
   measured dispatches. Join preempted intervals before assigning stage names.
-- [ ] Implement total latency and within-capture active-time views. Attribute norm,
+- [x] Implement total latency and within-capture active-time views. Attribute norm,
   projection, attention, MLP, residual and dispatch-gap behavior only to the
   evidence actually captured. Never sum separately captured stage medians to
   construct whole-layer latency or infer achieved DRAM bandwidth from bytes/time.
@@ -254,12 +275,12 @@ retained timing or reserved output has been collected.
 
 ## Task 5: Freeze the candidate and run reserved acceptance
 
-- [ ] Implement decoder build/evaluation receipts following `mlp_validation.py`.
+- [x] Implement decoder build/evaluation receipts following `mlp_validation.py`.
   Bind source/locks, binary hash, manifest and array hashes, routes, schedules,
   actual device/backend and complete expected check coverage. Reject changed
   binaries, stale manifests, duplicate/missing cases, inherited environment
   filters and truncated output. Test those failure cases before acceptance.
-- [ ] Keep development/checkpoint evaluation separate from reserved capture.
+- [x] Keep development/checkpoint evaluation separate from reserved capture.
   Add `decoder_acceptance.py` using the existing locked script environment and
   the same verified-local-asset contract. Refuse overwrite and require a clean,
   verified candidate receipt before any held-out model execution.
