@@ -47,6 +47,8 @@ def prepare():
     run("uv", "run", "--locked", "--script", "tests/fixtures/generate.py", "attention_precision")
     run("uv", "run", "--locked", "--script", "tests/fixtures/generate.py", "mlp", "--", "--self-test")
     run("uv", "run", "--locked", "--script", "tests/fixtures/generate.py", "mlp")
+    run("uv", "run", "--locked", "--script", "tests/fixtures/decoder_reference.py", "--self-test")
+    run("uv", "run", "--locked", "--script", "tests/fixtures/decoder_reference.py")
     print("All generated oracles match the frozen anchors.", flush=True)
 
 

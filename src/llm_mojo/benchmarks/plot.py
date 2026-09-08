@@ -840,11 +840,99 @@ def render_mlp(directory, record, samples, summary):
     print('MLP raw samples verified; latency and profile figures regenerated')
 
 
+
+def render_decoder_selection(directory):
+    from .decoder_layer_contract import screen_decision,confirmed_selection
+    from .study import load_decoder_windows
+    selected=json.loads((directory/'selection-confirmed.json').read_text())
+    build=load_run(directory,'decoder_selection_full_screen_')[0]['build']
+    decision=screen_decision(directory,build)
+    if selected!=confirmed_selection(decision,directory):raise ValueError('decoder selection is not reproduced by retained evidence')
+    screens={}
+    for path in sorted(directory.glob('decoder_selection_*run.json')):
+        prefix=path.name.removesuffix('run.json')
+        run,_,summary=load_run(directory,prefix)
+        table(directory,prefix+'summary.csv',summary)
+        if run['study'].endswith('_screen'):screens[run['study'].split('_')[2]]=summary
+    table(directory,'selection_lookup.csv',selected['lookup'])
+    prefill_style()
+    fig=plt.figure(figsize=(13,7.5))
+    grid=fig.add_gridspec(3,2,width_ratios=(2.1,1))
+    ax=fig.add_subplot(grid[:,0])
+    cells=[c for c in selected['cells'] if c['family']=='cached']
+    shapes=list(dict.fromkeys((c['query_rows'],c['rows']) for c in cells))
+    for offset,l,color,label in ((-.18,1,'#237a80','hot'),(.18,24,'#b65e3b','ring24')):
+        rows=[next(c for c in cells if (c['query_rows'],c['rows'],c['layers'])==(r,t,l)) for r,t in shapes]
+        gains=[100*(1-c['confirmation']['ratio']) if c['accepted'] else 0 for c in rows]
+        ax.barh([i+offset for i in range(len(rows))],gains,height=.32,color=color,label=label)
+        for i,(c,gain) in enumerate(zip(rows,gains)):
+            label=f"{gain:.1f}% · ID {c['accepted']}" if c['accepted'] else 'ID 0'
+            ax.text(gain+.5,i+offset,label,va='center',fontsize=8)
+    ax.set_yticks(range(len(shapes)),[f"R={r}, T={t}"+(' *' if any(c['neighbor'] for c in cells if (c['query_rows'],c['rows'])==(r,t)) else '') for r,t in shapes])
+    ax.invert_yaxis();ax.set_xlim(0,max(20,ax.get_xlim()[1]+10))
+    ax.set_xlabel('confirmed latency reduction versus ID 0 (%)')
+    ax.set_title('Cached prefill',loc='left',fontweight='bold');ax.legend(fontsize=9,loc='lower right')
+    for row,family,title in ((0,'full','Full prefill'),(1,'short','Short prefill'),(2,'decode','Decode')):
+        card=fig.add_subplot(grid[row,1]);card.axis('off')
+        accepted=sum(c['accepted']!=0 for c in selected['cells'] if c['family']==family)
+        choice='ID 0 retained' if not accepted else f'{accepted} confirmed mode cells'
+        values=[x for x in screens[family] if x['candidate']!=0]
+        if family=='full':
+            gains=[100*(1-x['ratio']) for x in values if x['query_rows']>=64]
+            detail=f'Projection screen, R ≥ 64:\n{min(gains):.1f}–{max(gains):.1f}% lower median latency.'
+        elif family=='short':
+            detail=f"Rowwise MLP screen:\n{min(x['ratio'] for x in values):.1f}–{max(x['ratio'] for x in values):.1f}× control latency."
+        else:
+            proposed=sum(c['candidate']!=0 for c in selected['cells'] if c['family']==family)
+            detail=f'{proposed} proposed mode cells, including neighbor.\n{accepted} confirmed; noise remains substantial.'
+        card.text(0,.98,title,fontsize=13,fontweight='bold',va='top')
+        card.text(0,.70,choice,fontsize=12,color='#237a80',fontweight='bold',va='top')
+        card.text(0,.43,detail,fontsize=10,va='top',linespacing=1.5)
+    fig.suptitle('Decoder layer: confirmed configuration choices',fontsize=16,y=.98)
+    fig.text(.11,.92,'Qwen2.5-0.5B · H=896 / I=4864 · Apple M4 Pro / Metal · BF16 storage / FP32 reductions · source '+build['repository']['commit'][:7],fontsize=9)
+    fig.text(.11,.035,'ID 0: baseline · ID 2: split8 attention · ID 3: split8 + 16×16 projections\n* Declared neighbors, independently confirmed. Exact shape/mode choices; ID 0 outside confirmed cells.',fontsize=9)
+    fig.subplots_adjust(left=.11,right=.98,bottom=.13,top=.87,wspace=.30,hspace=.38)
+    fig.savefig(directory/'selection_latency.png',dpi=180);plt.close(fig)
+    if (directory/'selection_profiles.json').exists():
+        profile=load_profile(directory,'selection_')
+        table(directory,'selection_profile_summary.csv',profile)
+        table(directory,'selection_profile_windows.csv',load_decoder_windows(directory,'selection_'))
+
+
+def render_decoder(directory,record,samples,summary):
+    from .study import load_decoder_profile, load_decoder_windows
+    from .decoder_layer_contract import WORKLOADS, PROFILES, STAGES
+    if (directory/'selection-confirmed.json').exists():render_decoder_selection(directory)
+    prefill_style()
+    table(directory,'summary.csv',summary)
+    labels=[f'R={r} / T={t}' for r,t in WORKLOADS]
+    fig,axes=plt.subplots(1,2,figsize=(12,4.8),layout='constrained')
+    for ax,l in zip(axes,(1,24)):
+        rows=[next(s for s in summary if (s['query_rows'],s['rows'],s['layers'])==(r,t,l)) for r,t in WORKLOADS]
+        ax.barh(labels,[s['control_us'] for s in rows],color='#237a80')
+        ax.set_xscale('log');ax.invert_yaxis();ax.set_xlabel('microseconds per decoder call · log scale')
+        ax.set_title('One hot call' if l==1 else '24 allocation sets · one sync per sweep')
+    fig.suptitle('Decoder layer latency · fixed attention and MLP policy')
+    fig.savefig(directory/'latency.png',dpi=180);plt.close(fig)
+    profile=load_decoder_profile(directory)
+    table(directory,'profile_summary.csv',profile)
+    table(directory,'profile_windows.csv',load_decoder_windows(directory))
+    fig,axes=plt.subplots(1,3,figsize=(13,6),layout='constrained')
+    for ax,(r,t,n) in zip(axes,PROFILES):
+        rows=[next(s for s in profile if s['query_rows']==r and s['rows']==t and s['stage']==stage) for stage in STAGES]
+        ax.barh(STAGES,[s['active_share_percent'] for s in rows],color='#b65e3b')
+        ax.set_xlim(0,65)
+        ax.invert_yaxis();ax.set_xlabel('share of captured GPU active time (%)');ax.set_title(f'R={r}, T={t} · {n} iterations')
+    fig.suptitle('Where decoder GPU active time goes · one diagnostic capture per workload')
+    fig.savefig(directory/'active_time.png',dpi=180);plt.close(fig)
+
 def render(directory):
     from .study import evidence_directory
     directory = evidence_directory(directory)
     record, samples, summary = load_run(directory)
     spec = record['specification']
+    if spec['operation'] == 'decoder_layer':
+        return render_decoder(directory,record,samples,summary)
     if spec['operation'] == 'mlp':
         return render_mlp(directory,record,samples,summary)
     if spec['operation'] == 'attention_sublayer':

@@ -106,16 +106,24 @@ small oracle fixtures but is not part of the inference path.
 
 Exit evidence: every implemented operation matches a provenance-bearing oracle
 fixture within a tolerance declared before comparison. An operation is not an
-optimization and needs no performance claim. This is the current stage.
+optimization and needs no performance claim.
 
 ### 3. Decoder block
 
 Compose the operations into one deterministic Qwen-compatible decoder block
 using a deliberately tiny fixture whose intermediate tensors remain easy to
 inspect.
+The [decoder-layer specification](decoder-layer.md) defines the accepted
+rounding, ownership, upstream fixture, and acceptance boundaries for this step.
 
 Exit evidence: every block boundary and the final block output match the
 reference oracle, with shapes, layouts, dtypes, and allocations documented.
+
+Completed: one Mojo decoder layer passes 43 synthetic development cases,
+three checkpoint cases and seven reserved cases, including exact cache and
+asynchronous ownership checks. The [bounded baseline](../studies/decoder_layer/README.md)
+retains 960 latency observations and three verified Metal profiles. This closes
+the layer milestone; full-model forward parity is next.
 
 ### 4. Full-model forward pass
 

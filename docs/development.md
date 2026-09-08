@@ -160,6 +160,15 @@ decode campaign's four observed holdouts can be checked with
 `MLP_SPLIT=decode_holdout MLP_VARIANTS=0,12`; variant 12 is a diagnostic candidate,
 not a promoted route.
 
+The [decoder-layer contract](decoder-layer.md) adds the actual pinned upstream
+decoder with the selected FP32 SDPA policy. Ordinary validation runs ten
+reference self-tests and verifies the frozen synthetic development arrays.
+Use `uv run --locked --script tests/fixtures/decoder_reference.py` directly
+to verify them; add `--output` with a new directory to regenerate them.
+An explicit `--checkpoint-assets` directory additionally verifies the three
+checkpoint cases without downloading assets. The reserved decoder inputs have
+not been evaluated and are excluded from this command.
+
 For recorded evaluation, build and launch the numerical candidate through the
 project environment:
 

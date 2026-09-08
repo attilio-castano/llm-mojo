@@ -1,0 +1,151 @@
+{
+  "kind": "decoder_capture_tooling_failure",
+  "status": "repaired_with_single_retry",
+  "failed_receipt": {
+    "capture": {
+      "capture_id": "attention-282c5067397b48a89687232cfef15f01",
+      "command": "xcrun xctrace record --no-prompt --run-name attention-282c5067397b48a89687232cfef15f01 --template '<template>' --time-limit 30s --output '<external-trace>' --target-stdout - --launch -- '<ephemeral-profile-binary>'",
+      "failures": [
+        "target output identity invalid: target mlp mapping is not a positive integer"
+      ],
+      "profile_region_markers_complete": true,
+      "run_name": "attention-282c5067397b48a89687232cfef15f01",
+      "status": "invalid",
+      "target_identity": null,
+      "target_output": {
+        "bytes": 825,
+        "content_note": "Output omitted from the receipt.",
+        "sha256": "2c7477bb1d248d97f8e66f76f8a3fbaffba9364036c4db47a3cd94f69b7fa6f2"
+      },
+      "template": {
+        "kind": "installed_name",
+        "name": "LLM_Mojo_Metal_Limiters"
+      },
+      "time_limit": "30s",
+      "xctrace_returncode": 0,
+      "xctrace_version": "xctrace version 16.0 (17F113)"
+    },
+    "created_utc": "2026-09-08T16:02:20.774626+00:00",
+    "profile": {
+      "binary": {
+        "bytes": 865384,
+        "path_note": "Canonical external artifact; path omitted.",
+        "sha256": "740fff8ec83d04cb3e659d758ebfbf2dd25fe9459bfa75b004a787dde2edef97"
+      },
+      "configuration": {
+        "dispatches_per_iteration": 16,
+        "entrypoint": "enqueue_decoder_layer",
+        "hidden_size": 896,
+        "implementation": "decoder_layer_0",
+        "intermediate_size": 4864,
+        "key_value_heads": 2,
+        "key_value_rows": 4096,
+        "mlp_mapping": 0,
+        "operation": "decoder_layer",
+        "profile_iterations": 100,
+        "profile_post_idle_milliseconds": 250,
+        "profile_rows": 1,
+        "profile_warmup_iterations": 10,
+        "profile_workload": "decoder-r1-t4096-v0",
+        "query_heads": 14
+      },
+      "hardware": {
+        "chip": "Apple M4 Pro",
+        "gpu_api": "metal"
+      },
+      "provenance": {
+        "bytes": 14924,
+        "path_note": "Canonical external artifact; path omitted.",
+        "schema_version": 1,
+        "sha256": "d321629b98cb1f5f0cd6873c93552af2b73405f7477beadcb7db00dfc0e1c6e0"
+      },
+      "repository": {
+        "branch": "codex/decoder-layer-baseline",
+        "commit": "d67fd94fa05f65b7d754d210cb38ba6eeb535549",
+        "dirty": false
+      },
+      "staged_binary": {
+        "bytes": 865384,
+        "path_note": "Byte-identical ephemeral launch copy under /private/tmp; removed after capture.",
+        "sha256": "740fff8ec83d04cb3e659d758ebfbf2dd25fe9459bfa75b004a787dde2edef97"
+      }
+    },
+    "schema_version": 2,
+    "trace": {
+      "created": true,
+      "path_note": "External raw Instruments trace; path intentionally omitted."
+    }
+  },
+  "failed_conditions": {
+    "before": {
+      "timestamp_utc": "2026-09-08T16:02:09.218060+00:00",
+      "battery": {
+        "power_source": "AC Power",
+        "charge": "100%",
+        "state": "charged",
+        "estimate": "0:00 remaining present: true"
+      },
+      "power_mode_raw": "0",
+      "thermal": [
+        "Note: No thermal warning level has been recorded",
+        "Note: No performance warning level has been recorded",
+        "Note: No CPU power status has been recorded"
+      ],
+      "memory": {
+        "physical_bytes": 25769803776,
+        "free_percent": 53
+      },
+      "displays": [
+        {
+          "name": "LG HDR 4K",
+          "connection": "unknown",
+          "resolution": "3008 x 1692 @ 60.00Hz",
+          "online": "spdisplays_yes"
+        }
+      ],
+      "power_settings": [
+        "powermode            0"
+      ]
+    },
+    "source_and_fixture_identity_verified_before": true,
+    "after": {
+      "timestamp_utc": "2026-09-08T16:02:20.927373+00:00",
+      "battery": {
+        "power_source": "AC Power",
+        "charge": "100%",
+        "state": "charged",
+        "estimate": "0:00 remaining present: true"
+      },
+      "power_mode_raw": "0",
+      "thermal": [
+        "Note: No thermal warning level has been recorded",
+        "Note: No performance warning level has been recorded",
+        "Note: No CPU power status has been recorded"
+      ],
+      "memory": {
+        "physical_bytes": 25769803776,
+        "free_percent": 53
+      },
+      "displays": [
+        {
+          "name": "LG HDR 4K",
+          "connection": "unknown",
+          "resolution": "3008 x 1692 @ 60.00Hz",
+          "online": "spdisplays_yes"
+        }
+      ],
+      "power_settings": [
+        "powermode            0"
+      ]
+    },
+    "source_and_fixture_identity_verified_after": true
+  },
+  "output": "Launching a verified ephemeral profile binary (sha256 740fff8ec83d04cb3e659d758ebfbf2dd25fe9459bfa75b004a787dde2edef97)...\nStarting recording with the LLM_Mojo_Metal_Limiters template. Launching process: attention-282c5067397b48a89687232cfef15f01. Time limit: 30.0 s\nCtrl-C to stop the recording\ndevice: Apple M4 Pro\napi: metal\noperation: decoder_layer\nmeasurement: whole_decoder\nquery rows: 1\nshape: 4096 1 seed: 4001\nvariants: 0 0 candidate-first: 0\ncorrectness: passed\nprofile implementation: enqueue_decoder_layer\nrows: 1\nhidden: 896\nkey value rows: 4096\nquery heads: 14\nkey value heads: 2\nintermediate size: 4864\nmlp mapping: 0\nprofile workload: decoder-r1-t4096-v0\nprofile dispatches per iteration: 16\nwarmup iterations: 10\nprofile iterations: 100\npost-profile idle milliseconds: 250\nPROFILE_REGION_BEGIN\nPROFILE_REGION_END\nTarget app exited, ending recording...\nRecording completed. Saving output file...\nOutput file saved as: capture.trace\nTraceback (most recent call last):\n  File \"/private/tmp/decoder-capture-20260908.py\", line 23, in <module>\n    capture_trace(profile_binary=folder/'profile',output_trace=folder/'capture.trace',\n  File \"/Users/attiliocastano/.codex/worktrees/c63f/llm-mojo/src/llm_mojo/benchmarks/capture_trace.py\", line 638, in capture_trace\n    raise RuntimeError(\nRuntimeError: target output identity invalid: target mlp mapping is not a positive integer; capture receipt: /private/tmp/llm-mojo-decoder-20260908/profiles/r1-t4096-v0/capture.json\n",
+  "repair_commit": "05e1def",
+  "repair": "Allow nonnegative MLP mapping IDs; still require exact provenance mapping and positive tensor dimensions.",
+  "verification_output": "...................................................................................Launching a verified ephemeral profile binary (sha256 8c664d3d44255e403a77bb093ebe9e2d66b137304942ec30190464829124a161)...\nprofile implementation: enqueue_rms_norm_apple_gpu\ndevice: Apple Test GPU\napi: metal\nrows: 1\nhidden: 896\nwarmup iterations: 1\nprofile iterations: 10\npost-profile idle milliseconds: 0\nPROFILE_REGION_BEGIN\nPROFILE_REGION_END\n.Launching a verified ephemeral profile binary (sha256 0ec4976431daccd792c8e5e7a093c3a9aeeced1edc99264af1157b1c18b11dfb)...\nprofile implementation: enqueue_linear_apple_gpu\ndevice: Apple Test GPU\napi: metal\nrows: 1\nhidden: 896\noutput features: 1152\nprofile workload: qkv-ring24\nprofile dispatches per iteration: 24\nwarmup iterations: 1\nprofile iterations: 2\npost-profile idle milliseconds: 0\nPROFILE_REGION_BEGIN\nPROFILE_REGION_END\n.Launching a verified ephemeral profile binary (sha256 8c664d3d44255e403a77bb093ebe9e2d66b137304942ec30190464829124a161)...\nrecorded\n.Launching a verified ephemeral profile binary (sha256 0ec4976431daccd792c8e5e7a093c3a9aeeced1edc99264af1157b1c18b11dfb)...\nprofile implementation: enqueue_linear_apple_gpu\ndevice: Apple Test GPU\napi: metal\nrows: 1\nhidden: 896\noutput features: 1152\nprofile workload: qkv-ring24\nprofile dispatches per iteration: 72\nwarmup iterations: 1\nprofile iterations: 2\npost-profile idle milliseconds: 0\nPROFILE_REGION_BEGIN\nPROFILE_REGION_END\n....Launching a verified ephemeral profile binary (sha256 8c664d3d44255e403a77bb093ebe9e2d66b137304942ec30190464829124a161)...\nprofile implementation: enqueue_rms_norm_apple_gpu\ndevice: Apple Test GPU\napi: metal\nrows: 4\nhidden: 896\nwarmup iterations: 1\nprofile iterations: 10\npost-profile idle milliseconds: 0\nPROFILE_REGION_BEGIN\nPROFILE_REGION_END\n.\n----------------------------------------------------------------------\nRan 91 tests in 5.213s\n\nOK\n",
+  "original_trace": "/private/tmp/llm-mojo-decoder-20260908/profiles/r1-t4096-v0-attempt1/capture.trace",
+  "retry_trace": "/private/tmp/llm-mojo-decoder-20260908/profiles/r1-t4096-v0/capture.trace",
+  "binary_rebuilt": false,
+  "numerical_candidate_changed": false
+}

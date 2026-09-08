@@ -1,0 +1,112 @@
+{
+  "source_commit": "b88ca506f08c21aec2b5047bdb92a7869cb33268",
+  "timing_observations": 16800,
+  "studies": [
+    {
+      "study": "decoder_selection_buffered",
+      "samples_sha256": "6fc6db15be80f114fc3e189c2d4f6b5bd7eaf411e50a6b102e2428918a763354",
+      "started_utc": "2026-09-08T17:35:11.338231+00:00",
+      "completed_utc": "2026-09-08T17:35:18.585573+00:00"
+    },
+    {
+      "study": "decoder_selection_calibration",
+      "samples_sha256": "cc8b8dbc9f8ea1948897aac78183431c0230f6fdcef70bf47b5456ddd3239e66",
+      "started_utc": "2026-09-08T17:34:35.055441+00:00",
+      "completed_utc": "2026-09-08T17:35:11.266290+00:00"
+    },
+    {
+      "study": "decoder_selection_cached_screen",
+      "samples_sha256": "34076147eb33bd84fcc120b2dbef37fe750db5cbbc956e6b661051986a9a0515",
+      "started_utc": "2026-09-08T17:54:12.319497+00:00",
+      "completed_utc": "2026-09-08T18:06:49.580087+00:00"
+    },
+    {
+      "study": "decoder_selection_decode_screen",
+      "samples_sha256": "9ac420c78027317628ed9f88f7bde91c2fde4682392563dd2782dc2d56250dc4",
+      "started_utc": "2026-09-08T18:06:49.658585+00:00",
+      "completed_utc": "2026-09-08T18:10:19.411051+00:00"
+    },
+    {
+      "study": "decoder_selection_full_screen",
+      "samples_sha256": "eeb4e2aac87c023e1b081acf0048cd68d2925e8dadb70d720eb9e309788cb658",
+      "started_utc": "2026-09-08T17:35:18.938827+00:00",
+      "completed_utc": "2026-09-08T17:52:50.718885+00:00"
+    },
+    {
+      "study": "decoder_selection_short_screen",
+      "samples_sha256": "d8b01b9b6811cef0678d7025fbda5604f28a6bf90d6963a44bc41e4ed1774cf4",
+      "started_utc": "2026-09-08T17:52:50.795243+00:00",
+      "completed_utc": "2026-09-08T17:54:12.246982+00:00"
+    },
+    {
+      "study": "decoder_selection_cached_confirmation",
+      "samples_sha256": "e2a5f101b7ba5284ce930d0af3a89ebf4d5c902f508a537df1828c6a219b67ef",
+      "started_utc": "2026-09-08T18:21:47.404845+00:00",
+      "completed_utc": "2026-09-08T18:31:42.928074+00:00"
+    },
+    {
+      "study": "decoder_selection_decode_confirmation",
+      "samples_sha256": "f71441d470763a6da73b4f8f2fe2f46cd1c58a93ad5542a217a87a3b5ba0e58e",
+      "started_utc": "2026-09-08T18:31:43.028224+00:00",
+      "completed_utc": "2026-09-08T18:33:11.342421+00:00"
+    },
+    {
+      "study": "decoder_selection_full_confirmation",
+      "samples_sha256": "5b7edc34eca06d8c251b330dbda3079eedc4f7792b687942f08b2acfa2a2817d",
+      "started_utc": "2026-09-08T18:10:19.892861+00:00",
+      "completed_utc": "2026-09-08T18:21:10.813027+00:00"
+    },
+    {
+      "study": "decoder_selection_short_confirmation",
+      "samples_sha256": "487f5f141234b7de36b72336cf7951063de5d8cbf8145b7b7a0baa32895b72eb",
+      "started_utc": "2026-09-08T18:21:10.917213+00:00",
+      "completed_utc": "2026-09-08T18:21:47.300991+00:00"
+    }
+  ],
+  "calibration_observations": 480,
+  "screen_observations": 9920,
+  "confirmation_observations": 6400,
+  "raw_valid_observations_repeated": false,
+  "numerical_gate": "fresh acceptance finished before every timing study",
+  "schema": 1,
+  "kind": "decoder_selection_evidence_index",
+  "postprocessing_source_sha256": {
+    "src/llm_mojo/benchmarks/study.py": "1e259318ed1662ee463bae2a10573da776ec9d9e78c8f290a419486a2142393f",
+    "src/llm_mojo/benchmarks/plot.py": "c984c6f2fe39a7d54555c421caf32555e4bfcaf8787cca001e4692a32394f3a7",
+    "src/llm_mojo/benchmarks/decoder_layer_contract.py": "55a7674f4a1a8d59aa5a50672c94f05a7c29119aa9943735684cc153ac45dc5f",
+    "src/llm_mojo/decoder_validation.py": "da35c5714bef62c0ac8a389f755c052d9e37cbcb8be3dc9e44d7f8476849a550"
+  },
+  "final_verification": {
+    "python_tests": 98,
+    "python_skips": 0,
+    "python_log_sha256": "890f2e1a45a15475c184842b331991f4deba6c99580e70743438f5ac9275fda1",
+    "generated_png_csv_files_reproduced_byte_for_byte": 19,
+    "local_document_links": "pass",
+    "git_diff_check": "pass",
+    "mojo_tests_before_candidate_freeze": 111,
+    "mojo_suites_before_candidate_freeze": 16
+  },
+  "cleanup_verification": {
+    "python_tests": 99,
+    "python_skips": 0,
+    "python_log_sha256": "7982765afa2fe2b0d0f653c30e2c3a03a224af39390bb669a9576a3b3f48d2d8",
+    "offline_without_checkout": "19 generated PNG/CSV artifacts reproduce byte-for-byte",
+    "regression": "offline selection reconstruction fails before the fix and passes after it",
+    "mojo_tests": 111,
+    "mojo_suites": 16,
+    "mojo_skips": 0,
+    "full_validation": "passed: frozen oracle regeneration, Python and Mojo suites, all benchmark smoke checks",
+    "full_validation_log_sha256": "87d403446b26e0aecf2fe569293f705a9bdb2a8b70d7bad97898599905855c57"
+  },
+  "review_verification": {
+    "python_tests": 101,
+    "python_skips": 0,
+    "python_log_sha256": "2698a44adf3fc9c46915ecf03f5ac2f1dd6b16ad28f8f8234dea157bc9ec1511",
+    "original_reserved_cases_replayed": 7,
+    "selection_reserved_cases_replayed": 9,
+    "protected_records_with_full_extents": 924,
+    "selection_async_exact_records_with_full_extents": 432,
+    "candidate_capture_evaluation_order": "verified against retained timestamps and frozen declaration hash",
+    "new_gpu_execution": false
+  }
+}

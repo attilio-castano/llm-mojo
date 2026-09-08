@@ -69,6 +69,9 @@ and BF16 operands/cache/output. The standalone BF16 GQA paths below retain
 their own contracts and remain named compatibility comparisons.
 The composed attention study describes its
 [reference hierarchy and validation boundaries](attention-sublayer.md).
+The [decoder-layer contract and fixture specification](decoder-layer.md)
+defines the next composition gate for attention followed by MLP. Its pinned
+upstream reference is qualified; Mojo layer acceptance remains unestablished.
 
 V0 is deliberately narrower than the model's complete advertised capability:
 

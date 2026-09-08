@@ -10,10 +10,11 @@ from .environment import (conditions_snapshot, ensure_record_location,
                          repository_state, require_ac, require_nominal_thermal_state,
                          stable_environment, utc_now)
 from .study import (STUDIES, BLOCKS, REPETITIONS, WARMUP, sha, write_json,
-                   encode_samples, parse_output, summarize, workloads, load_run,
+                   encode_samples, parse_output, summarize, workloads, comparisons, load_run,
                    select_parallelism_finalists, select_projection_tile, select_mlp_decode, mlp_decode_finalists)
 from .attention_sublayer_contract import fixture_identity
 from .mlp_contract import fixture_identity as mlp_fixture_identity
+from .decoder_layer_contract import fixture_identity as decoder_fixture_identity
 
 
 
@@ -21,7 +22,7 @@ def source_hashes():
     root = repository_root()
     paths = [*root.glob('src/**/*.mojo'), *root.glob('src/**/*.py'),
              *root.glob('tests/fixtures/**/*.py'), *root.glob('tests/fixtures/**/*.json'),
-             *root.glob('tests/fixtures/**/*.lock'), root / 'pyproject.toml', root / 'uv.lock']
+             *root.glob('tests/fixtures/**/*.lock'), *root.glob('tests/decoder_layer_support.*'), *root.glob('studies/decoder_layer/selection-declaration.json'), root / 'pyproject.toml', root / 'uv.lock']
     return {str(p.relative_to(root)): sha(p) for p in sorted(paths)}
 
 
@@ -35,18 +36,19 @@ def build(directory):
     sources = source_hashes()
     fixtures = fixture_identity()
     mlp_fixtures = mlp_fixture_identity()
+    decoder_fixtures = decoder_fixture_identity()
     commands, binaries = {}, {}
     env = {k: v for k, v in os.environ.items() if k != 'MODULAR_DEBUG'}
-    for name, source in [('operations', 'operations.mojo'), ('gqa_decode', 'attention_decode.mojo'), ('gqa_prefill','attention_prefill.mojo'), ('attention_sublayer','attention_sublayer.mojo'), ('mlp','mlp.mojo')]:
+    for name, source in [('operations', 'operations.mojo'), ('gqa_decode', 'attention_decode.mojo'), ('gqa_prefill','attention_prefill.mojo'), ('attention_sublayer','attention_sublayer.mojo'), ('mlp','mlp.mojo'), ('decoder_layer','decoder_layer.mojo')]:
         command = [environment_tool('mojo'), 'build', '-I', 'src',
                    f'src/llm_mojo/benchmarks/{source}', '-o', str(directory / name)]
         subprocess.run(command, cwd=repository_root(), env=env, check=True)
         binaries[name] = sha(directory / name)
         commands[name] = ['mojo', *command[1:-1], '<binary>']
-    if repository_state() != repo or source_hashes() != sources or fixture_identity() != fixtures or mlp_fixture_identity() != mlp_fixtures:
+    if repository_state() != repo or source_hashes() != sources or fixture_identity() != fixtures or mlp_fixture_identity() != mlp_fixtures or decoder_fixture_identity() != decoder_fixtures:
         raise RuntimeError('source changed during build')
     write_json(directory / 'build.json', dict(repository=repo, sources=sources, binaries=binaries,
-                                             commands=commands, environment=stable_environment(), attention_fixtures=fixtures, mlp_fixtures=mlp_fixtures))
+                                             commands=commands, environment=stable_environment(), attention_fixtures=fixtures, mlp_fixtures=mlp_fixtures, decoder_fixtures=decoder_fixtures))
 
 
 def checked_conditions():
@@ -62,7 +64,7 @@ def checked_conditions():
     return conditions
 
 
-def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=None, tile_kernel_screen=None, mlp_decode_screen=None):
+def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=None, tile_kernel_screen=None, mlp_decode_screen=None, decoder_screen=None):
     ensure_record_location(output)
     provenance = json.loads((build_dir / 'build.json').read_text())
     repo, sources = repository_state(), source_hashes()
@@ -81,7 +83,15 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
         seed = spec.get('seed',53)
         if spec['operation'] == 'mlp' and mlp_fixture_identity() != provenance.get('mlp_fixtures'):
             raise RuntimeError('MLP benchmark inputs changed')
+        if spec['operation'] == 'decoder_layer' and decoder_fixture_identity() != provenance.get('decoder_fixtures'):
+            raise RuntimeError('decoder benchmark inputs changed')
         selection = None
+        if spec.get('requires_selection'):
+            from .decoder_layer_contract import screen_decision, confirmation_spec
+            if decoder_screen is None:raise ValueError('decoder confirmation requires frozen screen selection')
+            selection=json.loads((decoder_screen/'selection.json').read_text())
+            if selection!=screen_decision(decoder_screen,provenance):raise ValueError('decoder screen selection changed')
+            spec=confirmation_spec(name.split('_')[2],selection)
         if name == 'mlp_decode_final':
             if mlp_decode_screen is None:
                 raise ValueError('decode confirmation requires both completed screens')
@@ -151,22 +161,22 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
             before = checked_conditions()
             record['conditions'].append(dict(block=block, before=before))
             first = block in (2, 3)
-            cases = [(w, l, c) for w in workloads(spec) for l in spec.get('layers',(1,24)) for c in spec['candidates']]
+            cases = comparisons(spec)
             if first:
                 cases.reverse()
             for workload, layers, candidate in cases:
                 rows = workload['rows']
-                binary_name = spec['operation'] if spec['operation'].startswith('gqa_') or spec['operation'] in ('attention_sublayer','mlp') else 'operations'
+                binary_name = spec['operation'] if spec['operation'].startswith('gqa_') or spec['operation'] in ('attention_sublayer','mlp','decoder_layer') else 'operations'
                 command = [str(build_dir / binary_name)]
                 if binary_name == 'operations':
                     command.append(spec['operation'])
-                if binary_name in ('gqa_prefill', 'attention_sublayer'):
+                if binary_name in ('gqa_prefill', 'attention_sublayer', 'decoder_layer'):
                     command.append(str(workload['query_rows']))
                 command += list(map(str, [rows, layers, candidate, spec['control'], int(first), seed,
                                           spec.get('mode','bench'), REPETITIONS, WARMUP]))
                 # A 4096-row MLP ring process performs 960 complete blocks.
                 # The rowwise baseline needs about ten minutes on this host.
-                timeout = 1200 if spec['operation'] == 'mlp' else 600 if spec['operation'] == 'attention_sublayer' else 300
+                timeout = 1200 if spec['operation'] in ('mlp','decoder_layer') else 600 if spec['operation'] == 'attention_sublayer' else 300
                 process = subprocess.run(command, cwd=repository_root(), capture_output=True, text=True, env=env, timeout=timeout)
                 # Local diagnostic logs are useful during execution; compact samples are the retained evidence.
                 (directory / 'last-process.txt').write_text(process.stdout + process.stderr)
@@ -191,6 +201,8 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
             raise RuntimeError('attention benchmark inputs changed during measurement')
         if spec['operation'] == 'mlp' and mlp_fixture_identity() != provenance['mlp_fixtures']:
             raise RuntimeError('MLP inputs changed during measurement')
+        if spec['operation'] == 'decoder_layer' and decoder_fixture_identity() != provenance['decoder_fixtures']:
+            raise RuntimeError('decoder inputs changed during measurement')
         if repository_state() != repo or source_hashes() != sources or stable_environment() != environment:
             raise RuntimeError('source or hardware/software changed during measurement')
         record.update(completed_utc=utc_now(), samples_sha256=sha(directory / 'samples.csv.gz'))
@@ -199,13 +211,14 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('command', choices=['build', 'run'])
+    p.add_argument('command', choices=['build', 'run', 'select-decoder', 'confirm-decoder'])
     p.add_argument('--build-dir', type=Path, required=True)
     p.add_argument('--output', type=Path)
     p.add_argument('--parallelism-screen', type=Path)
     p.add_argument('--tile-screen', type=Path)
     p.add_argument('--tile-kernel-screen', type=Path)
     p.add_argument('--mlp-decode-screen', type=Path)
+    p.add_argument('--decoder-screen', type=Path)
     p.add_argument('--studies', nargs='+', choices=list(STUDIES),
                    default=[name for name in STUDIES if not name.endswith('_screen') and not STUDIES[name].get('opt_in')
                             and name not in ('attention_sublayer_wo','attention_sublayer_decode','attention_sublayer_prefill',
@@ -214,6 +227,20 @@ def main():
     args = p.parse_args()
     if args.command == 'build':
         build(args.build_dir.resolve())
+    elif args.command == 'select-decoder':
+        from .decoder_layer_contract import screen_decision
+        if args.decoder_screen is None:p.error('select-decoder requires --decoder-screen')
+        path=args.decoder_screen.resolve()/'selection.json';ensure_record_location(path)
+        if path.exists():raise ValueError('refusing to overwrite frozen decoder selection')
+        write_json(path,screen_decision(args.decoder_screen.resolve(),json.loads((args.build_dir/'build.json').read_text())))
+    elif args.command == 'confirm-decoder':
+        from .decoder_layer_contract import screen_decision,confirmed_selection
+        if args.decoder_screen is None or args.output is None:p.error('confirm-decoder requires --decoder-screen and --output confirmation directory')
+        decision=json.loads((args.decoder_screen/'selection.json').read_text())
+        if decision!=screen_decision(args.decoder_screen,json.loads((args.build_dir/'build.json').read_text())):raise ValueError('frozen selection changed')
+        path=args.output.resolve()/'selection-confirmed.json';ensure_record_location(path)
+        if path.exists():raise ValueError('refusing to overwrite confirmed selection')
+        write_json(path,confirmed_selection(decision,args.output.resolve()))
     elif args.output is None:
         p.error('run requires --output')
     else:
@@ -221,7 +248,8 @@ def main():
             parallelism_screen=args.parallelism_screen.resolve() if args.parallelism_screen else None,
             tile_screen=args.tile_screen.resolve() if args.tile_screen else None,
             tile_kernel_screen=args.tile_kernel_screen.resolve() if args.tile_kernel_screen else None,
-            mlp_decode_screen=args.mlp_decode_screen.resolve() if args.mlp_decode_screen else None)
+            mlp_decode_screen=args.mlp_decode_screen.resolve() if args.mlp_decode_screen else None,
+            decoder_screen=args.decoder_screen.resolve() if args.decoder_screen else None)
 
 
 if __name__ == '__main__':
