@@ -8,6 +8,8 @@ import gzip
 import hashlib
 import json
 from pathlib import Path
+from collections import Counter
+from fractions import Fraction
 
 ROOT = Path(__file__).resolve().parent
 
@@ -227,6 +229,95 @@ def aten(plot=False):
         plt.close(figure)
 
 
+def consistency():
+    manifest = json.loads((ROOT/'consistency-study.json').read_text())
+    data = {}
+    for name, record in manifest['files'].items():
+        encoded = (ROOT/name).read_bytes()
+        raw = gzip.decompress(encoded)
+        if (sha(encoded) != record['sha256'] or sha(raw) != record['uncompressed_sha256']
+                or len(raw) != record['uncompressed_bytes']):
+            raise ValueError('consistency evidence checksum mismatch')
+        data[name] = raw
+    qualified = json.loads(data['consistency-reference.json.gz'])
+    declaration = manifest['declaration']
+    if (qualified['passed'] is not True or qualified['candidate_outputs_observed'] is not False
+            or qualified['reserved_outputs_observed'] is not False
+            or qualified['source']['tests/fixtures/model_consistency.json'] != manifest['declaration_sha256']
+            or qualified['observations_sha256'] != sha(data['consistency-observations.jsonl.gz'])
+            or [{k:c[k] for k in ('length','seed')} for c in qualified['cases']] != declaration['development_cases']):
+        raise ValueError('consistency reference identity mismatch')
+    boundaries = set(declaration['accuracy']['gates'])
+    required, observed, summary = Counter(), Counter(), []
+    for case in qualified['cases']:
+        if set(case['arrays']) != boundaries:
+            raise ValueError('incomplete consistency boundary census')
+        seen, checks = set(), 0
+        for schedule in case['schedules']:
+            rows = tuple(schedule['rows'])
+            if rows in seen or sum(rows) != case['length'] or min(rows) < 1 or schedule['failures']:
+                raise ValueError('invalid consistency schedule')
+            seen.add(rows)
+            if schedule['checks'] != len(rows)*75:
+                raise ValueError('incomplete schedule checks')
+            checks += schedule['checks']
+            start = 0
+            for count in rows:
+                for stage in boundaries:
+                    required[(case['length'],case['seed'],rows,start,count,stage)] += 1
+                start += count
+        if (case['length'],) not in seen:
+            raise ValueError('missing full repeat')
+        summary.append(dict(length=case['length'],seed=case['seed'],schedules=len(seen),checks=checks,failures=0))
+    for line in data['consistency-observations.jsonl.gz'].splitlines():
+        row = json.loads(line)
+        if row['exact'] is not True or row['max_abs'] != 0:
+            raise ValueError('failed reference consistency observation')
+        observed[(row['length'],row['seed'],tuple(row['schedule']),row['start'],row['rows'],row['stage'])] += 1
+    if observed != required:
+        raise ValueError('missing or duplicate reference observations')
+    detail = json.loads(data['consistency-native.json.gz'])
+    accuracy, ops = detail['accuracy'], detail['operations']
+    if (accuracy['qualification_sha256'] != sha(data['consistency-reference.json.gz'])
+            or accuracy['reserved_outputs_observed'] is not False or accuracy['passed'] is not False
+            or set(r['stage'] for r in accuracy['checks']) != boundaries |
+                {s+'_storage' for s in boundaries if s.startswith('cache_')}
+            or len(accuracy['checks']) != 123 or sum(not r['passed'] for r in accuracy['checks']) != 7):
+        raise ValueError('native accuracy evidence mismatch')
+    operation_stages = ('N_att','Q_raw','K_raw','V_raw','O','B_att','Z','N_mlp','G','U','A','S','B_mlp','Y')
+    for attempt in (detail['operations_initial'], ops):
+        if (attempt['passed'] is not True or attempt['reserved_outputs_observed'] is not False
+                or len(attempt['checks']) != 336 or any(r['failed'] for r in attempt['checks'])
+                or {(r['layer'],r['stage']) for r in attempt['checks']} !=
+                    {(i,s) for i in range(24) for s in operation_stages}):
+            raise ValueError('incomplete identical-operand diagnosis')
+    if len(ops['rounding']) != sum(r['bit_differences'] for r in ops['checks']):
+        raise ValueError('incomplete exact-sum diagnosis')
+    for row in ops['rounding']:
+        total = Fraction(row['exact_numerator'],row['exact_denominator'])
+        a, r = Fraction(row['native']), Fraction(row['upstream'])
+        closer = 'native' if abs(total-a)<abs(total-r) else 'upstream' if abs(total-r)<abs(total-a) else 'tie'
+        if (row['closer_to_exact'] != closer or row['exact_sum'] != float(total)
+                or row['midpoint_distance'] != float(total-(a+r)/2)):
+            raise ValueError('inconsistent exact-sum interpretation')
+    layer = [json.loads(line) for line in data['consistency-layer-records.jsonl.gz'].splitlines()]
+    if (sha(data['consistency-layer-records.jsonl.gz']) != detail['layer_receipt']['records_sha256']
+            or len(layer) != 13165 or any(r.get('failed',0) for r in layer)
+            or any(r['exact'] is not True for r in layer if r['kind']=='schedule_exact')
+            or not any(r['kind']=='schedule_exact' for r in layer)):
+        raise ValueError('failed or incomplete decoder consistency evidence')
+    table('consistency-reference.csv',summary)
+    table('consistency-accuracy.csv',[dict(stage=r['stage'],passed=r['passed'],
+        max_abs=r.get('max_abs',''),max_scaled=r.get('max_scaled',''),relative_rms=r.get('relative_rms',''))
+        for r in accuracy['checks']])
+    table('consistency-operations.csv',[dict(stage=s,checks=24,
+        changed_elements=sum(r['bit_differences'] for r in ops['checks'] if r['stage']==s),
+        max_abs=max(r['max_abs'] for r in ops['checks'] if r['stage']==s),
+        failed_elements=sum(r['failed'] for r in ops['checks'] if r['stage']==s)) for s in operation_stages])
+    table('consistency-rounding.csv',ops['rounding'])
+    print('Verified 71,250 HF comparisons, 13,165 decoder records, failed model accuracy and both operation diagnoses; regenerated four tables.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--plot', action='store_true', help='also regenerate study figures with matplotlib')
@@ -282,6 +373,8 @@ def main():
         rounding(args.plot)
     if (ROOT / 'aten-study.json').exists():
         aten(args.plot)
+    if (ROOT / 'consistency-study.json').exists():
+        consistency()
 
 
 if __name__ == '__main__':

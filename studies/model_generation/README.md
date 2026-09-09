@@ -1,9 +1,12 @@
 # Full-model reference schedule qualification
 
-**Blocked at independent reference confirmation.** Native model acceptance,
-greedy generation acceptance and full-model performance promotion have not run.
-The reference-only check found eight failing boundaries on independent inputs;
-its frozen budgets have not been widened. Final reserved inputs remain unopened.
+**Historical reference confirmation failed.** The subsequently authorized
+[consistency implementation](consistency.md) qualifies a canonical reference
+through 4096 tokens and passes native primitive/layer consistency checks. Its
+first native full-model accuracy case fails seven unchanged gates. Full-model
+schedule acceptance, generation and performance promotion remain pending.
+Final reserved inputs remain unopened. The original eight-failure reference
+confirmation below remains historical evidence, with unchanged budgets.
 
 The subsequent [rounding investigation](rounding.md) explains the first
 attention difference, its propagation, and the actual failing normalization

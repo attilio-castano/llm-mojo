@@ -74,7 +74,34 @@ def consistency_accuracy(actual, expected, gate):
     return result
 
 
-def verify_consistency_observations(report, path):
+def required_consistency_schedules(length, declaration):
+    """Independently reconstruct required schedules, not just reported ones."""
+    settings = declaration['schedules']
+    required = {(length,)}
+    if length <= settings['exhaustive_through']:
+        from itertools import combinations
+        for count in range(length):
+            for interior in combinations(range(1,length),count):
+                cuts = (0,*interior,length)
+                required.add(tuple(b-a for a,b in zip(cuts,cuts[1:])))
+    elif length <= settings['tokenwise_through']:
+        required.add((1,)*length)
+    if length > 17:
+        required.add((length-sum(settings['long_suffix']),*settings['long_suffix']))
+    if length > 2:
+        required.add((1,length-2,1))
+    remaining, chunks = length, []
+    while remaining:
+        rows = min(remaining,settings['ragged_cycle'][len(chunks)%len(settings['ragged_cycle'])])
+        chunks.append(rows)
+        remaining -= rows
+    required.add(tuple(chunks))
+    return required
+
+
+def verify_consistency_observations(report, path, declaration=None):
+    if declaration is None:
+        declaration = json.loads((repository_root()/'tests/fixtures/model_consistency.json').read_text())
     required = Counter()
     for case in report['cases']:
         if set(case['arrays']) != CONSISTENCY_BOUNDARIES:
@@ -91,8 +118,8 @@ def verify_consistency_observations(report, path):
                 for stage in CONSISTENCY_BOUNDARIES:
                     required[(case['length'],case['seed'],chunks,start,rows,stage)] += 1
                 start += rows
-        if (case['length'],) not in seen:
-            raise ValueError('missing full-repeat reference check')
+        if seen != required_consistency_schedules(case['length'],declaration):
+            raise ValueError('incomplete declared reference schedule census')
     observed = Counter()
     with path.open() as stream:
         for line in stream:
@@ -122,7 +149,7 @@ def consistency_reference(directory):
         raise ValueError('reference qualification observations changed')
     if [{k: c[k] for k in ('length', 'seed')} for c in report['cases']] != declaration['development_cases']:
         raise ValueError('incomplete reference qualification case census')
-    verify_consistency_observations(report, directory/'observations.jsonl')
+    verify_consistency_observations(report, directory/'observations.jsonl', declaration)
     for case in report['cases']:
         for record in case['arrays'].values():
             if sha(directory/record['path']) != record['sha256']:

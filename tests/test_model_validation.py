@@ -8,6 +8,19 @@ from llm_mojo.model_validation import (bf16, compare, consistency_accuracy,
 
 
 class ModelComparisonTests(unittest.TestCase):
+    def test_reference_rejects_omitted_schedule_even_with_complete_reported_records(self):
+        # All records for the reported full call are present, but the declared
+        # four-token partitions are missing. Counts alone must not qualify it.
+        report=dict(cases=[dict(length=4,seed=99,arrays={s:{} for s in CONSISTENCY_BOUNDARIES},
+                    schedules=[dict(rows=[4],checks=75,failures=[])])])
+        rows=[dict(length=4,seed=99,schedule=[4],start=0,rows=4,stage=s,exact=True,max_abs=0.)
+              for s in sorted(CONSISTENCY_BOUNDARIES)]
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'observations.jsonl'
+            path.write_text(''.join(json.dumps(r)+'\n' for r in rows))
+            with self.assertRaisesRegex(ValueError,'schedule census'):
+                verify_consistency_observations(report,path)
+
     def test_reference_requires_complete_passing_observations(self):
         report=dict(cases=[dict(length=1,seed=99,arrays={s:{} for s in CONSISTENCY_BOUNDARIES},
                     schedules=[dict(rows=[1],checks=75,failures=[])])])

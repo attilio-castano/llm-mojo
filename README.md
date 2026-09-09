@@ -18,8 +18,10 @@ composes RMSNorm, SwiGLU and residual under a frozen BF16 contract, with
 validated rowwise and tiled projection paths. The [decoder layer](studies/decoder_layer/selection.md)
 composes both sublayers and confirms workload-specific kernel choices for
 full prefill, cached prefill and decode. The [full-model development candidate](docs/generation.md)
-composes 24 layers and native greedy generation, but acceptance is blocked by
-[independent reference schedule confirmation](studies/model_generation/README.md).
+composes 24 layers and native greedy generation. The new
+[consistency route](studies/model_generation/consistency.md) passes canonical HF
+qualification and native component checks; promotion is paused at its first
+full-model numerical accuracy failure.
 No full-model speedup or generation parity is established.
 
 The [CPU text tokenizer](docs/tokenizer.md) implements Qwen normalization, splitting,

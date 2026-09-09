@@ -1,15 +1,22 @@
 # Qwen model composition and generation
 
-**Development candidate: acceptance is blocked by independent reference
-schedule confirmation.** The native model and generation call graphs compile. The
+**Development candidate: promotion is paused at native full-model accuracy.**
+The authorized [consistency revision](../studies/model_generation/consistency.md)
+passes 71,250 exact canonical HF comparisons through 4096 tokens and native
+primitive/layer schedule tests. Its first full-model input fails seven frozen
+accuracy gates. All 336 identical-operand operation checks pass; ten projection
+elements differ by one BF16 step. Full-model schedule and generation acceptance
+remain pending, and configuration 20 is not automatically selected.
+
+The native model and generation call graphs compile. The
 embedding/copy and BF16 binary-I/O tests pass on Apple M4 Pro / Metal. The
 upstream observation code passes a tiny synthetic 24-layer self-test; that is
 not qualification of the pinned checkpoint. The full checkpoint and all 196
 prepared tensors have since passed hash/extent verification. Reference-only
 calibration completed, but independent confirmation failed 8 of 2,025 checks.
 The [retained study](../studies/model_generation/README.md) records the frozen
-budgets and diagnosis. Native full-model comparison, generation acceptance and
-performance promotion have not run.
+budgets and diagnosis. That original confirmation remains failed; the approved
+consistency revision and native failure are recorded separately.
 
 The authorized [reference-only follow-up](../studies/model_generation/rounding.md)
 traced the discrepancy to FP32 attention differences crossing BF16 rounding
@@ -23,15 +30,18 @@ The deeper [HF/PyTorch study](../studies/model_generation/backend.md) locates th
 first difference in QK matrix multiplication. Normalizing SDPA query shape and
 causal-prefix layout yields 36,225 byte-equal full/cached comparisons at five
 declared lengths, while deterministic mode alone leaves the original differences
-unchanged. This stable route is available in diagnostic tooling; the reference
-acceptance policy remains unchanged.
+unchanged. The approved consistency revision now qualifies this canonical
+route while preserving the original failed policy and evidence.
 
 The approved scope and stop gates are in [generation-plan.md](generation-plan.md).
 The declaration is [model_contract.json](../tests/fixtures/model_contract.json).
 The numerical thresholds are initial reference-only qualification criteria;
 they failed, and a bounded reference-only calibration also failed independent
-confirmation. Both declarations and results remain intact. No full-model
-candidate outputs have been compared against them.
+confirmation. Both declarations and results remain intact. The new
+[consistency declaration](../tests/fixtures/model_consistency.json) independently
+requires exact schedule agreement and adopts the unchanged frozen budgets as
+cross-engine hypotheses. The first native accuracy failure is under that new
+declaration, not acceptance under the historical failed qualification.
 
 ## Native ownership
 
@@ -101,7 +111,10 @@ uv run --locked --script tests/fixtures/model_reference.py prepare --output buil
 uv run --locked --script tests/fixtures/model_reference.py qualify --output build/oracle_data/model-qualification
 ```
 
-A qualification failure prevents dependent comparison. Reference capture requires
+A qualification failure prevents dependent comparison. The historical
+`model_reference.py qualify` command above is expected to reproduce its original
+failure. Use the [consistency study commands](../studies/model_generation/consistency.md)
+for the newly approved canonical route. Reference capture requires
 an explicit passing qualification from the same reference source and contract.
 The upstream executes the real `Qwen2Model` and tied LM head with BF16 stored
 boundaries and math SDPA with FP32 Q/K/V/masks, rounding the attention output to

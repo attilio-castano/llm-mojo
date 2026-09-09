@@ -33,6 +33,24 @@ the optimization budget retains the consistent baseline; a speedup is optional.
 The deliverable is a checked consistent generator, receipts, compact evidence,
 reproducible measurements and local commits. No push, publication or agents.
 
+Execution checkpoint: canonical HF qualification passes 71,250 exact checks
+through 4096 tokens. Native configuration 20 passes primitive and one-layer
+accuracy/schedule tests, including 13,165 retained decoder records. Its first
+full-model development input fails seven of 75 numerical gates; all 48 cache
+storage checks pass. All 336 subsequent identical-operand operation checks
+pass. Ten projection elements differ by one BF16 step; exact rational sums
+favor Mojo in five and HF in five. No local gate defect was identified on this
+input. Promotion is paused at the numerical-policy decision, with no enlarged
+gate, new precision, optimization study or final reserved exposure. The
+[consistency study](../studies/model_generation/consistency.md) contains the
+evidence and reproduction commands. Stage 2 full-model schedule/generation
+acceptance and stage 3 remain incomplete.
+
+Final validation passes the frozen fixture anchors, 119 Python tests, every
+native regression file and all Metal benchmark smoke routes. The stale invalid
+GQA mapping test was corrected and rerun before completing the remaining suite.
+Retained evidence verification and table regeneration also pass.
+
 Approved for autonomous local execution on 2026-09-09. Starting checkout:
 `478cdc1`, updated to merged tokenizer head `d9aaad5` before implementation;
 branch `codex/qwen-generation-engine`. Local implementation,
