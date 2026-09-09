@@ -8,10 +8,30 @@ from .._repository import repository_root
 
 OPERATION = 'decoder_layer'
 VARIANTS = {0,1,2,3,4,8,12,14}
-ENTRYPOINTS = {f'decoder_layer_{v}':'enqueue_decoder_layer' for v in VARIANTS}
+# VARIANTS is the frozen historical selection registry.
+MEASUREMENT_VARIANTS = VARIANTS | {20}
+ENTRYPOINTS = {f'decoder_layer_{v}':'enqueue_decoder_layer' for v in MEASUREMENT_VARIANTS}
 NAMES = {0:'integrated control',1:'both 16x16 attention projections',
          2:'split8 attention',3:'split8 + both 16x16 projections',4:'rowwise MLP',
-         8:'combined gate/up',12:'cooperative down G4',14:'combined gate/up + down G4'}
+         8:'combined gate/up',12:'cooperative down G4',14:'combined gate/up + down G4',
+         20:'consistent G32 attention and rowwise projections'}
+POLICY_PATH = 'tests/fixtures/decoder_policies.json'
+
+
+def policy_declaration():
+    return json.loads((repository_root()/POLICY_PATH).read_text())
+
+
+def policy_schedules(rows):
+    """Finite declared schedules; each call sees its own absolute causal prefix."""
+    result={'policy_repeat':[(0,rows)], 'policy_tokenwise':[(p,1) for p in range(rows)]}
+    calls=[];p=0
+    for size in policy_declaration()['schedules']['irregular_chunks']:
+        if p==rows:break
+        size=min(size,rows-p);calls.append((p,size));p+=size
+    if p<rows:calls.append((p,rows-p))
+    result['policy_irregular']=calls
+    return result
 SELECTION_PATH = 'studies/decoder_layer/selection-declaration.json'
 SELECTION_PROMPT = ('A train travels 60 kilometers in 45 minutes. Explain its average '
                     'speed in kilometers per hour and why the units matter.')
@@ -66,7 +86,7 @@ def fixture_identity():
 
 
 def specification(variant,r,t):
-    if type(variant)is not int or variant not in VARIANTS or type(r)is not int or type(t)is not int or not 1<=r<=t<=4096:
+    if type(variant)is not int or variant not in MEASUREMENT_VARIANTS or type(r)is not int or type(t)is not int or not 1<=r<=t<=4096:
         raise ValueError('invalid decoder baseline route or shape')
     return dict(profile_rows=r,hidden_size=896,key_value_rows=t,query_heads=14,key_value_heads=2,
                 intermediate_size=4864,mlp_mapping=mappings(variant,r)[2],
@@ -87,14 +107,17 @@ def configuration(data):
 
 
 def mappings(variant,rows):
-    if type(variant)is not int or variant not in VARIANTS or type(rows)is not int or rows<1:
+    if type(variant)is not int or variant not in MEASUREMENT_VARIANTS or type(rows)is not int or rows<1:
         raise ValueError('invalid decoder configuration')
+    if variant==20:return (5,0,0)
     return (4 if variant in (2,3) else 0,5 if variant in (1,3) else 0,
             variant if rows==1 and variant in (8,12,14) else 0 if rows==1 or variant==4 else 7)
 
 
 def stages(variant,rows):
     result=list(STAGES)
+    if variant==20:
+        result[1:3]=['Q projection','K projection','V projection']
     if variant in (2,3) and rows>1:
         result[6:7]=['FP32 GQA split','FP32 GQA merge']
     if variant in (8,14) and rows==1:

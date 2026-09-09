@@ -23,6 +23,8 @@ MANIFEST=None
 EXPECTED_CASES=set()
 FROZEN=None
 DEVELOPMENT_ROOT=REPO/"build/oracle_data/decoder_layer"
+POLICY_STUDY=os.environ.get('DECODER_POLICY_STUDY')=='1'
+POLICY_EXACT={int(v) for v in os.environ.get('DECODER_INVARIANT_VARIANTS','20').split(',') if v}
 
 
 def sha(path):
@@ -80,11 +82,12 @@ def cases():
 
 
 def selection_variants():
-    from llm_mojo.benchmarks.decoder_layer_contract import VARIANTS
-    selected=sorted(VARIANTS)
+    from llm_mojo.benchmarks.decoder_layer_contract import VARIANTS, MEASUREMENT_VARIANTS
+    allowed=MEASUREMENT_VARIANTS if POLICY_STUDY else VARIANTS
+    selected=sorted(allowed)
     if os.environ.get('DECODER_VARIANTS'):
         selected=[int(v) for v in os.environ['DECODER_VARIANTS'].split(',')]
-        if len(set(selected))!=len(selected) or not set(selected)<=VARIANTS:
+        if len(set(selected))!=len(selected) or not set(selected)<=allowed:
             raise ValueError('invalid decoder selection variants')
     return selected
 
@@ -99,8 +102,12 @@ def verify_case(name):
 
 def schedules(name):
     declared=case_record(name)['schedules']
-    return [(key,[(call['start'],call['rows']) for call in declared[key]])
+    result=[(key,[(call['start'],call['rows']) for call in declared[key]])
             for key in ('full','chunk','threshold','reuse') if key in declared]
+    if POLICY_STUDY:
+        from llm_mojo.benchmarks.decoder_layer_contract import policy_schedules
+        result.extend(policy_schedules(case_record(name)['spec']['rows']).items())
+    return result
 
 
 def configure(name, policy, schedule, mode):
@@ -170,9 +177,10 @@ def check(address,name,stage,schedule,start,rows,width,capacity,mode='layer'):
     if np.any(bits[count:]!=0x42f6):
         raise AssertionError('decoder wrote inactive workspace '+stage)
     actual=from_bits(bits[:count]).reshape(rows,width)
-    label=f'full_{stage}' if schedule in ('full','full_slice') else f'{schedule}_{start}_{stage}'
+    sliced=schedule=='full_slice' or schedule.startswith('policy_')
+    label=f'full_{stage}' if schedule=='full' or sliced else f'{schedule}_{start}_{stage}'
     expected=read(name,label)
-    if schedule=='full_slice':
+    if sliced:
         expected=expected.reshape(-1,width)[start:start+rows]
     expected=expected.reshape(rows,width)
     gate=manifest()['specification']['whole_layer_gates'].get(stage)
@@ -193,14 +201,14 @@ def check(address,name,stage,schedule,start,rows,width,capacity,mode='layer'):
     if result.get('failed',0):
         print('DECODER FAILURE',json.dumps(RECORDS[-1]),flush=True)
         raise AssertionError('decoder numerical gate: '+stage)
-    if mode=='layer' and (IDENTITY.get('policy') == 20 or stage in ('B_att','Z','B_mlp','Y')):
+    if mode=='layer' and (POLICY_STUDY or IDENTITY.get('policy') == 20 or stage in ('B_att','Z','B_mlp','Y')):
         if schedule=='full':
             FULL[stage]=actual.copy()
         elif stage in FULL:
-            if IDENTITY.get('policy') == 20:
+            if POLICY_STUDY or IDENTITY.get('policy') == 20:
                 exact = actual.tobytes() == FULL[stage][start:start+rows].tobytes()
-                emit(dict(kind='schedule_exact', stage=stage, start=start, rows=rows, exact=exact))
-                if not exact:
+                emit(dict(kind='schedule_exact', stage=stage, start=start, rows=rows, elements=count, exact=exact))
+                if not exact and (IDENTITY.get('policy') in POLICY_EXACT if POLICY_STUDY else True):
                     raise AssertionError('consistent decoder bytes differ: '+stage)
             comparison=differences(actual,FULL[stage][start:start+rows],gate)
             emit(dict(kind='full_vs_chunk',stage=stage,start=start,rows=rows,**comparison))
@@ -216,17 +224,20 @@ def check_cache(address,produced,previous,name,label,start,rows,width,capacity):
         raise AssertionError('decoder cache append changed produced bits')
     if np.any(bits[(start+rows)*width:]!=0x42f6):
         raise AssertionError('decoder wrote inactive cache capacity')
-    if IDENTITY.get('policy') == 20:
+    if POLICY_STUDY or IDENTITY.get('policy') == 20:
         key = 'consistent_cache_key' if label.endswith('cache_key') else 'consistent_cache_value'
         if IDENTITY['schedule'] == 'full':
             FULL[key] = bits[:(start+rows)*width].copy()
         else:
             exact = bits[:(start+rows)*width].tobytes() == FULL[key][:(start+rows)*width].tobytes()
-            emit(dict(kind='schedule_exact', stage=key, start=start, rows=rows, exact=exact))
-            if not exact:
+            emit(dict(kind='schedule_exact', stage=key, start=start, rows=rows, elements=(start+rows)*width, exact=exact))
+            if not exact and (IDENTITY.get('policy') in POLICY_EXACT if POLICY_STUDY else True):
                 raise AssertionError('consistent decoder cache bytes differ')
     actual=from_bits(bits[:(start+rows)*width]).reshape(start+rows,width)
-    expected=read(name,label).reshape(start+rows,width)
+    if label.startswith('policy_'):
+        expected=read(name,'full_cache_key' if label.endswith('cache_key') else 'full_cache_value').reshape(-1,width)[:start+rows]
+    else:
+        expected=read(name,label).reshape(start+rows,width)
     emit(dict(kind='cache',stage=label,start=start,rows=rows,prefix_exact=True,append_exact=True,inactive_exact=True,
               **differences(actual,expected)))
 

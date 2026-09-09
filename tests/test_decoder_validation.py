@@ -86,5 +86,31 @@ class NumericalReceiptTests(unittest.TestCase):
         next(r for r in bad if r['kind']=='cache')['prefix_exact']=False
         with self.assertRaises(ValueError):self.validate(bad)
 
+    def test_policy_acceptance_requires_every_schedule_comparison(self):
+        from llm_mojo.decoder_validation import STAGES, BOUNDARIES
+        records=copy.deepcopy(self.records)
+        for stage in STAGES:
+            boundary=next(r for r in records if r['kind']=='boundary' and r['mode']=='layer'
+                          and r['schedule']=='chunk' and r['stage']==stage)
+            if stage not in BOUNDARIES:records.append({**boundary,'kind':'full_vs_chunk'})
+            records.append({**boundary,'kind':'schedule_exact','exact':True})
+        for stage in ('consistent_cache_key','consistent_cache_value'):
+            records.append(dict(case='qwen',policy=0,schedule='chunk',mode='layer',kind='schedule_exact',
+                stage=stage,start=0,rows=1,elements=128,exact=True))
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'checks.jsonl'
+            def check(rows,invariant=(0,)):
+                path.write_text(''.join(json.dumps(r)+'\n' for r in rows))
+                return validate_results(path,self.cases,variants=[0],invariant_variants=invariant)
+            check(records)
+            for bad in (records[:-1],records+[records[-1]]):
+                with self.assertRaises(ValueError):check(bad)
+            bad=copy.deepcopy(records);bad[-1]['elements']=127
+            with self.assertRaises(ValueError):check(bad)
+            bad=copy.deepcopy(records);bad[-1]['exact']=False
+            with self.assertRaises(ValueError):check(bad)
+            # The same numerically valid discrepancy is permitted by Fast.
+            check(bad,())
+
 
 if __name__=='__main__':unittest.main()

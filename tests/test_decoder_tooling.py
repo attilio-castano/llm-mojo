@@ -13,6 +13,18 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class DecoderToolingTests(unittest.TestCase):
+    def test_policy_registry_preserves_history_and_separate_qkv_dispatches(self):
+        self.assertNotIn(20,contract.VARIANTS)
+        self.assertEqual(contract.mappings(20,1),contract.mappings(20,4096))
+        for rows in (1,17,4096):
+            self.assertEqual(contract.stages(20,rows)[1:4],['Q projection','K projection','V projection'])
+            self.assertEqual(contract.specification(20,rows,4096)['dispatches_per_iteration'],17)
+        for rows in (1,15,16,17,63,64,65,4096):
+            schedules=contract.policy_schedules(rows)
+            self.assertEqual(schedules['policy_tokenwise'],[(p,1) for p in range(rows)])
+            for calls in schedules.values():
+                self.assertEqual([p for start,size in calls for p in range(start,start+size)],list(range(rows)))
+
     def test_frozen_workloads_and_sample_census(self):
         spec=STUDIES['decoder_layer']
         samples=[dict(query_rows=r,rows=t,layers=l,block=b,candidate=0,arm=a,variant=0,repetition=n,us=1.)

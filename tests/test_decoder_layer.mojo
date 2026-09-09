@@ -441,7 +441,7 @@ def _asynchronous_decoder(variant: Int = -1) raises:
             TileTensor(xb.unsafe_ptr().unsafe_offset(p*896),row_major(r,896)),
             Int(decoder_mappings(variant,r)[2]) if variant >= 0 else (7 if r > 1 else 0),
             True,gqa,projection)
-        assert_equal(route,6+gqa if r > 1 else 4)
+        assert_equal(route,11 if gqa == 5 else (6+gqa if r > 1 else 4))
         assert_equal(cache.length,p+r)
         ctx.enqueue_copy(dst_buf=outputs[j],src_buf=m.output)
         ctx.enqueue_copy(dst_buf=branches[j],src_buf=m.down)

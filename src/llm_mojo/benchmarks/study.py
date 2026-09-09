@@ -569,6 +569,16 @@ STUDIES['decoder_layer'] = dict(operation=decoder.OPERATION,control=0,candidates
     arithmetic=decoder.ARITHMETIC,inputs=decoder.INPUTS,timing=decoder.TIMING,
     layout='Row major X/Y[R,896], cache[T,2,64], weights[out,in], intermediate width 4864.')
 
+for _control in (0,3):
+    STUDIES[f'decoder_policies_baseline_{_control}'] = {
+        **STUDIES['decoder_layer'], 'control':_control, 'candidates':[_control,20],
+        'layers':[1,24], 'names':{v:decoder.NAMES[v] for v in (_control,20)},
+        'workloads':[dict(query_rows=r,rows=t) for r,t,v in decoder.policy_declaration()['workloads'] if v==_control]}
+STUDIES['decoder_policies_self'] = {
+    **STUDIES['decoder_layer'], 'control':20, 'candidates':[20], 'layers':[1,24],
+    'names':{20:decoder.NAMES[20]},
+    'workloads':[dict(query_rows=r,rows=t) for r,t,_ in decoder.policy_declaration()['workloads']]}
+
 
 
 def load_decoder_profile(directory,prefix=''):

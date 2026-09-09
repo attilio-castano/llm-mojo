@@ -114,15 +114,16 @@ def holdout_manifest(root,verify_arrays=True):
     return record,hashes
 
 
-def policies(spec,selection):
+def policies(spec,selection,variants=None):
+    if variants is not None:return variants
     return sorted(selection_contract.VARIANTS) if selection else [0,7] if spec['nq']==14 and spec['rows']>1 else [0]
 
 
-def expected_checks(cases,selection=False):
+def expected_checks(cases,selection=False,variants=None):
     expected=Counter()
     for name,case in cases.items():
         spec=case['spec'];t=spec['rows']
-        for policy in policies(spec,selection):
+        for policy in policies(spec,selection,variants):
             for schedule,calls in case['schedules'].items():
                 for call in calls:
                     p,r=call['start'],call['rows']
@@ -130,8 +131,11 @@ def expected_checks(cases,selection=False):
                     for stage in STAGES:
                         expected[name,policy,schedule,'layer','boundary',stage,p,r]+=1
                     if schedule!='full':
-                        for stage in BOUNDARIES:
+                        for stage in STAGES if variants is not None else BOUNDARIES:
                             expected[name,policy,schedule,'layer','full_vs_chunk',stage,p,r]+=1
+                        if variants is not None:
+                            for stage in (*STAGES,'consistent_cache_key','consistent_cache_value'):
+                                expected[name,policy,schedule,'layer','schedule_exact',stage,p,r]+=1
                     for stage in ('cache_key','cache_value'):
                         label=('full_' if schedule=='full' else f'{schedule}_{p}_')+stage
                         expected[name,policy,schedule,'layer','cache',label,p,r]+=1
@@ -152,7 +156,7 @@ def protected_extents(spec):
                 mw_down=h*i, a_cosine=capacity*d, a_sine=capacity*d)
 
 
-def validate_results(path,cases,selection=False):
+def validate_results(path,cases,selection=False,variants=None,invariant_variants=()):
     records=[json.loads(line) for line in Path(path).read_text().splitlines()]
     observed=Counter();runtimes=set();aux=Counter();protected=Counter()
     for row in records:
@@ -179,7 +183,7 @@ def validate_results(path,cases,selection=False):
         spec=cases[row['case']]['spec'];r=row['rows'];h=spec['h'];stage=row.get('stage','')
         if kind=='route':
             gqa,_,mlp=selection_contract.mappings(row['policy'],r) if selection else (0,0,row['policy'] if r>1 else 0)
-            if row['attention']!=(4 if r==1 else 6+gqa) or row['mlp']!=mlp:
+            if row['attention']!=(11 if gqa==5 else 4 if r==1 else 6+gqa) or row['mlp']!=mlp:
                 raise ValueError('decoder route changed')
             if row['backend']!='metal' or not row['device'].startswith('Apple '):
                 raise ValueError('decoder execution did not prove Metal')
@@ -187,6 +191,13 @@ def validate_results(path,cases,selection=False):
         elif kind=='cache':
             if row['elements']!=(row['start']+r)*spec['nk']*spec['d'] or any(row.get(k)is not True for k in ('prefix_exact','append_exact','inactive_exact')):
                 raise ValueError('incomplete cache preservation check')
+        elif kind=='schedule_exact':
+            width=spec['i'] if stage in ('G','U','A','S') else spec['nk']*spec['d'] if stage in ('K_raw','V_raw','K_rot','consistent_cache_key','consistent_cache_value') else h
+            count=(row['start']+r)*width if stage.startswith('consistent_cache_') else r*width
+            if type(row.get('exact'))is not bool or row.get('elements')!=count:
+                raise ValueError('incomplete decoder schedule comparison')
+            if row['policy'] in invariant_variants and not row['exact']:
+                raise ValueError('deterministic decoder schedule mismatch')
         elif kind in ('boundary','full_vs_chunk'):
             width=spec['i'] if stage in ('G','U','A','S') else spec['nk']*spec['d'] if stage in ('K_raw','V_raw','K_rot') else h
             if kind=='boundary' and row.get('inactive_exact')is not True:
@@ -196,11 +207,11 @@ def validate_results(path,cases,selection=False):
             if (row['mode']=='operation' or stage in BOUNDARIES) and row.get('failed')!=0:
                 raise ValueError('missing decoder gate')
     expected_protected=Counter((name,policy,label,elements) for name,case in cases.items()
-        for policy in policies(case['spec'],selection)
+        for policy in policies(case['spec'],selection,variants)
         for label,elements in protected_extents(case['spec']).items())
     if protected!=expected_protected:
         raise ValueError('incomplete protected decoder storage coverage')
-    if observed!=expected_checks(cases,selection) or len(runtimes)!=1:
+    if observed!=expected_checks(cases,selection,variants) or len(runtimes)!=1:
         raise ValueError('decoder missing, duplicate or unexpected numerical coverage')
     negatives={'second residual uses X','second residual omitted','first residual omitted',
                'second norm uses X','wrong norm weights','wrong absolute RoPE position',
@@ -215,7 +226,7 @@ def validate_results(path,cases,selection=False):
             if row['kind']=='boundary' and row['elements']!=row['rows']*896:
                 raise ValueError('incomplete asynchronous elements')
         expected=Counter()
-        for v in selection_contract.VARIANTS:
+        for v in variants if variants is not None else selection_contract.VARIANTS:
             for j in range(13):
                 start,rows=(0,53) if j==0 else (52+j,1)
                 for stage in BOUNDARIES:
@@ -227,6 +238,56 @@ def validate_results(path,cases,selection=False):
         actual=Counter((r['policy'],r['kind'],r.get('stage',r.get('label')),r.get('start',''),r.get('rows',''),r['elements']) for r in async_rows)
         if actual!=expected:raise ValueError('incomplete selection asynchronous coverage')
     return dict(checks=sum(observed.values()),runtime=dict(zip(('device','backend'),next(iter(runtimes)))))
+
+
+def evaluate_policies(binary,fixtures,output,variants,invariant_variants,split='development'):
+    """Reuse the layer suite with an explicit complete policy/schedule census."""
+    import copy
+    binary,fixtures,output=map(lambda p:Path(p).resolve(),(binary,fixtures,output))
+    ensure_record_location(output);candidate=verify_build(binary)
+    if not candidate.get('selection'):
+        raise ValueError('policy evaluation requires the configuration suite')
+    if (not variants or len(set(variants))!=len(variants)
+        or not set(variants)<=selection_contract.MEASUREMENT_VARIANTS
+        or not set(invariant_variants)<=set(variants)):
+        raise ValueError('invalid policy evaluation family')
+    raw=json.loads((fixtures/'manifest.json').read_text())
+    if raw.get('status')!='complete':raise ValueError('incomplete policy inputs')
+    cases={name:copy.deepcopy(case) for name,case in raw['cases'].items()
+           if case['spec']['nq']==14 and (split=='holdout' or name.startswith('checkpoint_')==(split=='checkpoint'))}
+    if not cases:raise ValueError('empty policy split')
+    hashes={'manifest.json':sha(fixtures/'manifest.json')}
+    for name,case in cases.items():
+        for label,spec in case['arrays'].items():
+            if sha(fixtures/name/(label+'.npy'))!=spec['sha256']:
+                raise ValueError('policy input changed')
+        case['schedules'].update({key:[dict(start=p,rows=r) for p,r in calls]
+            for key,calls in selection_contract.policy_schedules(case['spec']['rows']).items()})
+    output.mkdir(parents=True,exist_ok=False)
+    log=output/'output.log';results=output/'checks.jsonl'
+    env=environment();env.update(DECODER_SPLIT=split,DECODER_FIXTURES=str(fixtures),
+        DECODER_RECORDS=str(results),DECODER_POLICY_STUDY='1',
+        DECODER_VARIANTS=','.join(map(str,variants)),
+        DECODER_INVARIANT_VARIANTS=','.join(map(str,invariant_variants)))
+    record=dict(kind='decoder_policy_evaluation',status='started',build=candidate,
+        declaration=selection_contract.policy_declaration(),fixtures=hashes,split=split,
+        variants=variants,invariant_variants=invariant_variants,started_utc=utc_now())
+    try:
+        with log.open('w') as stream:
+            process=subprocess.run([str(binary)],cwd=repository_root(),env=env,stdout=stream,stderr=subprocess.STDOUT,timeout=14400)
+        record['exit_code']=process.returncode
+        if verify_build(binary)!=candidate or sha(fixtures/'manifest.json')!=hashes['manifest.json']:
+            raise ValueError('policy candidate or fixtures changed during evaluation')
+        if process.returncode or '0 failed , 0 skipped' not in log.read_text():
+            raise ValueError('decoder policy suite failed or truncated')
+        record.update(validate_results(results,cases,True,variants,invariant_variants),status='passed')
+    except Exception as error:
+        record.update(status='failed',error=str(error));raise
+    finally:
+        record.update(finished_utc=utc_now(),output_sha256=sha(log) if log.exists() else None,
+                      checks_sha256=sha(results) if results.exists() else None)
+        write(output/'evaluation.json',record)
+    return record
 
 
 def evaluate(binary,fixtures,output):
@@ -265,8 +326,16 @@ def main():
     e=sub.add_parser('evaluate')
     for flag in ('binary','fixtures','output'):
         e.add_argument('--'+flag,type=Path,required=True)
+    e=sub.add_parser('evaluate-policies')
+    for flag in ('binary','fixtures','output'):
+        e.add_argument('--'+flag,type=Path,required=True)
+    e.add_argument('--variants',type=int,nargs='+',required=True)
+    e.add_argument('--invariant-variants',type=int,nargs='*',default=[])
+    e.add_argument('--split',choices=['development','checkpoint','holdout'],default='development')
     args=p.parse_args()
     if args.command=='build':build(args.binary,args.selection)
+    elif args.command=='evaluate-policies':
+        evaluate_policies(args.binary,args.fixtures,args.output,args.variants,args.invariant_variants,args.split)
     else:evaluate(args.binary,args.fixtures,args.output)
 
 
