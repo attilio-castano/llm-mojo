@@ -124,10 +124,19 @@ def detailed_case(model, spec):
                 or not np.array_equal(norm_b.float().numpy(), cached['final_norm'])):
             raise ValueError('norm diagnostic does not reproduce upstream')
         index = int((norm_a.float() - norm_b.float()).abs().argmax())
+        # A large absolute error at a large reference value can pass rtol.
+        # Also identify the actual worst pointwise-budget coordinate.
+        error = (norm_a.float() - norm_b.float()).abs()
+        required = error - reference.GATES['hidden']['rtol'] * norm_a.float().abs()
+        gate_index = int(required.argmax())
         normalization.append(dict(position=position, index=index, gamma=float(model.model.norm.weight[index]),
             full_input=float(a[0, index]), cached_input=float(b[0, index]),
             full_inverse_rms=float(inv_a[0, 0]), cached_inverse_rms=float(inv_b[0, 0]),
             full_output=float(norm_a[0, index]), cached_output=float(norm_b[0, index]),
+            pointwise_coordinate=dict(index=gate_index, required_atol=max(0., float(required[0, gate_index])),
+                gamma=float(model.model.norm.weight[gate_index]),
+                full_input=float(a[0, gate_index]), cached_input=float(b[0, gate_index]),
+                full_output=float(norm_a[0, gate_index]), cached_output=float(norm_b[0, gate_index])),
             **difference(norm_a.float().numpy(), norm_b.float().numpy())))
         # Isolate shape from operand changes using ONLY the first layer's full inputs.
         f = full_trace[0]
