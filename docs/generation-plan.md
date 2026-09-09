@@ -1,5 +1,38 @@
 # Qwen forward and generation milestone
 
+## Approved consistency revision — 2026-09-09
+
+The user approved autonomous implementation of schedule consistency after the
+HF/ATen diagnosis. This revision replaces the old cross-schedule tolerance
+prerequisite for new acceptance; it does not reinterpret the old failed result.
+The executable declaration is `tests/fixtures/model_consistency.json`.
+
+1. Qualify canonical upstream execution through capacity 4096. Stream growing
+   cache comparisons rather than retaining every historical snapshot. Full,
+   repeated full, tokenwise short cases and ragged/mixed chunk schedules must
+   agree in all 75 recorded boundaries. Logits are computed at call endpoints
+   with a one-row upstream head; final norm is checked for every processed row.
+2. Establish one schedule-consistent Mojo arithmetic path, retaining BF16
+   storage and FP32 reductions. Audit normalization, all linear projections,
+   attention, elementwise boundaries and the LM head. Preserve query parallelism
+   inside GPU launches. Validate operations, a layer, the full model and greedy
+   generation progressively, with exact native schedule comparisons and separate
+   cross-engine numerical checks.
+3. Optimize only candidates that preserve the stored baseline results exactly.
+   The existing budget remains at most three studies with two challengers and
+   one independent confirmation each. Require complete-model timing evidence
+   before automatic selection; old mapping IDs are historical candidates.
+
+The historical frozen budgets are copied unchanged into the new declaration
+as cross-engine hypotheses before observing native outputs. Their reuse does
+not imply that the historical confirmation passed, and they cannot be enlarged
+after candidate exposure. Existing operation-level accuracy gates also remain.
+All original reserved inputs remain untouched until final acceptance. A required
+precision/tolerance change or reserved failure stops dependent work. Exhausting
+the optimization budget retains the consistent baseline; a speedup is optional.
+The deliverable is a checked consistent generator, receipts, compact evidence,
+reproducible measurements and local commits. No push, publication or agents.
+
 Approved for autonomous local execution on 2026-09-09. Starting checkout:
 `478cdc1`, updated to merged tokenizer head `d9aaad5` before implementation;
 branch `codex/qwen-generation-engine`. Local implementation,
