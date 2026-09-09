@@ -338,6 +338,317 @@
       "fast_selection": "Per cell and reuse mode, retain the incumbent unless a numerically valid candidate passes the existing direct paired faster rule against it. Select the lowest qualifying median ratio, then the lower ID.",
       "deterministic_selection": "If ID22 is invariant and byte-compatible with ID20, select it only in cells where its direct comparison to ID20 passes the existing faster rule; otherwise retain ID20. ID21 can replace this family globally only if it is invariant, every screened cell in both modes is faster than ID20, and, wherever ID22 qualifies, ID21 ratio_max is below (1-noise_floor) times ID22 ratio_min. Otherwise retain ID21 as a documented tradeoff. Unmeasured cells use ID20, or ID21 if that global family qualifies.",
       "confirmation": "Freeze the proposed lookup before the sole independent confirmation. Include all seven original cells in both modes. The 4096-row prefill candidate is an explicitly unmeasured extension until confirmation qualifies it; retain the validated fallback on failure. Fresh numerical confirmation executes the actual Fast/Deterministic lookups in both modes (test IDs100-103), requires invariance for101/103, and requires full-stage/KV compatibility between101 and103."
+    },
+    {
+      "round": 2,
+      "new_candidates": [
+        23,
+        24
+      ],
+      "new_candidate_outputs_observed": false,
+      "parameters": {
+        "23": {
+          "gqa_mapping": 5,
+          "projection_mapping": 8,
+          "mlp_mapping": 20,
+          "row_tile": 8,
+          "one_row": "Original rowwise kernel",
+          "qkv": "Packed projection followed by bit-preserving unpack",
+          "reduction": "Original lane-strided FP32 sums and warp.sum; no changed K partition"
+        },
+        "24": {
+          "gqa_mapping": 5,
+          "projection_mapping": 9,
+          "mlp_mapping": 21,
+          "row_tile": 16,
+          "one_row": "Original rowwise kernel",
+          "qkv": "Packed projection followed by bit-preserving unpack",
+          "reduction": "Original lane-strided FP32 sums and warp.sum; no changed K partition"
+        }
+      },
+      "rationale": "Round 1 four-row reuse reduced deterministic multirow latency by 24-37%, with complete stage and KV compatibility. Test larger reuse tiles; additional live accumulators may offset weight reuse. The fixed-MMA family failed global qualification because decode slowed down.",
+      "incumbent_decision": {
+        "schema": 1,
+        "kind": "decoder_policy_round_decision",
+        "declaration_sha256": "3ea1c6df923fff7dee11b9f7bc2c83e168f95983963ea9d40c744b0ff724a808",
+        "build_sha256": "eb8ef49a808b04e7d394aab38e2337ff814c016b7155e1453229c92899af12b7",
+        "numerical": [
+          {
+            "split": "development",
+            "evaluation_sha256": "325510149a550e2654c3c4c1555fdf81aa8a50adb9737f6a1a6a4a117493eb67",
+            "checks_sha256": "0f22fd0d1b8f5d00c3da97f78cd4f28984054098b0410b1ce185f0f58c1fb10c",
+            "binary_sha256": "378332647512aa7be42c17265fbc1051ef93c0708700e436905ac22c2e5aa4aa"
+          },
+          {
+            "split": "checkpoint",
+            "evaluation_sha256": "e42accc372194b11a7a039518bda96977b33f33398027c1cbefd4bd2b6018275",
+            "checks_sha256": "6d63019a997cc5f41d9dbe23e6ef25843436a09063071c4d2a5032c7c228ed6d",
+            "binary_sha256": "378332647512aa7be42c17265fbc1051ef93c0708700e436905ac22c2e5aa4aa"
+          }
+        ],
+        "screens": [
+          {
+            "study": "decoder_policies_round1_det",
+            "run_sha256": "4f3904d93b501af7f7cb4132d181cbf5123685ab7b49c911ac415acbfb415910",
+            "samples_sha256": "a9ed3cfe99310a6241b90b3858fb7cc41d7f6b1f7cc1479c11f1cd577efd7dbc"
+          },
+          {
+            "study": "decoder_policies_round1_fast_0",
+            "run_sha256": "03b8a34cbc101db9e7a67a83ed9742bbdd27493941b3f1f35ab20530a43d8ae1",
+            "samples_sha256": "7ec0c352fac89cd995fa0e6d10c4e5b6073d334e851b2e316f557a7f74a52c68"
+          },
+          {
+            "study": "decoder_policies_round1_fast_3",
+            "run_sha256": "2573759ae53d40178c3d25e412e5e3a3c3346e5c74e44ec6f03a86701389af4a",
+            "samples_sha256": "8ca79aff619416100833e8edac7f3ef0ff36ac3e851fafeea65787760d4de18c"
+          }
+        ],
+        "invariant_variants": [
+          20,
+          21,
+          22
+        ],
+        "round": 1,
+        "proposals": [
+          {
+            "query_rows": 16,
+            "rows": 16,
+            "layers": 1,
+            "fast": 0,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 16,
+            "rows": 16,
+            "layers": 24,
+            "fast": 0,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 256,
+            "rows": 256,
+            "layers": 1,
+            "fast": 0,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 256,
+            "rows": 256,
+            "layers": 24,
+            "fast": 0,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 1,
+            "fast": 21,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 24,
+            "fast": 0,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096,
+            "layers": 1,
+            "fast": 3,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096,
+            "layers": 24,
+            "fast": 3,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 1,
+            "rows": 256,
+            "layers": 1,
+            "fast": 0,
+            "deterministic": 20
+          },
+          {
+            "query_rows": 1,
+            "rows": 256,
+            "layers": 24,
+            "fast": 0,
+            "deterministic": 20
+          },
+          {
+            "query_rows": 1,
+            "rows": 4096,
+            "layers": 1,
+            "fast": 0,
+            "deterministic": 20
+          },
+          {
+            "query_rows": 1,
+            "rows": 4096,
+            "layers": 24,
+            "fast": 0,
+            "deterministic": 20
+          }
+        ],
+        "deterministic_family": [
+          20,
+          22
+        ],
+        "deterministic_fallback": 20,
+        "fixed_mma_global_qualified": false,
+        "compatible_row_reuse": true
+      },
+      "incumbent_decision_sha256": "b9ef60f8e1de7cc0cfa01b1c7b32371ca564659ac6d03b4fe9903f1dd39d26f6",
+      "numerical": {
+        "variants": [
+          20,
+          22,
+          23,
+          24
+        ],
+        "required_invariants": [
+          20,
+          22,
+          23,
+          24
+        ],
+        "comparison_family": [
+          20,
+          22,
+          23,
+          24
+        ],
+        "splits": [
+          "development",
+          "checkpoint"
+        ],
+        "admission": "Require unchanged numerical gates and complete schedule/family identity before timing. Retain any failure; stop this round on an invariant-family failure rather than silently alter its declared family."
+      },
+      "screens": [
+        {
+          "name": "decoder_policies_round2_det",
+          "control": 22,
+          "candidates": [
+            22,
+            23,
+            24
+          ],
+          "workloads": [
+            [
+              16,
+              16
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              16,
+              256
+            ],
+            [
+              64,
+              4096
+            ]
+          ],
+          "layers": [
+            1,
+            24
+          ]
+        },
+        {
+          "name": "decoder_policies_round2_fast_0_hot",
+          "control": 0,
+          "candidates": [
+            0,
+            23,
+            24
+          ],
+          "workloads": [
+            [
+              16,
+              16
+            ],
+            [
+              256,
+              256
+            ]
+          ],
+          "layers": [
+            1
+          ]
+        },
+        {
+          "name": "decoder_policies_round2_fast_0_ring",
+          "control": 0,
+          "candidates": [
+            0,
+            23,
+            24
+          ],
+          "workloads": [
+            [
+              16,
+              16
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              16,
+              256
+            ]
+          ],
+          "layers": [
+            24
+          ]
+        },
+        {
+          "name": "decoder_policies_round2_fast_21_hot",
+          "control": 21,
+          "candidates": [
+            21,
+            23,
+            24
+          ],
+          "workloads": [
+            [
+              16,
+              256
+            ]
+          ],
+          "layers": [
+            1
+          ]
+        },
+        {
+          "name": "decoder_policies_round2_fast_3",
+          "control": 3,
+          "candidates": [
+            3,
+            23,
+            24
+          ],
+          "workloads": [
+            [
+              64,
+              4096
+            ]
+          ],
+          "layers": [
+            1,
+            24
+          ]
+        }
+      ],
+      "selection": "Per exact cell and reuse mode, compare both candidates directly to the round-1 incumbent with same-run self pairs. Among candidates passing the calibrated faster rule, choose the lowest median ratio, then lower ID. Otherwise retain the incumbent. Deterministic candidates also require complete own schedule invariance and family byte identity. No new single-token screen: both larger tiles call the same one-row implementation as ID22. Retain its unqualified single-token incumbent ID20 and Fast ID0.",
+      "confirmation": "Use the sole independent final session already declared, with all seven cells and fresh inputs. Freeze any long-prefill extension from the selected 256-row candidate before that session; it needs its own direct gain to be accepted."
     }
   ]
 }

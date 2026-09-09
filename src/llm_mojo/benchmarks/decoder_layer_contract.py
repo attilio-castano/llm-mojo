@@ -19,7 +19,9 @@ NAMES = {0:'integrated control',1:'both 16x16 attention projections',
          8:'combined gate/up',12:'cooperative down G4',14:'combined gate/up + down G4',
          20:'consistent G32 attention and rowwise projections',
          21:'consistent G32 and fixed MMA projections',
-         22:'consistent G32 and four-row weight reuse'}
+         22:'consistent G32 and four-row weight reuse',
+         23:'consistent G32 and eight-row weight reuse',
+         24:'consistent G32 and sixteen-row weight reuse'}
 POLICY_PATH = 'tests/fixtures/decoder_policies.json'
 
 

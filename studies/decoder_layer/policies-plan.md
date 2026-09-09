@@ -108,3 +108,31 @@ Baseline collection encountered a tuple/list comparison error after all six
 captures had passed analysis. Canonicalizing the capture triples fixes that
 metadata seam. Retain the original captures and failure note; no measurement
 was repeated or removed.
+
+## Second and final optimization round
+
+Round 1 at `961f9c5` passed 2,297,625 core numerical checks and 259,758
+schedule comparisons per configuration. All 432 family comparisons between
+20 and 22 matched. Four-row reuse reduced deterministic multirow latency by
+24–37% in the screen. Fixed-MMA configuration 21 passed its own invariance
+checks but slowed hot single-token decode by 46–58%, so the frozen global
+rule retained the compatible rowwise family. Fast proposed 21 only at hot
+cached `(16,256)`; every proposal still needs independent confirmation.
+
+Freeze IDs 23 and 24 with eight and sixteen rows per SIMD group. Each reuses
+one weight load across independent row accumulators, retaining the original
+K stride, per-row reduction, BF16 materialization and single-row fallback.
+More live accumulators may reduce occupancy or cause spills; neither is
+assumed from source. Exact stage and cache checks precede measurement.
+
+The executable declaration binds the complete first-round decision and five
+new matrices: direct comparisons against the actual Fast and deterministic
+incumbents at the four multirow screen cells, with modes separated wherever
+their incumbents differ. This is 3,840 observations. The single-token kernels
+are structurally unchanged from 22, which did not qualify there. Preserve
+their incumbents and include both decode cells in final confirmation.
+
+Require full numerical and family compatibility for 20/22/23/24. Choose only
+direct, noise-calibrated gains against each incumbent; do not compose gains
+across sessions. The original fresh inputs and one independent confirmation
+remain reserved. No candidate slots remain after this round.

@@ -587,7 +587,7 @@ for _round in decoder.policy_declaration().get('rounds',[]):
     for _screen in _round['screens']:
         STUDIES[_screen['name']] = {
             **STUDIES['decoder_layer'], 'control':_screen['control'],
-            'candidates':_screen['candidates'], 'layers':[1,24],
+            'candidates':_screen['candidates'], 'layers':_screen.get('layers',[1,24]),
             'names':{v:decoder.NAMES[v] for v in _screen['candidates']},
             'workloads':[dict(query_rows=r,rows=t) for r,t in _screen['workloads']]}
 
