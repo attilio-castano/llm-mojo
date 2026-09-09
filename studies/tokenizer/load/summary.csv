@@ -1,0 +1,2 @@
+mode,case,family,input_bytes,pieces,max_piece_bytes,output_tokens,candidate,control_us,candidate_us,ratio,ratio_min,ratio_max,noise_floor,decision
+load,1,prose,64,12,10,12,0,17043.88525,17100.0315,1.0111939505097893,0.9937332813026067,1.0249009678089982,0.05,calibration

@@ -20,6 +20,11 @@ composes both sublayers and confirms workload-specific kernel choices for
 full prefill, cached prefill and decode. End-to-end model inference remains
 future work.
 
+The [CPU text tokenizer](docs/tokenizer.md) implements Qwen normalization, splitting,
+heap-based BPE, and streaming decoding in Mojo. Its command initializes the pinned
+artifact automatically; `uv run --locked llm-mojo-tokenizer encode 'Hello world'`
+encodes text without loading model weights.
+
 ## Explore the studies
 
 Each study connects an implementation choice to measurements and explains the
@@ -36,6 +41,7 @@ limits of the result. Start with a question:
 | [Attention sublayer](studies/attention_sublayer/README.md) | Do the individual kernel gains survive composition through Wo and the residual? |
 | [MLP sublayer](studies/mlp_sublayer/README.md) | Do tiled projections improve the complete SwiGLU block while preserving its BF16 boundaries? |
 | [Decoder layer](studies/decoder_layer/selection.md) | Which kernel combinations improve the complete decoder in each execution mode? |
+| [CPU tokenizer](studies/tokenizer/README.md) | When does heap BPE improve complete text encoding? |
 
 ![Full and incremental GQA prefill latency on Apple M4 Pro](studies/gqa_prefill/latency.png)
 
@@ -90,6 +96,7 @@ Python and resolves the locked Mojo and MAX toolchain.
 ```bash
 uv sync --locked
 uv run mojo --version
+uv run --locked llm-mojo-tokenizer setup
 uv run --locked llm-mojo-validate
 ```
 

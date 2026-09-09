@@ -49,6 +49,10 @@ def prepare():
     run("uv", "run", "--locked", "--script", "tests/fixtures/generate.py", "mlp")
     run("uv", "run", "--locked", "--script", "tests/fixtures/decoder_reference.py", "--self-test")
     run("uv", "run", "--locked", "--script", "tests/fixtures/decoder_reference.py")
+    from .tokenizer_assets import ensure_prepared
+    ensure_prepared(download=False)
+    run("uv", "run", "--locked", "--script", "tests/fixtures/tokenizer_reference.py")
+    run("uv", "run", "--locked", "--script", "tests/fixtures/tokenizer_reference.py", "--unicode")
     print("All generated oracles match the frozen anchors.", flush=True)
 
 
@@ -62,6 +66,9 @@ def main():
         for test in sorted((repository_root() / "tests").glob("test_*.mojo")):
             run(environment_tool("mojo"), "run", "-I", "src", "-I", "build",
                 "-I", "tests", str(test.relative_to(repository_root())))
+            if test.name == "test_tokenizer.mojo":
+                run(environment_tool("mojo"), "run", "-I", "src", str(test.relative_to(repository_root())),
+                    "build/oracle_data/tokenizer/unicode.bin")
 
         run(sys.executable, "-m", "llm_mojo.benchmarks.smoke")
 

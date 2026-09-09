@@ -383,3 +383,24 @@ for retained evidence and offline reproduction. Profile with
 `--decoder-selection FILE --prefix selection_`. Complete captures retain the
 actual 15/16/17-dispatch route. Diagnostic profile durations do not determine
 latency promotion.
+
+## CPU tokenizer
+
+The tokenizer uses the same four-block paired protocol and sample summaries,
+with an explicit CPU backend. From a clean validated commit, after tokenizer
+setup:
+
+```sh
+uv run --locked llm-mojo-bench build-tokenizer --build-dir /private/tmp/tokenizer-build
+uv run --locked llm-mojo-bench run-tokenizer --build-dir /private/tmp/tokenizer-build --output /private/tmp/tokenizer-run
+uv run --locked --with matplotlib==3.10.8 llm-mojo-bench report-tokenizer --build-dir /private/tmp/tokenizer-build --output /private/tmp/tokenizer-run
+```
+
+The report command checks retained hashes and the complete calibration grid; it
+needs no tokenizer artifact or execution. `rows` in this shared sample format is
+an opaque case ID for CPU text workloads. `cases` records the actual byte count,
+piece distribution, and output token count; `layers=1` means one sequence. Modes
+separate pre-split BPE, complete encoding, decoding, streaming, and table loading.
+The last two decode modes expose whole-call and incremental API paths over the
+same byte-decoder implementation. Table loading includes deserialization and
+native structure checks, not preparation or Python's startup SHA-256 checks.

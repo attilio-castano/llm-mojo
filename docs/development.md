@@ -99,6 +99,11 @@ for setup rather than adding these flags to project commands.
 
 ## Tests
 
+Prepare the tokenizer once with `uv run --locked llm-mojo-tokenizer setup`.
+This downloads only the pinned tokenizer artifact when missing, verifies it,
+and prepares tables and the native executable. Subsequent tokenizer calls reuse
+local artifacts. See [the tokenizer contract](tokenizer.md).
+
 Run the complete validation workflow from a clean checkout:
 
 ```bash

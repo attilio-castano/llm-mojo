@@ -14,6 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
+llm-mojo-tokenizer = "llm_mojo.tokenizer_assets:main"
 llm-mojo-validate = "llm_mojo.validate:main"
 llm-mojo-bench = "llm_mojo.benchmarks.run:main"
 
