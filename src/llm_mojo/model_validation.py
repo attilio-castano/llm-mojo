@@ -186,7 +186,7 @@ def evaluate_operations(binary, reference, output, prepared=None):
     import importlib.util
     binary, reference, output = (Path(p).resolve() for p in (binary, reference, output))
     receipt = verify_build(binary)
-    prepared, _ = verify_prepared(prepared)
+    prepared, prepared_manifest = verify_prepared(prepared)
     root = repository_root()
     manifest = json.loads((reference/'manifest.json').read_text())
     declaration = json.loads((root/'tests/fixtures/model_consistency.json').read_text())
@@ -217,7 +217,7 @@ def evaluate_operations(binary, reference, output, prepared=None):
     spec = importlib.util.spec_from_file_location('model_operation_numerics',root/'tests/fixtures/mlp/numerics.py')
     numerics = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(numerics)
-    records = []
+    records, rounding = [], []
     for i in range(24):
         for stage in stages:
             name = f'layer_{i}_{stage}'
@@ -231,13 +231,42 @@ def evaluate_operations(binary, reference, output, prepared=None):
                 gate = dict(atol=0.,rtol=0.,exact_bits=True)
             elif stage == 'A':
                 gate = dict(atol=2**-133,rtol=2**-7,max_bf16_steps=1,exact_reference_zero=True)
-            records.append(dict(layer=i,stage=stage,gate=gate,**numerics.differences(actual,expected,gate)))
+            records.append(dict(layer=i,stage=stage,gate=gate,
+                output_sha256=sha(output/(name+'.bin')),
+                **numerics.differences(actual,expected,gate)))
+            # Offline exact rational sums diagnose rounding; they are never
+            # inference operands or an alternative acceptance oracle.
+            if stage in ('Q_raw','K_raw','V_raw','G','U','B_mlp'):
+                from fractions import Fraction
+                source_stage = 'N_att' if stage.endswith('_raw') else 'S' if stage == 'B_mlp' else 'N_mlp'
+                tensor = 'qkv' if stage.endswith('_raw') else {'G':'gate','U':'up','B_mlp':'down'}[stage]
+                tensor_name = f'layer_{i}_{tensor}'
+                changed = np.flatnonzero(actual.view(np.uint32) != expected.view(np.uint32))
+                if len(changed):
+                    weights = bf16(prepared/(tensor_name+'.bin'),prepared_manifest['tensors'][tensor_name]['shape'])
+                    inputs = bf16(reference/f'layer_{i}_{source_stage}.bin',(weights.shape[1],))
+                    offset = {'Q_raw':0,'K_raw':896,'V_raw':1024}.get(stage,0)
+                    for coordinate in changed:
+                        total = sum((Fraction(float(x))*Fraction(float(w))
+                                     for x,w in zip(inputs,weights[offset+coordinate])),Fraction())
+                        if tensor == 'qkv':
+                            bias_name = f'layer_{i}_bias'
+                            bias = bf16(prepared/(bias_name+'.bin'),prepared_manifest['tensors'][bias_name]['shape'])
+                            total += Fraction(float(bias[offset+coordinate]))
+                        av, rv = Fraction(float(actual.flat[coordinate])), Fraction(float(expected.flat[coordinate]))
+                        rounding.append(dict(layer=i,stage=stage,coordinate=int(coordinate),
+                            exact_numerator=total.numerator,exact_denominator=total.denominator,
+                            exact_sum=float(total),native=float(av),upstream=float(rv),
+                            midpoint_distance=float(total-(av+rv)/2),
+                            closer_to_exact='native' if abs(total-av)<abs(total-rv) else
+                                'upstream' if abs(total-rv)<abs(total-av) else 'tie'))
     verify_build(binary)
     for name, record in manifest['arrays'].items():
         if sha(reference/(name+'.bin')) != record['sha256']:
             raise ValueError('operation input changed during execution')
     result = dict(kind='model_identical_operand_evaluation',build=receipt,command=command,
-        reference_sha256=sha(reference/'manifest.json'),checks=records,
+        reference_sha256=sha(reference/'manifest.json'),checks=records,rounding=rounding,
+        prepared_manifest_sha256=sha(prepared/'manifest.json'),
         reserved_outputs_observed=False,passed=all(r['failed']==0 for r in records))
     write(output/'evaluation.json',result)
     print('Identical-operand checks',len(records),'failed',sum(r['failed'] for r in records),flush=True)
