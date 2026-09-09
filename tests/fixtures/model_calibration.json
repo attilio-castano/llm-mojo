@@ -1,0 +1,20 @@
+{
+  "version": "qwen-reference-schedule-calibration-v1",
+  "purpose": "Qualify new full-model budgets using upstream outputs only; existing component gates and arithmetic remain unchanged",
+  "calibration": {"seed": 9103, "lengths": [1, 17, 65, 257, 1024]},
+  "confirmation": {"seed": 9133, "lengths": [15, 33, 129, 1025, 4096]},
+  "schedule": "one-token calls when length <= 17; otherwise [length - 17, 16, 1]",
+  "rtol": 0.03125,
+  "atol_floor": 0.0625,
+  "atol_quantum": 0.03125,
+  "relative_rms_floor": 0.015625,
+  "relative_rms_quantum": 0.00390625,
+  "margin": 1.5,
+  "maximum_qualified_relative_rms": 0.0625,
+  "relative_rms_definition": "Per token row: L2(actual - expected) / L2(expected), flattening head dimensions; zero signal requires exact equality",
+  "embedding": "exact",
+  "calibration_rule": "For each of 75 boundaries, round up margin times the largest required atol and relative RMS to their respective quanta, respecting floors; reject any relative RMS budget above the fixed maximum",
+  "confirmation_rule": "Freeze all budgets before confirmation; every element must satisfy atol + rtol * abs(expected), every row must satisfy its relative RMS budget, and embeddings must be exact; any failure stops dependent acceptance",
+  "candidate_outputs_observed": false,
+  "reserved_outputs_observed": false
+}

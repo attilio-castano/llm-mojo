@@ -76,9 +76,19 @@ retain a compact model study only when real execution produces evidence.
 - Two new native primitive tests pass on M4 Pro / Metal: repeated-ID embedding
   gather with copy guards, and exact BF16 binary I/O (including signed zero and
   subnormal bits). Model and generation call graphs compile.
-- Tiny synthetic upstream capture self-test passes 225 boundaries. Full pinned
-  checkpoint qualification has not run; model comparisons, greedy acceptance,
+- Tiny synthetic upstream capture self-test passes 225 boundaries. Initial
+  pinned-checkpoint schedule qualification failed; model comparisons, greedy acceptance,
   reserved acceptance, performance measurements and promotion remain pending.
-- The full checkpoint transfer is ongoing. Direct transfers were slow; bounded
-  ranges are being downloaded with exact Content-Range checks, followed by the
-  mandatory complete-file SHA-256 before publication/use.
+- The full checkpoint SHA-256 matches the pinned artifact. Preparation completed
+  with 196 BF16 tensors. Redundant download fragments remain outside Git.
+- Reference-only diagnosis identified SDPA execution shape as the source of the
+  observed full-versus-cached divergence on the 17-token diagnostic: rowwise
+  linear/norm execution did not change it; rowwise SDPA removed it. This is an
+  ablation result, not authorization to change the reference arithmetic.
+- Before any Mojo model comparison, a bounded reference calibration is declared
+  in `tests/fixtures/model_calibration.json`. It derives per-boundary pointwise
+  and per-token relative-RMS budgets from five development lengths, with a
+  fixed 1.5 safety margin and a 6.25% relative-RMS ceiling. Five independent
+  lengths/seed combinations then confirm frozen budgets. Failed initial
+  thresholds remain in the contract and evidence; failure of this bounded
+  calibration/confirmation stops dependent acceptance.
