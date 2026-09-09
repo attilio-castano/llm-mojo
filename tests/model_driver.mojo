@@ -2,6 +2,7 @@
 from std.sys import argv
 from max.gpu.host import DeviceContext
 from llm_mojo.model import QwenModel
+from model_operation_support import capture_operations
 
 
 def integers(text: String) raises -> List[Int]:
@@ -13,6 +14,10 @@ def integers(text: String) raises -> List[Int]:
 
 def main() raises:
     var args = argv()
+    if len(args) == 5 and args[1] == "--operations":
+        var ctx = DeviceContext()
+        capture_operations(ctx,args[2],args[3],args[4])
+        return
     if len(args) != 6:
         raise Error("model_driver prepared-dir comma-token-ids schedule configurations capture-root")
     var ids = integers(args[2])

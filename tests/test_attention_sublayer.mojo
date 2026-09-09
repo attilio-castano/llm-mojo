@@ -317,7 +317,7 @@ def test_partitioned_prefill_rejects_missing_storage_before_enqueue() raises:
     assert_equal(cache.length, 0)
     with assert_raises(contains="unknown integrated GQA mapping"):
         _ = enqueue_attention_sublayer_integrated(
-            ctx, weights, cache, work, TileTensor(input, row_major(17, 896)), 5,
+            ctx, weights, cache, work, TileTensor(input, row_major(17, 896)), 6,
         )
     var after = snapshot(cache.key, 65 * 128)
     for i in range(len(before)):

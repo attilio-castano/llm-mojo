@@ -29,7 +29,7 @@ def build(binary):
     if source['repository']['dirty']:
         raise ValueError('model numerical build requires clean source')
     binary.parent.mkdir(parents=True,exist_ok=True)
-    command=[environment_tool('mojo'),'build','-I','src','tests/model_driver.mojo','-o',str(binary)]
+    command=[environment_tool('mojo'),'build','-I','src','-I','tests','tests/model_driver.mojo','-o',str(binary)]
     subprocess.run(command,cwd=repository_root(),env=environment(),check=True)
     if source_identity()!=source:
         raise ValueError('source changed during model compilation')
@@ -181,6 +181,70 @@ def evaluate_consistency(binary, reference, output, length, prepared=None):
         raise ValueError('consistent full-model accuracy gates failed')
 
 
+def evaluate_operations(binary, reference, output, prepared=None):
+    """Isolate all layer operations on identical, actually observed HF inputs."""
+    import importlib.util
+    binary, reference, output = (Path(p).resolve() for p in (binary, reference, output))
+    receipt = verify_build(binary)
+    prepared, _ = verify_prepared(prepared)
+    root = repository_root()
+    manifest = json.loads((reference/'manifest.json').read_text())
+    declaration = json.loads((root/'tests/fixtures/model_consistency.json').read_text())
+    if (manifest.get('kind') != 'model_identical_operand_reference'
+            or manifest['case'] != declaration['development_cases'][0]
+            or manifest['observer_bitwise_equal'] is not True
+            or manifest['reserved_outputs_observed'] is not False
+            or manifest['source_sha256'] != sha(root/'tests/fixtures/model_reference_diagnosis.py')
+            or manifest['canonical_source_sha256'] != sha(root/'tests/fixtures/model_attention_diagnosis.py')
+            or manifest['reference']['source_sha256'] != sha(root/'tests/fixtures/model_reference.py')
+            or manifest['contract_sha256'] != sha(root/'tests/fixtures/model_consistency.json')):
+        raise ValueError('operation reference identity or scope mismatch')
+    stages = ('N_att','Q_raw','K_raw','V_raw','O','B_att','Z','N_mlp','G','U','A','S','B_mlp','Y')
+    required = {f'layer_{i}_{s}' for i in range(24) for s in ('X', *stages)}
+    if set(manifest['arrays']) != required:
+        raise ValueError('incomplete operation reference census')
+    for name, record in manifest['arrays'].items():
+        if sha(reference/(name+'.bin')) != record['sha256']:
+            raise ValueError('operation input bytes changed')
+    output.mkdir(parents=True, exist_ok=False)
+    command = [str(binary), '--operations', str(prepared), str(reference), str(output)]
+    with (output/'execution.log').open('w') as log:
+        subprocess.run(command, cwd=root, env=environment(), stdout=log, stderr=subprocess.STDOUT, check=True)
+    log = (output/'execution.log').read_text()
+    if ('operation device Apple M4 Pro backend metal' not in log
+            or any(f'completed identical-operand layer {i}\n' not in log for i in range(24))):
+        raise ValueError('incomplete native operation execution')
+    spec = importlib.util.spec_from_file_location('model_operation_numerics',root/'tests/fixtures/mlp/numerics.py')
+    numerics = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(numerics)
+    records = []
+    for i in range(24):
+        for stage in stages:
+            name = f'layer_{i}_{stage}'
+            shape = manifest['arrays'][name]['shape']
+            actual, expected = bf16(output/(name+'.bin'),shape), bf16(reference/(name+'.bin'),shape)
+            # These are the existing decoder identical-operand operation gates.
+            gate = dict(atol=2**-7,rtol=2**-7)
+            if stage == 'B_att':
+                gate = dict(atol=2**-5,rtol=2**-5)
+            elif stage in ('Z','S','Y'):
+                gate = dict(atol=0.,rtol=0.,exact_bits=True)
+            elif stage == 'A':
+                gate = dict(atol=2**-133,rtol=2**-7,max_bf16_steps=1,exact_reference_zero=True)
+            records.append(dict(layer=i,stage=stage,gate=gate,**numerics.differences(actual,expected,gate)))
+    verify_build(binary)
+    for name, record in manifest['arrays'].items():
+        if sha(reference/(name+'.bin')) != record['sha256']:
+            raise ValueError('operation input changed during execution')
+    result = dict(kind='model_identical_operand_evaluation',build=receipt,command=command,
+        reference_sha256=sha(reference/'manifest.json'),checks=records,
+        reserved_outputs_observed=False,passed=all(r['failed']==0 for r in records))
+    write(output/'evaluation.json',result)
+    print('Identical-operand checks',len(records),'failed',sum(r['failed'] for r in records),flush=True)
+    if not result['passed']:
+        raise ValueError('identical-operand accuracy failure')
+
+
 def evaluate(binary,reference,output,configurations,prepared=None):
     binary=Path(binary).resolve();reference=Path(reference).resolve();output=Path(output).resolve()
     receipt=verify_build(binary)
@@ -274,9 +338,13 @@ def main():
     c=sub.add_parser('consistency');c.add_argument('--binary',required=True,type=Path)
     c.add_argument('--reference',required=True,type=Path);c.add_argument('--output',required=True,type=Path)
     c.add_argument('--length',required=True,type=int);c.add_argument('--prepared',type=Path)
+    o=sub.add_parser('operations');o.add_argument('--binary',required=True,type=Path)
+    o.add_argument('--reference',required=True,type=Path);o.add_argument('--output',required=True,type=Path)
+    o.add_argument('--prepared',type=Path)
     args=parser.parse_args()
     if args.command=='build':build(args.binary)
     elif args.command=='consistency':evaluate_consistency(args.binary,args.reference,args.output,args.length,args.prepared)
+    elif args.command=='operations':evaluate_operations(args.binary,args.reference,args.output,args.prepared)
     else:evaluate(args.binary,args.reference,args.output,args.configurations,args.prepared)
 
 

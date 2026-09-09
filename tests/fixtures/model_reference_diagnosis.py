@@ -338,12 +338,82 @@ def run(model, mode, ids):
                 cached_top1=int(np.argmax(cached['logits'][-1])))
 
 
+@torch.no_grad()
+def native_operations(model, output):
+    """Observe actual HF operations on the already exposed one-token input."""
+    import subprocess
+    from model_attention_diagnosis import canonical_queries, exact_array
+    contract = Path(__file__).with_name('model_consistency.json')
+    source, contract_hash, before = reference.sha(__file__), reference.sha(contract), reference.provenance()
+    canonical_source = Path(__file__).with_name('model_attention_diagnosis.py')
+    canonical_hash = reference.sha(canonical_source)
+    spec = json.loads(contract.read_text())['development_cases'][0]
+    if spec['length'] != 1:
+        raise ValueError('operation diagnosis is scoped to the exposed one-token case')
+    ids = np.random.default_rng(spec['seed']).integers(0, 151643, size=1).tolist()
+    captured, handles = {}, []
+    def retain(name, value):
+        if name in captured or value.dtype != torch.bfloat16:
+            raise ValueError('duplicate or non-BF16 operation boundary')
+        captured[name] = value.detach().float().numpy().reshape(1, -1).copy()
+    def hook(module, name, before=False, tuple_output=False):
+        if before:
+            handles.append(module.register_forward_pre_hook(lambda module, args: retain(name, args[0])))
+        else:
+            handles.append(module.register_forward_hook(
+                lambda module, args, result: retain(name, result[0] if tuple_output else result)))
+    with canonical_queries():
+        unobserved = reference.forward(model, ids, [1], all_logits=False)[0][2]
+        for i, layer in enumerate(model.model.layers):
+            prefix = f'layer_{i}_'
+            hook(layer.input_layernorm, prefix+'X', before=True)
+            hook(layer.input_layernorm, prefix+'N_att')
+            for short, proj in [('Q_raw','q'),('K_raw','k'),('V_raw','v')]:
+                hook(getattr(layer.self_attn, proj+'_proj'), prefix+short)
+            hook(layer.self_attn.o_proj, prefix+'O', before=True)
+            hook(layer.self_attn.o_proj, prefix+'B_att')
+            hook(layer.post_attention_layernorm, prefix+'Z', before=True)
+            hook(layer.post_attention_layernorm, prefix+'N_mlp')
+            hook(layer.mlp.gate_proj, prefix+'G')
+            hook(layer.mlp.up_proj, prefix+'U')
+            hook(layer.mlp.act_fn, prefix+'A')
+            hook(layer.mlp.down_proj, prefix+'S', before=True)
+            hook(layer.mlp.down_proj, prefix+'B_mlp')
+            hook(layer, prefix+'Y', tuple_output=True)
+        try:
+            observed = reference.forward(model, ids, [1], all_logits=False)[0][2]
+        finally:
+            for handle in handles:
+                handle.remove()
+    if len(captured) != 24*15 or not all(exact_array(observed[n], unobserved[n]) for n in observed):
+        raise ValueError('operation observation changed model outputs or is incomplete')
+    output.mkdir(parents=True, exist_ok=False)
+    arrays = {}
+    for name, value in captured.items():
+        if not np.isfinite(value).all():
+            raise ValueError('nonfinite operation fixture')
+        path = output/(name+'.bin')
+        ((value.view(np.uint32) >> 16).astype('<u2')).tofile(path)
+        arrays[name] = dict(shape=list(value.shape), sha256=reference.sha(path))
+    if (source != reference.sha(__file__) or contract_hash != reference.sha(contract)
+            or canonical_hash != reference.sha(canonical_source) or before != reference.provenance()):
+        raise ValueError('operation reference source changed during execution')
+    report = dict(kind='model_identical_operand_reference', source_sha256=source,
+        source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=reference.ROOT,text=True).strip(),
+        reference=before, contract_sha256=contract_hash, canonical_source_sha256=canonical_hash, case=spec, ids=ids,
+        observer_bitwise_equal=True, arrays=arrays, reserved_outputs_observed=False,
+        scope='Actual upstream intermediate operands for the already exposed native one-token failure; no native outputs read by this generator.')
+    (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n')
+    print('Observed actual HF operations:',len(arrays),'boundaries; model observation unchanged',flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path)
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--detail', action='store_true', help='trace rounding, propagation and prediction impact')
     modes.add_argument('--backend', action='store_true', help='localize ATen operations and test fixed query execution')
+    modes.add_argument('--native-operations', action='store_true', help='export identical upstream operands for the exposed one-token native case')
     parser.add_argument('--download-sources', action='store_true', help='download hash-pinned upstream sources for --backend')
     parser.add_argument('--self-test', action='store_true')
     args = parser.parse_args()
@@ -361,6 +431,9 @@ def main():
     provenance = reference.provenance()
     ids = np.random.default_rng(9120).integers(0, 151643, size=17).tolist()
     model = reference.load_model()
+    if args.native_operations:
+        native_operations(model,args.output)
+        return
     if args.backend:
         import model_attention_diagnosis as backend
         result = backend.run(model, traced_forward, difference, args.download_sources)
