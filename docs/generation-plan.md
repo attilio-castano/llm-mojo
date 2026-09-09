@@ -142,3 +142,15 @@ mode is checked separately from a diagnostic that fixes SDPA query/prefix shape
 and layout. The latter is tested through the actual model at lengths 15, 17,
 65, 129 and 257. This is bounded reference diagnosis, with unchanged thresholds,
 reserved inputs and dtypes; no new numerical policy is automatically promoted.
+
+This follow-up is complete. Actual ATen observation places the first difference
+in QK multiplication with identical scaled inputs. Duplicate-query probes show
+both a CPU dispatch threshold effect and additional dimension/row-position
+effects within the larger path. Fixed-score softmax has smaller extent effects;
+fixed-probability PV is exact in these probes. Deterministic mode changes none
+of the observed operations. The canonical contiguous-query route passes all
+36,225 byte comparisons over five lengths, with exact full-call repeats. For
+the two localized inputs, its cached boundary hashes also match the original
+cached route. The report and reproducible evidence are in
+`studies/model_generation/backend.md`. This establishes a diagnostic control,
+not a new acceptance policy or native-model result.

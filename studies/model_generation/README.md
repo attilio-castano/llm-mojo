@@ -12,6 +12,12 @@ greedy trajectories agree with full recomputation. That diagnostic evidence
 informs a review of the acceptance criteria; the original failed gate and its
 records remain unchanged.
 
+The deeper [HF/PyTorch investigation](backend.md) localizes the first difference
+to QK matrix multiplication and demonstrates a stable diagnostic invocation:
+one contiguous query and its causal prefix yield 36,225 byte-equal model
+boundary comparisons across five declared lengths. This does not replace the
+original reference policy or its failed gate.
+
 ## Question and contract
 
 Can a full-prefill reference and a cached reference agree within a qualified

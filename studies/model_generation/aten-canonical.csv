@@ -1,0 +1,6 @@
+length,seed,checks,exact_checks,repeat_bitwise_equal,schedule_bitwise_equal,original_cached_comparison
+15,9148,1125,1125,True,True,True
+17,9120,1275,1275,True,True,True
+65,9168,4875,4875,True,True,
+129,9262,9675,9675,True,True,
+257,9360,19275,19275,True,True,

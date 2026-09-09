@@ -19,6 +19,13 @@ bounded greedy sequences on three declared prompts. These results motivate
 separating corresponding-mode comparisons from cross-schedule diagnostics;
 they do not establish Mojo model acceptance or change the frozen thresholds.
 
+The deeper [HF/PyTorch study](../studies/model_generation/backend.md) locates the
+first difference in QK matrix multiplication. Normalizing SDPA query shape and
+causal-prefix layout yields 36,225 byte-equal full/cached comparisons at five
+declared lengths, while deterministic mode alone leaves the original differences
+unchanged. This stable route is available in diagnostic tooling; the reference
+acceptance policy remains unchanged.
+
 The approved scope and stop gates are in [generation-plan.md](generation-plan.md).
 The declaration is [model_contract.json](../tests/fixtures/model_contract.json).
 The numerical thresholds are initial reference-only qualification criteria;

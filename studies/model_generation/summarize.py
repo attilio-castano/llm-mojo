@@ -1,4 +1,4 @@
-"""Verify retained reference evidence and regenerate the two study tables.
+"""Verify retained reference evidence and regenerate study tables and figures.
 
 Uses only the Python standard library; never executes a model.
 """
@@ -119,9 +119,117 @@ def rounding(plot=False):
         plt.close(figure)
 
 
+def aten(plot=False):
+    manifest = json.loads((ROOT / 'aten-study.json').read_text())
+    encoded = (ROOT / 'aten-detail.json.gz').read_bytes()
+    record = manifest['files']['aten-detail.json.gz']
+    raw = gzip.decompress(encoded)
+    if (sha(encoded) != record['sha256'] or sha(raw) != record['uncompressed_sha256']
+            or len(raw) != record['uncompressed_bytes']):
+        raise ValueError('ATen evidence checksum mismatch')
+    result = json.loads(raw)
+    backend = result['backend']
+    declaration = backend['declaration']
+    if (result['source_sha256'] != manifest['source_sha256']
+            or backend['source_sha256'] != manifest['helper_source_sha256']
+            or backend['declaration_sha256'] != manifest['declaration_sha256']
+            or backend['environment']['torch_git_version'] != declaration['torch_git_version']
+            or result['candidate_outputs_observed'] is not False
+            or result['reserved_outputs_observed'] is not False):
+        raise ValueError('ATen source or scope mismatch')
+    for field, declared in [('localized', 'trace_cases'), ('canonical', 'canonical_cases')]:
+        if [dict(length=c['length'], seed=c['seed']) for c in backend[field]] != declaration[declared]:
+            raise ValueError('ATen declared case census mismatch')
+    stages, isolation, dispatch, canonical = [], [], [], []
+    for case in backend['localized']:
+        if (case['observer_and_repeat_bitwise_equal'] is not True
+                or [r['position'] for r in case['records']] != list(range(case['length']))):
+            raise ValueError('ATen observation or position census mismatch')
+        for row in case['records']:
+            if [s['stage'] for s in row['stages']] != declaration['operations']:
+                raise ValueError('ATen operation census mismatch')
+            for stage in row['stages']:
+                stages.append(dict(length=case['length'], position=row['position'], **stage))
+            isolation.append(dict(length=case['length'], position=row['position'],
+                full_deterministic_equal=case['full_deterministic_equal'],
+                cached_deterministic_equal=row['deterministic_equal'],
+                fixed_scores_softmax_max_abs=row['fixed_scores_softmax']['max_abs'],
+                fixed_probabilities_pv_max_abs=row['fixed_probabilities_pv']['max_abs']))
+        expected = [(p, m) for p in declaration['threshold_positions'] for m in declaration['duplicate_query_rows']]
+        if [(r['position'], r['query_rows']) for r in case['threshold_probes']] != expected:
+            raise ValueError('ATen dispatch probe census mismatch')
+        for row in case['threshold_probes']:
+            duplicates = row['duplicate_row_comparisons']
+            if [r['row'] for r in duplicates] != list(range(row['query_rows'])):
+                raise ValueError('ATen duplicate query census mismatch')
+            dispatch.append(dict(length=case['length'], position=row['position'], keys=row['keys'],
+                query_rows=row['query_rows'], contraction=row['contraction'], work=row['work'],
+                source_predicted_path=row['source_predicted_path'],
+                forced_per_head_mm_equal=row['forced_per_head_mm_equal'],
+                first_row_max_abs=row['versus_one_row']['max_abs'],
+                all_rows_max_abs=max(r['max_abs'] for r in duplicates),
+                different_rows=json.dumps([r['row'] for r in duplicates if r['different'] > 0])))
+    boundaries = ({'hidden_' + str(i) for i in range(25)} | {'final_norm', 'logits'}
+                  | {'cache_' + kind + '_' + str(i) for kind in ('key', 'value') for i in range(24)})
+    for case in backend['canonical']:
+        observed = {(r['position'], r['stage']) for r in case['checks']}
+        expected = {(p, name) for p in range(case['length']) for name in boundaries}
+        if len(case['checks']) != len(expected) or observed != expected:
+            raise ValueError('canonical boundary census mismatch')
+        exact = all(r['exact'] for r in case['checks'])
+        if exact != case['schedule_bitwise_equal']:
+            raise ValueError('canonical equality summary mismatch')
+        original = next((c for c in backend['localized'] if (c['length'], c['seed']) ==
+                         (case['length'], case['seed'])), None)
+        cached_equal = (case['cached_boundary_sha256'] == original['original_cached_boundary_sha256']
+                        if original else None)
+        if cached_equal != case['original_cached_comparison']:
+            raise ValueError('canonical cached digest comparison mismatch')
+        canonical.append(dict(length=case['length'], seed=case['seed'], checks=len(case['checks']),
+            exact_checks=sum(r['exact'] for r in case['checks']),
+            repeat_bitwise_equal=case['repeat_bitwise_equal'], schedule_bitwise_equal=exact,
+            original_cached_comparison=cached_equal))
+    table('aten-stages.csv', stages)
+    table('aten-isolation.csv', isolation)
+    table('aten-dispatch.csv', dispatch)
+    table('aten-canonical.csv', canonical)
+    print('Verified ATen evidence; regenerated four tables:', sum(r['exact_checks'] for r in canonical),
+          'exact canonical comparisons.')
+    if plot:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        import numpy as np
+        figure, axes = plt.subplots(1, 2, figsize=(11, 4.5), layout='constrained')
+        rows = [r for r in dispatch if r['length'] == 15 and r['keys'] == 6]
+        axes[0].plot([r['query_rows'] for r in rows], [1e6*r['all_rows_max_abs'] for r in rows],
+                     marker='o', color='#2166ac')
+        axes[0].axvline(1.5, color='#b35806', linestyle='--', label='Small bmm → per-head mm')
+        axes[0].set(xlabel='Identical duplicated query rows (M)', ylabel='Largest score difference × 10⁶',
+                    title='Six keys: changing M changes rounding\nWork M × 64 × 6 crosses 400 at M = 2',
+                    xticks=range(1, 9), ylim=(0, 105))
+        axes[0].legend(frameon=False, fontsize=9)
+        axes[0].grid(alpha=.2)
+        matrix = np.full((8, 8), np.nan)
+        case = backend['localized'][0]
+        for row in case['threshold_probes']:
+            if row['keys'] == 2:
+                for value in row['duplicate_row_comparisons']:
+                    matrix[row['query_rows'] - 1, value['row']] = 1e6*value['max_abs']
+        cmap = plt.get_cmap('YlOrRd').copy()
+        cmap.set_bad('#dddddd')
+        shown = axes[1].imshow(matrix, cmap=cmap, vmin=0, vmax=100, aspect='auto')
+        axes[1].set(xlabel='Output row position (zero-based)', ylabel='Identical duplicated query rows (M)',
+                    title='Two keys: row position also matters\nEach cell compared with the one-query result',
+                    xticks=range(8), yticks=range(8), yticklabels=range(1, 9))
+        figure.colorbar(shown, ax=axes[1], label='Largest score difference × 10⁶')
+        figure.savefig(ROOT / 'aten-dispatch.png', dpi=180)
+        plt.close(figure)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--plot', action='store_true', help='also regenerate the rounding figure with matplotlib')
+    parser.add_argument('--plot', action='store_true', help='also regenerate study figures with matplotlib')
     args = parser.parse_args()
     manifest = json.loads((ROOT / 'reference-study.json').read_text())
     data = {}
@@ -172,6 +280,8 @@ def main():
     print('Verified 5 evidence files; regenerated summary.csv and diagnosis-summary.csv.')
     if (ROOT / 'rounding-study.json').exists():
         rounding(args.plot)
+    if (ROOT / 'aten-study.json').exists():
+        aten(args.plot)
 
 
 if __name__ == '__main__':

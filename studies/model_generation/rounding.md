@@ -7,6 +7,10 @@ about the selected CPU precision policy, not every Qwen backend or every prompt.
 The earlier qualification still fails its frozen intermediate-value criteria.
 No threshold, accepted component arithmetic or Mojo implementation was changed.
 
+The subsequent [implementation-level investigation](backend.md) identifies the
+first differing PyTorch operation, probes matrix dispatch and row position,
+and tests a stable query-by-query invocation through the actual Qwen model.
+
 ## What was held fixed
 
 The actual pinned Transformers `Qwen2ForCausalLM` and checkpoint execute on
@@ -154,5 +158,6 @@ uv run --locked --with matplotlib==3.10.8 python studies/model_generation/summar
 Use a fresh output filename for execution; the runner refuses to replace
 evidence. The final two commands verify retained hashes and regenerate five
 rounding tables, the earlier qualification tables, and optionally the figure
-without executing a model. Three diagnostic self-tests cover BF16 midpoint
-crossing, prediction margins/ties, and invalid numerical inputs.
+without executing a model. The original three diagnostic self-tests cover BF16
+midpoint crossing, prediction margins/ties, and invalid numerical inputs; two
+additional backend tests now cover observation and canonical causal behavior.
