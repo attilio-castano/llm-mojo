@@ -211,7 +211,7 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('command', choices=['build', 'run', 'select-decoder', 'confirm-decoder'])
+    p.add_argument('command', choices=['build', 'run', 'select-decoder', 'confirm-decoder', 'build-tokenizer', 'run-tokenizer', 'report-tokenizer'])
     p.add_argument('--build-dir', type=Path, required=True)
     p.add_argument('--output', type=Path)
     p.add_argument('--parallelism-screen', type=Path)
@@ -225,7 +225,18 @@ def main():
                                              'attention_sublayer_projections','attention_sublayer_integrated',
                                              'attention_sublayer_parallelism')])
     args = p.parse_args()
-    if args.command == 'build':
+    if args.command.endswith('-tokenizer'):
+        from . import tokenizer_contract
+        if args.command == 'build-tokenizer':
+            tokenizer_contract.build(args.build_dir.resolve())
+        elif args.output is None:
+            p.error('tokenizer run/report requires --output')
+        elif args.command == 'run-tokenizer':
+            tokenizer_contract.run(args.build_dir.resolve(), args.output.resolve())
+        else:
+            tokenizer_contract.report(args.output.resolve())
+            tokenizer_contract.plot(args.output.resolve())
+    elif args.command == 'build':
         build(args.build_dir.resolve())
     elif args.command == 'select-decoder':
         from .decoder_layer_contract import screen_decision

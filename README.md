@@ -20,6 +20,11 @@ composes both sublayers and confirms workload-specific kernel choices for
 full prefill, cached prefill and decode. End-to-end model inference remains
 future work.
 
+The [CPU text tokenizer](docs/tokenizer.md) implements Qwen normalization, splitting,
+heap-based BPE, and streaming decoding in Mojo. Its command initializes the pinned
+artifact automatically; `uv run --locked llm-mojo-tokenizer encode 'Hello world'`
+encodes text without loading model weights.
+
 ## Explore the studies
 
 Each study connects an implementation choice to measurements and explains the
@@ -90,6 +95,7 @@ Python and resolves the locked Mojo and MAX toolchain.
 ```bash
 uv sync --locked
 uv run mojo --version
+uv run --locked llm-mojo-tokenizer setup
 uv run --locked llm-mojo-validate
 ```
 
