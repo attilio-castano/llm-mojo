@@ -68,3 +68,17 @@ retain a compact model study only when real execution produces evidence.
 - The temporary tokenizer merge was aborted in favor of the identical merged
   tree. Its validation was interrupted for the update; baseline validation
   restarts on the merged head.
+
+### Development checkpoint
+
+- Existing complete validation passed on the updated base, including all Metal
+  benchmark smoke routes. The expanded Python suite passes 116 tests.
+- Two new native primitive tests pass on M4 Pro / Metal: repeated-ID embedding
+  gather with copy guards, and exact BF16 binary I/O (including signed zero and
+  subnormal bits). Model and generation call graphs compile.
+- Tiny synthetic upstream capture self-test passes 225 boundaries. Full pinned
+  checkpoint qualification has not run; model comparisons, greedy acceptance,
+  reserved acceptance, performance measurements and promotion remain pending.
+- The full checkpoint transfer is ongoing. Direct transfers were slow; bounded
+  ranges are being downloaded with exact Content-Range checks, followed by the
+  mandatory complete-file SHA-256 before publication/use.
