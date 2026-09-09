@@ -1,12 +1,18 @@
 """Native CPU timings, excluding setup/oracles and including call allocations."""
 from std.sys import argv
-from std.time import perf_counter_ns
+from std.ffi import external_call
 from llm_mojo.tokenizer import (
     Tokenizer,
     TokenizerWorkspace,
     TokenizerDecoder,
     TableReader,
 )
+
+
+def cpu_time_ns() -> UInt64:
+    # Darwin SDK: CLOCK_UPTIME_RAW=8, clockid_t is unsigned int. Mojo's
+    # perf_counter_ns rounds to microseconds on this host, losing short calls.
+    return external_call["clock_gettime_nsec_np", UInt64](UInt32(8))
 
 
 def read_bytes(mut reader: TableReader) raises -> List[UInt8]:
@@ -107,6 +113,7 @@ def main() raises:
         if decoded[i] != expected_bytes[i]:
             raise Error("benchmark decoded bytes")
     print("api: cpu")
+    print("timer: clock_gettime_nsec_np CLOCK_UPTIME_RAW")
     print("operation: tokenizer")
     print("case:", index, "mode:", mode)
     print("correctness: passed")
@@ -125,7 +132,7 @@ def main() raises:
         var variant = candidate if is_candidate else 0
         var label = "candidate" if is_candidate else "control"
         for sample in range(warmup + reps):
-            var start = perf_counter_ns()
+            var start = cpu_time_ns()
             var value = perform(
                 mode,
                 variant,
@@ -138,7 +145,7 @@ def main() raises:
                 result_ids,
                 result_bytes,
             )
-            var elapsed = Float64(perf_counter_ns() - start) / 1000.0
+            var elapsed = Float64(cpu_time_ns() - start) / 1000.0
             sink += value
             # Consume every output after the timing boundary. The compiler must
             # preserve the full output, not only its length or final element.

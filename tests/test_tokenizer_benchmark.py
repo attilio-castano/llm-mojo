@@ -17,6 +17,7 @@ class TokenizerBenchmarkTests(unittest.TestCase):
     def output(self, first=False):
         lines = [
             "api: cpu",
+            "timer: clock_gettime_nsec_np CLOCK_UPTIME_RAW",
             "operation: tokenizer",
             "case: 1 mode: encode",
             "correctness: passed",
@@ -43,6 +44,8 @@ class TokenizerBenchmarkTests(unittest.TestCase):
         for output in [
             valid.replace("api: cpu", "api: metal"),
             valid.replace("12.0", "nan"),
+            valid.replace("12.0", "0.0"),
+            valid.replace("timer: clock_gettime_nsec_np CLOCK_UPTIME_RAW", ""),
             valid.replace("BENCHMARK_COMPLETE", ""),
             valid.replace("SAMPLE candidate 1", "SAMPLE candidate 0"),
         ]:

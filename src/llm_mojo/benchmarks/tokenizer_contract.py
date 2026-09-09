@@ -55,6 +55,8 @@ def sources():
 
 
 def environment():
+    if platform.system() != "Darwin":
+        raise ValueError("the CPU tokenizer measurement harness requires Darwin")
     return dict(
         backend="cpu",
         os=platform.platform(),
@@ -161,6 +163,7 @@ def parse_output(output, case, mode, candidate, first):
     lines = output.splitlines()
     required = [
         "api: cpu",
+        "timer: clock_gettime_nsec_np CLOCK_UPTIME_RAW",
         "operation: tokenizer",
         f'case: {case} mode: {mode}',
         "correctness: passed",
@@ -241,6 +244,7 @@ def run(directory, output):
             repository=repo,
             build=provenance,
             runtime=dict(api="cpu", device=env["cpu"]),
+            timer="Darwin clock_gettime_nsec_np(CLOCK_UPTIME_RAW), nanoseconds",
             representation=dict(
                 input="UTF-8 UInt8",
                 token_ids="Mojo Int on recorded 64-bit host",

@@ -147,6 +147,12 @@ results), and local milestone commits. Pushing or opening a PR is separate.
 
 ### Benchmark timing details
 
+The Darwin CPU harness calls `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` directly
+for the timing boundary. The initial `perf_counter_ns` boundary rounded to
+microseconds on this host and produced zero-duration short decode samples;
+that incomplete attempt was rejected. The retained protocol requires positive
+durations and an explicit native timer marker, without relaxing its gates.
+
 The `load` mode measures warm-filesystem file reading, table construction,
 structural validation, and destruction of the temporary tokenizer. It excludes
 setup's source/table SHA-256 checks and is not a cold-start measurement. Reported
