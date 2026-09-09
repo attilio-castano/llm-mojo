@@ -1,0 +1,70 @@
+# Qwen forward and generation milestone
+
+Approved for autonomous local execution on 2026-09-09. Starting checkout:
+`478cdc1`, updated to merged tokenizer head `d9aaad5` before implementation;
+branch `codex/qwen-generation-engine`. Local implementation,
+integration of `codex/qwen-tokenizer`, pinned artifact downloads, fixture
+generation, sequential Metal benchmarks/profiles, documentation and local
+commits are authorized. No push or PR publication. Work inline without agents.
+
+## Scope and gates
+
+Build native Mojo batch-one BF16 Qwen2.5-0.5B-Instruct inference: verified
+prepared weights, embeddings, all 24 decoder layers, final norm, tied LM head,
+cached greedy generation and streaming text decoding. Capacity is at most 4096
+prompt plus generated tokens. Python is preparation/oracle tooling only.
+Chat rendering, multi-turn sessions, sampling, quantization and batching remain
+outside this milestone; this does not close the complete multi-turn V0 contract.
+
+1. Integrate and validate the existing native tokenizer.
+2. Qualify an independently executed pinned full-model reference; freeze
+   intermediate/logit gates, development fixtures, reserved inputs, and greedy
+   semantics before comparing candidate outputs. Preserve existing component
+   arithmetic. No tolerance can be fitted to Mojo results.
+3. Build fixed-ID-0 model forward with explicit persistent weights and per-layer
+   caches, shared nonaliasing scratch and ordered submission. Validate every
+   block boundary and final logits. Preflight all layers before dispatch.
+4. Add baseline/auto/explicit configuration policies, full and explicit chunked
+   prefill, cached one-token decode and streaming output. Validate mixed routes,
+   cache preservation, resets, failure invalidation and capacity accounting.
+5. Measure actual model loading, prefill, cached suffix and growing decode.
+   Existing layer lookup entries are candidates until model-level confirmation.
+   Unknown cells use ID 0. No guessed crossover or claimed chunking speedup.
+6. At most three further bottleneck studies, each with at most two challengers
+   and one independent confirmation. Freeze mechanism, comparison matrix and
+   numerical acceptance before execution. Use the paired four-block procedure
+   in experiments.md and retain all valid observations. No winner is required.
+7. Final reserved acceptance launches the exact receipted executable; retain
+   compact results, raw samples and reproduction commands. Run documented
+   validation and commit validated changes throughout.
+
+## Ownership and evidence
+
+Weights and KV caches persist per layer. Shared temporary storage must preserve
+the decoder's input/output nonaliasing rules and all asynchronous consumers.
+Normal next-token inference needs the final row's logits, while diagnostic
+execution captures selected earlier rows and every layer boundary. Device
+failure invalidates the execution; no partial cache rollback is promised.
+
+Cache length counts consumed/enqueued tokens. A newly selected terminal token
+can be in output history without being cached. Define ties, nonfinite logits,
+empty prompts, stop IDs and output limits explicitly before implementation.
+Greedy reference equality applies to adequate-margin cases; logits remain
+authoritative for numerically ambiguous argmax.
+
+Qualify numerical thresholds using reference-only evidence before candidate
+comparison. Bind artifacts, declarations, source and launched binaries in
+acceptance records. Reserved failures stop dependent promotion; do not widen
+tolerances, tune on the failure or silently spend additional reserved cases.
+Unavailable required hardware or necessary numerical-contract changes require
+returning with evidence. Routine development failures are fixed locally.
+
+Arrays, weights, binaries and traces stay outside Git. Extend existing tooling;
+retain a compact model study only when real execution produces evidence.
+
+## Progress
+
+- Branch attached and fast-forwarded to `d9aaad5` (tokenizer PR #18).
+- The temporary tokenizer merge was aborted in favor of the identical merged
+  tree. Its validation was interrupted for the update; baseline validation
+  restarts on the merged head.
