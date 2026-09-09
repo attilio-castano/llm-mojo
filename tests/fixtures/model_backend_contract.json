@@ -1,0 +1,84 @@
+{
+  "version": "qwen-aten-localization-v1",
+  "torch_git_version": "e4ee3be4063b7c430974252fdf7db42273388d86",
+  "source_files": {
+    "attention.cpp": {
+      "url": "https://raw.githubusercontent.com/pytorch/pytorch/e4ee3be4063b7c430974252fdf7db42273388d86/aten/src/ATen/native/transformers/attention.cpp",
+      "sha256": "9691a611d3459e0f5410125164550bb8e8ab1b8c8fbe7e94d84f8f89e3ad9cc9",
+      "bytes": 35101
+    },
+    "LinearAlgebra.cpp": {
+      "url": "https://raw.githubusercontent.com/pytorch/pytorch/e4ee3be4063b7c430974252fdf7db42273388d86/aten/src/ATen/native/LinearAlgebra.cpp",
+      "sha256": "e9c8caf78de8a6d5a9bf0ff35e260ba1ed1a0370b37c0fd92fd401bf271d7256",
+      "bytes": 137732
+    },
+    "SoftMaxKernel.cpp": {
+      "url": "https://raw.githubusercontent.com/pytorch/pytorch/e4ee3be4063b7c430974252fdf7db42273388d86/aten/src/ATen/native/cpu/SoftMaxKernel.cpp",
+      "sha256": "ea0f6b935946681737fbfb5b336b98c7adf654387d3fe94d8bd14c0e02b971c6",
+      "bytes": 55951
+    },
+    "modeling_qwen2.py": {
+      "url": "https://raw.githubusercontent.com/huggingface/transformers/v4.43.1/src/transformers/models/qwen2/modeling_qwen2.py",
+      "sha256": "06a9e704e9ec103c47c44fc974519dc93480aa325b9ad7d047239200bcf6fa69",
+      "bytes": 62323
+    }
+  },
+  "trace_cases": [
+    {
+      "length": 15,
+      "seed": 9148
+    },
+    {
+      "length": 17,
+      "seed": 9120
+    }
+  ],
+  "canonical_cases": [
+    {
+      "length": 15,
+      "seed": 9148
+    },
+    {
+      "length": 17,
+      "seed": 9120
+    },
+    {
+      "length": 65,
+      "seed": 9168
+    },
+    {
+      "length": 129,
+      "seed": 9262
+    },
+    {
+      "length": 257,
+      "seed": 9360
+    }
+  ],
+  "threshold_positions": [
+    1,
+    5,
+    6
+  ],
+  "duplicate_query_rows": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "operations": [
+    "scaled_query",
+    "scaled_key_transpose",
+    "scores",
+    "probabilities",
+    "weighted_values"
+  ],
+  "observer": "TorchDispatchMode pass-through; require bitwise equality with unobserved math SDPA, repeated execution, and the captured upstream output.",
+  "isolation": "Compare actual intermediate outputs. Hold score values fixed while varying softmax extent; hold probabilities fixed while varying weighted-value multiplication shape. Probe bmm with identical duplicated query rows across the source threshold.",
+  "stabilization": "Compare deterministic-algorithms mode with the existing math path on traced inputs. Separately execute the actual full Qwen model with SDPA normalized to one contiguous query and its contiguous causal prefix; compare all 75 boundaries and logits against tokenwise execution.",
+  "scope": "Reference diagnosis only. No thresholds or arithmetic dtypes changed, no alternative Python model oracle, no native model execution, no reserved inputs, no performance promotion."
+}

@@ -279,6 +279,8 @@ def self_test():
     result = unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(DiagnosticTests))
     if not result.wasSuccessful():
         raise ValueError('diagnostic self-test failed')
+    import model_attention_diagnosis as backend
+    backend.self_test()
 
 
 def run(model, mode, ids):
@@ -339,7 +341,10 @@ def run(model, mode, ids):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path)
-    parser.add_argument('--detail', action='store_true', help='trace rounding, propagation and prediction impact')
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument('--detail', action='store_true', help='trace rounding, propagation and prediction impact')
+    modes.add_argument('--backend', action='store_true', help='localize ATen operations and test fixed query execution')
+    parser.add_argument('--download-sources', action='store_true', help='download hash-pinned upstream sources for --backend')
     parser.add_argument('--self-test', action='store_true')
     args = parser.parse_args()
     if args.self_test:
@@ -347,6 +352,8 @@ def main():
         return
     if not args.output:
         parser.error('--output is required')
+    if args.download_sources and not args.backend:
+        parser.error('--download-sources requires --backend')
     if args.output.exists():
         raise ValueError('refusing to replace diagnosis evidence')
     reference.verify_assets()
@@ -354,6 +361,16 @@ def main():
     provenance = reference.provenance()
     ids = np.random.default_rng(9120).integers(0, 151643, size=17).tolist()
     model = reference.load_model()
+    if args.backend:
+        import model_attention_diagnosis as backend
+        result = backend.run(model, traced_forward, difference, args.download_sources)
+        if source != reference.sha(__file__) or provenance != reference.provenance():
+            raise ValueError('reference entrypoint changed during backend diagnosis')
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(dict(source_sha256=source, reference=provenance,
+            candidate_outputs_observed=False, reserved_outputs_observed=False,
+            backend=result), indent=2, allow_nan=False) + '\n')
+        return
     if args.detail:
         declaration_hash = reference.sha(DETAIL_CONTRACT)
         result = detail(model)

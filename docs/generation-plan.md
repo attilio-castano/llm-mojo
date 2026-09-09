@@ -130,3 +130,15 @@ through stop or the eight-token budget. The report, complete compact evidence,
 regenerated tables and figure are in `studies/model_generation/rounding.md`.
 Existing gates and reserved cases remain unchanged; revising acceptance is the
 next decision, and no native model execution or optimization followed this study.
+
+### Authorized HF/PyTorch implementation follow-up
+
+The user requested deeper localization and more reliable reference results.
+The declared ATen investigation observes actual scaled-Q/K multiplication,
+scores, softmax and weighted values beneath HF's SDPA call. Upstream source is
+matched to the installed HF file and exact PyTorch build revision. Identical
+matrix operands are probed across the CPU bmm dispatch threshold. Deterministic
+mode is checked separately from a diagnostic that fixes SDPA query/prefix shape
+and layout. The latter is tested through the actual model at lengths 15, 17,
+65, 129 and 257. This is bounded reference diagnosis, with unchanged thresholds,
+reserved inputs and dtypes; no new numerical policy is automatically promoted.
