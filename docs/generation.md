@@ -1,15 +1,22 @@
 # Qwen model composition and generation
 
-**Development candidate: full-model numerical and performance acceptance are
-not established.** The native model and generation call graphs compile. The
+**Development candidate: acceptance is blocked by independent reference
+schedule confirmation.** The native model and generation call graphs compile. The
 embedding/copy and BF16 binary-I/O tests pass on Apple M4 Pro / Metal. The
 upstream observation code passes a tiny synthetic 24-layer self-test; that is
-not qualification of the pinned checkpoint.
+not qualification of the pinned checkpoint. The full checkpoint and all 196
+prepared tensors have since passed hash/extent verification. Reference-only
+calibration completed, but independent confirmation failed 8 of 2,025 checks.
+The [retained study](../studies/model_generation/README.md) records the frozen
+budgets and diagnosis. Native full-model comparison, generation acceptance and
+performance promotion have not run.
 
 The approved scope and stop gates are in [generation-plan.md](generation-plan.md).
 The declaration is [model_contract.json](../tests/fixtures/model_contract.json).
 The numerical thresholds are initial reference-only qualification criteria;
-no full-model candidate outputs have been compared against them.
+they failed, and a bounded reference-only calibration also failed independent
+confirmation. Both declarations and results remain intact. No full-model
+candidate outputs have been compared against them.
 
 ## Native ownership
 

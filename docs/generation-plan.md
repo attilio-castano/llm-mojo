@@ -92,3 +92,17 @@ retain a compact model study only when real execution produces evidence.
   lengths/seed combinations then confirm frozen budgets. Failed initial
   thresholds remain in the contract and evidence; failure of this bounded
   calibration/confirmation stops dependent acceptance.
+- The declared calibration passed its fixed ceiling. Independent confirmation
+  failed 8 of 2,025 checks (hidden 22–24 and final norm at length 15), while all
+  row relative-RMS checks passed. All declared cases, including 4096, completed.
+  The budgets are frozen and dependent acceptance is stopped. No native model
+  outputs or final reserved outputs were observed; optimization budget is unspent.
+- The committed-source SDPA ablation reproduces the 17-token diagnosis across
+  all 75 boundaries. Compact raw records, source hashes and regeneration commands
+  are retained in `studies/model_generation/`. A new numerical-policy decision
+  and explicit authorization are needed before dependent work resumes.
+- Final tooling validation passes all 116 Python tests, the two calibration
+  metric self-tests, and lossless evidence verification/table regeneration.
+  The complete existing native validation and two new Metal primitive checks
+  passed earlier; native source has not changed since that checkpoint. No
+  additional performance study or full-model acceptance is claimed.

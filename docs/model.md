@@ -70,8 +70,11 @@ their own contracts and remain named compatibility comparisons.
 The composed attention study describes its
 [reference hierarchy and validation boundaries](attention-sublayer.md).
 The [decoder-layer contract and fixture specification](decoder-layer.md)
-defines the next composition gate for attention followed by MLP. Its pinned
-upstream reference is qualified; Mojo layer acceptance remains unestablished.
+defines the composition gate for attention followed by MLP. The layer has
+passed its numerical acceptance and workload selection study. The next
+[full-model gate](../studies/model_generation/README.md) is blocked at
+independent reference schedule confirmation; layer acceptance does not imply
+24-layer or generation acceptance.
 
 V0 is deliberately narrower than the model's complete advertised capability:
 
@@ -261,8 +264,10 @@ The upstream fixtures and numerical budgets are frozen. The materialized Mojo
 baseline, tiled prefill projections, and bounded decode experiments have passed
 their numerical checks and are documented in the [MLP study](../studies/mlp_sublayer/README.md).
 Rowwise mapping 0 remains the default; tiled mapping 7 is an explicit prefill
-option, and no decode candidate qualified for promotion. Composing attention
-and MLP into a complete decoder block remains the next implementation milestone.
+option, and no decode candidate qualified for promotion. The accepted
+[decoder composition](../studies/decoder_layer/selection.md) combines attention
+and MLP with workload-specific configurations. Full-model composition is a
+[development candidate](generation.md) awaiting numerical acceptance.
 
 ## Conversation semantics
 

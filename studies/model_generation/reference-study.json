@@ -1,0 +1,71 @@
+{
+  "kind": "upstream-model-schedule-qualification",
+  "date": "2026-09-09",
+  "outcome": "blocked-independent-reference-confirmation",
+  "device": "cpu",
+  "threads": 1,
+  "hardware": "Apple M4 Pro",
+  "macos": "26.6.2",
+  "source_anchors": {
+    "tests/fixtures/model_reference.py": {
+      "commit": "91f020af90e1bc6adc2dcb854e983dc27403e763",
+      "sha256": "216f5f99b12b1b0b376cc90f81e07ef5670421a9b0b737c43cd33e48e49e9770"
+    },
+    "tests/fixtures/model_contract.json": {
+      "commit": "91f020af90e1bc6adc2dcb854e983dc27403e763",
+      "sha256": "383a3f123bb5affad0d00e8333f971c92c950c739a452a4ff952de032395b506"
+    },
+    "tests/fixtures/model_calibration.py": {
+      "commit": "5993f50599137e3d417ee433e2c4a6aa802eef49",
+      "sha256": "431556cd3ea53ffe0610cf05f9e868f44192c4b7505b15f06690d67df156d453"
+    },
+    "tests/fixtures/model_calibration.json": {
+      "commit": "5993f50599137e3d417ee433e2c4a6aa802eef49",
+      "sha256": "f8b3d207d39758095239b647e1ec01d98eaed6f72cf34c504295fdd42a716d9d"
+    },
+    "tests/fixtures/model_reference_diagnosis.py": {
+      "commit": "311ce4d03cd8dd530370ff0afef0029224484176",
+      "sha256": "9b18d7ada2583fe8e71e6066eea43a496134d89f4bb6a970f5db885ce7c9e0d6"
+    }
+  },
+  "files": {
+    "initial-qualification.json.gz": {
+      "sha256": "1e04197e8f0a450a6ef264afbc69074e5dc985f2a47cacceeca08795e86ee391",
+      "uncompressed_sha256": "5eaea623406d2f8444328f2dde767b026b90e0094efb6f637eb6f05c1d5fb57d",
+      "uncompressed_bytes": 279509
+    },
+    "calibration-observations.jsonl.gz": {
+      "sha256": "58f282293a7a461eb6ce20d8ace733b59565a04aef14c918f2bcd374e8f9b413",
+      "uncompressed_sha256": "ac7ec68a3b060d1fc6f85b8b9d349cc5bbec55487a25915b2b9a46ac67a89945",
+      "uncompressed_bytes": 796595
+    },
+    "frozen-budgets.json": {
+      "sha256": "ddd59409120d7ee55422576afe81f4f323257801c72287f505ba60259c07f014",
+      "uncompressed_sha256": "ddd59409120d7ee55422576afe81f4f323257801c72287f505ba60259c07f014",
+      "uncompressed_bytes": 12180
+    },
+    "calibration-result.json": {
+      "sha256": "32e4347a425a8dea62764a7b8dcd03376415f92f2d85a8921bad73dd46bf3ae3",
+      "uncompressed_sha256": "32e4347a425a8dea62764a7b8dcd03376415f92f2d85a8921bad73dd46bf3ae3",
+      "uncompressed_bytes": 14671
+    },
+    "diagnosis.json.gz": {
+      "sha256": "6ca44a8f8c8b945f9798a9f3683fc68d3b5ba0cfcd10d8d37c79088c4628fc35",
+      "uncompressed_sha256": "6426605137530741a77d5cdfa2188195f168087c90c1e2ca6b1d4e07ceb762ca",
+      "uncompressed_bytes": 60080
+    }
+  },
+  "candidate_model_outputs_observed": false,
+  "reserved_outputs_observed": false,
+  "notes": [
+    "Source anchors identify committed bytes; per-run reports bind the executed reference sources and declarations.",
+    "Calibration finished before independent confirmation; frozen budget hash is recorded in the result.",
+    "Diagnosis is a new run of committed source; earlier temporary diagnostic reports are not the retained authority.",
+    "This is CPU numerical reference evidence, not GPU performance or native model acceptance."
+  ],
+  "commands": [
+    "uv run --locked --script tests/fixtures/model_reference.py qualify --output build/oracle_data/model-qualification",
+    "uv run --locked --script tests/fixtures/model_calibration.py --output build/oracle_data/model-reference-calibration-v1",
+    "uv run --locked --script tests/fixtures/model_reference_diagnosis.py --output build/oracle_data/model-qualification/reproduced-diagnosis.json"
+  ]
+}

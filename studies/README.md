@@ -4,7 +4,8 @@ These studies explain how the existing Mojo operations map work onto the Apple
 M4 Pro. Start with the value and storage contracts in [model](../docs/model.md)
 and [layouts](../docs/layouts.md), then read a topic below. Each comparison is
 operation-level except for the composed attention/MLP sublayers and the accepted
-decoder layer. Full-model forward parity is next.
+decoder layer. Full-model forward parity is blocked at independent reference
+schedule confirmation, documented in the new numerical study below.
 
 | Topic | Question |
 | --- | --- |
@@ -18,6 +19,7 @@ decoder layer. Full-model forward parity is next.
 | [Attention sublayer](attention_sublayer/README.md) | Where does time go in the complete block under the selected FP32 attention policy? |
 | [Decoder layer](decoder_layer/README.md) | How do complete layer costs shift between prefill, cached chunks and decode? |
 | [CPU tokenizer](tokenizer/README.md) | When does heap BPE improve complete text encoding? |
+| [Full-model reference](model_generation/README.md) | Does BF16 full prefill agree with cached execution across all 24 layers? |
 
 The CPU tokenizer study establishes exact Rust parity in Mojo and retains 9,680
 CPU observations. Heap merging improves long single pieces but costs more than
@@ -32,7 +34,9 @@ noise and diagnostic gaps remain explicit. The follow-up
 [configuration study](decoder_layer/selection.md) retains 16,800 additional
 latency observations and confirms 5.6–52.9% lower decoder latency on the primary
 cached-prefill grid. Full/short prefill and decode retain the existing baseline.
-The next step is full-model logits parity.
+Full-model logits parity is the next acceptance target; its reference-only
+confirmation currently fails eight intermediate boundaries. See the
+[numerical study](model_generation/README.md) for the frozen budgets and stop decision.
 
 The attention-sublayer study uses the explicit CPU FP32 attention policy as
 its accuracy baseline. It has 17 synthetic and three checkpoint cases; the

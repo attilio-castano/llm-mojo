@@ -1,0 +1,520 @@
+{
+  "reference": {
+    "model_revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+    "checkpoint_sha256": "fdf756fa7fcbe7404d5c60e26bff1a0c8b8aa1f72ced49e7dd0210fe288fb7fe",
+    "source_sha256": "216f5f99b12b1b0b376cc90f81e07ef5670421a9b0b737c43cd33e48e49e9770",
+    "contract_sha256": "383a3f123bb5affad0d00e8333f971c92c950c739a452a4ff952de032395b506",
+    "upstream_sha256": "06a9e704e9ec103c47c44fc974519dc93480aa325b9ad7d047239200bcf6fa69",
+    "torch": "2.4.0",
+    "transformers": "4.43.1",
+    "numpy": "1.26.4",
+    "device": "cpu",
+    "threads": 1,
+    "policy": "BF16 stored boundaries; math SDPA FP32 Q/K/V/mask, output BF16",
+    "gates": {
+      "hidden": {
+        "atol": 0.0625,
+        "rtol": 0.03125
+      },
+      "logits": {
+        "atol": 0.0625,
+        "rtol": 0.03125
+      }
+    }
+  },
+  "source_sha256": "431556cd3ea53ffe0610cf05f9e868f44192c4b7505b15f06690d67df156d453",
+  "declaration_sha256": "f8b3d207d39758095239b647e1ec01d98eaed6f72cf34c504295fdd42a716d9d",
+  "declaration": {
+    "version": "qwen-reference-schedule-calibration-v1",
+    "purpose": "Qualify new full-model budgets using upstream outputs only; existing component gates and arithmetic remain unchanged",
+    "calibration": {
+      "seed": 9103,
+      "lengths": [
+        1,
+        17,
+        65,
+        257,
+        1024
+      ]
+    },
+    "confirmation": {
+      "seed": 9133,
+      "lengths": [
+        15,
+        33,
+        129,
+        1025,
+        4096
+      ]
+    },
+    "schedule": "one-token calls when length <= 17; otherwise [length - 17, 16, 1]",
+    "rtol": 0.03125,
+    "atol_floor": 0.0625,
+    "atol_quantum": 0.03125,
+    "relative_rms_floor": 0.015625,
+    "relative_rms_quantum": 0.00390625,
+    "margin": 1.5,
+    "maximum_qualified_relative_rms": 0.0625,
+    "relative_rms_definition": "Per token row: L2(actual - expected) / L2(expected), flattening head dimensions; zero signal requires exact equality",
+    "embedding": "exact",
+    "calibration_rule": "For each of 75 boundaries, round up margin times the largest required atol and relative RMS to their respective quanta, respecting floors; reject any relative RMS budget above the fixed maximum",
+    "confirmation_rule": "Freeze all budgets before confirmation; every element must satisfy atol + rtol * abs(expected), every row must satisfy its relative RMS budget, and embeddings must be exact; any failure stops dependent acceptance",
+    "candidate_outputs_observed": false,
+    "reserved_outputs_observed": false
+  },
+  "candidate_outputs_observed": false,
+  "reserved_outputs_observed": false,
+  "gates": {
+    "cache_key_0": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_key_1": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_key_10": {
+      "rtol": 0.03125,
+      "atol": 0.09375,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_key_11": {
+      "rtol": 0.03125,
+      "atol": 0.15625,
+      "relative_rms": 0.01953125,
+      "exact": false
+    },
+    "cache_key_12": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_key_13": {
+      "rtol": 0.03125,
+      "atol": 0.125,
+      "relative_rms": 0.01953125,
+      "exact": false
+    },
+    "cache_key_14": {
+      "rtol": 0.03125,
+      "atol": 0.125,
+      "relative_rms": 0.01953125,
+      "exact": false
+    },
+    "cache_key_15": {
+      "rtol": 0.03125,
+      "atol": 0.125,
+      "relative_rms": 0.01953125,
+      "exact": false
+    },
+    "cache_key_16": {
+      "rtol": 0.03125,
+      "atol": 0.1875,
+      "relative_rms": 0.02734375,
+      "exact": false
+    },
+    "cache_key_17": {
+      "rtol": 0.03125,
+      "atol": 0.09375,
+      "relative_rms": 0.01953125,
+      "exact": false
+    },
+    "cache_key_18": {
+      "rtol": 0.03125,
+      "atol": 0.09375,
+      "relative_rms": 0.01953125,
+      "exact": false
+    },
+    "cache_key_19": {
+      "rtol": 0.03125,
+      "atol": 0.125,
+      "relative_rms": 0.01953125,
+      "exact": false
+    },
+    "cache_key_2": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_key_20": {
+      "rtol": 0.03125,
+      "atol": 0.09375,
+      "relative_rms": 0.01953125,
+      "exact": false
+    },
+    "cache_key_21": {
+      "rtol": 0.03125,
+      "atol": 0.125,
+      "relative_rms": 0.01953125,
+      "exact": false
+    },
+    "cache_key_22": {
+      "rtol": 0.03125,
+      "atol": 0.125,
+      "relative_rms": 0.01953125,
+      "exact": false
+    },
+    "cache_key_23": {
+      "rtol": 0.03125,
+      "atol": 0.09375,
+      "relative_rms": 0.01953125,
+      "exact": false
+    },
+    "cache_key_3": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_key_4": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_key_5": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_key_6": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_key_7": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_key_8": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_key_9": {
+      "rtol": 0.03125,
+      "atol": 0.09375,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_value_0": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_value_1": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_value_10": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.0390625,
+      "exact": false
+    },
+    "cache_value_11": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.02734375,
+      "exact": false
+    },
+    "cache_value_12": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.04296875,
+      "exact": false
+    },
+    "cache_value_13": {
+      "rtol": 0.03125,
+      "atol": 0.125,
+      "relative_rms": 0.04296875,
+      "exact": false
+    },
+    "cache_value_14": {
+      "rtol": 0.03125,
+      "atol": 0.09375,
+      "relative_rms": 0.04296875,
+      "exact": false
+    },
+    "cache_value_15": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.03515625,
+      "exact": false
+    },
+    "cache_value_16": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "cache_value_17": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "cache_value_18": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.03125,
+      "exact": false
+    },
+    "cache_value_19": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.03515625,
+      "exact": false
+    },
+    "cache_value_2": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_value_20": {
+      "rtol": 0.03125,
+      "atol": 0.09375,
+      "relative_rms": 0.02734375,
+      "exact": false
+    },
+    "cache_value_21": {
+      "rtol": 0.03125,
+      "atol": 0.15625,
+      "relative_rms": 0.03125,
+      "exact": false
+    },
+    "cache_value_22": {
+      "rtol": 0.03125,
+      "atol": 0.125,
+      "relative_rms": 0.02734375,
+      "exact": false
+    },
+    "cache_value_23": {
+      "rtol": 0.03125,
+      "atol": 0.15625,
+      "relative_rms": 0.03125,
+      "exact": false
+    },
+    "cache_value_3": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "cache_value_4": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "cache_value_5": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.01953125,
+      "exact": false
+    },
+    "cache_value_6": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "cache_value_7": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.02734375,
+      "exact": false
+    },
+    "cache_value_8": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.02734375,
+      "exact": false
+    },
+    "cache_value_9": {
+      "rtol": 0.03125,
+      "atol": 0.09375,
+      "relative_rms": 0.02734375,
+      "exact": false
+    },
+    "final_norm": {
+      "rtol": 0.03125,
+      "atol": 2.40625,
+      "relative_rms": 0.04296875,
+      "exact": false
+    },
+    "hidden_0": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": true
+    },
+    "hidden_1": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "hidden_10": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "hidden_11": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "hidden_12": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "hidden_13": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "hidden_14": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "hidden_15": {
+      "rtol": 0.03125,
+      "atol": 0.09375,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "hidden_16": {
+      "rtol": 0.03125,
+      "atol": 0.09375,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "hidden_17": {
+      "rtol": 0.03125,
+      "atol": 0.09375,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "hidden_18": {
+      "rtol": 0.03125,
+      "atol": 0.09375,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "hidden_19": {
+      "rtol": 0.03125,
+      "atol": 0.09375,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "hidden_2": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "hidden_20": {
+      "rtol": 0.03125,
+      "atol": 0.09375,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "hidden_21": {
+      "rtol": 0.03125,
+      "atol": 0.15625,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "hidden_22": {
+      "rtol": 0.03125,
+      "atol": 0.125,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "hidden_23": {
+      "rtol": 0.03125,
+      "atol": 0.15625,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "hidden_24": {
+      "rtol": 0.03125,
+      "atol": 0.375,
+      "relative_rms": 0.03515625,
+      "exact": false
+    },
+    "hidden_3": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "hidden_4": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "hidden_5": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.015625,
+      "exact": false
+    },
+    "hidden_6": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.01953125,
+      "exact": false
+    },
+    "hidden_7": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.01953125,
+      "exact": false
+    },
+    "hidden_8": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "hidden_9": {
+      "rtol": 0.03125,
+      "atol": 0.0625,
+      "relative_rms": 0.0234375,
+      "exact": false
+    },
+    "logits": {
+      "rtol": 0.03125,
+      "atol": 0.46875,
+      "relative_rms": 0.046875,
+      "exact": false
+    }
+  },
+  "calibration_passed": true
+}
