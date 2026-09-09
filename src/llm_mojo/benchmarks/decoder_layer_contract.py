@@ -27,7 +27,7 @@ def policy_profile_grid(spec):
     if sha_json(declared)!=spec.get('policies_sha256'):
         raise ValueError('decoder policy profile declaration changed')
     grid=[(r,t,v) for r,t,v,n in declared['profiles']]
-    if len(set(grid))!=len(grid) or sorted(map(list,grid))!=sorted(spec.get('captures',[])):
+    if len(set(grid))!=len(grid) or sorted(map(list,grid))!=sorted(map(list,spec.get('captures',[]))):
         raise ValueError('decoder policy profile census changed')
     return grid
 

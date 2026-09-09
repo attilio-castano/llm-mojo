@@ -29,6 +29,9 @@ class DecoderToolingTests(unittest.TestCase):
                   captures=[list(row[:3]) for row in declared['profiles']])
         self.assertEqual(contract.sha(contract.repository_root()/contract.POLICY_PATH),spec['policies_sha256'])
         self.assertEqual(len(contract.policy_profile_grid(spec)),6)
+        # The live collector constructs tuples; JSON restoration returns lists.
+        live={**spec,'captures':[tuple(row) for row in spec['captures']]}
+        self.assertEqual(contract.policy_profile_grid(live),contract.policy_profile_grid(spec))
         for bad in ({**spec,'policies_sha256':'changed'},{**spec,'captures':spec['captures'][:-1]}):
             with self.assertRaises(ValueError):contract.policy_profile_grid(bad)
 
