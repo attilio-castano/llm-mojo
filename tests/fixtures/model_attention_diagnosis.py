@@ -5,6 +5,7 @@ attention implementation supplies model outputs.
 """
 from contextlib import contextmanager
 import inspect
+import hashlib
 import json
 from pathlib import Path
 from unittest.mock import patch
@@ -30,7 +31,7 @@ def verify_sources(declaration, download=False):
         path = root / name
         if not path.exists() and download:
             data = urlopen(record['url'], timeout=45).read()
-            if len(data) != record['bytes'] or reference.hashlib.sha256(data).hexdigest() != record['sha256']:
+            if len(data) != record['bytes'] or hashlib.sha256(data).hexdigest() != record['sha256']:
                 raise ValueError('downloaded source identity mismatch: ' + name)
             path.write_bytes(data)
         if not path.exists():
@@ -117,15 +118,32 @@ def thresholds(ops, declaration, position, difference):
         records.append(dict(position=position, query_rows=rows, contraction=a.shape[2], keys=b.shape[2],
             work=work, source_predicted_path='small_bmm' if work < 400 else 'per_batch_mm',
             forced_per_head_mm_equal=torch.equal(actual, forced_mm),
-            versus_one_row=difference(first.numpy(), current.numpy())))
+            versus_one_row=difference(first.numpy(), current.numpy()),
+            duplicate_row_comparisons=[dict(row=row,
+                **difference(first.numpy(), actual[:, row:row + 1].numpy())) for row in range(rows)]))
     return records
+
+
+def boundary_digest(calls):
+    digest = hashlib.sha256()
+    for position, rows, values in calls:
+        digest.update(str((position, rows)).encode())
+        for name in sorted(values):
+            value = values[name]
+            digest.update(str((name, value.shape, str(value.dtype))).encode())
+            digest.update(value.tobytes(order='C'))
+    return digest.hexdigest()
+
+
+def exact_array(a, b):
+    return a.shape == b.shape and a.dtype == b.dtype and a.tobytes(order='C') == b.tobytes(order='C')
 
 
 def localize(model, spec, declaration, traced_forward, difference):
     length = spec['length']
     ids = np.random.default_rng(spec['seed']).integers(0, 151643, size=length).tolist()
     _, captures = traced_forward(model, ids, [length])
-    _, cached_captures = traced_forward(model, ids, [1] * length)
+    cached_calls, cached_captures = traced_forward(model, ids, [1] * length)
     f = captures[0]
     full_output, full_ops = trace(f['query'], f['key'], f['value'], f['mask'])
     if not torch.equal(full_output, f['output']):
@@ -172,6 +190,7 @@ def localize(model, spec, declaration, traced_forward, difference):
         if position in declaration['threshold_positions']:
             probes.extend(thresholds(ops, declaration, position, difference))
     return dict(**spec, ids=ids, observer_and_repeat_bitwise_equal=True,
+                original_cached_boundary_sha256=boundary_digest(cached_calls),
                 full_deterministic_equal=full_deterministic_equal,
                 records=records, threshold_probes=probes)
 
@@ -183,7 +202,7 @@ def canonical_case(model, spec, difference):
     with canonical_queries():
         full = reference.forward(model, ids, [length], all_logits=False)[0][2]
         repeat = reference.forward(model, ids, [length], all_logits=False)[0][2]
-        repeat_equal = all(np.array_equal(full[name], repeat[name]) for name in full)
+        repeat_equal = all(exact_array(full[name], repeat[name]) for name in full)
         cached = reference.forward(model, ids, [1] * length, all_logits=False)
     records = []
     for position, rows, values in cached:
@@ -198,9 +217,10 @@ def canonical_case(model, spec, difference):
             else:
                 expected = full[name][position:position + 1]
             records.append(dict(position=position, stage=name,
-                                exact=bool(np.array_equal(expected, actual)),
+                                exact=exact_array(expected, actual),
                                 **difference(expected, actual)))
     return dict(**spec, ids=ids, repeat_bitwise_equal=repeat_equal, checks=records,
+                cached_boundary_sha256=boundary_digest(cached),
                 schedule_bitwise_equal=all(r['exact'] for r in records))
 
 
@@ -221,6 +241,11 @@ def run(model, traced_forward, difference, download=False):
         print('ATen localization complete:', spec, flush=True)
     for spec in declaration['canonical_cases']:
         canonical.append(canonical_case(model, spec, difference))
+        original = next((case for case in localized if case['length'] == spec['length']
+                         and case['seed'] == spec['seed']), None)
+        canonical[-1]['original_cached_comparison'] = (
+            canonical[-1]['cached_boundary_sha256'] == original['original_cached_boundary_sha256']
+            if original else None)
         print('Canonical query comparison complete:', spec,
               'bitwise equal:', canonical[-1]['schedule_bitwise_equal'], flush=True)
     if source_hash != reference.sha(__file__) or contract_hash != reference.sha(CONTRACT):
