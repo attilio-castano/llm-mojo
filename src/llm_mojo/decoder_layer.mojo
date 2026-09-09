@@ -21,8 +21,10 @@ def decoder_mappings(variant: Int, rows: Int) raises -> SIMD[DType.int64, 4]:
     """
     if rows < 1 or (variant != 0 and variant != 1 and variant != 2
         and variant != 3 and variant != 4 and variant != 8
-        and variant != 12 and variant != 14):
+        and variant != 12 and variant != 14 and variant != 20):
         raise Error("unknown decoder configuration or invalid rows")
+    if variant == 20:
+        return SIMD[DType.int64, 4](5, 0, 0, 1)
     var gqa = 4 if variant == 2 or variant == 3 else 0
     var projections = 5 if variant == 1 or variant == 3 else 0
     var mlp = 0 if rows == 1 or variant == 4 else 7
@@ -55,8 +57,10 @@ def _decoder_preflight[XL: TensorLayout](
         or cache.capacity < 1 or cache.capacity > 4096
         or a.capacity < 1 or a.capacity > 4096):
         raise Error("decoder geometry or capacity is invalid")
-    if (gqa_mapping != 0 and gqa_mapping != 4) or (projection_mapping != 0 and projection_mapping != 5):
+    if (gqa_mapping != 0 and gqa_mapping != 4 and gqa_mapping != 5) or (projection_mapping != 0 and projection_mapping != 5):
         raise Error("decoder supports declared integrated attention mappings only")
+    if gqa_mapping == 5 and (projection_mapping != 0 or mlp_mapping != 0):
+        raise Error("consistent decoder requires rowwise projection and MLP mappings")
     if not integrated and (gqa_mapping != 0 or projection_mapping != 0):
         raise Error("tiny decoder requires attention mappings zero")
     if mlp_mapping != 0 and mlp_mapping != 7 and mlp_mapping != 8 and mlp_mapping != 12 and mlp_mapping != 14:
@@ -68,7 +72,7 @@ def _decoder_preflight[XL: TensorLayout](
         raise Error("decoder requires contiguous row-major input")
     _ = _validate_attention_sublayer(ctx, aw, cache, a, x,
                                     6 + gqa_mapping if integrated else 3,
-                                    ((3 if projection_mapping == 5 else 2) if r >= 16 else 1) if integrated else 0,
+                                    (((3 if projection_mapping == 5 else 2) if r >= 16 else 1) if gqa_mapping != 5 else 0) if integrated else 0,
                                     1 if projection_mapping == 5 else 0)
     _validate_mlp(ctx, mw, m, TileTensor(a.output, row_major(r, h)), mlp_mapping)
     var n = a.max_rows

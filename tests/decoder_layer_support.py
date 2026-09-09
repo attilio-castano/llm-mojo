@@ -193,13 +193,18 @@ def check(address,name,stage,schedule,start,rows,width,capacity,mode='layer'):
     if result.get('failed',0):
         print('DECODER FAILURE',json.dumps(RECORDS[-1]),flush=True)
         raise AssertionError('decoder numerical gate: '+stage)
-    if mode=='layer' and stage in ('B_att','Z','B_mlp','Y'):
+    if mode=='layer' and (IDENTITY.get('policy') == 20 or stage in ('B_att','Z','B_mlp','Y')):
         if schedule=='full':
             FULL[stage]=actual.copy()
         elif stage in FULL:
+            if IDENTITY.get('policy') == 20:
+                exact = actual.tobytes() == FULL[stage][start:start+rows].tobytes()
+                emit(dict(kind='schedule_exact', stage=stage, start=start, rows=rows, exact=exact))
+                if not exact:
+                    raise AssertionError('consistent decoder bytes differ: '+stage)
             comparison=differences(actual,FULL[stage][start:start+rows],gate)
             emit(dict(kind='full_vs_chunk',stage=stage,start=start,rows=rows,**comparison))
-            if comparison['failed']:
+            if comparison.get('failed', 0):
                 raise AssertionError('decoder full/chunk mismatch: '+stage)
 
 
@@ -211,6 +216,15 @@ def check_cache(address,produced,previous,name,label,start,rows,width,capacity):
         raise AssertionError('decoder cache append changed produced bits')
     if np.any(bits[(start+rows)*width:]!=0x42f6):
         raise AssertionError('decoder wrote inactive cache capacity')
+    if IDENTITY.get('policy') == 20:
+        key = 'consistent_cache_key' if label.endswith('cache_key') else 'consistent_cache_value'
+        if IDENTITY['schedule'] == 'full':
+            FULL[key] = bits[:(start+rows)*width].copy()
+        else:
+            exact = bits[:(start+rows)*width].tobytes() == FULL[key][:(start+rows)*width].tobytes()
+            emit(dict(kind='schedule_exact', stage=key, start=start, rows=rows, exact=exact))
+            if not exact:
+                raise AssertionError('consistent decoder cache bytes differ')
     actual=from_bits(bits[:(start+rows)*width]).reshape(start+rows,width)
     expected=read(name,label).reshape(start+rows,width)
     emit(dict(kind='cache',stage=label,start=start,rows=rows,prefix_exact=True,append_exact=True,inactive_exact=True,

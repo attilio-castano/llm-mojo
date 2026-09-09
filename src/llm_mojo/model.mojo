@@ -81,6 +81,8 @@ def select_configuration(policy: String, rows: Int, total: Int, device: String) 
     # Auto remains the control until model-level promotion earns lookup entries.
     if policy == "baseline" or policy == "auto":
         return 0
+    if policy == "consistent" or policy == "20":
+        return 20
     if policy == "candidate":
         return candidate_configuration(rows,total) if device == "Apple M4 Pro" else 0
     if policy == "0" or policy == "2" or policy == "3":

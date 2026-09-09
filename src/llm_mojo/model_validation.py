@@ -1,5 +1,6 @@
 """Execute a receipted model driver against complete development references."""
 import argparse
+from collections import Counter
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,9 @@ import numpy as np
 from ._repository import environment_tool, repository_root
 from .mlp_validation import source_identity, sha, write
 from .model_assets import verify_prepared
+
+CONSISTENCY_BOUNDARIES = ({f'hidden_{i}' for i in range(25)} | {'final_norm', 'logits'} |
+                          {f'cache_{kind}_{i}' for kind in ('key', 'value') for i in range(24)})
 
 
 def environment():
@@ -53,6 +57,128 @@ def compare(actual,expected,gate):
     error=np.abs(actual-expected)
     scaled=error/(gate['atol']+gate['rtol']*np.abs(expected))
     return dict(max_abs=float(error.max()),max_scaled=float(scaled.max()),passed=bool(np.all(scaled<=1)))
+
+
+def consistency_accuracy(actual, expected, gate):
+    """Pointwise and per-row error; accuracy is separate from byte equality."""
+    result = compare(actual, expected, gate)
+    error = (actual.astype(np.float64)-expected.astype(np.float64)).reshape(len(actual), -1)
+    signal = np.linalg.norm(expected.astype(np.float64).reshape(len(expected), -1), axis=1)
+    delta = np.linalg.norm(error, axis=1)
+    relative = np.divide(delta, signal, out=np.zeros_like(delta), where=signal != 0)
+    zero_ok = not np.any((signal == 0) & (delta != 0))
+    exact = actual.dtype == expected.dtype and actual.tobytes() == expected.tobytes()
+    result.update(relative_rms=float(relative.max()), exact=exact)
+    result['passed'] = (result['passed'] and zero_ok and result['relative_rms'] <= gate['relative_rms']
+                        and (not gate['exact'] or exact))
+    return result
+
+
+def verify_consistency_observations(report, path):
+    required = Counter()
+    for case in report['cases']:
+        if set(case['arrays']) != CONSISTENCY_BOUNDARIES:
+            raise ValueError('incomplete canonical reference boundary census')
+        seen = set()
+        for schedule in case['schedules']:
+            chunks = tuple(schedule['rows'])
+            if (not chunks or min(chunks) < 1 or sum(chunks) != case['length'] or chunks in seen
+                    or schedule['checks'] != len(chunks)*75 or schedule['failures']):
+                raise ValueError('invalid or failed reference schedule')
+            seen.add(chunks)
+            start = 0
+            for rows in chunks:
+                for stage in CONSISTENCY_BOUNDARIES:
+                    required[(case['length'],case['seed'],chunks,start,rows,stage)] += 1
+                start += rows
+        if (case['length'],) not in seen:
+            raise ValueError('missing full-repeat reference check')
+    observed = Counter()
+    with path.open() as stream:
+        for line in stream:
+            row = json.loads(line)
+            if row['exact'] is not True or row['max_abs'] != 0:
+                raise ValueError('failed exact reference observation')
+            observed[(row['length'],row['seed'],tuple(row['schedule']),row['start'],row['rows'],row['stage'])] += 1
+    if observed != required:
+        raise ValueError('incomplete or duplicated reference observations')
+
+
+def consistency_reference(directory):
+    """Verify the complete declared qualification before candidate exposure."""
+    root = repository_root()
+    contract = root/'tests/fixtures/model_consistency.json'
+    declaration = json.loads(contract.read_text())
+    report = json.loads((directory/'qualification.json').read_text())
+    if (report.get('kind') != 'model_consistency_reference' or report.get('passed') is not True
+            or report.get('candidate_outputs_observed') is not False
+            or report.get('reserved_outputs_observed') is not False
+            or report.get('version') != declaration['version']):
+        raise ValueError('canonical reference has not qualified')
+    for name, digest in report['source'].items():
+        if sha(root/name) != digest:
+            raise ValueError('canonical reference source changed: '+name)
+    if sha(directory/'observations.jsonl') != report['observations_sha256']:
+        raise ValueError('reference qualification observations changed')
+    if [{k: c[k] for k in ('length', 'seed')} for c in report['cases']] != declaration['development_cases']:
+        raise ValueError('incomplete reference qualification case census')
+    verify_consistency_observations(report, directory/'observations.jsonl')
+    for case in report['cases']:
+        for record in case['arrays'].values():
+            if sha(directory/record['path']) != record['sha256']:
+                raise ValueError('canonical reference array changed')
+    return declaration, report
+
+
+def evaluate_consistency(binary, reference, output, length, prepared=None):
+    """Initial full-forward accuracy gate for the consistent native candidate."""
+    binary, reference, output = (Path(p).resolve() for p in (binary, reference, output))
+    receipt = verify_build(binary)
+    declaration, qualified = consistency_reference(reference)
+    prepared, _ = verify_prepared(prepared)
+    case = next(c for c in qualified['cases'] if c['length'] == length)
+    output.mkdir(parents=True, exist_ok=False)
+    native = output/'call_0'
+    native.mkdir()
+    command = [str(binary), str(prepared), ','.join(map(str, case['ids'])), str(length), '20', str(output)]
+    with (output/'execution.log').open('w') as log:
+        subprocess.run(command, cwd=repository_root(), env=environment(), stdout=log,
+                       stderr=subprocess.STDOUT, check=True)
+    log = (output/'execution.log').read_text()
+    if ('model device Apple M4 Pro backend metal' not in log
+            or f'cache_length {length} submitted_layer_rows {length*24}' not in log):
+        raise ValueError('missing native Metal identity or cache accounting')
+    records = []
+    required = CONSISTENCY_BOUNDARIES
+    if set(case['arrays']) != required:
+        raise ValueError('incomplete canonical reference boundary census')
+    for name in sorted(required):
+        expected = np.load(reference/case['arrays'][name]['path'], allow_pickle=False)
+        if name.startswith('cache_'):
+            actual = bf16(native/(name+'.bin'), (min(4096, length+3), 2, 64))
+            kind, layer = name.split('_')[1:]
+            appended = bf16(native/(f'append_{kind}_{layer}.bin'), (length, 2, 64))
+            storage = actual[:length].tobytes() == appended.tobytes() and np.all(actual[length:] == 123)
+            records.append(dict(stage=name+'_storage', passed=bool(storage)))
+            actual = actual[:length]
+        else:
+            if name == 'final_norm':
+                expected = expected[-1:]
+            actual = bf16(native/(name+'.bin'), expected.shape)
+        records.append(dict(stage=name, **consistency_accuracy(actual, expected, declaration['accuracy']['gates'][name])))
+    verify_build(binary)
+    # Recheck input identities after execution as well as before it.
+    consistency_reference(reference)
+    report = dict(kind='model_consistency_accuracy', build=receipt, command=command,
+        qualification_sha256=sha(reference/'qualification.json'),
+        prepared_manifest_sha256=sha(prepared/'manifest.json'), length=length,
+        configuration=20, reserved_outputs_observed=False, checks=records,
+        passed=all(r['passed'] for r in records))
+    write(output/'evaluation.json', report)
+    print('consistent native accuracy', length, 'checks', len(records),
+          'failures', sum(not r['passed'] for r in records), flush=True)
+    if not report['passed']:
+        raise ValueError('consistent full-model accuracy gates failed')
 
 
 def evaluate(binary,reference,output,configurations,prepared=None):
@@ -145,8 +271,12 @@ def main():
     e.add_argument('--reference',required=True,type=Path);e.add_argument('--output',required=True,type=Path)
     e.add_argument('--configurations',required=True,nargs='+',type=int)
     e.add_argument('--prepared',type=Path)
+    c=sub.add_parser('consistency');c.add_argument('--binary',required=True,type=Path)
+    c.add_argument('--reference',required=True,type=Path);c.add_argument('--output',required=True,type=Path)
+    c.add_argument('--length',required=True,type=int);c.add_argument('--prepared',type=Path)
     args=parser.parse_args()
     if args.command=='build':build(args.binary)
+    elif args.command=='consistency':evaluate_consistency(args.binary,args.reference,args.output,args.length,args.prepared)
     else:evaluate(args.binary,args.reference,args.output,args.configurations,args.prepared)
 
 

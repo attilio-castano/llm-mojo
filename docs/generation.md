@@ -60,6 +60,14 @@ Full-model acceptance must still confirm these counters and actual execution.
 
 ## Workload policy
 
+The approved consistency revision adds explicit development configuration 20
+(`consistent`): FP32 G32 attention for every query and rowwise projections/MLP
+at every row count. It preserves query parallelism in one GPU attention launch.
+It is not automatically selected before full-model accuracy, exact schedule
+checks and final acceptance. The new declaration and streaming reference runner
+are `tests/fixtures/model_consistency.json` and `model_consistency.py`; historical
+reference qualification and configuration IDs retain their original meaning.
+
 `select_configuration` is shared by model clients. `baseline` always selects ID
 0. `candidate` uses the prior shared decoder lookup at its exact confirmed
 shapes on Apple M4 Pro, falling back to 0 elsewhere. Explicit IDs 0/2/3 remain

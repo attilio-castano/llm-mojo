@@ -4,7 +4,7 @@ from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.rope import enqueue_rope_apple_gpu
 from llm_mojo.residual import enqueue_residual_apple_gpu
 from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
-from llm_mojo.attention_decode import enqueue_grouped_query_attention_decode_apple_gpu
+from llm_mojo.attention_decode import enqueue_grouped_query_attention_decode_apple_gpu, enqueue_grouped_query_attention_consistent_apple_gpu
 from llm_mojo.attention_prefill import enqueue_grouped_query_attention_prefill_apple_gpu, enqueue_grouped_query_attention_prefill_split_apple_gpu
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.testing import TestSuite, assert_equal, assert_raises
@@ -168,7 +168,7 @@ def _case(name: String, t: Int, h: Int, nq: Int, nk: Int, d: Int, i: Int,
             var route = enqueue_decoder_layer(ctx, aw, cache, a, mw, m,
                 TileTensor(xb.unsafe_ptr().unsafe_offset(p*h), row_major(r,h)),
                 mapping, nq == 14, gqa, projection)
-            assert_equal(route, (4 if r == 1 else 6+gqa) if nq == 14 else 3)
+            assert_equal(route, (11 if gqa == 5 else (4 if r == 1 else 6+gqa)) if nq == 14 else 3)
             assert_equal(cache.length, p+r)
             ctx.synchronize()
             support.route(route, mapping, p, r, ctx.name(), ctx.api())
@@ -278,7 +278,7 @@ def _local_attention(ctx: DeviceContext, mut w: AttentionWeights,
     poison_decoder(a.raw_query,r*h)
     poison_decoder(a.raw_key,r*k)
     poison_decoder(a.raw_value,r*k)
-    _enqueue_attention_qkv(ctx,w,a,r,((3 if projection == 5 else 2) if r >= 16 else 1) if nq == 14 else 0)
+    _enqueue_attention_qkv(ctx,w,a,r,((3 if projection == 5 else 2) if r >= 16 else 1) if nq == 14 and gqa != 5 else 0)
     check_decoder(a.raw_query,name,"Q_raw","full",0,r,h,"operation")
     check_decoder(a.raw_key,name,"K_raw","full",0,r,k,"operation")
     check_decoder(a.raw_value,name,"V_raw","full",0,r,k,"operation")
@@ -305,6 +305,9 @@ def _local_attention(ctx: DeviceContext, mut w: AttentionWeights,
     if nq != 14:
         enqueue_grouped_query_attention_apple_gpu(ctx,q,keys,values,
             TileTensor(a.fp32_scratch,row_major(r,nq,r)),out)
+    elif gqa == 5:
+        enqueue_grouped_query_attention_consistent_apple_gpu(ctx,q,keys,values,out,
+            TileTensor(a.split,row_major(14,1,66)))
     elif r == 1:
         enqueue_grouped_query_attention_decode_apple_gpu[32,1,1,fp32_scores=True](
             ctx,q,keys,values,out,TileTensor(a.split,row_major(14,1,66)))
@@ -316,7 +319,7 @@ def _local_attention(ctx: DeviceContext, mut w: AttentionWeights,
     check_decoder(a.attention,name,"O","full",0,r,h,"operation")
     load_decoder(a.attention,name,"full_O",0,r*h)
     poison_decoder(a.projected,r*h)
-    _enqueue_attention_wo(ctx,w,a,r,nq == 14 and r >= 16,1 if projection == 5 else 0)
+    _enqueue_attention_wo(ctx,w,a,r,nq == 14 and r >= 16 and gqa != 5,1 if projection == 5 else 0)
     check_decoder(a.projected,name,"B_att","full",0,r,h,"operation")
     load_decoder(a.projected,name,"full_B_att",0,r*h)
     poison_decoder(a.output,r*h)
