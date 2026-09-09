@@ -1,0 +1,7 @@
+case,mode,matches_full,full_tokens,cached_tokens,full_text,cached_text
+text_0,cached_full_prompt,True,"[785, 11174, 90512, 11052, 1495, 504, 279, 12884]","[785, 11174, 90512, 11052, 1495, 504, 279, 12884]",The raindrops fell down from the sky,The raindrops fell down from the sky
+text_0,cached_tokenwise_prompt,True,"[785, 11174, 90512, 11052, 1495, 504, 279, 12884]","[785, 11174, 90512, 11052, 1495, 504, 279, 12884]",The raindrops fell down from the sky,The raindrops fell down from the sky
+text_1,cached_full_prompt,True,"[16, 17, 151645]","[16, 17, 151645]",12,12
+text_1,cached_tokenwise_prompt,True,"[16, 17, 151645]","[16, 17, 151645]",12,12
+text_2,cached_full_prompt,True,"[1151, 11, 18575, 11, 13753, 151645]","[1151, 11, 18575, 11, 13753, 151645]","red, orange, yellow","red, orange, yellow"
+text_2,cached_tokenwise_prompt,True,"[1151, 11, 18575, 11, 13753, 151645]","[1151, 11, 18575, 11, 13753, 151645]","red, orange, yellow","red, orange, yellow"

@@ -11,6 +11,14 @@ The [retained study](../studies/model_generation/README.md) records the frozen
 budgets and diagnosis. Native full-model comparison, generation acceptance and
 performance promotion have not run.
 
+The authorized [reference-only follow-up](../studies/model_generation/rounding.md)
+traced the discrepancy to FP32 attention differences crossing BF16 rounding
+boundaries and propagating through the model. It reproduced the normalization
+gate violation while observing identical argmax in 66 comparisons and matching
+bounded greedy sequences on three declared prompts. These results motivate
+separating corresponding-mode comparisons from cross-schedule diagnostics;
+they do not establish Mojo model acceptance or change the frozen thresholds.
+
 The approved scope and stop gates are in [generation-plan.md](generation-plan.md).
 The declaration is [model_contract.json](../tests/fixtures/model_contract.json).
 The numerical thresholds are initial reference-only qualification criteria;

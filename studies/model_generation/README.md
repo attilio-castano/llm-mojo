@@ -5,6 +5,13 @@ greedy generation acceptance and full-model performance promotion have not run.
 The reference-only check found eight failing boundaries on independent inputs;
 its frozen budgets have not been widened. Final reserved inputs remain unopened.
 
+The subsequent [rounding investigation](rounding.md) explains the first
+attention difference, its propagation, and the actual failing normalization
+coordinate. All 66 declared next-token comparisons and all six bounded cached
+greedy trajectories agree with full recomputation. That diagnostic evidence
+informs a review of the acceptance criteria; the original failed gate and its
+records remain unchanged.
+
 ## Question and contract
 
 Can a full-prefill reference and a cached reference agree within a qualified

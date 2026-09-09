@@ -118,3 +118,15 @@ recomputation with cached execution on identical histories, and report any
 free-running divergence separately. Keep all existing gates and reserved inputs
 unchanged. This investigation does not authorize numerical-policy promotion or
 resumption of the native-model optimization campaign.
+
+The follow-up is complete. Identical layer-1 Q/K/V operands produce FP32 SDPA
+differences up to 1.889e-6; some cross BF16 midpoints. Full/cached observation is
+bitwise equal to unobserved execution. Propagation and the learned final-norm
+scale explain the recorded pointwise violation (11.375 versus 7.25 at the worst
+coordinate, distinct from the largest absolute-error coordinate). All 66
+next-token comparisons agree; 48 satisfy the sufficient margin bound. All six
+cached trajectories on the three declared text prompts match full recomputation
+through stop or the eight-token budget. The report, complete compact evidence,
+regenerated tables and figure are in `studies/model_generation/rounding.md`.
+Existing gates and reserved cases remain unchanged; revising acceptance is the
+next decision, and no native model execution or optimization followed this study.
