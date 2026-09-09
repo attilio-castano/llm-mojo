@@ -22,6 +22,20 @@ def policy_declaration():
     return json.loads((repository_root()/POLICY_PATH).read_text())
 
 
+def policy_profile_grid(spec):
+    declared=spec['policies']
+    if sha_json(declared)!=spec.get('policies_sha256'):
+        raise ValueError('decoder policy profile declaration changed')
+    grid=[(r,t,v) for r,t,v,n in declared['profiles']]
+    if len(set(grid))!=len(grid) or sorted(map(list,grid))!=sorted(spec.get('captures',[])):
+        raise ValueError('decoder policy profile census changed')
+    return grid
+
+
+def sha_json(value):
+    return hashlib.sha256((json.dumps(value,indent=2)+'\n').encode()).hexdigest()
+
+
 def policy_schedules(rows):
     """Finite declared schedules; each call sees its own absolute causal prefix."""
     result={'policy_repeat':[(0,rows)], 'policy_tokenwise':[(p,1) for p in range(rows)]}

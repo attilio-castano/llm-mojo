@@ -209,6 +209,10 @@ def validate_results(path,cases,selection=False,variants=None,invariant_variants
     expected_protected=Counter((name,policy,label,elements) for name,case in cases.items()
         for policy in policies(case['spec'],selection,variants)
         for label,elements in protected_extents(case['spec']).items())
+    if variants is not None:
+        expected_protected.update((name,policy,label,protected_extents(case['spec'])['a_cosine'])
+            for name,case in cases.items() if 'policy_tokenwise' in case['schedules']
+            for policy in variants for label in ('tokenwise_cosine','tokenwise_sine'))
     if protected!=expected_protected:
         raise ValueError('incomplete protected decoder storage coverage')
     if observed!=expected_checks(cases,selection,variants) or len(runtimes)!=1:

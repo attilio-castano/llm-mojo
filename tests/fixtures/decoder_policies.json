@@ -1,24 +1,133 @@
 {
   "schema": 1,
   "kind": "decoder_two_policy_declaration",
-  "baseline_variants": [0, 3, 20],
-  "baseline_deterministic": [20],
-  "workloads": [[16, 16, 0], [256, 256, 0], [4096, 4096, 0], [16, 256, 0], [64, 4096, 3], [1, 256, 0], [1, 4096, 0]],
-  "modes": [1, 24],
-  "profiles": [[256, 256, 0, 25], [256, 256, 20, 25], [64, 4096, 3, 25], [64, 4096, 20, 25], [1, 4096, 0, 100], [1, 4096, 20, 100]],
+  "baseline_variants": [
+    0,
+    3,
+    20
+  ],
+  "baseline_deterministic": [
+    20
+  ],
+  "workloads": [
+    [
+      16,
+      16,
+      0
+    ],
+    [
+      256,
+      256,
+      0
+    ],
+    [
+      4096,
+      4096,
+      0
+    ],
+    [
+      16,
+      256,
+      0
+    ],
+    [
+      64,
+      4096,
+      3
+    ],
+    [
+      1,
+      256,
+      0
+    ],
+    [
+      1,
+      4096,
+      0
+    ]
+  ],
+  "modes": [
+    1,
+    24
+  ],
+  "profiles": [
+    [
+      256,
+      256,
+      0,
+      25
+    ],
+    [
+      256,
+      256,
+      20,
+      25
+    ],
+    [
+      64,
+      4096,
+      3,
+      25
+    ],
+    [
+      64,
+      4096,
+      20,
+      25
+    ],
+    [
+      1,
+      4096,
+      0,
+      100
+    ],
+    [
+      1,
+      4096,
+      20,
+      100
+    ]
+  ],
   "schedules": {
     "repeat": "Repeat the full call after resetting and poisoning the cache and workspace.",
     "tokenwise": "One token per call, including the 4096-token case.",
-    "irregular_chunks": [15, 1, 1, 46, 1, 1, 16, 17, 63, 64, 65, 257, 1024],
+    "irregular_chunks": [
+      15,
+      1,
+      1,
+      46,
+      1,
+      1,
+      16,
+      17,
+      63,
+      64,
+      65,
+      257,
+      1024
+    ],
     "irregular_tail": "Append the remaining suffix, clipping each declared chunk at the case length."
   },
   "confirmation": {
     "outputs_observed_at_declaration": false,
-    "seeds": [7141, 7151],
-    "rows": [1, 17, 65, 257, 4096],
+    "seeds": [
+      7141,
+      7151
+    ],
+    "rows": [
+      1,
+      17,
+      65,
+      257,
+      4096
+    ],
     "prompt": "A rectangle has a perimeter of 30 meters and a width of 5 meters. Explain how to find its length and area."
   },
-  "search_budget": {"rounds": 2, "new_candidates_per_round": 2, "independent_confirmation": 1},
+  "search_budget": {
+    "rounds": 2,
+    "new_candidates_per_round": 2,
+    "independent_confirmation": 1
+  },
   "accuracy": "Unchanged decoder-layer-v1 whole-layer and isolated-operation gates; exact Hugging Face agreement is not required.",
   "invariance": "All 16 stored intermediates and both active KV prefixes must equal the candidate's own full-call bytes on the same hardware and build. Candidate bytes may differ from configuration 20.",
   "selection": "Fast: validated measured winner per exact workload and reuse mode. Deterministic: a compatible arithmetic family across schedules; no independent phase winners unless cross-phase invariance passes. Unmeasured cells fall back to the declared baseline.",

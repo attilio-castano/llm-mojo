@@ -8,6 +8,7 @@ from llm_mojo.attention_decode import enqueue_grouped_query_attention_decode_app
 from llm_mojo.attention_prefill import enqueue_grouped_query_attention_prefill_apple_gpu, enqueue_grouped_query_attention_prefill_split_apple_gpu
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.testing import TestSuite, assert_equal, assert_raises
+from std.python import PythonObject
 from llm_mojo.attention_sublayer import AttentionWeights, AttentionCache, AttentionWorkspace, _enqueue_attention_qkv, _enqueue_attention_wo
 from llm_mojo.mlp import MLPWeights, MLPWorkspace, enqueue_mlp_stage_apple_gpu, enqueue_mlp_apple_gpu
 from llm_mojo.decoder_layer import enqueue_decoder_layer, decoder_mappings
@@ -119,6 +120,44 @@ def _check_layer(mut a: AttentionWorkspace, mut m: MLPWorkspace, name: String,
     check_decoder(m.output, name, "Y", schedule, p, r, h)
 
 
+def _schedule(ctx: DeviceContext, mut aw: AttentionWeights, mut cache: AttentionCache,
+              mut a: AttentionWorkspace, mut mw: MLPWeights, mut m: MLPWorkspace,
+              mut xb: DeviceBuffer[DType.bfloat16], name: String, schedule: String,
+              calls: PythonObject, policy: Int, selection: Bool) raises:
+    var support = decoder_support()
+    var nq = aw.query_heads
+    var nk = aw.kv_heads
+    var d = aw.head_dim
+    var h = aw.hidden
+    support.configure(name, policy, schedule, "layer")
+    cache.reset(ctx)
+    poison_decoder(cache.key, 0)
+    poison_decoder(cache.value, 0)
+    for c in range(Int(py=calls.__len__())):
+        var p = Int(py=calls[c][0])
+        var r = Int(py=calls[c][1])
+        var gqa = Int(decoder_mappings(policy,r)[0]) if selection else 0
+        var projection = Int(decoder_mappings(policy,r)[1]) if selection else 0
+        var mapping = Int(decoder_mappings(policy,r)[2]) if selection else (policy if r > 1 else 0)
+        assert_equal(cache.length, p)
+        _poison(a, m, r)
+        var prefix_k = decoder_snapshot(cache.key, p*nk*d)
+        var prefix_v = decoder_snapshot(cache.value, p*nk*d)
+        var route = enqueue_decoder_layer(ctx, aw, cache, a, mw, m,
+            TileTensor(xb.unsafe_ptr().unsafe_offset(p*h), row_major(r,h)),
+            mapping, nq == 14, gqa, projection)
+        assert_equal(route, (11 if gqa == 5 else (4 if r == 1 else 6+gqa)) if nq == 14 else 3)
+        assert_equal(cache.length, p+r)
+        ctx.synchronize()
+        support.route(route, mapping, p, r, ctx.name(), ctx.api())
+        _check_layer(a, m, name, schedule, p, r)
+        var label = "full_" if schedule == "full" else schedule+"_"+String(p)+"_"
+        check_decoder_cache(cache.key, a.rotated_key, prefix_k, name,
+                            label+"cache_key", p, r, nk*d, cache.capacity)
+        check_decoder_cache(cache.value, a.raw_value, prefix_v, name,
+                            label+"cache_value", p, r, nk*d, cache.capacity)
+
+
 def _case(name: String, t: Int, h: Int, nq: Int, nk: Int, d: Int, i: Int,
           policy: Int, selection: Bool = False) raises:
     var support = decoder_support()
@@ -153,31 +192,22 @@ def _case(name: String, t: Int, h: Int, nq: Int, nk: Int, d: Int, i: Int,
     for s in range(Int(py=schedules.__len__())):
         var schedule = String(py=schedules[s][0])
         var calls = schedules[s][1]
-        support.configure(name, policy, schedule, "layer")
-        cache.reset(ctx)
-        poison_decoder(cache.key, 0)
-        poison_decoder(cache.value, 0)
-        for c in range(Int(py=calls.__len__())):
-            var p = Int(py=calls[c][0])
-            var r = Int(py=calls[c][1])
-            var mapping = Int(decoder_mappings(policy,r)[2]) if selection else (policy if r > 1 else 0)
-            assert_equal(cache.length, p)
-            _poison(a, m, r)
-            var prefix_k = decoder_snapshot(cache.key, p*nk*d)
-            var prefix_v = decoder_snapshot(cache.value, p*nk*d)
-            var route = enqueue_decoder_layer(ctx, aw, cache, a, mw, m,
-                TileTensor(xb.unsafe_ptr().unsafe_offset(p*h), row_major(r,h)),
-                mapping, nq == 14, gqa, projection)
-            assert_equal(route, (11 if gqa == 5 else (4 if r == 1 else 6+gqa)) if nq == 14 else 3)
-            assert_equal(cache.length, p+r)
-            ctx.synchronize()
-            support.route(route, mapping, p, r, ctx.name(), ctx.api())
-            _check_layer(a, m, name, schedule, p, r)
-            var label = "full_" if schedule == "full" else schedule+"_"+String(p)+"_"
-            check_decoder_cache(cache.key, a.rotated_key, prefix_k, name,
-                                label+"cache_key", p, r, nk*d, cap)
-            check_decoder_cache(cache.value, a.raw_value, prefix_v, name,
-                                label+"cache_value", p, r, nk*d, cap)
+        if schedule == "policy_tokenwise":
+            # Decode owns one active row and one fully checked guard row.
+            # Keep the original full-sized workspace alive and protected too.
+            var da = AttentionWorkspace(ctx, 2, cap, nq, nk, d, False, nq != 14, splits)
+            var dm = MLPWorkspace(ctx, 2, h, i)
+            poison_decoder(da.cosine, 0)
+            poison_decoder(da.sine, 0)
+            load_decoder(da.cosine, name, "full_cosine", 0, t*d)
+            load_decoder(da.sine, name, "full_sine", 0, t*d)
+            var dc = decoder_snapshot(da.cosine, len(da.cosine))
+            var ds = decoder_snapshot(da.sine, len(da.sine))
+            _schedule(ctx,aw,cache,da,mw,dm,xb,name,schedule,calls,policy,selection)
+            exact_decoder(da.cosine, dc, "tokenwise_cosine")
+            exact_decoder(da.sine, ds, "tokenwise_sine")
+        else:
+            _schedule(ctx,aw,cache,a,mw,m,xb,name,schedule,calls,policy,selection)
     exact_decoder(xb, saved_xb, "xb")
     exact_decoder(aw.norm, saved_aw_norm, "aw_norm")
     exact_decoder(aw.qkv, saved_aw_qkv, "aw_qkv")

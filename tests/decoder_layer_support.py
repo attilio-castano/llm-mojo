@@ -1,5 +1,6 @@
 """Host-only BF16 transport and recorded decoder assertions; no inference."""
 import ctypes
+from functools import lru_cache
 import gzip
 import hashlib
 import importlib.util
@@ -117,8 +118,11 @@ def configure(name, policy, schedule, mode):
         FULL.clear()
 
 
+@lru_cache(maxsize=128)
 def read(name,label):
-    a=np.load(case_directory(name)/(label+'.npy'),allow_pickle=False)
+    # Slice before materializing: tokenwise replay needs one row from a large
+    # frozen array. Read-only mappings preserve the verified fixture bytes.
+    a=np.load(case_directory(name)/(label+'.npy'),allow_pickle=False,mmap_mode='r')
     spec=case_record(name)['arrays'][label]
     if a.shape!=tuple(spec['shape']) or a.dtype!=np.float32:
         raise ValueError('fixture shape/storage dtype changed')

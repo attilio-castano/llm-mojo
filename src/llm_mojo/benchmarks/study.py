@@ -473,7 +473,7 @@ def load_profile(directory, prefix=''):
     directory = evidence_directory(directory)
     record = json.loads((directory / (prefix+'profiles.json')).read_text())
     path = directory / (prefix+'profile_samples.csv.gz')
-    if record.get('schema') in (5,6):
+    if record.get('schema') in (5,6,7):
         return load_decoder_profile(directory,prefix)
     if record.get('schema') == 4:
         return load_mlp_profile(directory,prefix)
@@ -585,10 +585,16 @@ def load_decoder_profile(directory,prefix=''):
     directory=Path(directory)
     record=json.loads((directory/(prefix+'profiles.json')).read_text())
     path=directory/(prefix+'profile_samples.csv.gz')
-    selected=record.get('schema')==6
-    if record.get('schema') not in (5,6) or sha(path)!=record['samples_sha256']:
+    selected=record.get('schema') in (6,7)
+    if record.get('schema') not in (5,6,7) or sha(path)!=record['samples_sha256']:
         raise ValueError('decoder profile evidence changed')
-    if selected:
+    if record['schema']==7:
+        spec=record['specification']
+        grid=set(decoder.policy_profile_grid(spec))
+        source=record['common']['source_sha256']
+        if source.get(decoder.POLICY_PATH)!=spec['policies_sha256']:
+            raise ValueError('decoder profiles do not match their built policy declaration')
+    elif selected:
         spec=record['specification']
         if hashlib.sha256((json.dumps(spec['selection'],indent=2)+'\n').encode()).hexdigest()!=spec['selection_sha256']:
             raise ValueError('decoder profile selection identity changed')
@@ -637,8 +643,9 @@ def load_decoder_windows(directory,prefix=''):
     directory=Path(directory)
     load_decoder_profile(directory,prefix)
     record=json.loads((directory/(prefix+'profiles.json')).read_text())
-    selected=record['schema']==6
-    grid=decoder.profile_selection(record['specification']['selection']) if selected else [(r,t,0) for r,t,_ in decoder.PROFILES]
+    selected=record['schema'] in (6,7)
+    grid=(decoder.policy_profile_grid(record['specification']) if record['schema']==7 else
+          decoder.profile_selection(record['specification']['selection']) if selected else [(r,t,0) for r,t,_ in decoder.PROFILES])
     grouped=defaultdict(list)
     with gzip.open(directory/(prefix+'profile_samples.csv.gz'),'rt',newline='') as stream:
         for row in csv.DictReader(stream):

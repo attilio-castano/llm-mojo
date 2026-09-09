@@ -27,6 +27,11 @@ Configuration 20 is the initial deterministic control. Validate the existing
 Qwen synthetic stress cases and three real checkpoint cases. Repeat every
 case with the declared schedules through 4096 tokens. Preserve all operation,
 cache ownership, asynchronous reuse and negative-control checks.
+Tokenwise replay uses one active scratch row and one fully checked guard row,
+with the full cache and rotary tables retained. Fixture arrays are mapped read
+only and sliced before comparison. Full and irregular calls continue checking
+the complete larger workspace. This bounds host test traffic without reducing
+the tokenwise schedule or the checked storage extent of any allocation.
 
 Measure the seven declared shapes in hot and ring24 modes separately using
 the existing paired protocol and self-pair calibration. Ring24 has 24 distinct

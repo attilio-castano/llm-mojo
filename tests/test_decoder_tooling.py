@@ -24,6 +24,13 @@ class DecoderToolingTests(unittest.TestCase):
             self.assertEqual(schedules['policy_tokenwise'],[(p,1) for p in range(rows)])
             for calls in schedules.values():
                 self.assertEqual([p for start,size in calls for p in range(start,start+size)],list(range(rows)))
+        declared=contract.policy_declaration()
+        spec=dict(policies=declared,policies_sha256=contract.sha_json(declared),
+                  captures=[list(row[:3]) for row in declared['profiles']])
+        self.assertEqual(contract.sha(contract.repository_root()/contract.POLICY_PATH),spec['policies_sha256'])
+        self.assertEqual(len(contract.policy_profile_grid(spec)),6)
+        for bad in ({**spec,'policies_sha256':'changed'},{**spec,'captures':spec['captures'][:-1]}):
+            with self.assertRaises(ValueError):contract.policy_profile_grid(bad)
 
     def test_frozen_workloads_and_sample_census(self):
         spec=STUDIES['decoder_layer']
