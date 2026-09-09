@@ -9,12 +9,17 @@ from .._repository import repository_root
 OPERATION = 'decoder_layer'
 VARIANTS = {0,1,2,3,4,8,12,14}
 # VARIANTS is the frozen historical selection registry.
-MEASUREMENT_VARIANTS = VARIANTS | {20}
+MEASUREMENT_VARIANTS = VARIANTS | {20,21,22}
+# Numerical harness IDs for the public lookup: Fast/Deterministic, hot/ring24.
+POLICY_EXECUTIONS = {100:(False,1),101:(True,1),102:(False,24),103:(True,24)}
+POLICY_TEST_VARIANTS = MEASUREMENT_VARIANTS | POLICY_EXECUTIONS.keys()
 ENTRYPOINTS = {f'decoder_layer_{v}':'enqueue_decoder_layer' for v in MEASUREMENT_VARIANTS}
 NAMES = {0:'integrated control',1:'both 16x16 attention projections',
          2:'split8 attention',3:'split8 + both 16x16 projections',4:'rowwise MLP',
          8:'combined gate/up',12:'cooperative down G4',14:'combined gate/up + down G4',
-         20:'consistent G32 attention and rowwise projections'}
+         20:'consistent G32 attention and rowwise projections',
+         21:'consistent G32 and fixed MMA projections',
+         22:'consistent G32 and four-row weight reuse'}
 POLICY_PATH = 'tests/fixtures/decoder_policies.json'
 
 
@@ -36,15 +41,27 @@ def sha_json(value):
     return hashlib.sha256((json.dumps(value,indent=2)+'\n').encode()).hexdigest()
 
 
-def policy_schedules(rows):
+def policy_schedules(rows,declaration=None):
     """Finite declared schedules; each call sees its own absolute causal prefix."""
+    declaration=policy_declaration() if declaration is None else declaration
+    declared=declaration['schedules']
     result={'policy_repeat':[(0,rows)], 'policy_tokenwise':[(p,1) for p in range(rows)]}
     calls=[];p=0
-    for size in policy_declaration()['schedules']['irregular_chunks']:
+    for size in declared['irregular_chunks']:
         if p==rows:break
         size=min(size,rows-p);calls.append((p,size));p+=size
     if p<rows:calls.append((p,rows-p))
     result['policy_irregular']=calls
+    if 'lookup_chunks' in declared:
+        calls=[];p=0
+        for size in declared['lookup_chunks']:
+            if p==rows:break
+            size=min(size,rows-p);calls.append((p,size));p+=size
+        if p<rows:calls.append((p,rows-p))
+        result['policy_lookup']=calls
+    if 'prefill_prefix_rows' in declared:
+        prefix=min(rows,declared['prefill_prefix_rows'])
+        result['policy_prefix']=[(0,prefix)]+([(prefix,rows-prefix)] if prefix<rows else [])
     return result
 SELECTION_PATH = 'studies/decoder_layer/selection-declaration.json'
 SELECTION_PROMPT = ('A train travels 60 kilometers in 45 minutes. Explain its average '
@@ -124,8 +141,134 @@ def mappings(variant,rows):
     if type(variant)is not int or variant not in MEASUREMENT_VARIANTS or type(rows)is not int or rows<1:
         raise ValueError('invalid decoder configuration')
     if variant==20:return (5,0,0)
+    if variant==21:return (5,6,7)
+    if variant==22:return (5,7,19)
     return (4 if variant in (2,3) else 0,5 if variant in (1,3) else 0,
             variant if rows==1 and variant in (8,12,14) else 0 if rows==1 or variant==4 else 7)
+
+
+
+def policy_configuration(deterministic,rows,total_rows,layers=1):
+    """Mirror the native lookup so recorded routes expose selector drift."""
+    if type(deterministic)is not bool or type(rows)is not int or type(total_rows)is not int or not 1<=rows<=total_rows<=4096 or type(layers)is not int or layers not in (1,24):
+        raise ValueError('invalid decoder policy workload')
+    if deterministic:return 20
+    return 3 if (rows,total_rows)==(64,4096) else 0
+
+
+def execution_mappings(variant,rows,total_rows):
+    if variant in POLICY_EXECUTIONS:
+        deterministic,layers=POLICY_EXECUTIONS[variant]
+        variant=policy_configuration(deterministic,rows,total_rows,layers)
+    return mappings(variant,rows)
+
+
+def select_policy_round1(summaries,invariant_variants,compatible_family,declaration=None):
+    """Apply the frozen first-round rule to complete, reconstructed summaries."""
+    declaration=policy_declaration() if declaration is None else declaration
+    declared=declaration['rounds'][0]
+    if declared['round']!=1 or declared['new_candidates']!=[21,22]:
+        raise ValueError('unsupported decoder policy round')
+    screens={screen['name']:screen for screen in declared['screens']}
+    if set(summaries)!=set(screens):raise ValueError('missing policy screen')
+    tables={}
+    for name,screen in screens.items():
+        rows=summaries[name]
+        table={(x['query_rows'],x['rows'],x['layers'],x['candidate']):x for x in rows}
+        expected={(r,t,l,v) for r,t in screen['workloads']
+                  for l in declaration['modes'] for v in screen['candidates']}
+        if len(table)!=len(rows) or set(table)!=expected:
+            raise ValueError('incomplete policy screen comparison census')
+        tables[name]=table
+    det=tables['decoder_policies_round1_det']
+    cells=[(r,t,l) for r,t in screens['decoder_policies_round1_det']['workloads']
+           for l in declaration['modes']]
+    compatible=compatible_family is True and {20,22}<=set(invariant_variants)
+    use22={cell:compatible and det[*cell,22]['decision']=='faster' for cell in cells}
+    use21=21 in invariant_variants and all(
+        det[*cell,21]['decision']=='faster' and (
+            not use22[cell] or det[*cell,21]['ratio_max'] <
+            (1-det[*cell,21]['noise_floor'])*det[*cell,22]['ratio_min']) for cell in cells)
+    proposals=[]
+    for r,t,l in cells:
+        control=next(v for rr,tt,v in declaration['workloads'] if (r,t)==(rr,tt))
+        fast=tables[f'decoder_policies_round1_fast_{control}']
+        eligible=[fast[r,t,l,v] for v in (21,22) if fast[r,t,l,v]['decision']=='faster']
+        winner=min(eligible,key=lambda x:(x['ratio'],x['candidate']))['candidate'] if eligible else control
+        proposals.append(dict(query_rows=r,rows=t,layers=l,fast=winner,
+            deterministic=21 if use21 else 22 if use22[r,t,l] else 20))
+    return dict(round=1,proposals=proposals,deterministic_family=[21] if use21 else [20,22] if compatible else [20],
+        deterministic_fallback=21 if use21 else 20,
+        fixed_mma_global_qualified=use21,compatible_row_reuse=compatible)
+
+
+def policy_round1_decision(directory,numerical_directories,build):
+    """Bind selection to raw timing, full numerical census and one clean build."""
+    import copy
+    from .. import decoder_validation as validation
+    from .study import STUDIES,load_run
+    numerical_directories=list(map(Path,numerical_directories))
+    if not numerical_directories:raise ValueError('missing policy numerical split')
+    declared=json.loads((numerical_directories[0]/'evaluation.json').read_text())['declaration']
+    round_spec=declared['rounds'][0]
+    if build['repository']['dirty'] or build['sources'].get(POLICY_PATH)!=sha_json(declared):
+        raise ValueError('policy declaration differs from measurement build')
+    anchor_path=repository_root()/'tests/fixtures/decoder_layer/checksums.json'
+    evidence_path=anchor_path.with_name('development.json.gz')
+    anchor=json.loads(anchor_path.read_text())
+    if (sha(anchor_path)!=build['sources'].get(str(anchor_path.relative_to(repository_root())))
+        or sha(evidence_path)!=anchor['evidence_sha256']):
+        raise ValueError('policy numerical reference changed')
+    raw=gzip.decompress(evidence_path.read_bytes())
+    if hashlib.sha256(raw).hexdigest()!=anchor['uncompressed_sha256']:
+        raise ValueError('policy numerical evidence changed')
+    frozen=json.loads(raw);numerical=[];splits=set()
+    invariant=set(round_spec['numerical']['variants']);compatible=True
+    for directory_numerical in numerical_directories:
+        path=directory_numerical/'evaluation.json';record=json.loads(path.read_text())
+        source=record['build']['source'];split=record['split']
+        if (record.get('kind')!='decoder_policy_evaluation' or record.get('status')!='passed'
+            or record.get('exit_code')!=0 or record.get('declaration')!=declared
+            or source['repository']!=build['repository']
+            or any(source['sources'].get(k)!=v for k,v in build['sources'].items())
+            or record.get('variants')!=round_spec['numerical']['variants']
+            or record.get('invariant_variants')!=round_spec['numerical']['required_invariants']
+            or record.get('comparison_family')!=round_spec['numerical']['comparison_family']
+            or split in splits or split not in round_spec['numerical']['splits']):
+            raise ValueError('policy numerical evaluation identity changed')
+        splits.add(split)
+        if (sha(directory_numerical/'checks.jsonl')!=record['checks_sha256']
+            or sha(directory_numerical/'output.log')!=record['output_sha256']):
+            raise ValueError('policy numerical raw records changed')
+        cases={name:copy.deepcopy(case) for name,case in frozen['cases'].items()
+               if case['spec']['nq']==14 and name.startswith('checkpoint_')==(split=='checkpoint')}
+        for name,case in cases.items():
+            if any(record['fixtures'].get(name+'/'+label+'.npy')!=spec['sha256'] for label,spec in case['arrays'].items()):
+                raise ValueError('policy evaluation used different numerical inputs')
+            case['schedules'].update({key:[dict(start=p,rows=r) for p,r in calls]
+                for key,calls in policy_schedules(case['spec']['rows'],declared).items()})
+        replay=validation.validate_results(directory_numerical/'checks.jsonl',cases,True,
+            record['variants'],record['invariant_variants'],record['comparison_family'])
+        if any(record.get(k)!=v for k,v in replay.items()):
+            raise ValueError('policy numerical summary differs from complete records')
+        invariant &= {int(v) for v,result in replay['schedule_invariance'].items() if result['mismatches']==0}
+        compatible &= replay['family_compatible']
+        numerical.append(dict(split=split,evaluation_sha256=sha(path),checks_sha256=record['checks_sha256'],
+            binary_sha256=record['build']['binary_sha256']))
+    if splits!=set(round_spec['numerical']['splits']):raise ValueError('missing policy numerical split')
+    summaries={};runs=[]
+    for screen in round_spec['screens']:
+        name=screen['name'];path,prefix=selection_run_location(directory,name)
+        run,_,summary=load_run(path,prefix)
+        if (run['study']!=name or run['build']!=build
+            or run['specification']!=json.loads(json.dumps(STUDIES[name]))):
+            raise ValueError('policy timing screen identity changed')
+        summaries[name]=summary
+        runs.append(dict(study=name,run_sha256=sha(path/(prefix+'run.json')),samples_sha256=run['samples_sha256']))
+    return dict(schema=1,kind='decoder_policy_round_decision',declaration_sha256=sha_json(declared),
+        build_sha256=hashlib.sha256(json.dumps(build,sort_keys=True).encode()).hexdigest(),
+        numerical=numerical,screens=runs,invariant_variants=sorted(invariant),
+        **select_policy_round1(summaries,invariant,compatible,declared))
 
 
 def stages(variant,rows):

@@ -13,6 +13,39 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class DecoderToolingTests(unittest.TestCase):
+    def test_policy_selection_requires_complete_screens_and_compatible_arithmetic(self):
+        summaries={screen['name']:[dict(query_rows=r,rows=t,layers=l,candidate=v,
+            decision='calibration' if v==screen['control'] else 'faster',
+            ratio=1.0 if v==screen['control'] else 0.4 if v==21 else 0.6,
+            ratio_min=0.39 if v==21 else 0.59,ratio_max=0.41 if v==21 else 0.61,noise_floor=.05)
+            for r,t in screen['workloads'] for l in (1,24) for v in screen['candidates']]
+            for screen in contract.policy_declaration()['rounds'][0]['screens']}
+        choose=lambda invariant,compatible:contract.select_policy_round1(summaries,invariant,compatible)
+        # A globally faster fixed-MMA family is valid even with different bytes.
+        selected=choose({20,21,22},True)
+        self.assertEqual(selected['deterministic_family'],[21])
+        self.assertTrue(all(x['deterministic']==21 for x in selected['proposals']))
+        frozen=contract.policy_declaration()
+        expected_schedules=contract.policy_schedules(4096,frozen)
+        with patch.object(contract,'policy_declaration',return_value={}):
+            self.assertEqual(contract.select_policy_round1(summaries,{20,21,22},True,frozen),selected)
+            self.assertEqual(contract.policy_schedules(4096,frozen),expected_schedules)
+        # One bad mode forbids mixing distinct arithmetic families by workload.
+        row=next(x for x in summaries['decoder_policies_round1_det'] if x['candidate']==21)
+        row['decision']='slower'
+        selected=choose({20,21,22},True)
+        self.assertEqual(selected['deterministic_family'],[20,22])
+        self.assertTrue(all(x['deterministic']==22 for x in selected['proposals']))
+        self.assertTrue(all(x['fast']==21 for x in selected['proposals']))
+        # Own schedule invariance does not establish compatibility with ID20.
+        self.assertTrue(all(x['deterministic']==20 for x in choose({20,22},False)['proposals']))
+        row['decision']='faster';row['ratio_max']=.58
+        self.assertFalse(choose({20,21,22},True)['fixed_mma_global_qualified'])
+        name=next(iter(summaries));saved=summaries[name].pop()
+        with self.assertRaises(ValueError):choose({20,21,22},True)
+        summaries[name].extend([saved,saved])
+        with self.assertRaises(ValueError):choose({20,21,22},True)
+
     def test_policy_registry_preserves_history_and_separate_qkv_dispatches(self):
         self.assertNotIn(20,contract.VARIANTS)
         self.assertEqual(contract.mappings(20,1),contract.mappings(20,4096))
@@ -34,6 +67,16 @@ class DecoderToolingTests(unittest.TestCase):
         self.assertEqual(contract.policy_profile_grid(live),contract.policy_profile_grid(spec))
         for bad in ({**spec,'policies_sha256':'changed'},{**spec,'captures':spec['captures'][:-1]}):
             with self.assertRaises(ValueError):contract.policy_profile_grid(bad)
+
+    def test_policy_schedules_hit_every_lookup_cell_and_keep_test_ids_separate(self):
+        cells={(r,p+r) for calls in contract.policy_schedules(4096).values() for p,r in calls}
+        self.assertTrue({(r,t) for r,t,_ in contract.policy_declaration()['workloads']}<=cells)
+        self.assertFalse(contract.MEASUREMENT_VARIANTS & contract.POLICY_EXECUTIONS.keys())
+        self.assertEqual(contract.execution_mappings(100,64,4096),contract.mappings(3,64))
+        for variant in contract.POLICY_EXECUTIONS:
+            with self.assertRaises(ValueError):contract.specification(variant,1,4096)
+        for args in ((False,0,1,1),(True,2,1,1),(True,1,4097,1),(False,1,1,2)):
+            with self.assertRaises(ValueError):contract.policy_configuration(*args)
 
     def test_frozen_workloads_and_sample_census(self):
         spec=STUDIES['decoder_layer']

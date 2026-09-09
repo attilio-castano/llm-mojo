@@ -113,4 +113,39 @@ class NumericalReceiptTests(unittest.TestCase):
             check(bad,())
 
 
+    def test_family_compatibility_is_complete_and_separate_from_self_invariance(self):
+        from llm_mojo.decoder_validation import STAGES, BOUNDARIES
+        records=[dict(r) for r in self.records if r['mode']=='negative']
+        for variant in (0,3):
+            base=[{**r,'policy':variant} for r in self.records if r['mode']!='negative']
+            records.extend(base)
+            for stage in STAGES:
+                boundary=next(r for r in base if r['kind']=='boundary' and r['mode']=='layer'
+                              and r['schedule']=='chunk' and r['stage']==stage)
+                if stage not in BOUNDARIES:records.append({**boundary,'kind':'full_vs_chunk'})
+                records.append({**boundary,'kind':'schedule_exact','exact':True})
+            for stage in ('consistent_cache_key','consistent_cache_value'):
+                records.append(dict(case='qwen',policy=variant,schedule='chunk',mode='layer',kind='schedule_exact',
+                    stage=stage,start=0,rows=1,elements=128,exact=True))
+            if variant==3:
+                for row in [r for r in records if r.get('policy')==3 and r['kind']=='schedule_exact']:
+                    records.append({**row,'schedule':'full','kind':'family_exact','reference_variant':0})
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'checks.jsonl'
+            def check(rows):
+                path.write_text(''.join(json.dumps(r)+'\n' for r in rows))
+                return validate_results(path,self.cases,variants=[0,3],invariant_variants=[0,3],comparison_family=[0,3])
+            result=check(records)
+            self.assertTrue(result['family_compatible'])
+            self.assertEqual(result['family_comparisons'],18)
+            for bad in (records[:-1],records+[records[-1]]):
+                with self.assertRaises(ValueError):check(bad)
+            bad=copy.deepcopy(records);bad[-1]['reference_variant']=20
+            with self.assertRaises(ValueError):check(bad)
+            bad=copy.deepcopy(records);bad[-1]['exact']=False
+            # Both candidates may satisfy their own deterministic contract yet
+            # remain incompatible with each other. Such a family cannot mix.
+            self.assertFalse(check(bad)['family_compatible'])
+
+
 if __name__=='__main__':unittest.main()

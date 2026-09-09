@@ -60,7 +60,8 @@ def holdout_manifest(root,verify_arrays=True):
     payload={k:v for k,v in record.items() if k!='payload_sha256'}
     import hashlib
     selection=record.get('kind')=='decoder_selection_holdout'
-    if (record.get('status')!='complete' or record.get('kind') not in ('decoder_holdout','decoder_selection_holdout')
+    policy=record.get('kind')=='decoder_policy_holdout'
+    if (record.get('status')!='complete' or record.get('kind') not in ('decoder_holdout','decoder_selection_holdout','decoder_policy_holdout')
         or hashlib.sha256(json.dumps(payload,sort_keys=True).encode()).hexdigest()!=record.get('payload_sha256')):
         raise ValueError('decoder holdout is incomplete or changed')
     repo=repository_root();anchor=json.loads((repo/'tests/fixtures/decoder_layer/checksums.json').read_text())
@@ -69,10 +70,19 @@ def holdout_manifest(root,verify_arrays=True):
     expected={'h{h}_i{i}_nq{nq}_nk{nk}_d{d}_t{rows}_s{seed}_{mutation}'.format(**s):s
               for s in anchor['specification']['holdout']}
     ids=anchor['checkpoint']['holdout_token_ids'];checkpoint_name='checkpoint_holdout'
-    if selection:
-        declared=selection_contract.selection_declaration()
-        if record.get('selection')!=declared:raise ValueError('selection holdout declaration changed')
-        ids=declared['checkpoint_token_ids'];checkpoint_name='checkpoint_selection_holdout'
+    if selection or policy:
+        if policy:
+            declared_policy=selection_contract.policy_declaration()
+            if record.get('policies')!=declared_policy:raise ValueError('policy holdout declaration changed')
+            declared=declared_policy['confirmation']
+        else:
+            declared=selection_contract.selection_declaration()
+            if record.get('selection')!=declared:raise ValueError('selection holdout declaration changed')
+        ids=declared['checkpoint_token_ids']
+        import struct
+        if not ids or hashlib.sha256(struct.pack('<'+'q'*len(ids),*ids)).hexdigest()!=declared['checkpoint_token_ids_sha256']:
+            raise ValueError('decoder reserved token identity changed')
+        checkpoint_name='checkpoint_policy_holdout' if policy else 'checkpoint_selection_holdout'
         expected={f'h896_i4864_nq14_nk2_d64_t{t}_s{seed}_base':dict(h=896,nq=14,nk=2,d=64,i=4864,rows=t,seed=seed,mutation='base')
                   for seed in declared['seeds'] for t in declared['rows']}
     expected[checkpoint_name]=dict(h=896,nq=14,nk=2,d=64,i=4864,
@@ -90,6 +100,8 @@ def holdout_manifest(root,verify_arrays=True):
         position=0
         for r in chunks:
             required['chunk'].append((position,r));position+=r
+        if policy and t==33:required['threshold']=[(0,16),(16,1),(17,15),(32,1)]
+        if policy and t==65:required['reuse']=[(0,53)]+[(p,1) for p in range(53,65)]
         actual={key:[(c['start'],c['rows']) for c in calls] for key,calls in case['schedules'].items()}
         if actual!=required:
             raise ValueError('decoder reserved schedule changed')
@@ -119,7 +131,7 @@ def policies(spec,selection,variants=None):
     return sorted(selection_contract.VARIANTS) if selection else [0,7] if spec['nq']==14 and spec['rows']>1 else [0]
 
 
-def expected_checks(cases,selection=False,variants=None):
+def expected_checks(cases,selection=False,variants=None,comparison_family=()):
     expected=Counter()
     for name,case in cases.items():
         spec=case['spec'];t=spec['rows']
@@ -130,6 +142,9 @@ def expected_checks(cases,selection=False,variants=None):
                     expected[name,policy,schedule,'layer','route','',p,r]+=1
                     for stage in STAGES:
                         expected[name,policy,schedule,'layer','boundary',stage,p,r]+=1
+                    if schedule=='full' and policy in comparison_family[1:]:
+                        for stage in (*STAGES,'consistent_cache_key','consistent_cache_value'):
+                            expected[name,policy,schedule,'layer','family_exact',stage,p,r]+=1
                     if schedule!='full':
                         for stage in STAGES if variants is not None else BOUNDARIES:
                             expected[name,policy,schedule,'layer','full_vs_chunk',stage,p,r]+=1
@@ -156,7 +171,7 @@ def protected_extents(spec):
                 mw_down=h*i, a_cosine=capacity*d, a_sine=capacity*d)
 
 
-def validate_results(path,cases,selection=False,variants=None,invariant_variants=()):
+def validate_results(path,cases,selection=False,variants=None,invariant_variants=(),comparison_family=()):
     records=[json.loads(line) for line in Path(path).read_text().splitlines()]
     observed=Counter();runtimes=set();aux=Counter();protected=Counter()
     for row in records:
@@ -182,7 +197,7 @@ def validate_results(path,cases,selection=False,variants=None,invariant_variants
         observed[key]+=1
         spec=cases[row['case']]['spec'];r=row['rows'];h=spec['h'];stage=row.get('stage','')
         if kind=='route':
-            gqa,_,mlp=selection_contract.mappings(row['policy'],r) if selection else (0,0,row['policy'] if r>1 else 0)
+            gqa,_,mlp=selection_contract.execution_mappings(row['policy'],r,row['start']+r) if selection else (0,0,row['policy'] if r>1 else 0)
             if row['attention']!=(11 if gqa==5 else 4 if r==1 else 6+gqa) or row['mlp']!=mlp:
                 raise ValueError('decoder route changed')
             if row['backend']!='metal' or not row['device'].startswith('Apple '):
@@ -191,12 +206,14 @@ def validate_results(path,cases,selection=False,variants=None,invariant_variants
         elif kind=='cache':
             if row['elements']!=(row['start']+r)*spec['nk']*spec['d'] or any(row.get(k)is not True for k in ('prefix_exact','append_exact','inactive_exact')):
                 raise ValueError('incomplete cache preservation check')
-        elif kind=='schedule_exact':
+        elif kind in ('schedule_exact','family_exact'):
             width=spec['i'] if stage in ('G','U','A','S') else spec['nk']*spec['d'] if stage in ('K_raw','V_raw','K_rot','consistent_cache_key','consistent_cache_value') else h
             count=(row['start']+r)*width if stage.startswith('consistent_cache_') else r*width
-            if type(row.get('exact'))is not bool or row.get('elements')!=count:
+            if type(row.get('exact'))is not bool or type(row.get('elements'))is not int or row.get('elements')!=count:
                 raise ValueError('incomplete decoder schedule comparison')
-            if row['policy'] in invariant_variants and not row['exact']:
+            if kind=='family_exact' and (not comparison_family or type(row.get('reference_variant'))is not int or row.get('reference_variant')!=comparison_family[0]):
+                raise ValueError('decoder family comparison identity changed')
+            if kind=='schedule_exact' and row['policy'] in invariant_variants and not row['exact']:
                 raise ValueError('deterministic decoder schedule mismatch')
         elif kind in ('boundary','full_vs_chunk'):
             width=spec['i'] if stage in ('G','U','A','S') else spec['nk']*spec['d'] if stage in ('K_raw','V_raw','K_rot') else h
@@ -215,7 +232,7 @@ def validate_results(path,cases,selection=False,variants=None,invariant_variants
             for policy in variants for label in ('tokenwise_cosine','tokenwise_sine'))
     if protected!=expected_protected:
         raise ValueError('incomplete protected decoder storage coverage')
-    if observed!=expected_checks(cases,selection,variants) or len(runtimes)!=1:
+    if observed!=expected_checks(cases,selection,variants,comparison_family) or len(runtimes)!=1:
         raise ValueError('decoder missing, duplicate or unexpected numerical coverage')
     negatives={'second residual uses X','second residual omitted','first residual omitted',
                'second norm uses X','wrong norm weights','wrong absolute RoPE position',
@@ -241,10 +258,20 @@ def validate_results(path,cases,selection=False,variants=None,invariant_variants
                 expected[v,'exact',label,'','',66*128]+=1
         actual=Counter((r['policy'],r['kind'],r.get('stage',r.get('label')),r.get('start',''),r.get('rows',''),r['elements']) for r in async_rows)
         if actual!=expected:raise ValueError('incomplete selection asynchronous coverage')
-    return dict(checks=sum(observed.values()),runtime=dict(zip(('device','backend'),next(iter(runtimes)))))
+    result=dict(checks=sum(observed.values()),runtime=dict(zip(('device','backend'),next(iter(runtimes)))))
+    if variants is not None:
+        exact_rows=[r for r in records if r.get('kind')=='schedule_exact' and r.get('case') in cases and r.get('mode')=='layer']
+        result['schedule_invariance']={str(v):dict(
+            comparisons=sum(r['policy']==v for r in exact_rows),
+            mismatches=sum(r['policy']==v and not r['exact'] for r in exact_rows)) for v in variants}
+    if comparison_family:
+        family=[r for r in records if r.get('kind')=='family_exact']
+        result.update(comparison_family=list(comparison_family),family_comparisons=len(family),
+                      family_compatible=bool(family) and all(r['exact'] for r in family))
+    return result
 
 
-def evaluate_policies(binary,fixtures,output,variants,invariant_variants,split='development'):
+def evaluate_policies(binary,fixtures,output,variants,invariant_variants,split='development',comparison_family=()):
     """Reuse the layer suite with an explicit complete policy/schedule census."""
     import copy
     binary,fixtures,output=map(lambda p:Path(p).resolve(),(binary,fixtures,output))
@@ -252,11 +279,21 @@ def evaluate_policies(binary,fixtures,output,variants,invariant_variants,split='
     if not candidate.get('selection'):
         raise ValueError('policy evaluation requires the configuration suite')
     if (not variants or len(set(variants))!=len(variants)
-        or not set(variants)<=selection_contract.MEASUREMENT_VARIANTS
+        or not set(variants)<=selection_contract.POLICY_TEST_VARIANTS
         or not set(invariant_variants)<=set(variants)):
         raise ValueError('invalid policy evaluation family')
+    if comparison_family and (len(comparison_family)<2 or len(set(comparison_family))!=len(comparison_family)
+        or not set(comparison_family)<=set(variants)
+        or [v for v in variants if v in comparison_family]!=list(comparison_family)):
+        raise ValueError('invalid ordered decoder comparison family')
     raw=json.loads((fixtures/'manifest.json').read_text())
     if raw.get('status')!='complete':raise ValueError('incomplete policy inputs')
+    if split=='holdout':
+        verified,_=holdout_manifest(fixtures)
+        if (verified!=raw or raw.get('kind')!='decoder_policy_holdout'
+            or raw['candidate']['binary_sha256']!=candidate['binary_sha256']
+            or raw['candidate']['commit']!=candidate['source']['repository']['commit']):
+            raise ValueError('policy confirmation names a different frozen candidate')
     cases={name:copy.deepcopy(case) for name,case in raw['cases'].items()
            if case['spec']['nq']==14 and (split=='holdout' or name.startswith('checkpoint_')==(split=='checkpoint'))}
     if not cases:raise ValueError('empty policy split')
@@ -265,6 +302,7 @@ def evaluate_policies(binary,fixtures,output,variants,invariant_variants,split='
         for label,spec in case['arrays'].items():
             if sha(fixtures/name/(label+'.npy'))!=spec['sha256']:
                 raise ValueError('policy input changed')
+            hashes[name+'/'+label+'.npy']=spec['sha256']
         case['schedules'].update({key:[dict(start=p,rows=r) for p,r in calls]
             for key,calls in selection_contract.policy_schedules(case['spec']['rows']).items()})
     output.mkdir(parents=True,exist_ok=False)
@@ -272,10 +310,11 @@ def evaluate_policies(binary,fixtures,output,variants,invariant_variants,split='
     env=environment();env.update(DECODER_SPLIT=split,DECODER_FIXTURES=str(fixtures),
         DECODER_RECORDS=str(results),DECODER_POLICY_STUDY='1',
         DECODER_VARIANTS=','.join(map(str,variants)),
-        DECODER_INVARIANT_VARIANTS=','.join(map(str,invariant_variants)))
+        DECODER_INVARIANT_VARIANTS=','.join(map(str,invariant_variants)),
+        DECODER_COMPARISON_FAMILY=','.join(map(str,comparison_family)))
     record=dict(kind='decoder_policy_evaluation',status='started',build=candidate,
         declaration=selection_contract.policy_declaration(),fixtures=hashes,split=split,
-        variants=variants,invariant_variants=invariant_variants,started_utc=utc_now())
+        variants=variants,invariant_variants=invariant_variants,comparison_family=list(comparison_family),started_utc=utc_now())
     try:
         with log.open('w') as stream:
             process=subprocess.run([str(binary)],cwd=repository_root(),env=env,stdout=stream,stderr=subprocess.STDOUT,timeout=14400)
@@ -284,7 +323,11 @@ def evaluate_policies(binary,fixtures,output,variants,invariant_variants,split='
             raise ValueError('policy candidate or fixtures changed during evaluation')
         if process.returncode or '0 failed , 0 skipped' not in log.read_text():
             raise ValueError('decoder policy suite failed or truncated')
-        record.update(validate_results(results,cases,True,variants,invariant_variants),status='passed')
+        for name,case in cases.items():
+            for label,spec in case['arrays'].items():
+                if sha(fixtures/name/(label+'.npy'))!=spec['sha256']:
+                    raise ValueError('policy input changed during evaluation')
+        record.update(validate_results(results,cases,True,variants,invariant_variants,comparison_family),status='passed')
     except Exception as error:
         record.update(status='failed',error=str(error));raise
     finally:
@@ -335,11 +378,12 @@ def main():
         e.add_argument('--'+flag,type=Path,required=True)
     e.add_argument('--variants',type=int,nargs='+',required=True)
     e.add_argument('--invariant-variants',type=int,nargs='*',default=[])
+    e.add_argument('--comparison-family',type=int,nargs='*',default=[])
     e.add_argument('--split',choices=['development','checkpoint','holdout'],default='development')
     args=p.parse_args()
     if args.command=='build':build(args.binary,args.selection)
     elif args.command=='evaluate-policies':
-        evaluate_policies(args.binary,args.fixtures,args.output,args.variants,args.invariant_variants,args.split)
+        evaluate_policies(args.binary,args.fixtures,args.output,args.variants,args.invariant_variants,args.split,args.comparison_family)
     else:evaluate(args.binary,args.fixtures,args.output)
 
 

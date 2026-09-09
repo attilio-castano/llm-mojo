@@ -26,6 +26,8 @@ FROZEN=None
 DEVELOPMENT_ROOT=REPO/"build/oracle_data/decoder_layer"
 POLICY_STUDY=os.environ.get('DECODER_POLICY_STUDY')=='1'
 POLICY_EXACT={int(v) for v in os.environ.get('DECODER_INVARIANT_VARIANTS','20').split(',') if v}
+COMPARISON_FAMILY=[int(v) for v in os.environ.get('DECODER_COMPARISON_FAMILY','').split(',') if v]
+FAMILY_ANCHOR={}
 
 
 def sha(path):
@@ -54,7 +56,7 @@ def manifest():
         for path,digest in frozen['sources'].items():
             if sha(REPO/path)!=digest:
                 raise ValueError('decoder reference source changed: '+path)
-        if record.get('kind') in ('decoder_holdout','decoder_selection_holdout'):
+        if record.get('kind') in ('decoder_holdout','decoder_selection_holdout','decoder_policy_holdout'):
             from llm_mojo.decoder_validation import holdout_manifest
             holdout_manifest(ROOT)
             EXPECTED_CASES=set(record['cases'])
@@ -83,14 +85,22 @@ def cases():
 
 
 def selection_variants():
-    from llm_mojo.benchmarks.decoder_layer_contract import VARIANTS, MEASUREMENT_VARIANTS
-    allowed=MEASUREMENT_VARIANTS if POLICY_STUDY else VARIANTS
+    from llm_mojo.benchmarks.decoder_layer_contract import VARIANTS, POLICY_TEST_VARIANTS
+    allowed=POLICY_TEST_VARIANTS if POLICY_STUDY else VARIANTS
     selected=sorted(allowed)
     if os.environ.get('DECODER_VARIANTS'):
         selected=[int(v) for v in os.environ['DECODER_VARIANTS'].split(',')]
         if len(set(selected))!=len(selected) or not set(selected)<=allowed:
             raise ValueError('invalid decoder selection variants')
     return selected
+
+
+def policy_lookup_cases():
+    from llm_mojo.benchmarks.decoder_layer_contract import policy_declaration,policy_configuration
+    shapes=[(r,t) for r,t,_ in policy_declaration()['workloads']]
+    shapes.extend([(1,1),(17,17),(1,257),(17,256),(64,4095),(65,4096),(256,4096)])
+    return [(int(d),r,t,l,policy_configuration(d,r,t,l))
+            for d in (False,True) for r,t in shapes for l in (1,24)]
 
 
 def verify_case(name):
@@ -113,6 +123,8 @@ def schedules(name):
 
 def configure(name, policy, schedule, mode):
     global IDENTITY
+    if IDENTITY.get('case')!=name:
+        FAMILY_ANCHOR.clear()
     IDENTITY=dict(case=name,policy=policy,schedule=schedule,mode=mode)
     if schedule=='full' and mode=='layer':
         FULL.clear()
@@ -175,6 +187,20 @@ def route(actual, mapping, start, rows, device, backend):
               device=device, backend=backend))
 
 
+def compare_family(stage,bits,start,rows):
+    """Classify cross-configuration compatibility separately from accuracy."""
+    variant=IDENTITY.get('policy')
+    if not POLICY_STUDY or variant not in COMPARISON_FAMILY:return
+    if variant==COMPARISON_FAMILY[0]:
+        FAMILY_ANCHOR[stage]=bits.copy()
+        return
+    if stage not in FAMILY_ANCHOR:raise ValueError('missing family comparison anchor')
+    expected=FAMILY_ANCHOR[stage]
+    if bits.shape!=expected.shape:raise ValueError('family comparison extent changed')
+    emit(dict(kind='family_exact',stage=stage,start=start,rows=rows,elements=bits.size,
+        reference_variant=COMPARISON_FAMILY[0],exact=bool(np.array_equal(bits,expected))))
+
+
 def check(address,name,stage,schedule,start,rows,width,capacity,mode='layer'):
     count=rows*width
     bits=at(address,capacity).copy()
@@ -205,6 +231,8 @@ def check(address,name,stage,schedule,start,rows,width,capacity,mode='layer'):
     if result.get('failed',0):
         print('DECODER FAILURE',json.dumps(RECORDS[-1]),flush=True)
         raise AssertionError('decoder numerical gate: '+stage)
+    if mode=='layer' and schedule=='full':
+        compare_family(stage,bits[:count],start,rows)
     if mode=='layer' and (POLICY_STUDY or IDENTITY.get('policy') == 20 or stage in ('B_att','Z','B_mlp','Y')):
         if schedule=='full':
             FULL[stage]=actual.copy()
@@ -232,6 +260,7 @@ def check_cache(address,produced,previous,name,label,start,rows,width,capacity):
         key = 'consistent_cache_key' if label.endswith('cache_key') else 'consistent_cache_value'
         if IDENTITY['schedule'] == 'full':
             FULL[key] = bits[:(start+rows)*width].copy()
+            compare_family(key,bits[:(start+rows)*width],start,rows)
         else:
             exact = bits[:(start+rows)*width].tobytes() == FULL[key][:(start+rows)*width].tobytes()
             emit(dict(kind='schedule_exact', stage=key, start=start, rows=rows, elements=(start+rows)*width, exact=exact))

@@ -165,17 +165,17 @@ def _case(
         )
     with assert_raises(contains="QKV projection mapping"):
         _ = enqueue_attention_sublayer(
-            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), qkv_mapping=5
+            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), qkv_mapping=6
         )
     with assert_raises(contains="unknown integrated projection mapping"):
         _ = enqueue_attention_sublayer_integrated(
-            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), 0, 6)
+            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), 0, 8)
     with assert_raises(contains="requires control GQA"):
         _ = enqueue_attention_sublayer_integrated(
             ctx, weights, cache, work, TileTensor(input, row_major(1, h)), 1, 1)
     with assert_raises(contains="unknown Wo tile"):
         _ = enqueue_attention_sublayer(
-            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), wo_tile=3)
+            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), wo_tile=4)
     assert_equal(cache.length, t)
     cache.reset(ctx)
     assert_equal(cache.length, 0)

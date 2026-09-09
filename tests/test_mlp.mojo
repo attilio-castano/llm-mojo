@@ -131,7 +131,7 @@ def run_invalid_calls_and_async_reuse(mapping: Int) raises:
         enqueue_mlp_stage_apple_gpu(
             ctx, weights, work, TileTensor(xb, row_major(1, 896)), 7
         )
-    for bad_mapping in [-1, 19]:
+    for bad_mapping in [-1, 20]:
         with assert_raises():
             enqueue_mlp_apple_gpu(
                 ctx,
