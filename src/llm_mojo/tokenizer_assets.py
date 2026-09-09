@@ -291,6 +291,7 @@ def ensure_prepared(directory=None, *, download=True):
                 ],
                 cwd=repository_root(),
                 check=True,
+                stdout=sys.stderr,
             )
         if not prepared_valid(directory):
             raise ValueError("prepared tokenizer verification failed")

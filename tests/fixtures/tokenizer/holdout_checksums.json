@@ -1,0 +1,9 @@
+{
+  "decode_cases": 258,
+  "fixture_sha256": "b5c108d2c7c90b1604e3fb2f495177e2f6c325ae2376c355ee4b5c512f394de5",
+  "holdout": true,
+  "recipes_sha256": "ce6e1515f3e63fdf727c07bf05f4f6c018383bedf6dc59e83a423cfa568474a7",
+  "source_sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+  "text_cases": 355,
+  "tokenizers": "0.19.1"
+}

@@ -17,6 +17,12 @@ decoder layer. Full-model forward parity is next.
 | [MLP sublayer](mlp_sublayer/README.md) | How do tiled projections change complete SwiGLU latency under its frozen BF16 rounding contract? |
 | [Attention sublayer](attention_sublayer/README.md) | Where does time go in the complete block under the selected FP32 attention policy? |
 | [Decoder layer](decoder_layer/README.md) | How do complete layer costs shift between prefill, cached chunks and decode? |
+| [CPU tokenizer](tokenizer/README.md) | When does heap BPE improve complete text encoding? |
+
+The CPU tokenizer study establishes exact Rust parity in Mojo and retains 9,680
+CPU observations. Heap merging improves long single pieces but costs more than
+scanning the short pieces in the ordinary text workloads. Its report has a
+separate regeneration command and keeps this result distinct from GPU inference.
 
 The decoder study composes both residual branches without an added copy or
 synchronization. Its seven reserved cases pass, and it retains 960 baseline

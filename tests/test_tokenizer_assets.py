@@ -154,6 +154,15 @@ class TokenizerAssetTests(unittest.TestCase):
         self.assertEqual(len(mapping), 256)
         self.assertEqual(set(mapping.values()), set(range(256)))
 
+    def test_preparation_diagnostics_do_not_pollute_token_output(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            assets, "ensure_source"
+        ), patch.object(
+            assets, "prepared_valid", side_effect=[False, True]
+        ), patch.object(assets.subprocess, "run") as run:
+            assets.ensure_prepared(Path(tmp))
+            self.assertIs(run.call_args.kwargs["stdout"], assets.sys.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

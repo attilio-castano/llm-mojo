@@ -144,6 +144,8 @@ selection, unbounded tuning, automatic dispatch, or GPU speed claim is allowed.
 Completion requires exact development and holdout acceptance, documented full
 repository validation, reproducible retained measurements (including negative
 results), and local milestone commits. Pushing or opening a PR is separate.
+The completed [CPU study](../studies/tokenizer/README.md) records acceptance and
+the measured gains on long pieces alongside regressions on short pieces.
 
 ### Benchmark timing details
 

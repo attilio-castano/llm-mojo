@@ -380,7 +380,9 @@ def report(output):
             for s in summary
         ]
         with (output / mode / "summary.csv").open("w", newline="") as stream:
-            writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+            writer = csv.DictWriter(
+                stream, fieldnames=list(rows[0]), lineterminator="\n"
+            )
             writer.writeheader()
             writer.writerows(rows)
         print(

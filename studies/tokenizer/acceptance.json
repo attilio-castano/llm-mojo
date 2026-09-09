@@ -1,0 +1,87 @@
+{
+  "schema": 1,
+  "binary_build_commit": "06a962f37b86f8a6030a7c9cfb4845055f2c1511",
+  "binary_sha256": "ef945beebc965c74de2493966ea1b1aa7705895cc28a47c1f7c30a13edda5ee9",
+  "source_sha256": {
+    "src/llm_mojo/tokenizer.mojo": "50dfaebcc034e2dd584ac8b02fd3907504de5aa7b0150d869c5e4586b67b3a13",
+    "tests/test_tokenizer.mojo": "9fcccecff9ca2ad535be386f1f5b152d8d2a775ef7ee233d0cebd6a2f2a3f687",
+    "uv.lock": "6b5778657912ae1f544a3f6e87ee7811e4570b53f772d2cd74d8c45c2db9286a"
+  },
+  "tables_sha256": "28bce5aedb018845f4886852133a8ccbe7b1505324e6422d2cd019749fc1f900",
+  "command_template": [
+    "<hashed native acceptance executable>",
+    "<fixture>"
+  ],
+  "checks": [
+    {
+      "suite": "development",
+      "oracle": {
+        "decode_cases": 151923,
+        "fixture_sha256": "1785266c8072a1e6f433b383443eb2049f87b6c560d42d1b2f9377fcd8cffe42",
+        "holdout": false,
+        "recipes_sha256": "e0f174d88b346d9c9da2e2b103a38e395ea3970c936f5d693ab2f875b5784463",
+        "source_sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+        "text_cases": 3361,
+        "tokenizers": "0.19.1"
+      },
+      "exit_code": 0,
+      "output": "Tokenizer exact parity: 3361 text cases; 151923 decode cases; scan, heap and streaming passed"
+    },
+    {
+      "suite": "unicode",
+      "oracle": {
+        "decode_cases": 258,
+        "fixture_sha256": "6110c0391453fafb5c8f39335063151b5ee2fb1db8f8d4862e683ad2890be0d3",
+        "holdout": false,
+        "recipes_sha256": "010a0607184dee15ddbf3ffb74d20c4bd076902f4c08be2d1e48dde084def998",
+        "source_sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+        "text_cases": 2061,
+        "tokenizers": "0.19.1"
+      },
+      "exit_code": 0,
+      "output": "Tokenizer exact parity: 2061 text cases; 258 decode cases; scan, heap and streaming passed"
+    },
+    {
+      "suite": "holdout",
+      "oracle": {
+        "decode_cases": 258,
+        "fixture_sha256": "b5c108d2c7c90b1604e3fb2f495177e2f6c325ae2376c355ee4b5c512f394de5",
+        "holdout": true,
+        "recipes_sha256": "ce6e1515f3e63fdf727c07bf05f4f6c018383bedf6dc59e83a423cfa568474a7",
+        "source_sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+        "text_cases": 355,
+        "tokenizers": "0.19.1"
+      },
+      "exit_code": 0,
+      "output": "Tokenizer exact parity: 355 text cases; 258 decode cases; scan, heap and streaming passed"
+    }
+  ],
+  "completed_utc": "2026-09-09T11:13:22.713764+00:00",
+  "repository_validation": {
+    "command": "uv run --locked llm-mojo-validate",
+    "exit_code": 0,
+    "standard_mojo_tests": 111,
+    "python_tests_at_full_run": 108,
+    "note": "Full workflow passed before implementation commit. Supplementary Unicode invocation and additional tooling tests were validated separately after additions; no existing kernel changed. All Metal measurement smoke routes passed."
+  },
+  "final_tooling_validation": {
+    "command": "uv run --locked python -m unittest discover -s tests -p 'test_*.py'",
+    "exit_code": 0,
+    "tests": 112
+  },
+  "initialization": {
+    "first_download_command": "uv run --locked llm-mojo-tokenizer setup --asset-dir <empty temporary directory>",
+    "exit_code": 0,
+    "offline_encode_input": "Hello world",
+    "offline_encode_output": [
+      9707,
+      1879
+    ],
+    "native_dependencies": "otool -L: Mojo compiler/async runtime and libSystem; no Python or Rust tokenizer library"
+  },
+  "incomplete_measurement_attempt": {
+    "source_commit": "06a962f37b86f8a6030a7c9cfb4845055f2c1511",
+    "reason": "perf_counter_ns rounded short decode calls to zero on this host; strict positive-duration check rejected first block.",
+    "resolution": "Darwin clock_gettime_nsec_np(CLOCK_UPTIME_RAW), new clean source commit and complete new run; no timing or acceptance gate relaxed."
+  }
+}

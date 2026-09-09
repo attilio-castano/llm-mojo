@@ -41,6 +41,7 @@ limits of the result. Start with a question:
 | [Attention sublayer](studies/attention_sublayer/README.md) | Do the individual kernel gains survive composition through Wo and the residual? |
 | [MLP sublayer](studies/mlp_sublayer/README.md) | Do tiled projections improve the complete SwiGLU block while preserving its BF16 boundaries? |
 | [Decoder layer](studies/decoder_layer/selection.md) | Which kernel combinations improve the complete decoder in each execution mode? |
+| [CPU tokenizer](studies/tokenizer/README.md) | When does heap BPE improve complete text encoding? |
 
 ![Full and incremental GQA prefill latency on Apple M4 Pro](studies/gqa_prefill/latency.png)
 

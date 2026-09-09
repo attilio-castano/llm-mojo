@@ -1,0 +1,948 @@
+{
+  "schema": 1,
+  "study": "tokenizer_decode",
+  "specification": {
+    "operation": "tokenizer",
+    "mode": "decode",
+    "control": 0,
+    "candidates": [
+      0
+    ],
+    "names": {
+      "0": "decode"
+    },
+    "layers": [
+      1
+    ],
+    "rows": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "row_semantics": "case ID in cases; layers=1 means one sequence"
+  },
+  "cases": [
+    {
+      "case": 1,
+      "family": "prose",
+      "input_bytes": 64,
+      "pieces": 12,
+      "max_piece_bytes": 10,
+      "output_tokens": 12
+    },
+    {
+      "case": 2,
+      "family": "prose",
+      "input_bytes": 256,
+      "pieces": 46,
+      "max_piece_bytes": 10,
+      "output_tokens": 46
+    },
+    {
+      "case": 3,
+      "family": "prose",
+      "input_bytes": 4096,
+      "pieces": 737,
+      "max_piece_bytes": 10,
+      "output_tokens": 737
+    },
+    {
+      "case": 4,
+      "family": "prose",
+      "input_bytes": 16384,
+      "pieces": 2946,
+      "max_piece_bytes": 10,
+      "output_tokens": 2947
+    },
+    {
+      "case": 5,
+      "family": "multilingual",
+      "input_bytes": 63,
+      "pieces": 9,
+      "max_piece_bytes": 11,
+      "output_tokens": 18
+    },
+    {
+      "case": 6,
+      "family": "multilingual",
+      "input_bytes": 254,
+      "pieces": 33,
+      "max_piece_bytes": 11,
+      "output_tokens": 71
+    },
+    {
+      "case": 7,
+      "family": "multilingual",
+      "input_bytes": 4096,
+      "pieces": 542,
+      "max_piece_bytes": 11,
+      "output_tokens": 1144
+    },
+    {
+      "case": 8,
+      "family": "multilingual",
+      "input_bytes": 16383,
+      "pieces": 2169,
+      "max_piece_bytes": 11,
+      "output_tokens": 4578
+    },
+    {
+      "case": 9,
+      "family": "code",
+      "input_bytes": 64,
+      "pieces": 18,
+      "max_piece_bytes": 9,
+      "output_tokens": 18
+    },
+    {
+      "case": 10,
+      "family": "code",
+      "input_bytes": 256,
+      "pieces": 71,
+      "max_piece_bytes": 9,
+      "output_tokens": 71
+    },
+    {
+      "case": 11,
+      "family": "code",
+      "input_bytes": 4096,
+      "pieces": 1125,
+      "max_piece_bytes": 9,
+      "output_tokens": 1125
+    },
+    {
+      "case": 12,
+      "family": "code",
+      "input_bytes": 16384,
+      "pieces": 4498,
+      "max_piece_bytes": 9,
+      "output_tokens": 4498
+    },
+    {
+      "case": 13,
+      "family": "whitespace",
+      "input_bytes": 64,
+      "pieces": 22,
+      "max_piece_bytes": 10,
+      "output_tokens": 22
+    },
+    {
+      "case": 14,
+      "family": "whitespace",
+      "input_bytes": 256,
+      "pieces": 79,
+      "max_piece_bytes": 10,
+      "output_tokens": 79
+    },
+    {
+      "case": 15,
+      "family": "whitespace",
+      "input_bytes": 4096,
+      "pieces": 1247,
+      "max_piece_bytes": 11,
+      "output_tokens": 1247
+    },
+    {
+      "case": 16,
+      "family": "whitespace",
+      "input_bytes": 16384,
+      "pieces": 4989,
+      "max_piece_bytes": 10,
+      "output_tokens": 4989
+    },
+    {
+      "case": 17,
+      "family": "long_piece",
+      "input_bytes": 128,
+      "pieces": 1,
+      "max_piece_bytes": 128,
+      "output_tokens": 16
+    },
+    {
+      "case": 18,
+      "family": "long_piece",
+      "input_bytes": 512,
+      "pieces": 1,
+      "max_piece_bytes": 512,
+      "output_tokens": 64
+    },
+    {
+      "case": 19,
+      "family": "long_piece",
+      "input_bytes": 2048,
+      "pieces": 1,
+      "max_piece_bytes": 2048,
+      "output_tokens": 256
+    },
+    {
+      "case": 20,
+      "family": "long_piece",
+      "input_bytes": 4096,
+      "pieces": 1,
+      "max_piece_bytes": 4096,
+      "output_tokens": 512
+    }
+  ],
+  "repository": {
+    "commit": "ae5652e691363d89f1292a1c1bf3b4a68fe98568",
+    "branch": "codex/qwen-tokenizer",
+    "dirty": false
+  },
+  "build": {
+    "repository": {
+      "commit": "ae5652e691363d89f1292a1c1bf3b4a68fe98568",
+      "branch": "codex/qwen-tokenizer",
+      "dirty": false
+    },
+    "sources": {
+      "src/llm_mojo/tokenizer.mojo": "50dfaebcc034e2dd584ac8b02fd3907504de5aa7b0150d869c5e4586b67b3a13",
+      "src/llm_mojo/tokenizer_assets.py": "52f8272dcf7c405d4dda52b4ec4b5a29b9196e97f7bcb16855f20a98b8717777",
+      "src/llm_mojo/benchmarks/tokenizer.mojo": "fbf0eed676fe1a7c5f6496af5ac220531cfbd15fd456e91021ed2f90ff1d9bf7",
+      "src/llm_mojo/benchmarks/tokenizer_contract.py": "f61d1f4e6b25a6c8002f7103b5e79d3a6982a5a639b29483aad64449d8666c0f",
+      "src/llm_mojo/benchmarks/study.py": "1e259318ed1662ee463bae2a10573da776ec9d9e78c8f290a419486a2142393f",
+      "src/llm_mojo/benchmarks/run.py": "cc61db9fa3d4a7937bcfe9ab28d5c9fb004d1fc575476bbea191f03315790182",
+      "tests/fixtures/tokenizer/generate.py": "45d4a55d78f91e97739c7f10c0c6ecde99b748e6dde4025fa1836571247d8715",
+      "tests/fixtures/tokenizer/benchmark_checksums.json": "a956a0e77235bce3efc2e7bcc688a7e03b93b8a8fb15c1642756f1cae5f8384e",
+      "tests/fixtures/tokenizer_reference.py": "10e78df36c0a2b3a1ce072a8b9bf67ec076f76cc882fa5d4ce55434a37a88eff",
+      "tests/fixtures/generate.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+      "uv.lock": "6b5778657912ae1f544a3f6e87ee7811e4570b53f772d2cd74d8c45c2db9286a"
+    },
+    "environment": {
+      "backend": "cpu",
+      "os": "macOS-26.6.2-arm64-arm-64bit",
+      "machine": "arm64",
+      "cpu": "Apple M4 Pro",
+      "logical_cpus": "14",
+      "mojo": "Mojo 1.0.0 (ed45d567)"
+    },
+    "binary_sha256": "a178f818e7bf6ec0ade37bb2a340e281ef4d1b91f17cc9c81ca873646deee475",
+    "tables_sha256": "28bce5aedb018845f4886852133a8ccbe7b1505324e6422d2cd019749fc1f900",
+    "inputs": {
+      "tokenizers": "0.19.1",
+      "source_sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+      "fixture_sha256": "934b6b6f9c1461c5dc2258bcfeaced921c8c52b7a1cb1a5da4d6ab334376759b",
+      "cases": [
+        {
+          "case": 1,
+          "family": "prose",
+          "input_bytes": 64,
+          "pieces": 12,
+          "max_piece_bytes": 10,
+          "output_tokens": 12
+        },
+        {
+          "case": 2,
+          "family": "prose",
+          "input_bytes": 256,
+          "pieces": 46,
+          "max_piece_bytes": 10,
+          "output_tokens": 46
+        },
+        {
+          "case": 3,
+          "family": "prose",
+          "input_bytes": 4096,
+          "pieces": 737,
+          "max_piece_bytes": 10,
+          "output_tokens": 737
+        },
+        {
+          "case": 4,
+          "family": "prose",
+          "input_bytes": 16384,
+          "pieces": 2946,
+          "max_piece_bytes": 10,
+          "output_tokens": 2947
+        },
+        {
+          "case": 5,
+          "family": "multilingual",
+          "input_bytes": 63,
+          "pieces": 9,
+          "max_piece_bytes": 11,
+          "output_tokens": 18
+        },
+        {
+          "case": 6,
+          "family": "multilingual",
+          "input_bytes": 254,
+          "pieces": 33,
+          "max_piece_bytes": 11,
+          "output_tokens": 71
+        },
+        {
+          "case": 7,
+          "family": "multilingual",
+          "input_bytes": 4096,
+          "pieces": 542,
+          "max_piece_bytes": 11,
+          "output_tokens": 1144
+        },
+        {
+          "case": 8,
+          "family": "multilingual",
+          "input_bytes": 16383,
+          "pieces": 2169,
+          "max_piece_bytes": 11,
+          "output_tokens": 4578
+        },
+        {
+          "case": 9,
+          "family": "code",
+          "input_bytes": 64,
+          "pieces": 18,
+          "max_piece_bytes": 9,
+          "output_tokens": 18
+        },
+        {
+          "case": 10,
+          "family": "code",
+          "input_bytes": 256,
+          "pieces": 71,
+          "max_piece_bytes": 9,
+          "output_tokens": 71
+        },
+        {
+          "case": 11,
+          "family": "code",
+          "input_bytes": 4096,
+          "pieces": 1125,
+          "max_piece_bytes": 9,
+          "output_tokens": 1125
+        },
+        {
+          "case": 12,
+          "family": "code",
+          "input_bytes": 16384,
+          "pieces": 4498,
+          "max_piece_bytes": 9,
+          "output_tokens": 4498
+        },
+        {
+          "case": 13,
+          "family": "whitespace",
+          "input_bytes": 64,
+          "pieces": 22,
+          "max_piece_bytes": 10,
+          "output_tokens": 22
+        },
+        {
+          "case": 14,
+          "family": "whitespace",
+          "input_bytes": 256,
+          "pieces": 79,
+          "max_piece_bytes": 10,
+          "output_tokens": 79
+        },
+        {
+          "case": 15,
+          "family": "whitespace",
+          "input_bytes": 4096,
+          "pieces": 1247,
+          "max_piece_bytes": 11,
+          "output_tokens": 1247
+        },
+        {
+          "case": 16,
+          "family": "whitespace",
+          "input_bytes": 16384,
+          "pieces": 4989,
+          "max_piece_bytes": 10,
+          "output_tokens": 4989
+        },
+        {
+          "case": 17,
+          "family": "long_piece",
+          "input_bytes": 128,
+          "pieces": 1,
+          "max_piece_bytes": 128,
+          "output_tokens": 16
+        },
+        {
+          "case": 18,
+          "family": "long_piece",
+          "input_bytes": 512,
+          "pieces": 1,
+          "max_piece_bytes": 512,
+          "output_tokens": 64
+        },
+        {
+          "case": 19,
+          "family": "long_piece",
+          "input_bytes": 2048,
+          "pieces": 1,
+          "max_piece_bytes": 2048,
+          "output_tokens": 256
+        },
+        {
+          "case": 20,
+          "family": "long_piece",
+          "input_bytes": 4096,
+          "pieces": 1,
+          "max_piece_bytes": 4096,
+          "output_tokens": 512
+        }
+      ]
+    },
+    "table_manifest": {
+      "base_vocabulary": 151643,
+      "format": 1,
+      "generators": {
+        "src/llm_mojo/tokenizer_assets.py": "52f8272dcf7c405d4dda52b4ec4b5a29b9196e97f7bcb16855f20a98b8717777",
+        "tests/fixtures/generate.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/tokenizer/generate.py": "45d4a55d78f91e97739c7f10c0c6ecde99b748e6dde4025fa1836571247d8715",
+        "tests/fixtures/tokenizer_reference.py": "10e78df36c0a2b3a1ce072a8b9bf67ec076f76cc882fa5d4ce55434a37a88eff"
+      },
+      "merges": 151387,
+      "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+      "source_sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+      "source_url": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/resolve/7ae557604adf67be50417f59c2c2f167def9a775/tokenizer.json",
+      "tables_bytes": 8050212,
+      "tables_sha256": "28bce5aedb018845f4886852133a8ccbe7b1505324e6422d2cd019749fc1f900",
+      "unicode": {
+        "backend_extension_sha256": "ee4974d908c2f8bc1b81c2941d393824bd0e05be5f6951e4fe9eaf95c6cb18f5",
+        "classification": "exhaustive scalar queries against tokenizers.Regex",
+        "combining_class_differences": [
+          2045,
+          2200,
+          2201,
+          2202,
+          2203,
+          2204,
+          2205,
+          2206,
+          2207,
+          2250,
+          2251,
+          2252,
+          2253,
+          2254,
+          2255,
+          2256,
+          2257,
+          2258,
+          2259,
+          2558,
+          3132,
+          3387,
+          3388,
+          3770,
+          5909,
+          6847,
+          6848,
+          6849,
+          6850,
+          6851,
+          6852,
+          6853,
+          6854,
+          6855,
+          6856,
+          6857,
+          6858,
+          6859,
+          6860,
+          6861,
+          6862,
+          7670,
+          7671,
+          7672,
+          7673,
+          7674,
+          43052,
+          68900,
+          68901,
+          68902,
+          68903,
+          69291,
+          69292,
+          69373,
+          69374,
+          69375,
+          69446,
+          69447,
+          69448,
+          69449,
+          69450,
+          69451,
+          69452,
+          69453,
+          69454,
+          69455,
+          69456,
+          69506,
+          69507,
+          69508,
+          69509,
+          69744,
+          70459,
+          70750,
+          71737,
+          71738,
+          71997,
+          71998,
+          72003,
+          72160,
+          72244,
+          72263,
+          72345,
+          73026,
+          73028,
+          73029,
+          73111,
+          73537,
+          73538,
+          94192,
+          94193,
+          123023,
+          123184,
+          123185,
+          123186,
+          123187,
+          123188,
+          123189,
+          123190,
+          123566,
+          123628,
+          123629,
+          123630,
+          123631,
+          124140,
+          124141,
+          124142,
+          124143
+        ],
+        "combining_classes": "Unicode 15 with Rust NFD barrier probes",
+        "composition": "Unicode 15 canonical pairs filtered by Rust NFC",
+        "decomposition": "exhaustive scalar tokenizers.normalizers.NFD queries; algorithmic Hangul",
+        "decomposition_differences": [
+          71992
+        ],
+        "oracle_python": "3.12.14",
+        "python_unicode": "15.0.0",
+        "tokenizers": "0.19.1"
+      },
+      "vocabulary": 151665
+    },
+    "command": [
+      "mojo",
+      "build",
+      "-I",
+      "src",
+      "src/llm_mojo/benchmarks/tokenizer.mojo",
+      "-o",
+      "<binary>"
+    ]
+  },
+  "runtime": {
+    "api": "cpu",
+    "device": "Apple M4 Pro"
+  },
+  "timer": "Darwin clock_gettime_nsec_np(CLOCK_UPTIME_RAW), nanoseconds",
+  "representation": {
+    "input": "UTF-8 UInt8",
+    "token_ids": "Mojo Int on recorded 64-bit host",
+    "merge_key_value": "UInt64",
+    "prepared_fields": "little-endian UInt32"
+  },
+  "blocks": 4,
+  "repetitions": 10,
+  "warmup": 10,
+  "timing": "Native monotonic wall time per complete CPU call, including call allocations and prior-result destruction. Setup, fixtures, output consumption and printing excluded. Symbol/heap buffers reused; BPE and streaming output buffers reused. BPE mode receives precomputed pieces; encode mode starts from UTF-8 bytes.",
+  "started_utc": "2026-09-09T11:10:44.730902+00:00",
+  "conditions": [
+    {
+      "block": 1,
+      "before": {
+        "timestamp_utc": "2026-09-09T11:10:44.730980+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 60
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-09T11:10:55.877123+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 60
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    },
+    {
+      "block": 2,
+      "before": {
+        "timestamp_utc": "2026-09-09T11:10:56.282335+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 60
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-09T11:11:07.556120+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 55
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    },
+    {
+      "block": 3,
+      "before": {
+        "timestamp_utc": "2026-09-09T11:11:07.953861+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 54
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-09T11:11:18.862805+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 58
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    },
+    {
+      "block": 4,
+      "before": {
+        "timestamp_utc": "2026-09-09T11:11:19.355921+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 59
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-09T11:11:30.353255+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 60
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    }
+  ],
+  "workspace_capacities": {
+    "1": [
+      16,
+      16,
+      16,
+      16
+    ],
+    "2": [
+      16,
+      16,
+      16,
+      16
+    ],
+    "3": [
+      16,
+      16,
+      16,
+      16
+    ],
+    "4": [
+      16,
+      16,
+      16,
+      16
+    ],
+    "5": [
+      16,
+      16,
+      16,
+      8
+    ],
+    "6": [
+      16,
+      16,
+      16,
+      8
+    ],
+    "7": [
+      16,
+      16,
+      16,
+      8
+    ],
+    "8": [
+      16,
+      16,
+      16,
+      8
+    ],
+    "9": [
+      16,
+      16,
+      16,
+      16
+    ],
+    "10": [
+      16,
+      16,
+      16,
+      16
+    ],
+    "11": [
+      16,
+      16,
+      16,
+      16
+    ],
+    "12": [
+      16,
+      16,
+      16,
+      16
+    ],
+    "13": [
+      16,
+      16,
+      16,
+      16
+    ],
+    "14": [
+      16,
+      16,
+      16,
+      16
+    ],
+    "15": [
+      16,
+      16,
+      16,
+      16
+    ],
+    "16": [
+      16,
+      16,
+      16,
+      16
+    ],
+    "17": [
+      128,
+      128,
+      128,
+      128
+    ],
+    "18": [
+      512,
+      512,
+      512,
+      512
+    ],
+    "19": [
+      2048,
+      2048,
+      2048,
+      2048
+    ],
+    "20": [
+      4096,
+      4096,
+      4096,
+      4096
+    ]
+  },
+  "completed_utc": "2026-09-09T11:11:30.818524+00:00",
+  "samples_sha256": "a0352c812cf952742f47e2d4a61ccd644c4c89d8423d421d1fb4c8ad8455655a"
+}
