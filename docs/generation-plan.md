@@ -106,3 +106,15 @@ retain a compact model study only when real execution produces evidence.
   The complete existing native validation and two new Metal primitive checks
   passed earlier; native source has not changed since that checkpoint. No
   additional performance study or full-model acceptance is claimed.
+
+### Authorized reference diagnosis follow-up
+
+The user authorized a focused reference-only investigation after reviewing the
+failed gate. Trace the first SDPA difference before/after BF16 rounding on the
+already observed 17-token and 15-token cases; follow its propagation and final
+RMSNorm scaling; assess logits, top-token margins and bounded greedy sequences.
+Use three declared text inputs and eight output steps per input. Compare full
+recomputation with cached execution on identical histories, and report any
+free-running divergence separately. Keep all existing gates and reserved inputs
+unchanged. This investigation does not authorize numerical-policy promotion or
+resumption of the native-model optimization campaign.
