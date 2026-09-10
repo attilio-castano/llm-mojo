@@ -600,7 +600,7 @@ def replay_policy_campaign(directory):
     """Reconstruct the entire bounded campaign from adjacent retained evidence."""
     import copy
     from .. import decoder_validation as validation
-    from .study import load_run,load_decoder_profile,load_decoder_windows
+    from .study import load_run,load_decoder_profile,load_decoder_windows,load_numerical_record
     directory=Path(directory)
     index=json.loads((directory/'policies-evidence.json').read_text())
     if index.get('kind')!='decoder_policy_campaign' or index.get('schema')!=1:
@@ -663,7 +663,7 @@ def replay_policy_campaign(directory):
     for name in index['baseline_numerical']:
         # The earliest receipts predate individual-array hashes and summary
         # fields. Their complete raw checks are replayed with that declaration.
-        record=json.loads((directory/name).read_text())['evaluation']
+        record=load_numerical_record(directory/name)['evaluation']
         split=record['split']
         cases={n:c for n,c in frozen['cases'].items()
             if c['spec']['nq']==14 and n.startswith('checkpoint_')==(split=='checkpoint')}
@@ -678,7 +678,7 @@ def replay_policy_campaign(directory):
         decision=policy_round_decision(directory,[directory/n for n in phase['numerical']],build,number)
         if decision!=expected:raise ValueError('decoder optimization decision changed')
         for name in phase['numerical']:
-            record=json.loads((directory/name).read_text())['evaluation']
+            record=load_numerical_record(directory/name)['evaluation']
             numerical.append(numeric_row('round'+str(number),record,record))
         adversarial=json.loads((directory/phase['adversarial']).read_text())
         if (adversarial.get('status')!='passed'
@@ -706,7 +706,7 @@ def replay_policy_campaign(directory):
     cost=policy_cost_report(directory,accepted,build)
     if cost!=json.loads((directory/index['cost']).read_text()):
         raise ValueError('final decoder policy cost changed')
-    final=json.loads((directory/index['holdout_numerical']).read_text())['evaluation']
+    final=load_numerical_record(directory/index['holdout_numerical'])['evaluation']
     if final['declaration'].get('accepted_lookup')!=accepted:
         raise ValueError('final numerical execution used a different lookup')
     regression=json.loads((directory/index['repository_validation']).read_text())

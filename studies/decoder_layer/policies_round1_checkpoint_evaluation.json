@@ -1,5 +1,5 @@
 {
-  "format": "decoder-policy-numerics-gzip-v1",
+  "format": "decoder-policy-numerics-columns-v1",
   "evaluation": {
     "kind": "decoder_policy_evaluation",
     "status": "passed",
@@ -854,9 +854,11 @@
   },
   "original_evaluation_sha256": "e42accc372194b11a7a039518bda96977b33f33398027c1cbefd4bd2b6018275",
   "checks": {
-    "file": "policies_round1_checkpoint_checks.jsonl.gz",
-    "sha256": "dae81454f8f21a5e399081c1147903481eafe2275eb33777f285dae5f1df54a4",
-    "uncompressed_sha256": "6d63019a997cc5f41d9dbe23e6ef25843436a09063071c4d2a5032c7c228ed6d"
+    "file": "policies_round1_checkpoint_checks.columns.jsonl.xz",
+    "sha256": "b5d14140b3f7c86bec91300844b29e485ae3614e58ddef6987c29a7c53b9a7b9",
+    "uncompressed_sha256": "6d63019a997cc5f41d9dbe23e6ef25843436a09063071c4d2a5032c7c228ed6d",
+    "records": 670952,
+    "uncompressed_bytes": 208705671
   },
   "output": {
     "file": "policies_round1_checkpoint_output.log.gz",

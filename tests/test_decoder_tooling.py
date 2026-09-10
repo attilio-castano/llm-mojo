@@ -13,6 +13,94 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class DecoderToolingTests(unittest.TestCase):
+    def test_compact_holdout_manifest_preserves_original_fixture_identity(self):
+        import gzip
+        from llm_mojo._repository import repository_root
+        path=repository_root()/'studies/decoder_layer/policies_holdout_manifest.json'
+        wrapper=json.loads(path.read_text())
+        with tempfile.TemporaryDirectory() as tmp:
+            original=Path(tmp)/'manifest.json'
+            original.write_bytes(gzip.decompress((path.parent/wrapper['record']).read_bytes()))
+            expected=validation.holdout_manifest(original,verify_arrays=False)
+            self.assertEqual(validation.holdout_manifest(path,verify_arrays=False),expected)
+            self.assertEqual(expected[1]['manifest.json'],wrapper['uncompressed_sha256'])
+
+    def test_column_archive_roundtrip_preserves_bytes_and_block_order(self):
+        import gzip,hashlib,lzma
+        records=[dict(case='escaped\n\"é',value=-0.0,items=[None,True,2**60,1e-30]),
+                 dict(kind='negative',failed=1,expected_failure=True)]
+        records=(records*4097)+[dict(value=1.0000000000000002)]
+        raw=''.join(json.dumps(r)+'\n' for r in records).encode()
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);source=root/'checks.jsonl.gz';source.write_bytes(gzip.compress(raw))
+            target=root/'checks.columns.jsonl.xz'
+            spec=validation.compact_checks(source,target)
+            restored=''.join(json.dumps(r)+'\n' for r in validation.check_records(target)).encode()
+            self.assertEqual(restored,raw)
+            self.assertEqual(spec['uncompressed_sha256'],hashlib.sha256(raw).hexdigest())
+            self.assertEqual(spec['records'],len(records))
+            self.assertEqual(spec['uncompressed_bytes'],len(raw))
+            original=target.read_bytes()
+            with self.assertRaises(FileExistsError):validation.compact_checks(source,target)
+            self.assertEqual(target.read_bytes(),original)
+            # Missing columns, reordered schema IDs, or unused rows must not be
+            # silently dropped by zip/index reconstruction.
+            blocks=lzma.decompress(original).splitlines(keepends=True)
+            for mutation in ('short_column','unused_row','negative_id','duplicate_key'):
+                order,tables=json.loads(blocks[1])
+                if mutation=='short_column':tables[0][1][0].pop()
+                elif mutation=='unused_row':order.pop()
+                elif mutation=='negative_id':order[0]=-1
+                else:tables[0][0][1]=tables[0][0][0]
+                target.write_bytes(lzma.compress(blocks[0]+(json.dumps([order,tables])+'\n').encode()))
+                with self.subTest(mutation=mutation),self.assertRaises(ValueError):
+                    list(validation.check_records(target))
+            target.write_bytes(original[:-8])
+            with self.assertRaises((EOFError,lzma.LZMAError)):
+                list(validation.check_records(target))
+            target.unlink();source.write_bytes(gzip.compress(b'{"value":1}\n'))
+            with self.assertRaisesRegex(ValueError,'canonical'):validation.compact_checks(source,target)
+            self.assertFalse(target.exists())
+
+    def test_column_receipt_replays_gates_and_rejects_rehashed_omissions(self):
+        import gzip,hashlib
+        import test_decoder_validation as baseline_tests
+        fixture=baseline_tests.NumericalReceiptTests();fixture.setUp()
+        raw=''.join(json.dumps(r)+'\n' for r in fixture.records).encode()
+        native=b'TestSuite summary: 1 passed , 0 failed , 0 skipped\n'
+        digest=lambda data:hashlib.sha256(data).hexdigest()
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);source=root/'checks.jsonl';source.write_bytes(raw)
+            target=root/'checks.columns.jsonl.xz';spec=validation.compact_checks(source,target)
+            output=gzip.compress(native);(root/'output.gz').write_bytes(output)
+            record=dict(status='passed',checks_sha256=digest(raw),output_sha256=digest(native))
+            wrapper=dict(format='decoder-policy-numerics-columns-v1',evaluation=record,
+                original_evaluation_sha256='a'*64,checks=spec,
+                output=dict(file='output.gz',sha256=digest(output),uncompressed_sha256=digest(native),original_sha256=digest(native)))
+            receipt=root/'archive.json';receipt.write_text(json.dumps(wrapper))
+            observed,path,identity=validation.read_policy_evidence(receipt)
+            self.assertEqual((observed,identity),(record,'a'*64))
+            self.assertEqual(validation.validate_results(path,fixture.cases),validation.validate_results(source,fixture.cases))
+            # The existing compact JSON wrapper also works for large receipts.
+            receipt_raw=receipt.read_bytes();packed=gzip.compress(receipt_raw)
+            (root/'archive.json.gz').write_bytes(packed)
+            receipt.write_text(json.dumps(dict(format='lossless-json-gzip-v1',record='archive.json.gz',
+                sha256=digest(packed),uncompressed_sha256=digest(receipt_raw))))
+            self.assertEqual(validation.read_policy_evidence(receipt),(observed,path,identity))
+            for key,value in (('sha256','0'*64),('uncompressed_sha256','0'*64),('records',spec['records']-1),('uncompressed_bytes',0)):
+                altered=copy.deepcopy(wrapper);altered['checks'][key]=value
+                receipt.write_text(json.dumps(altered))
+                with self.subTest(key=key),self.assertRaises(ValueError):validation.read_policy_evidence(receipt)
+            # Even updating the receipt to match a valid archive cannot waive a
+            # missing protected-storage check in the numerical validator.
+            partial=[r for r in fixture.records if r.get('label')!='aw_qkv']
+            source.write_text(''.join(json.dumps(r)+'\n' for r in partial))
+            target.unlink();wrapper['checks']=validation.compact_checks(source,target)
+            wrapper['evaluation']['checks_sha256']=wrapper['checks']['uncompressed_sha256']
+            receipt.write_text(json.dumps(wrapper))
+            _,path,_=validation.read_policy_evidence(receipt)
+            with self.assertRaises(ValueError):validation.validate_results(path,fixture.cases)
+
     def test_recorded_policy_lookup_is_independent_of_live_dispatch(self):
         frozen=copy.deepcopy(contract._POLICY_LOOKUP)
         for cell in frozen['cells']:

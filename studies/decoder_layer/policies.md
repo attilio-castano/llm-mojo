@@ -164,13 +164,44 @@ Apple M4 Pro with 24 GiB were retained throughout the final confirmation.
 
 The campaign retains 17,280 observations across 19 timing studies, including
 4,320 in the independent final session. Every accepted and rejected timing
-observation is retained, along with the complete numerical JSONL compressed
-losslessly and the six profile traces'
+observation is retained, along with every numerical check in lossless column
+archives and the six profile traces'
 compact dispatch samples. Original source/binary identities are preserved.
 Private build paths and native-log prefixes are normalized explicitly;
 original receipt/output hashes remain separate from normalized bytes.
 The earliest baseline receipts predate individual-array hashes and summary
 fields, so replay derives their schedule counts from complete raw checks.
+
+The [storage receipt](policies_storage.json) records the conversion of eight
+verbose JSONL gzip files from 138,271,990 to 32,910,840 bytes (76.2% smaller).
+All 9,752,424 records remain, including the interrupted run and expected
+negative controls; this storage census is distinct from the 9,583,121 accepted
+core numerical assertions above. Each XZ archive holds blocks of at most 8,192
+records as ordered field layouts, value columns and record order. The reader
+reconstructs the original JSONL bytes and verifies their unchanged SHA-256,
+record count and byte count before numerical replay. Floating-point values,
+field order, repeated checks and signed zeros are preserved.
+
+Four large JSON metadata files, including the 47,431-line holdout manifest,
+use the repository's existing lossless gzip wrapper with readable summaries.
+Their complete payloads and original identities remain available to replay.
+This changes storage only: the timing samples, numerical gates, reference
+arrays, selected policies and measured source/binary identities are unchanged.
+Full replay remains local and does not require external artifact downloads.
+
+To recover an original JSONL stream into a new external file:
+
+```sh
+uv run --locked python -m llm_mojo.decoder_validation expand-checks --input studies/decoder_layer/policies_holdout_checks.columns.jsonl.xz --output "$POLICY_CHECKS"
+```
+
+Its SHA-256 must match the corresponding `uncompressed_sha256` in the storage
+receipt. `compact-checks --input "$POLICY_CHECKS" --output "$POLICY_ARCHIVE"`
+performs the reverse conversion; the new output must end in `.columns.jsonl.xz`.
+The encoder refuses noncanonical JSONL and verifies reconstructed bytes before
+returning. Expanded JSONL and the former verbose gzip files stay outside the
+current Git tree. Earlier branch commits still contain those blobs; squash
+merging the final tree avoids introducing them into the history of `main`.
 
 The retained collection-failure ledger records the interrupted early baseline,
 the profile collector's tuple/list metadata error, stale invalid-call test IDs

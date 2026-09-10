@@ -2,7 +2,10 @@
 import argparse
 from collections import Counter
 import gzip
+import hashlib
+import itertools
 import json
+import lzma
 import os
 from pathlib import Path
 import subprocess
@@ -11,6 +14,7 @@ from ._repository import environment_tool, repository_root
 from .mlp_validation import sha, write, source_identity as base_source_identity
 from .benchmarks.environment import ensure_record_location, utc_now
 from .benchmarks import decoder_layer_contract as selection_contract
+from .benchmarks.study import load_numerical_record
 
 BOUNDARIES=('B_att','Z','B_mlp','Y')
 STAGES=('N_att','Q_raw','K_raw','V_raw','Q','K_rot','O','B_att','Z','N_mlp','G','U','A','S','B_mlp','Y')
@@ -58,7 +62,7 @@ def verify_build(binary):
 def holdout_manifest(root,verify_arrays=True,policy_declaration=None):
     root=Path(root)
     manifest=root if root.is_file() else root/'manifest.json'
-    root=manifest.parent;record=json.loads(manifest.read_text())
+    root=manifest.parent;record=load_numerical_record(manifest)
     payload={k:v for k,v in record.items() if k!='payload_sha256'}
     import hashlib
     selection=record.get('kind')=='decoder_selection_holdout'
@@ -117,7 +121,11 @@ def holdout_manifest(root,verify_arrays=True,policy_declaration=None):
             raise ValueError('decoder reserved array census changed')
         if any(a.get('dtype')!='float32' or a.get('logical_dtype')!='bfloat16' for a in case['arrays'].values()):
             raise ValueError('decoder reserved storage dtype changed')
-    hashes={'manifest.json':sha(manifest)}
+    # The loader above verified both compressed and original payload hashes.
+    # Fixture identity names the experiment's manifest, not its storage wrapper.
+    stored=json.loads(manifest.read_text())
+    manifest_sha=stored['uncompressed_sha256'] if stored.get('format')=='lossless-json-gzip-v1' else sha(manifest)
+    hashes={'manifest.json':manifest_sha}
 
     for name,case in record['cases'].items():
         for label,spec in case['arrays'].items():
@@ -173,9 +181,84 @@ def protected_extents(spec):
                 mw_down=h*i, a_cosine=capacity*d, a_sine=capacity*d)
 
 
+_COLUMN_HEADER=b'{"format":"decoder-checks-columns-v1"}\n'
+_COLUMN_SUFFIX='.columns.jsonl.xz'
+
+
+def column_records(path):
+    """Transpose bounded column blocks back into ordered check dictionaries."""
+    with lzma.open(path,'rb') as stream:
+        if stream.readline()!=_COLUMN_HEADER:raise ValueError('unsupported column archive')
+        for line in stream:
+            order,tables=json.loads(line)
+            if not isinstance(order,list) or not order or len(order)>8192 or not tables:
+                raise ValueError('invalid column block')
+            positions=[0]*len(tables)
+            for keys,columns in tables:
+                if (not keys or not all(isinstance(k,str) for k in keys)
+                    or len(set(keys))!=len(keys) or len(keys)!=len(columns)
+                    or not all(isinstance(c,list) for c in columns)
+                    or not columns[0] or any(len(c)!=len(columns[0]) for c in columns)):
+                    raise ValueError('invalid column table')
+            for index in order:
+                if type(index) is not int or not 0<=index<len(tables):
+                    raise ValueError('invalid column order')
+                keys,columns=tables[index];position=positions[index]
+                if position>=len(columns[0]):raise ValueError('column order exceeds table')
+                yield dict(zip(keys,(column[position] for column in columns)))
+                positions[index]+=1
+            if any(position!=len(table[1][0]) for position,table in zip(positions,tables)):
+                raise ValueError('column order omits records')
+
+
+def compact_checks(source,destination):
+    """Losslessly transpose canonical JSONL; return original and encoded hashes.
+
+    Each block stores key layouts once, values by column, and the original row
+    order. No check, field, floating-point value or repeated row is discarded.
+    Reject noncanonical input instead of silently changing its original bytes.
+    """
+    source,destination=Path(source),Path(destination)
+    if not destination.name.endswith(_COLUMN_SUFFIX):raise ValueError('wrong column archive suffix')
+    original=hashlib.sha256();count=0;size=0
+    # Exclusive creation keeps an existing evidence artifact untouched.
+    with destination.open('xb') as target:
+        try:
+            with (gzip.open(source,'rb') if source.suffix=='.gz' else source.open('rb')) as stream, \
+                lzma.open(target,'wb',preset=6) as encoded:
+                encoded.write(_COLUMN_HEADER)
+                while block:=list(itertools.islice(stream,8192)):
+                    layouts={};tables=[];order=[]
+                    for line in block:
+                        row=json.loads(line)
+                        if not isinstance(row,dict) or not row or (json.dumps(row)+'\n').encode()!=line:
+                            raise ValueError('checks are not canonical JSONL')
+                        original.update(line);count+=1;size+=len(line)
+                        keys=tuple(row)
+                        if keys not in layouts:
+                            layouts[keys]=len(tables);tables.append((keys,[[] for _ in keys]))
+                        index=layouts[keys];order.append(index)
+                        for column,value in zip(tables[index][1],row.values()):column.append(value)
+                    encoded.write((json.dumps([order,tables],separators=(',',':'))+'\n').encode())
+            target.flush()
+            restored=hashlib.sha256();restored_count=0
+            for row in column_records(destination):
+                restored.update((json.dumps(row)+'\n').encode());restored_count+=1
+            if restored.digest()!=original.digest() or restored_count!=count:
+                raise ValueError('column archive did not reproduce original checks')
+        except Exception:
+            destination.unlink()
+            raise
+    return dict(file=destination.name,sha256=sha(destination),
+        uncompressed_sha256=original.hexdigest(),records=count,uncompressed_bytes=size)
+
+
 def check_records(path):
-    """Stream complete raw or losslessly compressed numerical records."""
+    """Stream complete raw, gzip or lossless columnar numerical records."""
     path=Path(path)
+    if path.name.endswith(_COLUMN_SUFFIX):
+        yield from column_records(path)
+        return
     with (gzip.open(path,'rt') if path.suffix=='.gz' else path.open()) as stream:
         for line in stream:yield json.loads(line)
 
@@ -292,8 +375,8 @@ def read_policy_evidence(location):
         if sha(checks)!=record['checks_sha256'] or sha(log)!=record['output_sha256']:
             raise ValueError('policy numerical raw records changed')
         return record,checks,sha(receipt)
-    wrapper=json.loads(location.read_text())
-    if wrapper.get('format')!='decoder-policy-numerics-gzip-v1':
+    wrapper=load_numerical_record(location)
+    if wrapper.get('format') not in ('decoder-policy-numerics-gzip-v1','decoder-policy-numerics-columns-v1'):
         raise ValueError('unsupported policy numerical archive')
     record=wrapper['evaluation']
     paths={}
@@ -304,9 +387,17 @@ def read_policy_evidence(location):
         if sha(path)!=spec['sha256']:raise ValueError('compressed policy evidence changed')
         h=hashlib.sha256()
         try:
-            with gzip.open(path,'rb') as stream:
-                for data in iter(lambda:stream.read(1024*1024),b''):h.update(data)
-        except (OSError,EOFError) as error:
+            if field=='checks' and wrapper['format']=='decoder-policy-numerics-columns-v1':
+                if not path.name.endswith(_COLUMN_SUFFIX):raise ValueError('wrong column archive suffix')
+                count=0;size=0
+                for row in column_records(path):
+                    data=(json.dumps(row)+'\n').encode();h.update(data);count+=1;size+=len(data)
+                if count!=spec['records'] or size!=spec['uncompressed_bytes']:
+                    raise ValueError('column archive census changed')
+            else:
+                with gzip.open(path,'rb') as stream:
+                    for data in iter(lambda:stream.read(1024*1024),b''):h.update(data)
+        except (OSError,EOFError,lzma.LZMAError) as error:
             raise ValueError('invalid compressed policy evidence') from error
         if h.hexdigest()!=spec['uncompressed_sha256']:
             raise ValueError('uncompressed policy evidence changed')
@@ -418,6 +509,8 @@ def evaluate(binary,fixtures,output):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);sub=p.add_subparsers(dest='command',required=True)
+    for command in ('compact-checks','expand-checks'):
+        c=sub.add_parser(command);c.add_argument('--input',type=Path,required=True);c.add_argument('--output',type=Path,required=True)
     b=sub.add_parser('build');b.add_argument('--binary',type=Path,required=True);b.add_argument('--selection',action='store_true')
     e=sub.add_parser('evaluate')
     for flag in ('binary','fixtures','output'):
@@ -430,7 +523,11 @@ def main():
     e.add_argument('--comparison-family',type=int,nargs='*',default=[])
     e.add_argument('--split',choices=['development','checkpoint','holdout'],default='development')
     args=p.parse_args()
-    if args.command=='build':build(args.binary,args.selection)
+    if args.command=='compact-checks':print(json.dumps(compact_checks(args.input,args.output),indent=2))
+    elif args.command=='expand-checks':
+        with args.output.open('xb') as stream:
+            for row in check_records(args.input):stream.write((json.dumps(row)+'\n').encode())
+    elif args.command=='build':build(args.binary,args.selection)
     elif args.command=='evaluate-policies':
         evaluate_policies(args.binary,args.fixtures,args.output,args.variants,args.invariant_variants,args.split,args.comparison_family)
     else:evaluate(args.binary,args.fixtures,args.output)
