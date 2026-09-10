@@ -25,6 +25,21 @@ Local edits, artifact verification, execution, tests and commits remain approved
 no push, publication, agents or new kernel search. Historical reserved inputs
 are not needed for this implementation milestone and remain untouched.
 
+## Measured selection checkpoint
+
+The full-model paired run retained 1,360 samples in four complete blocks.
+All eleven workload cells have a qualifying candidate; 16/256 chooses 21,
+while its configuration-2 comparison is inconclusive. The other cells use
+2 or 3 as listed below. The shared Fast/auto dispatcher now installs those
+choices on M4 Pro, with baseline 0 elsewhere. Final automatic-dispatch capture
+and compact evidence replay follow this source freeze.
+
+The primary and actual-generation-history diagnostic runs passed all 16,992
+cache-storage observations. Five of six independent 32-token continuations
+match HF exactly. Same-history comparisons agree on 191 of 192 choices; the
+exception is an exact HF top-logit tie. A bounded HF replay reproduces the
+large early-layer amplification when given recorded native inputs.
+
 ## Historical execution checkpoint
 
 The reference-only calibration at `ce1a8e6` failed its frozen budget ceilings.

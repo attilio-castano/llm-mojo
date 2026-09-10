@@ -23,6 +23,11 @@ def test_generation_limits_and_policy() raises:
         _ = generation_budget(1,-1)
     assert_equal(select_configuration("21",16,256,"Apple M4 Pro"),21)
     assert_equal(select_configuration("fast",1,1024,"Apple M4 Pro"),0)
+    assert_equal(select_configuration("fast",16,256,"Apple M4 Pro"),21)
+    assert_equal(select_configuration("fast",16,1024,"Apple M4 Pro"),2)
+    assert_equal(select_configuration("auto",64,4096,"Apple M4 Pro"),3)
+    assert_equal(select_configuration("fast",16,255,"Apple M4 Pro"),0)
+    assert_equal(select_configuration("fast",64,4096,"other"),0)
     assert_equal(select_configuration("auto",17,257,"other"),0)
     with assert_raises():
         _ = select_configuration("fast",0,1,"")

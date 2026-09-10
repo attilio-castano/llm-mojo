@@ -547,9 +547,68 @@ def runtime():
         extra_checks,extra_storage=runtime_diagnostic_census(history)
         checks+=extra_checks;storage_checks+=extra_storage
         predictions.extend(r for r in history['diagnostics'] if r['stage']=='logits')
+        for i,(case,g) in enumerate(zip(history['specification']['cases'],generation['records'],strict=True)):
+            remaining=len(g['prompt_ids']);schedule=[]
+            while remaining:
+                rows=min(remaining,g['chunk_rows'] or remaining)
+                schedule.append(rows);remaining-=rows
+            schedule += [1]*(len(g['tokens'])-1)
+            if case['ids']!=g['prompt_ids']+g['tokens'][:-1] or case['schedule']!=schedule:
+                raise ValueError('diagnostics did not follow actual native generation')
+            logits=sorted((r for r in history['diagnostics'] if r['case']==case['name']
+                and r['comparison']=='hf_same_history' and r['stage']=='logits' and r['mode']=='scheduled'
+                and r['start']+r['rows']>=len(g['prompt_ids'])),key=lambda r:r['call'])
+            if [r['token'] for r in logits]!=g['tokens']:
+                raise ValueError('captured token choices differ from actual generation')
     summary=runtime_ratios(measurements)
+    selected={}
+    for r in sorted(summary,key=lambda r:(r['median_ratio'],r['configuration'])):
+        if r['outcome']=='gain': selected.setdefault((r['rows'],r['total']),r['configuration'])
+    for final_name,ref_name in (('runtime-selected-diagnostics.json.gz','runtime-reference.json.gz'),
+                                ('runtime-mixed-diagnostics.json.gz','runtime-mixed-reference.json.gz')):
+        if final_name not in payload: continue
+        final=payload[final_name];selected_reference=payload[ref_name]
+        if final['configuration_policy']!='fast' or final['reference_sha256']!=manifest['files'][ref_name]['raw_sha256']:
+            raise ValueError('selected runtime reference/policy mismatch')
+        for actual,original in zip(final['specification']['cases'],selected_reference['specification']['cases'],strict=True):
+            if any(actual[k]!=original[k] for k in ('name','ids','schedule')):
+                raise ValueError('selected runtime case mismatch')
+            total=0;expected=[]
+            for rows in actual['schedule']:
+                total+=rows;expected.append(selected.get((rows,total),0))
+            if (actual['configurations']!=expected or
+                    actual['full_configurations']!=[selected.get((len(actual['ids']),len(actual['ids'])),0)]):
+                raise ValueError('automatic dispatch differs from measured selection')
+        extra_checks,extra_storage=runtime_diagnostic_census(final)
+        checks+=extra_checks;storage_checks+=extra_storage
+    propagation=None
+    if 'runtime-propagation.json.gz' in payload:
+        prop=payload['runtime-propagation.json.gz']['result']
+        if (prop['native_result_sha256']!=manifest['files']['runtime-diagnostics.json.gz']['raw_sha256']
+                or prop['reference_manifest_sha256']!=manifest['files']['runtime-reference.json.gz']['raw_sha256']
+                or prop['baseline_reproduced_boundaries']!=75 or [r['layer'] for r in prop['layers']]!=[0,1,2,3]):
+            raise ValueError('runtime propagation binding or coverage mismatch')
+        propagation=[]
+        for r in prop['layers']:
+            for k in ('input_difference','observed_output_difference','hf_propagated_difference','identical_input_residual'):
+                values=r[k]['row_relative_l2']
+                if (len(values)!=len(prop['ids']) or any(not math.isfinite(v) or v<0 for v in values)
+                        or max(values)!=r[k]['max_row_relative_l2']):
+                    raise ValueError('incomplete propagation rows')
+            propagation.append(dict(layer=r['layer'],**{k:r[k]['max_row_relative_l2'] for k in (
+                'input_difference','observed_output_difference','hf_propagated_difference','identical_input_residual')}))
     generations=[]
+    from llm_mojo.model_validation import validate_generation_events
+    declaration=reference['specification']['declaration']
+    if Counter((r['prompt'],r['chunk_rows']) for r in generation['records'])!=Counter(
+            (prompt,chunk) for prompt in declaration['prompts'] for chunk in (0,4)):
+        raise ValueError('incomplete generation prompt/chunk census')
+    if generation['empty_prompt_rejected'] is not True or generation['zero_budget']['tokens']:
+        raise ValueError('missing generation limit/input checks')
     for r in generation['records']:
+        verified=validate_generation_events(r['events'],declaration['max_new_tokens'])
+        if any(verified[k]!=r[k] for k in verified) or r['unobserved_output_exact'] is not True:
+            raise ValueError('generation event binding or observation mismatch')
         oracle=next(x for x in reference['generations'] if x['prompt']==r['prompt'])
         if r['prompt_ids']!=oracle['prompt_ids']: raise ValueError('native/reference tokenizer mismatch')
         first=next((i for i,(a,b) in enumerate(zip(r['tokens'],oracle['tokens'])) if a!=b),None)
@@ -558,8 +617,10 @@ def runtime():
         generations.append(dict(prompt=r['prompt'],chunk_rows=r['chunk_rows'],tokens=len(r['tokens']),
             reference_tokens=len(oracle['tokens']),first_difference=first,text=r['text'],reference_text=oracle['text']))
     table('runtime-measurements.csv',summary)
+    table('runtime-selection.csv',[dict(rows=r,total=t,configuration=c) for (r,t),c in sorted(selected.items())])
     table('runtime-predictions.csv',predictions)
     table('runtime-generations.csv',generations)
+    if propagation is not None: table('runtime-propagation.csv',propagation)
     print(f"Verified {checks:,} runtime diagnostics, {storage_checks:,} storage checks and {len(measurements['samples']):,} timing samples.")
 
 

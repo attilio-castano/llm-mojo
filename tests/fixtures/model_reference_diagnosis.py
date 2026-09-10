@@ -487,6 +487,58 @@ def fast_affine_diagnosis(model, qualification):
         scope='169 identical-operand affine checks and at most 16 exact dot witnesses on one exposed reference case; no native results, no changed gates')
 
 
+def runtime_propagation(model, native_result, reference_directory):
+    """Explain the exposed early-layer amplification using HF on native operands."""
+    from model_consistency import calls
+    report=json.loads(native_result.read_text())
+    manifest_path=reference_directory/'manifest.json'
+    manifest=json.loads(manifest_path.read_text())
+    if report['reference_sha256']!=reference.sha(manifest_path):
+        raise ValueError('native/reference binding mismatch')
+    worst=max((r for r in report['diagnostics'] if r['comparison']=='hf_same_history'
+        and r['mode']=='full' and r['configuration']==0 and r['stage'].startswith('hidden_')),key=lambda r:r['max_abs'])
+    case=next(c for c in manifest['cases'] if c['name']==worst['case'])
+    ids=case['ids'];length=len(ids)
+    baseline=next(calls(model,ids,[length],canonical=False))[2]
+    for name,record in case['modes']['full'][0]['arrays'].items():
+        path=reference_directory/record['path']
+        if reference.sha(path)!=record['sha256'] or baseline[name].tobytes()!=np.load(path,allow_pickle=False).tobytes():
+            raise ValueError('unmodified HF capture did not reproduce')
+    native={};hashes={}
+    for i in range(5):
+        path=native_result.parent/case['name']/'full-0/call_0'/f'hidden_{i}.bin'
+        data=np.fromfile(path,dtype='<u2')
+        if data.size!=length*896: raise ValueError('incomplete native propagation input')
+        native[i]=(data.astype(np.uint32)<<16).view(np.float32).reshape(length,896)
+        hashes[f'hidden_{i}']=reference.sha(path)
+    def metrics(a,b):
+        a,b=a.astype(np.float64),b.astype(np.float64)
+        norm=np.linalg.norm(b,axis=1);error=np.linalg.norm(a-b,axis=1)
+        relative=np.divide(error,norm,out=np.zeros_like(error),where=norm!=0)
+        return dict(max_abs=float(np.abs(a-b).max()),max_row_relative_l2=float(relative.max()),
+            row_relative_l2=relative.tolist(),zero_reference_nonzero_rows=int(np.sum((norm==0)&(error!=0))))
+    rows=[]
+    for i in range(4):
+        seen=[0]
+        def replace(module,args):
+            seen[0]+=1
+            return (torch.from_numpy(native[i]).bfloat16().unsqueeze(0),*args[1:])
+        hook=model.model.layers[i].register_forward_pre_hook(replace)
+        try:
+            injected=next(calls(model,ids,[length],canonical=False))[2]
+        finally:
+            hook.remove()
+        if seen[0]!=1: raise ValueError('incomplete decoder input replacement')
+        expected=baseline[f'hidden_{i+1}'];propagated=injected[f'hidden_{i+1}']
+        rows.append(dict(layer=i,input_difference=metrics(native[i],baseline[f'hidden_{i}']),
+            observed_output_difference=metrics(native[i+1],expected),
+            hf_propagated_difference=metrics(propagated,expected),
+            identical_input_residual=metrics(native[i+1],propagated)))
+    return dict(native_result_sha256=reference.sha(native_result),reference_manifest_sha256=reference.sha(manifest_path),
+        selected_record=worst,ids=ids,native_input_sha256=hashes,baseline_reproduced_boundaries=75,layers=rows,
+        scope='First four layers of the exposed full-call maximum; replace each HF layer input with the recorded native input. No arithmetic or threshold changes.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path)
@@ -495,6 +547,8 @@ def main():
     modes.add_argument('--backend', action='store_true', help='localize ATen operations and test fixed query execution')
     modes.add_argument('--native-operations', action='store_true', help='export identical upstream operands for the exposed one-token native case')
     modes.add_argument('--fast-affine', type=Path, help='diagnose the already exposed failed Fast qualification result.json')
+    modes.add_argument('--runtime-propagation',type=Path,help='diagnose the exposed native early-layer amplification')
+    parser.add_argument('--runtime-reference',type=Path)
     parser.add_argument('--download-sources', action='store_true', help='download hash-pinned upstream sources for --backend')
     parser.add_argument('--self-test', action='store_true')
     args = parser.parse_args()
@@ -512,6 +566,15 @@ def main():
     provenance = reference.provenance()
     ids = np.random.default_rng(9120).integers(0, 151643, size=17).tolist()
     model = reference.load_model()
+    if args.runtime_propagation:
+        if not args.runtime_reference: parser.error('--runtime-propagation requires --runtime-reference')
+        result=runtime_propagation(model,args.runtime_propagation,args.runtime_reference)
+        if source!=reference.sha(__file__) or provenance!=reference.provenance():
+            raise ValueError('source changed during propagation diagnosis')
+        args.output.parent.mkdir(parents=True,exist_ok=True)
+        args.output.write_text(json.dumps(dict(kind='model-runtime-propagation-v1',source_sha256=source,
+            reference=provenance,reserved_outputs_observed=False,native_outputs_observed=True,result=result),indent=2,allow_nan=False)+'\n')
+        return
     if args.fast_affine:
         result = fast_affine_diagnosis(model, args.fast_affine)
         if source != reference.sha(__file__) or provenance != reference.provenance():

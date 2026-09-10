@@ -395,7 +395,7 @@ def numerical_diagnostic(actual, expected):
         zero_reference_nonzero_rows=int(np.sum((norm==0)&(error!=0))),exact=actual.tobytes()==expected.tobytes())
 
 
-def runtime_specification(output, generations=None):
+def runtime_specification(output, generations=None, mixed_only=False):
     declaration=json.loads((repository_root()/'tests/fixtures/model_runtime.json').read_text())
     cases=[]
     if generations is not None:
@@ -414,6 +414,13 @@ def runtime_specification(output, generations=None):
         return
     def ids(length):
         return np.random.default_rng(declaration['seed']+length).integers(0,151643,size=length).tolist()
+    if mixed_only:
+        for m in declaration['mixed_schedules']:
+            cases.append(dict(name=m['name'],ids=ids(m['length']),schedule=m['schedule'],
+                configurations=m['configurations'],full_configurations=[0]))
+        declaration['prompts']=[]
+        write(output,dict(declaration=declaration,cases=cases,measurements=[]))
+        return
     for length in declaration['lengths']:
         schedule=[1]*length if length<=17 else [length-17,16,1]
         cases.append(dict(name=f'length-{length}',ids=ids(length),schedule=schedule,
@@ -445,12 +452,13 @@ def storage_diagnostic(actual, appended, previous, start, rows):
         inactive=bool(np.all(actual[start+rows:]==123)))
 
 
-def diagnose(binary, reference, output, prepared=None):
+def diagnose(binary, reference, output, prepared=None, policy=None):
     """Execute every declared schedule; numerical differences remain measurements."""
     binary,reference,output=map(lambda p:Path(p).resolve(),(binary,reference,output))
     receipt=verify_build(binary)
     prepared,_=verify_prepared(prepared)
     manifest=json.loads((reference/'manifest.json').read_text())
+    effective=json.loads(json.dumps(manifest['specification']))
     from .tokenizer_assets import SOURCE_SHA
     if manifest.get('tokenizer_sha256')!=SOURCE_SHA: raise ValueError('wrong diagnostic tokenizer')
     if manifest['kind']!='model-diagnostic-reference-v1':
@@ -465,13 +473,13 @@ def diagnose(binary, reference, output, prepared=None):
                     if sha(reference/record['path'])!=record['sha256']: raise ValueError('diagnostic array changed')
     output.mkdir(parents=True,exist_ok=False)
     diagnostics,storage=[],[]
-    for case,spec in zip(manifest['cases'],manifest['specification']['cases'],strict=True):
+    for case,spec in zip(manifest['cases'],effective['cases'],strict=True):
         if case['name']!=spec['name'] or case['ids']!=spec['ids']: raise ValueError('case binding mismatch')
         full_native={}
         for mode in ('full','scheduled'):
             calls=case['modes'][mode]
             schedule=[len(case['ids'])] if mode=='full' else spec['schedule']
-            variants=spec['full_configurations'] if mode=='full' else [None]
+            variants=([0] if policy is not None else spec['full_configurations']) if mode=='full' else [None]
             if [c['rows'] for c in calls]!=schedule or sum(schedule)!=len(case['ids']):
                 raise ValueError('diagnostic schedule mismatch')
             for variant in variants:
@@ -480,11 +488,15 @@ def diagnose(binary, reference, output, prepared=None):
                 directory=output/case['name']/(mode+('-'+str(variant) if variant is not None else ''))
                 for index in range(len(calls)): (directory/f'call_{index}').mkdir(parents=True)
                 command=[str(binary),str(prepared),','.join(map(str,case['ids'])),','.join(map(str,schedule)),
-                    ','.join(map(str,configs)),str(directory)]
+                    policy if policy is not None else ','.join(map(str,configs)),str(directory)]
                 with (directory/'execution.log').open('w') as log:
                     subprocess.run(command,cwd=repository_root(),env=environment(),stdout=log,stderr=subprocess.STDOUT,check=True)
                 log=(directory/'execution.log').read_text()
                 if 'model device Apple M4 Pro backend metal' not in log: raise ValueError('missing Metal identity')
+                if policy is not None:
+                    configs=[int(next(line for line in log.splitlines() if line.startswith(f'call {i} token ')).rsplit('configuration ',1)[1]) for i in range(len(calls))]
+                    if mode=='full': spec['full_configurations']=configs.copy()
+                    else: spec['configurations']=configs.copy()
                 previous={}
                 for index,call in enumerate(calls):
                     start,rows=call['start'],call['rows']
@@ -523,7 +535,7 @@ def diagnose(binary, reference, output, prepared=None):
                 print('diagnosed',case['name'],mode,configs,flush=True)
     verify_build(binary)
     report=dict(kind='model-runtime-diagnostics-v1',build=receipt,reference_sha256=sha(reference/'manifest.json'),
-        specification=manifest['specification'],prepared_manifest_sha256=sha(prepared/'manifest.json'),
+        specification=effective,configuration_policy=policy,prepared_manifest_sha256=sha(prepared/'manifest.json'),
         diagnostics=diagnostics,storage=storage,invariants_passed=all(r['prefix'] and r['append'] and r['inactive'] for r in storage),
         numerical_policy='diagnostic only; no full-model error gate')
     write(output/'result.json',report)
@@ -579,6 +591,10 @@ def benchmark(binary, specification, output, prepared=None):
 def generation_events(path, maximum):
     import csv
     events=list(csv.DictReader(Path(path).read_text().splitlines(),delimiter='\t'))
+    return validate_generation_events(events,maximum)
+
+
+def validate_generation_events(events, maximum):
     def group(name): return [r for r in events if r['event']==name]
     prompt,tokens=group('prompt'),group('token')
     for values in (prompt,tokens):
@@ -667,6 +683,7 @@ def main():
     sub=parser.add_subparsers(dest='command',required=True)
     s=sub.add_parser('specification');s.add_argument('--output',required=True,type=Path)
     s.add_argument('--generations',type=Path)
+    s.add_argument('--mixed-only',action='store_true')
     b=sub.add_parser('build');b.add_argument('--binary',required=True,type=Path)
     b.add_argument('--generation',action='store_true')
     g=sub.add_parser('generate');g.add_argument('--binary',required=True,type=Path)
@@ -677,6 +694,7 @@ def main():
     d=sub.add_parser('diagnose');d.add_argument('--binary',required=True,type=Path)
     d.add_argument('--reference',required=True,type=Path);d.add_argument('--output',required=True,type=Path)
     d.add_argument('--prepared',type=Path)
+    d.add_argument('--policy',choices=['fast','auto','baseline'])
     m=sub.add_parser('benchmark');m.add_argument('--binary',required=True,type=Path)
     m.add_argument('--specification',required=True,type=Path);m.add_argument('--output',required=True,type=Path)
     m.add_argument('--prepared',type=Path)
@@ -691,11 +709,11 @@ def main():
     o.add_argument('--reference',required=True,type=Path);o.add_argument('--output',required=True,type=Path)
     o.add_argument('--prepared',type=Path)
     args=parser.parse_args()
-    if args.command=='specification':runtime_specification(args.output,args.generations)
+    if args.command=='specification':runtime_specification(args.output,args.generations,args.mixed_only)
     elif args.command=='build':build(args.binary,args.generation)
     elif args.command=='generate':generation_study(args.binary,args.output,args.prepared,args.policy)
     elif args.command=='lifecycle':lifecycle_study(args.binary,args.output,args.prepared)
-    elif args.command=='diagnose':diagnose(args.binary,args.reference,args.output,args.prepared)
+    elif args.command=='diagnose':diagnose(args.binary,args.reference,args.output,args.prepared,args.policy)
     elif args.command=='benchmark':benchmark(args.binary,args.specification,args.output,args.prepared)
     elif args.command=='consistency':evaluate_consistency(args.binary,args.reference,args.output,args.length,args.prepared)
     elif args.command=='operations':evaluate_operations(args.binary,args.reference,args.output,args.prepared)

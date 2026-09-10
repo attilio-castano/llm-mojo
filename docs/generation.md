@@ -3,11 +3,13 @@
 The active [Fast implementation revision](fast-generation-plan.md) uses numerical
 comparisons as diagnostics. Required checks cover assets, data flow, cache and
 generation semantics; historical full-model distance ceilings no longer block
-integration. `fast` is the public default, with `auto` as an alias. Both retain
-configuration 0 until complete-model measurements support specific selections.
+integration. `fast` is the public default, with `auto` as an alias. On Apple M4 Pro they select the eleven measured workload cells described in
+the [runtime study](../studies/model_generation/runtime.md), with configuration
+0 elsewhere.
 Explicit configurations 0/2/3/21 and the historical `consistent` path remain
-available. The full-checkpoint generator and lifecycle checks have executed;
-reproducible workload measurements and diagnostic evidence are being collected.
+available. The full-checkpoint generator, lifecycle checks, numerical diagnostics and
+paired model measurements have executed. Numerical differences are retained
+and explained separately from exact implementation invariants.
 
 ## Historical numerical-policy studies
 
@@ -88,24 +90,25 @@ Full-model acceptance must still confirm these counters and actual execution.
 
 ## Workload policy
 
-The approved consistency revision adds explicit development configuration 20
-(`consistent`): FP32 G32 attention for every query and rowwise projections/MLP
-at every row count. It preserves query parallelism in one GPU attention launch.
-It is not automatically selected before full-model accuracy, exact schedule
-checks and final acceptance. The new declaration and streaming reference runner
-are `tests/fixtures/model_consistency.json` and `model_consistency.py`; historical
-reference qualification and configuration IDs retain their original meaning.
+`select_configuration` is shared by model clients. `fast` (the public default)
+and `auto` use the measured M4 Pro lookup: split8 configuration 2 at
+16/1024, 16/4096, 15/256 and 17/256; configuration 3, combining split8 and
+larger projections, at 64/1024, 64/4096, 256/1024, 256/4096, 65/4096 and
+255/4096; configuration 21 at 16/256. Pairs denote incoming rows / total
+cached rows. Every other shape and device name falls back to configuration 0.
+Baseline 0 already includes integrated attention and optimized multi-row MLP
+7, with rowwise MLP 0 for decode. Full prefill and ordinary single-row decode
+therefore retain these existing optimized routes.
 
-`select_configuration` is shared by model clients. `baseline` always selects ID
-0. `candidate` uses the prior shared decoder lookup at its exact confirmed
-shapes on Apple M4 Pro, falling back to 0 elsewhere. Explicit IDs 0/2/3 remain
-available for comparison. `auto` currently selects 0 everywhere: historical
-one-layer choices require full-model confirmation before automatic promotion.
-The same choice applies to all 24 layers for that call.
+`baseline` always selects 0. `candidate` retains the prior split8 lookup, and
+explicit IDs 0/2/3/21 remain available for comparison. The historical
+`consistent` / 20 route uses FP32 G32 attention and rowwise projections at all
+row counts; it remains an explicit study mode. The same selected configuration
+applies to all 24 layers for a call.
 
-Scratch includes split8 capacity before execution, so selecting an existing
-configuration does not allocate within the layer loop. Cached-prefix numerical
-compatibility must be validated when a later call changes configuration.
+Scratch includes split8 capacity before execution, so selection allocates
+nothing within the layer loop. The diagnostic suite checks exact cache
+preservation, append storage and inactive capacity across mixed configurations.
 
 ## Prepared checkpoint and reference
 
