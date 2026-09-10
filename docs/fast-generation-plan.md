@@ -1,6 +1,31 @@
-# Fast full-model acceptance
+# Fast full-model implementation
 
-## Execution checkpoint
+## Active revision: implementation with numerical diagnosis
+
+Approved on 2026-09-10 after the failed reference qualification. Complete the
+native Fast runtime using the existing kernels. The historical numerical
+ceilings below remain recorded but no longer block integration or measurement.
+
+Required checks establish pinned assets, architecture, causal positions, exact
+cache preservation/appends/guards, submission accounting, invalid-input handling,
+reset, greedy ties/nonfinite rejection, stop/context limits and UTF-8 streaming.
+Existing independent operation tests remain required. HF intermediate errors,
+same-history logits/distributions and independent trajectories are diagnostic
+observations, not automatic pass/fail criteria. Investigate suspicious differences
+on identical operands; retain discrepancies and their scope without retuning
+historical limits. No general quality or exact-HF-equivalence claim is implied.
+
+Finish the existing public generator, expose candidates 0/2/3/21, exercise the
+real 24-layer model and capture all 75 boundaries on declared development
+schedules. Measure the complete model with allocation and diagnostic capture
+outside timing. Only measured workload-specific gains enter Fast/auto dispatch;
+other workloads retain configuration 0. Test the final selected path and retain
+compact observations, provenance, generation examples and reproducible timings.
+Local edits, artifact verification, execution, tests and commits remain approved;
+no push, publication, agents or new kernel search. Historical reserved inputs
+are not needed for this implementation milestone and remain untouched.
+
+## Historical execution checkpoint
 
 The reference-only calibration at `ce1a8e6` failed its frozen budget ceilings.
 All 12,300 declared calibration observations were retained. The largest hidden

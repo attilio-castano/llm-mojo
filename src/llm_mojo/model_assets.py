@@ -70,15 +70,15 @@ def verify_prepared(directory=None):
     return directory, manifest
 
 
-def generate(prepared, prompt, maximum, chunk_rows=0, policy='baseline'):
-    """Verify inputs before launching the experimental native generation driver.
+def generate(prepared, prompt, maximum, chunk_rows=0, policy='fast', report=None):
+    """Verify inputs before launching the native generation driver.
 
     Prepared artifacts must remain unchanged during the launch and execution.
     Python performs initialization only; the child owns native inference.
     """
     if not 0 <= maximum <= 4096 or not 0 <= chunk_rows <= 4096:
         raise ValueError('invalid generation or chunk limit')
-    if policy not in ('baseline', 'auto', 'candidate', 'consistent', '0', '2', '3', '20'):
+    if policy not in ('baseline', 'auto', 'candidate', 'consistent', '0', '2', '3', '20', '21', 'fast'):
         raise ValueError('unknown generation configuration policy')
     prompt = Path(prompt).resolve()
     if not prompt.is_file():
@@ -90,20 +90,22 @@ def generate(prepared, prompt, maximum, chunk_rows=0, policy='baseline'):
         environment_tool('mojo'), 'run', '-I', 'src',
         str(root / 'src/llm_mojo/generate_cli.mojo'), str(directory), str(tables),
         str(prompt), str(maximum), str(chunk_rows), policy,
+        *([str(Path(report).resolve())] if report is not None else []),
     ], cwd=root, check=True)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description='Verify artifacts and run the experimental native Qwen generator; full-model acceptance is pending.')
+        description='Verify artifacts and run native BF16 Qwen plain-text greedy generation on Metal.')
     parser.add_argument('--prepared', type=Path, required=True)
     parser.add_argument('--prompt', type=Path, required=True)
     parser.add_argument('--max-new-tokens', type=int, required=True)
     parser.add_argument('--chunk-rows', type=int, default=0)
-    parser.add_argument('--policy', default='baseline',
-                        choices=['baseline', 'auto', 'candidate', 'consistent', '0', '2', '3', '20'])
+    parser.add_argument('--policy', default='fast',
+                        choices=['baseline', 'auto', 'candidate', 'consistent', '0', '2', '3', '20', '21', 'fast'])
+    parser.add_argument('--report', type=Path, help='Write native timing, token and cache events as TSV')
     args = parser.parse_args(argv)
-    generate(args.prepared, args.prompt, args.max_new_tokens, args.chunk_rows, args.policy)
+    generate(args.prepared, args.prompt, args.max_new_tokens, args.chunk_rows, args.policy, args.report)
 
 
 if __name__ == '__main__':

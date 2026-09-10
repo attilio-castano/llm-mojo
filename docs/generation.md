@@ -1,5 +1,16 @@
 # Qwen model composition and generation
 
+The active [Fast implementation revision](fast-generation-plan.md) uses numerical
+comparisons as diagnostics. Required checks cover assets, data flow, cache and
+generation semantics; historical full-model distance ceilings no longer block
+integration. `fast` is the public default, with `auto` as an alias. Both retain
+configuration 0 until complete-model measurements support specific selections.
+Explicit configurations 0/2/3/21 and the historical `consistent` path remain
+available. The full-checkpoint generator and lifecycle checks have executed;
+reproducible workload measurements and diagnostic evidence are being collected.
+
+## Historical numerical-policy studies
+
 The subsequent [Fast completion effort](fast-generation-plan.md) stopped during
 reference-only qualification: the declared intermediate-error ceilings failed
 before independent confirmation or native Fast acceptance. The
@@ -118,7 +129,10 @@ uv run --locked --script tests/fixtures/model_reference.py prepare --output buil
 uv run --locked --script tests/fixtures/model_reference.py qualify --output build/oracle_data/model-qualification
 ```
 
-A qualification failure prevents dependent comparison. The historical
+Under the historical qualification workflow, failure prevents dependent comparison.
+The new `model_reference.py diagnose` / `model_validation diagnose` workflow
+captures corresponding histories without requiring qualification; it retains
+numerical distances separately from required exact storage checks. The historical
 `model_reference.py qualify` command above is expected to reproduce its original
 failure. Use the [consistency study commands](../studies/model_generation/consistency.md)
 for the newly approved canonical route. Reference capture requires
@@ -146,7 +160,7 @@ generation acceptance and performance promotion are not yet implemented.
 The verified development launcher is:
 
 ```sh
-uv run --locked python -m llm_mojo.model_assets --prepared "$MODEL_PREPARED" --prompt "$PROMPT_FILE" --max-new-tokens 16 --policy baseline
+uv run --locked python -m llm_mojo.model_assets --prepared "$MODEL_PREPARED" --prompt "$PROMPT_FILE" --max-new-tokens 16 --policy fast --report build/generation-events.tsv
 ```
 
 `MODEL_PREPARED` names the prepared model directory and `PROMPT_FILE` contains
@@ -166,6 +180,12 @@ limit, and emits complete UTF-8 fragments. It applies no sampling or repetition
 penalty. A selected final token is in history but need not have been consumed
 into the KV cache. Chat-template rendering is outside this milestone.
 
-This candidate has compiled but has not yet executed with the full checkpoint.
-Do not treat compilation, the primitive tests or the tiny upstream self-test as
-model/generation acceptance.
+The optional TSV report records prompt/generated IDs, selected prefill
+configurations, native initialization, prefill and decode durations, and cache
+accounting. Native durations exclude Python asset verification and compilation.
+TTFT includes native initialization/tokenization; decode timings end at device
+synchronization. Output remains generated UTF-8 text on stdout.
+
+The first full-checkpoint execution and lifecycle checks passed during the
+implementation revision. These establish execution and tested invariants;
+model quality and exact HF trajectory equivalence require separate evidence.

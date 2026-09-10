@@ -8,6 +8,7 @@ import gzip
 import hashlib
 import json
 import math
+from statistics import median
 from pathlib import Path
 from collections import Counter
 from fractions import Fraction
@@ -460,6 +461,108 @@ def fast_reference():
           '169 local affine comparisons and 16 exact witnesses; confirmation/native acceptance remain unexecuted.')
 
 
+def runtime_ratios(report):
+    samples=report['samples']
+    expected=Counter()
+    for w in report['specification']['measurements']:
+        for block in range(4):
+            for arm,config in enumerate([0,0,*w['candidates']]):
+                for sample in range(10):
+                    expected[(block,arm,w['total']-w['rows'],w['rows'],config,sample)]+=1
+    observed=Counter(tuple(r[k] for k in ('block','arm','prefix','rows','configuration','sample')) for r in samples)
+    if expected!=observed or any(r['nanoseconds']<=0 for r in samples):
+        raise ValueError('incomplete runtime measurement census')
+    results=[]
+    for w in report['specification']['measurements']:
+        def med(block,arm):
+            return median(r['nanoseconds'] for r in samples if r['block']==block and r['arm']==arm
+                and r['rows']==w['rows'] and r['prefix']+r['rows']==w['total'])
+        noise=max(abs(med(b,1)/med(b,0)-1) for b in range(4))
+        for arm,config in enumerate(w['candidates'],start=2):
+            ratios=[med(b,arm)/med(b,0) for b in range(4)]
+            gain=all(r<1 for r in ratios) and 1-median(ratios)>max(.05,noise)
+            regression=all(r>1 for r in ratios) and median(ratios)-1>max(.05,noise)
+            results.append(dict(rows=w['rows'],total=w['total'],configuration=config,
+                baseline_ms=median(med(b,0) for b in range(4))/1e6,
+                candidate_ms=median(med(b,arm) for b in range(4))/1e6,
+                median_ratio=median(ratios),min_ratio=min(ratios),max_ratio=max(ratios),control_noise=noise,
+                outcome='gain' if gain else 'regression' if regression else 'inconclusive'))
+    return results
+
+
+def runtime_diagnostic_census(diagnostics):
+    wanted=Counter();stored=Counter()
+    for case in diagnostics['specification']['cases']:
+        for mode in ('full','scheduled'):
+            schedule=[len(case['ids'])] if mode=='full' else case['schedule']
+            variants=case['full_configurations'] if mode=='full' else [None]
+            for variant in variants:
+                start=0
+                for call,rows in enumerate(schedule):
+                    config=variant if mode=='full' else case['configurations'][call]
+                    for stage in ({f'hidden_{i}' for i in range(25)} | {'logits','final_norm'} |
+                                  {f'cache_{kind}_{i}' for kind in ('key','value') for i in range(24)}):
+                        tag=(case['name'],mode,config,call,start,rows,stage)
+                        wanted[tag+('hf_same_history',)]+=1
+                        if stage.startswith('cache_'): stored[tag]+=1
+                        if mode=='scheduled' and (stage not in ('logits','final_norm') or start+rows==len(case['ids'])):
+                            wanted[tag+('native_full',)]+=1
+                    start+=rows
+    keys=('case','mode','configuration','call','start','rows','stage')
+    if Counter(tuple(r[k] for k in keys+('comparison',)) for r in diagnostics['diagnostics'])!=wanted:
+        raise ValueError('incomplete runtime diagnostic census')
+    if Counter(tuple(r[k] for k in keys) for r in diagnostics['storage'])!=stored:
+        raise ValueError('incomplete runtime storage census')
+    if diagnostics['invariants_passed'] is not True or any(not all(r[k] for k in ('prefix','append','inactive')) for r in diagnostics['storage']):
+        raise ValueError('runtime cache invariant failed')
+    if any(not r['exact'] for r in diagnostics['diagnostics'] if r['stage']=='hidden_0'):
+        raise ValueError('runtime embedding invariant failed')
+    return len(wanted),len(stored)
+
+
+def runtime():
+    manifest=json.loads((ROOT/'runtime-study.json').read_text())
+    payload={}
+    for name,record in manifest['files'].items():
+        encoded=(ROOT/name).read_bytes();raw=gzip.decompress(encoded)
+        if sha(encoded)!=record['sha256'] or sha(raw)!=record['raw_sha256']:
+            raise ValueError('runtime evidence hash mismatch')
+        payload[name]=json.loads(raw)
+    diagnostics=payload['runtime-diagnostics.json.gz']
+    measurements=payload['runtime-measurements.json.gz']
+    generation=payload['runtime-generations.json.gz']
+    reference=payload['runtime-reference.json.gz']
+    if (diagnostics['reference_sha256']!=manifest['files']['runtime-reference.json.gz']['raw_sha256']
+            or diagnostics['specification']!=reference['specification']):
+        raise ValueError('runtime reference binding mismatch')
+    checks,storage_checks=runtime_diagnostic_census(diagnostics)
+    predictions=[r for r in diagnostics['diagnostics'] if r['stage']=='logits']
+    if 'runtime-history-diagnostics.json.gz' in payload:
+        history=payload['runtime-history-diagnostics.json.gz']
+        history_reference=payload['runtime-history-reference.json.gz']
+        if (history['reference_sha256']!=manifest['files']['runtime-history-reference.json.gz']['raw_sha256']
+                or history['specification']!=history_reference['specification']
+                or history['specification']['history_source_sha256']!=manifest['files']['runtime-generations.json.gz']['raw_sha256']):
+            raise ValueError('runtime history binding mismatch')
+        extra_checks,extra_storage=runtime_diagnostic_census(history)
+        checks+=extra_checks;storage_checks+=extra_storage
+        predictions.extend(r for r in history['diagnostics'] if r['stage']=='logits')
+    summary=runtime_ratios(measurements)
+    generations=[]
+    for r in generation['records']:
+        oracle=next(x for x in reference['generations'] if x['prompt']==r['prompt'])
+        if r['prompt_ids']!=oracle['prompt_ids']: raise ValueError('native/reference tokenizer mismatch')
+        first=next((i for i,(a,b) in enumerate(zip(r['tokens'],oracle['tokens'])) if a!=b),None)
+        if first is None and len(r['tokens'])!=len(oracle['tokens']):
+            first=min(len(r['tokens']),len(oracle['tokens']))
+        generations.append(dict(prompt=r['prompt'],chunk_rows=r['chunk_rows'],tokens=len(r['tokens']),
+            reference_tokens=len(oracle['tokens']),first_difference=first,text=r['text'],reference_text=oracle['text']))
+    table('runtime-measurements.csv',summary)
+    table('runtime-predictions.csv',predictions)
+    table('runtime-generations.csv',generations)
+    print(f"Verified {checks:,} runtime diagnostics, {storage_checks:,} storage checks and {len(measurements['samples']):,} timing samples.")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--plot', action='store_true', help='also regenerate study figures with matplotlib')
@@ -519,6 +622,8 @@ def main():
         consistency()
     if (ROOT / 'fast-reference-study.json').exists():
         fast_reference()
+    if (ROOT / 'runtime-study.json').exists():
+        runtime()
 
 
 if __name__ == '__main__':

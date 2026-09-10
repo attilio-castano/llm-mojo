@@ -18,6 +18,21 @@ spec.loader.exec_module(study)
 
 
 class ModelStudyTests(unittest.TestCase):
+    def test_runtime_selection_requires_complete_pairs_and_gain_above_noise(self):
+        report=dict(specification=dict(measurements=[dict(rows=16,total=256,candidates=[21])]),samples=[])
+        for block in range(4):
+            for arm,config in enumerate([0,0,21]):
+                for sample in range(10):
+                    report['samples'].append(dict(block=block,arm=arm,prefix=240,rows=16,
+                        configuration=config,sample=sample,nanoseconds=[100,101,80][arm]))
+        self.assertEqual(study.runtime_ratios(report)[0]['outcome'],'gain')
+        noisy=json.loads(json.dumps(report))
+        for r in noisy['samples']:
+            if r['arm']==1: r['nanoseconds']=130
+        self.assertEqual(study.runtime_ratios(noisy)[0]['outcome'],'inconclusive')
+        report['samples'].pop()
+        with self.assertRaisesRegex(ValueError,'census'): study.runtime_ratios(report)
+
     def test_fast_reference_stop_replays_from_all_observations(self):
         output = io.StringIO()
         with patch.object(study, 'table') as table, redirect_stdout(output):

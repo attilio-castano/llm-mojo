@@ -1,7 +1,7 @@
 """Fixed Qwen model ownership. Native execution; prepared files are verified by tooling.
 
-This initial implementation is a development candidate, not accepted full-model
-inference. Its cross-layer copy keeps the existing decoder alias contract intact.
+The cross-layer copy keeps the existing decoder alias contract intact. Numerical
+comparisons are diagnostics; storage and lifecycle invariants remain exact.
 """
 from std.memory import bitcast
 from std.gpu import global_idx
@@ -79,13 +79,13 @@ def select_configuration(policy: String, rows: Int, total: Int, device: String) 
     if rows < 1 or total < rows or total > 4096:
         raise Error("invalid configuration-selection dimensions")
     # Auto remains the control until model-level promotion earns lookup entries.
-    if policy == "baseline" or policy == "auto":
+    if policy == "baseline" or policy == "auto" or policy == "fast":
         return 0
     if policy == "consistent" or policy == "20":
         return 20
     if policy == "candidate":
         return candidate_configuration(rows,total) if device == "Apple M4 Pro" else 0
-    if policy == "0" or policy == "2" or policy == "3":
+    if policy == "0" or policy == "2" or policy == "3" or policy == "21":
         return Int(policy)
     raise Error("unknown generation configuration policy")
 
@@ -188,7 +188,7 @@ struct QwenModel(Movable):
     def forward(mut self, ctx: DeviceContext, ids: List[Int], configuration: Int = 0, capture: String = "") raises:
         """Submit all layers. ID upload synchronizes; layer execution does not.
 
-        Public development API; not yet full-model accepted. The host token
+        Native inference API. The host token
         staging boundary is measured separately from a future enqueue API.
         """
         self.preflight(ctx,ids,configuration)

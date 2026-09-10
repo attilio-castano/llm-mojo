@@ -20,7 +20,7 @@ def environment():
     return {k:v for k,v in os.environ.items() if k!='MODULAR_DEBUG'}
 
 
-def build(binary):
+def build(binary, generation=False):
     binary=Path(binary).resolve()
     receipt=Path(str(binary)+'.provenance.json')
     if binary.exists() or receipt.exists():
@@ -29,7 +29,8 @@ def build(binary):
     if source['repository']['dirty']:
         raise ValueError('model numerical build requires clean source')
     binary.parent.mkdir(parents=True,exist_ok=True)
-    command=[environment_tool('mojo'),'build','-I','src','-I','tests','tests/model_driver.mojo','-o',str(binary)]
+    entry='src/llm_mojo/generate_cli.mojo' if generation else 'tests/model_driver.mojo'
+    command=[environment_tool('mojo'),'build','-I','src','-I','tests',entry,'-o',str(binary)]
     subprocess.run(command,cwd=repository_root(),env=environment(),check=True)
     if source_identity()!=source:
         raise ValueError('source changed during model compilation')
@@ -383,10 +384,296 @@ def evaluate(binary,reference,output,configurations,prepared=None):
         raise ValueError('full-model development numerical checks failed')
 
 
+def numerical_diagnostic(actual, expected):
+    if actual.shape != expected.shape or not np.isfinite(actual).all() or not np.isfinite(expected).all():
+        raise ValueError('nonfinite or mismatched diagnostic boundary')
+    a,b = actual.astype(np.float64),expected.astype(np.float64)
+    error = np.linalg.norm((a-b).reshape(len(a),-1),axis=1)
+    norm = np.linalg.norm(b.reshape(len(b),-1),axis=1)
+    relative = np.divide(error,norm,out=np.zeros_like(error),where=norm!=0)
+    return dict(max_abs=float(np.max(np.abs(a-b))),max_row_relative_l2=float(relative.max()),
+        zero_reference_nonzero_rows=int(np.sum((norm==0)&(error!=0))),exact=actual.tobytes()==expected.tobytes())
+
+
+def runtime_specification(output, generations=None):
+    declaration=json.loads((repository_root()/'tests/fixtures/model_runtime.json').read_text())
+    cases=[]
+    if generations is not None:
+        report=json.loads(Path(generations).read_text())
+        for i,r in enumerate(report['records']):
+            consumed=r['prompt_ids']+r['tokens'][:-1]
+            remaining=len(r['prompt_ids']);schedule=[]
+            while remaining:
+                rows=min(remaining,r['chunk_rows'] or remaining)
+                schedule.append(rows);remaining-=rows
+            schedule += [1]*(len(r['tokens'])-1)
+            cases.append(dict(name=f'history-{i}',ids=consumed,schedule=schedule,
+                configurations=[0]*len(schedule),full_configurations=[0]))
+        declaration['prompts']=[]
+        write(output,dict(declaration=declaration,cases=cases,measurements=[],history_source_sha256=sha(generations)))
+        return
+    def ids(length):
+        return np.random.default_rng(declaration['seed']+length).integers(0,151643,size=length).tolist()
+    for length in declaration['lengths']:
+        schedule=[1]*length if length<=17 else [length-17,16,1]
+        cases.append(dict(name=f'length-{length}',ids=ids(length),schedule=schedule,
+            configurations=[0]*len(schedule),full_configurations=[0]))
+    for w in declaration['measurements']:
+        prefix=w['total']-w['rows']
+        for candidate in w['candidates']:
+            cases.append(dict(name=f"cell-{w['rows']}-{w['total']}-{candidate}",ids=ids(w['total']),
+                schedule=[prefix,w['rows']],configurations=[0,candidate],full_configurations=[0]))
+    write(output,dict(declaration=declaration,cases=cases,measurements=declaration['measurements']))
+
+
+def prediction_diagnostic(actual, expected):
+    a,b=actual.astype(np.float64).ravel(),expected.astype(np.float64).ravel()
+    def log_softmax(x):
+        x=x-x.max()
+        return x-np.log(np.exp(x).sum())
+    la,lb=log_softmax(a),log_softmax(b)
+    p,q=np.exp(la),np.exp(lb)
+    ordered=np.sort(b)
+    return dict(kl_nats=float(np.sum(q*(lb-la))),total_variation=float(np.abs(p-q).sum()/2),
+        token=int(a.argmax()),reference_token=int(b.argmax()),reference_margin=float(ordered[-1]-ordered[-2]))
+
+
+def storage_diagnostic(actual, appended, previous, start, rows):
+    # Byte equality preserves signed zero, unlike numeric array_equal.
+    return dict(prefix=start==0 or actual[:start].tobytes()==previous[:start].tobytes(),
+        append=actual[start:start+rows].tobytes()==appended.tobytes(),
+        inactive=bool(np.all(actual[start+rows:]==123)))
+
+
+def diagnose(binary, reference, output, prepared=None):
+    """Execute every declared schedule; numerical differences remain measurements."""
+    binary,reference,output=map(lambda p:Path(p).resolve(),(binary,reference,output))
+    receipt=verify_build(binary)
+    prepared,_=verify_prepared(prepared)
+    manifest=json.loads((reference/'manifest.json').read_text())
+    from .tokenizer_assets import SOURCE_SHA
+    if manifest.get('tokenizer_sha256')!=SOURCE_SHA: raise ValueError('wrong diagnostic tokenizer')
+    if manifest['kind']!='model-diagnostic-reference-v1':
+        raise ValueError('wrong diagnostic reference kind')
+    for name,digest in manifest['sources'].items():
+        if sha(repository_root()/name)!=digest: raise ValueError('diagnostic source changed')
+    for case in manifest['cases']:
+        for calls in case['modes'].values():
+            for call in calls:
+                if set(call['arrays'])!=CONSISTENCY_BOUNDARIES: raise ValueError('incomplete boundary census')
+                for record in call['arrays'].values():
+                    if sha(reference/record['path'])!=record['sha256']: raise ValueError('diagnostic array changed')
+    output.mkdir(parents=True,exist_ok=False)
+    diagnostics,storage=[],[]
+    for case,spec in zip(manifest['cases'],manifest['specification']['cases'],strict=True):
+        if case['name']!=spec['name'] or case['ids']!=spec['ids']: raise ValueError('case binding mismatch')
+        full_native={}
+        for mode in ('full','scheduled'):
+            calls=case['modes'][mode]
+            schedule=[len(case['ids'])] if mode=='full' else spec['schedule']
+            variants=spec['full_configurations'] if mode=='full' else [None]
+            if [c['rows'] for c in calls]!=schedule or sum(schedule)!=len(case['ids']):
+                raise ValueError('diagnostic schedule mismatch')
+            for variant in variants:
+                configs=[variant] if mode=='full' else spec['configurations']
+                if len(configs)!=len(schedule): raise ValueError('missing call configuration')
+                directory=output/case['name']/(mode+('-'+str(variant) if variant is not None else ''))
+                for index in range(len(calls)): (directory/f'call_{index}').mkdir(parents=True)
+                command=[str(binary),str(prepared),','.join(map(str,case['ids'])),','.join(map(str,schedule)),
+                    ','.join(map(str,configs)),str(directory)]
+                with (directory/'execution.log').open('w') as log:
+                    subprocess.run(command,cwd=repository_root(),env=environment(),stdout=log,stderr=subprocess.STDOUT,check=True)
+                log=(directory/'execution.log').read_text()
+                if 'model device Apple M4 Pro backend metal' not in log: raise ValueError('missing Metal identity')
+                previous={}
+                for index,call in enumerate(calls):
+                    start,rows=call['start'],call['rows']
+                    if start!=sum(schedule[:index]): raise ValueError('diagnostic position mismatch')
+                    if f'call {index} token ' not in log or f'cache_length {start+rows} submitted_layer_rows {(start+rows)*24}' not in log:
+                        raise ValueError('missing model accounting')
+                    native=directory/f'call_{index}'
+                    for name,record in sorted(call['arrays'].items()):
+                        expected=np.load(reference/record['path'],allow_pickle=False)
+                        tag=dict(case=case['name'],mode=mode,configuration=configs[index],call=index,start=start,rows=rows,stage=name)
+                        if name.startswith('cache_'):
+                            actual=bf16(native/(name+'.bin'),(min(4096,len(case['ids'])+3),2,64))
+                            kind,layer=name.split('_')[1:]
+                            appended=bf16(native/(f'append_{kind}_{layer}.bin'),(rows,2,64))
+                            check=storage_diagnostic(actual,appended,previous.get(name),start,rows)
+                            storage.append(dict(**tag,**check))
+                            previous[name]=actual
+                            actual=actual[:start+rows]
+                        else:
+                            if name=='final_norm': expected=expected[-1:]
+                            actual=bf16(native/(name+'.bin'),expected.shape)
+                        metrics=numerical_diagnostic(actual,expected)
+                        if name=='hidden_0' and not metrics['exact']: raise ValueError('embedding lookup mismatch')
+                        if name=='logits': metrics.update(prediction_diagnostic(actual,expected))
+                        diagnostics.append(dict(**tag,comparison='hf_same_history',**metrics))
+                        if mode=='full' and variant==0: full_native[name]=actual.copy()
+                        if mode=='scheduled' and name in full_native:
+                            full=full_native[name]
+                            if name.startswith('cache_'): full=full[:start+rows]
+                            elif name in ('logits','final_norm'):
+                                if start+rows!=len(case['ids']): continue
+                            else: full=full[start:start+rows]
+                            metrics=numerical_diagnostic(actual,full)
+                            if name=='logits': metrics.update(prediction_diagnostic(actual,full))
+                            diagnostics.append(dict(**tag,comparison='native_full',**metrics))
+                print('diagnosed',case['name'],mode,configs,flush=True)
+    verify_build(binary)
+    report=dict(kind='model-runtime-diagnostics-v1',build=receipt,reference_sha256=sha(reference/'manifest.json'),
+        specification=manifest['specification'],prepared_manifest_sha256=sha(prepared/'manifest.json'),
+        diagnostics=diagnostics,storage=storage,invariants_passed=all(r['prefix'] and r['append'] and r['inactive'] for r in storage),
+        numerical_policy='diagnostic only; no full-model error gate')
+    write(output/'result.json',report)
+    if not report['invariants_passed']: raise ValueError('cache storage invariant failed')
+
+
+def benchmark(binary, specification, output, prepared=None):
+    from .benchmarks.environment import stable_environment, conditions_snapshot, require_ac
+    binary,output=Path(binary).resolve(),Path(output).resolve()
+    receipt=verify_build(binary)
+    prepared,_=verify_prepared(prepared)
+    spec=json.loads(Path(specification).read_text())
+    output.mkdir(parents=True,exist_ok=False)
+    samples,conditions=[],[]
+    hardware=stable_environment()
+    for block in range(4):
+        before=conditions_snapshot();require_ac(before)
+        plan=[]
+        workloads=spec['measurements'][::-1] if block in (1,2) else spec['measurements']
+        for workload in workloads:
+            arms=[0,0,*workload['candidates']]
+            order=list(enumerate(arms))
+            if block in (1,2): order.reverse()
+            for arm,config in order:
+                plan.append([workload['total']-workload['rows'],workload['rows'],config,block,arm])
+        path=output/f'block_{block}.txt'
+        path.write_text(''.join(','.join(map(str,row))+'\n' for row in plan))
+        command=[str(binary),'--bench',str(prepared),str(path),'10','10']
+        with (output/f'block_{block}.log').open('w') as log:
+            subprocess.run(command,cwd=repository_root(),env=environment(),stdout=log,stderr=subprocess.STDOUT,check=True)
+        lines=(output/f'block_{block}.log').read_text().splitlines()
+        if 'model device Apple M4 Pro backend metal' not in lines: raise ValueError('missing Metal identity')
+        block_rows=[]
+        for line in lines:
+            if line.startswith('sample '):
+                values=list(map(int,line.split()[1:]))
+                block_rows.append(dict(zip(('block','arm','prefix','rows','configuration','sample','nanoseconds'),values,strict=True)))
+        expected=Counter(tuple(row+[sample]) for row in plan for sample in range(10))
+        actual=Counter((r['prefix'],r['rows'],r['configuration'],r['block'],r['arm'],r['sample']) for r in block_rows)
+        if expected!=actual or any(r['nanoseconds']<=0 for r in block_rows): raise ValueError('incomplete benchmark census')
+        samples.extend(block_rows)
+        conditions.append(dict(before=before,after=conditions_snapshot()))
+        print('measured block',block,len(block_rows),'samples',flush=True)
+    verify_build(binary)
+    write(output/'result.json',dict(kind='model-runtime-measurements-v1',build=receipt,
+        prepared_manifest_sha256=sha(prepared/'manifest.json'),specification=spec,environment=hardware,conditions=conditions,
+        model_geometry=dict(layers=24,hidden=896,intermediate=4864,query_heads=14,kv_heads=2,head_width=64,vocabulary=151936),
+        dtype='BF16 stored tensors; FP32 reductions',layout='row-major activations and output-row-major affine weights',
+        warmups=10,samples_per_arm=10,samples=samples,
+        boundary='resident 24-layer forward including token upload and tied head, ending at device synchronization; prefix setup and greedy readback excluded'))
+
+
+def generation_events(path, maximum):
+    import csv
+    events=list(csv.DictReader(Path(path).read_text().splitlines(),delimiter='\t'))
+    def group(name): return [r for r in events if r['event']==name]
+    prompt,tokens=group('prompt'),group('token')
+    for values in (prompt,tokens):
+        if [int(r['index']) for r in values]!=list(range(len(values))): raise ValueError('invalid token event order')
+        if any(not 0<=int(r['value'])<151936 for r in values): raise ValueError('invalid reported token')
+    budget=min(maximum,4096-len(prompt))
+    if not 1<=len(prompt)<=4096 or not 0<=len(tokens)<=budget: raise ValueError('generation budget mismatch')
+    finish=group('finish')
+    if len(finish)!=1 or int(finish[0]['index'])!=len(tokens): raise ValueError('missing generation completion')
+    ids=[int(r['value']) for r in tokens]
+    if any(t in (151643,151645) for t in ids[:-1]): raise ValueError('generation continued after stop')
+    if finish[0]['value']=='stop':
+        if not ids or ids[-1] not in (151643,151645): raise ValueError('false stop')
+    elif finish[0]['value']!='limit' or len(tokens)!=budget: raise ValueError('early generation termination')
+    if budget:
+        if len(group('device'))!=1 or group('device')[0]['value']!='Apple M4 Pro/metal': raise ValueError('missing generation Metal identity')
+        expected=len(prompt)+len(tokens)-1
+        if len(group('cache'))!=1 or int(group('cache')[0]['value'])!=expected: raise ValueError('generation cache mismatch')
+        if len(group('submitted'))!=1 or int(group('submitted')[0]['value'])!=24*expected: raise ValueError('generation submission mismatch')
+        if len(group('decode'))!=len(tokens)-1: raise ValueError('generation decode count mismatch')
+    return dict(prompt_ids=[int(r['value']) for r in prompt],tokens=ids,events=events)
+
+
+def generation_study(binary, output, prepared=None, policy='fast'):
+    from .tokenizer_assets import ensure_prepared
+    from .benchmarks.environment import stable_environment, conditions_snapshot
+    binary,output=Path(binary).resolve(),Path(output).resolve()
+    receipt=verify_build(binary)
+    prepared,_=verify_prepared(prepared)
+    tables=ensure_prepared(download=False)
+    declaration=json.loads((repository_root()/'tests/fixtures/model_runtime.json').read_text())
+    output.mkdir(parents=True,exist_ok=False)
+    conditions_before=conditions_snapshot()
+    records=[]
+    for i,text in enumerate(declaration['prompts']):
+        prompt=output/f'prompt_{i}.txt';prompt.write_text(text)
+        for chunk in (0,4):
+            report=output/f'events_{i}_{chunk}.tsv'
+            command=[str(binary),str(prepared),str(tables),str(prompt),str(declaration['max_new_tokens']),str(chunk),policy,str(report)]
+            result=subprocess.run(command,cwd=repository_root(),env=environment(),capture_output=True,check=True)
+            generated=result.stdout.decode('utf-8',errors='strict')
+            unobserved=subprocess.run(command[:-1],cwd=repository_root(),env=environment(),capture_output=True,check=True)
+            if unobserved.stdout!=result.stdout: raise ValueError('reporting changed generated output')
+            record=generation_events(report,declaration['max_new_tokens'])
+            records.append(dict(prompt=text,chunk_rows=chunk,text=generated,unobserved_output_exact=True,**record))
+            print('generated',i,'chunk',chunk,len(record['tokens']),'tokens',flush=True)
+    prompt=output/'zero.txt';prompt.write_text('Hello')
+    report=output/'zero.tsv'
+    result=subprocess.run([str(binary),str(prepared),str(tables),str(prompt),'0','0',policy,str(report)],
+        cwd=repository_root(),env=environment(),capture_output=True,check=True)
+    if result.stdout: raise ValueError('zero budget emitted text')
+    zero=generation_events(report,0)
+    prompt.write_text('')
+    invalid=subprocess.run([str(binary),str(prepared),str(tables),str(prompt),'1','0',policy],
+        cwd=repository_root(),env=environment(),capture_output=True)
+    if invalid.returncode==0 or invalid.stdout: raise ValueError('empty prompt was accepted')
+    verify_build(binary)
+    write(output/'result.json',dict(kind='model-runtime-generations-v1',build=receipt,policy=policy,
+        environment=stable_environment(),conditions_before=conditions_before,conditions_after=conditions_snapshot(),
+        dtype='BF16 stored tensors; FP32 reductions',layout='row-major',
+        prepared_manifest_sha256=sha(prepared/'manifest.json'),tokenizer_sha256=sha(tables),
+        records=records,zero_budget=zero,empty_prompt_rejected=True))
+
+
+def lifecycle_study(binary, output, prepared=None):
+    binary=Path(binary).resolve()
+    receipt=verify_build(binary)
+    prepared,_=verify_prepared(prepared)
+    result=subprocess.run([str(binary),'--lifecycle',str(prepared)],cwd=repository_root(),
+        env=environment(),capture_output=True,text=True,check=True)
+    if ('model device Apple M4 Pro backend metal' not in result.stdout or
+            'lifecycle passed:' not in result.stdout): raise ValueError('missing lifecycle completion')
+    verify_build(binary)
+    write(output,dict(kind='model-runtime-lifecycle-v1',build=receipt,
+        prepared_manifest_sha256=sha(prepared/'manifest.json'),stdout=result.stdout))
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     sub=parser.add_subparsers(dest='command',required=True)
+    s=sub.add_parser('specification');s.add_argument('--output',required=True,type=Path)
+    s.add_argument('--generations',type=Path)
     b=sub.add_parser('build');b.add_argument('--binary',required=True,type=Path)
+    b.add_argument('--generation',action='store_true')
+    g=sub.add_parser('generate');g.add_argument('--binary',required=True,type=Path)
+    g.add_argument('--output',required=True,type=Path);g.add_argument('--prepared',type=Path)
+    g.add_argument('--policy',default='fast')
+    l=sub.add_parser('lifecycle');l.add_argument('--binary',required=True,type=Path)
+    l.add_argument('--output',required=True,type=Path);l.add_argument('--prepared',type=Path)
+    d=sub.add_parser('diagnose');d.add_argument('--binary',required=True,type=Path)
+    d.add_argument('--reference',required=True,type=Path);d.add_argument('--output',required=True,type=Path)
+    d.add_argument('--prepared',type=Path)
+    m=sub.add_parser('benchmark');m.add_argument('--binary',required=True,type=Path)
+    m.add_argument('--specification',required=True,type=Path);m.add_argument('--output',required=True,type=Path)
+    m.add_argument('--prepared',type=Path)
     e=sub.add_parser('evaluate');e.add_argument('--binary',required=True,type=Path)
     e.add_argument('--reference',required=True,type=Path);e.add_argument('--output',required=True,type=Path)
     e.add_argument('--configurations',required=True,nargs='+',type=int)
@@ -398,7 +685,12 @@ def main():
     o.add_argument('--reference',required=True,type=Path);o.add_argument('--output',required=True,type=Path)
     o.add_argument('--prepared',type=Path)
     args=parser.parse_args()
-    if args.command=='build':build(args.binary)
+    if args.command=='specification':runtime_specification(args.output,args.generations)
+    elif args.command=='build':build(args.binary,args.generation)
+    elif args.command=='generate':generation_study(args.binary,args.output,args.prepared,args.policy)
+    elif args.command=='lifecycle':lifecycle_study(args.binary,args.output,args.prepared)
+    elif args.command=='diagnose':diagnose(args.binary,args.reference,args.output,args.prepared)
+    elif args.command=='benchmark':benchmark(args.binary,args.specification,args.output,args.prepared)
     elif args.command=='consistency':evaluate_consistency(args.binary,args.reference,args.output,args.length,args.prepared)
     elif args.command=='operations':evaluate_operations(args.binary,args.reference,args.output,args.prepared)
     else:evaluate(args.binary,args.reference,args.output,args.configurations,args.prepared)

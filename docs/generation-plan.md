@@ -1,3 +1,6 @@
+The active revision is [Fast implementation with numerical diagnosis](fast-generation-plan.md).
+The qualification stop gates below describe historical plans.
+
 # Qwen forward and generation milestone
 
 ## Approved Fast completion revision — 2026-09-10

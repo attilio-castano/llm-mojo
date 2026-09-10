@@ -1,3 +1,8 @@
+The active [Fast runtime plan](../../docs/fast-generation-plan.md) now treats
+full-model numerical differences as diagnostics while retaining exact
+implementation invariants. The failed qualifications below remain historical
+evidence and do not gate the new implementation effort.
+
 # Full-model reference schedule qualification
 
 The [Fast reference qualification](fast-reference.md) is the latest checkpoint.
