@@ -1,6 +1,6 @@
 """Verify retained reference evidence and regenerate study tables and figures.
 
-Uses only the Python standard library; never executes a model.
+Uses project validation helpers for schedule coverage; never executes a model.
 """
 import csv
 import argparse
@@ -230,6 +230,8 @@ def aten(plot=False):
 
 
 def consistency():
+    from llm_mojo.model_validation import required_consistency_schedules
+
     manifest = json.loads((ROOT/'consistency-study.json').read_text())
     data = {}
     for name, record in manifest['files'].items():
@@ -241,7 +243,8 @@ def consistency():
         data[name] = raw
     qualified = json.loads(data['consistency-reference.json.gz'])
     declaration = manifest['declaration']
-    if (qualified['passed'] is not True or qualified['candidate_outputs_observed'] is not False
+    if (sha((json.dumps(declaration, indent=2) + '\n').encode()) != manifest['declaration_sha256']
+            or qualified['passed'] is not True or qualified['candidate_outputs_observed'] is not False
             or qualified['reserved_outputs_observed'] is not False
             or qualified['source']['tests/fixtures/model_consistency.json'] != manifest['declaration_sha256']
             or qualified['observations_sha256'] != sha(data['consistency-observations.jsonl.gz'])
@@ -255,7 +258,7 @@ def consistency():
         seen, checks = set(), 0
         for schedule in case['schedules']:
             rows = tuple(schedule['rows'])
-            if rows in seen or sum(rows) != case['length'] or min(rows) < 1 or schedule['failures']:
+            if not rows or rows in seen or sum(rows) != case['length'] or min(rows) < 1 or schedule['failures']:
                 raise ValueError('invalid consistency schedule')
             seen.add(rows)
             if schedule['checks'] != len(rows)*75:
@@ -266,8 +269,8 @@ def consistency():
                 for stage in boundaries:
                     required[(case['length'],case['seed'],rows,start,count,stage)] += 1
                 start += count
-        if (case['length'],) not in seen:
-            raise ValueError('missing full repeat')
+        if seen != required_consistency_schedules(case['length'], declaration):
+            raise ValueError('incomplete declared reference schedule census')
         summary.append(dict(length=case['length'],seed=case['seed'],schedules=len(seen),checks=checks,failures=0))
     for line in data['consistency-observations.jsonl.gz'].splitlines():
         row = json.loads(line)
@@ -315,7 +318,8 @@ def consistency():
         max_abs=max(r['max_abs'] for r in ops['checks'] if r['stage']==s),
         failed_elements=sum(r['failed'] for r in ops['checks'] if r['stage']==s)) for s in operation_stages])
     table('consistency-rounding.csv',ops['rounding'])
-    print('Verified 71,250 HF comparisons, 13,165 decoder records, failed model accuracy and both operation diagnoses; regenerated four tables.')
+    print(f'Verified {sum(observed.values()):,} HF comparisons, {len(layer):,} decoder records, '
+          'failed model accuracy and both operation diagnoses; regenerated four tables.')
 
 
 def main():
