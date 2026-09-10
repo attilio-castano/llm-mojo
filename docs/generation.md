@@ -1,5 +1,12 @@
 # Qwen model composition and generation
 
+The subsequent [Fast completion effort](fast-generation-plan.md) stopped during
+reference-only qualification: the declared intermediate-error ceilings failed
+before independent confirmation or native Fast acceptance. The
+[Fast reference study](../studies/model_generation/fast-reference.md) retains
+the complete calibration, diagnosis and stop decision. The earlier native
+configuration-20 accuracy failure below remains separate historical evidence.
+
 **Development candidate: promotion is paused at native full-model accuracy.**
 The authorized [consistency revision](../studies/model_generation/consistency.md)
 passes 71,250 exact canonical HF comparisons through 4096 tokens and native

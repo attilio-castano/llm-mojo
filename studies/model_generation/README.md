@@ -1,5 +1,10 @@
 # Full-model reference schedule qualification
 
+The [Fast reference qualification](fast-reference.md) is the latest checkpoint.
+It failed its predeclared intermediate-error ceilings during reference-only
+calibration; confirmation and native Fast acceptance did not run. This README
+retains the earlier schedule-qualification result below.
+
 **Historical reference confirmation failed.** The subsequently authorized
 [consistency implementation](consistency.md) qualifies a canonical reference
 through 4096 tokens and passes native primitive/layer consistency checks. Its

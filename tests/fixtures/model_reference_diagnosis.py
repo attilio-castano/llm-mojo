@@ -407,6 +407,86 @@ def native_operations(model, output):
     print('Observed actual HF operations:',len(arrays),'boundaries; model observation unchanged',flush=True)
 
 
+@torch.no_grad()
+def fast_affine_diagnosis(model, qualification):
+    """Reproduce the exposed calibration maximum; inspect identical operands.
+
+    This is diagnosis on already observed reference inputs, never a new
+    qualification or authorization to change any numerical threshold.
+    """
+    from fractions import Fraction
+    import model_calibration as calibration
+    from model_consistency import calls
+    from model_attention_diagnosis import exact_array
+    report = json.loads(qualification.read_text())
+    if report['passed'] or report['source'] != calibration.fast_identity():
+        raise ValueError('require the original failed Fast qualification')
+    raw_path = qualification.parent/'observations.jsonl'
+    if reference.sha(raw_path) != report['observations_sha256']:
+        raise ValueError('calibration observation hash mismatch')
+    rows = [json.loads(line) for line in raw_path.read_text().splitlines()]
+    worst = max(rows, key=lambda r: r['relative_rms'])
+    if worst['arm'] != 'fp32_split2' or worst['schedule'] != [worst['length']]:
+        raise ValueError('this bounded diagnosis requires an exposed split-affine full call')
+    ids = dict(report['cases']['calibration'])[worst['case']]
+    captured, handles = [], []
+    def hook(name):
+        def observe(module, args, output):
+            captured.append((name, module, args[0].detach().clone(), output.detach().clone()))
+        return observe
+    for name, module in model.named_modules():
+        if isinstance(module, torch.nn.Linear):
+            handles.append(module.register_forward_hook(hook(name)))
+    try:
+        observed = next(calls(model, ids, [len(ids)], canonical=False))[2]
+    finally:
+        for handle in handles:
+            handle.remove()
+    baseline = next(calls(model, ids, [len(ids)], canonical=False))[2]
+    if len(captured) != 169 or any(not exact_array(baseline[n], observed[n]) for n in baseline):
+        raise ValueError('observation altered the reference or missed an affine operation')
+    with calibration.split_linear():
+        changed = next(calls(model, ids, [len(ids)], canonical=False))[2]
+    reproduced = []
+    for name in sorted(baseline):
+        value = calibration.metrics(changed[name], baseline[name], report['declaration']['rtol'])
+        old = next(r for r in rows if r['case'] == worst['case'] and r['arm'] == worst['arm']
+                   and r['schedule'] == worst['schedule'] and r['stage'] == name)
+        if any(value[k] != old[k] for k in ('max_abs', 'required_atol', 'relative_rms')):
+            raise ValueError('exposed calibration result did not reproduce')
+        reproduced.append(dict(stage=name, **value))
+    operations, witnesses = [], []
+    for name, module, x, expected in captured:
+        with calibration.split_linear() as count:
+            actual = module(x)
+        if count[0] != 1 or actual.shape != expected.shape or actual.dtype != torch.bfloat16:
+            raise ValueError('invalid local affine replacement')
+        a, b = actual.float().numpy().reshape(-1, actual.shape[-1]), expected.float().numpy().reshape(-1, expected.shape[-1])
+        record = dict(module=name, shape=list(actual.shape), different=int(np.count_nonzero(a != b)),
+                      **calibration.metrics(a, b, report['declaration']['rtol']))
+        operations.append(record)
+        if record['different'] and len(witnesses) < 16:
+            # Freeze at most the first 16 differing affine operations in
+            # execution order, and the first differing element in each.
+            row, column = map(int, np.argwhere(a != b)[0])
+            operands = x.reshape(-1, x.shape[-1])[row].float().tolist()
+            weights = module.weight[column].float().tolist()
+            exact = sum((Fraction(v)*Fraction(w) for v, w in zip(operands, weights, strict=True)), Fraction())
+            if module.bias is not None:
+                exact += Fraction(float(module.bias[column]))
+            hf, split = Fraction(float(b[row,column])), Fraction(float(a[row,column]))
+            dh, ds = abs(hf-exact), abs(split-exact)
+            witnesses.append(dict(module=name, row=row, column=column,
+                exact_numerator=str(exact.numerator), exact_denominator=str(exact.denominator),
+                hf=float(hf), split=float(split), hf_absolute_error=float(dh), split_absolute_error=float(ds),
+                nearer='hf' if dh < ds else 'split' if ds < dh else 'tie'))
+    return dict(qualification_sha256=reference.sha(qualification), worst_record=worst,
+        ids=ids, observation_exact=True, reproduced_boundaries=reproduced,
+        operations=operations, exact_dot_witnesses=witnesses,
+        calibration_source=calibration.fast_identity(), confirmation_executed=False,
+        scope='169 identical-operand affine checks and at most 16 exact dot witnesses on one exposed reference case; no native results, no changed gates')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path)
@@ -414,6 +494,7 @@ def main():
     modes.add_argument('--detail', action='store_true', help='trace rounding, propagation and prediction impact')
     modes.add_argument('--backend', action='store_true', help='localize ATen operations and test fixed query execution')
     modes.add_argument('--native-operations', action='store_true', help='export identical upstream operands for the exposed one-token native case')
+    modes.add_argument('--fast-affine', type=Path, help='diagnose the already exposed failed Fast qualification result.json')
     parser.add_argument('--download-sources', action='store_true', help='download hash-pinned upstream sources for --backend')
     parser.add_argument('--self-test', action='store_true')
     args = parser.parse_args()
@@ -431,6 +512,15 @@ def main():
     provenance = reference.provenance()
     ids = np.random.default_rng(9120).integers(0, 151643, size=17).tolist()
     model = reference.load_model()
+    if args.fast_affine:
+        result = fast_affine_diagnosis(model, args.fast_affine)
+        if source != reference.sha(__file__) or provenance != reference.provenance():
+            raise ValueError('reference source changed during Fast diagnosis')
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(dict(source_sha256=source, reference=provenance,
+            new_candidate_outputs_observed=False, reserved_outputs_observed=False,
+            fast_affine=result), indent=2, allow_nan=False)+'\n')
+        return
     if args.native_operations:
         native_operations(model,args.output)
         return

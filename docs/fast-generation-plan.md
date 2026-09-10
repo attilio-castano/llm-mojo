@@ -1,10 +1,28 @@
 # Fast full-model acceptance
 
+## Execution checkpoint
+
+The reference-only calibration at `ce1a8e6` failed its frozen budget ceilings.
+All 12,300 declared calibration observations were retained. The largest hidden
+row-relative L2 difference was 14.425%, above the 6.25% ceiling; the 1.5 margin
+required a 21.875% hidden budget. Prediction checks passed, with all three
+changed greedy choices occurring at exact reference ties. A bounded diagnosis
+reproduced all 75 metrics on the exposed worst case and inspected 169 affine
+operations on identical operands. See the
+[retained result](../studies/model_generation/fast-reference.md).
+
+The agreed stop gate applies: confirmation, native Fast acceptance, integration
+promotion and model timings remain unexecuted. Limits and native arithmetic
+remain unchanged. The candidate inventory below is ready for a subsequent
+accepted numerical-policy decision.
+
+## Validation at the initial freeze
+
 Pre-qualification validation passed: `uv run --locked llm-mojo-validate`
 completed the frozen fixture anchors, 136 Python regressions, every native
 suite, both tokenizer parity runs and all benchmark smoke routes on Metal.
 The new reference self-test separately passed eight tests; it is now registered
-in the validation command. Numerical qualification has not run at this freeze.
+in the validation command. Numerical qualification had not run at that freeze.
 
 Approved for autonomous local execution on 2026-09-10, starting at `ac09d16`.
 Scope: native batch-one BF16 Qwen2.5-0.5B-Instruct plain-text greedy generation,

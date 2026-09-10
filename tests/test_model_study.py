@@ -18,6 +18,56 @@ spec.loader.exec_module(study)
 
 
 class ModelStudyTests(unittest.TestCase):
+    def test_fast_reference_stop_replays_from_all_observations(self):
+        output = io.StringIO()
+        with patch.object(study, 'table') as table, redirect_stdout(output):
+            study.fast_reference()
+        self.assertEqual(len(table.call_args_list[0].args[1]), 5)
+        self.assertEqual(len(table.call_args_list[1].args[1]), 164)
+        self.assertEqual(len(table.call_args_list[2].args[1]), 169)
+        self.assertIn('12,300 Fast reference checks', output.getvalue())
+
+    def test_fast_replay_rejects_missing_schedule_promotion_and_changed_budget(self):
+        for damage, message in [('schedule','schedule census'), ('promotion','promoted'),
+                                ('budget','budget derivation')]:
+            with self.subTest(damage=damage), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                manifest = json.loads((STUDY/'fast-reference-study.json').read_text())
+                for name in manifest['files']:
+                    shutil.copyfile(STUDY/name, root/name)
+                def load(name):
+                    return json.loads(gzip.decompress((root/name).read_bytes()))
+                def save(name, raw):
+                    encoded = gzip.compress(raw, mtime=0)
+                    (root/name).write_bytes(encoded)
+                    manifest['files'][name].update(sha256=study.sha(encoded),
+                        uncompressed_sha256=study.sha(raw), uncompressed_bytes=len(raw))
+                report = load('fast-reference-result.json.gz')
+                if damage == 'schedule':
+                    rows = [json.loads(line) for line in gzip.decompress(
+                        (root/'fast-reference-observations.jsonl.gz').read_bytes()).splitlines()]
+                    kept = [r for r in rows if not (r['case'] == 'random-16' and r['schedule'] == [1]*16)]
+                    self.assertLess(len(kept), len(rows))
+                    raw = ''.join(json.dumps(r)+'\n' for r in kept).encode()
+                    save('fast-reference-observations.jsonl.gz', raw)
+                    report['observations_sha256'] = study.sha(raw)
+                    report['checks'] = len(kept)
+                elif damage == 'promotion':
+                    report['passed'] = True
+                else:
+                    frozen = load('fast-reference-budgets.json.gz')
+                    for record in (frozen, report):
+                        record['gates']['hidden_1']['relative_rms'] = 0.03125
+                    raw = (json.dumps(frozen)+'\n').encode()
+                    save('fast-reference-budgets.json.gz', raw)
+                    report['frozen_budgets_sha256'] = study.sha(raw)
+                save('fast-reference-result.json.gz', (json.dumps(report)+'\n').encode())
+                (root/'fast-reference-study.json').write_text(json.dumps(manifest))
+                with patch.object(study, 'ROOT', root), patch.object(study, 'table') as table:
+                    with self.assertRaisesRegex(ValueError, message):
+                        study.fast_reference()
+                    table.assert_not_called()
+
     def test_retained_consistency_evidence_is_complete(self):
         output = io.StringIO()
         with patch.object(study, 'table') as table, redirect_stdout(output):

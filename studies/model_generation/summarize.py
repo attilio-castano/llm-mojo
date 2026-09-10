@@ -7,6 +7,7 @@ import argparse
 import gzip
 import hashlib
 import json
+import math
 from pathlib import Path
 from collections import Counter
 from fractions import Fraction
@@ -322,6 +323,143 @@ def consistency():
           'failed model accuracy and both operation diagnoses; regenerated four tables.')
 
 
+def fast_reference():
+    """Replay the complete failed Fast qualification without Torch or a model."""
+    manifest = json.loads((ROOT/'fast-reference-study.json').read_text())
+    if (manifest.get('kind') != 'fast-reference-study-v1'
+            or any(manifest.get(k) is not False for k in (
+                'calibration_passed','confirmation_executed','native_acceptance_executed'))
+            or set(manifest['files']) != {'fast-reference-result.json.gz',
+                'fast-reference-budgets.json.gz','fast-reference-observations.jsonl.gz',
+                'fast-reference-diagnosis.json.gz','fast-reference-contract.json.gz'}):
+        raise ValueError('Fast study scope or file census mismatch')
+    data = {}
+    for name, record in manifest['files'].items():
+        encoded = (ROOT/name).read_bytes()
+        raw = gzip.decompress(encoded)
+        if (sha(encoded) != record['sha256'] or sha(raw) != record['uncompressed_sha256']
+                or len(raw) != record['uncompressed_bytes']):
+            raise ValueError('Fast evidence hash mismatch')
+        data[name] = raw
+    report = json.loads(data['fast-reference-result.json.gz'])
+    frozen = json.loads(data['fast-reference-budgets.json.gz'])
+    declaration = json.loads(data['fast-reference-contract.json.gz'])
+    rows = [json.loads(line) for line in data['fast-reference-observations.jsonl.gz'].splitlines()]
+    diagnosis = json.loads(data['fast-reference-diagnosis.json.gz'])
+    if (report['source_commit'] != manifest['source_commit']
+            or report['source']['tests/fixtures/model_fast.json'] != sha(data['fast-reference-contract.json.gz'])
+            or report['declaration'] != declaration or frozen['declaration'] != declaration
+            or report['observations_sha256'] != sha(data['fast-reference-observations.jsonl.gz'])
+            or report['frozen_budgets_sha256'] != sha(data['fast-reference-budgets.json.gz'])
+            or report['gates'] != frozen['gates'] or report['checks'] != len(rows)
+            or not report['started_at'] <= report['frozen_at'] <= report['finished_at']):
+        raise ValueError('Fast result/budget/source binding mismatch')
+    boundaries = ({f'hidden_{i}' for i in range(25)} | {'final_norm','logits'} |
+                  {f'cache_{kind}_{i}' for kind in ('key','value') for i in range(24)})
+    def role(name):
+        if name == 'hidden_0': return 'embedding'
+        if name.startswith('hidden_'): return 'hidden'
+        if name.startswith('cache_key_'): return 'key'
+        if name.startswith('cache_value_'): return 'value'
+        if name in ('final_norm','logits'): return name
+        raise ValueError('unknown Fast boundary')
+    cases = report['cases']['calibration']
+    required_cases = ({f'random-{n}' for n in declaration['calibration']['lengths']} |
+        {f'text-{i}' for i in range(len(declaration['calibration']['texts']))})
+    if set(name for name, ids in cases) != required_cases or len(cases) != len(required_cases):
+        raise ValueError('incomplete Fast calibration cases')
+    expected = Counter()
+    for case, ids in cases:
+        length = len(ids)
+        if (not 1 <= length <= 4096 or any(type(i) is not int or not 0 <= i < 151936 for i in ids)
+                or (case.startswith('random-') and length != int(case.split('-')[1]))):
+            raise ValueError('invalid Fast calibration input')
+        schedules = {(length,), tuple([1]*length if length <= 17 else [length-17,16,1])}
+        for schedule in schedules:
+            for arm in declaration['reference_arms']:
+                start = 0
+                for count in schedule:
+                    for stage in boundaries:
+                        expected[('calibration',case,length,arm,schedule,start,count,stage)] += 1
+                    start += count
+    observed = Counter((r['phase'],r['case'],r['length'],r['arm'],tuple(r['schedule']),r['start'],r['rows'],r['stage']) for r in rows)
+    if observed != expected:
+        raise ValueError('incomplete or duplicated Fast reference schedule census')
+    derived, summary = {}, []
+    for group in declaration['maximum_atol']:
+        records = [r for r in rows if role(r['stage']) == group]
+        gate = dict(rtol=declaration['rtol'], exact=False)
+        for metric, field in [('required_atol','atol'),('relative_rms','relative_rms')]:
+            gate[field] = max(declaration[field+'_floor'], math.ceil(
+                declaration['margin']*max(r[metric] for r in records)/declaration[field+'_quantum'])*declaration[field+'_quantum'])
+        derived[group] = gate
+        summary.append(dict(role=group, max_observed_relative_rms=max(r['relative_rms'] for r in records),
+            derived_relative_rms=gate['relative_rms'], relative_rms_ceiling=declaration['maximum_qualified_relative_rms'],
+            derived_atol=gate['atol'], atol_ceiling=declaration['maximum_atol'][group]))
+    derived['embedding'] = dict(rtol=0.,atol=0.,relative_rms=0.,exact=True)
+    gates = {name: derived[role(name)] for name in boundaries}
+    ceiling_failures = sorted(n for n,g in gates.items() if role(n) != 'embedding' and (
+        g['atol'] > declaration['maximum_atol'][role(n)] or g['relative_rms'] > declaration['maximum_qualified_relative_rms']))
+    if gates != report['gates'] or ceiling_failures != report['ceiling_failures'] or not ceiling_failures:
+        raise ValueError('Fast budget derivation or ceiling decision mismatch')
+    for record in (report, frozen):
+        if (record['calibration_passed'] is not False
+                or record['new_candidate_outputs_used_for_calibration'] is not False
+                or record['reserved_outputs_observed'] is not False):
+            raise ValueError('Fast qualification scope/status mismatch')
+    if report['passed'] is not False or report['confirmation_executed'] is not False:
+        raise ValueError('failed Fast qualification was promoted')
+    prediction_rows, failures = [], []
+    for r in rows:
+        g = gates[r['stage']]
+        if any(not math.isfinite(r[k]) or r[k] < 0 for k in ('max_abs','required_atol','relative_rms')):
+            raise ValueError('invalid Fast numerical observation')
+        passed = (r['required_atol'] <= g['atol'] and r['relative_rms'] <= g['relative_rms']
+                  and (not g['exact'] or r['exact']))
+        if r['stage'] == 'logits':
+            p = declaration['prediction']
+            passed &= (0 <= r['kl_nats'] <= p['maximum_kl_nats']
+                and 0 <= r['total_variation'] <= p['maximum_total_variation']
+                and (r['reference_margin'] <= 2*(g['atol']+g['rtol']*r['reference_max_abs']) or r['same_token']))
+            prediction_rows.append({k:r[k] for k in ('case','length','arm','start','rows','max_abs','relative_rms','kl_nats','total_variation','same_token','reference_margin')})
+        if not passed: failures.append(r)
+    if failures != report['failures']:
+        raise ValueError('Fast numerical decision mismatch')
+    detail = diagnosis['fast_affine']
+    expected_modules = {f'model.layers.{i}.{name}' for i in range(24) for name in (
+        'self_attn.q_proj','self_attn.k_proj','self_attn.v_proj','self_attn.o_proj',
+        'mlp.gate_proj','mlp.up_proj','mlp.down_proj')} | {'lm_head'}
+    if (diagnosis['source_sha256'] != manifest['diagnosis_source_sha256']
+            or detail['qualification_sha256'] != sha(data['fast-reference-result.json.gz'])
+            or detail['observation_exact'] is not True or detail['calibration_source'] != report['source']
+            or diagnosis['reserved_outputs_observed'] is not False
+            or diagnosis['new_candidate_outputs_observed'] is not False
+            or len(detail['reproduced_boundaries']) != 75
+            or {r['stage'] for r in detail['reproduced_boundaries']} != boundaries
+            or len(detail['operations']) != 169 or {r['module'] for r in detail['operations']} != expected_modules
+            or len(detail['exact_dot_witnesses']) != 16):
+        raise ValueError('incomplete Fast affine diagnosis')
+    worst = max(rows, key=lambda r:r['relative_rms'])
+    if worst != detail['worst_record']:
+        raise ValueError('Fast diagnosis did not target the exposed maximum')
+    for r in detail['reproduced_boundaries']:
+        original = next(x for x in rows if x['case'] == worst['case'] and x['arm'] == worst['arm']
+                        and x['schedule'] == worst['schedule'] and x['stage'] == r['stage'])
+        if any(r[k] != original[k] for k in ('max_abs','required_atol','relative_rms')):
+            raise ValueError('Fast failure did not reproduce')
+    for r in detail['exact_dot_witnesses']:
+        exact = Fraction(int(r['exact_numerator']),int(r['exact_denominator']))
+        a,b = abs(Fraction(r['hf'])-exact), abs(Fraction(r['split'])-exact)
+        if (r['nearer'] != ('hf' if a < b else 'split' if b < a else 'tie')
+                or r['hf_absolute_error'] != float(a) or r['split_absolute_error'] != float(b)):
+            raise ValueError('invalid Fast exact-dot interpretation')
+    table('fast-reference-budgets.csv', summary)
+    table('fast-reference-predictions.csv', prediction_rows)
+    table('fast-reference-operations.csv', detail['operations'])
+    print(f'Verified {len(rows):,} Fast reference checks, failed calibration ceilings, '
+          '169 local affine comparisons and 16 exact witnesses; confirmation/native acceptance remain unexecuted.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--plot', action='store_true', help='also regenerate study figures with matplotlib')
@@ -379,6 +517,8 @@ def main():
         aten(args.plot)
     if (ROOT / 'consistency-study.json').exists():
         consistency()
+    if (ROOT / 'fast-reference-study.json').exists():
+        fast_reference()
 
 
 if __name__ == '__main__':
