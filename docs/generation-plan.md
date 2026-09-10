@@ -1,5 +1,14 @@
 # Qwen forward and generation milestone
 
+## Approved Fast completion revision — 2026-09-10
+
+The active [Fast completion plan](fast-generation-plan.md) consolidates existing
+kernel selections, independently qualifies a new full-model numerical contract,
+then completes native generation acceptance and model-level selection. It does
+not require native schedule identity. The consistency investigation and its
+failed gates below remain historical evidence. Qualification failure stops
+dependent native acceptance; no historical failure is retroactively waived.
+
 ## Approved consistency revision — 2026-09-09
 
 The user approved autonomous implementation of schedule consistency after the
