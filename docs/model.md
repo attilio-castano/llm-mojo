@@ -71,10 +71,12 @@ The composed attention study describes its
 [reference hierarchy and validation boundaries](attention-sublayer.md).
 The [decoder-layer contract and fixture specification](decoder-layer.md)
 defines the composition gate for attention followed by MLP. The layer has
-passed its numerical acceptance and workload selection study. The next
-[full-model gate](../studies/model_generation/README.md) is blocked at
-independent reference schedule confirmation; layer acceptance does not imply
-24-layer or generation acceptance.
+passed its numerical acceptance and workload selection study. The modified,
+pinned HF reference passes full-model schedule qualification. The current
+[full-model gate](../studies/model_generation/consistency.md) is paused at seven
+native accuracy failures on its first input; the earlier reference confirmation
+failure remains historical evidence. Native 24-layer schedule consistency and
+generation acceptance remain pending.
 
 V0 is deliberately narrower than the model's complete advertised capability:
 

@@ -4,8 +4,9 @@ These studies explain how the existing Mojo operations map work onto the Apple
 M4 Pro. Start with the value and storage contracts in [model](../docs/model.md)
 and [layouts](../docs/layouts.md), then read a topic below. Each comparison is
 operation-level except for the composed attention/MLP sublayers and the accepted
-decoder layer. Full-model forward parity is blocked at independent reference
-schedule confirmation, documented in the new numerical study below.
+decoder layer. The modified HF reference passes full-model schedule
+qualification; native full-model accuracy acceptance is paused at its first
+failing input, documented in the numerical study below.
 
 | Topic | Question |
 | --- | --- |
@@ -41,9 +42,12 @@ dispatches and 9,583,121 core numerical checks. Four-row reuse lowers determinis
 prefill latency by 24–37%; the selected deterministic prefill policy still takes
 2.2–6.0 times Fast latency. Decode comparisons remain inconclusive. Both final
 deterministic lookup settings pass all fresh schedule/cache comparisons.
-Full-model logits parity is the next acceptance target; its reference-only
-confirmation currently fails eight intermediate boundaries. See the
-[numerical study](model_generation/README.md) for the frozen budgets and stop decision.
+The modified, pinned CPU HF reference passes 71,250 exact comparisons across
+all 24 layers. The native full-model candidate then fails seven intermediate
+accuracy gates on its first one-token input. Full-model schedule consistency,
+generation acceptance and combined prefill-plus-growing-decode performance
+remain pending. The earlier eight-failure reference confirmation is historical
+evidence, distinct from the current [native accuracy stop](model_generation/consistency.md).
 
 The attention-sublayer study uses the explicit CPU FP32 attention policy as
 its accuracy baseline. It has 17 synthetic and three checkpoint cases; the
