@@ -165,17 +165,17 @@ def _case(
         )
     with assert_raises(contains="QKV projection mapping"):
         _ = enqueue_attention_sublayer(
-            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), qkv_mapping=5
+            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), qkv_mapping=8
         )
     with assert_raises(contains="unknown integrated projection mapping"):
         _ = enqueue_attention_sublayer_integrated(
-            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), 0, 6)
+            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), 0, 10)
     with assert_raises(contains="requires control GQA"):
         _ = enqueue_attention_sublayer_integrated(
             ctx, weights, cache, work, TileTensor(input, row_major(1, h)), 1, 1)
     with assert_raises(contains="unknown Wo tile"):
         _ = enqueue_attention_sublayer(
-            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), wo_tile=3)
+            ctx, weights, cache, work, TileTensor(input, row_major(1, h)), wo_tile=6)
     assert_equal(cache.length, t)
     cache.reset(ctx)
     assert_equal(cache.length, 0)
@@ -317,7 +317,7 @@ def test_partitioned_prefill_rejects_missing_storage_before_enqueue() raises:
     assert_equal(cache.length, 0)
     with assert_raises(contains="unknown integrated GQA mapping"):
         _ = enqueue_attention_sublayer_integrated(
-            ctx, weights, cache, work, TileTensor(input, row_major(17, 896)), 5,
+            ctx, weights, cache, work, TileTensor(input, row_major(17, 896)), 6,
         )
     var after = snapshot(cache.key, 65 * 128)
     for i in range(len(before)):

@@ -1,0 +1,40 @@
+{
+  "status": "passed",
+  "command": [
+    "uv",
+    "run",
+    "--locked",
+    "llm-mojo-validate"
+  ],
+  "exit_code": 0,
+  "python_tests": 124,
+  "native_test_suite_summaries": [
+    "Summary [ 7.467 ] 11 tests run: 11 passed , 0 failed , 0 skipped ",
+    "Summary [ 807.796 ] 9 tests run: 9 passed , 0 failed , 0 skipped ",
+    "Summary [ 5.675 ] 1 tests run: 1 passed , 0 failed , 0 skipped ",
+    "Summary [ 252503.931 ] 2 tests run: 2 passed , 0 failed , 0 skipped ",
+    "Summary [ 7607.867 ] 8 tests run: 8 passed , 0 failed , 0 skipped ",
+    "Summary [ 9.726 ] 2 tests run: 2 passed , 0 failed , 0 skipped ",
+    "Summary [ 23101.133 ] 6 tests run: 6 passed , 0 failed , 0 skipped ",
+    "Summary [ 5594.288 ] 1 tests run: 1 passed , 0 failed , 0 skipped ",
+    "Summary [ 6787.252 ] 4 tests run: 4 passed , 0 failed , 0 skipped ",
+    "Summary [ 49425.056 ] 5 tests run: 5 passed , 0 failed , 0 skipped ",
+    "Summary [ 152495.563 ] 6 tests run: 6 passed , 0 failed , 0 skipped ",
+    "Summary [ 0.001 ] 1 tests run: 1 passed , 0 failed , 0 skipped ",
+    "Summary [ 284.788 ] 35 tests run: 35 passed , 0 failed , 0 skipped ",
+    "Summary [ 1107339.143 ] 2 tests run: 2 passed , 0 failed , 0 skipped ",
+    "Summary [ 7.848 ] 2 tests run: 2 passed , 0 failed , 0 skipped ",
+    "Summary [ 5.672 ] 7 tests run: 7 passed , 0 failed , 0 skipped ",
+    "Summary [ 8.323 ] 10 tests run: 10 passed , 0 failed , 0 skipped ",
+    "Summary [ 819.605 ] 7 tests run: 7 passed , 0 failed , 0 skipped "
+  ],
+  "tokenizer_parity_summaries": [
+    "Tokenizer exact parity: 3361 text cases; 151923 decode cases; scan, heap and streaming passed",
+    "Tokenizer exact parity: 2061 text cases; 258 decode cases; scan, heap and streaming passed"
+  ],
+  "benchmark_smoke": "complete on Metal",
+  "log": "round1-full-validation-fixed.log",
+  "log_sha256": "bd7227a03afcf09349960547d211ec53799577cd265bad529b185c46a9164173",
+  "corrected_test_failure_record": "round1-validation-failures.json",
+  "implementation_commit": "961f9c558edc6cb8af1846af4aa8843123dc67b2"
+}

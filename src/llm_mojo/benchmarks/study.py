@@ -473,7 +473,7 @@ def load_profile(directory, prefix=''):
     directory = evidence_directory(directory)
     record = json.loads((directory / (prefix+'profiles.json')).read_text())
     path = directory / (prefix+'profile_samples.csv.gz')
-    if record.get('schema') in (5,6):
+    if record.get('schema') in (5,6,7):
         return load_decoder_profile(directory,prefix)
     if record.get('schema') == 4:
         return load_mlp_profile(directory,prefix)
@@ -569,16 +569,47 @@ STUDIES['decoder_layer'] = dict(operation=decoder.OPERATION,control=0,candidates
     arithmetic=decoder.ARITHMETIC,inputs=decoder.INPUTS,timing=decoder.TIMING,
     layout='Row major X/Y[R,896], cache[T,2,64], weights[out,in], intermediate width 4864.')
 
+for _control in (0,3):
+    STUDIES[f'decoder_policies_baseline_{_control}'] = {
+        **STUDIES['decoder_layer'], 'control':_control, 'candidates':[_control,20],
+        'layers':[1,24], 'names':{v:decoder.NAMES[v] for v in (_control,20)},
+        'workloads':[dict(query_rows=r,rows=t) for r,t,v in decoder.policy_declaration()['workloads'] if v==_control]}
+STUDIES['decoder_policies_self'] = {
+    **STUDIES['decoder_layer'], 'control':20, 'candidates':[20], 'layers':[1,24],
+    'names':{20:decoder.NAMES[20]},
+    'workloads':[dict(query_rows=r,rows=t) for r,t,_ in decoder.policy_declaration()['workloads']]}
+
+
+
+
+# Each new parameter choice stays in the existing measurement matrix.
+for _round in decoder.policy_declaration().get('rounds',[]):
+    for _screen in _round['screens']:
+        STUDIES[_screen['name']] = {
+            **STUDIES['decoder_layer'], 'control':_screen['control'],
+            'candidates':_screen['candidates'], 'layers':_screen.get('layers',[1,24]),
+            'names':{v:decoder.NAMES[v] for v in _screen['candidates']},
+            'workloads':[dict(query_rows=r,rows=t) for r,t in _screen['workloads']]}
+
+
+if 'final_confirmation' in decoder.policy_declaration():
+    STUDIES.update(decoder.policy_confirmation_specs())
 
 
 def load_decoder_profile(directory,prefix=''):
     directory=Path(directory)
     record=json.loads((directory/(prefix+'profiles.json')).read_text())
     path=directory/(prefix+'profile_samples.csv.gz')
-    selected=record.get('schema')==6
-    if record.get('schema') not in (5,6) or sha(path)!=record['samples_sha256']:
+    selected=record.get('schema') in (6,7)
+    if record.get('schema') not in (5,6,7) or sha(path)!=record['samples_sha256']:
         raise ValueError('decoder profile evidence changed')
-    if selected:
+    if record['schema']==7:
+        spec=record['specification']
+        grid=set(decoder.policy_profile_grid(spec))
+        source=record['common']['source_sha256']
+        if source.get(decoder.POLICY_PATH)!=spec['policies_sha256']:
+            raise ValueError('decoder profiles do not match their built policy declaration')
+    elif selected:
         spec=record['specification']
         if hashlib.sha256((json.dumps(spec['selection'],indent=2)+'\n').encode()).hexdigest()!=spec['selection_sha256']:
             raise ValueError('decoder profile selection identity changed')
@@ -627,8 +658,9 @@ def load_decoder_windows(directory,prefix=''):
     directory=Path(directory)
     load_decoder_profile(directory,prefix)
     record=json.loads((directory/(prefix+'profiles.json')).read_text())
-    selected=record['schema']==6
-    grid=decoder.profile_selection(record['specification']['selection']) if selected else [(r,t,0) for r,t,_ in decoder.PROFILES]
+    selected=record['schema'] in (6,7)
+    grid=(decoder.policy_profile_grid(record['specification']) if record['schema']==7 else
+          decoder.profile_selection(record['specification']['selection']) if selected else [(r,t,0) for r,t,_ in decoder.PROFILES])
     grouped=defaultdict(list)
     with gzip.open(directory/(prefix+'profile_samples.csv.gz'),'rt',newline='') as stream:
         for row in csv.DictReader(stream):

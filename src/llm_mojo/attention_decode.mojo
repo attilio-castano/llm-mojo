@@ -41,8 +41,12 @@ def _decode_kernel[
     var kv_head = block_idx.x // head_blocks
     var first_head = kv_head * 7 + (block_idx.x % head_blocks) * heads
     var split = block_idx.y
-    var begin = Int(rows) * split // splits
-    var end = Int(rows) * (split + 1) // splits
+    # Query rows are independent work. The visible prefix, and therefore every
+    # reduction, depends only on this query's absolute position.
+    var query_row = block_idx.z
+    var visible = Int(rows) - Int(query.dim[0]()) + query_row + 1
+    var begin = visible * split // splits
+    var end = visible * (split + 1) // splits
 
     # Comptime indexing scalarizes these small arrays into per-lane registers.
     var q0 = stack_allocation[DType.float32](row_major[heads]()).fill(0)
@@ -61,8 +65,8 @@ def _decode_kernel[
     comptime assert u1.flat_rank == 1
     comptime for h in range(heads):
         if first_head + h < (kv_head + 1) * 7:
-            q0[h] = query[0, first_head + h, lane].cast[DType.float32]()
-            q1[h] = query[0, first_head + h, lane + 32].cast[DType.float32]()
+            q0[h] = query[query_row, first_head + h, lane].cast[DType.float32]()
+            q1[h] = query[query_row, first_head + h, lane + 32].cast[DType.float32]()
 
     for t in range(begin + group, end, groups):
         var k0 = rebind[Float32](key[t, kv_head, lane].cast[DType.float32]())
@@ -136,10 +140,10 @@ def _decode_kernel[
             var head = first_head + h
             if head < (kv_head + 1) * 7:
                 comptime if splits == 1:
-                    output[0, head, lane] = (u0[h] / z[h]).cast[
+                    output[query_row, head, lane] = (u0[h] / z[h]).cast[
                         DType.bfloat16
                     ]()
-                    output[0, head, lane + 32] = (u1[h] / z[h]).cast[
+                    output[query_row, head, lane + 32] = (u1[h] / z[h]).cast[
                         DType.bfloat16
                     ]()
                 else:
@@ -148,6 +152,39 @@ def _decode_kernel[
                     if lane == 0:
                         workspace[head, split, 64] = m[h]
                         workspace[head, split, 65] = z[h]
+
+
+def enqueue_grouped_query_attention_consistent_apple_gpu[
+    QL: TensorLayout, KL: TensorLayout, VL: TensorLayout,
+    OL: TensorLayout, WL: TensorLayout,
+](
+    context: DeviceContext,
+    query: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    key: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
+    value: TileTensor[DType.bfloat16, VL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+    workspace: TileTensor[DType.float32, WL, MutAnyOrigin],
+) raises:
+    """G32 FP32 arithmetic for every causal query, batched in one GPU launch.
+
+    The same 32 groups traverse keys at fixed residue classes modulo 32 and
+    merge in group order, independent of query count and cached-prefix length.
+    Q/O [R,14,64] are a suffix of K/V [T,2,64]. Workspace is unused.
+    """
+    comptime assert query.flat_rank == 3 and key.flat_rank == 3
+    comptime assert value.flat_rank == 3 and output.flat_rank == 3
+    var r = Int(query.dim[0]())
+    var t = Int(key.dim[0]())
+    if context.api() != "metal" or r < 1 or t < r or t > 4096:
+        raise Error("consistent attention requires Metal and a valid causal suffix")
+    if (Int(query.dim[1]()) != 14 or Int(query.dim[2]()) != 64
+        or Int(key.dim[1]()) != 2 or Int(key.dim[2]()) != 64
+        or Int(value.dim[0]()) != t or Int(value.dim[1]()) != 2 or Int(value.dim[2]()) != 64
+        or Int(output.dim[0]()) != r or Int(output.dim[1]()) != 14 or Int(output.dim[2]()) != 64):
+        raise Error("consistent attention requires Q/O[R,14,64] and K/V[T,2,64]")
+    comptime kernel = _decode_kernel[32, 1, 1, False, True, QL, KL, VL, OL, WL]
+    context.enqueue_function[kernel](query, key, value, output, workspace, Int32(t),
+        grid_dim=(14, 1, r), block_dim=1024)
 
 
 def _decode_merge_kernel[

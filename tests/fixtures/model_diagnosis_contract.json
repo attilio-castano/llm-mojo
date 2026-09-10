@@ -1,0 +1,16 @@
+{
+  "version": "qwen-reference-rounding-diagnosis-v1",
+  "random_cases": [{"length": 17, "seed": 9120}, {"length": 15, "seed": 9148}],
+  "text_cases": [
+    "<|im_start|>user\nWrite a short sentence about rain.<|im_end|>\n<|im_start|>assistant\n",
+    "<|im_start|>user\nWhat is 7 + 5? Answer briefly.<|im_end|>\n<|im_start|>assistant\n",
+    "<|im_start|>user\nContinue: red, orange, yellow,<|im_end|>\n<|im_start|>assistant\n"
+  ],
+  "greedy_steps": 8,
+  "stop_ids": [151645, 151643],
+  "trace": "Pass-through capture of FP32 SDPA Q/K/V, mask, output before BF16 rounding, and existing model boundaries. Verify observed and unobserved runs are bitwise equal.",
+  "shape_ablation": "Using identical captured first-layer operands: full queries/full masked keys, one query/full masked keys, one query/causal-prefix keys. Compare with explicit FP64 attention as a diagnostic only.",
+  "propagation": "Compare each token at every hidden boundary; inspect final-norm scale and gamma at its largest error coordinate.",
+  "predictions": "Compare full recomputation with both full-prompt cached execution and tokenwise-prompt cached execution on the same full-reference history. Separately follow independent greedy trajectories; lowest-ID ties, no sampling or penalties.",
+  "interpretation": "Diagnostic evidence only. No new acceptance threshold, no changed precision policy, no native model execution, no reserved inputs. A top-two margin greater than twice the measured maximum logit perturbation certifies that this perturbation cannot change argmax for that comparison."
+}

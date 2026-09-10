@@ -1,0 +1,41 @@
+{
+  "version": "qwen-generation-development-v1",
+  "status": "awaiting-reference-only-qualification",
+  "model_revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+  "policy": "BF16 weights and stored boundaries; FP32 reductions and math SDPA; BF16 LM-head output exposed as FP32",
+  "initial_qualification_gates": {
+    "hidden": {"atol": 0.0625, "rtol": 0.03125},
+    "logits": {"atol": 0.0625, "rtol": 0.03125}
+  },
+  "qualification_lengths": [1, 17, 65, 257],
+  "development_lengths": [1, 17, 65, 257, 1024, 1025, 4096],
+  "development_mixed_schedules": [
+    {"length": 1025, "rows": [1008, 16, 1], "configurations": [0, 2, 0]},
+    {"length": 1025, "rows": [960, 64, 1], "configurations": [0, 3, 0]},
+    {"length": 4096, "rows": [960, 64, 3056, 16], "configurations": [0, 3, 0, 2]}
+  ],
+  "reserved_recipe": "numpy PCG64 default_rng(seed + length), integers(0,151643,size=length); declare IDs before clean candidate exposure",
+  "reserved_cases": [
+    {"seed": 19013, "length": 17},
+    {"seed": 19013, "length": 257},
+    {"seed": 19013, "length": 4096},
+    {"seed": 19031, "length": 1},
+    {"seed": 19031, "length": 65},
+    {"seed": 19031, "length": 1024}
+  ],
+  "reserved_text": "<|im_start|>user\nReply with only the word yes.<|im_end|>\n<|im_start|>assistant\n",
+  "reserved_text_max_new_tokens": 16,
+  "reserved_outputs_observed": false,
+  "generation": {
+    "capacity": 4096,
+    "batch": 1,
+    "selection": "raw-logit argmax, lowest token ID on exact ties, no repetition penalty or sampling transforms",
+    "stop_ids": [151645, 151643],
+    "nonfinite_logits": "error and invalidate execution",
+    "empty_prompt": "reject",
+    "max_new_tokens_zero": "return no output without model execution",
+    "capacity_exhaustion": "stop at min(max_new_tokens, capacity-prompt_length)",
+    "terminal_token": "append to history; need not be cached; omit special tokens from visible output"
+  },
+  "optimization_budget": {"additional_studies": 3, "challengers_per_study": 2, "independent_confirmations_per_study": 1}
+}

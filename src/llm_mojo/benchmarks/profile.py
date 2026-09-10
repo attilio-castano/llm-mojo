@@ -50,7 +50,7 @@ def build_profile(args):
     is_decoder = operation == decoder.OPERATION
     rectangular = is_prefill or is_sublayer or is_decoder
     warmup = getattr(args,'profile_warmup',100)
-    allowed = decoder.VARIANTS if is_decoder else mlp.VARIANTS if is_mlp else sublayer.VARIANTS if is_sublayer else (prefill.VARIANTS if is_prefill else VARIANTS)
+    allowed = decoder.MEASUREMENT_VARIANTS if is_decoder else mlp.VARIANTS if is_mlp else sublayer.VARIANTS if is_sublayer else (prefill.VARIANTS if is_prefill else VARIANTS)
     if args.profile_variant not in allowed:
         raise RuntimeError('unknown profile variant for operation')
     spec = (dict(dispatches=decoder.specification(args.profile_variant,query_rows,args.profile_rows)["dispatches_per_iteration"]) if is_decoder else dict(dispatches=mlp.specification(args.profile_variant,args.profile_rows)['dispatches_per_iteration']) if is_mlp else dict(dispatches=sublayer.specification(args.profile_variant,query_rows,args.profile_rows)['dispatches_per_iteration']) if is_sublayer else
@@ -150,7 +150,7 @@ def argument_parser():
     p.add_argument('--profile-query-rows', type=int, default=1)
     p.add_argument('--profile-warmup', type=int, default=100)
     p.add_argument('--build-profile-binary', type=Path, required=True)
-    p.add_argument('--profile-variant', type=int, choices=sorted(set(VARIANTS)|set(prefill.VARIANTS)|set(sublayer.VARIANTS)|mlp.VARIANTS), default=9)
+    p.add_argument('--profile-variant', type=int, choices=sorted(set(VARIANTS)|set(prefill.VARIANTS)|set(sublayer.VARIANTS)|mlp.VARIANTS|decoder.MEASUREMENT_VARIANTS), default=9)
     p.add_argument('--profile-rows', type=int, default=4096)
     p.add_argument('--profile-iterations', type=int, default=500)
     return p

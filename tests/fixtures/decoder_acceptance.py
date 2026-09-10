@@ -32,17 +32,29 @@ def main():
     p.add_argument('--candidate-binary',type=Path)
     p.add_argument('--selection',action='store_true')
     p.add_argument('--declare-selection',action='store_true')
+    p.add_argument('--policies',action='store_true')
+    p.add_argument('--declare-policies',action='store_true')
     p.add_argument('--checkpoint-assets',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True)
     args=p.parse_args();out=args.output.resolve();ensure_record_location(out)
     if out.exists():raise ValueError('refusing to overwrite reserved decoder outputs')
-    if args.declare_selection:
+    if args.selection and args.policies or args.declare_selection and args.declare_policies:
+        raise ValueError('choose one decoder declaration')
+    if args.declare_selection or args.declare_policies:
         import transformers
         _,origin=checkpoint(args.checkpoint_assets)
         if origin!=load_frozen()['checkpoint']:raise ValueError('checkpoint identity changed')
         tokenizer=transformers.AutoTokenizer.from_pretrained(args.checkpoint_assets,local_files_only=True,trust_remote_code=False)
+        policy=selection.policy_declaration() if args.declare_policies else None
+        prompt=policy['confirmation']['prompt'] if policy else selection.SELECTION_PROMPT
         ids=tokenizer.apply_chat_template([dict(role='system',content='You are a helpful assistant.'),
-            dict(role='user',content=selection.SELECTION_PROMPT)],tokenize=True,add_generation_prompt=True)
+            dict(role='user',content=prompt)],tokenize=True,add_generation_prompt=True)
+        if policy:
+            policy['confirmation'].update(checkpoint_token_ids=ids,
+                checkpoint_token_ids_sha256=hashlib.sha256(struct.pack('<'+'q'*len(ids),*ids)).hexdigest())
+            write_json(out,policy)
+            print('Policy confirmation tokens declared without decoder execution:',len(ids),'tokens')
+            return
         record=dict(variants=sorted(selection.VARIANTS),seeds=selection.SELECTION_SEEDS,rows=selection.SELECTION_ROWS,
             prompt=selection.SELECTION_PROMPT,screen_grids=selection.SCREEN_GRIDS,neighbors=selection.NEIGHBORS,
             checkpoint_token_ids=ids,checkpoint_token_ids_sha256=hashlib.sha256(struct.pack('<'+'q'*len(ids),*ids)).hexdigest(),
@@ -52,8 +64,9 @@ def main():
         return
     if args.candidate_binary is None:p.error('--candidate-binary is required for reserved execution')
     candidate=verify_build(args.candidate_binary)
-    if bool(candidate.get('selection'))!=args.selection:raise ValueError('wrong numerical candidate kind')
-    declared=selection.selection_declaration() if args.selection else None
+    if bool(candidate.get('selection'))!=(args.selection or args.policies):raise ValueError('wrong numerical candidate kind')
+    policy=selection.policy_declaration() if args.policies else None
+    declared=policy['confirmation'] if policy else selection.selection_declaration() if args.selection else None
     torch.set_num_threads(1)
     frozen=load_frozen()
     if sources()!=frozen['sources'] or provenance()!=frozen['upstream']:
@@ -73,12 +86,13 @@ def main():
             x.append(bits.view(np.float32))
     data={k:v for k,v in cases[0][2].items() if k!='X'};data['X']=np.stack(x)
     out.mkdir(parents=True)
-    record=dict(kind='decoder_selection_holdout' if declared else 'decoder_holdout',status='started',cases={},checkpoint=origin,
+    record=dict(kind='decoder_policy_holdout' if policy else 'decoder_selection_holdout' if declared else 'decoder_holdout',status='started',cases={},checkpoint=origin,
         specification=frozen['specification'],sources=frozen['sources'],upstream=frozen['upstream'],
         candidate=dict(binary_sha256=candidate['binary_sha256'],commit=candidate['source']['repository']['commit'],
             reference_sha256=sha(ROOT/'tests/fixtures/decoder_layer/checksums.json')),
         started_utc=utc_now())
-    if declared:record['selection']=declared
+    if policy:record['policies']=policy
+    elif declared:record['selection']=declared
     torch.set_num_threads(1)
     try:
         heldout=[case_spec(QWEN,t,seed) for seed in declared['seeds'] for t in declared['rows']] if declared else HOLDOUT
@@ -87,7 +101,7 @@ def main():
             record['cases'][name]=execute_case(out/name,name,spec,inputs(spec))
             write_json(out/'manifest.json',record)
         spec=case_spec(QWEN,len(ids),0)
-        name='checkpoint_selection_holdout' if declared else 'checkpoint_holdout'
+        name='checkpoint_policy_holdout' if policy else 'checkpoint_selection_holdout' if declared else 'checkpoint_holdout'
         record['cases'][name]=execute_case(out/name,name,spec,data,ids)
         if verify_build(args.candidate_binary)!=candidate or sources()!=frozen['sources']:
             raise ValueError('candidate/reference changed during reserved execution')

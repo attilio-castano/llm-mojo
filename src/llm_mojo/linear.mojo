@@ -182,6 +182,93 @@ def _linear_rowwise_apple_gpu_kernel[
             output[row, output_feature] = rebind[output.ElementType](result)
 
 
+def _linear_rowwise_rows_apple_gpu_kernel[
+    ROW_TILE: Int, IL: TensorLayout, WL: TensorLayout, BL: TensorLayout,
+    OL: TensorLayout, HAS_BIAS: Bool,
+](
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    bias: TileTensor[DType.bfloat16, BL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+    rows: Int32, inputs: Int32, outputs: Int32,
+):
+    """One SIMD group reuses a weight across several independent row dots.
+
+    Each row keeps the original lane-strided FP32 accumulator and warp.sum
+    order. The row tile changes weight reuse, not the K reduction partition.
+    """
+    comptime assert is_apple_gpu()
+    comptime assert input.flat_rank == 2 and weight.flat_rank == 2
+    comptime assert bias.flat_rank == 1 and output.flat_rank == 2
+    var r = Int(rows)
+    var k = Int(inputs)
+    var n = Int(outputs)
+    var lane = lane_id()
+    var group = thread_idx.x // WARP_SIZE
+    var product = block_idx.x * LINEAR_APPLE_GPU_SIMD_GROUPS + group
+    var row = (product // n) * ROW_TILE
+    var column = product % n
+    if row < r:
+        var accumulators = SIMD[DType.float32, ROW_TILE](0)
+        var feature = lane
+        while feature < k:
+            var w = rebind[Scalar[DType.bfloat16]](weight[column,feature])
+            comptime for j in range(ROW_TILE):
+                if row+j < r:
+                    var x = rebind[Scalar[DType.bfloat16]](input[row+j,feature])
+                    accumulators[j] += x.cast[DType.float32]() * w.cast[DType.float32]()
+            feature += WARP_SIZE
+        comptime for j in range(ROW_TILE):
+            if row+j < r:
+                var total = warp.sum(accumulators[j])
+                if lane == 0:
+                    var b: Scalar[DType.bfloat16] = 0
+                    comptime if HAS_BIAS:
+                        b = rebind[Scalar[DType.bfloat16]](bias[column])
+                    output[row+j,column] = rebind[output.ElementType](
+                        (total+b.cast[DType.float32]()).cast[DType.bfloat16]())
+
+
+def enqueue_linear_rowwise_rows_apple_gpu[
+    ROW_TILE: Int, IL: TensorLayout, WL: TensorLayout, BL: TensorLayout,
+    OL: TensorLayout, HAS_BIAS: Bool = True,
+](
+    context: DeviceContext,
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    bias: TileTensor[DType.bfloat16, BL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+) raises:
+    comptime assert ROW_TILE == 4 or ROW_TILE == 8 or ROW_TILE == 16
+    var rows = Int(input.dim[0]())
+    if rows == 1:
+        enqueue_linear_apple_gpu[IL,WL,BL,OL,HAS_BIAS](context,input,weight,bias,output)
+        return
+    _validate_linear[IL,WL,BL,OL,HAS_BIAS](input,weight,bias,output)
+    if context.api() != "metal":
+        raise Error("Apple GPU linear projection requires the Metal device API")
+    var inputs = Int(input.dim[1]())
+    var outputs = Int(weight.dim[0]())
+    comptime kernel = _linear_rowwise_rows_apple_gpu_kernel[ROW_TILE,IL,WL,BL,OL,HAS_BIAS]
+    context.enqueue_function[kernel](input,weight,bias,output,
+        Int32(rows),Int32(inputs),Int32(outputs),
+        grid_dim=ceildiv(ceildiv(rows,ROW_TILE)*outputs,LINEAR_APPLE_GPU_SIMD_GROUPS),
+        block_dim=LINEAR_APPLE_GPU_BLOCK_SIZE)
+
+
+def enqueue_linear_rowwise_rows_apple_gpu[
+    ROW_TILE: Int, IL: TensorLayout, WL: TensorLayout, OL: TensorLayout,
+](
+    context: DeviceContext,
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+) raises:
+    var bias = TileTensor(weight.ptr,row_major(1))
+    enqueue_linear_rowwise_rows_apple_gpu[ROW_TILE,IL,WL,type_of(bias.layout),OL,False](
+        context,input,weight,bias,output)
+
+
 def _linear_prefill_direct_apple_gpu_kernel[
     InputLayout: TensorLayout,
     WeightLayout: TensorLayout,

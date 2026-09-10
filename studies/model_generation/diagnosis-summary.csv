@@ -1,0 +1,5 @@
+mode,changed_boundaries,repeat_bitwise_equal,last_hidden_relative_rms,logits_relative_rms,logits_max_abs
+original,72,True,0.023103085281180005,0.02245829966149682,0.317138671875
+rowwise_linear,72,True,0.023103085281180005,0.02245829966149682,0.317138671875
+rowwise_norm,72,True,0.023103085281180005,0.02245829966149682,0.317138671875
+rowwise_sdpa,0,True,0.0,0.0,0.0

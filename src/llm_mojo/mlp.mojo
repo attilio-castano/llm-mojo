@@ -4,6 +4,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.linear import (
     enqueue_linear_apple_gpu,
+    enqueue_linear_rowwise_rows_apple_gpu,
     enqueue_linear_apple_gpu_two_output,
     enqueue_linear_pair_decode_apple_gpu,
     enqueue_linear_cooperative_decode_apple_gpu,
@@ -20,6 +21,8 @@ def mlp_projection_mapping(mapping: Int, stage: Int) -> Int:
     Tile IDs 1/2/3 mean 8x16, 16x16, 8x32. No row-count selector.
     Public entrypoints validate the configuration before enqueue.
     """
+    if mapping >= 19:
+        return mapping - 12 if stage == 1 or stage == 2 or stage == 5 else 0
     if mapping >= 8:
         var gate_mapping = mapping if mapping <= 10 else 0
         var down_mapping = mapping if mapping == 11 or mapping == 12 else 0
@@ -73,8 +76,17 @@ def _enqueue_projection[
             ctx, input, weight, output
         )
 
+    elif mapping == 7:
+        enqueue_linear_rowwise_rows_apple_gpu[4](ctx, input, weight, output)
+    elif mapping == 8:
+        enqueue_linear_rowwise_rows_apple_gpu[8](ctx, input, weight, output)
+    elif mapping == 9:
+        enqueue_linear_rowwise_rows_apple_gpu[16](ctx, input, weight, output)
+
 
 def mlp_combines_gate_up(mapping: Int) -> Bool:
+    if mapping >= 19:
+        return False
     var gate_mapping = 8 + (mapping - 13) // 2 if mapping >= 13 else mapping
     return gate_mapping == 8 or gate_mapping == 10
 
@@ -175,10 +187,10 @@ def _validate_mlp[
     mapping: Int,
 ) raises:
     comptime assert x.flat_rank == 2
-    if mapping < 0 or mapping > 18:
+    if mapping < 0 or mapping > 21:
         raise Error("unknown MLP projection mapping")
     var r = Int(x.dim[0]())
-    if mapping >= 8 and r != 1:
+    if mapping >= 8 and mapping <= 18 and r != 1:
         raise Error("MLP decode mapping requires one row")
     if (
         r <= 0
@@ -287,6 +299,7 @@ def enqueue_mlp_apple_gpu[
     Mapping 7 uses the independently selected 16x16 tile for all projections.
     Decode-only 8/9/10 combine gate/up launches and/or use two outputs/group;
     11/12 cooperate with two/four groups per down output. 13..18 compose them.
+    Mapping 19 reuses each weight across four independent rowwise reductions.
     Isolated stage APIs always enqueue exactly that stage, even for a combined
     mapping; the complete entrypoint combines stages 1/2 into one dispatch.
     """

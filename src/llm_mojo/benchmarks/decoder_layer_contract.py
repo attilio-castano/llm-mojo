@@ -8,10 +8,63 @@ from .._repository import repository_root
 
 OPERATION = 'decoder_layer'
 VARIANTS = {0,1,2,3,4,8,12,14}
-ENTRYPOINTS = {f'decoder_layer_{v}':'enqueue_decoder_layer' for v in VARIANTS}
+# VARIANTS is the frozen historical selection registry.
+MEASUREMENT_VARIANTS = VARIANTS | {20,21,22,23,24}
+# Numerical harness IDs for the public lookup: Fast/Deterministic, hot/ring24.
+POLICY_EXECUTIONS = {100:(False,1),101:(True,1),102:(False,24),103:(True,24)}
+POLICY_TEST_VARIANTS = MEASUREMENT_VARIANTS | POLICY_EXECUTIONS.keys()
+ENTRYPOINTS = {f'decoder_layer_{v}':'enqueue_decoder_layer' for v in MEASUREMENT_VARIANTS}
 NAMES = {0:'integrated control',1:'both 16x16 attention projections',
          2:'split8 attention',3:'split8 + both 16x16 projections',4:'rowwise MLP',
-         8:'combined gate/up',12:'cooperative down G4',14:'combined gate/up + down G4'}
+         8:'combined gate/up',12:'cooperative down G4',14:'combined gate/up + down G4',
+         20:'consistent G32 attention and rowwise projections',
+         21:'consistent G32 and fixed MMA projections',
+         22:'consistent G32 and four-row weight reuse',
+         23:'consistent G32 and eight-row weight reuse',
+         24:'consistent G32 and sixteen-row weight reuse'}
+POLICY_PATH = 'tests/fixtures/decoder_policies.json'
+
+
+def policy_declaration():
+    return json.loads((repository_root()/POLICY_PATH).read_text())
+
+
+def policy_profile_grid(spec):
+    declared=spec['policies']
+    if sha_json(declared)!=spec.get('policies_sha256'):
+        raise ValueError('decoder policy profile declaration changed')
+    grid=[(r,t,v) for r,t,v,n in declared['profiles']]
+    if len(set(grid))!=len(grid) or sorted(map(list,grid))!=sorted(map(list,spec.get('captures',[]))):
+        raise ValueError('decoder policy profile census changed')
+    return grid
+
+
+def sha_json(value):
+    return hashlib.sha256((json.dumps(value,indent=2)+'\n').encode()).hexdigest()
+
+
+def policy_schedules(rows,declaration=None):
+    """Finite declared schedules; each call sees its own absolute causal prefix."""
+    declaration=policy_declaration() if declaration is None else declaration
+    declared=declaration['schedules']
+    result={'policy_repeat':[(0,rows)], 'policy_tokenwise':[(p,1) for p in range(rows)]}
+    calls=[];p=0
+    for size in declared['irregular_chunks']:
+        if p==rows:break
+        size=min(size,rows-p);calls.append((p,size));p+=size
+    if p<rows:calls.append((p,rows-p))
+    result['policy_irregular']=calls
+    if 'lookup_chunks' in declared:
+        calls=[];p=0
+        for size in declared['lookup_chunks']:
+            if p==rows:break
+            size=min(size,rows-p);calls.append((p,size));p+=size
+        if p<rows:calls.append((p,rows-p))
+        result['policy_lookup']=calls
+    if 'prefill_prefix_rows' in declared:
+        prefix=min(rows,declared['prefill_prefix_rows'])
+        result['policy_prefix']=[(0,prefix)]+([(prefix,rows-prefix)] if prefix<rows else [])
+    return result
 SELECTION_PATH = 'studies/decoder_layer/selection-declaration.json'
 SELECTION_PROMPT = ('A train travels 60 kilometers in 45 minutes. Explain its average '
                     'speed in kilometers per hour and why the units matter.')
@@ -66,7 +119,7 @@ def fixture_identity():
 
 
 def specification(variant,r,t):
-    if type(variant)is not int or variant not in VARIANTS or type(r)is not int or type(t)is not int or not 1<=r<=t<=4096:
+    if type(variant)is not int or variant not in MEASUREMENT_VARIANTS or type(r)is not int or type(t)is not int or not 1<=r<=t<=4096:
         raise ValueError('invalid decoder baseline route or shape')
     return dict(profile_rows=r,hidden_size=896,key_value_rows=t,query_heads=14,key_value_heads=2,
                 intermediate_size=4864,mlp_mapping=mappings(variant,r)[2],
@@ -87,14 +140,195 @@ def configuration(data):
 
 
 def mappings(variant,rows):
-    if type(variant)is not int or variant not in VARIANTS or type(rows)is not int or rows<1:
+    if type(variant)is not int or variant not in MEASUREMENT_VARIANTS or type(rows)is not int or rows<1:
         raise ValueError('invalid decoder configuration')
+    if variant==20:return (5,0,0)
+    if variant==21:return (5,6,7)
+    if variant>=22:return (5,variant-15,variant-3)
     return (4 if variant in (2,3) else 0,5 if variant in (1,3) else 0,
             variant if rows==1 and variant in (8,12,14) else 0 if rows==1 or variant==4 else 7)
 
 
+
+# Loaded once; archived numerical replay can provide its own frozen table.
+_POLICY_LOOKUP=policy_declaration()['accepted_lookup']
+
+
+def policy_configuration(deterministic,rows,total_rows,layers=1,lookup=None):
+    """Mirror the native lookup so recorded routes expose selector drift."""
+    if type(deterministic)is not bool or type(rows)is not int or type(total_rows)is not int or not 1<=rows<=total_rows<=4096 or type(layers)is not int or layers not in (1,24):
+        raise ValueError('invalid decoder policy workload')
+    lookup=_POLICY_LOOKUP if lookup is None else lookup
+    policy='deterministic' if deterministic else 'fast'
+    for cell in lookup['cells']:
+        if (cell['query_rows'],cell['rows'],cell['layers'])==(rows,total_rows,layers):
+            return cell[policy]
+    return lookup['fallbacks'][policy]
+
+
+def execution_mappings(variant,rows,total_rows,lookup=None):
+    if variant in POLICY_EXECUTIONS:
+        deterministic,layers=POLICY_EXECUTIONS[variant]
+        variant=policy_configuration(deterministic,rows,total_rows,layers,lookup)
+    return mappings(variant,rows)
+
+
+def select_policy_round1(summaries,invariant_variants,compatible_family,declaration=None):
+    """Apply the frozen first-round rule to complete, reconstructed summaries."""
+    declaration=policy_declaration() if declaration is None else declaration
+    declared=declaration['rounds'][0]
+    if declared['round']!=1 or declared['new_candidates']!=[21,22]:
+        raise ValueError('unsupported decoder policy round')
+    screens={screen['name']:screen for screen in declared['screens']}
+    if set(summaries)!=set(screens):raise ValueError('missing policy screen')
+    tables={}
+    for name,screen in screens.items():
+        rows=summaries[name]
+        table={(x['query_rows'],x['rows'],x['layers'],x['candidate']):x for x in rows}
+        expected={(r,t,l,v) for r,t in screen['workloads']
+                  for l in declaration['modes'] for v in screen['candidates']}
+        if len(table)!=len(rows) or set(table)!=expected:
+            raise ValueError('incomplete policy screen comparison census')
+        tables[name]=table
+    det=tables['decoder_policies_round1_det']
+    cells=[(r,t,l) for r,t in screens['decoder_policies_round1_det']['workloads']
+           for l in declaration['modes']]
+    compatible=compatible_family is True and {20,22}<=set(invariant_variants)
+    use22={cell:compatible and det[*cell,22]['decision']=='faster' for cell in cells}
+    use21=21 in invariant_variants and all(
+        det[*cell,21]['decision']=='faster' and (
+            not use22[cell] or det[*cell,21]['ratio_max'] <
+            (1-det[*cell,21]['noise_floor'])*det[*cell,22]['ratio_min']) for cell in cells)
+    proposals=[]
+    for r,t,l in cells:
+        control=next(v for rr,tt,v in declaration['workloads'] if (r,t)==(rr,tt))
+        fast=tables[f'decoder_policies_round1_fast_{control}']
+        eligible=[fast[r,t,l,v] for v in (21,22) if fast[r,t,l,v]['decision']=='faster']
+        winner=min(eligible,key=lambda x:(x['ratio'],x['candidate']))['candidate'] if eligible else control
+        proposals.append(dict(query_rows=r,rows=t,layers=l,fast=winner,
+            deterministic=21 if use21 else 22 if use22[r,t,l] else 20))
+    return dict(round=1,proposals=proposals,deterministic_family=[21] if use21 else [20,22] if compatible else [20],
+        deterministic_fallback=21 if use21 else 20,
+        fixed_mma_global_qualified=use21,compatible_row_reuse=compatible)
+
+
+def select_policy_round2(summaries,invariant_variants,compatible_family,declaration=None):
+    """Compare each new tile directly with its frozen incumbent, per mode."""
+    import copy
+    declaration=policy_declaration() if declaration is None else declaration
+    declared=declaration['rounds'][1]
+    incumbent=declared['incumbent_decision']
+    if (declared['round']!=2 or declared['new_candidates']!=[23,24]
+        or sha_json(incumbent)!=declared['incumbent_decision_sha256']):
+        raise ValueError('round-two incumbent or candidate declaration changed')
+    screens={screen['name']:screen for screen in declared['screens']}
+    if set(summaries)!=set(screens):raise ValueError('missing policy screen')
+    proposals=copy.deepcopy(incumbent['proposals'])
+    cells={(p['query_rows'],p['rows'],p['layers']):p for p in proposals}
+    visited=set()
+    compatible=compatible_family is True and {20,22,23,24}<=set(invariant_variants)
+    for name,screen in screens.items():
+        table={(x['query_rows'],x['rows'],x['layers'],x['candidate']):x for x in summaries[name]}
+        expected={(r,t,l,v) for r,t in screen['workloads']
+                  for l in screen['layers'] for v in screen['candidates']}
+        if len(table)!=len(summaries[name]) or set(table)!=expected:
+            raise ValueError('incomplete policy screen comparison census')
+        policy='deterministic' if name.endswith('_det') else 'fast'
+        for r,t in screen['workloads']:
+            for l in screen['layers']:
+                key=(policy,r,t,l)
+                cell=cells[r,t,l]
+                if key in visited or cell[policy]!=screen['control']:
+                    raise ValueError('policy screen does not compare the frozen incumbent')
+                visited.add(key)
+                eligible=[table[r,t,l,v] for v in (23,24)
+                          if table[r,t,l,v]['decision']=='faster'
+                          and (policy=='fast' or compatible)]
+                if eligible:
+                    cell[policy]=min(eligible,key=lambda x:(x['ratio'],x['candidate']))['candidate']
+    if visited!={(policy,r,t,l) for r,t,l in cells if r>1 for policy in ('fast','deterministic')}:
+        raise ValueError('missing multirow policy comparison')
+    return dict(round=2,proposals=proposals,deterministic_fallback=20,
+        deterministic_family=[20,22,23,24] if compatible else incumbent['deterministic_family'],
+        compatible_row_reuse=compatible)
+
+
+def policy_round1_decision(directory,numerical_directories,build):
+    return policy_round_decision(directory,numerical_directories,build,1)
+
+
+def policy_round_decision(directory,numerical_directories,build,round_number):
+    """Bind selection to raw timing, full numerical census and one clean build."""
+    import copy
+    from .. import decoder_validation as validation
+    from .study import STUDIES,load_run
+    numerical_directories=list(map(Path,numerical_directories))
+    if not numerical_directories:raise ValueError('missing policy numerical split')
+    evidence=[validation.read_policy_evidence(p) for p in numerical_directories]
+    declared=evidence[0][0]['declaration']
+    if round_number not in (1,2):raise ValueError('unknown policy round')
+    round_spec=declared['rounds'][round_number-1]
+    if build['repository']['dirty'] or build['sources'].get(POLICY_PATH)!=sha_json(declared):
+        raise ValueError('policy declaration differs from measurement build')
+    anchor_path=repository_root()/'tests/fixtures/decoder_layer/checksums.json'
+    evidence_path=anchor_path.with_name('development.json.gz')
+    anchor=json.loads(anchor_path.read_text())
+    if (sha(anchor_path)!=build['sources'].get(str(anchor_path.relative_to(repository_root())))
+        or sha(evidence_path)!=anchor['evidence_sha256']):
+        raise ValueError('policy numerical reference changed')
+    raw=gzip.decompress(evidence_path.read_bytes())
+    if hashlib.sha256(raw).hexdigest()!=anchor['uncompressed_sha256']:
+        raise ValueError('policy numerical evidence changed')
+    frozen=json.loads(raw);numerical=[];splits=set()
+    invariant=set(round_spec['numerical']['variants']);compatible=True
+    for record,checks_path,original_receipt_sha in evidence:
+        source=record['build']['source'];split=record['split']
+        if (record.get('kind')!='decoder_policy_evaluation' or record.get('status')!='passed'
+            or record.get('exit_code')!=0 or record.get('declaration')!=declared
+            or source['repository']!=build['repository']
+            or any(source['sources'].get(k)!=v for k,v in build['sources'].items())
+            or record.get('variants')!=round_spec['numerical']['variants']
+            or record.get('invariant_variants')!=round_spec['numerical']['required_invariants']
+            or record.get('comparison_family')!=round_spec['numerical']['comparison_family']
+            or split in splits or split not in round_spec['numerical']['splits']):
+            raise ValueError('policy numerical evaluation identity changed')
+        splits.add(split)
+        cases={name:copy.deepcopy(case) for name,case in frozen['cases'].items()
+               if case['spec']['nq']==14 and name.startswith('checkpoint_')==(split=='checkpoint')}
+        for name,case in cases.items():
+            if any(record['fixtures'].get(name+'/'+label+'.npy')!=spec['sha256'] for label,spec in case['arrays'].items()):
+                raise ValueError('policy evaluation used different numerical inputs')
+            case['schedules'].update({key:[dict(start=p,rows=r) for p,r in calls]
+                for key,calls in policy_schedules(case['spec']['rows'],declared).items()})
+        replay=validation.validate_results(checks_path,cases,True,
+            record['variants'],record['invariant_variants'],record['comparison_family'])
+        if any(record.get(k)!=v for k,v in replay.items()):
+            raise ValueError('policy numerical summary differs from complete records')
+        invariant &= {int(v) for v,result in replay['schedule_invariance'].items() if result['mismatches']==0}
+        compatible &= replay['family_compatible']
+        numerical.append(dict(split=split,evaluation_sha256=original_receipt_sha,checks_sha256=record['checks_sha256'],
+            binary_sha256=record['build']['binary_sha256']))
+    if splits!=set(round_spec['numerical']['splits']):raise ValueError('missing policy numerical split')
+    summaries={};runs=[]
+    for screen in round_spec['screens']:
+        name=screen['name'];path,prefix=selection_run_location(directory,name)
+        run,_,summary=load_run(path,prefix)
+        if (run['study']!=name or run['build']!=build
+            or run['specification']!=json.loads(json.dumps(STUDIES[name]))):
+            raise ValueError('policy timing screen identity changed')
+        summaries[name]=summary
+        runs.append(dict(study=name,run_sha256=sha(path/(prefix+'run.json')),samples_sha256=run['samples_sha256']))
+    return dict(schema=1,kind='decoder_policy_round_decision',declaration_sha256=sha_json(declared),
+        build_sha256=hashlib.sha256(json.dumps(build,sort_keys=True).encode()).hexdigest(),
+        numerical=numerical,screens=runs,invariant_variants=sorted(invariant),
+        **(select_policy_round1 if round_number==1 else select_policy_round2)(
+            summaries,invariant,compatible,declared))
+
+
 def stages(variant,rows):
     result=list(STAGES)
+    if variant==20:
+        result[1:3]=['Q projection','K projection','V projection']
     if variant in (2,3) and rows>1:
         result[6:7]=['FP32 GQA split','FP32 GQA merge']
     if variant in (8,14) and rows==1:
@@ -245,3 +479,272 @@ def profile_selection(record):
 def selection_run_location(directory,name):
     root=Path(directory)
     return (root/name,'') if (root/name).is_dir() else (root,name+'_')
+
+
+def _policy_matrix(name,control,cells,field):
+    """One control and reuse mode, with complete per-cell self calibration."""
+    layers=sorted({p['layers'] for p in cells})
+    if len(layers)!=1:raise ValueError('policy matrix must separate reuse modes')
+    comparisons=[dict(query_rows=p['query_rows'],rows=p['rows'],layers=p['layers'],candidate=v)
+        for p in cells for v in sorted({control,p[field]})]
+    variants=sorted({p['candidate'] for p in comparisons})
+    return dict(name=name,control=control,candidates=variants,layers=layers,
+        names={v:NAMES[v] for v in variants},
+        workloads=[dict(query_rows=p['query_rows'],rows=p['rows']) for p in cells],
+        comparisons=comparisons)
+
+
+def propose_policy_confirmation(decision,declaration=None):
+    """Freeze the final table and the previously unmeasured long extension."""
+    declaration=policy_declaration() if declaration is None else declaration
+    if decision.get('round')!=2 or not decision.get('compatible_row_reuse'):
+        raise ValueError('final proposal requires the complete compatible second round')
+    cells=[]
+    source={(p['query_rows'],p['rows'],p['layers']):p for p in decision['proposals']}
+    expected={(r,t,l) for r,t,_ in declaration['workloads'] if r!=4096 for l in declaration['modes']}
+    if len(source)!=len(decision['proposals']) or set(source)!=expected:
+        raise ValueError('incomplete final proposal basis')
+    for r,t,control in declaration['workloads']:
+        for l in declaration['modes']:
+            p=source[256,256,l] if r==4096 else source[r,t,l]
+            cells.append(dict(query_rows=r,rows=t,layers=l,fast_control=control,
+                fast=p['fast'],deterministic=p['deterministic'],
+                unmeasured_extension=r==4096))
+    screens=[]
+    for l in declaration['modes']:
+        mode='hot' if l==1 else 'ring'
+        det=[p for p in cells if p['layers']==l]
+        screens.append(dict(**_policy_matrix('decoder_policies_confirmation_det_'+mode,20,det,'deterministic'),policy='deterministic'))
+        for control in sorted({p['fast_control'] for p in cells}):
+            fast=[p for p in det if p['fast_control']==control and p['fast']!=control]
+            if fast:screens.append(dict(**_policy_matrix(f'decoder_policies_confirmation_fast_{control}_{mode}',control,fast,'fast'),policy='fast'))
+    return dict(schema=1,kind='decoder_policy_confirmation_proposal',basis=decision,
+        basis_sha256=sha_json(decision),cells=cells,screens=screens,
+        deterministic_fallback=20,numerical=dict(variants=[100,101,102,103],
+            required_invariants=[101,103],comparison_family=[101,103],split='holdout'),
+        rule='One independent serialized timing session. Qualify each proposed deterministic configuration directly against20 and every changed Fast configuration against its original Fast incumbent, with self calibration. Apply the existing faster rule; otherwise retain the fallback. Then measure the accepted deterministic configuration directly against accepted Fast at all seven cells in both modes, self calibrated. This cost phase cannot change selection. No new candidates or repeated confirmation.',
+        numerical_order='Encode exactly the mechanically accepted lookup, run full regression and commit. Capture the already reserved fresh inputs once for that final numerical executable and execute the actual lookups across every declared schedule. Kernel timing and final lookup build identities are recorded separately.')
+
+
+def policy_confirmation_specs(declaration=None):
+    from .study import STUDIES
+    declaration=policy_declaration() if declaration is None else declaration
+    final=declaration['final_confirmation']
+    if final!=json.loads(json.dumps(propose_policy_confirmation(final['basis'],declaration))):
+        raise ValueError('policy confirmation proposal changed')
+    return {s['name']:{**STUDIES['decoder_layer'],**{k:v for k,v in s.items() if k not in ('name','policy')}}
+            for s in final['screens']}
+
+
+def policy_confirmed_selection(directory,build,declaration=None):
+    """Derive acceptance only from all frozen, completed qualification runs."""
+    import copy
+    from .study import load_run
+    declaration=policy_declaration() if declaration is None else declaration
+    final=declaration['final_confirmation']
+    if build['repository']['dirty'] or build['sources'].get(POLICY_PATH)!=sha_json(declaration):
+        raise ValueError('confirmation build does not bind this proposal')
+    specs=policy_confirmation_specs(declaration);tables={};receipts=[]
+    for name,spec in specs.items():
+        path,prefix=selection_run_location(directory,name);run,_,summary=load_run(path,prefix)
+        if (run['study']!=name or run['build']!=build or run['specification']!=json.loads(json.dumps(spec))):
+            raise ValueError('policy qualification identity changed')
+        tables[name]={(p['query_rows'],p['rows'],p['layers'],p['candidate']):p for p in summary}
+        receipts.append(dict(study=name,run_sha256=sha(path/(prefix+'run.json')),samples_sha256=run['samples_sha256']))
+    cells=copy.deepcopy(final['cells'])
+    for screen in final['screens']:
+        policy=screen['policy'];table=tables[screen['name']]
+        for w in screen['workloads']:
+            for l in screen['layers']:
+                cell=next(p for p in cells if (p['query_rows'],p['rows'],p['layers'])==(w['query_rows'],w['rows'],l))
+                proposed=cell[policy];row=table[w['query_rows'],w['rows'],l,proposed]
+                cell[policy]=proposed if proposed==screen['control'] or row['decision']=='faster' else screen['control']
+    return dict(schema=1,kind='decoder_policy_confirmed_selection',proposal_sha256=sha_json(final),
+        build_sha256=hashlib.sha256(json.dumps(build,sort_keys=True).encode()).hexdigest(),
+        qualification=receipts,cells=cells,fallbacks=dict(fast=0,deterministic=20))
+
+
+def policy_cost_specs(accepted):
+    from .study import STUDIES
+    if accepted.get('kind')!='decoder_policy_confirmed_selection':
+        raise ValueError('policy cost needs a confirmed lookup')
+    result={}
+    for l in (1,24):
+        for control in sorted({p['fast'] for p in accepted['cells'] if p['layers']==l}):
+            cells=[p for p in accepted['cells'] if p['layers']==l and p['fast']==control]
+            name=f'decoder_policies_cost_{control}_'+('hot' if l==1 else 'ring')
+            spec=_policy_matrix(name,control,cells,'deterministic')
+            result[name]={**STUDIES['decoder_layer'],**{k:v for k,v in spec.items() if k!='name'}}
+    return result
+
+
+def policy_cost_report(directory,accepted,build):
+    from .study import load_run
+    rows=[];receipts=[]
+    for name,spec in policy_cost_specs(accepted).items():
+        path,prefix=selection_run_location(directory,name);run,_,summary=load_run(path,prefix)
+        if (run['study']!=name or run['build']!=build or run.get('selection')!=accepted
+            or run['specification']!=json.loads(json.dumps(spec))):
+            raise ValueError('policy cost does not execute the accepted configurations')
+        selected={(p['query_rows'],p['rows'],p['layers']):p['deterministic'] for p in accepted['cells']}
+        rows.extend(dict(**p,fast=spec['control'],deterministic=p['candidate']) for p in summary
+            if p['candidate']==selected[p['query_rows'],p['rows'],p['layers']])
+        receipts.append(dict(study=name,run_sha256=sha(path/(prefix+'run.json')),samples_sha256=run['samples_sha256']))
+    expected={(p['query_rows'],p['rows'],p['layers'],p['fast'],p['deterministic']) for p in accepted['cells']}
+    actual={(p['query_rows'],p['rows'],p['layers'],p['fast'],p['deterministic']) for p in rows}
+    if len(rows)!=len(expected) or actual!=expected:raise ValueError('incomplete final policy cost table')
+    return dict(kind='decoder_policy_cost',accepted=accepted,runs=receipts,rows=rows)
+
+
+def replay_policy_campaign(directory):
+    """Reconstruct the entire bounded campaign from adjacent retained evidence."""
+    import copy
+    from .. import decoder_validation as validation
+    from .study import load_run,load_decoder_profile,load_decoder_windows,load_numerical_record
+    directory=Path(directory)
+    index=json.loads((directory/'policies-evidence.json').read_text())
+    if index.get('kind')!='decoder_policy_campaign' or index.get('schema')!=1:
+        raise ValueError('unsupported decoder policy campaign')
+    for name,digest in index['files'].items():
+        if name!=Path(name).name or sha(directory/name)!=digest:
+            raise ValueError('decoder policy evidence index changed: '+name)
+    runs={}
+    for name in index['timing_studies']:
+        run,samples,summary=load_run(directory,name+'_')
+        if run['study']!=name:raise ValueError('decoder campaign timing identity changed')
+        runs[name]=(run,samples,summary)
+    numerical=[]
+    anchor_path=repository_root()/'tests/fixtures/decoder_layer/checksums.json'
+    evidence_path=anchor_path.with_name('development.json.gz')
+    anchor=json.loads(anchor_path.read_text())
+    if sha(evidence_path)!=anchor['evidence_sha256']:
+        raise ValueError('decoder policy reference evidence changed')
+    raw=gzip.decompress(evidence_path.read_bytes())
+    if hashlib.sha256(raw).hexdigest()!=anchor['uncompressed_sha256']:
+        raise ValueError('decoder policy reference payload changed')
+    frozen=json.loads(raw)
+    for name in index['incomplete_numerical']:
+        record,_,_=validation.read_policy_evidence(directory/name)
+        if record.get('status')!='failed' or record.get('exit_code')!=-15:
+            raise ValueError('interrupted baseline was reclassified as accepted evidence')
+
+    def numeric_row(phase,record,replay):
+        return dict(phase=phase,split=record['split'],checks=replay['checks'],
+            variants=','.join(map(str,record['variants'])),
+            schedule_comparisons=sum(v['comparisons'] for v in replay['schedule_invariance'].values()),
+            schedule_mismatches=sum(v['mismatches'] for v in replay['schedule_invariance'].values()),
+            required_invariants=','.join(map(str,record['invariant_variants'])),
+            required_invariant_mismatches=sum(replay['schedule_invariance'][str(v)]['mismatches'] for v in record['invariant_variants']),
+            family_comparisons=replay.get('family_comparisons',0),family_compatible=replay.get('family_compatible',''),
+            commit=record['build']['source']['repository']['commit'],binary_sha256=record['build']['binary_sha256'])
+
+    def replay_numerical(name,cases,phase):
+        record,checks,_=validation.read_policy_evidence(directory/name)
+        if record.get('status')!='passed' or record.get('exit_code')!=0:
+            raise ValueError('decoder policy numerical run did not pass')
+        declared=record['declaration']
+        source=record['build']['source']
+        if (source['repository']['dirty'] or source['sources'].get(POLICY_PATH)!=sha_json(declared)
+            or source['sources'].get('tests/fixtures/decoder_layer/checksums.json')!=sha(anchor_path)):
+            raise ValueError('decoder policy numerical source is not bound')
+        cases=copy.deepcopy(cases)
+        for case in cases.values():
+            case['schedules'].update({key:[dict(start=p,rows=r) for p,r in calls]
+                for key,calls in policy_schedules(case['spec']['rows'],declared).items()})
+        result=validation.validate_results(checks,cases,True,record['variants'],
+            record['invariant_variants'],record.get('comparison_family',()),
+            lookup=declared.get('accepted_lookup'))
+        if any(k in record and record[k]!=v for k,v in result.items()):
+            raise ValueError('decoder policy numerical summary changed')
+        numerical.append(numeric_row(phase,record,result))
+        return record,result
+
+    baseline_build=runs['decoder_policies_baseline_0'][0]['build']
+    for name in index['baseline_numerical']:
+        # The earliest receipts predate individual-array hashes and summary
+        # fields. Their complete raw checks are replayed with that declaration.
+        record=load_numerical_record(directory/name)['evaluation']
+        split=record['split']
+        cases={n:c for n,c in frozen['cases'].items()
+            if c['spec']['nq']==14 and n.startswith('checkpoint_')==(split=='checkpoint')}
+        record,_=replay_numerical(name,cases,'baseline')
+        if (record['build']['source']['repository']!=baseline_build['repository']
+            or any(record['build']['source']['sources'].get(k)!=v for k,v in baseline_build['sources'].items())):
+            raise ValueError('baseline numerical and timing source differ')
+    for phase in index['rounds']:
+        number=phase['round'];name=f'decoder_policies_round{number}_det'
+        build=runs[name][0]['build']
+        expected=json.loads((directory/phase['decision']).read_text())
+        decision=policy_round_decision(directory,[directory/n for n in phase['numerical']],build,number)
+        if decision!=expected:raise ValueError('decoder optimization decision changed')
+        for name in phase['numerical']:
+            record=load_numerical_record(directory/name)['evaluation']
+            numerical.append(numeric_row('round'+str(number),record,record))
+        adversarial=json.loads((directory/phase['adversarial']).read_text())
+        if (adversarial.get('status')!='passed'
+            or adversarial['binary_sha256']!=build['binaries']['decoder_layer']
+            or adversarial['build_sha256']!=hashlib.sha256(json.dumps(build,sort_keys=True).encode()).hexdigest()):
+            raise ValueError('adversarial policy benchmark identity changed')
+        expected_cases={(r,t,24,v) for r,t in phase['adversarial_shapes']
+            for v in record['declaration']['rounds'][number-1]['numerical']['variants']}
+        actual_cases={(p['query_rows'],p['rows'],p['layers'],p['variant']) for p in adversarial['cases']}
+        if actual_cases!=expected_cases or len(actual_cases)!=len(adversarial['cases']):
+            raise ValueError('adversarial policy case census changed')
+        for case in adversarial['cases']:
+            text=adversarial['retained_outputs'][case['output']]
+            if (hashlib.sha256(text.encode()).hexdigest()!=case['output_sha256']
+                or 'correctness: passed' not in text or 'BENCHMARK_COMPLETE' not in text
+                or case['backend']!='metal' or not case['device'].startswith('Apple ')):
+                raise ValueError('adversarial benchmark output changed')
+    declared=json.loads((directory/index['confirmation_declaration']).read_text())
+    if declared['final_confirmation']['basis']!=decision:
+        raise ValueError('final proposal is not the reconstructed last-round decision')
+    build=runs['decoder_policies_confirmation_det_hot'][0]['build']
+    accepted=policy_confirmed_selection(directory,build,declared)
+    if accepted!=json.loads((directory/index['accepted']).read_text()):
+        raise ValueError('confirmed decoder policy lookup changed')
+    cost=policy_cost_report(directory,accepted,build)
+    if cost!=json.loads((directory/index['cost']).read_text()):
+        raise ValueError('final decoder policy cost changed')
+    final=load_numerical_record(directory/index['holdout_numerical'])['evaluation']
+    if final['declaration'].get('accepted_lookup')!=accepted:
+        raise ValueError('final numerical execution used a different lookup')
+    regression=json.loads((directory/index['repository_validation']).read_text())
+    if (regression.get('status')!='passed' or regression.get('exit_code')!=0
+        or regression['source']['sources']!=final['build']['source']['sources']):
+        raise ValueError('final numerical source did not pass the repository regression')
+    bridge=json.loads((directory/index['build_bridge']).read_text())
+    native='src/llm_mojo/decoder_layer.mojo'
+    if (bridge.get('kind')!='decoder_policy_build_bridge'
+        or bridge['timing_commit']!=build['repository']['commit']
+        or bridge['timing_binary_sha256']!=build['binaries']['decoder_layer']
+        or bridge['numerical_commit']!=final['build']['source']['repository']['commit']
+        or bridge['numerical_binary_sha256']!=final['build']['binary_sha256']
+        or bridge['environment']!=build['environment']
+        or bridge['changed_native_sources']!=([native] if build['sources'][native]!=final['build']['source']['sources'][native] else [])
+        or bridge['timing_source_sha256']!=build['sources'][native]
+        or bridge['numerical_source_sha256']!=final['build']['source']['sources'][native]):
+        raise ValueError('timing and numerical build identities are not bridged')
+    if any(final['build']['source']['sources'].get(k)!=v for k,v in build['sources'].items()
+        if k.startswith('src/') and k.endswith('.mojo') and k!=native):
+        raise ValueError('native arithmetic changed between timing and final confirmation')
+    manifest,hashes=validation.holdout_manifest(directory/index['holdout_manifest'],
+        verify_arrays=False,policy_declaration=final['declaration'])
+    if (manifest['candidate']['binary_sha256']!=final['build']['binary_sha256']
+        or manifest['candidate']['commit']!=final['build']['source']['repository']['commit']
+        or hashes!=final['fixtures']):
+        raise ValueError('fresh decoder inputs are not bound to the final executable')
+    expected=declared['final_confirmation']['numerical']
+    if (final['variants']!=expected['variants'] or final['invariant_variants']!=expected['required_invariants']
+        or final.get('comparison_family')!=expected['comparison_family'] or final['split']!=expected['split']):
+        raise ValueError('final policy numerical contract changed')
+    _,result=replay_numerical(index['holdout_numerical'],manifest['cases'],'confirmation')
+    if result.get('family_compatible')is not True:
+        raise ValueError('final deterministic reuse modes are not compatible')
+    profile_identity=declared['rounds'][0]['baseline_profile_sha256']
+    for name,digest in profile_identity.items():
+        if sha(directory/('policies_'+name))!=digest:
+            raise ValueError('optimization rationale names different baseline profiles')
+    profile=load_decoder_profile(directory,'policies_')
+    windows=load_decoder_windows(directory,'policies_')
+    return dict(accepted=accepted,cost=cost,runs=runs,numerical=numerical,profile=profile,windows=windows)

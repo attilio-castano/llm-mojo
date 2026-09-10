@@ -1,0 +1,108 @@
+{
+  "format": "lossless-json-gzip-v1",
+  "record": "policies_holdout_manifest.json.gz",
+  "sha256": "6c8b1492e17d1c86f833a44f311d86a4dd326e0346994f7f7de6fb31cf5c45e0",
+  "uncompressed_sha256": "6e57a6710e131a588c16c209d12379761ae4b30d2d09db33e4ae3a3ea1bfdac4",
+  "metadata": {
+    "kind": "decoder_policy_holdout",
+    "status": "complete",
+    "candidate": {
+      "binary_sha256": "9856561479d0c4c5ef4c8a527a0580397fbd0e767a27380f4f479d83aacc5873",
+      "commit": "f08e5a9009bf7aca8ffb23606a163b4053ae0857",
+      "reference_sha256": "e351604090115cf4a7ec060aa594d37b9c8fd5e744afe4b0549bea90910afab4"
+    },
+    "payload_sha256": "215859a5091c385a30886961c5bbd347465442503bc8eeb38fa6ac2f42995269"
+  },
+  "cases": {
+    "h896_i4864_nq14_nk2_d64_t1_s7141_base": {
+      "rows": 1,
+      "arrays": 51,
+      "schedules": [
+        "full",
+        "chunk"
+      ]
+    },
+    "h896_i4864_nq14_nk2_d64_t17_s7141_base": {
+      "rows": 17,
+      "arrays": 387,
+      "schedules": [
+        "full",
+        "chunk"
+      ]
+    },
+    "h896_i4864_nq14_nk2_d64_t65_s7141_base": {
+      "rows": 65,
+      "arrays": 366,
+      "schedules": [
+        "full",
+        "chunk",
+        "reuse"
+      ]
+    },
+    "h896_i4864_nq14_nk2_d64_t257_s7141_base": {
+      "rows": 257,
+      "arrays": 93,
+      "schedules": [
+        "full",
+        "chunk"
+      ]
+    },
+    "h896_i4864_nq14_nk2_d64_t4096_s7141_base": {
+      "rows": 4096,
+      "arrays": 93,
+      "schedules": [
+        "full",
+        "chunk"
+      ]
+    },
+    "h896_i4864_nq14_nk2_d64_t1_s7151_base": {
+      "rows": 1,
+      "arrays": 51,
+      "schedules": [
+        "full",
+        "chunk"
+      ]
+    },
+    "h896_i4864_nq14_nk2_d64_t17_s7151_base": {
+      "rows": 17,
+      "arrays": 387,
+      "schedules": [
+        "full",
+        "chunk"
+      ]
+    },
+    "h896_i4864_nq14_nk2_d64_t65_s7151_base": {
+      "rows": 65,
+      "arrays": 366,
+      "schedules": [
+        "full",
+        "chunk",
+        "reuse"
+      ]
+    },
+    "h896_i4864_nq14_nk2_d64_t257_s7151_base": {
+      "rows": 257,
+      "arrays": 93,
+      "schedules": [
+        "full",
+        "chunk"
+      ]
+    },
+    "h896_i4864_nq14_nk2_d64_t4096_s7151_base": {
+      "rows": 4096,
+      "arrays": 93,
+      "schedules": [
+        "full",
+        "chunk"
+      ]
+    },
+    "checkpoint_policy_holdout": {
+      "rows": 46,
+      "arrays": 93,
+      "schedules": [
+        "full",
+        "chunk"
+      ]
+    }
+  }
+}

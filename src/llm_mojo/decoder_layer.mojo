@@ -21,8 +21,15 @@ def decoder_mappings(variant: Int, rows: Int) raises -> SIMD[DType.int64, 4]:
     """
     if rows < 1 or (variant != 0 and variant != 1 and variant != 2
         and variant != 3 and variant != 4 and variant != 8
-        and variant != 12 and variant != 14):
+        and variant != 12 and variant != 14 and variant != 20
+        and variant != 21 and variant != 22 and variant != 23 and variant != 24):
         raise Error("unknown decoder configuration or invalid rows")
+    if variant == 20:
+        return SIMD[DType.int64, 4](5, 0, 0, 1)
+    if variant == 21:
+        return SIMD[DType.int64, 4](5, 6, 7, 1)
+    if variant >= 22:
+        return SIMD[DType.int64, 4](5, Int64(variant-15), Int64(variant-3), 1)
     var gqa = 4 if variant == 2 or variant == 3 else 0
     var projections = 5 if variant == 1 or variant == 3 else 0
     var mlp = 0 if rows == 1 or variant == 4 else 7
@@ -55,21 +62,28 @@ def _decoder_preflight[XL: TensorLayout](
         or cache.capacity < 1 or cache.capacity > 4096
         or a.capacity < 1 or a.capacity > 4096):
         raise Error("decoder geometry or capacity is invalid")
-    if (gqa_mapping != 0 and gqa_mapping != 4) or (projection_mapping != 0 and projection_mapping != 5):
+    if (gqa_mapping != 0 and gqa_mapping != 4 and gqa_mapping != 5) or (projection_mapping != 0 and projection_mapping != 5 and projection_mapping != 6 and projection_mapping != 7 and projection_mapping != 8 and projection_mapping != 9):
         raise Error("decoder supports declared integrated attention mappings only")
+    if projection_mapping >= 6 and gqa_mapping != 5:
+        raise Error("policy projection mappings require consistent attention")
+    if gqa_mapping == 5 and not ((projection_mapping == 0 and mlp_mapping == 0)
+        or (projection_mapping == 6 and mlp_mapping == 7)
+        or (projection_mapping >= 7 and mlp_mapping == projection_mapping + 12)):
+        raise Error("consistent decoder requires a declared projection and MLP family")
     if not integrated and (gqa_mapping != 0 or projection_mapping != 0):
         raise Error("tiny decoder requires attention mappings zero")
-    if mlp_mapping != 0 and mlp_mapping != 7 and mlp_mapping != 8 and mlp_mapping != 12 and mlp_mapping != 14:
+    if mlp_mapping != 0 and mlp_mapping != 7 and mlp_mapping != 8 and mlp_mapping != 12 and mlp_mapping != 14 and mlp_mapping != 19 and mlp_mapping != 20 and mlp_mapping != 21:
         raise Error("decoder supports declared MLP mappings only")
-    if mlp_mapping == 7 and r == 1:
+    if mlp_mapping == 7 and r == 1 and projection_mapping < 6:
         raise Error("decoder single-row baseline requires MLP mapping zero")
     comptime assert x.rank == 2
     if Int(x.layout.stride[0]().product()) != h or Int(x.layout.stride[1]().product()) != 1:
         raise Error("decoder requires contiguous row-major input")
     _ = _validate_attention_sublayer(ctx, aw, cache, a, x,
                                     6 + gqa_mapping if integrated else 3,
-                                    ((3 if projection_mapping == 5 else 2) if r >= 16 else 1) if integrated else 0,
-                                    1 if projection_mapping == 5 else 0)
+                                    (2 if projection_mapping == 6 else projection_mapping - 2) if projection_mapping >= 6 else
+                                    ((((3 if projection_mapping == 5 else 2) if r >= 16 else 1) if gqa_mapping != 5 else 0) if integrated else 0),
+                                    projection_mapping - 4 if projection_mapping >= 7 else (1 if projection_mapping == 5 else 0))
     _validate_mlp(ctx, mw, m, TileTensor(a.output, row_major(r, h)), mlp_mapping)
     var n = a.max_rows
     var k = aw.kv_heads * aw.head_dim
@@ -155,3 +169,77 @@ def enqueue_decoder_layer_configuration[XL: TensorLayout](
     var mappings = decoder_mappings(variant, Int(x.dim[0]()))
     return enqueue_decoder_layer(ctx,aw,cache,attention,mw,mlp,x,
         Int(mappings[2]),True,Int(mappings[0]),Int(mappings[1]))
+
+
+struct DecoderCache[DETERMINISTIC: Bool](Movable):
+    """A decoder cache whose execution policy is fixed in its type.
+
+    Rebuilding under a different policy starts an empty prefix. The contained
+    AttentionCache remains available to the existing explicit storage API.
+    """
+    var storage: AttentionCache
+    var reuse_layers: Int
+
+    def __init__(out self, ctx: DeviceContext, capacity: Int,
+                 reuse_layers: Int = 1) raises:
+        if reuse_layers != 1 and reuse_layers != 24:
+            raise Error("decoder reuse mode must be hot or ring24")
+        self.storage = AttentionCache(ctx, capacity)
+        self.reuse_layers = reuse_layers
+
+    def reset(mut self, ctx: DeviceContext) raises:
+        self.storage.reset(ctx)
+
+    def prefill_splits(self) -> Int:
+        """Required allocation capacity, independent of the next call's shape."""
+        return 1 if Self.DETERMINISTIC else 8
+
+
+def decoder_policy_configuration(deterministic: Bool, rows: Int,
+                                  total_rows: Int, reuse_layers: Int = 1) raises -> Int:
+    """Exact measured cells, with an explicit unmeasured-workload fallback."""
+    if rows < 1 or rows > total_rows or total_rows > 4096:
+        raise Error("invalid decoder policy workload")
+    if reuse_layers != 1 and reuse_layers != 24:
+        raise Error("decoder reuse mode must be hot or ring24")
+    if deterministic:
+        if rows == 16 and total_rows == 16:
+            return 22
+        if rows == 256 and total_rows == 256:
+            return 22
+        if rows == 4096 and total_rows == 4096:
+            return 22
+        if rows == 16 and total_rows == 256:
+            return 22
+        if rows == 64 and total_rows == 4096:
+            return 22
+        return 20
+    if rows == 16 and total_rows == 256 and reuse_layers == 1:
+        return 21
+    if rows == 64 and total_rows == 4096:
+        return 3
+    return 0
+
+
+def enqueue_decoder_layer_policy[DETERMINISTIC: Bool, XL: TensorLayout](
+    ctx: DeviceContext, mut aw: AttentionWeights,
+    mut cache: DecoderCache[DETERMINISTIC], mut attention: AttentionWorkspace,
+    mut mw: MLPWeights, mut mlp: MLPWorkspace,
+    x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
+) raises -> Int:
+    var reuse_layers = cache.reuse_layers
+    return _enqueue_decoder_layer_policy_storage[DETERMINISTIC](ctx, aw,
+        cache.storage, attention, mw, mlp, x, reuse_layers)
+
+
+def _enqueue_decoder_layer_policy_storage[DETERMINISTIC: Bool, XL: TensorLayout](
+    ctx: DeviceContext, mut aw: AttentionWeights, mut cache: AttentionCache,
+    mut attention: AttentionWorkspace, mut mw: MLPWeights, mut mlp: MLPWorkspace,
+    x: TileTensor[DType.bfloat16, XL, MutAnyOrigin], reuse_layers: Int,
+) raises -> Int:
+    # Shared with the numerical harness, which observes every stored stage.
+    var rows = Int(x.dim[0]())
+    var variant = decoder_policy_configuration(DETERMINISTIC, rows,
+        cache.length + rows, reuse_layers)
+    return enqueue_decoder_layer_configuration(ctx, aw, cache,
+        attention, mw, mlp, x, variant)

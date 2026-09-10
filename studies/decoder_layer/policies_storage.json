@@ -1,0 +1,141 @@
+{
+  "schema": 1,
+  "kind": "decoder_policy_lossless_storage",
+  "description": "Columnar XZ archives reconstruct every original JSONL byte. Original gzip and receipt hashes identify the previous representation. Numerical evaluation and historical source/binary identities are unchanged. Large JSON metadata uses the existing lossless gzip wrapper.",
+  "original_bytes": 138271990,
+  "encoded_bytes": 32910840,
+  "records": 9752424,
+  "checks": [
+    {
+      "original_file": "policies_baseline_checkpoint_checks.jsonl.gz",
+      "original_sha256": "dd2430900cd3b2dd9473ec981c93f08a0edcc303cc63dbd53ab5412e950abe24",
+      "original_bytes": 10387508,
+      "original_wrapper_sha256": "49746947397b0fbba8a610eed4d445e9846658e77e6abd437d3913e0ba899363",
+      "file": "policies_baseline_checkpoint_checks.columns.jsonl.xz",
+      "sha256": "cbb608d22a3284e0c9bfaa788cc436e1ac38c3c780f4338699b59dd643694676",
+      "uncompressed_sha256": "7bbac68caf00b36f75930a74d6f2f6b9ca8503be2f7f4b6e9eed2d1124ac501d",
+      "records": 668751,
+      "uncompressed_bytes": 209477225,
+      "encoded_bytes": 2848920
+    },
+    {
+      "original_file": "policies_baseline_development_checks.jsonl.gz",
+      "original_sha256": "70e7c106a64751071424cd25cec2f52247748060849242c1222aa4b03fc7abd2",
+      "original_bytes": 24483986,
+      "original_wrapper_sha256": "35a6c405c80105edf07864e6a8fddafebad11474c9aa705005b0fb56239bd6ea",
+      "file": "policies_baseline_development_checks.columns.jsonl.xz",
+      "sha256": "958824b5619b23952f48a1cc887bd893b84f724eaf0076b87632281e419db48c",
+      "uncompressed_sha256": "582579f22968745979ac12f94d4906eb16f20bfdc0479c6d7ae65cd5815d980e",
+      "records": 1616547,
+      "uncompressed_bytes": 546049511,
+      "encoded_bytes": 6288656
+    },
+    {
+      "original_file": "policies_holdout_checks.jsonl.gz",
+      "original_sha256": "6ebaed988d5c30b9884646be93e2fb482f32a92922846df15a07bdcab3a900a3",
+      "original_bytes": 30148987,
+      "original_wrapper_sha256": "88c4d7cb39dd248a3f011a6dd7999cfd10ac797c3712adbd8ebc853119e8b925",
+      "file": "policies_holdout_checks.columns.jsonl.xz",
+      "sha256": "1f87f29607ea5a39ff70ddb9e0239ea84453408dab3bb0788e883b8555dbc642",
+      "uncompressed_sha256": "9d1f96f00d21bca582dc5ccca54f1b0288e4b9b7713b5f40a4c116f8d2cc39af",
+      "records": 1938699,
+      "uncompressed_bytes": 658820402,
+      "encoded_bytes": 7831504
+    },
+    {
+      "original_file": "policies_interrupted_baseline_checks.jsonl.gz",
+      "original_sha256": "eb95fbe3d1e15103c5d38ae477c9ba1c689bca4950e6569bc3d0121b70e5ba45",
+      "original_bytes": 2186407,
+      "original_wrapper_sha256": "4726ea140ecd2b6d16802debdc351c02dcdb1ed034ca5e034dc7a603392061d2",
+      "file": "policies_interrupted_baseline_checks.columns.jsonl.xz",
+      "sha256": "7ec08f091f3b7536d972f2ec78a6b5bfac3dfb50a75dc4cb4bdb493da8be6941",
+      "uncompressed_sha256": "7b4f5236d2b88edbf0e80d813bd61909e7bc6cd09561532e16065f46e2657aab",
+      "records": 162496,
+      "uncompressed_bytes": 54049159,
+      "encoded_bytes": 297616
+    },
+    {
+      "original_file": "policies_round1_checkpoint_checks.jsonl.gz",
+      "original_sha256": "dae81454f8f21a5e399081c1147903481eafe2275eb33777f285dae5f1df54a4",
+      "original_bytes": 9369675,
+      "original_wrapper_sha256": "8038fcb92c568181826e77a936d5331088204da47fd77458214bcf77d85ff428",
+      "file": "policies_round1_checkpoint_checks.columns.jsonl.xz",
+      "sha256": "b5d14140b3f7c86bec91300844b29e485ae3614e58ddef6987c29a7c53b9a7b9",
+      "uncompressed_sha256": "6d63019a997cc5f41d9dbe23e6ef25843436a09063071c4d2a5032c7c228ed6d",
+      "records": 670952,
+      "uncompressed_bytes": 208705671,
+      "encoded_bytes": 2184632
+    },
+    {
+      "original_file": "policies_round1_development_checks.jsonl.gz",
+      "original_sha256": "c90b5c48d2e364ad57d9fb5e89377869ce720107571a01d24abcf4a3bdfa0387",
+      "original_bytes": 21683008,
+      "original_wrapper_sha256": "941d9c70d8e55c6cb5cf1f988b344e3bd2d818ac9b994352c6e2196a4678dec1",
+      "file": "policies_round1_development_checks.columns.jsonl.xz",
+      "sha256": "a45a5fd962d38a25a877368a45af996901dea3c4a14745ea5203be74cdcb7f78",
+      "uncompressed_sha256": "0f22fd0d1b8f5d00c3da97f78cd4f28984054098b0410b1ce185f0f58c1fb10c",
+      "records": 1628453,
+      "uncompressed_bytes": 546522440,
+      "encoded_bytes": 4821708
+    },
+    {
+      "original_file": "policies_round2_checkpoint_checks.jsonl.gz",
+      "original_sha256": "9acae61e43d3ddc363ae283abeabf37aae2a31d78fddc4b9798bbc1b9ce7ed72",
+      "original_bytes": 12247824,
+      "original_wrapper_sha256": "95245934f89bc6e643c2e7e27c66f429bb317841425713a0cde43a5bf2bcad52",
+      "file": "policies_round2_checkpoint_checks.columns.jsonl.xz",
+      "sha256": "20654631123b9b230dd8ecd0d29e0cc66694ce82ecd3c445421b70ae09a9e167",
+      "uncompressed_sha256": "91f3229963e37ac66b4b2b9a0d8b989eabbd38444d80cbe44252bd199ad7fd76",
+      "records": 894659,
+      "uncompressed_bytes": 277746837,
+      "encoded_bytes": 2807892
+    },
+    {
+      "original_file": "policies_round2_development_checks.jsonl.gz",
+      "original_sha256": "60c89ba5f38f21644e59067e3381c93d7097688266d05d9670cbc621658c8fc4",
+      "original_bytes": 27764595,
+      "original_wrapper_sha256": "3c3274dfde7df078d9ec1687b850cb2a2e674f485d5dfea80bfbff6624889af6",
+      "file": "policies_round2_development_checks.columns.jsonl.xz",
+      "sha256": "bd623ffead6a393aee0a531d4fa910315d0d6400783da5058284be1b9f9cc62d",
+      "uncompressed_sha256": "2e784f077c80d006999f2531ec7d7c5a06b85380d6d8ae620e7d6640667b0f07",
+      "records": 2171867,
+      "uncompressed_bytes": 727673379,
+      "encoded_bytes": 5829912
+    }
+  ],
+  "metadata": [
+    {
+      "file": "policies_holdout_manifest.json",
+      "original_lines": 47431,
+      "summary_lines": 108,
+      "archive": "policies_holdout_manifest.json.gz",
+      "uncompressed_sha256": "6e57a6710e131a588c16c209d12379761ae4b30d2d09db33e4ae3a3ea1bfdac4"
+    },
+    {
+      "file": "policies_holdout_evaluation.json",
+      "original_lines": 3714,
+      "summary_lines": 19,
+      "archive": "policies_holdout_evaluation.json.gz",
+      "uncompressed_sha256": "5090752bbdf01a4fcdda08ac5faf751156913fa3727cbe97a3dbd8e1bf2a94b5"
+    },
+    {
+      "file": "policies_round1_development_evaluation.json",
+      "original_lines": 6366,
+      "summary_lines": 18,
+      "archive": "policies_round1_development_evaluation.json.gz",
+      "uncompressed_sha256": "5c4bdfb7fe285699dedf95c225508b86d24595842526aa129776e56c61fcb857"
+    },
+    {
+      "file": "policies_round2_development_evaluation.json",
+      "original_lines": 6686,
+      "summary_lines": 19,
+      "archive": "policies_round2_development_evaluation.json.gz",
+      "uncompressed_sha256": "f4548e9bb904475f33e5d6dbea87d8bc418273d19c6b7c2d5f2ee9055545aeec"
+    }
+  ],
+  "original_tree_commit": "9e30837b012919b596e535a0107ecf1b4fbe2bcb",
+  "conversion_sources": {
+    "src/llm_mojo/decoder_validation.py": "f6d6f5383a6618053da130d9186299117a10bf2c8ea2afb4a3e0adff3fb42d70",
+    "src/llm_mojo/benchmarks/study.py": "e3b08544c8759529662fc8ab67e9e49984b975fcbc9a4275c2a6cb21cd63b172"
+  }
+}

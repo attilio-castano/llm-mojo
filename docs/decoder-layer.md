@@ -13,6 +13,16 @@ ordered evidence gates, measurement budget, and stop conditions. The subsequent
 it confirms cached-prefill improvements and retains the baseline for full/short
 prefill and decode.
 
+The later [policy study](../studies/decoder_layer/policies.md) adds separate
+Fast and Deterministic contracts. `DecoderCache[False]` and
+`DecoderCache[True]` fix that choice for a cache's lifetime;
+`enqueue_decoder_layer_policy` selects the confirmed configuration for the
+call's query rows, total context and declared reuse mode. Rebuild the prefix
+in a new cache to change policy. The deterministic contract covers all 16
+stored stages, including Y, and both active KV prefixes across the tested
+schedules on the same hardware and build. Exact HF output matching remains
+a separate compatibility question.
+
 ## Scope
 
 Compose one Qwen2.5-0.5B-Instruct decoder layer from the accepted
@@ -457,3 +467,49 @@ of 16 calls is a separately labeled calibration diagnostic and cannot select
 a raw-hot winner. Existing BF16 rounding boundaries and acceptance gates apply
 to every configuration. Fresh reserved outputs require a clean candidate bound
 to the separately declared seeds and checkpoint token IDs.
+
+
+## Execution policies
+
+Fast and Deterministic share the Qwen equations, BF16 materialization points,
+causal visibility, cache ownership rules and numerical gates above. Their
+additional execution contracts differ:
+
+| Policy | Selection and numerical contract |
+| --- | --- |
+| Fast | Use the demonstrated configuration for the submitted shape and reuse mode. Different chunk schedules may round differently while retaining the shared accuracy gates. |
+| Deterministic | Keep one compatible arithmetic family for the cache lifetime. All 16 stored stages, including Y, and both active KV prefixes must agree byte for byte across the declared schedules on the same hardware and build. |
+
+Exact agreement with Hugging Face is a separate comparison. A valid
+Deterministic family may use a reduction order that differs from the older
+configuration 20. This campaign covers one sequence and one decoder layer;
+it does not qualify multi-request batching, full-model generation or identity
+across different devices and compiler builds.
+
+The caller chooses how many new rows to submit. The policy selects the
+implementation for that call using `R`, the resulting cache length `T`, and
+the declared weight-reuse mode. It does not choose chunk sizes or schedule
+requests. The [policy study](../studies/decoder_layer/policies-plan.md) freezes
+these workloads and the bounded optimization/confirmation procedure.
+
+`DecoderCache[False]` owns a Fast cache and `DecoderCache[True]` owns a
+Deterministic cache. Construct either with `(ctx, capacity, reuse_layers)`,
+where reuse is 1 for the hot case or 24 for the measured ring. That integer is
+a caller-supplied reuse description; creating one cache does not allocate or
+execute 24 model layers. `cache.prefill_splits()` supplies the partial-workspace
+capacity required by its policy. Initialize weights and rotary tables outside
+enqueue, then call `enqueue_decoder_layer_policy(ctx, aw, cache, attention, mw,
+mlp, x)`. The final output remains in `mlp.output`.
+
+The policy is a compile-time property of the cache type. To use a different
+policy, construct the other cache type and rebuild its prefix from the original
+layer inputs. `reset(ctx)` empties the existing cache without changing its
+policy. The raw configuration and attention-storage APIs remain available for
+explicit experiments; callers using those APIs own their mapping compatibility.
+
+The complete-layer numerical harness executes both public lookups in both reuse
+modes. Besides full, repeated, tokenwise and irregular calls, it exercises each
+measured lookup cell inside cached schedules. These checks catch a selector that
+combines individually valid kernels into an invalid cache history. Deterministic
+also requires byte identity between reuse modes before they can share a family.
+All invalid-call, protected-storage and asynchronous-reuse checks still apply.

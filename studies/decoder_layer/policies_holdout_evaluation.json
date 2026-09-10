@@ -1,0 +1,19 @@
+{
+  "format": "lossless-json-gzip-v1",
+  "record": "policies_holdout_evaluation.json.gz",
+  "sha256": "16910f7d0fa0753fada340a8dd4917b077415a446a92adf63ccf7ef7a419913f",
+  "uncompressed_sha256": "5090752bbdf01a4fcdda08ac5faf751156913fa3727cbe97a3dbd8e1bf2a94b5",
+  "metadata": {
+    "status": "passed",
+    "split": "holdout",
+    "checks": 1937598,
+    "variants": [
+      100,
+      101,
+      102,
+      103
+    ],
+    "source_commit": "f08e5a9009bf7aca8ffb23606a163b4053ae0857",
+    "original_evaluation_sha256": "d036eebb09fc2d0b9b9f84f862907df74932033ea08d5084ed9a7e5ef5d8abc9"
+  }
+}

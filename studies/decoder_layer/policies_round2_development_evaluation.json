@@ -1,0 +1,19 @@
+{
+  "format": "lossless-json-gzip-v1",
+  "record": "policies_round2_development_evaluation.json.gz",
+  "sha256": "248707b1713eed4becb08643b32b1049460cad72cb803d3886aa82c3bcbccdee",
+  "uncompressed_sha256": "f4548e9bb904475f33e5d6dbea87d8bc418273d19c6b7c2d5f2ee9055545aeec",
+  "metadata": {
+    "status": "passed",
+    "split": "development",
+    "checks": 2170246,
+    "variants": [
+      20,
+      22,
+      23,
+      24
+    ],
+    "source_commit": "4af906816e69901f33ef47919116f74f88a59ed6",
+    "original_evaluation_sha256": "c8269bb4f41d65cf6cb09aa5dd6712c10d326310f2525600364c44266e52e7a7"
+  }
+}

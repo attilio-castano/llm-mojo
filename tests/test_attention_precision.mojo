@@ -34,7 +34,8 @@ def _run_cases(composed: Bool) raises:
         if not composed:
             try:
                 _operations(case_id, nq, nk, d, t, True)
-            except:
+            except error:
+                print("precision case",case_id,"failed:",error)
                 failed_cases += 1
             continue
         for route in range(7):
@@ -43,42 +44,49 @@ def _run_cases(composed: Bool) raises:
             for chunked in range(2):
                 try:
                     _case(case_id, nq, nk, d, t, route, Bool(chunked), "fp32", route >= 3)
-                except:
+                except error:
+                    print("precision case",case_id,"failed:",error)
                     failed_cases += 1
         # Same original X, fixed FP32 attention policy and unchanged gates;
         # only Wo's work ownership changes. Includes tiny/ragged shapes.
         for chunked in range(2):
             try:
                 _case(case_id, nq, nk, d, t, 3, Bool(chunked), "fp32", True, True)
-            except:
+            except error:
+                print("precision case",case_id,"failed:",error)
                 failed_cases += 1
             if nq == 14:
                 try:
                     _case(case_id, nq, nk, d, t, 6, Bool(chunked), "fp32", True, True)
-                except:
+                except error:
+                    print("precision case",case_id,"failed:",error)
                     failed_cases += 1
             for mapping in [1, 2]:
                 try:
                     _case(case_id, nq, nk, d, t, 3, Bool(chunked), "fp32", True, True, mapping)
-                except:
+                except error:
+                    print("precision case",case_id,"failed:",error)
                     failed_cases += 1
             if nq == 14:
                 for mapping in range(5):
                     try:
                         _case(case_id, nq, nk, d, t, 6, Bool(chunked), "fp32", True,
                               integrated=True, gqa_mapping=mapping)
-                    except:
+                    except error:
+                        print("precision case",case_id,"failed:",error)
                         failed_cases += 1
                 for mapping in range(1, 6):
                     try:
                         _case(case_id, nq, nk, d, t, 6, Bool(chunked), "fp32", True,
                               integrated=True, projection_mapping=mapping)
-                    except:
+                    except error:
+                        print("precision case",case_id,"failed:",error)
                         failed_cases += 1
                 try:
                     _case(case_id, nq, nk, d, t, 6, Bool(chunked), "fp32", True,
                           integrated=True, gqa_mapping=4, projection_mapping=5)
-                except:
+                except error:
+                    print("precision case",case_id,"failed:",error)
                     failed_cases += 1
     if failed_cases:
         raise Error("FP32 attention failed its declared accuracy or exact cache gates")

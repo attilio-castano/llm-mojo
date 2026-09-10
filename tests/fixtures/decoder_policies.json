@@ -1,0 +1,1388 @@
+{
+  "schema": 1,
+  "kind": "decoder_two_policy_declaration",
+  "baseline_variants": [
+    0,
+    3,
+    20
+  ],
+  "baseline_deterministic": [
+    20
+  ],
+  "workloads": [
+    [
+      16,
+      16,
+      0
+    ],
+    [
+      256,
+      256,
+      0
+    ],
+    [
+      4096,
+      4096,
+      0
+    ],
+    [
+      16,
+      256,
+      0
+    ],
+    [
+      64,
+      4096,
+      3
+    ],
+    [
+      1,
+      256,
+      0
+    ],
+    [
+      1,
+      4096,
+      0
+    ]
+  ],
+  "modes": [
+    1,
+    24
+  ],
+  "profiles": [
+    [
+      256,
+      256,
+      0,
+      25
+    ],
+    [
+      256,
+      256,
+      20,
+      25
+    ],
+    [
+      64,
+      4096,
+      3,
+      25
+    ],
+    [
+      64,
+      4096,
+      20,
+      25
+    ],
+    [
+      1,
+      4096,
+      0,
+      100
+    ],
+    [
+      1,
+      4096,
+      20,
+      100
+    ]
+  ],
+  "schedules": {
+    "repeat": "Repeat the full call after resetting and poisoning the cache and workspace.",
+    "tokenwise": "One token per call, including the 4096-token case.",
+    "irregular_chunks": [
+      15,
+      1,
+      1,
+      46,
+      1,
+      1,
+      16,
+      17,
+      63,
+      64,
+      65,
+      257,
+      1024
+    ],
+    "irregular_tail": "Append the remaining suffix, clipping each declared chunk at the case length.",
+    "lookup_chunks": [
+      16,
+      224,
+      16,
+      3776,
+      64
+    ],
+    "prefill_prefix_rows": 256
+  },
+  "confirmation": {
+    "outputs_observed_at_declaration": false,
+    "seeds": [
+      7141,
+      7151
+    ],
+    "rows": [
+      1,
+      17,
+      65,
+      257,
+      4096
+    ],
+    "prompt": "A rectangle has a perimeter of 30 meters and a width of 5 meters. Explain how to find its length and area.",
+    "checkpoint_token_ids": [
+      151644,
+      8948,
+      198,
+      2610,
+      525,
+      264,
+      10950,
+      17847,
+      13,
+      151645,
+      198,
+      151644,
+      872,
+      198,
+      32,
+      22756,
+      702,
+      264,
+      46342,
+      315,
+      220,
+      18,
+      15,
+      20044,
+      323,
+      264,
+      2374,
+      315,
+      220,
+      20,
+      20044,
+      13,
+      81917,
+      1246,
+      311,
+      1477,
+      1181,
+      3084,
+      323,
+      3082,
+      13,
+      151645,
+      198,
+      151644,
+      77091,
+      198
+    ],
+    "checkpoint_token_ids_sha256": "fdc37a0a6bdf05ef4f7764425d99d3cbe491c5d8f0180bfd6fc97fa295213180"
+  },
+  "search_budget": {
+    "rounds": 2,
+    "new_candidates_per_round": 2,
+    "independent_confirmation": 1
+  },
+  "accuracy": "Unchanged decoder-layer-v1 whole-layer and isolated-operation gates; exact Hugging Face agreement is not required.",
+  "invariance": "All 16 stored stages, including Y, and both active KV prefixes must equal the candidate's own full-call bytes on the same hardware and build. Candidate bytes may differ from configuration 20.",
+  "selection": "Fast: validated measured winner per exact workload and reuse mode. Deterministic: a compatible arithmetic family across schedules; no independent phase winners unless cross-phase invariance passes. Unmeasured cells fall back to the declared baseline.",
+  "timing": "Four paired blocks, ten warmups and ten observations per arm, balanced order, same-run self-pair calibration, all valid observations retained. A gain requires all four ratios below one and a reduction exceeding max(5%, self-pair deviation).",
+  "scope": "One Qwen2.5-0.5B decoder layer on Apple Metal. Historical full-model accuracy failures remain separate; no full-model or cross-device determinism claim.",
+  "rounds": [
+    {
+      "round": 1,
+      "new_candidates": [
+        21,
+        22
+      ],
+      "new_candidate_outputs_observed": false,
+      "parameters": {
+        "21": {
+          "gqa_mapping": 5,
+          "projection_mapping": 6,
+          "mlp_mapping": 7,
+          "qkv_tile": [
+            8,
+            16
+          ],
+          "wo_tile": [
+            8,
+            16
+          ],
+          "mlp_tile": [
+            16,
+            16
+          ],
+          "row_count_threshold": null
+        },
+        "22": {
+          "gqa_mapping": 5,
+          "projection_mapping": 7,
+          "mlp_mapping": 19,
+          "row_tile": 4,
+          "one_row": "Original rowwise kernel",
+          "qkv": "Packed projection followed by bit-preserving unpack",
+          "reduction": "Original lane-strided FP32 sums and warp.sum; no changed K partition"
+        }
+      },
+      "rationale": "At (256,256), MLP is 85.225% of ID20 captured GPU active time; at (64,4096), MLP is 68.538% and GQA is 20.592%. Test projection reuse first.",
+      "baseline_profile_sha256": {
+        "profiles.json": "ba82e8e3ed329e5bb1f942e0f6fc129dc198e35ca3f753514cca40da7ce5bb24",
+        "profile_samples.csv.gz": "bcf05040dbd5a8aec91d1cac58f945017273ebe4748d6359df690cc124ee1d60"
+      },
+      "numerical": {
+        "variants": [
+          20,
+          21,
+          22
+        ],
+        "required_invariants": [
+          20,
+          22
+        ],
+        "comparison_family": [
+          20,
+          22
+        ],
+        "splits": [
+          "development",
+          "checkpoint"
+        ],
+        "admission": "Every unchanged numerical gate must pass before timing. Classify every candidate's schedule invariance. A non-invariant but numerically valid candidate remains eligible only for Fast. Exclude a failed candidate from timing and retain its failure."
+      },
+      "screens": [
+        {
+          "name": "decoder_policies_round1_det",
+          "control": 20,
+          "candidates": [
+            20,
+            21,
+            22
+          ],
+          "workloads": [
+            [
+              16,
+              16
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              16,
+              256
+            ],
+            [
+              64,
+              4096
+            ],
+            [
+              1,
+              256
+            ],
+            [
+              1,
+              4096
+            ]
+          ]
+        },
+        {
+          "name": "decoder_policies_round1_fast_0",
+          "control": 0,
+          "candidates": [
+            0,
+            21,
+            22
+          ],
+          "workloads": [
+            [
+              16,
+              16
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              16,
+              256
+            ],
+            [
+              1,
+              256
+            ],
+            [
+              1,
+              4096
+            ]
+          ]
+        },
+        {
+          "name": "decoder_policies_round1_fast_3",
+          "control": 3,
+          "candidates": [
+            3,
+            21,
+            22
+          ],
+          "workloads": [
+            [
+              64,
+              4096
+            ]
+          ]
+        }
+      ],
+      "fast_selection": "Per cell and reuse mode, retain the incumbent unless a numerically valid candidate passes the existing direct paired faster rule against it. Select the lowest qualifying median ratio, then the lower ID.",
+      "deterministic_selection": "If ID22 is invariant and byte-compatible with ID20, select it only in cells where its direct comparison to ID20 passes the existing faster rule; otherwise retain ID20. ID21 can replace this family globally only if it is invariant, every screened cell in both modes is faster than ID20, and, wherever ID22 qualifies, ID21 ratio_max is below (1-noise_floor) times ID22 ratio_min. Otherwise retain ID21 as a documented tradeoff. Unmeasured cells use ID20, or ID21 if that global family qualifies.",
+      "confirmation": "Freeze the proposed lookup before the sole independent confirmation. Include all seven original cells in both modes. The 4096-row prefill candidate is an explicitly unmeasured extension until confirmation qualifies it; retain the validated fallback on failure. Fresh numerical confirmation executes the actual Fast/Deterministic lookups in both modes (test IDs100-103), requires invariance for101/103, and requires full-stage/KV compatibility between101 and103."
+    },
+    {
+      "round": 2,
+      "new_candidates": [
+        23,
+        24
+      ],
+      "new_candidate_outputs_observed": false,
+      "parameters": {
+        "23": {
+          "gqa_mapping": 5,
+          "projection_mapping": 8,
+          "mlp_mapping": 20,
+          "row_tile": 8,
+          "one_row": "Original rowwise kernel",
+          "qkv": "Packed projection followed by bit-preserving unpack",
+          "reduction": "Original lane-strided FP32 sums and warp.sum; no changed K partition"
+        },
+        "24": {
+          "gqa_mapping": 5,
+          "projection_mapping": 9,
+          "mlp_mapping": 21,
+          "row_tile": 16,
+          "one_row": "Original rowwise kernel",
+          "qkv": "Packed projection followed by bit-preserving unpack",
+          "reduction": "Original lane-strided FP32 sums and warp.sum; no changed K partition"
+        }
+      },
+      "rationale": "Round 1 four-row reuse reduced deterministic multirow latency by 24-37%, with complete stage and KV compatibility. Test larger reuse tiles; additional live accumulators may offset weight reuse. The fixed-MMA family failed global qualification because decode slowed down.",
+      "incumbent_decision": {
+        "schema": 1,
+        "kind": "decoder_policy_round_decision",
+        "declaration_sha256": "3ea1c6df923fff7dee11b9f7bc2c83e168f95983963ea9d40c744b0ff724a808",
+        "build_sha256": "eb8ef49a808b04e7d394aab38e2337ff814c016b7155e1453229c92899af12b7",
+        "numerical": [
+          {
+            "split": "development",
+            "evaluation_sha256": "325510149a550e2654c3c4c1555fdf81aa8a50adb9737f6a1a6a4a117493eb67",
+            "checks_sha256": "0f22fd0d1b8f5d00c3da97f78cd4f28984054098b0410b1ce185f0f58c1fb10c",
+            "binary_sha256": "378332647512aa7be42c17265fbc1051ef93c0708700e436905ac22c2e5aa4aa"
+          },
+          {
+            "split": "checkpoint",
+            "evaluation_sha256": "e42accc372194b11a7a039518bda96977b33f33398027c1cbefd4bd2b6018275",
+            "checks_sha256": "6d63019a997cc5f41d9dbe23e6ef25843436a09063071c4d2a5032c7c228ed6d",
+            "binary_sha256": "378332647512aa7be42c17265fbc1051ef93c0708700e436905ac22c2e5aa4aa"
+          }
+        ],
+        "screens": [
+          {
+            "study": "decoder_policies_round1_det",
+            "run_sha256": "4f3904d93b501af7f7cb4132d181cbf5123685ab7b49c911ac415acbfb415910",
+            "samples_sha256": "a9ed3cfe99310a6241b90b3858fb7cc41d7f6b1f7cc1479c11f1cd577efd7dbc"
+          },
+          {
+            "study": "decoder_policies_round1_fast_0",
+            "run_sha256": "03b8a34cbc101db9e7a67a83ed9742bbdd27493941b3f1f35ab20530a43d8ae1",
+            "samples_sha256": "7ec0c352fac89cd995fa0e6d10c4e5b6073d334e851b2e316f557a7f74a52c68"
+          },
+          {
+            "study": "decoder_policies_round1_fast_3",
+            "run_sha256": "2573759ae53d40178c3d25e412e5e3a3c3346e5c74e44ec6f03a86701389af4a",
+            "samples_sha256": "8ca79aff619416100833e8edac7f3ef0ff36ac3e851fafeea65787760d4de18c"
+          }
+        ],
+        "invariant_variants": [
+          20,
+          21,
+          22
+        ],
+        "round": 1,
+        "proposals": [
+          {
+            "query_rows": 16,
+            "rows": 16,
+            "layers": 1,
+            "fast": 0,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 16,
+            "rows": 16,
+            "layers": 24,
+            "fast": 0,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 256,
+            "rows": 256,
+            "layers": 1,
+            "fast": 0,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 256,
+            "rows": 256,
+            "layers": 24,
+            "fast": 0,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 1,
+            "fast": 21,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 24,
+            "fast": 0,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096,
+            "layers": 1,
+            "fast": 3,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096,
+            "layers": 24,
+            "fast": 3,
+            "deterministic": 22
+          },
+          {
+            "query_rows": 1,
+            "rows": 256,
+            "layers": 1,
+            "fast": 0,
+            "deterministic": 20
+          },
+          {
+            "query_rows": 1,
+            "rows": 256,
+            "layers": 24,
+            "fast": 0,
+            "deterministic": 20
+          },
+          {
+            "query_rows": 1,
+            "rows": 4096,
+            "layers": 1,
+            "fast": 0,
+            "deterministic": 20
+          },
+          {
+            "query_rows": 1,
+            "rows": 4096,
+            "layers": 24,
+            "fast": 0,
+            "deterministic": 20
+          }
+        ],
+        "deterministic_family": [
+          20,
+          22
+        ],
+        "deterministic_fallback": 20,
+        "fixed_mma_global_qualified": false,
+        "compatible_row_reuse": true
+      },
+      "incumbent_decision_sha256": "b9ef60f8e1de7cc0cfa01b1c7b32371ca564659ac6d03b4fe9903f1dd39d26f6",
+      "numerical": {
+        "variants": [
+          20,
+          22,
+          23,
+          24
+        ],
+        "required_invariants": [
+          20,
+          22,
+          23,
+          24
+        ],
+        "comparison_family": [
+          20,
+          22,
+          23,
+          24
+        ],
+        "splits": [
+          "development",
+          "checkpoint"
+        ],
+        "admission": "Require unchanged numerical gates and complete schedule/family identity before timing. Retain any failure; stop this round on an invariant-family failure rather than silently alter its declared family."
+      },
+      "screens": [
+        {
+          "name": "decoder_policies_round2_det",
+          "control": 22,
+          "candidates": [
+            22,
+            23,
+            24
+          ],
+          "workloads": [
+            [
+              16,
+              16
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              16,
+              256
+            ],
+            [
+              64,
+              4096
+            ]
+          ],
+          "layers": [
+            1,
+            24
+          ]
+        },
+        {
+          "name": "decoder_policies_round2_fast_0_hot",
+          "control": 0,
+          "candidates": [
+            0,
+            23,
+            24
+          ],
+          "workloads": [
+            [
+              16,
+              16
+            ],
+            [
+              256,
+              256
+            ]
+          ],
+          "layers": [
+            1
+          ]
+        },
+        {
+          "name": "decoder_policies_round2_fast_0_ring",
+          "control": 0,
+          "candidates": [
+            0,
+            23,
+            24
+          ],
+          "workloads": [
+            [
+              16,
+              16
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              16,
+              256
+            ]
+          ],
+          "layers": [
+            24
+          ]
+        },
+        {
+          "name": "decoder_policies_round2_fast_21_hot",
+          "control": 21,
+          "candidates": [
+            21,
+            23,
+            24
+          ],
+          "workloads": [
+            [
+              16,
+              256
+            ]
+          ],
+          "layers": [
+            1
+          ]
+        },
+        {
+          "name": "decoder_policies_round2_fast_3",
+          "control": 3,
+          "candidates": [
+            3,
+            23,
+            24
+          ],
+          "workloads": [
+            [
+              64,
+              4096
+            ]
+          ],
+          "layers": [
+            1,
+            24
+          ]
+        }
+      ],
+      "selection": "Per exact cell and reuse mode, compare both candidates directly to the round-1 incumbent with same-run self pairs. Among candidates passing the calibrated faster rule, choose the lowest median ratio, then lower ID. Otherwise retain the incumbent. Deterministic candidates also require complete own schedule invariance and family byte identity. No new single-token screen: both larger tiles call the same one-row implementation as ID22. Retain its unqualified single-token incumbent ID20 and Fast ID0.",
+      "confirmation": "Use the sole independent final session already declared, with all seven cells and fresh inputs. Freeze any long-prefill extension from the selected 256-row candidate before that session; it needs its own direct gain to be accepted."
+    }
+  ],
+  "final_confirmation": {
+    "schema": 1,
+    "kind": "decoder_policy_confirmation_proposal",
+    "basis": {
+      "schema": 1,
+      "kind": "decoder_policy_round_decision",
+      "declaration_sha256": "55c3c1a561dd22458a571b33e95cf4a46842d3dcd6c9aad80f13c175a24c9999",
+      "build_sha256": "1392491162a57ddad89019501395932be23fc80c1f9f46db7587a522dd47aa88",
+      "numerical": [
+        {
+          "split": "development",
+          "evaluation_sha256": "c8269bb4f41d65cf6cb09aa5dd6712c10d326310f2525600364c44266e52e7a7",
+          "checks_sha256": "2e784f077c80d006999f2531ec7d7c5a06b85380d6d8ae620e7d6640667b0f07",
+          "binary_sha256": "f7caf00ed7736e1d288dd424bdf48272587b4596ed9cfaf8f4faf17560c7371d"
+        },
+        {
+          "split": "checkpoint",
+          "evaluation_sha256": "89221bae24c2c3678206587b948db20e41195bfd07c695243c144a01c4265092",
+          "checks_sha256": "91f3229963e37ac66b4b2b9a0d8b989eabbd38444d80cbe44252bd199ad7fd76",
+          "binary_sha256": "f7caf00ed7736e1d288dd424bdf48272587b4596ed9cfaf8f4faf17560c7371d"
+        }
+      ],
+      "screens": [
+        {
+          "study": "decoder_policies_round2_det",
+          "run_sha256": "445dd3a4b0314b07852a10ceb27326cd8f64594af98abfb8f89b151b419d5df6",
+          "samples_sha256": "2aa9011f324b9fcd44234523239fb4008d892d950d690347f251a7799d1a4ea2"
+        },
+        {
+          "study": "decoder_policies_round2_fast_0_hot",
+          "run_sha256": "d3b5e515430688333b4f55598b4e9c788f2a37a1b55a1f8ac62f9dba77f6d6a0",
+          "samples_sha256": "ecf48a3d14e73fd09a8add6523b1e3dfea6356a04a479fdde69fc5a6626573b8"
+        },
+        {
+          "study": "decoder_policies_round2_fast_0_ring",
+          "run_sha256": "12a6e2e55fa2cf7c1291cd9a3362fab7bf2a1ce21688c4bf1331e0e032b55fe2",
+          "samples_sha256": "298eabd61c587057e04199ed3236feed11180fb5432857deeba977dcd9704d3a"
+        },
+        {
+          "study": "decoder_policies_round2_fast_21_hot",
+          "run_sha256": "24391870dc8628caa85b614dbdd616cd80d9a8543bc995ec80915402327add55",
+          "samples_sha256": "c7703895207d24af50d91d674dc2225a42072660256ffbe1ed64481a3e956122"
+        },
+        {
+          "study": "decoder_policies_round2_fast_3",
+          "run_sha256": "5ff51db62e604d334abf583451710fce1c20986930c0fdeede87bb28adef762d",
+          "samples_sha256": "f75f53967a706de0ffe05580f0444f62417e0986e7d987b21f536d72fb79560b"
+        }
+      ],
+      "invariant_variants": [
+        20,
+        22,
+        23,
+        24
+      ],
+      "round": 2,
+      "proposals": [
+        {
+          "query_rows": 16,
+          "rows": 16,
+          "layers": 1,
+          "fast": 0,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 16,
+          "rows": 16,
+          "layers": 24,
+          "fast": 0,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 256,
+          "rows": 256,
+          "layers": 1,
+          "fast": 0,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 256,
+          "rows": 256,
+          "layers": 24,
+          "fast": 0,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 16,
+          "rows": 256,
+          "layers": 1,
+          "fast": 21,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 16,
+          "rows": 256,
+          "layers": 24,
+          "fast": 0,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 64,
+          "rows": 4096,
+          "layers": 1,
+          "fast": 3,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 64,
+          "rows": 4096,
+          "layers": 24,
+          "fast": 3,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 1,
+          "rows": 256,
+          "layers": 1,
+          "fast": 0,
+          "deterministic": 20
+        },
+        {
+          "query_rows": 1,
+          "rows": 256,
+          "layers": 24,
+          "fast": 0,
+          "deterministic": 20
+        },
+        {
+          "query_rows": 1,
+          "rows": 4096,
+          "layers": 1,
+          "fast": 0,
+          "deterministic": 20
+        },
+        {
+          "query_rows": 1,
+          "rows": 4096,
+          "layers": 24,
+          "fast": 0,
+          "deterministic": 20
+        }
+      ],
+      "deterministic_fallback": 20,
+      "deterministic_family": [
+        20,
+        22,
+        23,
+        24
+      ],
+      "compatible_row_reuse": true
+    },
+    "basis_sha256": "7453098279c806f22d12ba5697d2d5e38a3b547e9b2105c8ba582ccb6e34160f",
+    "cells": [
+      {
+        "query_rows": 16,
+        "rows": 16,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 16,
+        "rows": 16,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 256,
+        "rows": 256,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 256,
+        "rows": 256,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 4096,
+        "rows": 4096,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": true
+      },
+      {
+        "query_rows": 4096,
+        "rows": 4096,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": true
+      },
+      {
+        "query_rows": 16,
+        "rows": 256,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 21,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 16,
+        "rows": 256,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 64,
+        "rows": 4096,
+        "layers": 1,
+        "fast_control": 3,
+        "fast": 3,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 64,
+        "rows": 4096,
+        "layers": 24,
+        "fast_control": 3,
+        "fast": 3,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 256,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 256,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 4096,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 4096,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      }
+    ],
+    "screens": [
+      {
+        "name": "decoder_policies_confirmation_det_hot",
+        "control": 20,
+        "candidates": [
+          20,
+          22
+        ],
+        "layers": [
+          1
+        ],
+        "names": {
+          "20": "consistent G32 attention and rowwise projections",
+          "22": "consistent G32 and four-row weight reuse"
+        },
+        "workloads": [
+          {
+            "query_rows": 16,
+            "rows": 16
+          },
+          {
+            "query_rows": 256,
+            "rows": 256
+          },
+          {
+            "query_rows": 4096,
+            "rows": 4096
+          },
+          {
+            "query_rows": 16,
+            "rows": 256
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096
+          },
+          {
+            "query_rows": 1,
+            "rows": 256
+          },
+          {
+            "query_rows": 1,
+            "rows": 4096
+          }
+        ],
+        "comparisons": [
+          {
+            "query_rows": 16,
+            "rows": 16,
+            "layers": 1,
+            "candidate": 20
+          },
+          {
+            "query_rows": 16,
+            "rows": 16,
+            "layers": 1,
+            "candidate": 22
+          },
+          {
+            "query_rows": 256,
+            "rows": 256,
+            "layers": 1,
+            "candidate": 20
+          },
+          {
+            "query_rows": 256,
+            "rows": 256,
+            "layers": 1,
+            "candidate": 22
+          },
+          {
+            "query_rows": 4096,
+            "rows": 4096,
+            "layers": 1,
+            "candidate": 20
+          },
+          {
+            "query_rows": 4096,
+            "rows": 4096,
+            "layers": 1,
+            "candidate": 22
+          },
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 1,
+            "candidate": 20
+          },
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 1,
+            "candidate": 22
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096,
+            "layers": 1,
+            "candidate": 20
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096,
+            "layers": 1,
+            "candidate": 22
+          },
+          {
+            "query_rows": 1,
+            "rows": 256,
+            "layers": 1,
+            "candidate": 20
+          },
+          {
+            "query_rows": 1,
+            "rows": 4096,
+            "layers": 1,
+            "candidate": 20
+          }
+        ],
+        "policy": "deterministic"
+      },
+      {
+        "name": "decoder_policies_confirmation_fast_0_hot",
+        "control": 0,
+        "candidates": [
+          0,
+          21
+        ],
+        "layers": [
+          1
+        ],
+        "names": {
+          "0": "integrated control",
+          "21": "consistent G32 and fixed MMA projections"
+        },
+        "workloads": [
+          {
+            "query_rows": 16,
+            "rows": 256
+          }
+        ],
+        "comparisons": [
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 1,
+            "candidate": 0
+          },
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 1,
+            "candidate": 21
+          }
+        ],
+        "policy": "fast"
+      },
+      {
+        "name": "decoder_policies_confirmation_det_ring",
+        "control": 20,
+        "candidates": [
+          20,
+          22
+        ],
+        "layers": [
+          24
+        ],
+        "names": {
+          "20": "consistent G32 attention and rowwise projections",
+          "22": "consistent G32 and four-row weight reuse"
+        },
+        "workloads": [
+          {
+            "query_rows": 16,
+            "rows": 16
+          },
+          {
+            "query_rows": 256,
+            "rows": 256
+          },
+          {
+            "query_rows": 4096,
+            "rows": 4096
+          },
+          {
+            "query_rows": 16,
+            "rows": 256
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096
+          },
+          {
+            "query_rows": 1,
+            "rows": 256
+          },
+          {
+            "query_rows": 1,
+            "rows": 4096
+          }
+        ],
+        "comparisons": [
+          {
+            "query_rows": 16,
+            "rows": 16,
+            "layers": 24,
+            "candidate": 20
+          },
+          {
+            "query_rows": 16,
+            "rows": 16,
+            "layers": 24,
+            "candidate": 22
+          },
+          {
+            "query_rows": 256,
+            "rows": 256,
+            "layers": 24,
+            "candidate": 20
+          },
+          {
+            "query_rows": 256,
+            "rows": 256,
+            "layers": 24,
+            "candidate": 22
+          },
+          {
+            "query_rows": 4096,
+            "rows": 4096,
+            "layers": 24,
+            "candidate": 20
+          },
+          {
+            "query_rows": 4096,
+            "rows": 4096,
+            "layers": 24,
+            "candidate": 22
+          },
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 24,
+            "candidate": 20
+          },
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 24,
+            "candidate": 22
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096,
+            "layers": 24,
+            "candidate": 20
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096,
+            "layers": 24,
+            "candidate": 22
+          },
+          {
+            "query_rows": 1,
+            "rows": 256,
+            "layers": 24,
+            "candidate": 20
+          },
+          {
+            "query_rows": 1,
+            "rows": 4096,
+            "layers": 24,
+            "candidate": 20
+          }
+        ],
+        "policy": "deterministic"
+      }
+    ],
+    "deterministic_fallback": 20,
+    "numerical": {
+      "variants": [
+        100,
+        101,
+        102,
+        103
+      ],
+      "required_invariants": [
+        101,
+        103
+      ],
+      "comparison_family": [
+        101,
+        103
+      ],
+      "split": "holdout"
+    },
+    "rule": "One independent serialized timing session. Qualify each proposed deterministic configuration directly against20 and every changed Fast configuration against its original Fast incumbent, with self calibration. Apply the existing faster rule; otherwise retain the fallback. Then measure the accepted deterministic configuration directly against accepted Fast at all seven cells in both modes, self calibrated. This cost phase cannot change selection. No new candidates or repeated confirmation.",
+    "numerical_order": "Encode exactly the mechanically accepted lookup, run full regression and commit. Capture the already reserved fresh inputs once for that final numerical executable and execute the actual lookups across every declared schedule. Kernel timing and final lookup build identities are recorded separately."
+  },
+  "accepted_lookup": {
+    "schema": 1,
+    "kind": "decoder_policy_confirmed_selection",
+    "proposal_sha256": "bb3a09f3d40f837ae159d543e0b8dece1586cfb63bec71d3ff7b07b24e06f5fc",
+    "build_sha256": "a8ede8026f02a6194bafd57344f63bb17ccb949aee337c511e9fd83b54dde951",
+    "qualification": [
+      {
+        "study": "decoder_policies_confirmation_det_hot",
+        "run_sha256": "072a0a8c2df44971c1eb1183948f919b1f29bff49043c63b32b2be3100f6ac45",
+        "samples_sha256": "8c9a064029b220a021ae7118de1904adbf2e0d21a5ffe329ed49a6c5d06eba7f"
+      },
+      {
+        "study": "decoder_policies_confirmation_fast_0_hot",
+        "run_sha256": "bb8442aa7e51cab5fbdd5f9eb8f1e55d644009d345ff8af8c0f43f5955be2613",
+        "samples_sha256": "c3e3d9d6c69ccb02aba1214477c3da0ad45ab8113250c9c07757e35e390c7e6f"
+      },
+      {
+        "study": "decoder_policies_confirmation_det_ring",
+        "run_sha256": "751d084e58fe88cb853ab3140484a26237cd3de3b68079c6dd15d006410e7aa4",
+        "samples_sha256": "896f9718b4ebc1194988aecc7958953ea20f84c3f3a3a39985b217efc1c5c820"
+      }
+    ],
+    "cells": [
+      {
+        "query_rows": 16,
+        "rows": 16,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 16,
+        "rows": 16,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 256,
+        "rows": 256,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 256,
+        "rows": 256,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 4096,
+        "rows": 4096,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": true
+      },
+      {
+        "query_rows": 4096,
+        "rows": 4096,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": true
+      },
+      {
+        "query_rows": 16,
+        "rows": 256,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 21,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 16,
+        "rows": 256,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 64,
+        "rows": 4096,
+        "layers": 1,
+        "fast_control": 3,
+        "fast": 3,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 64,
+        "rows": 4096,
+        "layers": 24,
+        "fast_control": 3,
+        "fast": 3,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 256,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 256,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 4096,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 4096,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      }
+    ],
+    "fallbacks": {
+      "fast": 0,
+      "deterministic": 20
+    }
+  }
+}

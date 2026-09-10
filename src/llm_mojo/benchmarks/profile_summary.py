@@ -20,9 +20,13 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
             attention_sublayer=False, wo_comparison=False, decode_comparison=False,
             prefill_comparison=False, projection_comparison=False, parallelism_variants=None,
             combined_projections=False, attention_study=None, mlp=False,
-            mlp_variants=None, mlp_rows=None, decoder_layer=False, decoder_selection=None):
+            mlp_variants=None, mlp_rows=None, decoder_layer=False, decoder_selection=None,
+            decoder_policies=False):
     records, samples = [], []
     common = None
+    if decoder_policies:
+        if decoder_selection is not None:raise ValueError('choose one decoder profile declaration')
+        decoder_layer=True
     if not mlp and (mlp_variants is not None or mlp_rows is not None):
         raise ValueError('MLP grid options require the MLP study')
     if prefill_variant is not None and prefill_variants is not None:
@@ -54,6 +58,10 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
             selected=json.loads(Path(decoder_selection).read_text())
             spec=dict(selection=selected,selection_sha256=sha(decoder_selection),
                       captures=decoder_contract.profile_selection(selected))
+        if decoder_policies:
+            declared=decoder_contract.policy_declaration()
+            spec=dict(policies=declared,policies_sha256=decoder_contract.sha_json(declared),
+                      captures=[(r,t,v) for r,t,v,n in declared['profiles']])
     elif mlp:
         variants = [0] if mlp_variants is None else mlp_variants
         rows = mlp_contract.PROFILE_ROWS if mlp_rows is None else mlp_rows
@@ -77,6 +85,8 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
     if decoder_selection is not None:
         if not decoder_layer:raise ValueError('decoder selection requires decoder profiles')
         captures=[(r,t,v,f'r{r}-t{t}-v{v}') for r,t,v in spec['captures']]
+    if decoder_policies:
+        captures=[(r,t,v,f'r{r}-t{t}-v{v}') for r,t,v in decoder_contract.policy_profile_grid(spec)]
     for r,t,variant,folder in captures:
         stages = decoder_contract.stages(variant,r) if decoder_layer else stage_map[variant]
         directory = source / folder
@@ -150,7 +160,7 @@ def collect(source, output, prefill_variant=None, *, prefill_variants=None, pref
     writer.writeheader(); writer.writerows(samples)
     raw = output / (prefix+'profile_samples.csv.gz')
     raw.write_bytes(gzip.compress(stream.getvalue().encode(), mtime=0))
-    write_json(output / (prefix+'profiles.json'), dict(schema=6 if decoder_selection is not None else 5 if decoder_layer else 4 if mlp else 3 if attention_sublayer else (2 if prefill else 1),
+    write_json(output / (prefix+'profiles.json'), dict(schema=7 if decoder_policies else 6 if decoder_selection is not None else 5 if decoder_layer else 4 if mlp else 3 if attention_sublayer else (2 if prefill else 1),
                 **(dict(specification=spec) if prefill else {}), common=common, captures=records,
                 samples_sha256=sha(raw),
                 boundary=f'Instrumented GPU active dispatch durations (non-overlapping segments summed, preemption gaps excluded); {len(captures)} single captures, not paired latency trials. Counter statistics are device-wide within each target window. Stage labels follow the validated source enqueue order.',
@@ -167,6 +177,7 @@ if __name__ == '__main__':
     group.add_argument('--attention-sublayer',action='store_true')
     group.add_argument('--mlp',action='store_true')
     group.add_argument('--decoder-layer',action='store_true')
+    group.add_argument('--decoder-policies',action='store_true')
     parser.add_argument('--decoder-selection',type=Path)
     parser.add_argument('--mlp-variants',type=int,nargs='+')
     parser.add_argument('--mlp-rows',type=int,nargs='+')
@@ -179,7 +190,7 @@ if __name__ == '__main__':
     parser.add_argument('--combined-projections',action='store_true')
     parser.add_argument('--parallelism-variants',type=int,nargs='+')
     args = parser.parse_args()
-    collect(args.source, args.output, args.prefill_variant, mlp=args.mlp, decoder_layer=args.decoder_layer, decoder_selection=args.decoder_selection,
+    collect(args.source, args.output, args.prefill_variant, mlp=args.mlp, decoder_layer=args.decoder_layer, decoder_selection=args.decoder_selection, decoder_policies=args.decoder_policies,
             mlp_variants=args.mlp_variants, mlp_rows=args.mlp_rows,
             prefill_variants=args.prefill_variants, prefix=args.prefix, attention_sublayer=args.attention_sublayer,
             wo_comparison=args.wo_comparison, decode_comparison=args.decode_comparison,

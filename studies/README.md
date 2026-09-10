@@ -4,7 +4,9 @@ These studies explain how the existing Mojo operations map work onto the Apple
 M4 Pro. Start with the value and storage contracts in [model](../docs/model.md)
 and [layouts](../docs/layouts.md), then read a topic below. Each comparison is
 operation-level except for the composed attention/MLP sublayers and the accepted
-decoder layer. Full-model forward parity is next.
+decoder layer. The modified HF reference passes full-model schedule
+qualification; native full-model accuracy acceptance is paused at its first
+failing input, documented in the numerical study below.
 
 | Topic | Question |
 | --- | --- |
@@ -17,7 +19,9 @@ decoder layer. Full-model forward parity is next.
 | [MLP sublayer](mlp_sublayer/README.md) | How do tiled projections change complete SwiGLU latency under its frozen BF16 rounding contract? |
 | [Attention sublayer](attention_sublayer/README.md) | Where does time go in the complete block under the selected FP32 attention policy? |
 | [Decoder layer](decoder_layer/README.md) | How do complete layer costs shift between prefill, cached chunks and decode? |
+| [Decoder policies](decoder_layer/policies.md) | How much does schedule-invariant execution cost, and which optimizations preserve it? |
 | [CPU tokenizer](tokenizer/README.md) | When does heap BPE improve complete text encoding? |
+| [Full-model reference](model_generation/README.md) | Does BF16 full prefill agree with cached execution across all 24 layers? |
 
 The CPU tokenizer study establishes exact Rust parity in Mojo and retains 9,680
 CPU observations. Heap merging improves long single pieces but costs more than
@@ -32,7 +36,18 @@ noise and diagnostic gaps remain explicit. The follow-up
 [configuration study](decoder_layer/selection.md) retains 16,800 additional
 latency observations and confirms 5.6–52.9% lower decoder latency on the primary
 cached-prefill grid. Full/short prefill and decode retain the existing baseline.
-The next step is full-model logits parity.
+The subsequent [policy campaign](decoder_layer/policies.md) separates Fast and
+Deterministic execution. It retains 17,280 timing observations, 4,975 profiled
+dispatches and 9,583,121 core numerical checks. Four-row reuse lowers deterministic
+prefill latency by 24–37%; the selected deterministic prefill policy still takes
+2.2–6.0 times Fast latency. Decode comparisons remain inconclusive. Both final
+deterministic lookup settings pass all fresh schedule/cache comparisons.
+The modified, pinned CPU HF reference passes 71,250 exact comparisons across
+all 24 layers. The native full-model candidate then fails seven intermediate
+accuracy gates on its first one-token input. Full-model schedule consistency,
+generation acceptance and combined prefill-plus-growing-decode performance
+remain pending. The earlier eight-failure reference confirmation is historical
+evidence, distinct from the current [native accuracy stop](model_generation/consistency.md).
 
 The attention-sublayer study uses the explicit CPU FP32 attention policy as
 its accuracy baseline. It has 17 synthetic and three checkpoint cases; the

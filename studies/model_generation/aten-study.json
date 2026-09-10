@@ -1,0 +1,31 @@
+{
+  "kind": "upstream-reference-aten-diagnosis",
+  "result_written_utc": "2026-09-09T15:13:36.394838+00:00",
+  "source_commit": "e89d525a51513d7c147d2849510011471438ab61",
+  "source_sha256": "54c557772aed6b5b98fa0c373958611b497d0ab494c89a90db9b50340da73f2d",
+  "helper_source_sha256": "d5679a799703fa3e11289a8ab72512cfb219f92df319b0b22e6f0645cd133582",
+  "declaration_sha256": "18c559629a9ba0133cf34649c4f860855e2481d6f750db773fb0e6aaf740fca6",
+  "command": "uv run --locked --script tests/fixtures/model_reference_diagnosis.py --backend --output build/oracle_data/model-qualification/aten-detail-v2.json",
+  "hardware": "Apple M4 Pro",
+  "macos": "26.6.2",
+  "device": "cpu",
+  "intraop_threads": 1,
+  "interop_threads": 14,
+  "candidate_outputs_observed": false,
+  "reserved_outputs_observed": false,
+  "files": {
+    "aten-detail.json.gz": {
+      "sha256": "c9794c8e2ddfc7d8cd53ead7d4f21b5f4093bd5e761e0e00b42066aa038dec1e",
+      "uncompressed_sha256": "c0710f581a1ffdc7850104f249800912cf87079f9bbb5b1770be7667304ece39",
+      "uncompressed_bytes": 8730076
+    }
+  },
+  "scope": "Two first-layer ATen traces and five canonical-query full-model schedule comparisons; no tolerance changes, native model execution, reserved inputs or performance claim.",
+  "refinement": {
+    "reason": "Inspect every duplicated query row, and bind canonical cached results to original cached boundary bytes for both localized inputs.",
+    "previous_source_commit": "5f44a4b31f273387d16f83580edb858d5663fc5b",
+    "previous_report_sha256": "613d3d50615a67c9a23da853b4c628808b1601b1baf84c7d2b4d138f25437477",
+    "all_common_observations_equal": true,
+    "inputs_and_precision_policy_unchanged": true
+  }
+}

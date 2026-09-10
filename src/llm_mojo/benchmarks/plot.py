@@ -1018,13 +1018,80 @@ def render(directory):
     print(directory.name, len(samples), 'observations verified; summary and figure regenerated')
 
 
+
+def render_decoder_policies(directory):
+    from .decoder_layer_contract import replay_policy_campaign
+    evidence=replay_policy_campaign(directory)
+    for name,(_,_,summary) in evidence['runs'].items():
+        table(directory,name+'_summary.csv',summary)
+    table(directory,'policies_lookup.csv',evidence['accepted']['cells'])
+    table(directory,'policies_cost.csv',evidence['cost']['rows'])
+    table(directory,'policies_numerical.csv',evidence['numerical'])
+    table(directory,'policies_profile_summary.csv',evidence['profile'])
+    table(directory,'policies_profile_windows.csv',evidence['windows'])
+    shapes=list(dict.fromkeys((p['query_rows'],p['rows']) for p in evidence['accepted']['cells']))
+    key=lambda p:(p['query_rows'],p['rows'],p['layers'])
+    baseline={key(p):p for name in ('decoder_policies_baseline_0','decoder_policies_baseline_3')
+        for p in evidence['runs'][name][2] if p['candidate']==20}
+    final={key(p):p for p in evidence['cost']['rows']}
+    prefill_style()
+    fig,axes=plt.subplots(1,2,figsize=(12.5,7.3),sharex=True,sharey=True)
+    points=[*baseline.values(),*final.values()]
+    for ax,layers in zip(axes,(1,24)):
+        for offset,series,color,marker,label in ((-.14,baseline,'#9298a0','o','Original deterministic'),
+                                               (.14,final,'#197a80','s','Selected deterministic')):
+            for j,(r,t) in enumerate(shapes):
+                row=series[r,t,layers]
+                ax.errorbar(row['ratio'],j+offset,
+                    xerr=[[row['ratio']-row['ratio_min']],[row['ratio_max']-row['ratio']]],
+                    fmt=marker,color=color,capsize=3,markersize=5,
+                    markerfacecolor='white' if row['decision']=='inconclusive' else color,
+                    label=label if j==0 else None)
+        ax.axvline(1,color='#333333',linewidth=1)
+        ax.set_xscale('log',base=2)
+        ax.set_xlim(min(.85,min(p['ratio_min'] for p in points)/1.12),max(p['ratio_max'] for p in points)*1.15)
+        ax.set_xticks([1,2,4,8],[f'{v}×' for v in (1,2,4,8)])
+        ax.grid(axis='x',alpha=.18)
+        ax.set_xlabel('Deterministic time / paired Fast time · lower is faster')
+        ax.set_title('Hot · one call' if layers==1 else 'Ring24 · per call in a 24-allocation sweep')
+    labels=[f'Full prefill {r}' if r==t else f'Decode · T={t}' if r==1 else f'Cached prefill · R={r}, T={t}' for r,t in shapes]
+    axes[0].set_yticks(range(len(labels)),labels);axes[0].invert_yaxis()
+    handles,labels=axes[0].get_legend_handles_labels()
+    fig.legend(handles,labels,loc='upper center',bbox_to_anchor=(.5,.900),ncol=2,frameon=False)
+    old=evidence['runs']['decoder_policies_baseline_0'][0]['repository']['commit'][:7]
+    current=evidence['runs']['decoder_policies_confirmation_det_hot'][0]['repository']['commit'][:7]
+    fig.suptitle('Decoder layer · measured cost of schedule invariance',fontsize=17,fontweight='bold',y=.985)
+    fig.text(.5,.930,'Qwen2.5-0.5B · Apple M4 Pro / Metal · BF16 storage / FP32 reductions',ha='center',fontsize=10)
+    fig.text(.05,.04,'Whiskers: range of four paired block ratios, not confidence intervals. Open marks: inconclusive under self calibration.\n'
+        'Each point compares policies within its own session; no historical speedup factors are composed.\n'
+        f'Original timing source {old}; final configuration timing source {current}. Selector overhead is excluded; this is not model throughput.',fontsize=9,color='#555555')
+    fig.tight_layout(rect=(0,.14,1,.885))
+    fig.savefig(directory/'policies_latency.png',dpi=180);plt.close(fig)
+    rows=['| Workload R / T | Mode | Fast ID | Det ID | Fast µs | Det µs | Paired Det / Fast | Four-block range | Decision |',
+          '| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |']
+    for r,t in shapes:
+        for layers in (1,24):
+            p=final[r,t,layers]
+            rows.append(f"| {r} / {t} | {'hot' if layers==1 else 'ring24'} | {p['fast']} | {p['deterministic']} | {p['control_us']:.1f} | {p['candidate_us']:.1f} | {p['ratio']:.3f}× | {p['ratio_min']:.3f}–{p['ratio_max']:.3f}× | {p['decision']} |")
+    (directory/'policies_results.md').write_text('\n'.join(rows)+'\n')
+    report=directory/'policies.md'
+    if report.exists():
+        text=report.read_text();start='<!-- policies-cost:start -->';end='<!-- policies-cost:end -->'
+        if text.count(start)!=1 or text.count(end)!=1:raise ValueError('decoder policy report table markers changed')
+        before,rest=text.split(start);_,after=rest.split(end)
+        report.write_text(before+start+'\n\n'+'\n'.join(rows)+'\n\n'+end+after)
+    print('Replayed every decoder policy numerical/timing record and regenerated tables and figure.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directories', nargs='*', type=Path)
+    parser.add_argument('--policies', action='store_true', help='Replay the decoder policy campaign and regenerate its report tables/figure')
     args = parser.parse_args()
-    directories = args.directories or sorted((repository_root() / 'studies').glob('*/'))
+    directories = args.directories or ([repository_root()/'studies/decoder_layer'] if args.policies else sorted((repository_root() / 'studies').glob('*/')))
     for directory in directories:
-        render(directory)
+        if args.policies:render_decoder_policies(directory)
+        else:render(directory)
 
 
 if __name__ == '__main__':

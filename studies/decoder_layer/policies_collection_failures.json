@@ -1,0 +1,29 @@
+[
+  {
+    "source": "baseline-v1/interruption.json",
+    "record": {
+      "reason": "Stopped before completion to reduce test-only copying of full-sized fixture and scratch buffers during tokenwise replay. No failed numerical gate had been observed; all emitted records and the terminated evaluation receipt are retained.",
+      "replacement": "baseline-v2"
+    },
+    "sha256": "dc5c8cd6490a213b829affd52c6a0576a707f0be1bd46cd461d78517e3307197"
+  },
+  {
+    "source": "baseline-v2/profiles/collector-failure.json",
+    "record": {
+      "kind": "metadata_collection_failure",
+      "error": "Live tuple capture triples were compared with JSON-style lists.",
+      "measurements_changed": false,
+      "recaptured": false,
+      "validated_captures": 6
+    },
+    "sha256": "663d5107670a64f86939f13090e8ff61772df6c27d54e33344c782630505f5f3"
+  },
+  {
+    "kind": "native smoke launch environment",
+    "error": "No module named 'llm_mojo'",
+    "cause": "Direct binary invocation omitted the uv environment.",
+    "retry": "uv run --locked, same executable, untimed adversarial smoke passed",
+    "failed_output_sha256": "ede4d4f806905da2c4bf58bb0fa891377a44dbf60aeb5579d1dfe88abcde1474",
+    "passed_output_sha256": "7ecad4f104dff03a420991d502a645fcfb36394cee69f76a30bb825ea0404945"
+  }
+]

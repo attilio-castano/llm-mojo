@@ -30,7 +30,8 @@ def _enqueue(ctx: DeviceContext, mut aw: AttentionWeights, mut cache: AttentionC
     var actual = enqueue_decoder_layer_configuration(ctx,aw,cache,a,mw,m,
         TileTensor(input.unsafe_ptr().unsafe_offset((t-r)*896),row_major(r,896)),
         variant)
-    if actual != (6+Int(decoder_mappings(variant,r)[0]) if r > 1 else 4) or cache.length != t:
+    var gqa = Int(decoder_mappings(variant,r)[0])
+    if actual != (11 if gqa == 5 else (6+gqa if r > 1 else 4)) or cache.length != t:
         raise Error("decoder benchmark route/cache identity mismatch")
 
 
@@ -57,7 +58,8 @@ def main() raises:
     var warmup = Int(args[10])
     var cm = decoder_mappings(candidate,r)
     var bm = decoder_mappings(control,r)
-    var dispatches = 16 + (1 if Int(cm[0]) == 4 and r > 1 else 0) - (1 if r == 1 and (candidate == 8 or candidate == 14) else 0)
+    var support = Python.import_module("llm_mojo.benchmarks.decoder_layer_contract")
+    var dispatches = Int(py=support.specification(candidate,r,t)["dispatches_per_iteration"])
     if (r < 1 or r > t or t > 4096 or (layers != 1 and layers != 24)
         or seed != 4001
         or (first != 0 and first != 1) or repetitions < 1 or warmup < 0 or warmup > 100
@@ -65,7 +67,6 @@ def main() raises:
         or (mode == "buffered" and (layers != 1 or r != 1 or candidate != 0 or control != 0))
         or (mode == "profile" and (layers != 1 or candidate != control or repetitions*dispatches > 5000))):
         raise Error("invalid decoder benchmark shape, mapping or budget")
-    var support = Python.import_module("llm_mojo.benchmarks.decoder_layer_contract")
     support.fixture_identity()
     var adversarial = mode == "adversarial"
     var ctx = DeviceContext()

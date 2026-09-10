@@ -1,0 +1,957 @@
+{
+  "schema": 1,
+  "study": "decoder_policies_cost_0_ring",
+  "specification": {
+    "operation": "decoder_layer",
+    "control": 0,
+    "candidates": [
+      0,
+      20,
+      22
+    ],
+    "names": {
+      "0": "integrated control",
+      "20": "consistent G32 attention and rowwise projections",
+      "22": "consistent G32 and four-row weight reuse"
+    },
+    "seed": 4001,
+    "measurement": "whole_decoder",
+    "opt_in": true,
+    "workloads": [
+      {
+        "query_rows": 16,
+        "rows": 16
+      },
+      {
+        "query_rows": 256,
+        "rows": 256
+      },
+      {
+        "query_rows": 4096,
+        "rows": 4096
+      },
+      {
+        "query_rows": 16,
+        "rows": 256
+      },
+      {
+        "query_rows": 1,
+        "rows": 256
+      },
+      {
+        "query_rows": 1,
+        "rows": 4096
+      }
+    ],
+    "arithmetic": "BF16 stored boundaries/cache; FP32 reductions and SDPA; materialized BF16 SiLU, product and residual operands.",
+    "inputs": "Frozen seed 4001, original X prefix/suffix; GPU-produced cache prefix. Hot one allocation set; ring24 distinct input/weight/cache sets with identical contents and shared scratch. Untimed adversarial smoke uses 24 distinct hidden-coordinate sign patterns.",
+    "timing": "Host enqueue through completion; hot one call, ring24 one synchronization per sweep divided by 24. Prefix preparation, allocation, verification and printing excluded. Each sample overwrites the same suffix at P=T-R after the previous sample completes; not growing-context generation.",
+    "layout": "Row major X/Y[R,896], cache[T,2,64], weights[out,in], intermediate width 4864.",
+    "layers": [
+      24
+    ],
+    "comparisons": [
+      {
+        "query_rows": 16,
+        "rows": 16,
+        "layers": 24,
+        "candidate": 0
+      },
+      {
+        "query_rows": 16,
+        "rows": 16,
+        "layers": 24,
+        "candidate": 22
+      },
+      {
+        "query_rows": 256,
+        "rows": 256,
+        "layers": 24,
+        "candidate": 0
+      },
+      {
+        "query_rows": 256,
+        "rows": 256,
+        "layers": 24,
+        "candidate": 22
+      },
+      {
+        "query_rows": 4096,
+        "rows": 4096,
+        "layers": 24,
+        "candidate": 0
+      },
+      {
+        "query_rows": 4096,
+        "rows": 4096,
+        "layers": 24,
+        "candidate": 22
+      },
+      {
+        "query_rows": 16,
+        "rows": 256,
+        "layers": 24,
+        "candidate": 0
+      },
+      {
+        "query_rows": 16,
+        "rows": 256,
+        "layers": 24,
+        "candidate": 22
+      },
+      {
+        "query_rows": 1,
+        "rows": 256,
+        "layers": 24,
+        "candidate": 0
+      },
+      {
+        "query_rows": 1,
+        "rows": 256,
+        "layers": 24,
+        "candidate": 20
+      },
+      {
+        "query_rows": 1,
+        "rows": 4096,
+        "layers": 24,
+        "candidate": 0
+      },
+      {
+        "query_rows": 1,
+        "rows": 4096,
+        "layers": 24,
+        "candidate": 20
+      }
+    ]
+  },
+  "repository": {
+    "commit": "214ce2c3575fcbfbaf396421ac0b63e9bab7d973",
+    "branch": "codex/qwen-generation-engine",
+    "dirty": false
+  },
+  "build": {
+    "repository": {
+      "commit": "214ce2c3575fcbfbaf396421ac0b63e9bab7d973",
+      "branch": "codex/qwen-generation-engine",
+      "dirty": false
+    },
+    "sources": {
+      "pyproject.toml": "02c82f14225188794d65a4d73a73b58922ea6c131156b8dbb54b118a504b8dbf",
+      "src/llm_mojo/__init__.mojo": "54ca844ca97d5f13084dae07021cbe9535b95cf3414d5133daec18787507d905",
+      "src/llm_mojo/__init__.py": "d45f08c560f8a501262a3c17663244a1a74fb76658d746e99a430dbc1f9935b7",
+      "src/llm_mojo/_repository.py": "51d920267e176f952b137d2f3e14dbbb3e9d9c39f59e386e9138b939fb5fbf7f",
+      "src/llm_mojo/attention.mojo": "3210f50d6850db60a6cacf4c30d860ca0b72177ad1c9b313c7ae7d92b79be973",
+      "src/llm_mojo/attention_decode.mojo": "1b7925a46e19b5472f7cdef63c325c35ddeec870c1b9ba0bd3ae375a37c3708b",
+      "src/llm_mojo/attention_prefill.mojo": "5ee18f967ca73a17d5ea8a32f1e70c1c69de0174a644931796d3c044bb8f204c",
+      "src/llm_mojo/attention_sublayer.mojo": "721ed27304c241b3d6adea18d89f664c4478cdb56f9ac256e2786986c5090305",
+      "src/llm_mojo/benchmarks/__init__.mojo": "b8a8f32ace824dd687bc6b2f87afeb3180f7b5ac78684ecefd669201a1e9801c",
+      "src/llm_mojo/benchmarks/__init__.py": "11fddc93cafb04100810b633bfea5b41fb2ba60a48383c9fecb3fdd1ae9cd00c",
+      "src/llm_mojo/benchmarks/analyze_trace.py": "ebfc402938550bc0dfb79db2c14aaf72fb4679035dd05d5b0e98a71cc3e46cbd",
+      "src/llm_mojo/benchmarks/attention_contract.py": "bf0c99eee9a064a304c6a22fd0f766a14adb7617f3e5e417fd993846452851a1",
+      "src/llm_mojo/benchmarks/attention_decode.mojo": "983f00a4a01396cfa46f5064098b6155a893c0aa4c66d197f65d91b38bc6a76d",
+      "src/llm_mojo/benchmarks/attention_decode_contract.py": "36b34c75a5186931331d6ae9bab8da6e493e55f6c8a612614c26a6c613dbd201",
+      "src/llm_mojo/benchmarks/attention_decode_support.mojo": "55ad60c4cbf1379adfb0575e840db8726d8d64103d6d973c20d71366c32a9968",
+      "src/llm_mojo/benchmarks/attention_prefill.mojo": "9edb4b4761b99993ba3175e9dfc4f526f9c0820dad5badc5b7cf820aed322b06",
+      "src/llm_mojo/benchmarks/attention_prefill_contract.py": "8cd0df325ea4cbab884b3205e50832a0dc289d1d18194375bdd9f90ef8ac2578",
+      "src/llm_mojo/benchmarks/attention_prefill_ir.mojo": "7310f3328cdbcbd53230a4d40c7cb15629c1e96497630e940f5d02810af9a4d6",
+      "src/llm_mojo/benchmarks/attention_prefill_support.mojo": "85fea01a59589c62513221d2840610750a20f51977a775a0c99574c49df8aceb",
+      "src/llm_mojo/benchmarks/attention_sublayer.mojo": "33b0aa118704d01ee74653fe64645fd838901dac1bcc13238e7a29f4a1cabdd4",
+      "src/llm_mojo/benchmarks/attention_sublayer_contract.py": "a0bca7364c6de60ea2a726d223c7f50b3ffe9613390f83329018a5bb73e4dc40",
+      "src/llm_mojo/benchmarks/capture_trace.py": "adcc15d6693793d8c0af23aa102c5a02a6dc802f3ae7ceeff8e46d5ab0d242d2",
+      "src/llm_mojo/benchmarks/decoder_layer.mojo": "5ab83aedd4100992a3f04599818aa0b24bdb0827aab60df3d0c690a75e30c3d2",
+      "src/llm_mojo/benchmarks/decoder_layer_contract.py": "9eb57a127a3fe0aa5a935f42814a08048d0edc895b51d4be550170c101f868d6",
+      "src/llm_mojo/benchmarks/environment.py": "815e2f79a5189a7dcf5b97fc2c159fb38e5924e3d388ec2c37650b9a92beb48c",
+      "src/llm_mojo/benchmarks/mlp.mojo": "cb4ab11ab9061c97474a4c579f5bdf5b9487b809c2a987d11fa3407ec97bf144",
+      "src/llm_mojo/benchmarks/mlp_contract.py": "d6d628df468484dd41f890ed0c27bc44df8b3971ce9e91ed0e9fa9a717822a3f",
+      "src/llm_mojo/benchmarks/operations.mojo": "3d3a96985d42cfbb314cda9fd7d4318a11e9fe841b3f52347b6402309d071561",
+      "src/llm_mojo/benchmarks/plot.py": "c984c6f2fe39a7d54555c421caf32555e4bfcaf8787cca001e4692a32394f3a7",
+      "src/llm_mojo/benchmarks/profile.py": "e6f0f75840c5b619f4be8c7aea20e009c0a938ff8801af07d4e2aef752b19ca1",
+      "src/llm_mojo/benchmarks/profile_summary.py": "76015047382bf017d5d767dede798da7dab61e5b222995ea7bf75170b6950a36",
+      "src/llm_mojo/benchmarks/run.py": "4871e8377801480c85f07baeab43166f0036ffa968c5df69de9854cd0c030e77",
+      "src/llm_mojo/benchmarks/smoke.py": "236713e6d59ff172d94592eeac1d4ffc1f6db54eb66e4387389b12cb60fcad69",
+      "src/llm_mojo/benchmarks/study.py": "e3b08544c8759529662fc8ab67e9e49984b975fcbc9a4275c2a6cb21cd63b172",
+      "src/llm_mojo/benchmarks/tokenizer.mojo": "fbf0eed676fe1a7c5f6496af5ac220531cfbd15fd456e91021ed2f90ff1d9bf7",
+      "src/llm_mojo/benchmarks/tokenizer_contract.py": "308c90063ddd89ab6f30566014db3a5d045d6264c1836f1f63e553461f43ad26",
+      "src/llm_mojo/bf16_arithmetic.mojo": "e41319b3ea6239d3928ee49e2ec85944a9d328f983806e9dc44356cd757591be",
+      "src/llm_mojo/decoder_layer.mojo": "a383f8ef477c8ca948a5ea02a4259398e354d8b2683382138f516764931ed9fa",
+      "src/llm_mojo/decoder_validation.py": "4fd6612a76e611148e5eb74a6ea0c1a22fe484c43681efe2b2a32ef465c10157",
+      "src/llm_mojo/generate_cli.mojo": "59f672bb32ae8547d1964886be345161b3efd05500983bb588c98dc21c0a754d",
+      "src/llm_mojo/linear.mojo": "6eb294c2af94ad11876ff949a7fdf42c6dd31cd6c32df6a83f05eaa37facb8be",
+      "src/llm_mojo/mlp.mojo": "b374d7d095eeb6b17fa499be04b5d0c4019c06384f78de3d4afb8fe07c37c979",
+      "src/llm_mojo/mlp_validation.py": "bb8cc28e0b5be58f9bd6c73d088d934798b60d518e6b052208c7c8957ba5923a",
+      "src/llm_mojo/model.mojo": "25d1c2f40b1d85cb3db8e4640ebc67213ff43202666158b1487a3a3e7f8819b6",
+      "src/llm_mojo/model_assets.py": "d1611fb68aa842ca3b8aeaf13d118f4c35a63bb303815d497e500e4e6e3b9883",
+      "src/llm_mojo/model_validation.py": "071468ddd75353899fbf298db4001bacf1696fd000600f80a358ea56d68742dc",
+      "src/llm_mojo/residual.mojo": "0ff18151428c2cb0fde502217ebf18ae60e4a7c4b5effc8dd8f772b5be8f96a5",
+      "src/llm_mojo/rms_norm.mojo": "a555c33f86c6f893b780beab8033a9495ad62e502d0670753e7639850fba0f56",
+      "src/llm_mojo/rope.mojo": "12add6e982c6d1b500c1f346bf3733a9306acd1d15994fbaed8eb610904b289e",
+      "src/llm_mojo/swiglu.mojo": "22aa2a2911ef9a4c330ca6d67f6d3b58cc6d6cf343ca25bec10509eedc22b5e6",
+      "src/llm_mojo/tokenizer.mojo": "50dfaebcc034e2dd584ac8b02fd3907504de5aa7b0150d869c5e4586b67b3a13",
+      "src/llm_mojo/tokenizer_assets.py": "310193b2c00809c6ad91875b0788de3e7989e81d9ed48f70395c2d48f7cdf523",
+      "src/llm_mojo/tokenizer_cli.mojo": "386a1da81e07083aa0acb8dd872fcf7947fc2aeb80eb981986c54189c2d906ee",
+      "src/llm_mojo/validate.py": "e2e8a6bed7701951a8ccd4d436fc33a8f6ab929b06b4560f7b6347f56f995c3f",
+      "studies/decoder_layer/selection-declaration.json": "03f87c8ea116ffad09f44848efe659f7ed50f5ca3af0a0ff693d1e2b807852a5",
+      "tests/decoder_layer_support.mojo": "20bc6d05723638af6086ec4e87b2342566044ab1d3ea589b1623f372d87a0b8e",
+      "tests/decoder_layer_support.py": "a9f2482aead9e5f7da44ff9b34f1fb08216964ca1e8e95b51268b78e24ac6a27",
+      "tests/fixtures/attention/generate.py": "587eb5ed0c63e2a05f3026c2dde839c7fd92c37ec9e7c8bdab22cb37bccf3ea4",
+      "tests/fixtures/attention/generate_decode.py": "dd82f833f9507cd54edfaf95c5b2ade7381fefb6f612547b8849711be503861a",
+      "tests/fixtures/attention/generate_prefill.py": "35193674d82c1b5ca18a642b452de298ad58dcc2a609396c895f8b2819a3f54e",
+      "tests/fixtures/attention_sublayer/checkpoint.py": "03485aaed630e273c89fcf5b8bfd8c51a32aca4d764202702f82b158a6e7367c",
+      "tests/fixtures/attention_sublayer/checkpoint_checksums.json": "a6730403ed7a3ae4becc02e39a1910bdb5781c3846b0bdd71eca20fc26a6cb20",
+      "tests/fixtures/attention_sublayer/checksums.json": "64bc40d13d26492880d7c848da237afb4e5406588a01f5f4575c1bee6dcf49de",
+      "tests/fixtures/attention_sublayer/generate.py": "bb48bf3b84ae87944685071d269f85690e81488fa3cebe5a055c9dd205235ec2",
+      "tests/fixtures/attention_sublayer/precision.py": "5a33b83d6bef9c3ff4824e1007591a3cca305225c3297667129f8d700280b5a2",
+      "tests/fixtures/attention_sublayer/precision_checksums.json": "3a4d9e6642be1729b206f18de7253b784bc70b455e3ead7bc1a3d402a21d7f84",
+      "tests/fixtures/attention_sublayer/upstream.py": "e6228d7ecfa07976479372758d28fc10a99cf9391a1b3cf18955be419dcac02b",
+      "tests/fixtures/checksums.json": "becd13cec305f11367f5523d4c80732052215f7862070c6635ad4b7cb59ab51b",
+      "tests/fixtures/decoder_acceptance.py": "dca6aa405415ab5158983f51ae55062a44936a25f3050e8419ece33cbf2f3c76",
+      "tests/fixtures/decoder_acceptance.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+      "tests/fixtures/decoder_layer/checksums.json": "e351604090115cf4a7ec060aa594d37b9c8fd5e744afe4b0549bea90910afab4",
+      "tests/fixtures/decoder_layer/contract.py": "2646e775d0063c1fef450f604911cf7aa427b22b236921e3e78511678284819f",
+      "tests/fixtures/decoder_layer/generate.py": "08915679cf8464c7b57c552a2f4254be769cd68b1ee1e6db3a7f99d4744ff06c",
+      "tests/fixtures/decoder_layer/reference.py": "e3dfa596a4823de3f8b874aa788d56826382fae67db448cde422552b992d14e6",
+      "tests/fixtures/decoder_layer/test_reference.py": "813e4de124dbe71cbe040c697ddbc7e3902ecf0768ea8464927fdadecb6f3878",
+      "tests/fixtures/decoder_policies.json": "45c84b98c455f0ea9b6e7ef29938a11e396626ce177052696f55c3ca3f168f0b",
+      "tests/fixtures/decoder_reference.py": "b76370e78cea0a62bb8b75eae4cdfd67d408a47cffab0730add3dd2190b16bb6",
+      "tests/fixtures/decoder_reference.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+      "tests/fixtures/generate.py": "4638cd68d5b5cc54f94c68581e6be3f0bfbb3abf71d81160930794dcfccb4047",
+      "tests/fixtures/generate.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+      "tests/fixtures/linear/generate.py": "f84abf1d3d798e9c5c798059c1cbb6f235e54e7b54b8a4f9b9a9dc426d67c348",
+      "tests/fixtures/mlp/checksums.json": "6de9811889f14c9ece9999b7e4ee6116dfc41bb3dfac95486ec86f3582ec43e7",
+      "tests/fixtures/mlp/contract.py": "439686ec0dfd22d6cc3d4427f5b6f622c4b20bdb5ff609cc04bf762b6c0cc155",
+      "tests/fixtures/mlp/generate.py": "f9f8e2fe4031929922891090c5ed99c4f20ab52567729e93d011cf76afc95459",
+      "tests/fixtures/mlp/numerics.py": "ae713d7ec1754884524bac9bbd59b902b7fcc3edc012a72156ef7f1d41fd7f7d",
+      "tests/fixtures/mlp/reference.py": "c02a4ab733ad6702b663aecc3593b72a68c6d419797a6fc06f1e60d6a995851f",
+      "tests/fixtures/mlp/test_reference.py": "c1b759ce27855d955e1662781ecdd100423c25168d3dbe36c7ed83b4d262ed1f",
+      "tests/fixtures/mlp_acceptance.py": "e086b5fee2bf3b38c03db15a17e935c12268590085e0a70d785307e0971cbb85",
+      "tests/fixtures/mlp_acceptance.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+      "tests/fixtures/mlp_decode_holdout.json": "575764613e7c208cfac36b71ce352a80e693a4b84e359b5327d04875973ece7c",
+      "tests/fixtures/mlp_optimization_holdout.json": "b30d1e12d84f7249be2dc298efdc424548b661041dc901918d63c36463647440",
+      "tests/fixtures/model_attention_diagnosis.py": "d5679a799703fa3e11289a8ab72512cfb219f92df319b0b22e6f0645cd133582",
+      "tests/fixtures/model_backend_contract.json": "18c559629a9ba0133cf34649c4f860855e2481d6f750db773fb0e6aaf740fca6",
+      "tests/fixtures/model_calibration.json": "f8b3d207d39758095239b647e1ec01d98eaed6f72cf34c504295fdd42a716d9d",
+      "tests/fixtures/model_calibration.py": "431556cd3ea53ffe0610cf05f9e868f44192c4b7505b15f06690d67df156d453",
+      "tests/fixtures/model_calibration.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+      "tests/fixtures/model_consistency.json": "567f03fd1cf0705836783898fc424fd38c44bfadd30db5fbdc2b26341028f23c",
+      "tests/fixtures/model_consistency.py": "94de9081dba758a58dfb99c8c24497914dd1863035eec16136325260ff385ce8",
+      "tests/fixtures/model_consistency.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+      "tests/fixtures/model_contract.json": "383a3f123bb5affad0d00e8333f971c92c950c739a452a4ff952de032395b506",
+      "tests/fixtures/model_diagnosis_contract.json": "295fdaf4c6f80c7f6dd55287164647569d654887a05f56db9b0562d2a1aac621",
+      "tests/fixtures/model_reference.py": "216f5f99b12b1b0b376cc90f81e07ef5670421a9b0b737c43cd33e48e49e9770",
+      "tests/fixtures/model_reference.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+      "tests/fixtures/model_reference_diagnosis.py": "1758e619b2ed8ab270ea8a2fabe1ad658a573efdd9e19d618c6bf75cdb8273c5",
+      "tests/fixtures/model_reference_diagnosis.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+      "tests/fixtures/rms_norm/generate.py": "3c2f8125fcb42e3002d8e2bf1863dfcb32c8148bf3e7f8ec7c99e5f227e2233f",
+      "tests/fixtures/rope/generate.py": "d774a3f319657349f82b415162cfadebc2be15ee7b905f08621ced785b92b708",
+      "tests/fixtures/tokenizer/benchmark_checksums.json": "a956a0e77235bce3efc2e7bcc688a7e03b93b8a8fb15c1642756f1cae5f8384e",
+      "tests/fixtures/tokenizer/checksums.json": "b81503eeff73486c8ee41e6ca4c02513bc72d5bf758939abbfaeaf3bc77676ac",
+      "tests/fixtures/tokenizer/generate.py": "45d4a55d78f91e97739c7f10c0c6ecde99b748e6dde4025fa1836571247d8715",
+      "tests/fixtures/tokenizer/holdout_checksums.json": "44cd78fac48ba231f589e1588ff55197cb31cb5a907f704df9bd4413fe228574",
+      "tests/fixtures/tokenizer/unicode_checksums.json": "18a4a2380c985dbb9efb4d0643d77a1ddf1d3ef4b1cc331555cc15801c89d0dd",
+      "tests/fixtures/tokenizer_reference.py": "10e78df36c0a2b3a1ce072a8b9bf67ec076f76cc882fa5d4ce55434a37a88eff",
+      "tests/fixtures/tokenizer_reference.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+      "uv.lock": "6b5778657912ae1f544a3f6e87ee7811e4570b53f772d2cd74d8c45c2db9286a"
+    },
+    "binaries": {
+      "operations": "e9ffa37d479531d85799fa124bc8f951f614f4bcfdb8499779e655ae62d6552d",
+      "gqa_decode": "5657fdbb4a103a5fd5dcc59d4647ad5cd9a201f7b0e0975aafc9c60114ecbed0",
+      "gqa_prefill": "23f489c55c60b18a194109e07fdaa268edec8469c9faa2a9e7c832a3edc6e2a6",
+      "attention_sublayer": "5a01122cd8cdcd8e9f3f4b9d185f4a4d8b6b5252533f52cde6b792a240886b12",
+      "mlp": "eca678b6e5583790ec5aa26c88f67c216921906899f81c917059f1cbd6c28c5f",
+      "decoder_layer": "490da58056e16345511cb65e328fbfd04e4c60a31e310f10eb4a7474bfbf2b7f"
+    },
+    "commands": {
+      "operations": [
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/operations.mojo",
+        "-o",
+        "<binary>"
+      ],
+      "gqa_decode": [
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/attention_decode.mojo",
+        "-o",
+        "<binary>"
+      ],
+      "gqa_prefill": [
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/attention_prefill.mojo",
+        "-o",
+        "<binary>"
+      ],
+      "attention_sublayer": [
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/attention_sublayer.mojo",
+        "-o",
+        "<binary>"
+      ],
+      "mlp": [
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/mlp.mojo",
+        "-o",
+        "<binary>"
+      ],
+      "decoder_layer": [
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/decoder_layer.mojo",
+        "-o",
+        "<binary>"
+      ]
+    },
+    "environment": {
+      "hardware": {
+        "model": "Mac16,7",
+        "chip": "Apple M4 Pro",
+        "logical_cpu_count": "14",
+        "gpu_api": "metal",
+        "gpu_target": "metal:4-metal4",
+        "physical_memory_bytes": 25769803776
+      },
+      "software": {
+        "macos": "26.6.2",
+        "macos_build": "25G83",
+        "darwin": "25.6.0",
+        "xcode": [
+          "Xcode 26.6",
+          "Build version 17F113"
+        ],
+        "metal": [
+          "Apple metal version 32023.883 (metalfe-32023.883)",
+          "Target: air64-apple-darwin25.6.0",
+          "Thread model: posix"
+        ],
+        "uv": "uv 0.12.5 (210d1f678 2026-08-14 aarch64-apple-darwin)",
+        "mojo": "1.0.0",
+        "max": "26.5.0"
+      }
+    },
+    "attention_fixtures": {
+      "case_id": 7,
+      "case": [
+        14,
+        2,
+        64,
+        4096,
+        53
+      ],
+      "array_sha256": {
+        "7_input.npy": "080f80cb7f9b45a0da943696fa3c085fe41a305b8ecce2dfdb0de57279453868",
+        "7_weight.npy": "fa880d7b8e092a36910a6938faf265e8d5e0a5bcbbeac014900c08881b05a502",
+        "7_bias.npy": "fdac1558ffc650e784089322a2ca5e1852a30a3dd1db4cc37f2c45198f7b1b9e",
+        "7_norm_weight.npy": "a3f6004fd80ff3f6fecce8d78281d56a1d7a7854193e8800fda7553f1cb7e37b",
+        "7_output_weight.npy": "27ea4f5c5318d9eda531faaea626236191c6d64d026cac954b6b427c291ed32d",
+        "upstream_7_cosine.npy": "d5b96f212afc101e3d6612daf3a287ef3fd63fa6dc053f8b7b7033a12be7c8a3",
+        "upstream_7_sine.npy": "5ab5d637f34465e5b372bd3c2baa47f0cebf0a51565bd83e023032f2e15bf540",
+        "upstream_7_cache_key.npy": "8f322530e084f946586b6d01b45bd36908c449f48fc8d212fe41dae27f540b67",
+        "upstream_7_cache_value.npy": "eb3f63e774da43afa4feeb263efec9e8b9dcfdff1c7cc5deac89d1e851dec21b",
+        "fp32_7_projected.npy": "1eea206ee30c358a8d5560cdbcad9f9ece896e282f6ee679202c10bd00c35843",
+        "fp32_7_output.npy": "a9d91fd52c3567ac46052bd1760d2c1e614e4dbb9d499f8acfeb3eec89263f3e",
+        "fp32_7_attention.npy": "e2d8c65361fd2a0d56c90280140edbcf45c930147961a6b49edfd2abd4c34f4b"
+      },
+      "recipe": "Frozen synthetic case 7 (seed 53, T=4096); each workload uses suffix [T-R,T), upstream cache prefix and causal full-prefix outputs. Ring24 owns 24 distinct weights/inputs/caches. Odd entries negate X, Wqkv and Wo, preserving Q/K/V and negating branch/output. Two sign patterns; not 24 model layers. Python reads arrays only before timing.",
+      "arithmetic": "BF16 weights/activations/cache/output; FP32 GQA scores, softmax probabilities and accumulation; GQA output rounded to BF16 before Wo."
+    },
+    "mlp_fixtures": {
+      "case": "h896_i4864_r4096_s1601",
+      "arrays": {
+        "h896_i4864_r4096_s1601/A.npy": "ac01daad9161a0863f089948cb17a862dc4bd14079c833be5cefe4b06be12f66",
+        "h896_i4864_r4096_s1601/D.npy": "152371575d28f5bbff51e276259364f31914ff16dc2870b33b7cb4336b9fd2af",
+        "h896_i4864_r4096_s1601/G.npy": "93a544abcff7fe4285446fe276d8c45770b5f02c4eeb14ef56d39a402628f54b",
+        "h896_i4864_r4096_s1601/N.npy": "270d98fa728b3f650df42206346ff7bfd641afcb83b4c078040ee30afe920f42",
+        "h896_i4864_r4096_s1601/S.npy": "3fe5d36d85ece8258a12b1b4912e40e82e3763fa401e413f3496025739a22a34",
+        "h896_i4864_r4096_s1601/U.npy": "1dc705389cae43e6d159ef0f7481f18db83ba9f8cf0ca66c27ab9787e81b9280",
+        "h896_i4864_r4096_s1601/X.npy": "f550b901ac013f6415cc913ae5eb49de1be9b054e54a7fdab7d8fa46417e70ac",
+        "h896_i4864_r4096_s1601/Y.npy": "0a9c5786722a3eec92d6cf38ba4e882fac8c3161d23ff561e3858d8fcc76072a",
+        "h896_i4864_r4096_s1601/down.npy": "0fefa8465c5e67cc93304d3a2800ffefb971802288605b6976da1e21afc838fd",
+        "h896_i4864_r4096_s1601/gate.npy": "a2749aa748e7c281b454dfef8c6cdc15d3fa1300f55bf4f688f0a103c6e2b5e6",
+        "h896_i4864_r4096_s1601/norm.npy": "c498c08a396670a9162180a7349d93d0ea1ac41781769a11b31ade7340cd6651",
+        "h896_i4864_r4096_s1601/up.npy": "2967fe3e4ee343a5fc5eb011171a900a8a75065ec0e4fe223945c6e812cc940a"
+      },
+      "anchor_sha256": "6de9811889f14c9ece9999b7e4ee6116dfc41bb3dfac95486ec86f3582ec43e7",
+      "arithmetic": "BF16 weights and N/G/U/A/S/D/Y; FP32 reductions and SiLU; explicit BF16 stores between all seven stages.",
+      "inputs": "Prefixes of frozen development seed 1601, R=4096. Ring24 has 24 distinct copies of these nonuniform inputs and weights, sharing workspace. It is not a decoder stack or a claim of cold DRAM."
+    },
+    "decoder_fixtures": {
+      "case": "h896_i4864_nq14_nk2_d64_t4096_s4001_base",
+      "reference_sha256": "e351604090115cf4a7ec060aa594d37b9c8fd5e744afe4b0549bea90910afab4",
+      "arrays": {
+        "input_X": {
+          "dtype": "float32",
+          "logical_dtype": "bfloat16",
+          "sha256": "43f27b972fd252d0a76a67a3b476026c7efce9cac02612f5b97c358b4a2da710",
+          "shape": [
+            4096,
+            896
+          ]
+        },
+        "input_input_norm": {
+          "dtype": "float32",
+          "logical_dtype": "bfloat16",
+          "sha256": "957e4f378418b455402d4aaff3ba6f526aa50448e0b5ede8a1f7e61f80cd78d5",
+          "shape": [
+            896
+          ]
+        },
+        "input_qkv": {
+          "dtype": "float32",
+          "logical_dtype": "bfloat16",
+          "sha256": "c243ba19c965d2e2c184c11ec3e79170967b2eaaffaac760ba2a6418decd0274",
+          "shape": [
+            1152,
+            896
+          ]
+        },
+        "input_bias": {
+          "dtype": "float32",
+          "logical_dtype": "bfloat16",
+          "sha256": "f51443a47fbbba8c85678cb62a3bfe70b613e56b5258146f274a1b16f921d70a",
+          "shape": [
+            1152
+          ]
+        },
+        "input_wo": {
+          "dtype": "float32",
+          "logical_dtype": "bfloat16",
+          "sha256": "8470171f8d43e12a1b8ec5aa0379a6d72a7b8063fec7dbf51e5a9d76c6f9c5e8",
+          "shape": [
+            896,
+            896
+          ]
+        },
+        "input_post_norm": {
+          "dtype": "float32",
+          "logical_dtype": "bfloat16",
+          "sha256": "17da1c38b95e18f6132f5227e44fc8deee0c3409c5e129602b5060f564fe4b0b",
+          "shape": [
+            896
+          ]
+        },
+        "input_gate": {
+          "dtype": "float32",
+          "logical_dtype": "bfloat16",
+          "sha256": "74b78204709d7f13ffc1b31a34471dbd78e2a615cc1a6c48d6003832eeb27f5b",
+          "shape": [
+            4864,
+            896
+          ]
+        },
+        "input_up": {
+          "dtype": "float32",
+          "logical_dtype": "bfloat16",
+          "sha256": "c242c1596b83f77da1fdb817d94ed6b1d76bc501a20f751f5523b677e726e835",
+          "shape": [
+            4864,
+            896
+          ]
+        },
+        "input_down": {
+          "dtype": "float32",
+          "logical_dtype": "bfloat16",
+          "sha256": "567f2e225b8451f1b58bc45d41d8dda18dda5f82879afbcaa50dd360ff01b030",
+          "shape": [
+            896,
+            4864
+          ]
+        },
+        "full_cosine": {
+          "dtype": "float32",
+          "logical_dtype": "bfloat16",
+          "sha256": "d5b96f212afc101e3d6612daf3a287ef3fd63fa6dc053f8b7b7033a12be7c8a3",
+          "shape": [
+            4096,
+            64
+          ]
+        },
+        "full_sine": {
+          "dtype": "float32",
+          "logical_dtype": "bfloat16",
+          "sha256": "5ab5d637f34465e5b372bd3c2baa47f0cebf0a51565bd83e023032f2e15bf540",
+          "shape": [
+            4096,
+            64
+          ]
+        },
+        "full_B_att": {
+          "dtype": "float32",
+          "logical_dtype": "bfloat16",
+          "sha256": "0462e58948718ad1551fc480ed60aff49118a47256e37f0af3e4ce37feefb34b",
+          "shape": [
+            4096,
+            896
+          ]
+        },
+        "full_Z": {
+          "dtype": "float32",
+          "logical_dtype": "bfloat16",
+          "sha256": "9cdb8aefc8c3ab98afc2d247f98afc3ffeea9d8111e06c3e18a29035c3e73c77",
+          "shape": [
+            4096,
+            896
+          ]
+        },
+        "full_B_mlp": {
+          "dtype": "float32",
+          "logical_dtype": "bfloat16",
+          "sha256": "3981904bb325e2a2ac7f5610844b49ec5f40e4a93ed7f2ffd7e8a2d971b0f9d5",
+          "shape": [
+            4096,
+            896
+          ]
+        },
+        "full_Y": {
+          "dtype": "float32",
+          "logical_dtype": "bfloat16",
+          "sha256": "844b6dd039952e969988b9f797511ff39109d2f1a6886473e9b2514c78b35eea",
+          "shape": [
+            4096,
+            896
+          ]
+        }
+      }
+    }
+  },
+  "seed": 4001,
+  "repetitions": 10,
+  "warmup": 10,
+  "blocks": 4,
+  "dtype": "BF16 stored boundaries/cache; FP32 reductions and SDPA; materialized BF16 SiLU, product and residual operands.",
+  "timing": "Host enqueue through completion; hot one call, ring24 one synchronization per sweep divided by 24. Prefix preparation, allocation, verification and printing excluded. Each sample overwrites the same suffix at P=T-R after the previous sample completes; not growing-context generation.",
+  "inputs": "Frozen seed 4001, original X prefix/suffix; GPU-produced cache prefix. Hot one allocation set; ring24 distinct input/weight/cache sets with identical contents and shared scratch. Untimed adversarial smoke uses 24 distinct hidden-coordinate sign patterns.",
+  "started_utc": "2026-09-10T03:03:57.861495+00:00",
+  "conditions": [
+    {
+      "block": 1,
+      "before": {
+        "timestamp_utc": "2026-09-10T03:03:57.861534+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 79
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-10T03:11:50.302494+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 80
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    },
+    {
+      "block": 2,
+      "before": {
+        "timestamp_utc": "2026-09-10T03:11:50.610844+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 80
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-10T03:19:43.010175+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 79
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    },
+    {
+      "block": 3,
+      "before": {
+        "timestamp_utc": "2026-09-10T03:19:43.393577+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 79
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-10T03:27:35.605409+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 79
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    },
+    {
+      "block": 4,
+      "before": {
+        "timestamp_utc": "2026-09-10T03:27:35.998552+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 80
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      },
+      "after": {
+        "timestamp_utc": "2026-09-10T03:35:28.579260+00:00",
+        "battery": {
+          "power_source": "AC Power",
+          "charge": "100%",
+          "state": "charged",
+          "estimate": "0:00 remaining present: true"
+        },
+        "power_mode_raw": "0",
+        "thermal": [
+          "Note: No thermal warning level has been recorded",
+          "Note: No performance warning level has been recorded",
+          "Note: No CPU power status has been recorded"
+        ],
+        "memory": {
+          "physical_bytes": 25769803776,
+          "free_percent": 79
+        },
+        "displays": [
+          {
+            "name": "LG HDR 4K",
+            "connection": "unknown",
+            "resolution": "3008 x 1692 @ 60.00Hz",
+            "online": "spdisplays_yes"
+          }
+        ],
+        "power_settings": [
+          "powermode            0"
+        ]
+      }
+    }
+  ],
+  "selection": {
+    "schema": 1,
+    "kind": "decoder_policy_confirmed_selection",
+    "proposal_sha256": "bb3a09f3d40f837ae159d543e0b8dece1586cfb63bec71d3ff7b07b24e06f5fc",
+    "build_sha256": "a8ede8026f02a6194bafd57344f63bb17ccb949aee337c511e9fd83b54dde951",
+    "qualification": [
+      {
+        "study": "decoder_policies_confirmation_det_hot",
+        "run_sha256": "072a0a8c2df44971c1eb1183948f919b1f29bff49043c63b32b2be3100f6ac45",
+        "samples_sha256": "8c9a064029b220a021ae7118de1904adbf2e0d21a5ffe329ed49a6c5d06eba7f"
+      },
+      {
+        "study": "decoder_policies_confirmation_fast_0_hot",
+        "run_sha256": "bb8442aa7e51cab5fbdd5f9eb8f1e55d644009d345ff8af8c0f43f5955be2613",
+        "samples_sha256": "c3e3d9d6c69ccb02aba1214477c3da0ad45ab8113250c9c07757e35e390c7e6f"
+      },
+      {
+        "study": "decoder_policies_confirmation_det_ring",
+        "run_sha256": "751d084e58fe88cb853ab3140484a26237cd3de3b68079c6dd15d006410e7aa4",
+        "samples_sha256": "896f9718b4ebc1194988aecc7958953ea20f84c3f3a3a39985b217efc1c5c820"
+      }
+    ],
+    "cells": [
+      {
+        "query_rows": 16,
+        "rows": 16,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 16,
+        "rows": 16,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 256,
+        "rows": 256,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 256,
+        "rows": 256,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 4096,
+        "rows": 4096,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": true
+      },
+      {
+        "query_rows": 4096,
+        "rows": 4096,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": true
+      },
+      {
+        "query_rows": 16,
+        "rows": 256,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 21,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 16,
+        "rows": 256,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 64,
+        "rows": 4096,
+        "layers": 1,
+        "fast_control": 3,
+        "fast": 3,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 64,
+        "rows": 4096,
+        "layers": 24,
+        "fast_control": 3,
+        "fast": 3,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 256,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 256,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 4096,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 4096,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      }
+    ],
+    "fallbacks": {
+      "fast": 0,
+      "deterministic": 20
+    }
+  },
+  "runtime": {
+    "device": "Apple M4 Pro",
+    "api": "metal",
+    "correctness": "passed",
+    "measurement": "whole_decoder"
+  },
+  "completed_utc": "2026-09-10T03:35:29.697111+00:00",
+  "samples_sha256": "d47adc66387b7a827a4405157f2756597ec7639716722eab5ffb20311b4e64b7"
+}

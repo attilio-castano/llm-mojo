@@ -17,8 +17,15 @@ QKV, MMA projection and FP32 GQA studies. The [MLP sublayer](studies/mlp_sublaye
 composes RMSNorm, SwiGLU and residual under a frozen BF16 contract, with
 validated rowwise and tiled projection paths. The [decoder layer](studies/decoder_layer/selection.md)
 composes both sublayers and confirms workload-specific kernel choices for
-full prefill, cached prefill and decode. End-to-end model inference remains
-future work.
+full prefill, cached prefill and decode. The [Fast and Deterministic policies](studies/decoder_layer/policies.md)
+add separate execution contracts, fresh schedule-invariance checks and a measured
+latency comparison. Four-row weight reuse lowers deterministic prefill latency
+by 24–37% on the measured cells. The [full-model development candidate](docs/generation.md)
+composes 24 layers and native greedy generation. The new
+[consistency route](studies/model_generation/consistency.md) passes canonical HF
+qualification and native component checks; promotion is paused at its first
+full-model numerical accuracy failure.
+No full-model speedup or generation parity is established.
 
 The [CPU text tokenizer](docs/tokenizer.md) implements Qwen normalization, splitting,
 heap-based BPE, and streaming decoding in Mojo. Its command initializes the pinned
@@ -41,7 +48,9 @@ limits of the result. Start with a question:
 | [Attention sublayer](studies/attention_sublayer/README.md) | Do the individual kernel gains survive composition through Wo and the residual? |
 | [MLP sublayer](studies/mlp_sublayer/README.md) | Do tiled projections improve the complete SwiGLU block while preserving its BF16 boundaries? |
 | [Decoder layer](studies/decoder_layer/selection.md) | Which kernel combinations improve the complete decoder in each execution mode? |
+| [Decoder policies](studies/decoder_layer/policies.md) | How can deterministic execution preserve useful optimization, and what does it cost? |
 | [CPU tokenizer](studies/tokenizer/README.md) | When does heap BPE improve complete text encoding? |
+| [Full-model reference](studies/model_generation/README.md) | Does BF16 full prefill agree with cached execution across all 24 layers? |
 
 ![Full and incremental GQA prefill latency on Apple M4 Pro](studies/gqa_prefill/latency.png)
 

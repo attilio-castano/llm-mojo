@@ -1,0 +1,155 @@
+{
+  "schema": 1,
+  "kind": "decoder_policy_confirmed_selection",
+  "proposal_sha256": "bb3a09f3d40f837ae159d543e0b8dece1586cfb63bec71d3ff7b07b24e06f5fc",
+  "build_sha256": "a8ede8026f02a6194bafd57344f63bb17ccb949aee337c511e9fd83b54dde951",
+  "qualification": [
+    {
+      "study": "decoder_policies_confirmation_det_hot",
+      "run_sha256": "072a0a8c2df44971c1eb1183948f919b1f29bff49043c63b32b2be3100f6ac45",
+      "samples_sha256": "8c9a064029b220a021ae7118de1904adbf2e0d21a5ffe329ed49a6c5d06eba7f"
+    },
+    {
+      "study": "decoder_policies_confirmation_fast_0_hot",
+      "run_sha256": "bb8442aa7e51cab5fbdd5f9eb8f1e55d644009d345ff8af8c0f43f5955be2613",
+      "samples_sha256": "c3e3d9d6c69ccb02aba1214477c3da0ad45ab8113250c9c07757e35e390c7e6f"
+    },
+    {
+      "study": "decoder_policies_confirmation_det_ring",
+      "run_sha256": "751d084e58fe88cb853ab3140484a26237cd3de3b68079c6dd15d006410e7aa4",
+      "samples_sha256": "896f9718b4ebc1194988aecc7958953ea20f84c3f3a3a39985b217efc1c5c820"
+    }
+  ],
+  "cells": [
+    {
+      "query_rows": 16,
+      "rows": 16,
+      "layers": 1,
+      "fast_control": 0,
+      "fast": 0,
+      "deterministic": 22,
+      "unmeasured_extension": false
+    },
+    {
+      "query_rows": 16,
+      "rows": 16,
+      "layers": 24,
+      "fast_control": 0,
+      "fast": 0,
+      "deterministic": 22,
+      "unmeasured_extension": false
+    },
+    {
+      "query_rows": 256,
+      "rows": 256,
+      "layers": 1,
+      "fast_control": 0,
+      "fast": 0,
+      "deterministic": 22,
+      "unmeasured_extension": false
+    },
+    {
+      "query_rows": 256,
+      "rows": 256,
+      "layers": 24,
+      "fast_control": 0,
+      "fast": 0,
+      "deterministic": 22,
+      "unmeasured_extension": false
+    },
+    {
+      "query_rows": 4096,
+      "rows": 4096,
+      "layers": 1,
+      "fast_control": 0,
+      "fast": 0,
+      "deterministic": 22,
+      "unmeasured_extension": true
+    },
+    {
+      "query_rows": 4096,
+      "rows": 4096,
+      "layers": 24,
+      "fast_control": 0,
+      "fast": 0,
+      "deterministic": 22,
+      "unmeasured_extension": true
+    },
+    {
+      "query_rows": 16,
+      "rows": 256,
+      "layers": 1,
+      "fast_control": 0,
+      "fast": 21,
+      "deterministic": 22,
+      "unmeasured_extension": false
+    },
+    {
+      "query_rows": 16,
+      "rows": 256,
+      "layers": 24,
+      "fast_control": 0,
+      "fast": 0,
+      "deterministic": 22,
+      "unmeasured_extension": false
+    },
+    {
+      "query_rows": 64,
+      "rows": 4096,
+      "layers": 1,
+      "fast_control": 3,
+      "fast": 3,
+      "deterministic": 22,
+      "unmeasured_extension": false
+    },
+    {
+      "query_rows": 64,
+      "rows": 4096,
+      "layers": 24,
+      "fast_control": 3,
+      "fast": 3,
+      "deterministic": 22,
+      "unmeasured_extension": false
+    },
+    {
+      "query_rows": 1,
+      "rows": 256,
+      "layers": 1,
+      "fast_control": 0,
+      "fast": 0,
+      "deterministic": 20,
+      "unmeasured_extension": false
+    },
+    {
+      "query_rows": 1,
+      "rows": 256,
+      "layers": 24,
+      "fast_control": 0,
+      "fast": 0,
+      "deterministic": 20,
+      "unmeasured_extension": false
+    },
+    {
+      "query_rows": 1,
+      "rows": 4096,
+      "layers": 1,
+      "fast_control": 0,
+      "fast": 0,
+      "deterministic": 20,
+      "unmeasured_extension": false
+    },
+    {
+      "query_rows": 1,
+      "rows": 4096,
+      "layers": 24,
+      "fast_control": 0,
+      "fast": 0,
+      "deterministic": 20,
+      "unmeasured_extension": false
+    }
+  ],
+  "fallbacks": {
+    "fast": 0,
+    "deterministic": 20
+  }
+}

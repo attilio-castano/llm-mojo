@@ -10,13 +10,16 @@ from std.gpu import global_idx
 from std.math import ceildiv
 from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.linear import (
-    enqueue_linear_apple_gpu, enqueue_linear_prefill_mma_8x16_apple_gpu,
+    enqueue_linear_apple_gpu,
+    enqueue_linear_rowwise_rows_apple_gpu,
+    enqueue_linear_prefill_mma_8x16_apple_gpu,
     enqueue_linear_prefill_mma_tile_apple_gpu,
 )
 from llm_mojo.rope import enqueue_rope_apple_gpu
 from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
 from llm_mojo.attention_decode import (
     enqueue_grouped_query_attention_decode_apple_gpu,
+    enqueue_grouped_query_attention_consistent_apple_gpu,
 )
 from llm_mojo.attention_prefill import (
     enqueue_grouped_query_attention_prefill_apple_gpu,
@@ -263,10 +266,11 @@ def _enqueue_attention_qkv(
 
     The sublayer validates storage before calling. Mapping 0 keeps three
     rowwise launches; 1/2 use packed rowwise/8x16 MMA; 3/4 use 16x16/8x32 MMA.
+    Mapping 5 reuses each weight across four rows with the rowwise reduction.
     Packed mappings include an explicit layout copy.
     No allocation, synchronization, new arithmetic, or rounding in the copy.
     """
-    if mapping < 0 or mapping > 4:
+    if mapping < 0 or mapping > 7:
         raise Error("unknown QKV projection mapping")
     var h = weights.hidden
     var k = weights.kv_heads * weights.head_dim
@@ -299,8 +303,14 @@ def _enqueue_attention_qkv(
         enqueue_linear_prefill_mma_8x16_apple_gpu(ctx, normal, weight, bias, packed)
     elif mapping == 3:
         enqueue_linear_prefill_mma_tile_apple_gpu[16, 16](ctx, normal, weight, bias, packed)
-    else:
+    elif mapping == 4:
         enqueue_linear_prefill_mma_tile_apple_gpu[8, 32](ctx, normal, weight, bias, packed)
+    elif mapping == 5:
+        enqueue_linear_rowwise_rows_apple_gpu[4](ctx, normal, weight, bias, packed)
+    elif mapping == 6:
+        enqueue_linear_rowwise_rows_apple_gpu[8](ctx, normal, weight, bias, packed)
+    else:
+        enqueue_linear_rowwise_rows_apple_gpu[16](ctx, normal, weight, bias, packed)
     ctx.enqueue_function[_unpack_qkv[type_of(packed.layout), type_of(q.layout), type_of(key.layout)]](
         packed, q, key, value, Int32(rows), Int32(h), Int32(k),
         grid_dim=ceildiv(rows * (h + 2 * k), 128), block_dim=128,
@@ -312,13 +322,19 @@ def _enqueue_attention_wo(
     mut work: AttentionWorkspace, rows: Int, use_mma: Bool, tile: Int = 0,
 ) raises:
     """Shared Wo boundary for composition and isolated timing on identical data."""
-    if tile < 0 or tile > 2:
+    if tile < 0 or tile > 5:
         raise Error("unknown Wo tile mapping")
     var h = weights.hidden
     var a = TileTensor(work.attention, row_major(rows, h))
     var w = TileTensor(weights.output, row_major(h, h))
     var o = TileTensor(work.projected, row_major(rows, h))
-    if not use_mma:
+    if tile == 3:
+        enqueue_linear_rowwise_rows_apple_gpu[4](ctx, a, w, o)
+    elif tile == 4:
+        enqueue_linear_rowwise_rows_apple_gpu[8](ctx, a, w, o)
+    elif tile == 5:
+        enqueue_linear_rowwise_rows_apple_gpu[16](ctx, a, w, o)
+    elif not use_mma:
         enqueue_linear_apple_gpu(ctx, a, w, o)
     elif tile == 0:
         enqueue_linear_prefill_mma_8x16_apple_gpu(ctx, a, w, o)
@@ -343,14 +359,14 @@ def _validate_attention_sublayer[XL: TensorLayout](
     var k = nk * d
     var p = cache.length
     var t = p + r
-    if route < 0 or route > 10:
+    if route < 0 or route > 11:
         raise Error("unknown attention sublayer route")
-    if qkv_mapping < 0 or qkv_mapping > 4:
+    if qkv_mapping < 0 or qkv_mapping > 7:
         raise Error("unknown QKV projection mapping")
-    if wo_tile < 0 or wo_tile > 2:
+    if wo_tile < 0 or wo_tile > 5:
         raise Error("unknown Wo tile mapping")
     var launched_route = route
-    if route >= 6 and r == 1:
+    if route >= 6 and route <= 10 and r == 1:
         launched_route = 4
     elif (route == 4 or route == 5) and r != 1:
         launched_route = 3
@@ -375,7 +391,7 @@ def _validate_attention_sublayer[XL: TensorLayout](
         raise Error("materialized route requires probability scratch")
     if launched_route == 3 and not work.fp32_materialized:
         raise Error("FP32 route requires FP32 probability scratch")
-    if launched_route >= 9 and work.prefill_splits < (4 if launched_route == 9 else 8):
+    if (launched_route == 9 or launched_route == 10) and work.prefill_splits < (4 if launched_route == 9 else 8):
         raise Error("split prefill requires caller-allocated partial storage")
     if (route == 1 or route == 2 or route >= 4) and (nq != 14 or nk != 2 or d != 64):
         raise Error("optimized GQA requires Qwen dimensions")
@@ -409,6 +425,7 @@ def enqueue_attention_sublayer[
     Route 6 uses FP32 rolled-MMA prefill and G32 decode (actual route 4).
     Routes 7/8 use 16/8 query rows per FP32 tile; 9/10 use 4/8 KV splits
     with a separate FP32 merge. All use G32 for R=1 (actual route 4).
+    Route 11 uses the same FP32 G32 arithmetic for every query at every R.
     wo_mma selects only the bias-free output projection's 8x16 MMA mapping;
     it preserves BF16 projection output before the separate residual addition.
     It is an explicit experiment, independent of the GQA precision route.
@@ -484,6 +501,9 @@ def enqueue_attention_sublayer[
             ctx, q, keys, values,
             TileTensor(work.fp32_scratch, row_major(r, nq, t)), a,
         )
+    elif launched_route == 11:
+        enqueue_grouped_query_attention_consistent_apple_gpu(
+            ctx, q, keys, values, a, TileTensor(work.split, row_major(14, 1, 66)))
     elif launched_route == 6:
         enqueue_grouped_query_attention_prefill_apple_gpu[
             32, 32, MMA=True, SCHEDULE=2, FP32=True
@@ -577,14 +597,27 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     Wo, and also supports GQA mapping 4 (split8) to compose the two studies.
     Other projection/GQA combinations remain outside this bounded study.
     Zero keeps both 8x16 projections.
+    GQA mapping 5 is the consistency baseline: route 11 and rowwise projections
+    for every row count. Projection mapping 6 forces 8x16 MMA at every row
+    count; mappings 7/8/9 pack QKV and reuse rowwise weights across 4/8/16 rows.
     """
     comptime assert x.flat_rank == 2
-    if gqa_mapping < 0 or gqa_mapping > 4:
+    if gqa_mapping < 0 or gqa_mapping > 5:
         raise Error("unknown integrated GQA mapping")
-    if projection_mapping < 0 or projection_mapping > 5:
+    if projection_mapping < 0 or projection_mapping > 9:
         raise Error("unknown integrated projection mapping")
-    if projection_mapping and gqa_mapping and not (projection_mapping == 5 and gqa_mapping == 4):
+    if projection_mapping >= 6 and gqa_mapping != 5:
+        raise Error("policy projection mappings require consistent attention")
+    if projection_mapping and gqa_mapping and not ((projection_mapping == 5 and gqa_mapping == 4)
+        or (projection_mapping >= 6 and gqa_mapping == 5)):
         raise Error("projection study requires control GQA mapping")
+    if gqa_mapping == 5:
+        if projection_mapping >= 6:
+            # Padding inactive rows changes occupancy, not K reduction order.
+            return enqueue_attention_sublayer(ctx, weights, cache, work, x, 11,
+                projection_mapping == 6, 2 if projection_mapping == 6 else projection_mapping - 2,
+                0 if projection_mapping == 6 else projection_mapping - 4)
+        return enqueue_attention_sublayer(ctx, weights, cache, work, x, 11)
     var use_mma = Int(x.dim[0]()) >= 16
     var qkv = 2 if use_mma else 1
     if use_mma and projection_mapping >= 3:

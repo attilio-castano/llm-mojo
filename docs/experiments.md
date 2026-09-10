@@ -95,6 +95,22 @@ readable JSON summaries and hashes for compressed and original bytes. Loading
 verifies both hashes; decompression recovers every original check and failure.
 Historical source identities remain those of the measured or validated code.
 
+The decoder policy campaign uses bounded column blocks for its larger check
+streams (`*.columns.jsonl.xz`). A block stores ordered field layouts once,
+values by column, and the original record order. Replay reconstructs every
+check and verifies the SHA-256 of the original JSONL bytes before applying the
+unchanged numerical gates. This is lossless storage, not sampling or replacing
+checks with aggregate counts. Large manifests and evaluation metadata use the
+existing `.json.gz` format with small readable JSON summaries.
+
+Keep expanded numerical dumps outside Git. Before retaining a large numerical
+archive, remove repeated metadata losslessly and record its actual compressed
+size. If it remains too large for the study, use durable external storage with
+hash-verified retrieval; a hash alone does not make evidence available. Do not
+replace complete acceptance coverage with a sample to meet a storage target.
+The [decoder storage receipt](../studies/decoder_layer/policies_storage.json)
+records both representations and their identities.
+
 Generated oracle arrays belong in `build/`; their independent generators,
 pinned dependencies and frozen data hashes belong in tests. Model weights,
 compiled binaries, full traces and temporary logs remain outside Git.

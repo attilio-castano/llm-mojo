@@ -1,0 +1,719 @@
+{
+  "kind": "model_schedule_consistency_study",
+  "status": "canonical reference qualified; native full-model accuracy failed; promotion paused",
+  "declaration": {
+    "version": "qwen-schedule-consistency-v1",
+    "model_revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+    "scope": "Batch one; same hardware and compiled binary; every stored boundary, active KV prefix and emitted logit must be byte-identical across schedules. Cross-engine comparison uses separate frozen numerical gates.",
+    "precision": "Existing BF16 weights and stored boundaries; FP32 reductions; no precision upgrade.",
+    "reference_policy": "Actual pinned HF Qwen with one contiguous SDPA query and its causal prefix; original math SDPA and BF16 output. LM head uses one row per requested endpoint.",
+    "accuracy": {
+      "source": "studies/model_generation/frozen-budgets.json",
+      "sha256": "ddd59409120d7ee55422576afe81f4f323257801c72287f505ba60259c07f014",
+      "gates": {
+        "cache_key_0": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_key_1": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_key_10": {
+          "rtol": 0.03125,
+          "atol": 0.09375,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_key_11": {
+          "rtol": 0.03125,
+          "atol": 0.15625,
+          "relative_rms": 0.01953125,
+          "exact": false
+        },
+        "cache_key_12": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_key_13": {
+          "rtol": 0.03125,
+          "atol": 0.125,
+          "relative_rms": 0.01953125,
+          "exact": false
+        },
+        "cache_key_14": {
+          "rtol": 0.03125,
+          "atol": 0.125,
+          "relative_rms": 0.01953125,
+          "exact": false
+        },
+        "cache_key_15": {
+          "rtol": 0.03125,
+          "atol": 0.125,
+          "relative_rms": 0.01953125,
+          "exact": false
+        },
+        "cache_key_16": {
+          "rtol": 0.03125,
+          "atol": 0.1875,
+          "relative_rms": 0.02734375,
+          "exact": false
+        },
+        "cache_key_17": {
+          "rtol": 0.03125,
+          "atol": 0.09375,
+          "relative_rms": 0.01953125,
+          "exact": false
+        },
+        "cache_key_18": {
+          "rtol": 0.03125,
+          "atol": 0.09375,
+          "relative_rms": 0.01953125,
+          "exact": false
+        },
+        "cache_key_19": {
+          "rtol": 0.03125,
+          "atol": 0.125,
+          "relative_rms": 0.01953125,
+          "exact": false
+        },
+        "cache_key_2": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_key_20": {
+          "rtol": 0.03125,
+          "atol": 0.09375,
+          "relative_rms": 0.01953125,
+          "exact": false
+        },
+        "cache_key_21": {
+          "rtol": 0.03125,
+          "atol": 0.125,
+          "relative_rms": 0.01953125,
+          "exact": false
+        },
+        "cache_key_22": {
+          "rtol": 0.03125,
+          "atol": 0.125,
+          "relative_rms": 0.01953125,
+          "exact": false
+        },
+        "cache_key_23": {
+          "rtol": 0.03125,
+          "atol": 0.09375,
+          "relative_rms": 0.01953125,
+          "exact": false
+        },
+        "cache_key_3": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_key_4": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_key_5": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_key_6": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_key_7": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_key_8": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_key_9": {
+          "rtol": 0.03125,
+          "atol": 0.09375,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_value_0": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_value_1": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_value_10": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.0390625,
+          "exact": false
+        },
+        "cache_value_11": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.02734375,
+          "exact": false
+        },
+        "cache_value_12": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.04296875,
+          "exact": false
+        },
+        "cache_value_13": {
+          "rtol": 0.03125,
+          "atol": 0.125,
+          "relative_rms": 0.04296875,
+          "exact": false
+        },
+        "cache_value_14": {
+          "rtol": 0.03125,
+          "atol": 0.09375,
+          "relative_rms": 0.04296875,
+          "exact": false
+        },
+        "cache_value_15": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.03515625,
+          "exact": false
+        },
+        "cache_value_16": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "cache_value_17": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "cache_value_18": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.03125,
+          "exact": false
+        },
+        "cache_value_19": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.03515625,
+          "exact": false
+        },
+        "cache_value_2": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_value_20": {
+          "rtol": 0.03125,
+          "atol": 0.09375,
+          "relative_rms": 0.02734375,
+          "exact": false
+        },
+        "cache_value_21": {
+          "rtol": 0.03125,
+          "atol": 0.15625,
+          "relative_rms": 0.03125,
+          "exact": false
+        },
+        "cache_value_22": {
+          "rtol": 0.03125,
+          "atol": 0.125,
+          "relative_rms": 0.02734375,
+          "exact": false
+        },
+        "cache_value_23": {
+          "rtol": 0.03125,
+          "atol": 0.15625,
+          "relative_rms": 0.03125,
+          "exact": false
+        },
+        "cache_value_3": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "cache_value_4": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "cache_value_5": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.01953125,
+          "exact": false
+        },
+        "cache_value_6": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "cache_value_7": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.02734375,
+          "exact": false
+        },
+        "cache_value_8": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.02734375,
+          "exact": false
+        },
+        "cache_value_9": {
+          "rtol": 0.03125,
+          "atol": 0.09375,
+          "relative_rms": 0.02734375,
+          "exact": false
+        },
+        "final_norm": {
+          "rtol": 0.03125,
+          "atol": 2.40625,
+          "relative_rms": 0.04296875,
+          "exact": false
+        },
+        "hidden_0": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": true
+        },
+        "hidden_1": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "hidden_10": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "hidden_11": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "hidden_12": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "hidden_13": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "hidden_14": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "hidden_15": {
+          "rtol": 0.03125,
+          "atol": 0.09375,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "hidden_16": {
+          "rtol": 0.03125,
+          "atol": 0.09375,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "hidden_17": {
+          "rtol": 0.03125,
+          "atol": 0.09375,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "hidden_18": {
+          "rtol": 0.03125,
+          "atol": 0.09375,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "hidden_19": {
+          "rtol": 0.03125,
+          "atol": 0.09375,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "hidden_2": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "hidden_20": {
+          "rtol": 0.03125,
+          "atol": 0.09375,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "hidden_21": {
+          "rtol": 0.03125,
+          "atol": 0.15625,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "hidden_22": {
+          "rtol": 0.03125,
+          "atol": 0.125,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "hidden_23": {
+          "rtol": 0.03125,
+          "atol": 0.15625,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "hidden_24": {
+          "rtol": 0.03125,
+          "atol": 0.375,
+          "relative_rms": 0.03515625,
+          "exact": false
+        },
+        "hidden_3": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "hidden_4": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "hidden_5": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.015625,
+          "exact": false
+        },
+        "hidden_6": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.01953125,
+          "exact": false
+        },
+        "hidden_7": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.01953125,
+          "exact": false
+        },
+        "hidden_8": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "hidden_9": {
+          "rtol": 0.03125,
+          "atol": 0.0625,
+          "relative_rms": 0.0234375,
+          "exact": false
+        },
+        "logits": {
+          "rtol": 0.03125,
+          "atol": 0.46875,
+          "relative_rms": 0.046875,
+          "exact": false
+        }
+      },
+      "purpose": "Unchanged historical budgets adopted as cross-engine acceptance hypotheses before candidate exposure, not a claim that historical schedule confirmation passed."
+    },
+    "development_cases": [
+      {
+        "length": 1,
+        "seed": 9104
+      },
+      {
+        "length": 4,
+        "seed": 9107
+      },
+      {
+        "length": 15,
+        "seed": 9118
+      },
+      {
+        "length": 16,
+        "seed": 9119
+      },
+      {
+        "length": 17,
+        "seed": 9120
+      },
+      {
+        "length": 63,
+        "seed": 9166
+      },
+      {
+        "length": 64,
+        "seed": 9167
+      },
+      {
+        "length": 65,
+        "seed": 9168
+      },
+      {
+        "length": 129,
+        "seed": 9232
+      },
+      {
+        "length": 257,
+        "seed": 9360
+      },
+      {
+        "length": 1024,
+        "seed": 10127
+      },
+      {
+        "length": 1025,
+        "seed": 10128
+      },
+      {
+        "length": 4096,
+        "seed": 13199
+      }
+    ],
+    "schedules": {
+      "exhaustive_through": 4,
+      "tokenwise_through": 257,
+      "ragged_cycle": [
+        1,
+        15,
+        16,
+        31,
+        32,
+        63,
+        64
+      ],
+      "long_suffix": [
+        16,
+        1
+      ],
+      "include_first_and_last_single": true,
+      "repeat_full": true
+    },
+    "reserved_cases": [
+      {
+        "seed": 19013,
+        "length": 17
+      },
+      {
+        "seed": 19013,
+        "length": 257
+      },
+      {
+        "seed": 19013,
+        "length": 4096
+      },
+      {
+        "seed": 19031,
+        "length": 1
+      },
+      {
+        "seed": 19031,
+        "length": 65
+      },
+      {
+        "seed": 19031,
+        "length": 1024
+      }
+    ],
+    "reserved_text": "<|im_start|>user\nReply with only the word yes.<|im_end|>\n<|im_start|>assistant\n",
+    "reserved_text_max_new_tokens": 16,
+    "generation": {
+      "capacity": 4096,
+      "batch": 1,
+      "selection": "raw-logit argmax, lowest token ID on exact ties, no repetition penalty or sampling transforms",
+      "stop_ids": [
+        151645,
+        151643
+      ],
+      "nonfinite_logits": "error and invalidate execution",
+      "empty_prompt": "reject",
+      "max_new_tokens_zero": "return no output without model execution",
+      "capacity_exhaustion": "stop at min(max_new_tokens, capacity-prompt_length)",
+      "terminal_token": "append to history; need not be cached; omit special tokens from visible output"
+    },
+    "optimization_budget": {
+      "additional_studies": 3,
+      "challengers_per_study": 2,
+      "independent_confirmations_per_study": 1
+    },
+    "stop_conditions": [
+      "Any required precision change or tolerance increase",
+      "Any final reserved failure",
+      "Optimization budget exhausted: retain consistent baseline and report measured costs"
+    ],
+    "candidate_outputs_observed": false,
+    "reserved_outputs_observed": false
+  },
+  "declaration_sha256": "567f03fd1cf0705836783898fc424fd38c44bfadd30db5fbdc2b26341028f23c",
+  "hardware": "Apple M4 Pro",
+  "backend": "metal",
+  "macos": "26.6.2",
+  "mojo": "1.0.0",
+  "max": "26.5.0",
+  "numpy_native_tooling": "2.5.2",
+  "files": {
+    "consistency-reference.json.gz": {
+      "sha256": "0036111dad5c941915dbf801ba39764b75ac8a04629b7f5eba7f7b81f145ba29",
+      "uncompressed_sha256": "56cb5e71f3cb808f100c02487a28a479b46b3734cdd4a3a089b8245f454483b2",
+      "uncompressed_bytes": 367432
+    },
+    "consistency-observations.jsonl.gz": {
+      "sha256": "7c69e92ccf7d9561f045e4c3ad1b4e671da646194e9964eecfb1b4a58ffde2c2",
+      "uncompressed_sha256": "c1f7468605c4606f6991921cda4eaf4f912e7ee2fdc716d3a880070f632e531f",
+      "uncompressed_bytes": 26501600
+    },
+    "consistency-layer-records.jsonl.gz": {
+      "sha256": "9745b8ec86eaf66751385a02acf60b9558c067362b439feee6f8b7aba4be8579",
+      "uncompressed_sha256": "5635b22581ade14110f1659d132506565c28769e471e187654d43161254fbfe6",
+      "uncompressed_bytes": 4154496
+    },
+    "consistency-native.json.gz": {
+      "sha256": "495448b6397f6aaacaec6d109d02aa53f02e72a5546a9edad4213758085a5f04",
+      "uncompressed_sha256": "3fb981831f7e237eb18de338a4b3fe1a37b7af19e0294aac53fe93e3606916ab",
+      "uncompressed_bytes": 521432
+    }
+  },
+  "reserved_outputs_observed": false,
+  "optimization_studies_used": 0,
+  "scope": "Numerical evidence only. Native exact schedules established for primitive and one-layer cases; full-model schedule, generation and performance acceptance remain pending.",
+  "regression_validation": {
+    "passed": true,
+    "python_tests": 119,
+    "fixture_anchors_passed": true,
+    "native_suite_and_smoke_passed": true,
+    "execution": "Documented full validation stopped at the stale GQA mapping-5 negative test. Corrected sublayer test passed; all remaining native files and smoke checks then completed. Final Python suite includes the schedule-omission regression.",
+    "logs": {
+      "initial": {
+        "path": "/private/tmp/qwen-consistency-validation-v1.log",
+        "sha256": "f54fdd5edbb5cdd7c18a1b89c24fdf21e454349c9ce85827cacee6e24031dcf4",
+        "compact_summary": [
+          "All generated oracles match the frozen anchors.",
+          "Summary [ 9.749 ] 11 tests run: 11 passed , 0 failed , 0 skipped ",
+          "Summary [ 1132.526 ] 9 tests run: 9 passed , 0 failed , 0 skipped ",
+          "Summary [ 6.518 ] 1 tests run: 1 passed , 0 failed , 0 skipped ",
+          "Summary [ 255141.840 ] 2 tests run: 2 passed , 0 failed , 0 skipped ",
+          "prefill case 0 1 1 all 16 routes passed",
+          "prefill case 1 2 2 all 16 routes passed",
+          "prefill case 2 7 7 all 16 routes passed",
+          "prefill case 3 8 8 all 16 routes passed",
+          "prefill case 4 9 9 all 16 routes passed",
+          "prefill case 5 15 15 all 16 routes passed",
+          "prefill case 6 16 16 all 16 routes passed",
+          "prefill case 7 17 17 all 16 routes passed",
+          "prefill case 8 31 31 all 16 routes passed",
+          "prefill case 9 32 32 all 16 routes passed",
+          "prefill case 10 33 33 all 16 routes passed",
+          "prefill case 11 63 63 all 16 routes passed",
+          "prefill case 12 64 64 all 16 routes passed",
+          "prefill case 13 65 65 all 16 routes passed",
+          "prefill case 14 2 7 all 16 routes passed",
+          "prefill case 15 7 33 all 16 routes passed",
+          "prefill case 16 16 256 all 16 routes passed",
+          "prefill case 17 17 257 all 16 routes passed",
+          "prefill case 18 16 1024 all 16 routes passed",
+          "prefill case 19 16 4095 all 16 routes passed",
+          "prefill case 20 16 4096 all 16 routes passed",
+          "prefill case 21 7 33 all 16 routes passed",
+          "prefill case 22 7 33 all 16 routes passed",
+          "prefill case 23 7 33 all 16 routes passed",
+          "prefill case 24 7 33 all 16 routes passed",
+          "prefill case 25 33 65 all 16 routes passed",
+          "prefill case 26 256 256 all 16 routes passed",
+          "prefill case 27 1024 1024 all 16 routes passed",
+          "prefill case 28 4096 4096 all 16 routes passed",
+          "Summary [ 8415.167 ] 8 tests run: 8 passed , 0 failed , 0 skipped ",
+          "Summary [ 17.287 ] 2 tests run: 2 passed , 0 failed , 0 skipped ",
+          "Summary [ 23405.304 ] 6 tests run: 5 passed , 1 failed , 0 skipped "
+        ]
+      },
+      "sublayer_retry": {
+        "path": "/private/tmp/qwen-consistency-sublayer-v2.log",
+        "sha256": "c1492653da46e807da8cfc09b23b516d815fe63e5bd0ef3a1224690976350a7f",
+        "compact_summary": [
+          "Summary [ 23239.678 ] 6 tests run: 6 passed , 0 failed , 0 skipped "
+        ]
+      },
+      "remaining_native_and_smoke": {
+        "path": "/private/tmp/qwen-consistency-validation-remainder-v1.log",
+        "sha256": "c11be38a14b3e958f88347f34aa18ae7193544aa7b4aedfeef36518ad4826730",
+        "compact_summary": [
+          "Summary [ 5788.932 ] 1 tests run: 1 passed , 0 failed , 0 skipped ",
+          "Summary [ 6150.704 ] 3 tests run: 3 passed , 0 failed , 0 skipped ",
+          "Summary [ 48985.324 ] 5 tests run: 5 passed , 0 failed , 0 skipped ",
+          "Summary [ 153975.764 ] 4 tests run: 4 passed , 0 failed , 0 skipped ",
+          "Summary [ 0.001 ] 1 tests run: 1 passed , 0 failed , 0 skipped ",
+          "Summary [ 285.563 ] 35 tests run: 35 passed , 0 failed , 0 skipped ",
+          "Summary [ 1072322.523 ] 2 tests run: 2 passed , 0 failed , 0 skipped ",
+          "Summary [ 8.247 ] 2 tests run: 2 passed , 0 failed , 0 skipped ",
+          "Summary [ 5.012 ] 7 tests run: 7 passed , 0 failed , 0 skipped ",
+          "Summary [ 7.429 ] 10 tests run: 10 passed , 0 failed , 0 skipped ",
+          "Summary [ 671.062 ] 7 tests run: 7 passed , 0 failed , 0 skipped ",
+          "Tokenizer exact parity: 3361 text cases; 151923 decode cases; scan, heap and streaming passed",
+          "Tokenizer exact parity: 2061 text cases; 258 decode cases; scan, heap and streaming passed",
+          "linear all measurement routes passed",
+          "rms_norm all measurement routes passed",
+          "rope all measurement routes passed",
+          "prefill all 16 measurement routes passed in both modes",
+          "attention sublayer FP32, projections, GQA parallelism and decode measurement routes passed in both modes",
+          "MLP projection variants in both modes, all seven stages and isolated projection ring routes passed",
+          "decoder complete workload grid and adversarial rings passed on Metal"
+        ]
+      },
+      "final_python": {
+        "path": "/private/tmp/qwen-consistency-python-final.log",
+        "sha256": "f04e522436ba231d6384952b2718ef8e2df64d138f2032e9f33d0b5e7917ebc7",
+        "compact_summary": [
+          "Ran 119 tests in 4.350s"
+        ]
+      }
+    }
+  }
+}

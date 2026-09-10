@@ -13,6 +13,287 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class DecoderToolingTests(unittest.TestCase):
+    def test_compact_holdout_manifest_preserves_original_fixture_identity(self):
+        import gzip
+        from llm_mojo._repository import repository_root
+        path=repository_root()/'studies/decoder_layer/policies_holdout_manifest.json'
+        wrapper=json.loads(path.read_text())
+        with tempfile.TemporaryDirectory() as tmp:
+            original=Path(tmp)/'manifest.json'
+            original.write_bytes(gzip.decompress((path.parent/wrapper['record']).read_bytes()))
+            expected=validation.holdout_manifest(original,verify_arrays=False)
+            self.assertEqual(validation.holdout_manifest(path,verify_arrays=False),expected)
+            self.assertEqual(expected[1]['manifest.json'],wrapper['uncompressed_sha256'])
+
+    def test_column_archive_roundtrip_preserves_bytes_and_block_order(self):
+        import gzip,hashlib,lzma
+        records=[dict(case='escaped\n\"é',value=-0.0,items=[None,True,2**60,1e-30]),
+                 dict(kind='negative',failed=1,expected_failure=True)]
+        records=(records*4097)+[dict(value=1.0000000000000002)]
+        raw=''.join(json.dumps(r)+'\n' for r in records).encode()
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);source=root/'checks.jsonl.gz';source.write_bytes(gzip.compress(raw))
+            target=root/'checks.columns.jsonl.xz'
+            spec=validation.compact_checks(source,target)
+            restored=''.join(json.dumps(r)+'\n' for r in validation.check_records(target)).encode()
+            self.assertEqual(restored,raw)
+            self.assertEqual(spec['uncompressed_sha256'],hashlib.sha256(raw).hexdigest())
+            self.assertEqual(spec['records'],len(records))
+            self.assertEqual(spec['uncompressed_bytes'],len(raw))
+            original=target.read_bytes()
+            with self.assertRaises(FileExistsError):validation.compact_checks(source,target)
+            self.assertEqual(target.read_bytes(),original)
+            # Missing columns, reordered schema IDs, or unused rows must not be
+            # silently dropped by zip/index reconstruction.
+            blocks=lzma.decompress(original).splitlines(keepends=True)
+            for mutation in ('short_column','unused_row','negative_id','duplicate_key'):
+                order,tables=json.loads(blocks[1])
+                if mutation=='short_column':tables[0][1][0].pop()
+                elif mutation=='unused_row':order.pop()
+                elif mutation=='negative_id':order[0]=-1
+                else:tables[0][0][1]=tables[0][0][0]
+                target.write_bytes(lzma.compress(blocks[0]+(json.dumps([order,tables])+'\n').encode()))
+                with self.subTest(mutation=mutation),self.assertRaises(ValueError):
+                    list(validation.check_records(target))
+            target.write_bytes(original[:-8])
+            with self.assertRaises((EOFError,lzma.LZMAError)):
+                list(validation.check_records(target))
+            target.unlink();source.write_bytes(gzip.compress(b'{"value":1}\n'))
+            with self.assertRaisesRegex(ValueError,'canonical'):validation.compact_checks(source,target)
+            self.assertFalse(target.exists())
+
+    def test_column_receipt_replays_gates_and_rejects_rehashed_omissions(self):
+        import gzip,hashlib
+        import test_decoder_validation as baseline_tests
+        fixture=baseline_tests.NumericalReceiptTests();fixture.setUp()
+        raw=''.join(json.dumps(r)+'\n' for r in fixture.records).encode()
+        native=b'TestSuite summary: 1 passed , 0 failed , 0 skipped\n'
+        digest=lambda data:hashlib.sha256(data).hexdigest()
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);source=root/'checks.jsonl';source.write_bytes(raw)
+            target=root/'checks.columns.jsonl.xz';spec=validation.compact_checks(source,target)
+            output=gzip.compress(native);(root/'output.gz').write_bytes(output)
+            record=dict(status='passed',checks_sha256=digest(raw),output_sha256=digest(native))
+            wrapper=dict(format='decoder-policy-numerics-columns-v1',evaluation=record,
+                original_evaluation_sha256='a'*64,checks=spec,
+                output=dict(file='output.gz',sha256=digest(output),uncompressed_sha256=digest(native),original_sha256=digest(native)))
+            receipt=root/'archive.json';receipt.write_text(json.dumps(wrapper))
+            observed,path,identity=validation.read_policy_evidence(receipt)
+            self.assertEqual((observed,identity),(record,'a'*64))
+            self.assertEqual(validation.validate_results(path,fixture.cases),validation.validate_results(source,fixture.cases))
+            # The existing compact JSON wrapper also works for large receipts.
+            receipt_raw=receipt.read_bytes();packed=gzip.compress(receipt_raw)
+            (root/'archive.json.gz').write_bytes(packed)
+            receipt.write_text(json.dumps(dict(format='lossless-json-gzip-v1',record='archive.json.gz',
+                sha256=digest(packed),uncompressed_sha256=digest(receipt_raw))))
+            self.assertEqual(validation.read_policy_evidence(receipt),(observed,path,identity))
+            for key,value in (('sha256','0'*64),('uncompressed_sha256','0'*64),('records',spec['records']-1),('uncompressed_bytes',0)):
+                altered=copy.deepcopy(wrapper);altered['checks'][key]=value
+                receipt.write_text(json.dumps(altered))
+                with self.subTest(key=key),self.assertRaises(ValueError):validation.read_policy_evidence(receipt)
+            # Even updating the receipt to match a valid archive cannot waive a
+            # missing protected-storage check in the numerical validator.
+            partial=[r for r in fixture.records if r.get('label')!='aw_qkv']
+            source.write_text(''.join(json.dumps(r)+'\n' for r in partial))
+            target.unlink();wrapper['checks']=validation.compact_checks(source,target)
+            wrapper['evaluation']['checks_sha256']=wrapper['checks']['uncompressed_sha256']
+            receipt.write_text(json.dumps(wrapper))
+            _,path,_=validation.read_policy_evidence(receipt)
+            with self.assertRaises(ValueError):validation.validate_results(path,fixture.cases)
+
+    def test_recorded_policy_lookup_is_independent_of_live_dispatch(self):
+        frozen=copy.deepcopy(contract._POLICY_LOOKUP)
+        for cell in frozen['cells']:
+            if (cell['query_rows'],cell['rows'],cell['layers'])==(16,16,1):
+                cell.update(deterministic=22,fast=21)
+        different=dict(cells=[],fallbacks=dict(fast=0,deterministic=20))
+        with patch.object(contract,'_POLICY_LOOKUP',different):
+            self.assertEqual(contract.policy_configuration(True,16,16),20)
+            self.assertEqual(contract.policy_configuration(True,16,16,lookup=frozen),22)
+            self.assertEqual(contract.execution_mappings(101,16,16,frozen),(5,7,19))
+            self.assertEqual(contract.execution_mappings(100,16,16,frozen),(5,6,7))
+            self.assertEqual(contract.policy_configuration(True,17,17,lookup=frozen),20)
+            self.assertEqual(contract.policy_configuration(False,64,4095,lookup=frozen),0)
+        for cell in contract._POLICY_LOOKUP['cells']:
+            for deterministic,policy in ((False,'fast'),(True,'deterministic')):
+                self.assertEqual(contract.policy_configuration(deterministic,cell['query_rows'],
+                    cell['rows'],cell['layers']),cell[policy])
+
+    def test_compressed_numerical_archive_preserves_and_rechecks_all_records(self):
+        import gzip,hashlib
+        import test_decoder_validation as baseline_tests
+        fixture=baseline_tests.NumericalReceiptTests();fixture.setUp()
+        raw=''.join(json.dumps(r)+'\n' for r in fixture.records).encode()
+        native=b'TestSuite summary: 1 passed , 0 failed , 0 skipped\n'
+        digest=lambda data:hashlib.sha256(data).hexdigest()
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);checks=root/'checks.jsonl';output=root/'output.log'
+            checks.write_bytes(raw);output.write_bytes(native)
+            record=dict(status='passed',exit_code=0,checks_sha256=digest(raw),output_sha256=digest(native))
+            receipt=root/'evaluation.json';receipt.write_text(json.dumps(record))
+            original_sha=validation.sha(receipt)
+            wrapper=dict(format='decoder-policy-numerics-gzip-v1',evaluation=record,
+                original_evaluation_sha256=original_sha)
+            for field,data in (('checks',raw),('output',native)):
+                name=field+'.gz';compressed=gzip.compress(data,mtime=0)
+                (root/name).write_bytes(compressed)
+                wrapper[field]=dict(file=name,sha256=digest(compressed),uncompressed_sha256=digest(data))
+            wrapper['output']['original_sha256']=digest(native)
+            archive=root/'archive.json'
+            archive.write_text(json.dumps(wrapper))
+            observed,path,identity=validation.read_policy_evidence(archive)
+            self.assertEqual((observed,identity),(record,original_sha))
+            self.assertEqual(validation.validate_results(path,fixture.cases),validation.validate_results(checks,fixture.cases))
+            self.assertEqual(validation.read_policy_evidence(root),(record,checks,original_sha))
+            # A syntactically valid, freshly hashed archive still needs every gate.
+            partial=''.join(json.dumps(r)+'\n' for r in fixture.records[1:]).encode()
+            bad=root/'partial.jsonl.gz';bad.write_bytes(gzip.compress(partial,mtime=0))
+            with self.assertRaises(ValueError):validation.validate_results(bad,fixture.cases)
+            for field in ('checks','output'):
+                altered=copy.deepcopy(wrapper);altered[field]['uncompressed_sha256']='0'*64
+                archive.write_text(json.dumps(altered))
+                with self.assertRaises(ValueError):validation.read_policy_evidence(archive)
+            altered=copy.deepcopy(wrapper);altered['checks']['file']='../checks.gz'
+            archive.write_text(json.dumps(altered))
+            with self.assertRaises(ValueError):validation.read_policy_evidence(archive)
+            archive.write_text(json.dumps(wrapper))
+            (root/'checks.gz').write_bytes((root/'checks.gz').read_bytes()[:-8])
+            with self.assertRaises(ValueError):validation.read_policy_evidence(archive)
+
+    def test_final_confirmation_is_frozen_and_cost_uses_the_accepted_lookup(self):
+        from llm_mojo.benchmarks import study
+        declaration=copy.deepcopy(contract.policy_declaration())
+        basis=copy.deepcopy(declaration['rounds'][1]['incumbent_decision'])
+        basis.update(round=2,compatible_row_reuse=True,deterministic_family=[20,22,23,24])
+        for cell in basis['proposals']:
+            if cell['query_rows']>1:cell['deterministic']=24
+        declaration['final_confirmation']=json.loads(json.dumps(contract.propose_policy_confirmation(basis,declaration)))
+        before=copy.deepcopy(declaration)
+        build=dict(repository=dict(dirty=False),sources={contract.POLICY_PATH:contract.sha_json(declaration)})
+        specs=contract.policy_confirmation_specs(declaration)
+        self.assertEqual(len(declaration['final_confirmation']['cells']),14)
+        def data(spec):
+            return [dict(**w,layers=l,candidate=c,block=b,arm=a,
+                variant=spec['control'] if a=='control' else c,repetition=n,
+                us=100. if a=='control' or c==spec['control'] else
+                    120. if (w['query_rows'],w['rows'],l,b)==(256,256,24,1) else 80.)
+                for w,l,c in study.comparisons(spec) for b in range(1,5)
+                for a in ('control','candidate') for n in range(10)]
+        self.assertEqual(sum(len(data(s)) for s in specs.values()),2080)
+        def load(path,prefix=''):
+            name=prefix.removesuffix('_') if prefix else Path(path).name;spec=specs[name]
+            samples=data(spec)
+            return dict(study=name,build=build,specification=json.loads(json.dumps(spec)),samples_sha256='samples'),samples,study.summarize(samples,spec)
+        with patch.object(study,'load_run',side_effect=load),patch.object(contract,'sha',return_value='0'*64):
+            accepted=contract.policy_confirmed_selection(Path('/unused'),build,declaration)
+        self.assertEqual(declaration,before)
+        bad=next(c for c in accepted['cells'] if (c['query_rows'],c['rows'],c['layers'])==(256,256,24))
+        self.assertEqual(bad['deterministic'],20)
+        self.assertEqual(next(c for c in accepted['cells'] if (c['query_rows'],c['rows'],c['layers'])==(16,256,1))['fast'],21)
+        # Equal policies need one complete self comparison and still appear in cost.
+        accepted['cells'][0]['deterministic']=accepted['cells'][0]['fast']
+        costs=contract.policy_cost_specs(accepted)
+        def cost(path,prefix=''):
+            name=prefix.removesuffix('_') if prefix else Path(path).name;spec=costs[name]
+            samples=data(spec)
+            return dict(study=name,build=build,selection=accepted,
+                specification=json.loads(json.dumps(spec)),samples_sha256='samples'),samples,study.summarize(samples,spec)
+        with patch.object(study,'load_run',side_effect=cost),patch.object(contract,'sha',return_value='0'*64):
+            report=contract.policy_cost_report(Path('/unused'),accepted,build)
+        self.assertEqual(len(report['rows']),14)
+        first=next(r for r in report['rows'] if (r['query_rows'],r['rows'],r['layers'])==(16,16,1))
+        self.assertEqual(first['ratio'],1.)
+        altered=copy.deepcopy(declaration)
+        altered['final_confirmation']['cells'][0]['deterministic']=23
+        with self.assertRaises(ValueError):contract.policy_confirmation_specs(altered)
+
+    def test_second_round_uses_actual_incumbents_and_complete_mode_census(self):
+        declaration=contract.policy_declaration()
+        declared=declaration['rounds'][1]
+        summaries={screen['name']:[dict(query_rows=r,rows=t,layers=l,candidate=v,
+            decision='calibration' if v==screen['control'] else 'faster',
+            ratio=1.0 if v==screen['control'] else .8 if v==23 else .7)
+            for r,t in screen['workloads'] for l in screen['layers'] for v in screen['candidates']]
+            for screen in declared['screens']}
+        choose=lambda compatible:contract.select_policy_round2(summaries,{20,22,23,24},compatible)
+        selected=choose(True)
+        self.assertTrue(all(x['deterministic']==24 and x['fast']==24
+                            for x in selected['proposals'] if x['query_rows']>1))
+        self.assertTrue(all(x['deterministic']==20 and x['fast']==0
+                            for x in selected['proposals'] if x['query_rows']==1))
+        self.assertTrue(all(x['deterministic']==22 for x in choose(False)['proposals'] if x['query_rows']>1))
+        hot=summaries['decoder_policies_round2_fast_21_hot']
+        for row in hot:row['decision']='inconclusive'
+        cell=next(x for x in choose(True)['proposals'] if (x['query_rows'],x['rows'],x['layers'])==(16,256,1))
+        self.assertEqual(cell['fast'],21)
+        hot.pop()
+        with self.assertRaises(ValueError):choose(True)
+
+    def test_policy_selection_requires_complete_screens_and_compatible_arithmetic(self):
+        summaries={screen['name']:[dict(query_rows=r,rows=t,layers=l,candidate=v,
+            decision='calibration' if v==screen['control'] else 'faster',
+            ratio=1.0 if v==screen['control'] else 0.4 if v==21 else 0.6,
+            ratio_min=0.39 if v==21 else 0.59,ratio_max=0.41 if v==21 else 0.61,noise_floor=.05)
+            for r,t in screen['workloads'] for l in (1,24) for v in screen['candidates']]
+            for screen in contract.policy_declaration()['rounds'][0]['screens']}
+        choose=lambda invariant,compatible:contract.select_policy_round1(summaries,invariant,compatible)
+        # A globally faster fixed-MMA family is valid even with different bytes.
+        selected=choose({20,21,22},True)
+        self.assertEqual(selected['deterministic_family'],[21])
+        self.assertTrue(all(x['deterministic']==21 for x in selected['proposals']))
+        frozen=contract.policy_declaration()
+        expected_schedules=contract.policy_schedules(4096,frozen)
+        with patch.object(contract,'policy_declaration',return_value={}):
+            self.assertEqual(contract.select_policy_round1(summaries,{20,21,22},True,frozen),selected)
+            self.assertEqual(contract.policy_schedules(4096,frozen),expected_schedules)
+        # One bad mode forbids mixing distinct arithmetic families by workload.
+        row=next(x for x in summaries['decoder_policies_round1_det'] if x['candidate']==21)
+        row['decision']='slower'
+        selected=choose({20,21,22},True)
+        self.assertEqual(selected['deterministic_family'],[20,22])
+        self.assertTrue(all(x['deterministic']==22 for x in selected['proposals']))
+        self.assertTrue(all(x['fast']==21 for x in selected['proposals']))
+        # Own schedule invariance does not establish compatibility with ID20.
+        self.assertTrue(all(x['deterministic']==20 for x in choose({20,22},False)['proposals']))
+        row['decision']='faster';row['ratio_max']=.58
+        self.assertFalse(choose({20,21,22},True)['fixed_mma_global_qualified'])
+        name=next(iter(summaries));saved=summaries[name].pop()
+        with self.assertRaises(ValueError):choose({20,21,22},True)
+        summaries[name].extend([saved,saved])
+        with self.assertRaises(ValueError):choose({20,21,22},True)
+
+    def test_policy_registry_preserves_history_and_separate_qkv_dispatches(self):
+        self.assertNotIn(20,contract.VARIANTS)
+        self.assertEqual(contract.mappings(20,1),contract.mappings(20,4096))
+        for rows in (1,17,4096):
+            self.assertEqual(contract.stages(20,rows)[1:4],['Q projection','K projection','V projection'])
+            self.assertEqual(contract.specification(20,rows,4096)['dispatches_per_iteration'],17)
+        for rows in (1,15,16,17,63,64,65,4096):
+            schedules=contract.policy_schedules(rows)
+            self.assertEqual(schedules['policy_tokenwise'],[(p,1) for p in range(rows)])
+            for calls in schedules.values():
+                self.assertEqual([p for start,size in calls for p in range(start,start+size)],list(range(rows)))
+        declared=contract.policy_declaration()
+        spec=dict(policies=declared,policies_sha256=contract.sha_json(declared),
+                  captures=[list(row[:3]) for row in declared['profiles']])
+        self.assertEqual(contract.sha(contract.repository_root()/contract.POLICY_PATH),spec['policies_sha256'])
+        self.assertEqual(len(contract.policy_profile_grid(spec)),6)
+        # The live collector constructs tuples; JSON restoration returns lists.
+        live={**spec,'captures':[tuple(row) for row in spec['captures']]}
+        self.assertEqual(contract.policy_profile_grid(live),contract.policy_profile_grid(spec))
+        for bad in ({**spec,'policies_sha256':'changed'},{**spec,'captures':spec['captures'][:-1]}):
+            with self.assertRaises(ValueError):contract.policy_profile_grid(bad)
+
+    def test_policy_schedules_hit_every_lookup_cell_and_keep_test_ids_separate(self):
+        cells={(r,p+r) for calls in contract.policy_schedules(4096).values() for p,r in calls}
+        self.assertTrue({(r,t) for r,t,_ in contract.policy_declaration()['workloads']}<=cells)
+        self.assertFalse(contract.MEASUREMENT_VARIANTS & contract.POLICY_EXECUTIONS.keys())
+        self.assertEqual(contract.execution_mappings(100,64,4096),contract.mappings(3,64))
+        for variant in contract.POLICY_EXECUTIONS:
+            with self.assertRaises(ValueError):contract.specification(variant,1,4096)
+        for args in ((False,0,1,1),(True,2,1,1),(True,1,4097,1),(False,1,1,2)):
+            with self.assertRaises(ValueError):contract.policy_configuration(*args)
+
     def test_frozen_workloads_and_sample_census(self):
         spec=STUDIES['decoder_layer']
         samples=[dict(query_rows=r,rows=t,layers=l,block=b,candidate=0,arm=a,variant=0,repetition=n,us=1.)

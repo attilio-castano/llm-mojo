@@ -1,0 +1,41 @@
+{
+  "kind": "decoder_policy_build_bridge",
+  "timing_commit": "214ce2c3575fcbfbaf396421ac0b63e9bab7d973",
+  "timing_binary_sha256": "490da58056e16345511cb65e328fbfd04e4c60a31e310f10eb4a7474bfbf2b7f",
+  "numerical_commit": "f08e5a9009bf7aca8ffb23606a163b4053ae0857",
+  "numerical_binary_sha256": "9856561479d0c4c5ef4c8a527a0580397fbd0e767a27380f4f479d83aacc5873",
+  "changed_native_sources": [
+    "src/llm_mojo/decoder_layer.mojo"
+  ],
+  "environment": {
+    "hardware": {
+      "model": "Mac16,7",
+      "chip": "Apple M4 Pro",
+      "logical_cpu_count": "14",
+      "gpu_api": "metal",
+      "gpu_target": "metal:4-metal4",
+      "physical_memory_bytes": 25769803776
+    },
+    "software": {
+      "macos": "26.6.2",
+      "macos_build": "25G83",
+      "darwin": "25.6.0",
+      "xcode": [
+        "Xcode 26.6",
+        "Build version 17F113"
+      ],
+      "metal": [
+        "Apple metal version 32023.883 (metalfe-32023.883)",
+        "Target: air64-apple-darwin25.6.0",
+        "Thread model: posix"
+      ],
+      "uv": "uv 0.12.5 (210d1f678 2026-08-14 aarch64-apple-darwin)",
+      "mojo": "1.0.0",
+      "max": "26.5.0"
+    }
+  },
+  "timing_source_sha256": "a383f8ef477c8ca948a5ea02a4259398e354d8b2683382138f516764931ed9fa",
+  "numerical_source_sha256": "9aa1c330eb4535550374233a454a743da4f921a207023e8282973ba84bddb491",
+  "selector_diff": "--- timing/src/llm_mojo/decoder_layer.mojo\n+++ numerical/src/llm_mojo/decoder_layer.mojo\n@@ -203,7 +203,19 @@\n     if reuse_layers != 1 and reuse_layers != 24:\n         raise Error(\"decoder reuse mode must be hot or ring24\")\n     if deterministic:\n+        if rows == 16 and total_rows == 16:\n+            return 22\n+        if rows == 256 and total_rows == 256:\n+            return 22\n+        if rows == 4096 and total_rows == 4096:\n+            return 22\n+        if rows == 16 and total_rows == 256:\n+            return 22\n+        if rows == 64 and total_rows == 4096:\n+            return 22\n         return 20\n+    if rows == 16 and total_rows == 256 and reuse_layers == 1:\n+        return 21\n     if rows == 64 and total_rows == 4096:\n         return 3\n     return 0\n",
+  "boundary": "Only decoder_policy_configuration changed in native sources. Timing measures explicit configuration enqueue through completion and excludes the policy selector; numerical evidence executes the final actual lookup."
+}

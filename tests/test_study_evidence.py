@@ -219,10 +219,14 @@ class EvidenceTests(unittest.TestCase):
 
     def test_retained_studies_are_complete(self):
         count = 0
+        policy_runs = {}
         for directory in (ROOT / 'studies').glob('*/'):
             for record in evidence_directory(directory).glob('*run.json'):
-                _, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
+                run, samples, _ = load_run(directory,record.name.removesuffix('run.json'))
                 count += len(samples)
+                if run['study'].startswith('decoder_policies_'):
+                    self.assertNotIn(run['study'],policy_runs)
+                    policy_runs[run['study']]=len(samples)
         selection=ROOT/'studies/decoder_layer/selection-confirmed.json'
         extra=0
         if selection.exists():
@@ -230,7 +234,17 @@ class EvidenceTests(unittest.TestCase):
             from llm_mojo.benchmarks.study import comparisons
             decision=json.loads(selection.read_text())['selection']
             extra=10400+sum(80*len(comparisons(contract.confirmation_spec(f,decision))) for f in contract.SCREEN_GRIDS)
-        self.assertEqual(count,105440+extra)  # original studies plus complete declared selection trials
+        from llm_mojo.benchmarks import decoder_layer_contract as contract
+        policy_directory=ROOT/'studies/decoder_layer'
+        declared=json.loads((policy_directory/'policies_confirmation_declaration.json').read_text())
+        accepted=json.loads((policy_directory/'policies_accepted.json').read_text())
+        expected={'decoder_policies_baseline_0','decoder_policies_baseline_3','decoder_policies_self'}
+        expected.update(screen['name'] for round_spec in declared['rounds'] for screen in round_spec['screens'])
+        expected.update(screen['name'] for screen in declared['final_confirmation']['screens'])
+        expected.update(contract.policy_cost_specs(accepted))
+        self.assertEqual(set(policy_runs),expected)
+        self.assertEqual(sum(policy_runs.values()),3360+5760+3840+4320)
+        self.assertEqual(count,105440+extra+17280)  # original, selection and bounded policy campaigns
         directory = ROOT / 'studies/mlp_sublayer/data'
         from llm_mojo.benchmarks.study import select_mlp_decode
         decode_builds=[]

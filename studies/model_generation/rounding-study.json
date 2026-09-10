@@ -1,0 +1,29 @@
+{
+  "kind": "upstream-reference-rounding-diagnosis",
+  "result_written_utc": "2026-09-09T14:47:04.549711+00:00",
+  "source_commit": "cd34ca3a76656ac599cc4d06115380f6afc62646",
+  "source_sha256": "246dba9f214fdb07bff2295ff1d83a373addf7527a4bd7ba6d7da2361e570c7b",
+  "declaration_sha256": "295fdaf4c6f80c7f6dd55287164647569d654887a05f56db9b0562d2a1aac621",
+  "command": "uv run --locked --script tests/fixtures/model_reference_diagnosis.py --detail --output build/oracle_data/model-qualification/rounding-detail-v2.json",
+  "hardware": "Apple M4 Pro",
+  "macos": "26.6.2",
+  "device": "cpu",
+  "threads": 1,
+  "candidate_outputs_observed": false,
+  "reserved_outputs_observed": false,
+  "files": {
+    "rounding-detail.json.gz": {
+      "sha256": "f08b2136a86c8e2d36f8aa351a79b70ef3ca0ec26b17bfbc3beb34cf06d7cb3b",
+      "uncompressed_sha256": "ac02d29163889be028371d44f62364f0f8eec3aed94423f4e31e945ee7591f6d",
+      "uncompressed_bytes": 3912100
+    }
+  },
+  "scope": "Two previously observed random inputs and three declared text inputs; eight greedy steps maximum; no acceptance thresholds changed.",
+  "refinement": {
+    "reason": "Added the coordinate that maximizes the required absolute tolerance after accounting for rtol, alongside the maximum-absolute-error coordinate.",
+    "previous_source_commit": "004cf540edd73be42e1285784a4054623b49b5cc",
+    "previous_report_sha256": "951b5b3586cfd2b9d7153e0568d0fb09d2a8ec7e46964412db8e75484383fa60",
+    "all_common_observations_equal": true,
+    "inputs_and_precision_policy_unchanged": true
+  }
+}

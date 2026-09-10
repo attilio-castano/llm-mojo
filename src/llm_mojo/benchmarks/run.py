@@ -64,7 +64,7 @@ def checked_conditions():
     return conditions
 
 
-def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=None, tile_kernel_screen=None, mlp_decode_screen=None, decoder_screen=None):
+def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=None, tile_kernel_screen=None, mlp_decode_screen=None, decoder_screen=None, policy_confirmation=None):
     ensure_record_location(output)
     provenance = json.loads((build_dir / 'build.json').read_text())
     repo, sources = repository_state(), source_hashes()
@@ -79,13 +79,23 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
     output.mkdir(parents=True, exist_ok=False)
     env = {k: v for k, v in os.environ.items() if k != 'MODULAR_DEBUG'}
     for name in study_names:
-        spec = STUDIES[name]
+        policy_selection = None
+        if name.startswith('decoder_policies_cost_'):
+            from .decoder_layer_contract import policy_confirmed_selection, policy_cost_specs
+            if policy_confirmation is None:
+                raise ValueError('policy cost requires complete qualification runs')
+            policy_selection=policy_confirmed_selection(policy_confirmation,provenance)
+            cost_specs=policy_cost_specs(policy_selection)
+            if name not in cost_specs:raise ValueError('cost study is outside the accepted lookup')
+            spec=cost_specs[name]
+        else:
+            spec = STUDIES[name]
         seed = spec.get('seed',53)
         if spec['operation'] == 'mlp' and mlp_fixture_identity() != provenance.get('mlp_fixtures'):
             raise RuntimeError('MLP benchmark inputs changed')
         if spec['operation'] == 'decoder_layer' and decoder_fixture_identity() != provenance.get('decoder_fixtures'):
             raise RuntimeError('decoder benchmark inputs changed')
-        selection = None
+        selection = policy_selection
         if spec.get('requires_selection'):
             from .decoder_layer_contract import screen_decision, confirmation_spec
             if decoder_screen is None:raise ValueError('decoder confirmation requires frozen screen selection')
@@ -219,7 +229,10 @@ def main():
     p.add_argument('--tile-kernel-screen', type=Path)
     p.add_argument('--mlp-decode-screen', type=Path)
     p.add_argument('--decoder-screen', type=Path)
-    p.add_argument('--studies', nargs='+', choices=list(STUDIES),
+    p.add_argument('--policy-confirmation', type=Path)
+    from .decoder_layer_contract import MEASUREMENT_VARIANTS
+    cost_names=[f'decoder_policies_cost_{v}_{mode}' for v in sorted(MEASUREMENT_VARIANTS) for mode in ('hot','ring')]
+    p.add_argument('--studies', nargs='+', choices=[*STUDIES,*cost_names],
                    default=[name for name in STUDIES if not name.endswith('_screen') and not STUDIES[name].get('opt_in')
                             and name not in ('attention_sublayer_wo','attention_sublayer_decode','attention_sublayer_prefill',
                                              'attention_sublayer_projections','attention_sublayer_integrated',
@@ -260,7 +273,8 @@ def main():
             tile_screen=args.tile_screen.resolve() if args.tile_screen else None,
             tile_kernel_screen=args.tile_kernel_screen.resolve() if args.tile_kernel_screen else None,
             mlp_decode_screen=args.mlp_decode_screen.resolve() if args.mlp_decode_screen else None,
-            decoder_screen=args.decoder_screen.resolve() if args.decoder_screen else None)
+            decoder_screen=args.decoder_screen.resolve() if args.decoder_screen else None,
+            policy_confirmation=args.policy_confirmation.resolve() if args.policy_confirmation else None)
 
 
 if __name__ == '__main__':
