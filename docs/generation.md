@@ -136,7 +136,22 @@ generation acceptance and performance promotion are not yet implemented.
 
 ## Plain-text generation candidate
 
-`generate_cli.mojo` composes the native tokenizer, model and streaming decoder.
+The verified development launcher is:
+
+```sh
+uv run --locked python -m llm_mojo.model_assets --prepared "$MODEL_PREPARED" --prompt "$PROMPT_FILE" --max-new-tokens 16 --policy baseline
+```
+
+`MODEL_PREPARED` names the prepared model directory and `PROMPT_FILE` contains
+raw prompt bytes. The launcher verifies the checkpoint identity, manifest,
+all 196 tensor extents and hashes, and pinned tokenizer tables before starting
+the native driver. Missing model artifacts fail; tokenizer preparation uses
+local assets without downloads. Keep the prepared files unchanged during
+execution. Python performs initialization only, with no interop in inference.
+
+`generate_cli.mojo` is the internal driver: direct invocation assumes that its
+caller has already performed those checks. It composes the native tokenizer,
+model and streaming decoder.
 It accepts raw prompt bytes, optional fixed-size prompt chunks and a maximum
 output count. It performs raw-logit greedy selection with lowest-ID ties,
 rejects nonfinite logits, stops at IDs 151645/151643 or the requested/context
