@@ -602,6 +602,12 @@ def generation_events(path, maximum):
     return dict(prompt_ids=[int(r['value']) for r in prompt],tokens=ids,events=events)
 
 
+def require_empty_prompt_rejection(result):
+    # The native Mojo runtime reports uncaught exceptions on stdout on this release.
+    if result.returncode==0 or b'prompt must encode to 1..4096 tokens' not in result.stdout+result.stderr:
+        raise ValueError('missing empty prompt rejection')
+
+
 def generation_study(binary, output, prepared=None, policy='fast'):
     from .tokenizer_assets import ensure_prepared
     from .benchmarks.environment import stable_environment, conditions_snapshot
@@ -634,7 +640,7 @@ def generation_study(binary, output, prepared=None, policy='fast'):
     prompt.write_text('')
     invalid=subprocess.run([str(binary),str(prepared),str(tables),str(prompt),'1','0',policy],
         cwd=repository_root(),env=environment(),capture_output=True)
-    if invalid.returncode==0 or invalid.stdout: raise ValueError('empty prompt was accepted')
+    require_empty_prompt_rejection(invalid)
     verify_build(binary)
     write(output/'result.json',dict(kind='model-runtime-generations-v1',build=receipt,policy=policy,
         environment=stable_environment(),conditions_before=conditions_before,conditions_after=conditions_snapshot(),

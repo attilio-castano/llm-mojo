@@ -1,4 +1,5 @@
 import tempfile
+import subprocess
 import json
 from pathlib import Path
 import unittest
@@ -6,10 +7,18 @@ import numpy as np
 from llm_mojo.model_validation import (bf16, compare, consistency_accuracy,
     verify_consistency_observations, CONSISTENCY_BOUNDARIES,
     numerical_diagnostic, prediction_diagnostic, storage_diagnostic)
-from llm_mojo.model_validation import generation_events
+from llm_mojo.model_validation import generation_events, require_empty_prompt_rejection
 
 
 class ModelComparisonTests(unittest.TestCase):
+    def test_native_exception_on_stdout_is_a_rejection_not_generated_text(self):
+        error=b'Unhandled exception caught during execution: prompt must encode to 1..4096 tokens\n'
+        for stdout,stderr in ((error,b''),(b'',error)):
+            require_empty_prompt_rejection(subprocess.CompletedProcess([],1,stdout,stderr))
+        for result in (subprocess.CompletedProcess([],0,error,b''),
+                       subprocess.CompletedProcess([],1,b'other failure',b'')):
+            with self.assertRaises(ValueError): require_empty_prompt_rejection(result)
+
     def test_generation_event_contract_rejects_truncation_and_bad_cache_accounting(self):
         good=('event\tindex\tvalue\tnanoseconds\n'
               'prompt\t0\t42\t0\n'
