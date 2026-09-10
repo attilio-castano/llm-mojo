@@ -18,6 +18,7 @@ schedule confirmation, documented in the new numerical study below.
 | [MLP sublayer](mlp_sublayer/README.md) | How do tiled projections change complete SwiGLU latency under its frozen BF16 rounding contract? |
 | [Attention sublayer](attention_sublayer/README.md) | Where does time go in the complete block under the selected FP32 attention policy? |
 | [Decoder layer](decoder_layer/README.md) | How do complete layer costs shift between prefill, cached chunks and decode? |
+| [Decoder policies](decoder_layer/policies.md) | How much does schedule-invariant execution cost, and which optimizations preserve it? |
 | [CPU tokenizer](tokenizer/README.md) | When does heap BPE improve complete text encoding? |
 | [Full-model reference](model_generation/README.md) | Does BF16 full prefill agree with cached execution across all 24 layers? |
 
@@ -34,6 +35,12 @@ noise and diagnostic gaps remain explicit. The follow-up
 [configuration study](decoder_layer/selection.md) retains 16,800 additional
 latency observations and confirms 5.6–52.9% lower decoder latency on the primary
 cached-prefill grid. Full/short prefill and decode retain the existing baseline.
+The subsequent [policy campaign](decoder_layer/policies.md) separates Fast and
+Deterministic execution. It retains 17,280 timing observations, 4,975 profiled
+dispatches and 9,583,121 core numerical checks. Four-row reuse lowers deterministic
+prefill latency by 24–37%; the selected deterministic prefill policy still takes
+2.2–6.0 times Fast latency. Decode comparisons remain inconclusive. Both final
+deterministic lookup settings pass all fresh schedule/cache comparisons.
 Full-model logits parity is the next acceptance target; its reference-only
 confirmation currently fails eight intermediate boundaries. See the
 [numerical study](model_generation/README.md) for the frozen budgets and stop decision.

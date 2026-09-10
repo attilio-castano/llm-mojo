@@ -1,5 +1,9 @@
 # Fast and deterministic decoder policies
 
+The [completed results](policies.md) report the accepted policies and final
+confirmation. Statements below about reserved inputs describe their status
+at each declaration's time.
+
 This campaign studies one Qwen2.5-0.5B decoder layer on Apple Metal. Its
 [executable declaration](../../tests/fixtures/decoder_policies.json) freezes
 the workloads, schedules, fresh confirmation inputs and search budget before
@@ -14,7 +18,7 @@ not a policy requirement. Tolerances cannot be enlarged after seeing failures.
 
 Fast permits schedule-dependent rounding and selects the fastest demonstrated
 validated configuration at each measured workload and reuse mode. Deterministic
-requires all 16 intermediates, output and active KV prefixes to match the same
+requires all 16 stored stages, including Y, and active KV prefixes to match the same
 candidate's full-call bytes across full, repeated, tokenwise and irregular
 schedules on the same hardware and build. A new deterministic family may use
 a different reduction order from configuration 20. Its prefill and decode

@@ -13,6 +13,16 @@ ordered evidence gates, measurement budget, and stop conditions. The subsequent
 it confirms cached-prefill improvements and retains the baseline for full/short
 prefill and decode.
 
+The later [policy study](../studies/decoder_layer/policies.md) adds separate
+Fast and Deterministic contracts. `DecoderCache[False]` and
+`DecoderCache[True]` fix that choice for a cache's lifetime;
+`enqueue_decoder_layer_policy` selects the confirmed configuration for the
+call's query rows, total context and declared reuse mode. Rebuild the prefix
+in a new cache to change policy. The deterministic contract covers all 16
+stored stages, including Y, and both active KV prefixes across the tested
+schedules on the same hardware and build. Exact HF output matching remains
+a separate compatibility question.
+
 ## Scope
 
 Compose one Qwen2.5-0.5B-Instruct decoder layer from the accepted

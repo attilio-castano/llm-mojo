@@ -1057,11 +1057,11 @@ def render_decoder_policies(directory):
     labels=[f'Full prefill {r}' if r==t else f'Decode · T={t}' if r==1 else f'Cached prefill · R={r}, T={t}' for r,t in shapes]
     axes[0].set_yticks(range(len(labels)),labels);axes[0].invert_yaxis()
     handles,labels=axes[0].get_legend_handles_labels()
-    fig.legend(handles,labels,loc='upper center',bbox_to_anchor=(.5,.935),ncol=2,frameon=False)
+    fig.legend(handles,labels,loc='upper center',bbox_to_anchor=(.5,.900),ncol=2,frameon=False)
     old=evidence['runs']['decoder_policies_baseline_0'][0]['repository']['commit'][:7]
     current=evidence['runs']['decoder_policies_confirmation_det_hot'][0]['repository']['commit'][:7]
     fig.suptitle('Decoder layer · measured cost of schedule invariance',fontsize=17,fontweight='bold',y=.985)
-    fig.text(.5,.949,'Qwen2.5-0.5B · Apple M4 Pro / Metal · BF16 storage / FP32 reductions',ha='center',fontsize=10)
+    fig.text(.5,.930,'Qwen2.5-0.5B · Apple M4 Pro / Metal · BF16 storage / FP32 reductions',ha='center',fontsize=10)
     fig.text(.05,.04,'Whiskers: range of four paired block ratios, not confidence intervals. Open marks: inconclusive under self calibration.\n'
         'Each point compares policies within its own session; no historical speedup factors are composed.\n'
         f'Original timing source {old}; final configuration timing source {current}. Selector overhead is excluded; this is not model throughput.',fontsize=9,color='#555555')

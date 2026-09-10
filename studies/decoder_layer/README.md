@@ -1,5 +1,9 @@
 # One Qwen decoder layer
 
+The [Fast and Deterministic policy study](policies.md) is the latest layer
+milestone. It defines separate execution contracts, confirms the workload
+lookup on fresh inputs and measures the cost of schedule invariance.
+
 The follow-up [configuration selection study](selection.md) confirms cached-prefill
 gains up to 52.9% and records exact choices for full prefill, cached prefill and
 decode. This report preserves the original decoder ID 0 baseline evidence.

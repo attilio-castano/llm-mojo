@@ -1,0 +1,188 @@
+{
+  "schema": 1,
+  "kind": "decoder_policy_campaign",
+  "timing_studies": [
+    "decoder_policies_baseline_0",
+    "decoder_policies_baseline_3",
+    "decoder_policies_self",
+    "decoder_policies_round1_det",
+    "decoder_policies_round1_fast_0",
+    "decoder_policies_round1_fast_3",
+    "decoder_policies_round2_det",
+    "decoder_policies_round2_fast_0_hot",
+    "decoder_policies_round2_fast_0_ring",
+    "decoder_policies_round2_fast_21_hot",
+    "decoder_policies_round2_fast_3",
+    "decoder_policies_confirmation_det_hot",
+    "decoder_policies_confirmation_det_ring",
+    "decoder_policies_confirmation_fast_0_hot",
+    "decoder_policies_cost_0_hot",
+    "decoder_policies_cost_0_ring",
+    "decoder_policies_cost_21_hot",
+    "decoder_policies_cost_3_hot",
+    "decoder_policies_cost_3_ring"
+  ],
+  "rounds": [
+    {
+      "round": 1,
+      "decision": "policies_round1_decision.json",
+      "numerical": [
+        "policies_round1_development_evaluation.json",
+        "policies_round1_checkpoint_evaluation.json"
+      ],
+      "adversarial": "policies_round1_adversarial.json",
+      "adversarial_shapes": [
+        [
+          1,
+          65
+        ],
+        [
+          15,
+          256
+        ],
+        [
+          16,
+          65
+        ],
+        [
+          17,
+          65
+        ]
+      ]
+    },
+    {
+      "round": 2,
+      "decision": "policies_round2_decision.json",
+      "numerical": [
+        "policies_round2_development_evaluation.json",
+        "policies_round2_checkpoint_evaluation.json"
+      ],
+      "adversarial": "policies_round2_adversarial.json",
+      "adversarial_shapes": [
+        [
+          1,
+          65
+        ],
+        [
+          7,
+          65
+        ],
+        [
+          8,
+          65
+        ],
+        [
+          9,
+          65
+        ],
+        [
+          15,
+          256
+        ],
+        [
+          16,
+          65
+        ],
+        [
+          17,
+          65
+        ]
+      ]
+    }
+  ],
+  "incomplete_numerical": [
+    "policies_interrupted_baseline_evaluation.json"
+  ],
+  "baseline_numerical": [
+    "policies_baseline_development_evaluation.json",
+    "policies_baseline_checkpoint_evaluation.json"
+  ],
+  "confirmation_declaration": "policies_confirmation_declaration.json",
+  "accepted": "policies_accepted.json",
+  "cost": "policies_cost.json",
+  "holdout_manifest": "policies_holdout_manifest.json",
+  "holdout_numerical": "policies_holdout_evaluation.json",
+  "repository_validation": "policies_validation.json",
+  "build_bridge": "policies_build_bridge.json",
+  "files": {
+    "decoder_policies_baseline_0_run.json": "27667afd4e15f79c39eba92250b5d1c1ff870467a27124d08f0be44c96ffeedf",
+    "decoder_policies_baseline_0_samples.csv.gz": "d3cc0917161ffa032952089e9838d8fb8f511e615099bc5d1b1210509730a527",
+    "decoder_policies_baseline_3_run.json": "80f5c7450eb459ecdaf7820717706c5ef6f7a5920ea0324da497ba77720f180e",
+    "decoder_policies_baseline_3_samples.csv.gz": "cfee737285524e5848661db0f9a42cbad0eaeb38ccc5513c60b8e61370c69358",
+    "decoder_policies_confirmation_det_hot_run.json": "072a0a8c2df44971c1eb1183948f919b1f29bff49043c63b32b2be3100f6ac45",
+    "decoder_policies_confirmation_det_hot_samples.csv.gz": "8c9a064029b220a021ae7118de1904adbf2e0d21a5ffe329ed49a6c5d06eba7f",
+    "decoder_policies_confirmation_det_ring_run.json": "751d084e58fe88cb853ab3140484a26237cd3de3b68079c6dd15d006410e7aa4",
+    "decoder_policies_confirmation_det_ring_samples.csv.gz": "896f9718b4ebc1194988aecc7958953ea20f84c3f3a3a39985b217efc1c5c820",
+    "decoder_policies_confirmation_fast_0_hot_run.json": "bb8442aa7e51cab5fbdd5f9eb8f1e55d644009d345ff8af8c0f43f5955be2613",
+    "decoder_policies_confirmation_fast_0_hot_samples.csv.gz": "c3e3d9d6c69ccb02aba1214477c3da0ad45ab8113250c9c07757e35e390c7e6f",
+    "decoder_policies_cost_0_hot_run.json": "37595475f8f6a47ed420f514eb4223db3362ad5eb194940d6d15989020d1a95b",
+    "decoder_policies_cost_0_hot_samples.csv.gz": "c9c5e73f2e163b1de5a576b82a7bc6da24247aebfd78b97fd310442ffddd244d",
+    "decoder_policies_cost_0_ring_run.json": "61eba38bb66d322a20e79063684f8b47308e21e73052bdc7ebd6a8cd625f43e6",
+    "decoder_policies_cost_0_ring_samples.csv.gz": "d47adc66387b7a827a4405157f2756597ec7639716722eab5ffb20311b4e64b7",
+    "decoder_policies_cost_21_hot_run.json": "b821bf1188b4eb425a387a355c4a2a0677b10d72b359b61ed7e66ffeb28f972b",
+    "decoder_policies_cost_21_hot_samples.csv.gz": "df237d77661f6e4b050e9ae5e6b43a0f970b243f77e90233231230b89bedae69",
+    "decoder_policies_cost_3_hot_run.json": "e33a9463799d4b08ebc16fea17431e093d81068bc1b178b24150ca6d2d345962",
+    "decoder_policies_cost_3_hot_samples.csv.gz": "4b586ab0b68aa46b0ba51989451c850298ec697132e8cb95c4989374a1eb4e53",
+    "decoder_policies_cost_3_ring_run.json": "64fec97bf5c70fe15f229238246a9b522402338ccc742f0af5851e5e88b75f62",
+    "decoder_policies_cost_3_ring_samples.csv.gz": "febf0d539ff7b81595755c1a29ae988bcc7eda531a705d3718aad3a9c4e9344b",
+    "decoder_policies_round1_det_run.json": "4f3904d93b501af7f7cb4132d181cbf5123685ab7b49c911ac415acbfb415910",
+    "decoder_policies_round1_det_samples.csv.gz": "a9ed3cfe99310a6241b90b3858fb7cc41d7f6b1f7cc1479c11f1cd577efd7dbc",
+    "decoder_policies_round1_fast_0_run.json": "03b8a34cbc101db9e7a67a83ed9742bbdd27493941b3f1f35ab20530a43d8ae1",
+    "decoder_policies_round1_fast_0_samples.csv.gz": "7ec0c352fac89cd995fa0e6d10c4e5b6073d334e851b2e316f557a7f74a52c68",
+    "decoder_policies_round1_fast_3_run.json": "2573759ae53d40178c3d25e412e5e3a3c3346e5c74e44ec6f03a86701389af4a",
+    "decoder_policies_round1_fast_3_samples.csv.gz": "8ca79aff619416100833e8edac7f3ef0ff36ac3e851fafeea65787760d4de18c",
+    "decoder_policies_round2_det_run.json": "445dd3a4b0314b07852a10ceb27326cd8f64594af98abfb8f89b151b419d5df6",
+    "decoder_policies_round2_det_samples.csv.gz": "2aa9011f324b9fcd44234523239fb4008d892d950d690347f251a7799d1a4ea2",
+    "decoder_policies_round2_fast_0_hot_run.json": "d3b5e515430688333b4f55598b4e9c788f2a37a1b55a1f8ac62f9dba77f6d6a0",
+    "decoder_policies_round2_fast_0_hot_samples.csv.gz": "ecf48a3d14e73fd09a8add6523b1e3dfea6356a04a479fdde69fc5a6626573b8",
+    "decoder_policies_round2_fast_0_ring_run.json": "12a6e2e55fa2cf7c1291cd9a3362fab7bf2a1ce21688c4bf1331e0e032b55fe2",
+    "decoder_policies_round2_fast_0_ring_samples.csv.gz": "298eabd61c587057e04199ed3236feed11180fb5432857deeba977dcd9704d3a",
+    "decoder_policies_round2_fast_21_hot_run.json": "24391870dc8628caa85b614dbdd616cd80d9a8543bc995ec80915402327add55",
+    "decoder_policies_round2_fast_21_hot_samples.csv.gz": "c7703895207d24af50d91d674dc2225a42072660256ffbe1ed64481a3e956122",
+    "decoder_policies_round2_fast_3_run.json": "5ff51db62e604d334abf583451710fce1c20986930c0fdeede87bb28adef762d",
+    "decoder_policies_round2_fast_3_samples.csv.gz": "f75f53967a706de0ffe05580f0444f62417e0986e7d987b21f536d72fb79560b",
+    "decoder_policies_self_run.json": "2f8f3ec07967ffaf96616a0095e5f11c9b42196290b28bfb32456758cc006613",
+    "decoder_policies_self_samples.csv.gz": "c0e978a384688cda9d83c56e4c0564c4057cca8fe49544824ce940c4b9a378c1",
+    "policies_accepted.json": "431f15c48d3ed8f0c4873addfd7922ce197c6f69ee2b24194adde4793da7757d",
+    "policies_baseline_checkpoint_checks.jsonl.gz": "dd2430900cd3b2dd9473ec981c93f08a0edcc303cc63dbd53ab5412e950abe24",
+    "policies_baseline_checkpoint_evaluation.json": "49746947397b0fbba8a610eed4d445e9846658e77e6abd437d3913e0ba899363",
+    "policies_baseline_checkpoint_output.log.gz": "263784f543797b92f7a70ea3a2292bc4225463287132e10956374cefec0801c4",
+    "policies_baseline_development_checks.jsonl.gz": "70e7c106a64751071424cd25cec2f52247748060849242c1222aa4b03fc7abd2",
+    "policies_baseline_development_evaluation.json": "35a6c405c80105edf07864e6a8fddafebad11474c9aa705005b0fb56239bd6ea",
+    "policies_baseline_development_output.log.gz": "e36d5b200122095d7388b9fbccc6b00f697f38ef57293b44150ffab8e81c08db",
+    "policies_build_bridge.json": "5d07574324cfd5ae0540d903e7161017a113665e74c2c0ef881e3c0a18170aea",
+    "policies_collection_failures.json": "1968b91c4de2b887636c5a9d93ddb8fc8b09cfd0ce3cb65cbaf2dcebb591ced7",
+    "policies_confirmation_declaration.json": "45c84b98c455f0ea9b6e7ef29938a11e396626ce177052696f55c3ca3f168f0b",
+    "policies_cost.json": "02d9d095419202955eb6906c618dcb5cb553ec69e784cab63a75522c3c19ef25",
+    "policies_final_validation_failure.json": "f606add78a0f3398d9d7474ec7a36ca4e2552a62b9d773bda27a77a3e72d8344",
+    "policies_holdout_checks.jsonl.gz": "6ebaed988d5c30b9884646be93e2fb482f32a92922846df15a07bdcab3a900a3",
+    "policies_holdout_evaluation.json": "88c4d7cb39dd248a3f011a6dd7999cfd10ac797c3712adbd8ebc853119e8b925",
+    "policies_holdout_manifest.json": "6e57a6710e131a588c16c209d12379761ae4b30d2d09db33e4ae3a3ea1bfdac4",
+    "policies_holdout_output.log.gz": "c926161f36c9a00bd3bb7936a3c2d07c08cea867ebead196ccaaa5ef47c9e375",
+    "policies_interrupted_baseline_checks.jsonl.gz": "eb95fbe3d1e15103c5d38ae477c9ba1c689bca4950e6569bc3d0121b70e5ba45",
+    "policies_interrupted_baseline_evaluation.json": "4726ea140ecd2b6d16802debdc351c02dcdb1ed034ca5e034dc7a603392061d2",
+    "policies_interrupted_baseline_output.log.gz": "d16d596182aa07564995a4195270d14433289c64181b00ce5b617183e9d86451",
+    "policies_profile_samples.csv.gz": "bcf05040dbd5a8aec91d1cac58f945017273ebe4748d6359df690cc124ee1d60",
+    "policies_profiles.json": "ba82e8e3ed329e5bb1f942e0f6fc129dc198e35ca3f753514cca40da7ce5bb24",
+    "policies_round1_adversarial.json": "461029dae025aaead571417848d2e093e5e74f3be5f7e4a50dec294772719569",
+    "policies_round1_checkpoint_checks.jsonl.gz": "dae81454f8f21a5e399081c1147903481eafe2275eb33777f285dae5f1df54a4",
+    "policies_round1_checkpoint_evaluation.json": "8038fcb92c568181826e77a936d5331088204da47fd77458214bcf77d85ff428",
+    "policies_round1_checkpoint_output.log.gz": "8427d14c66284248b8117305733aa1f667d7f3ddf96032d11f2ea2b50932f2aa",
+    "policies_round1_decision.json": "b9ef60f8e1de7cc0cfa01b1c7b32371ca564659ac6d03b4fe9903f1dd39d26f6",
+    "policies_round1_development_checks.jsonl.gz": "c90b5c48d2e364ad57d9fb5e89377869ce720107571a01d24abcf4a3bdfa0387",
+    "policies_round1_development_evaluation.json": "941d9c70d8e55c6cb5cf1f988b344e3bd2d818ac9b994352c6e2196a4678dec1",
+    "policies_round1_development_output.log.gz": "aeb01fc3db2051fea346f6b21716687eac9fb65aa5baa7ffe3eb6bb889e53f56",
+    "policies_round1_validation.json": "54f55bdb58e82c9afe6c5e9e71dd24b46dece25ee8361ff023a1b2741d12033a",
+    "policies_round1_validation_failures.json": "ae992f8eb4739aa9cd2940d150997cd9ed874b18a903ad761dcd2447f2c212d9",
+    "policies_round2_adversarial.json": "b3443375c2d9e4d271d6d19f59cfc847e24c56cf878604929f8fa9448a8907dc",
+    "policies_round2_checkpoint_checks.jsonl.gz": "9acae61e43d3ddc363ae283abeabf37aae2a31d78fddc4b9798bbc1b9ce7ed72",
+    "policies_round2_checkpoint_evaluation.json": "95245934f89bc6e643c2e7e27c66f429bb317841425713a0cde43a5bf2bcad52",
+    "policies_round2_checkpoint_output.log.gz": "719273418567294b9a4c164ec49de7a153ec3b6342a3f5ea7f07e7aeaa04e5a9",
+    "policies_round2_decision.json": "7453098279c806f22d12ba5697d2d5e38a3b547e9b2105c8ba582ccb6e34160f",
+    "policies_round2_development_checks.jsonl.gz": "60c89ba5f38f21644e59067e3381c93d7097688266d05d9670cbc621658c8fc4",
+    "policies_round2_development_evaluation.json": "3c3274dfde7df078d9ec1687b850cb2a2e674f485d5dfea80bfbff6624889af6",
+    "policies_round2_development_output.log.gz": "725ddf317169fbf773a713d1eef036669971c6fbb7ec8754cbaba8607adb2273",
+    "policies_round2_validation.json": "2eac375452f3b1b92558f857467c3955ac5d926db8128a62d9a849084adc6936",
+    "policies_validation.json": "b265a5082d9ddeb40ee8d70371f42ddc10e0863df18d10ba55070f31276a78ea"
+  }
+}
