@@ -592,6 +592,10 @@ for _round in decoder.policy_declaration().get('rounds',[]):
             'workloads':[dict(query_rows=r,rows=t) for r,t in _screen['workloads']]}
 
 
+if 'final_confirmation' in decoder.policy_declaration():
+    STUDIES.update(decoder.policy_confirmation_specs())
+
+
 def load_decoder_profile(directory,prefix=''):
     directory=Path(directory)
     record=json.loads((directory/(prefix+'profiles.json')).read_text())

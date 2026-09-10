@@ -650,5 +650,584 @@
       "selection": "Per exact cell and reuse mode, compare both candidates directly to the round-1 incumbent with same-run self pairs. Among candidates passing the calibrated faster rule, choose the lowest median ratio, then lower ID. Otherwise retain the incumbent. Deterministic candidates also require complete own schedule invariance and family byte identity. No new single-token screen: both larger tiles call the same one-row implementation as ID22. Retain its unqualified single-token incumbent ID20 and Fast ID0.",
       "confirmation": "Use the sole independent final session already declared, with all seven cells and fresh inputs. Freeze any long-prefill extension from the selected 256-row candidate before that session; it needs its own direct gain to be accepted."
     }
-  ]
+  ],
+  "final_confirmation": {
+    "schema": 1,
+    "kind": "decoder_policy_confirmation_proposal",
+    "basis": {
+      "schema": 1,
+      "kind": "decoder_policy_round_decision",
+      "declaration_sha256": "55c3c1a561dd22458a571b33e95cf4a46842d3dcd6c9aad80f13c175a24c9999",
+      "build_sha256": "1392491162a57ddad89019501395932be23fc80c1f9f46db7587a522dd47aa88",
+      "numerical": [
+        {
+          "split": "development",
+          "evaluation_sha256": "c8269bb4f41d65cf6cb09aa5dd6712c10d326310f2525600364c44266e52e7a7",
+          "checks_sha256": "2e784f077c80d006999f2531ec7d7c5a06b85380d6d8ae620e7d6640667b0f07",
+          "binary_sha256": "f7caf00ed7736e1d288dd424bdf48272587b4596ed9cfaf8f4faf17560c7371d"
+        },
+        {
+          "split": "checkpoint",
+          "evaluation_sha256": "89221bae24c2c3678206587b948db20e41195bfd07c695243c144a01c4265092",
+          "checks_sha256": "91f3229963e37ac66b4b2b9a0d8b989eabbd38444d80cbe44252bd199ad7fd76",
+          "binary_sha256": "f7caf00ed7736e1d288dd424bdf48272587b4596ed9cfaf8f4faf17560c7371d"
+        }
+      ],
+      "screens": [
+        {
+          "study": "decoder_policies_round2_det",
+          "run_sha256": "445dd3a4b0314b07852a10ceb27326cd8f64594af98abfb8f89b151b419d5df6",
+          "samples_sha256": "2aa9011f324b9fcd44234523239fb4008d892d950d690347f251a7799d1a4ea2"
+        },
+        {
+          "study": "decoder_policies_round2_fast_0_hot",
+          "run_sha256": "d3b5e515430688333b4f55598b4e9c788f2a37a1b55a1f8ac62f9dba77f6d6a0",
+          "samples_sha256": "ecf48a3d14e73fd09a8add6523b1e3dfea6356a04a479fdde69fc5a6626573b8"
+        },
+        {
+          "study": "decoder_policies_round2_fast_0_ring",
+          "run_sha256": "12a6e2e55fa2cf7c1291cd9a3362fab7bf2a1ce21688c4bf1331e0e032b55fe2",
+          "samples_sha256": "298eabd61c587057e04199ed3236feed11180fb5432857deeba977dcd9704d3a"
+        },
+        {
+          "study": "decoder_policies_round2_fast_21_hot",
+          "run_sha256": "24391870dc8628caa85b614dbdd616cd80d9a8543bc995ec80915402327add55",
+          "samples_sha256": "c7703895207d24af50d91d674dc2225a42072660256ffbe1ed64481a3e956122"
+        },
+        {
+          "study": "decoder_policies_round2_fast_3",
+          "run_sha256": "5ff51db62e604d334abf583451710fce1c20986930c0fdeede87bb28adef762d",
+          "samples_sha256": "f75f53967a706de0ffe05580f0444f62417e0986e7d987b21f536d72fb79560b"
+        }
+      ],
+      "invariant_variants": [
+        20,
+        22,
+        23,
+        24
+      ],
+      "round": 2,
+      "proposals": [
+        {
+          "query_rows": 16,
+          "rows": 16,
+          "layers": 1,
+          "fast": 0,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 16,
+          "rows": 16,
+          "layers": 24,
+          "fast": 0,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 256,
+          "rows": 256,
+          "layers": 1,
+          "fast": 0,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 256,
+          "rows": 256,
+          "layers": 24,
+          "fast": 0,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 16,
+          "rows": 256,
+          "layers": 1,
+          "fast": 21,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 16,
+          "rows": 256,
+          "layers": 24,
+          "fast": 0,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 64,
+          "rows": 4096,
+          "layers": 1,
+          "fast": 3,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 64,
+          "rows": 4096,
+          "layers": 24,
+          "fast": 3,
+          "deterministic": 22
+        },
+        {
+          "query_rows": 1,
+          "rows": 256,
+          "layers": 1,
+          "fast": 0,
+          "deterministic": 20
+        },
+        {
+          "query_rows": 1,
+          "rows": 256,
+          "layers": 24,
+          "fast": 0,
+          "deterministic": 20
+        },
+        {
+          "query_rows": 1,
+          "rows": 4096,
+          "layers": 1,
+          "fast": 0,
+          "deterministic": 20
+        },
+        {
+          "query_rows": 1,
+          "rows": 4096,
+          "layers": 24,
+          "fast": 0,
+          "deterministic": 20
+        }
+      ],
+      "deterministic_fallback": 20,
+      "deterministic_family": [
+        20,
+        22,
+        23,
+        24
+      ],
+      "compatible_row_reuse": true
+    },
+    "basis_sha256": "7453098279c806f22d12ba5697d2d5e38a3b547e9b2105c8ba582ccb6e34160f",
+    "cells": [
+      {
+        "query_rows": 16,
+        "rows": 16,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 16,
+        "rows": 16,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 256,
+        "rows": 256,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 256,
+        "rows": 256,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 4096,
+        "rows": 4096,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": true
+      },
+      {
+        "query_rows": 4096,
+        "rows": 4096,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": true
+      },
+      {
+        "query_rows": 16,
+        "rows": 256,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 21,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 16,
+        "rows": 256,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 64,
+        "rows": 4096,
+        "layers": 1,
+        "fast_control": 3,
+        "fast": 3,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 64,
+        "rows": 4096,
+        "layers": 24,
+        "fast_control": 3,
+        "fast": 3,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 256,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 256,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 4096,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 4096,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      }
+    ],
+    "screens": [
+      {
+        "name": "decoder_policies_confirmation_det_hot",
+        "control": 20,
+        "candidates": [
+          20,
+          22
+        ],
+        "layers": [
+          1
+        ],
+        "names": {
+          "20": "consistent G32 attention and rowwise projections",
+          "22": "consistent G32 and four-row weight reuse"
+        },
+        "workloads": [
+          {
+            "query_rows": 16,
+            "rows": 16
+          },
+          {
+            "query_rows": 256,
+            "rows": 256
+          },
+          {
+            "query_rows": 4096,
+            "rows": 4096
+          },
+          {
+            "query_rows": 16,
+            "rows": 256
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096
+          },
+          {
+            "query_rows": 1,
+            "rows": 256
+          },
+          {
+            "query_rows": 1,
+            "rows": 4096
+          }
+        ],
+        "comparisons": [
+          {
+            "query_rows": 16,
+            "rows": 16,
+            "layers": 1,
+            "candidate": 20
+          },
+          {
+            "query_rows": 16,
+            "rows": 16,
+            "layers": 1,
+            "candidate": 22
+          },
+          {
+            "query_rows": 256,
+            "rows": 256,
+            "layers": 1,
+            "candidate": 20
+          },
+          {
+            "query_rows": 256,
+            "rows": 256,
+            "layers": 1,
+            "candidate": 22
+          },
+          {
+            "query_rows": 4096,
+            "rows": 4096,
+            "layers": 1,
+            "candidate": 20
+          },
+          {
+            "query_rows": 4096,
+            "rows": 4096,
+            "layers": 1,
+            "candidate": 22
+          },
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 1,
+            "candidate": 20
+          },
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 1,
+            "candidate": 22
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096,
+            "layers": 1,
+            "candidate": 20
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096,
+            "layers": 1,
+            "candidate": 22
+          },
+          {
+            "query_rows": 1,
+            "rows": 256,
+            "layers": 1,
+            "candidate": 20
+          },
+          {
+            "query_rows": 1,
+            "rows": 4096,
+            "layers": 1,
+            "candidate": 20
+          }
+        ],
+        "policy": "deterministic"
+      },
+      {
+        "name": "decoder_policies_confirmation_fast_0_hot",
+        "control": 0,
+        "candidates": [
+          0,
+          21
+        ],
+        "layers": [
+          1
+        ],
+        "names": {
+          "0": "integrated control",
+          "21": "consistent G32 and fixed MMA projections"
+        },
+        "workloads": [
+          {
+            "query_rows": 16,
+            "rows": 256
+          }
+        ],
+        "comparisons": [
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 1,
+            "candidate": 0
+          },
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 1,
+            "candidate": 21
+          }
+        ],
+        "policy": "fast"
+      },
+      {
+        "name": "decoder_policies_confirmation_det_ring",
+        "control": 20,
+        "candidates": [
+          20,
+          22
+        ],
+        "layers": [
+          24
+        ],
+        "names": {
+          "20": "consistent G32 attention and rowwise projections",
+          "22": "consistent G32 and four-row weight reuse"
+        },
+        "workloads": [
+          {
+            "query_rows": 16,
+            "rows": 16
+          },
+          {
+            "query_rows": 256,
+            "rows": 256
+          },
+          {
+            "query_rows": 4096,
+            "rows": 4096
+          },
+          {
+            "query_rows": 16,
+            "rows": 256
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096
+          },
+          {
+            "query_rows": 1,
+            "rows": 256
+          },
+          {
+            "query_rows": 1,
+            "rows": 4096
+          }
+        ],
+        "comparisons": [
+          {
+            "query_rows": 16,
+            "rows": 16,
+            "layers": 24,
+            "candidate": 20
+          },
+          {
+            "query_rows": 16,
+            "rows": 16,
+            "layers": 24,
+            "candidate": 22
+          },
+          {
+            "query_rows": 256,
+            "rows": 256,
+            "layers": 24,
+            "candidate": 20
+          },
+          {
+            "query_rows": 256,
+            "rows": 256,
+            "layers": 24,
+            "candidate": 22
+          },
+          {
+            "query_rows": 4096,
+            "rows": 4096,
+            "layers": 24,
+            "candidate": 20
+          },
+          {
+            "query_rows": 4096,
+            "rows": 4096,
+            "layers": 24,
+            "candidate": 22
+          },
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 24,
+            "candidate": 20
+          },
+          {
+            "query_rows": 16,
+            "rows": 256,
+            "layers": 24,
+            "candidate": 22
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096,
+            "layers": 24,
+            "candidate": 20
+          },
+          {
+            "query_rows": 64,
+            "rows": 4096,
+            "layers": 24,
+            "candidate": 22
+          },
+          {
+            "query_rows": 1,
+            "rows": 256,
+            "layers": 24,
+            "candidate": 20
+          },
+          {
+            "query_rows": 1,
+            "rows": 4096,
+            "layers": 24,
+            "candidate": 20
+          }
+        ],
+        "policy": "deterministic"
+      }
+    ],
+    "deterministic_fallback": 20,
+    "numerical": {
+      "variants": [
+        100,
+        101,
+        102,
+        103
+      ],
+      "required_invariants": [
+        101,
+        103
+      ],
+      "comparison_family": [
+        101,
+        103
+      ],
+      "split": "holdout"
+    },
+    "rule": "One independent serialized timing session. Qualify each proposed deterministic configuration directly against20 and every changed Fast configuration against its original Fast incumbent, with self calibration. Apply the existing faster rule; otherwise retain the fallback. Then measure the accepted deterministic configuration directly against accepted Fast at all seven cells in both modes, self calibrated. This cost phase cannot change selection. No new candidates or repeated confirmation.",
+    "numerical_order": "Encode exactly the mechanically accepted lookup, run full regression and commit. Capture the already reserved fresh inputs once for that final numerical executable and execute the actual lookups across every declared schedule. Kernel timing and final lookup build identities are recorded separately."
+  }
 }

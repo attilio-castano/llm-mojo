@@ -474,3 +474,118 @@ def profile_selection(record):
 def selection_run_location(directory,name):
     root=Path(directory)
     return (root/name,'') if (root/name).is_dir() else (root,name+'_')
+
+
+def _policy_matrix(name,control,cells,field):
+    """One control and reuse mode, with complete per-cell self calibration."""
+    layers=sorted({p['layers'] for p in cells})
+    if len(layers)!=1:raise ValueError('policy matrix must separate reuse modes')
+    comparisons=[dict(query_rows=p['query_rows'],rows=p['rows'],layers=p['layers'],candidate=v)
+        for p in cells for v in sorted({control,p[field]})]
+    variants=sorted({p['candidate'] for p in comparisons})
+    return dict(name=name,control=control,candidates=variants,layers=layers,
+        names={v:NAMES[v] for v in variants},
+        workloads=[dict(query_rows=p['query_rows'],rows=p['rows']) for p in cells],
+        comparisons=comparisons)
+
+
+def propose_policy_confirmation(decision,declaration=None):
+    """Freeze the final table and the previously unmeasured long extension."""
+    declaration=policy_declaration() if declaration is None else declaration
+    if decision.get('round')!=2 or not decision.get('compatible_row_reuse'):
+        raise ValueError('final proposal requires the complete compatible second round')
+    cells=[]
+    source={(p['query_rows'],p['rows'],p['layers']):p for p in decision['proposals']}
+    expected={(r,t,l) for r,t,_ in declaration['workloads'] if r!=4096 for l in declaration['modes']}
+    if len(source)!=len(decision['proposals']) or set(source)!=expected:
+        raise ValueError('incomplete final proposal basis')
+    for r,t,control in declaration['workloads']:
+        for l in declaration['modes']:
+            p=source[256,256,l] if r==4096 else source[r,t,l]
+            cells.append(dict(query_rows=r,rows=t,layers=l,fast_control=control,
+                fast=p['fast'],deterministic=p['deterministic'],
+                unmeasured_extension=r==4096))
+    screens=[]
+    for l in declaration['modes']:
+        mode='hot' if l==1 else 'ring'
+        det=[p for p in cells if p['layers']==l]
+        screens.append(dict(**_policy_matrix('decoder_policies_confirmation_det_'+mode,20,det,'deterministic'),policy='deterministic'))
+        for control in sorted({p['fast_control'] for p in cells}):
+            fast=[p for p in det if p['fast_control']==control and p['fast']!=control]
+            if fast:screens.append(dict(**_policy_matrix(f'decoder_policies_confirmation_fast_{control}_{mode}',control,fast,'fast'),policy='fast'))
+    return dict(schema=1,kind='decoder_policy_confirmation_proposal',basis=decision,
+        basis_sha256=sha_json(decision),cells=cells,screens=screens,
+        deterministic_fallback=20,numerical=dict(variants=[100,101,102,103],
+            required_invariants=[101,103],comparison_family=[101,103],split='holdout'),
+        rule='One independent serialized timing session. Qualify each proposed deterministic configuration directly against20 and every changed Fast configuration against its original Fast incumbent, with self calibration. Apply the existing faster rule; otherwise retain the fallback. Then measure the accepted deterministic configuration directly against accepted Fast at all seven cells in both modes, self calibrated. This cost phase cannot change selection. No new candidates or repeated confirmation.',
+        numerical_order='Encode exactly the mechanically accepted lookup, run full regression and commit. Capture the already reserved fresh inputs once for that final numerical executable and execute the actual lookups across every declared schedule. Kernel timing and final lookup build identities are recorded separately.')
+
+
+def policy_confirmation_specs(declaration=None):
+    from .study import STUDIES
+    declaration=policy_declaration() if declaration is None else declaration
+    final=declaration['final_confirmation']
+    if final!=json.loads(json.dumps(propose_policy_confirmation(final['basis'],declaration))):
+        raise ValueError('policy confirmation proposal changed')
+    return {s['name']:{**STUDIES['decoder_layer'],**{k:v for k,v in s.items() if k not in ('name','policy')}}
+            for s in final['screens']}
+
+
+def policy_confirmed_selection(directory,build,declaration=None):
+    """Derive acceptance only from all frozen, completed qualification runs."""
+    import copy
+    from .study import load_run
+    declaration=policy_declaration() if declaration is None else declaration
+    final=declaration['final_confirmation']
+    if build['repository']['dirty'] or build['sources'].get(POLICY_PATH)!=sha_json(declaration):
+        raise ValueError('confirmation build does not bind this proposal')
+    specs=policy_confirmation_specs(declaration);tables={};receipts=[]
+    for name,spec in specs.items():
+        path,prefix=selection_run_location(directory,name);run,_,summary=load_run(path,prefix)
+        if (run['study']!=name or run['build']!=build or run['specification']!=json.loads(json.dumps(spec))):
+            raise ValueError('policy qualification identity changed')
+        tables[name]={(p['query_rows'],p['rows'],p['layers'],p['candidate']):p for p in summary}
+        receipts.append(dict(study=name,run_sha256=sha(path/(prefix+'run.json')),samples_sha256=run['samples_sha256']))
+    cells=copy.deepcopy(final['cells'])
+    for screen in final['screens']:
+        policy=screen['policy'];table=tables[screen['name']]
+        for w in screen['workloads']:
+            for l in screen['layers']:
+                cell=next(p for p in cells if (p['query_rows'],p['rows'],p['layers'])==(w['query_rows'],w['rows'],l))
+                proposed=cell[policy];row=table[w['query_rows'],w['rows'],l,proposed]
+                cell[policy]=proposed if proposed==screen['control'] or row['decision']=='faster' else screen['control']
+    return dict(schema=1,kind='decoder_policy_confirmed_selection',proposal_sha256=sha_json(final),
+        build_sha256=hashlib.sha256(json.dumps(build,sort_keys=True).encode()).hexdigest(),
+        qualification=receipts,cells=cells,fallbacks=dict(fast=0,deterministic=20))
+
+
+def policy_cost_specs(accepted):
+    from .study import STUDIES
+    if accepted.get('kind')!='decoder_policy_confirmed_selection':
+        raise ValueError('policy cost needs a confirmed lookup')
+    result={}
+    for l in (1,24):
+        for control in sorted({p['fast'] for p in accepted['cells'] if p['layers']==l}):
+            cells=[p for p in accepted['cells'] if p['layers']==l and p['fast']==control]
+            name=f'decoder_policies_cost_{control}_'+('hot' if l==1 else 'ring')
+            spec=_policy_matrix(name,control,cells,'deterministic')
+            result[name]={**STUDIES['decoder_layer'],**{k:v for k,v in spec.items() if k!='name'}}
+    return result
+
+
+def policy_cost_report(directory,accepted,build):
+    from .study import load_run
+    rows=[];receipts=[]
+    for name,spec in policy_cost_specs(accepted).items():
+        path,prefix=selection_run_location(directory,name);run,_,summary=load_run(path,prefix)
+        if (run['study']!=name or run['build']!=build or run.get('selection')!=accepted
+            or run['specification']!=json.loads(json.dumps(spec))):
+            raise ValueError('policy cost does not execute the accepted configurations')
+        selected={(p['query_rows'],p['rows'],p['layers']):p['deterministic'] for p in accepted['cells']}
+        rows.extend(dict(**p,fast=spec['control'],deterministic=p['candidate']) for p in summary
+            if p['candidate']==selected[p['query_rows'],p['rows'],p['layers']])
+        receipts.append(dict(study=name,run_sha256=sha(path/(prefix+'run.json')),samples_sha256=run['samples_sha256']))
+    expected={(p['query_rows'],p['rows'],p['layers'],p['fast'],p['deterministic']) for p in accepted['cells']}
+    actual={(p['query_rows'],p['rows'],p['layers'],p['fast'],p['deterministic']) for p in rows}
+    if len(rows)!=len(expected) or actual!=expected:raise ValueError('incomplete final policy cost table')
+    return dict(kind='decoder_policy_cost',accepted=accepted,runs=receipts,rows=rows)

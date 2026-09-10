@@ -136,3 +136,44 @@ Require full numerical and family compatibility for 20/22/23/24. Choose only
 direct, noise-calibrated gains against each incumbent; do not compose gains
 across sessions. The original fresh inputs and one independent confirmation
 remain reserved. No candidate slots remain after this round.
+
+## Frozen final confirmation
+
+Round 2 at `4af9068` passed 3,064,220 core checks, 259,758 exact schedule
+comparisons per configuration and all 1,296 family comparisons. Its 28
+adversarial ring checks also passed. The eight-row tile was 11–16% slower
+than four-row reuse across the screen; the sixteen-row tile was 37–61%
+slower. Both were rejected for dispatch. More reuse did not improve the
+whole layer in this experiment; no register or DRAM counter establishes
+which resource caused the regression. All 3,840 observations are retained.
+
+Freeze the final proposal in the executable declaration: deterministic 22
+at the four screened multirow shapes, 20 at decode, and an explicitly
+unmeasured extension of 22 to full 4096-row prefill. Fast proposes 21 only
+at hot cached `(16,256)` and retains the original 0/3 controls elsewhere.
+There are no remaining optimization candidates.
+
+The sole independent timing session first compares each proposed
+deterministic configuration directly with 20, including same-run self
+calibration, and compares the changed Fast cell with its original control.
+Each promotion must satisfy the existing four-block gain rule. Failed or
+inconclusive promotions retain the declared fallback. Then, within the same
+serialized session and build, measure the accepted deterministic and Fast
+configurations directly against one another at all seven cells in both
+modes. Each cost matrix is derived from the complete qualification records
+and includes its own Fast self-pairs. Cost results cannot change selection.
+
+This is 2,080 qualification observations and 2,240 cost observations for
+the frozen proposal. The long ring comparison repeatedly executes the slow
+20 control across 24 allocation sets; retain the full protocol despite its
+execution cost. Preserve a copy of the proposal-time declaration so later
+lookup changes cannot reinterpret these runs.
+
+Timing measures explicit configuration enqueue through completion. After
+mechanical acceptance, encode precisely that table in the native and Python
+lookups, validate the repository and commit. No kernel arithmetic changes
+are permitted in this step. Generate the already reserved fresh inputs once
+for the final numerical executable, then execute actual policies 100–103
+across every declared schedule. Require byte identity for 101/103 and
+between those reuse modes. Record the timing build and final lookup build
+separately; the configuration timings exclude the policy selector itself.

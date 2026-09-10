@@ -13,6 +13,53 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class DecoderToolingTests(unittest.TestCase):
+    def test_final_confirmation_is_frozen_and_cost_uses_the_accepted_lookup(self):
+        from llm_mojo.benchmarks import study
+        declaration=copy.deepcopy(contract.policy_declaration())
+        basis=copy.deepcopy(declaration['rounds'][1]['incumbent_decision'])
+        basis.update(round=2,compatible_row_reuse=True,deterministic_family=[20,22,23,24])
+        for cell in basis['proposals']:
+            if cell['query_rows']>1:cell['deterministic']=24
+        declaration['final_confirmation']=json.loads(json.dumps(contract.propose_policy_confirmation(basis,declaration)))
+        before=copy.deepcopy(declaration)
+        build=dict(repository=dict(dirty=False),sources={contract.POLICY_PATH:contract.sha_json(declaration)})
+        specs=contract.policy_confirmation_specs(declaration)
+        self.assertEqual(len(declaration['final_confirmation']['cells']),14)
+        def data(spec):
+            return [dict(**w,layers=l,candidate=c,block=b,arm=a,
+                variant=spec['control'] if a=='control' else c,repetition=n,
+                us=100. if a=='control' or c==spec['control'] else
+                    120. if (w['query_rows'],w['rows'],l,b)==(256,256,24,1) else 80.)
+                for w,l,c in study.comparisons(spec) for b in range(1,5)
+                for a in ('control','candidate') for n in range(10)]
+        self.assertEqual(sum(len(data(s)) for s in specs.values()),2080)
+        def load(path,prefix=''):
+            name=prefix.removesuffix('_') if prefix else Path(path).name;spec=specs[name]
+            samples=data(spec)
+            return dict(study=name,build=build,specification=json.loads(json.dumps(spec)),samples_sha256='samples'),samples,study.summarize(samples,spec)
+        with patch.object(study,'load_run',side_effect=load),patch.object(contract,'sha',return_value='0'*64):
+            accepted=contract.policy_confirmed_selection(Path('/unused'),build,declaration)
+        self.assertEqual(declaration,before)
+        bad=next(c for c in accepted['cells'] if (c['query_rows'],c['rows'],c['layers'])==(256,256,24))
+        self.assertEqual(bad['deterministic'],20)
+        self.assertEqual(next(c for c in accepted['cells'] if (c['query_rows'],c['rows'],c['layers'])==(16,256,1))['fast'],21)
+        # Equal policies need one complete self comparison and still appear in cost.
+        accepted['cells'][0]['deterministic']=accepted['cells'][0]['fast']
+        costs=contract.policy_cost_specs(accepted)
+        def cost(path,prefix=''):
+            name=prefix.removesuffix('_') if prefix else Path(path).name;spec=costs[name]
+            samples=data(spec)
+            return dict(study=name,build=build,selection=accepted,
+                specification=json.loads(json.dumps(spec)),samples_sha256='samples'),samples,study.summarize(samples,spec)
+        with patch.object(study,'load_run',side_effect=cost),patch.object(contract,'sha',return_value='0'*64):
+            report=contract.policy_cost_report(Path('/unused'),accepted,build)
+        self.assertEqual(len(report['rows']),14)
+        first=next(r for r in report['rows'] if (r['query_rows'],r['rows'],r['layers'])==(16,16,1))
+        self.assertEqual(first['ratio'],1.)
+        altered=copy.deepcopy(declaration)
+        altered['final_confirmation']['cells'][0]['deterministic']=23
+        with self.assertRaises(ValueError):contract.policy_confirmation_specs(altered)
+
     def test_second_round_uses_actual_incumbents_and_complete_mode_census(self):
         declaration=contract.policy_declaration()
         declared=declaration['rounds'][1]
