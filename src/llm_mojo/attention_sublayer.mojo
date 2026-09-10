@@ -270,7 +270,7 @@ def _enqueue_attention_qkv(
     Packed mappings include an explicit layout copy.
     No allocation, synchronization, new arithmetic, or rounding in the copy.
     """
-    if mapping < 0 or mapping > 5:
+    if mapping < 0 or mapping > 7:
         raise Error("unknown QKV projection mapping")
     var h = weights.hidden
     var k = weights.kv_heads * weights.head_dim
@@ -305,8 +305,12 @@ def _enqueue_attention_qkv(
         enqueue_linear_prefill_mma_tile_apple_gpu[16, 16](ctx, normal, weight, bias, packed)
     elif mapping == 4:
         enqueue_linear_prefill_mma_tile_apple_gpu[8, 32](ctx, normal, weight, bias, packed)
-    else:
+    elif mapping == 5:
         enqueue_linear_rowwise_rows_apple_gpu[4](ctx, normal, weight, bias, packed)
+    elif mapping == 6:
+        enqueue_linear_rowwise_rows_apple_gpu[8](ctx, normal, weight, bias, packed)
+    else:
+        enqueue_linear_rowwise_rows_apple_gpu[16](ctx, normal, weight, bias, packed)
     ctx.enqueue_function[_unpack_qkv[type_of(packed.layout), type_of(q.layout), type_of(key.layout)]](
         packed, q, key, value, Int32(rows), Int32(h), Int32(k),
         grid_dim=ceildiv(rows * (h + 2 * k), 128), block_dim=128,
@@ -318,7 +322,7 @@ def _enqueue_attention_wo(
     mut work: AttentionWorkspace, rows: Int, use_mma: Bool, tile: Int = 0,
 ) raises:
     """Shared Wo boundary for composition and isolated timing on identical data."""
-    if tile < 0 or tile > 3:
+    if tile < 0 or tile > 5:
         raise Error("unknown Wo tile mapping")
     var h = weights.hidden
     var a = TileTensor(work.attention, row_major(rows, h))
@@ -326,6 +330,10 @@ def _enqueue_attention_wo(
     var o = TileTensor(work.projected, row_major(rows, h))
     if tile == 3:
         enqueue_linear_rowwise_rows_apple_gpu[4](ctx, a, w, o)
+    elif tile == 4:
+        enqueue_linear_rowwise_rows_apple_gpu[8](ctx, a, w, o)
+    elif tile == 5:
+        enqueue_linear_rowwise_rows_apple_gpu[16](ctx, a, w, o)
     elif not use_mma:
         enqueue_linear_apple_gpu(ctx, a, w, o)
     elif tile == 0:
@@ -353,9 +361,9 @@ def _validate_attention_sublayer[XL: TensorLayout](
     var t = p + r
     if route < 0 or route > 11:
         raise Error("unknown attention sublayer route")
-    if qkv_mapping < 0 or qkv_mapping > 5:
+    if qkv_mapping < 0 or qkv_mapping > 7:
         raise Error("unknown QKV projection mapping")
-    if wo_tile < 0 or wo_tile > 3:
+    if wo_tile < 0 or wo_tile > 5:
         raise Error("unknown Wo tile mapping")
     var launched_route = route
     if route >= 6 and route <= 10 and r == 1:
@@ -591,12 +599,12 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     Zero keeps both 8x16 projections.
     GQA mapping 5 is the consistency baseline: route 11 and rowwise projections
     for every row count. Projection mapping 6 forces 8x16 MMA at every row
-    count; mapping 7 packs QKV and reuses rowwise weights across four rows.
+    count; mappings 7/8/9 pack QKV and reuse rowwise weights across 4/8/16 rows.
     """
     comptime assert x.flat_rank == 2
     if gqa_mapping < 0 or gqa_mapping > 5:
         raise Error("unknown integrated GQA mapping")
-    if projection_mapping < 0 or projection_mapping > 7:
+    if projection_mapping < 0 or projection_mapping > 9:
         raise Error("unknown integrated projection mapping")
     if projection_mapping >= 6 and gqa_mapping != 5:
         raise Error("policy projection mappings require consistent attention")
@@ -607,8 +615,8 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
         if projection_mapping >= 6:
             # Padding inactive rows changes occupancy, not K reduction order.
             return enqueue_attention_sublayer(ctx, weights, cache, work, x, 11,
-                projection_mapping == 6, 2 if projection_mapping == 6 else 5,
-                0 if projection_mapping == 6 else 3)
+                projection_mapping == 6, 2 if projection_mapping == 6 else projection_mapping - 2,
+                0 if projection_mapping == 6 else projection_mapping - 4)
         return enqueue_attention_sublayer(ctx, weights, cache, work, x, 11)
     var use_mma = Int(x.dim[0]()) >= 16
     var qkv = 2 if use_mma else 1

@@ -239,7 +239,7 @@ def enqueue_linear_rowwise_rows_apple_gpu[
     bias: TileTensor[DType.bfloat16, BL, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
 ) raises:
-    comptime assert ROW_TILE == 4
+    comptime assert ROW_TILE == 4 or ROW_TILE == 8 or ROW_TILE == 16
     var rows = Int(input.dim[0]())
     if rows == 1:
         enqueue_linear_apple_gpu[IL,WL,BL,OL,HAS_BIAS](context,input,weight,bias,output)

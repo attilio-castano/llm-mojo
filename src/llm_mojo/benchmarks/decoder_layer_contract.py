@@ -9,7 +9,7 @@ from .._repository import repository_root
 OPERATION = 'decoder_layer'
 VARIANTS = {0,1,2,3,4,8,12,14}
 # VARIANTS is the frozen historical selection registry.
-MEASUREMENT_VARIANTS = VARIANTS | {20,21,22}
+MEASUREMENT_VARIANTS = VARIANTS | {20,21,22,23,24}
 # Numerical harness IDs for the public lookup: Fast/Deterministic, hot/ring24.
 POLICY_EXECUTIONS = {100:(False,1),101:(True,1),102:(False,24),103:(True,24)}
 POLICY_TEST_VARIANTS = MEASUREMENT_VARIANTS | POLICY_EXECUTIONS.keys()
@@ -144,7 +144,7 @@ def mappings(variant,rows):
         raise ValueError('invalid decoder configuration')
     if variant==20:return (5,0,0)
     if variant==21:return (5,6,7)
-    if variant==22:return (5,7,19)
+    if variant>=22:return (5,variant-15,variant-3)
     return (4 if variant in (2,3) else 0,5 if variant in (1,3) else 0,
             variant if rows==1 and variant in (8,12,14) else 0 if rows==1 or variant==4 else 7)
 
@@ -204,7 +204,52 @@ def select_policy_round1(summaries,invariant_variants,compatible_family,declarat
         fixed_mma_global_qualified=use21,compatible_row_reuse=compatible)
 
 
+def select_policy_round2(summaries,invariant_variants,compatible_family,declaration=None):
+    """Compare each new tile directly with its frozen incumbent, per mode."""
+    import copy
+    declaration=policy_declaration() if declaration is None else declaration
+    declared=declaration['rounds'][1]
+    incumbent=declared['incumbent_decision']
+    if (declared['round']!=2 or declared['new_candidates']!=[23,24]
+        or sha_json(incumbent)!=declared['incumbent_decision_sha256']):
+        raise ValueError('round-two incumbent or candidate declaration changed')
+    screens={screen['name']:screen for screen in declared['screens']}
+    if set(summaries)!=set(screens):raise ValueError('missing policy screen')
+    proposals=copy.deepcopy(incumbent['proposals'])
+    cells={(p['query_rows'],p['rows'],p['layers']):p for p in proposals}
+    visited=set()
+    compatible=compatible_family is True and {20,22,23,24}<=set(invariant_variants)
+    for name,screen in screens.items():
+        table={(x['query_rows'],x['rows'],x['layers'],x['candidate']):x for x in summaries[name]}
+        expected={(r,t,l,v) for r,t in screen['workloads']
+                  for l in screen['layers'] for v in screen['candidates']}
+        if len(table)!=len(summaries[name]) or set(table)!=expected:
+            raise ValueError('incomplete policy screen comparison census')
+        policy='deterministic' if name.endswith('_det') else 'fast'
+        for r,t in screen['workloads']:
+            for l in screen['layers']:
+                key=(policy,r,t,l)
+                cell=cells[r,t,l]
+                if key in visited or cell[policy]!=screen['control']:
+                    raise ValueError('policy screen does not compare the frozen incumbent')
+                visited.add(key)
+                eligible=[table[r,t,l,v] for v in (23,24)
+                          if table[r,t,l,v]['decision']=='faster'
+                          and (policy=='fast' or compatible)]
+                if eligible:
+                    cell[policy]=min(eligible,key=lambda x:(x['ratio'],x['candidate']))['candidate']
+    if visited!={(policy,r,t,l) for r,t,l in cells if r>1 for policy in ('fast','deterministic')}:
+        raise ValueError('missing multirow policy comparison')
+    return dict(round=2,proposals=proposals,deterministic_fallback=20,
+        deterministic_family=[20,22,23,24] if compatible else incumbent['deterministic_family'],
+        compatible_row_reuse=compatible)
+
+
 def policy_round1_decision(directory,numerical_directories,build):
+    return policy_round_decision(directory,numerical_directories,build,1)
+
+
+def policy_round_decision(directory,numerical_directories,build,round_number):
     """Bind selection to raw timing, full numerical census and one clean build."""
     import copy
     from .. import decoder_validation as validation
@@ -212,7 +257,8 @@ def policy_round1_decision(directory,numerical_directories,build):
     numerical_directories=list(map(Path,numerical_directories))
     if not numerical_directories:raise ValueError('missing policy numerical split')
     declared=json.loads((numerical_directories[0]/'evaluation.json').read_text())['declaration']
-    round_spec=declared['rounds'][0]
+    if round_number not in (1,2):raise ValueError('unknown policy round')
+    round_spec=declared['rounds'][round_number-1]
     if build['repository']['dirty'] or build['sources'].get(POLICY_PATH)!=sha_json(declared):
         raise ValueError('policy declaration differs from measurement build')
     anchor_path=repository_root()/'tests/fixtures/decoder_layer/checksums.json'
@@ -270,7 +316,8 @@ def policy_round1_decision(directory,numerical_directories,build):
     return dict(schema=1,kind='decoder_policy_round_decision',declaration_sha256=sha_json(declared),
         build_sha256=hashlib.sha256(json.dumps(build,sort_keys=True).encode()).hexdigest(),
         numerical=numerical,screens=runs,invariant_variants=sorted(invariant),
-        **select_policy_round1(summaries,invariant,compatible,declared))
+        **(select_policy_round1 if round_number==1 else select_policy_round2)(
+            summaries,invariant,compatible,declared))
 
 
 def stages(variant,rows):

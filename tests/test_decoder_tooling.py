@@ -13,6 +13,28 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class DecoderToolingTests(unittest.TestCase):
+    def test_second_round_uses_actual_incumbents_and_complete_mode_census(self):
+        declaration=contract.policy_declaration()
+        declared=declaration['rounds'][1]
+        summaries={screen['name']:[dict(query_rows=r,rows=t,layers=l,candidate=v,
+            decision='calibration' if v==screen['control'] else 'faster',
+            ratio=1.0 if v==screen['control'] else .8 if v==23 else .7)
+            for r,t in screen['workloads'] for l in screen['layers'] for v in screen['candidates']]
+            for screen in declared['screens']}
+        choose=lambda compatible:contract.select_policy_round2(summaries,{20,22,23,24},compatible)
+        selected=choose(True)
+        self.assertTrue(all(x['deterministic']==24 and x['fast']==24
+                            for x in selected['proposals'] if x['query_rows']>1))
+        self.assertTrue(all(x['deterministic']==20 and x['fast']==0
+                            for x in selected['proposals'] if x['query_rows']==1))
+        self.assertTrue(all(x['deterministic']==22 for x in choose(False)['proposals'] if x['query_rows']>1))
+        hot=summaries['decoder_policies_round2_fast_21_hot']
+        for row in hot:row['decision']='inconclusive'
+        cell=next(x for x in choose(True)['proposals'] if (x['query_rows'],x['rows'],x['layers'])==(16,256,1))
+        self.assertEqual(cell['fast'],21)
+        hot.pop()
+        with self.assertRaises(ValueError):choose(True)
+
     def test_policy_selection_requires_complete_screens_and_compatible_arithmetic(self):
         summaries={screen['name']:[dict(query_rows=r,rows=t,layers=l,candidate=v,
             decision='calibration' if v==screen['control'] else 'faster',

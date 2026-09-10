@@ -332,7 +332,7 @@ def _local_attention(ctx: DeviceContext, mut w: AttentionWeights,
     poison_decoder(a.raw_query,r*h)
     poison_decoder(a.raw_key,r*k)
     poison_decoder(a.raw_value,r*k)
-    _enqueue_attention_qkv(ctx,w,a,r,(2 if projection == 6 else 5) if projection >= 6 else
+    _enqueue_attention_qkv(ctx,w,a,r,(2 if projection == 6 else projection - 2) if projection >= 6 else
         (((3 if projection == 5 else 2) if r >= 16 else 1) if nq == 14 and gqa != 5 else 0))
     check_decoder(a.raw_query,name,"Q_raw","full",0,r,h,"operation")
     check_decoder(a.raw_key,name,"K_raw","full",0,r,k,"operation")
@@ -375,7 +375,7 @@ def _local_attention(ctx: DeviceContext, mut w: AttentionWeights,
     load_decoder(a.attention,name,"full_O",0,r*h)
     poison_decoder(a.projected,r*h)
     _enqueue_attention_wo(ctx,w,a,r,projection >= 6 or (nq == 14 and r >= 16 and gqa != 5),
-        3 if projection == 7 else (1 if projection == 5 else 0))
+        projection - 4 if projection >= 7 else (1 if projection == 5 else 0))
     check_decoder(a.projected,name,"B_att","full",0,r,h,"operation")
     load_decoder(a.projected,name,"full_B_att",0,r*h)
     poison_decoder(a.output,r*h)

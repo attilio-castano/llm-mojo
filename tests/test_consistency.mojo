@@ -72,7 +72,7 @@ def _fill_linear(mut buffer: DeviceBuffer[DType.bfloat16], seed: Int) raises:
             mapped.unsafe_ptr()[unsafe_offset=i] = bitcast[DType.bfloat16](bits)
 
 
-def _rowwise_weight_reuse[HAS_BIAS: Bool]() raises:
+def _rowwise_weight_reuse[HAS_BIAS: Bool, ROW_TILE: Int]() raises:
     var ctx = DeviceContext()
     assert_equal(ctx.api(),"metal")
     var n = 19
@@ -96,10 +96,10 @@ def _rowwise_weight_reuse[HAS_BIAS: Bool]() raises:
             var y = TileTensor(full.unsafe_ptr().unsafe_offset(n),row_major(rows,n))
             comptime if HAS_BIAS:
                 enqueue_linear_apple_gpu(ctx,x,w,b,a)
-                enqueue_linear_rowwise_rows_apple_gpu[4](ctx,x,w,b,y)
+                enqueue_linear_rowwise_rows_apple_gpu[ROW_TILE](ctx,x,w,b,y)
             else:
                 enqueue_linear_apple_gpu(ctx,x,w,a)
-                enqueue_linear_rowwise_rows_apple_gpu[4](ctx,x,w,y)
+                enqueue_linear_rowwise_rows_apple_gpu[ROW_TILE](ctx,x,w,y)
             for chunk in [1,3,16]:
                 chunks.enqueue_fill(-123)
                 var p = 0
@@ -108,9 +108,9 @@ def _rowwise_weight_reuse[HAS_BIAS: Bool]() raises:
                     var cx = TileTensor(xb.unsafe_ptr().unsafe_offset(p*k),row_major(r,k))
                     var cy = TileTensor(chunks.unsafe_ptr().unsafe_offset((p+1)*n),row_major(r,n))
                     comptime if HAS_BIAS:
-                        enqueue_linear_rowwise_rows_apple_gpu[4](ctx,cx,w,b,cy)
+                        enqueue_linear_rowwise_rows_apple_gpu[ROW_TILE](ctx,cx,w,b,cy)
                     else:
-                        enqueue_linear_rowwise_rows_apple_gpu[4](ctx,cx,w,cy)
+                        enqueue_linear_rowwise_rows_apple_gpu[ROW_TILE](ctx,cx,w,cy)
                     p += r
                 with old.map_to_host() as reference:
                     with full.map_to_host() as actual:
@@ -123,8 +123,12 @@ def _rowwise_weight_reuse[HAS_BIAS: Bool]() raises:
 
 
 def test_rowwise_weight_reuse_preserves_bits_and_guards() raises:
-    _rowwise_weight_reuse[True]()
-    _rowwise_weight_reuse[False]()
+    _rowwise_weight_reuse[True,4]()
+    _rowwise_weight_reuse[False,4]()
+    _rowwise_weight_reuse[True,8]()
+    _rowwise_weight_reuse[False,8]()
+    _rowwise_weight_reuse[True,16]()
+    _rowwise_weight_reuse[False,16]()
 
 
 def test_consistency_mapping_is_independent_of_rows() raises:
@@ -132,6 +136,8 @@ def test_consistency_mapping_is_independent_of_rows() raises:
         assert_equal(decoder_mappings(20,rows),SIMD[DType.int64,4](5,0,0,1))
         assert_equal(decoder_mappings(21,rows),SIMD[DType.int64,4](5,6,7,1))
         assert_equal(decoder_mappings(22,rows),SIMD[DType.int64,4](5,7,19,1))
+        assert_equal(decoder_mappings(23,rows),SIMD[DType.int64,4](5,8,20,1))
+        assert_equal(decoder_mappings(24,rows),SIMD[DType.int64,4](5,9,21,1))
     with assert_raises():
         _ = decoder_mappings(20,0)
 

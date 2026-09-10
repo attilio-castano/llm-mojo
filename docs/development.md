@@ -150,7 +150,7 @@ not capture or evaluate the separate holdouts. The Mojo MLP adds
 operation/composition and BF16 boundary tests for all nineteen projection mappings.
 Mappings 0 through 7 cover full and chunked rows; decode-only mappings 8 through
 18 use each fixture's first row and reject multi-row calls.
-Decoder policy mapping 19 reuses projection weights across four rows; its
+Decoder policy mappings 19/20/21 reuse projection weights across 4/8/16 rows; their
 primitive byte-equivalence and composed numerical checks belong to the
 [decoder policy study](../studies/decoder_layer/policies-plan.md). The historical
 standalone MLP measurement registry remains 0 through 18.

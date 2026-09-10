@@ -22,14 +22,14 @@ def decoder_mappings(variant: Int, rows: Int) raises -> SIMD[DType.int64, 4]:
     if rows < 1 or (variant != 0 and variant != 1 and variant != 2
         and variant != 3 and variant != 4 and variant != 8
         and variant != 12 and variant != 14 and variant != 20
-        and variant != 21 and variant != 22):
+        and variant != 21 and variant != 22 and variant != 23 and variant != 24):
         raise Error("unknown decoder configuration or invalid rows")
     if variant == 20:
         return SIMD[DType.int64, 4](5, 0, 0, 1)
     if variant == 21:
         return SIMD[DType.int64, 4](5, 6, 7, 1)
-    if variant == 22:
-        return SIMD[DType.int64, 4](5, 7, 19, 1)
+    if variant >= 22:
+        return SIMD[DType.int64, 4](5, Int64(variant-15), Int64(variant-3), 1)
     var gqa = 4 if variant == 2 or variant == 3 else 0
     var projections = 5 if variant == 1 or variant == 3 else 0
     var mlp = 0 if rows == 1 or variant == 4 else 7
@@ -62,17 +62,17 @@ def _decoder_preflight[XL: TensorLayout](
         or cache.capacity < 1 or cache.capacity > 4096
         or a.capacity < 1 or a.capacity > 4096):
         raise Error("decoder geometry or capacity is invalid")
-    if (gqa_mapping != 0 and gqa_mapping != 4 and gqa_mapping != 5) or (projection_mapping != 0 and projection_mapping != 5 and projection_mapping != 6 and projection_mapping != 7):
+    if (gqa_mapping != 0 and gqa_mapping != 4 and gqa_mapping != 5) or (projection_mapping != 0 and projection_mapping != 5 and projection_mapping != 6 and projection_mapping != 7 and projection_mapping != 8 and projection_mapping != 9):
         raise Error("decoder supports declared integrated attention mappings only")
     if projection_mapping >= 6 and gqa_mapping != 5:
         raise Error("policy projection mappings require consistent attention")
     if gqa_mapping == 5 and not ((projection_mapping == 0 and mlp_mapping == 0)
         or (projection_mapping == 6 and mlp_mapping == 7)
-        or (projection_mapping == 7 and mlp_mapping == 19)):
+        or (projection_mapping >= 7 and mlp_mapping == projection_mapping + 12)):
         raise Error("consistent decoder requires a declared projection and MLP family")
     if not integrated and (gqa_mapping != 0 or projection_mapping != 0):
         raise Error("tiny decoder requires attention mappings zero")
-    if mlp_mapping != 0 and mlp_mapping != 7 and mlp_mapping != 8 and mlp_mapping != 12 and mlp_mapping != 14 and mlp_mapping != 19:
+    if mlp_mapping != 0 and mlp_mapping != 7 and mlp_mapping != 8 and mlp_mapping != 12 and mlp_mapping != 14 and mlp_mapping != 19 and mlp_mapping != 20 and mlp_mapping != 21:
         raise Error("decoder supports declared MLP mappings only")
     if mlp_mapping == 7 and r == 1 and projection_mapping < 6:
         raise Error("decoder single-row baseline requires MLP mapping zero")
@@ -81,9 +81,9 @@ def _decoder_preflight[XL: TensorLayout](
         raise Error("decoder requires contiguous row-major input")
     _ = _validate_attention_sublayer(ctx, aw, cache, a, x,
                                     6 + gqa_mapping if integrated else 3,
-                                    (2 if projection_mapping == 6 else 5) if projection_mapping >= 6 else
+                                    (2 if projection_mapping == 6 else projection_mapping - 2) if projection_mapping >= 6 else
                                     ((((3 if projection_mapping == 5 else 2) if r >= 16 else 1) if gqa_mapping != 5 else 0) if integrated else 0),
-                                    3 if projection_mapping == 7 else (1 if projection_mapping == 5 else 0))
+                                    projection_mapping - 4 if projection_mapping >= 7 else (1 if projection_mapping == 5 else 0))
     _validate_mlp(ctx, mw, m, TileTensor(a.output, row_major(r, h)), mlp_mapping)
     var n = a.max_rows
     var k = aw.kv_heads * aw.head_dim
