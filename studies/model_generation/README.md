@@ -1,11 +1,13 @@
 The active [Fast runtime plan](../../docs/fast-generation-plan.md) now treats
 full-model numerical differences as diagnostics while retaining exact
-implementation invariants. The failed qualifications below remain historical
-evidence and do not gate the new implementation effort.
+implementation invariants. The [completed native Fast runtime study](runtime.md)
+retains measured dispatch for eleven workloads, native generation and complete
+diagnostic evidence. The failed qualifications below remain historical evidence.
 
 # Full-model reference schedule qualification
 
-The [Fast reference qualification](fast-reference.md) is the latest checkpoint.
+The [Fast reference qualification](fast-reference.md) records the preceding
+reference-only checkpoint.
 It failed its predeclared intermediate-error ceilings during reference-only
 calibration; confirmation and native Fast acceptance did not run. This README
 retains the earlier schedule-qualification result below.
@@ -13,8 +15,9 @@ retains the earlier schedule-qualification result below.
 **Historical reference confirmation failed.** The subsequently authorized
 [consistency implementation](consistency.md) qualifies a canonical reference
 through 4096 tokens and passes native primitive/layer consistency checks. Its
-first native full-model accuracy case fails seven unchanged gates. Full-model
-schedule acceptance, generation and performance promotion remain pending.
+first native full-model accuracy case fails seven unchanged gates. At that
+checkpoint, full-model schedule acceptance, generation and performance promotion
+remained pending.
 Final reserved inputs remain unopened. The original eight-failure reference
 confirmation below remains historical evidence, with unchanged budgets.
 

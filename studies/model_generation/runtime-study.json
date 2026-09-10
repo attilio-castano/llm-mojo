@@ -1,0 +1,99 @@
+{
+  "kind": "model-runtime-study-v1",
+  "numerical_policy": "diagnostic only",
+  "files": {
+    "runtime-diagnostics.json.gz": {
+      "sha256": "c59bddbaaeff5916c1f943fa5fb4f73891e678789150961ad30edef9d286a1a3",
+      "raw_sha256": "7bae388bea71704bfee3c41b43b828a1bab16ed4bad40e086a572515bc3f1277",
+      "raw_bytes": 9513682,
+      "compressed_bytes": 442232
+    },
+    "runtime-measurements.json.gz": {
+      "sha256": "a3d79203a1a97fe8ba30196c322693b8aee4b09ea29f2341f31e16a06fe2bc5a",
+      "raw_sha256": "4cbd95b00b30716fe6840489c519721e7c6660296bd9094672046a75ea9f634a",
+      "raw_bytes": 801440,
+      "compressed_bytes": 124023
+    },
+    "runtime-generations.json.gz": {
+      "sha256": "512e897b941ae0aa98829ec5414674dc9c8c08619d5e8fdf1a1865942486320d",
+      "raw_sha256": "572d1d7abb340e902476d9a52a51d55de384f1435b33ecb929b0fc682308f346",
+      "raw_bytes": 92680,
+      "compressed_bytes": 13401
+    },
+    "runtime-reference.json.gz": {
+      "sha256": "fffe26625786c6e5fcde809e1227c6f42ae76628a8c74d5141925a988e5820d1",
+      "raw_sha256": "b7ccd38bf47a3ba78454272c65601c07285d92f3228884d322a4524e0acff4a4",
+      "raw_bytes": 4619993,
+      "compressed_bytes": 756820
+    },
+    "runtime-history-diagnostics.json.gz": {
+      "sha256": "1cdfbd8d5461d5e6c743ea752d8e2cfd419fc5ef7c99f3cbbf904314fdf74817",
+      "raw_sha256": "9efd0667ba9f71c472b527306d7e0fde8db8e275a286303193c7ff53aabb5380",
+      "raw_bytes": 12860897,
+      "compressed_bytes": 515694
+    },
+    "runtime-history-reference.json.gz": {
+      "sha256": "1ce92faad5a58ca475788729306a48556bfa6d489c2e1991017b8395d263a281",
+      "raw_sha256": "ecdc80b1e1c0a029c629defbe99238d1a3d6492a06dc14b66a9a613b84e14f20",
+      "raw_bytes": 4824418,
+      "compressed_bytes": 718392
+    },
+    "runtime-propagation.json.gz": {
+      "sha256": "4ac0122b4233c65f75137f7e5bdbc9666d94dfbb268a836613d0beb2aaf9de2a",
+      "raw_sha256": "e65302d88c7db3509475530f184a8cb3d7fa43ad384fab18cae4f494886d3b43",
+      "raw_bytes": 14509,
+      "compressed_bytes": 3197
+    },
+    "runtime-lifecycle.json.gz": {
+      "sha256": "8498574031bf73f9b7fba7b320b281a99f48d45485374fbdc02adedd20b046b9",
+      "raw_sha256": "636abd78c5d16827eb51e2e8e5c325a113450e1e33db875c1fc66b2d2d285054",
+      "raw_bytes": 19079,
+      "compressed_bytes": 7587
+    },
+    "runtime-selected-diagnostics.json.gz": {
+      "sha256": "1dfcccd6b66e2aa65a1f9f87a19295afd35d6e2cd7966c84393f392de96f294d",
+      "raw_sha256": "7ed2384247fd8aa871bf94148a425e331b4e805091b5c335b5dc3d50e42e5c47",
+      "raw_bytes": 9517211,
+      "compressed_bytes": 444022
+    },
+    "runtime-mixed-diagnostics.json.gz": {
+      "sha256": "18ff428f6bb068deb3042a34be2d744535859e457de437f5124494cc85595691",
+      "raw_sha256": "7f30d7724d553a798cd04c78f6c224494b6411df23781659068ae9bb4a7a4402",
+      "raw_bytes": 776643,
+      "compressed_bytes": 40723
+    },
+    "runtime-mixed-reference.json.gz": {
+      "sha256": "5f2e1868b3037c098444371b93bb8084f698f2e432d0f622908a42abf5bc2eab",
+      "raw_sha256": "e8c23dd48d639b0b73583e4a14fabdf840fdba8052921cb434e89f21bc5bf67e",
+      "raw_bytes": 356670,
+      "compressed_bytes": 56132
+    },
+    "runtime-public.json.gz": {
+      "sha256": "fa41c1e89af1bcd9771385ed8f7602eba632337b743af4d7b56354e8c71c9be4",
+      "raw_sha256": "0d2283be0e119ad9823cb979bf829cf52e4c880c80cc4056192425e729eb6d37",
+      "raw_bytes": 146790,
+      "compressed_bytes": 11676
+    }
+  },
+  "complete": true,
+  "validation": {
+    "python_tests": 146,
+    "python_log_sha256": "4b91e93968e029d96fca9b1fee163441c5c1dda0e49336e04a9d4b3bf4b5da02",
+    "native_scope": "All native suites; MLP development/reuse explicitly limited to the Fast mappings 0 and 7. Tokenizer ordinary and Unicode parity and all benchmark smoke routes passed.",
+    "initial_command": "uv run --locked llm-mojo-validate",
+    "initial_command_status": "Stopped during redundant historical MLP variant sweep after fixtures, Python tests and native suites through linear passed; no numerical failure caused the stop.",
+    "initial_log_sha256": "b69c7e0f7bd7a4c5efcbc85a88d1278c573817b11249103a71e046fab22dd5cb",
+    "remaining_exit_code": 0,
+    "remaining_log_sha256": "832d4c20b870258b7828a66365e86f92bfc051e1e21546ac7b4e0754881e793f",
+    "selected_model_tests": 3,
+    "selected_model_log_sha256": "ca3404eb5ee16093757ffa18359aa8888f4490e020285f78fb7a362ac3b4167b",
+    "selection_python_tests": 143,
+    "selection_python_log_sha256": "e5cffcbb78d189388d08bf697f6d706247a0c23f804a77363c8386dddd00fee8",
+    "python_command": "uv run --locked python -m unittest discover -s tests -p 'test_*.py'",
+    "python_exit_code": 0,
+    "evidence_replay_command": "uv run --locked python studies/model_generation/summarize.py",
+    "evidence_replay_exit_code": 0,
+    "evidence_replay_log_sha256": "359bb80044a7f3c968d4c6468e935271cd430d968122ced4500bb1cdcba49deb"
+  },
+  "propagation_source_sha256": "048bc04b2d8e49114c90e33c8db97ebdf1a3929fce0ccc69312aea16856e1c14"
+}

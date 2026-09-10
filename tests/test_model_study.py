@@ -18,6 +18,39 @@ spec.loader.exec_module(study)
 
 
 class ModelStudyTests(unittest.TestCase):
+    def test_completed_runtime_replays_all_evidence(self):
+        output = io.StringIO()
+        with patch.object(study, 'table') as table, redirect_stdout(output):
+            study.runtime()
+        tables = {call.args[0]: call.args[1] for call in table.call_args_list}
+        self.assertEqual(len(tables['runtime-selection.csv']), 11)
+        self.assertEqual(len(tables['runtime-generations.csv']), 6)
+        self.assertIn('72,114 runtime diagnostics, 24,816 storage checks', output.getvalue())
+
+    def test_runtime_diagnosis_retains_large_errors_but_rejects_missing_or_corrupt_storage(self):
+        report = json.loads(gzip.decompress((STUDY/'runtime-diagnostics.json.gz').read_bytes()))
+        row = next(r for r in report['diagnostics'] if r['stage']=='hidden_1')
+        row['max_abs'] = row['max_row_relative_l2'] = 1e6
+        study.runtime_diagnostic_census(report)
+        report['storage'][0]['inactive'] = False
+        with self.assertRaisesRegex(ValueError, 'cache invariant'):
+            study.runtime_diagnostic_census(report)
+        report['storage'][0]['inactive'] = True
+        report['diagnostics'].pop()
+        with self.assertRaisesRegex(ValueError, 'diagnostic census'):
+            study.runtime_diagnostic_census(report)
+
+    def test_runtime_rejects_omitted_evidence_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = json.loads((STUDY/'runtime-study.json').read_text())
+            del manifest['files']['runtime-mixed-diagnostics.json.gz']
+            (root/'runtime-study.json').write_text(json.dumps(manifest))
+            with patch.object(study, 'ROOT', root), patch.object(study, 'table') as table:
+                with self.assertRaisesRegex(ValueError, 'evidence file census'):
+                    study.runtime()
+                table.assert_not_called()
+
     def test_runtime_selection_requires_complete_pairs_and_gain_above_noise(self):
         report=dict(specification=dict(measurements=[dict(rows=16,total=256,candidates=[21])]),samples=[])
         for block in range(4):

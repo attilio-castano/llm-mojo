@@ -517,11 +517,21 @@ def runtime_diagnostic_census(diagnostics):
         raise ValueError('runtime cache invariant failed')
     if any(not r['exact'] for r in diagnostics['diagnostics'] if r['stage']=='hidden_0'):
         raise ValueError('runtime embedding invariant failed')
+    for r in diagnostics['diagnostics']:
+        if any(not math.isfinite(r[k]) or r[k]<0 for k in ('max_abs','max_row_relative_l2')):
+            raise ValueError('invalid runtime diagnostic metric')
+        if r['stage']=='logits' and (not math.isfinite(r['kl_nats']) or not 0<=r['total_variation']<=1):
+            raise ValueError('invalid runtime prediction metric')
     return len(wanted),len(stored)
 
 
 def runtime():
     manifest=json.loads((ROOT/'runtime-study.json').read_text())
+    required={f'runtime-{name}.json.gz' for name in ('diagnostics','measurements','generations','reference',
+        'history-diagnostics','history-reference','propagation','lifecycle','selected-diagnostics',
+        'mixed-diagnostics','mixed-reference','public')}
+    if manifest.get('complete') is not True or set(manifest['files'])!=required:
+        raise ValueError('incomplete runtime evidence file census')
     payload={}
     for name,record in manifest['files'].items():
         encoded=(ROOT/name).read_bytes();raw=gzip.decompress(encoded)
@@ -536,7 +546,7 @@ def runtime():
             or diagnostics['specification']!=reference['specification']):
         raise ValueError('runtime reference binding mismatch')
     checks,storage_checks=runtime_diagnostic_census(diagnostics)
-    predictions=[r for r in diagnostics['diagnostics'] if r['stage']=='logits']
+    predictions=[dict(run='explicit',**r) for r in diagnostics['diagnostics'] if r['stage']=='logits']
     if 'runtime-history-diagnostics.json.gz' in payload:
         history=payload['runtime-history-diagnostics.json.gz']
         history_reference=payload['runtime-history-reference.json.gz']
@@ -546,7 +556,7 @@ def runtime():
             raise ValueError('runtime history binding mismatch')
         extra_checks,extra_storage=runtime_diagnostic_census(history)
         checks+=extra_checks;storage_checks+=extra_storage
-        predictions.extend(r for r in history['diagnostics'] if r['stage']=='logits')
+        predictions.extend(dict(run='generation-history',**r) for r in history['diagnostics'] if r['stage']=='logits')
         for i,(case,g) in enumerate(zip(history['specification']['cases'],generation['records'],strict=True)):
             remaining=len(g['prompt_ids']);schedule=[]
             while remaining:
@@ -581,6 +591,7 @@ def runtime():
                 raise ValueError('automatic dispatch differs from measured selection')
         extra_checks,extra_storage=runtime_diagnostic_census(final)
         checks+=extra_checks;storage_checks+=extra_storage
+        predictions.extend(dict(run=final_name.removesuffix('.json.gz'),**r) for r in final['diagnostics'] if r['stage']=='logits')
     propagation=None
     if 'runtime-propagation.json.gz' in payload:
         prop=payload['runtime-propagation.json.gz']['result']
@@ -599,6 +610,17 @@ def runtime():
                 'input_difference','observed_output_difference','hf_propagated_difference','identical_input_residual')}))
     generations=[]
     from llm_mojo.model_validation import validate_generation_events
+    public=payload['runtime-public.json.gz']
+    verified_public=validate_generation_events(public['events'],8)
+    if (public['exit_code']!=0 or public['default_policy']!='fast' or len(public['prompt_ids'])!=1024
+            or any(verified_public[k]!=public[k] for k in verified_public)):
+        raise ValueError('public Fast launcher evidence mismatch')
+    configurations=[r for r in public['events'] if r['event']=='configuration']
+    if ([int(r['index']) for r in configurations]!=list(range(0,1024,16)) or
+            any(int(r['value'])!=selected.get((16,int(r['index'])+16),0) for r in configurations)):
+        raise ValueError('public launcher did not execute the measured Fast choices')
+    if 'lifecycle passed:' not in payload['runtime-lifecycle.json.gz']['stdout']:
+        raise ValueError('missing native lifecycle completion')
     declaration=reference['specification']['declaration']
     if Counter((r['prompt'],r['chunk_rows']) for r in generation['records'])!=Counter(
             (prompt,chunk) for prompt in declaration['prompts'] for chunk in (0,4)):

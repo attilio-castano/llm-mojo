@@ -25,14 +25,17 @@ Local edits, artifact verification, execution, tests and commits remain approved
 no push, publication, agents or new kernel search. Historical reserved inputs
 are not needed for this implementation milestone and remain untouched.
 
-## Measured selection checkpoint
+## Completed implementation checkpoint
 
 The full-model paired run retained 1,360 samples in four complete blocks.
 All eleven workload cells have a qualifying candidate; 16/256 chooses 21,
 while its configuration-2 comparison is inconclusive. The other cells use
 2 or 3 as listed below. The shared Fast/auto dispatcher now installs those
-choices on M4 Pro, with baseline 0 elsewhere. Final automatic-dispatch capture
-and compact evidence replay follow this source freeze.
+choices on M4 Pro, with baseline 0 elsewhere. Final automatic-dispatch capture,
+two mixed-configuration histories and the public default-Fast launcher passed.
+The retained replay verifies 72,114 numerical observations, 24,816 exact cache
+checks and all 1,360 timing samples. See the [completed runtime study](../studies/model_generation/runtime.md)
+for results, validation scope and reproduction commands.
 
 The primary and actual-generation-history diagnostic runs passed all 16,992
 cache-storage observations. Five of six independent 32-token continuations
@@ -51,10 +54,10 @@ reproduced all 75 metrics on the exposed worst case and inspected 169 affine
 operations on identical operands. See the
 [retained result](../studies/model_generation/fast-reference.md).
 
-The agreed stop gate applies: confirmation, native Fast acceptance, integration
-promotion and model timings remain unexecuted. Limits and native arithmetic
-remain unchanged. The candidate inventory below is ready for a subsequent
-accepted numerical-policy decision.
+At that historical checkpoint, the original stop gate left confirmation, native
+Fast acceptance, integration promotion and model timings unexecuted. The active
+diagnostic revision above supersedes that workflow; the original failed
+qualification and its limits remain unchanged.
 
 ## Validation at the initial freeze
 
@@ -70,7 +73,7 @@ Metal on M4 Pro, at most 4096 prompt plus generated tokens. Local edits,
 verified pinned artifact preparation/downloads, tests, sequential measurements,
 documentation and commits are authorized. No agents, push or publication.
 
-## Sequence and stop gates
+## Historical sequence and stop gates
 
 1. Consolidate the existing decoder selections below. They nominate candidates,
    not automatic model-level winners.
@@ -109,8 +112,9 @@ and BF16 materialization boundaries.
 | 64/1024, 64/4096, 256/1024, 256/4096, 65/4096, 255/4096 | 0, 3 | Earlier shared selection: split8 plus larger projections |
 | 16/256 | 0, 2, 21 | Earlier hot result and newer hot fixed-MMA result; ring results did not promote either |
 
-Latest Fast only selects 21 at hot 16/256 and 3 at 64/4096; it is not a
-superset of the older selection. Treat hot/ring24 as nomination evidence:
+At the initial freeze, the latest decoder Fast policy selected only 21 at hot
+16/256 and 3 at 64/4096. The completed model selection above combines the
+measured winners. Treat the earlier hot/ring24 results as nomination evidence:
 neither is a functional 24-layer workload. Existing standalone kernels with a
 different precision contract are not interchangeable candidates. Rejected MLP
 decode candidates and deterministic row-reuse studies do not reopen here.

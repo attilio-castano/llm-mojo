@@ -86,7 +86,8 @@ model invalid before waiting and restores validity only after synchronization.
 
 The runtime processes only new token rows. `submitted_rows` counts submitted
 layer rows, and the diagnostic driver reports it with logical cache length.
-Full-model acceptance must still confirm these counters and actual execution.
+The completed runtime study verifies these counters during diagnostic captures,
+mixed-configuration calls and native generation.
 
 ## Workload policy
 
@@ -138,8 +139,9 @@ captures corresponding histories without requiring qualification; it retains
 numerical distances separately from required exact storage checks. The historical
 `model_reference.py qualify` command above is expected to reproduce its original
 failure. Use the [consistency study commands](../studies/model_generation/consistency.md)
-for the newly approved canonical route. Reference capture requires
-an explicit passing qualification from the same reference source and contract.
+for the historical canonical route. That consistency workflow requires
+an explicit passing qualification from the same reference source and contract;
+the active diagnostic workflow does not.
 The upstream executes the real `Qwen2Model` and tied LM head with BF16 stored
 boundaries and math SDPA with FP32 Q/K/V/masks, rounding the attention output to
 BF16. It records every decoder boundary, final normalization, logits and caches.
@@ -155,10 +157,11 @@ The development evaluator builds only from clean source, records the compiled
 executable hash, and launches that exact executable. It checks reference array
 hashes, complete boundary coverage, actual M4 Pro / Metal identity, cache
 accounting, numerical error, exact preserved prefixes, exact appended K/V and
-untouched inactive capacity. It is a development evaluator; reserved acceptance,
-generation acceptance and performance promotion are not yet implemented.
+untouched inactive capacity. The completed [runtime study](../studies/model_generation/runtime.md)
+adds actual generation, same-history diagnosis, paired full-model measurements
+and final Fast dispatch verification. Historical reserved inputs remain unopened.
 
-## Plain-text generation candidate
+## Native plain-text generation
 
 The verified development launcher is:
 
@@ -189,6 +192,8 @@ accounting. Native durations exclude Python asset verification and compilation.
 TTFT includes native initialization/tokenization; decode timings end at device
 synchronization. Output remains generated UTF-8 text on stdout.
 
-The first full-checkpoint execution and lifecycle checks passed during the
-implementation revision. These establish execution and tested invariants;
-model quality and exact HF trajectory equivalence require separate evidence.
+Full-checkpoint execution, lifecycle checks, six 32-token generation runs and
+a public default-Fast smoke with a 1024-token prompt passed. Same-history
+predictions agree with HF on 191 of 192 generated choices; the exception is an
+exact HF top-logit tie. These are bounded development observations, not a
+general model-quality or exact trajectory-equivalence claim.
