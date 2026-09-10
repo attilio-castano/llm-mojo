@@ -203,7 +203,19 @@ def decoder_policy_configuration(deterministic: Bool, rows: Int,
     if reuse_layers != 1 and reuse_layers != 24:
         raise Error("decoder reuse mode must be hot or ring24")
     if deterministic:
+        if rows == 16 and total_rows == 16:
+            return 22
+        if rows == 256 and total_rows == 256:
+            return 22
+        if rows == 4096 and total_rows == 4096:
+            return 22
+        if rows == 16 and total_rows == 256:
+            return 22
+        if rows == 64 and total_rows == 4096:
+            return 22
         return 20
+    if rows == 16 and total_rows == 256 and reuse_layers == 1:
+        return 21
     if rows == 64 and total_rows == 4096:
         return 3
     return 0

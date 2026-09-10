@@ -1,0 +1,24 @@
+{
+  "kind": "decoder_policy_integration_validation",
+  "source_base": "4292e84",
+  "status": "corrected_test_inputs",
+  "accuracy_tolerances_changed": false,
+  "failure_log": "round1-full-validation.log",
+  "isolated_reproduction": "precision-negative-repro.log",
+  "cause": "The invalid-call checks used QKV mapping5, integrated projection6 and Wo tile3, which this round registers as valid candidates. The first such call raised an unrelated workspace error; the precision suite swallowed that exception and reported a generic accuracy/cache failure.",
+  "fix": {
+    "invalid_qkv_mapping": 6,
+    "invalid_integrated_projection": 8,
+    "invalid_wo_tile": 4,
+    "precision_exceptions": "Print case identity and the original exception while preserving aggregate failure."
+  },
+  "verification": [
+    "precision-negative-fixed.log",
+    "precision-case0-fixed-prepared.log"
+  ],
+  "preparation_error": {
+    "log": "precision-case0-fixed.log",
+    "cause": "PRECISION_CASE=0 requires the generator single-case manifest, which full preparation does not create.",
+    "fix": "Ran the existing attention_precision --case 0 generator, then reran both tests successfully."
+  }
+}

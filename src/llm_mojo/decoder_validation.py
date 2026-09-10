@@ -55,8 +55,10 @@ def verify_build(binary):
     return record
 
 
-def holdout_manifest(root,verify_arrays=True):
-    root=Path(root);record=json.loads((root/'manifest.json').read_text())
+def holdout_manifest(root,verify_arrays=True,policy_declaration=None):
+    root=Path(root)
+    manifest=root if root.is_file() else root/'manifest.json'
+    root=manifest.parent;record=json.loads(manifest.read_text())
     payload={k:v for k,v in record.items() if k!='payload_sha256'}
     import hashlib
     selection=record.get('kind')=='decoder_selection_holdout'
@@ -72,7 +74,7 @@ def holdout_manifest(root,verify_arrays=True):
     ids=anchor['checkpoint']['holdout_token_ids'];checkpoint_name='checkpoint_holdout'
     if selection or policy:
         if policy:
-            declared_policy=selection_contract.policy_declaration()
+            declared_policy=selection_contract.policy_declaration() if policy_declaration is None else policy_declaration
             if record.get('policies')!=declared_policy:raise ValueError('policy holdout declaration changed')
             declared=declared_policy['confirmation']
         else:
@@ -115,7 +117,7 @@ def holdout_manifest(root,verify_arrays=True):
             raise ValueError('decoder reserved array census changed')
         if any(a.get('dtype')!='float32' or a.get('logical_dtype')!='bfloat16' for a in case['arrays'].values()):
             raise ValueError('decoder reserved storage dtype changed')
-    hashes={'manifest.json':sha(root/'manifest.json')}
+    hashes={'manifest.json':sha(manifest)}
 
     for name,case in record['cases'].items():
         for label,spec in case['arrays'].items():
@@ -171,10 +173,23 @@ def protected_extents(spec):
                 mw_down=h*i, a_cosine=capacity*d, a_sine=capacity*d)
 
 
-def validate_results(path,cases,selection=False,variants=None,invariant_variants=(),comparison_family=()):
-    records=[json.loads(line) for line in Path(path).read_text().splitlines()]
+def check_records(path):
+    """Stream complete raw or losslessly compressed numerical records."""
+    path=Path(path)
+    with (gzip.open(path,'rt') if path.suffix=='.gz' else path.open()) as stream:
+        for line in stream:yield json.loads(line)
+
+
+def validate_results(path,cases,selection=False,variants=None,invariant_variants=(),comparison_family=(),lookup=None):
     observed=Counter();runtimes=set();aux=Counter();protected=Counter()
-    for row in records:
+    async_rows=[];family=[];schedule_counts=Counter();schedule_mismatches=Counter()
+    for row in check_records(path):
+        if selection and row.get('mode')=='async':async_rows.append(row)
+        if comparison_family and row.get('kind')=='family_exact':family.append(row)
+        if (variants is not None and row.get('kind')=='schedule_exact'
+            and row.get('case') in cases and row.get('mode')=='layer'):
+            schedule_counts[row['policy']]+=1
+            schedule_mismatches[row['policy']]+=row.get('exact')is not True
         if row.get('expected_failure'):
             if row.get('mode')!='negative' or row.get('failed',0)<=0:
                 raise ValueError('invalid expected negative control')
@@ -197,7 +212,7 @@ def validate_results(path,cases,selection=False,variants=None,invariant_variants
         observed[key]+=1
         spec=cases[row['case']]['spec'];r=row['rows'];h=spec['h'];stage=row.get('stage','')
         if kind=='route':
-            gqa,_,mlp=selection_contract.execution_mappings(row['policy'],r,row['start']+r) if selection else (0,0,row['policy'] if r>1 else 0)
+            gqa,_,mlp=selection_contract.execution_mappings(row['policy'],r,row['start']+r,lookup) if selection else (0,0,row['policy'] if r>1 else 0)
             if row['attention']!=(11 if gqa==5 else 4 if r==1 else 6+gqa) or row['mlp']!=mlp:
                 raise ValueError('decoder route changed')
             if row['backend']!='metal' or not row['device'].startswith('Apple '):
@@ -240,7 +255,6 @@ def validate_results(path,cases,selection=False,variants=None,invariant_variants
     if aux!=Counter({n:1 for n in negatives}):
         raise ValueError('incomplete decoder negative controls')
     if selection:
-        async_rows=[r for r in records if r.get('mode')=='async']
         for row in async_rows:
             if row.get('failed')!=0 or type(row.get('elements')) is not int or row['elements']<=0:
                 raise ValueError('missing selection asynchronous gate')
@@ -260,15 +274,50 @@ def validate_results(path,cases,selection=False,variants=None,invariant_variants
         if actual!=expected:raise ValueError('incomplete selection asynchronous coverage')
     result=dict(checks=sum(observed.values()),runtime=dict(zip(('device','backend'),next(iter(runtimes)))))
     if variants is not None:
-        exact_rows=[r for r in records if r.get('kind')=='schedule_exact' and r.get('case') in cases and r.get('mode')=='layer']
         result['schedule_invariance']={str(v):dict(
-            comparisons=sum(r['policy']==v for r in exact_rows),
-            mismatches=sum(r['policy']==v and not r['exact'] for r in exact_rows)) for v in variants}
+            comparisons=schedule_counts[v],mismatches=schedule_mismatches[v]) for v in variants}
     if comparison_family:
-        family=[r for r in records if r.get('kind')=='family_exact']
         result.update(comparison_family=list(comparison_family),family_comparisons=len(family),
                       family_compatible=bool(family) and all(r['exact'] for r in family))
     return result
+
+
+def read_policy_evidence(location):
+    """Return a receipt, complete checks path and original receipt identity."""
+    import hashlib
+    location=Path(location)
+    if location.is_dir():
+        receipt=location/'evaluation.json';record=json.loads(receipt.read_text())
+        checks=location/'checks.jsonl';log=location/'output.log'
+        if sha(checks)!=record['checks_sha256'] or sha(log)!=record['output_sha256']:
+            raise ValueError('policy numerical raw records changed')
+        return record,checks,sha(receipt)
+    wrapper=json.loads(location.read_text())
+    if wrapper.get('format')!='decoder-policy-numerics-gzip-v1':
+        raise ValueError('unsupported policy numerical archive')
+    record=wrapper['evaluation']
+    paths={}
+    for field in ('checks','output'):
+        spec=wrapper[field];name=spec['file']
+        if name!=Path(name).name:raise ValueError('policy archive payload must be adjacent')
+        path=location.parent/name
+        if sha(path)!=spec['sha256']:raise ValueError('compressed policy evidence changed')
+        h=hashlib.sha256()
+        try:
+            with gzip.open(path,'rb') as stream:
+                for data in iter(lambda:stream.read(1024*1024),b''):h.update(data)
+        except (OSError,EOFError) as error:
+            raise ValueError('invalid compressed policy evidence') from error
+        if h.hexdigest()!=spec['uncompressed_sha256']:
+            raise ValueError('uncompressed policy evidence changed')
+        paths[field]=path
+    if (wrapper['checks']['uncompressed_sha256']!=record['checks_sha256']
+        or wrapper['output']['original_sha256']!=record['output_sha256']):
+        raise ValueError('policy archive changed the original check/output identity')
+    with gzip.open(paths['output'],'rt') as stream:log=stream.read()
+    if record.get('status')=='passed' and '0 failed , 0 skipped' not in log:
+        raise ValueError('policy archive lacks complete native suite output')
+    return record,paths['checks'],wrapper['original_evaluation_sha256']
 
 
 def evaluate_policies(binary,fixtures,output,variants,invariant_variants,split='development',comparison_family=()):

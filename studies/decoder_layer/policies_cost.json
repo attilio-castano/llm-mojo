@@ -1,0 +1,397 @@
+{
+  "kind": "decoder_policy_cost",
+  "accepted": {
+    "schema": 1,
+    "kind": "decoder_policy_confirmed_selection",
+    "proposal_sha256": "bb3a09f3d40f837ae159d543e0b8dece1586cfb63bec71d3ff7b07b24e06f5fc",
+    "build_sha256": "a8ede8026f02a6194bafd57344f63bb17ccb949aee337c511e9fd83b54dde951",
+    "qualification": [
+      {
+        "study": "decoder_policies_confirmation_det_hot",
+        "run_sha256": "072a0a8c2df44971c1eb1183948f919b1f29bff49043c63b32b2be3100f6ac45",
+        "samples_sha256": "8c9a064029b220a021ae7118de1904adbf2e0d21a5ffe329ed49a6c5d06eba7f"
+      },
+      {
+        "study": "decoder_policies_confirmation_fast_0_hot",
+        "run_sha256": "bb8442aa7e51cab5fbdd5f9eb8f1e55d644009d345ff8af8c0f43f5955be2613",
+        "samples_sha256": "c3e3d9d6c69ccb02aba1214477c3da0ad45ab8113250c9c07757e35e390c7e6f"
+      },
+      {
+        "study": "decoder_policies_confirmation_det_ring",
+        "run_sha256": "751d084e58fe88cb853ab3140484a26237cd3de3b68079c6dd15d006410e7aa4",
+        "samples_sha256": "896f9718b4ebc1194988aecc7958953ea20f84c3f3a3a39985b217efc1c5c820"
+      }
+    ],
+    "cells": [
+      {
+        "query_rows": 16,
+        "rows": 16,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 16,
+        "rows": 16,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 256,
+        "rows": 256,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 256,
+        "rows": 256,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 4096,
+        "rows": 4096,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": true
+      },
+      {
+        "query_rows": 4096,
+        "rows": 4096,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": true
+      },
+      {
+        "query_rows": 16,
+        "rows": 256,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 21,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 16,
+        "rows": 256,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 64,
+        "rows": 4096,
+        "layers": 1,
+        "fast_control": 3,
+        "fast": 3,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 64,
+        "rows": 4096,
+        "layers": 24,
+        "fast_control": 3,
+        "fast": 3,
+        "deterministic": 22,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 256,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 256,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 4096,
+        "layers": 1,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      },
+      {
+        "query_rows": 1,
+        "rows": 4096,
+        "layers": 24,
+        "fast_control": 0,
+        "fast": 0,
+        "deterministic": 20,
+        "unmeasured_extension": false
+      }
+    ],
+    "fallbacks": {
+      "fast": 0,
+      "deterministic": 20
+    }
+  },
+  "runs": [
+    {
+      "study": "decoder_policies_cost_0_hot",
+      "run_sha256": "37595475f8f6a47ed420f514eb4223db3362ad5eb194940d6d15989020d1a95b",
+      "samples_sha256": "c9c5e73f2e163b1de5a576b82a7bc6da24247aebfd78b97fd310442ffddd244d"
+    },
+    {
+      "study": "decoder_policies_cost_3_hot",
+      "run_sha256": "e33a9463799d4b08ebc16fea17431e093d81068bc1b178b24150ca6d2d345962",
+      "samples_sha256": "4b586ab0b68aa46b0ba51989451c850298ec697132e8cb95c4989374a1eb4e53"
+    },
+    {
+      "study": "decoder_policies_cost_21_hot",
+      "run_sha256": "b821bf1188b4eb425a387a355c4a2a0677b10d72b359b61ed7e66ffeb28f972b",
+      "samples_sha256": "df237d77661f6e4b050e9ae5e6b43a0f970b243f77e90233231230b89bedae69"
+    },
+    {
+      "study": "decoder_policies_cost_0_ring",
+      "run_sha256": "61eba38bb66d322a20e79063684f8b47308e21e73052bdc7ebd6a8cd625f43e6",
+      "samples_sha256": "d47adc66387b7a827a4405157f2756597ec7639716722eab5ffb20311b4e64b7"
+    },
+    {
+      "study": "decoder_policies_cost_3_ring",
+      "run_sha256": "64fec97bf5c70fe15f229238246a9b522402338ccc742f0af5851e5e88b75f62",
+      "samples_sha256": "febf0d539ff7b81595755c1a29ae988bcc7eda531a705d3718aad3a9c4e9344b"
+    }
+  ],
+  "rows": [
+    {
+      "query_rows": 16,
+      "rows": 16,
+      "layers": 1,
+      "candidate": 22,
+      "control_us": 814.5,
+      "candidate_us": 1958.0,
+      "ratio": 2.3891755617315935,
+      "ratio_min": 1.803644646924829,
+      "ratio_max": 2.4283942963422196,
+      "noise_floor": 0.05,
+      "decision": "slower",
+      "fast": 0,
+      "deterministic": 22
+    },
+    {
+      "query_rows": 256,
+      "rows": 256,
+      "layers": 1,
+      "candidate": 22,
+      "control_us": 4568.25,
+      "candidate_us": 26208.75,
+      "ratio": 5.737159720761381,
+      "ratio_min": 5.7138649503654415,
+      "ratio_max": 5.770127584689837,
+      "noise_floor": 0.05,
+      "decision": "slower",
+      "fast": 0,
+      "deterministic": 22
+    },
+    {
+      "query_rows": 4096,
+      "rows": 4096,
+      "layers": 1,
+      "candidate": 22,
+      "control_us": 85664.0,
+      "candidate_us": 512050.25,
+      "ratio": 5.9789798554987055,
+      "ratio_min": 5.972599461910626,
+      "ratio_max": 5.9828438669305175,
+      "noise_floor": 0.05,
+      "decision": "slower",
+      "fast": 0,
+      "deterministic": 22
+    },
+    {
+      "query_rows": 1,
+      "rows": 256,
+      "layers": 1,
+      "candidate": 20,
+      "control_us": 469.25,
+      "candidate_us": 468.75,
+      "ratio": 0.9811311876529267,
+      "ratio_min": 0.96,
+      "ratio_max": 1.0593311758360302,
+      "noise_floor": 0.18137651821862344,
+      "decision": "inconclusive",
+      "fast": 0,
+      "deterministic": 20
+    },
+    {
+      "query_rows": 1,
+      "rows": 4096,
+      "layers": 1,
+      "candidate": 20,
+      "control_us": 462.5,
+      "candidate_us": 481.5,
+      "ratio": 1.0432681520239466,
+      "ratio_min": 1.023454157782516,
+      "ratio_max": 1.053376906318083,
+      "noise_floor": 0.05,
+      "decision": "inconclusive",
+      "fast": 0,
+      "deterministic": 20
+    },
+    {
+      "query_rows": 64,
+      "rows": 4096,
+      "layers": 1,
+      "candidate": 22,
+      "control_us": 2089.75,
+      "candidate_us": 9350.75,
+      "ratio": 4.477021176914604,
+      "ratio_min": 4.463117689185963,
+      "ratio_max": 4.479645593869732,
+      "noise_floor": 0.05,
+      "decision": "slower",
+      "fast": 3,
+      "deterministic": 22
+    },
+    {
+      "query_rows": 16,
+      "rows": 256,
+      "layers": 1,
+      "candidate": 22,
+      "control_us": 878.5,
+      "candidate_us": 2057.5,
+      "ratio": 2.3421068316929183,
+      "ratio_min": 2.3244469653998867,
+      "ratio_max": 2.385231825987407,
+      "noise_floor": 0.05,
+      "decision": "slower",
+      "fast": 21,
+      "deterministic": 22
+    },
+    {
+      "query_rows": 16,
+      "rows": 16,
+      "layers": 24,
+      "candidate": 22,
+      "control_us": 816.0729166666667,
+      "candidate_us": 1770.2708333333333,
+      "ratio": 2.1683365176200913,
+      "ratio_min": 2.1640041784504063,
+      "ratio_max": 2.177870574371061,
+      "noise_floor": 0.19321466605811666,
+      "decision": "slower",
+      "fast": 0,
+      "deterministic": 22
+    },
+    {
+      "query_rows": 256,
+      "rows": 256,
+      "layers": 24,
+      "candidate": 22,
+      "control_us": 4396.385416666666,
+      "candidate_us": 25623.822916666668,
+      "ratio": 5.8273253897173465,
+      "ratio_min": 5.822339885949403,
+      "ratio_max": 5.8317081379859586,
+      "noise_floor": 0.05,
+      "decision": "slower",
+      "fast": 0,
+      "deterministic": 22
+    },
+    {
+      "query_rows": 4096,
+      "rows": 4096,
+      "layers": 24,
+      "candidate": 22,
+      "control_us": 85405.72916666666,
+      "candidate_us": 507787.6875,
+      "ratio": 5.94519750025604,
+      "ratio_min": 5.944458457642872,
+      "ratio_max": 5.947782520663436,
+      "noise_floor": 0.05,
+      "decision": "slower",
+      "fast": 0,
+      "deterministic": 22
+    },
+    {
+      "query_rows": 16,
+      "rows": 256,
+      "layers": 24,
+      "candidate": 22,
+      "control_us": 781.9583333333334,
+      "candidate_us": 1807.40625,
+      "ratio": 2.313964930205109,
+      "ratio_min": 2.1195514073494914,
+      "ratio_max": 2.340847512734366,
+      "noise_floor": 0.07063276294045506,
+      "decision": "slower",
+      "fast": 0,
+      "deterministic": 22
+    },
+    {
+      "query_rows": 1,
+      "rows": 256,
+      "layers": 24,
+      "candidate": 20,
+      "control_us": 436.7604166666667,
+      "candidate_us": 464.0104166666667,
+      "ratio": 1.0684580564282835,
+      "ratio_min": 0.9981086192920832,
+      "ratio_max": 1.0893672199170126,
+      "noise_floor": 0.2306628419219341,
+      "decision": "inconclusive",
+      "fast": 0,
+      "deterministic": 20
+    },
+    {
+      "query_rows": 1,
+      "rows": 4096,
+      "layers": 24,
+      "candidate": 20,
+      "control_us": 453.9375,
+      "candidate_us": 452.64583333333337,
+      "ratio": 0.9702679729586532,
+      "ratio_min": 0.7891176363037993,
+      "ratio_max": 1.1620365743979215,
+      "noise_floor": 0.17389710375168033,
+      "decision": "inconclusive",
+      "fast": 0,
+      "deterministic": 20
+    },
+    {
+      "query_rows": 64,
+      "rows": 4096,
+      "layers": 24,
+      "candidate": 22,
+      "control_us": 1952.46875,
+      "candidate_us": 9035.791666666666,
+      "ratio": 4.62868595419595,
+      "ratio_min": 4.6225268633805205,
+      "ratio_max": 4.632063790269208,
+      "noise_floor": 0.05,
+      "decision": "slower",
+      "fast": 3,
+      "deterministic": 22
+    }
+  ]
+}

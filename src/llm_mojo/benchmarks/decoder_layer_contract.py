@@ -150,18 +150,26 @@ def mappings(variant,rows):
 
 
 
-def policy_configuration(deterministic,rows,total_rows,layers=1):
+# Loaded once; archived numerical replay can provide its own frozen table.
+_POLICY_LOOKUP=policy_declaration()['accepted_lookup']
+
+
+def policy_configuration(deterministic,rows,total_rows,layers=1,lookup=None):
     """Mirror the native lookup so recorded routes expose selector drift."""
     if type(deterministic)is not bool or type(rows)is not int or type(total_rows)is not int or not 1<=rows<=total_rows<=4096 or type(layers)is not int or layers not in (1,24):
         raise ValueError('invalid decoder policy workload')
-    if deterministic:return 20
-    return 3 if (rows,total_rows)==(64,4096) else 0
+    lookup=_POLICY_LOOKUP if lookup is None else lookup
+    policy='deterministic' if deterministic else 'fast'
+    for cell in lookup['cells']:
+        if (cell['query_rows'],cell['rows'],cell['layers'])==(rows,total_rows,layers):
+            return cell[policy]
+    return lookup['fallbacks'][policy]
 
 
-def execution_mappings(variant,rows,total_rows):
+def execution_mappings(variant,rows,total_rows,lookup=None):
     if variant in POLICY_EXECUTIONS:
         deterministic,layers=POLICY_EXECUTIONS[variant]
-        variant=policy_configuration(deterministic,rows,total_rows,layers)
+        variant=policy_configuration(deterministic,rows,total_rows,layers,lookup)
     return mappings(variant,rows)
 
 
@@ -256,7 +264,8 @@ def policy_round_decision(directory,numerical_directories,build,round_number):
     from .study import STUDIES,load_run
     numerical_directories=list(map(Path,numerical_directories))
     if not numerical_directories:raise ValueError('missing policy numerical split')
-    declared=json.loads((numerical_directories[0]/'evaluation.json').read_text())['declaration']
+    evidence=[validation.read_policy_evidence(p) for p in numerical_directories]
+    declared=evidence[0][0]['declaration']
     if round_number not in (1,2):raise ValueError('unknown policy round')
     round_spec=declared['rounds'][round_number-1]
     if build['repository']['dirty'] or build['sources'].get(POLICY_PATH)!=sha_json(declared):
@@ -272,8 +281,7 @@ def policy_round_decision(directory,numerical_directories,build,round_number):
         raise ValueError('policy numerical evidence changed')
     frozen=json.loads(raw);numerical=[];splits=set()
     invariant=set(round_spec['numerical']['variants']);compatible=True
-    for directory_numerical in numerical_directories:
-        path=directory_numerical/'evaluation.json';record=json.loads(path.read_text())
+    for record,checks_path,original_receipt_sha in evidence:
         source=record['build']['source'];split=record['split']
         if (record.get('kind')!='decoder_policy_evaluation' or record.get('status')!='passed'
             or record.get('exit_code')!=0 or record.get('declaration')!=declared
@@ -285,9 +293,6 @@ def policy_round_decision(directory,numerical_directories,build,round_number):
             or split in splits or split not in round_spec['numerical']['splits']):
             raise ValueError('policy numerical evaluation identity changed')
         splits.add(split)
-        if (sha(directory_numerical/'checks.jsonl')!=record['checks_sha256']
-            or sha(directory_numerical/'output.log')!=record['output_sha256']):
-            raise ValueError('policy numerical raw records changed')
         cases={name:copy.deepcopy(case) for name,case in frozen['cases'].items()
                if case['spec']['nq']==14 and name.startswith('checkpoint_')==(split=='checkpoint')}
         for name,case in cases.items():
@@ -295,13 +300,13 @@ def policy_round_decision(directory,numerical_directories,build,round_number):
                 raise ValueError('policy evaluation used different numerical inputs')
             case['schedules'].update({key:[dict(start=p,rows=r) for p,r in calls]
                 for key,calls in policy_schedules(case['spec']['rows'],declared).items()})
-        replay=validation.validate_results(directory_numerical/'checks.jsonl',cases,True,
+        replay=validation.validate_results(checks_path,cases,True,
             record['variants'],record['invariant_variants'],record['comparison_family'])
         if any(record.get(k)!=v for k,v in replay.items()):
             raise ValueError('policy numerical summary differs from complete records')
         invariant &= {int(v) for v,result in replay['schedule_invariance'].items() if result['mismatches']==0}
         compatible &= replay['family_compatible']
-        numerical.append(dict(split=split,evaluation_sha256=sha(path),checks_sha256=record['checks_sha256'],
+        numerical.append(dict(split=split,evaluation_sha256=original_receipt_sha,checks_sha256=record['checks_sha256'],
             binary_sha256=record['build']['binary_sha256']))
     if splits!=set(round_spec['numerical']['splits']):raise ValueError('missing policy numerical split')
     summaries={};runs=[]
@@ -589,3 +594,157 @@ def policy_cost_report(directory,accepted,build):
     actual={(p['query_rows'],p['rows'],p['layers'],p['fast'],p['deterministic']) for p in rows}
     if len(rows)!=len(expected) or actual!=expected:raise ValueError('incomplete final policy cost table')
     return dict(kind='decoder_policy_cost',accepted=accepted,runs=receipts,rows=rows)
+
+
+def replay_policy_campaign(directory):
+    """Reconstruct the entire bounded campaign from adjacent retained evidence."""
+    import copy
+    from .. import decoder_validation as validation
+    from .study import load_run,load_decoder_profile,load_decoder_windows
+    directory=Path(directory)
+    index=json.loads((directory/'policies-evidence.json').read_text())
+    if index.get('kind')!='decoder_policy_campaign' or index.get('schema')!=1:
+        raise ValueError('unsupported decoder policy campaign')
+    for name,digest in index['files'].items():
+        if name!=Path(name).name or sha(directory/name)!=digest:
+            raise ValueError('decoder policy evidence index changed: '+name)
+    runs={}
+    for name in index['timing_studies']:
+        run,samples,summary=load_run(directory,name+'_')
+        if run['study']!=name:raise ValueError('decoder campaign timing identity changed')
+        runs[name]=(run,samples,summary)
+    numerical=[]
+    anchor_path=repository_root()/'tests/fixtures/decoder_layer/checksums.json'
+    evidence_path=anchor_path.with_name('development.json.gz')
+    anchor=json.loads(anchor_path.read_text())
+    if sha(evidence_path)!=anchor['evidence_sha256']:
+        raise ValueError('decoder policy reference evidence changed')
+    raw=gzip.decompress(evidence_path.read_bytes())
+    if hashlib.sha256(raw).hexdigest()!=anchor['uncompressed_sha256']:
+        raise ValueError('decoder policy reference payload changed')
+    frozen=json.loads(raw)
+    for name in index['incomplete_numerical']:
+        record,_,_=validation.read_policy_evidence(directory/name)
+        if record.get('status')!='failed' or record.get('exit_code')!=-15:
+            raise ValueError('interrupted baseline was reclassified as accepted evidence')
+
+    def numeric_row(phase,record,replay):
+        return dict(phase=phase,split=record['split'],checks=replay['checks'],
+            variants=','.join(map(str,record['variants'])),
+            schedule_comparisons=sum(v['comparisons'] for v in replay['schedule_invariance'].values()),
+            schedule_mismatches=sum(v['mismatches'] for v in replay['schedule_invariance'].values()),
+            required_invariants=','.join(map(str,record['invariant_variants'])),
+            required_invariant_mismatches=sum(replay['schedule_invariance'][str(v)]['mismatches'] for v in record['invariant_variants']),
+            family_comparisons=replay.get('family_comparisons',0),family_compatible=replay.get('family_compatible',''),
+            commit=record['build']['source']['repository']['commit'],binary_sha256=record['build']['binary_sha256'])
+
+    def replay_numerical(name,cases,phase):
+        record,checks,_=validation.read_policy_evidence(directory/name)
+        if record.get('status')!='passed' or record.get('exit_code')!=0:
+            raise ValueError('decoder policy numerical run did not pass')
+        declared=record['declaration']
+        source=record['build']['source']
+        if (source['repository']['dirty'] or source['sources'].get(POLICY_PATH)!=sha_json(declared)
+            or source['sources'].get('tests/fixtures/decoder_layer/checksums.json')!=sha(anchor_path)):
+            raise ValueError('decoder policy numerical source is not bound')
+        cases=copy.deepcopy(cases)
+        for case in cases.values():
+            case['schedules'].update({key:[dict(start=p,rows=r) for p,r in calls]
+                for key,calls in policy_schedules(case['spec']['rows'],declared).items()})
+        result=validation.validate_results(checks,cases,True,record['variants'],
+            record['invariant_variants'],record.get('comparison_family',()),
+            lookup=declared.get('accepted_lookup'))
+        if any(k in record and record[k]!=v for k,v in result.items()):
+            raise ValueError('decoder policy numerical summary changed')
+        numerical.append(numeric_row(phase,record,result))
+        return record,result
+
+    baseline_build=runs['decoder_policies_baseline_0'][0]['build']
+    for name in index['baseline_numerical']:
+        # The earliest receipts predate individual-array hashes and summary
+        # fields. Their complete raw checks are replayed with that declaration.
+        record=json.loads((directory/name).read_text())['evaluation']
+        split=record['split']
+        cases={n:c for n,c in frozen['cases'].items()
+            if c['spec']['nq']==14 and n.startswith('checkpoint_')==(split=='checkpoint')}
+        record,_=replay_numerical(name,cases,'baseline')
+        if (record['build']['source']['repository']!=baseline_build['repository']
+            or any(record['build']['source']['sources'].get(k)!=v for k,v in baseline_build['sources'].items())):
+            raise ValueError('baseline numerical and timing source differ')
+    for phase in index['rounds']:
+        number=phase['round'];name=f'decoder_policies_round{number}_det'
+        build=runs[name][0]['build']
+        expected=json.loads((directory/phase['decision']).read_text())
+        decision=policy_round_decision(directory,[directory/n for n in phase['numerical']],build,number)
+        if decision!=expected:raise ValueError('decoder optimization decision changed')
+        for name in phase['numerical']:
+            record=json.loads((directory/name).read_text())['evaluation']
+            numerical.append(numeric_row('round'+str(number),record,record))
+        adversarial=json.loads((directory/phase['adversarial']).read_text())
+        if (adversarial.get('status')!='passed'
+            or adversarial['binary_sha256']!=build['binaries']['decoder_layer']
+            or adversarial['build_sha256']!=hashlib.sha256(json.dumps(build,sort_keys=True).encode()).hexdigest()):
+            raise ValueError('adversarial policy benchmark identity changed')
+        expected_cases={(r,t,24,v) for r,t in phase['adversarial_shapes']
+            for v in record['declaration']['rounds'][number-1]['numerical']['variants']}
+        actual_cases={(p['query_rows'],p['rows'],p['layers'],p['variant']) for p in adversarial['cases']}
+        if actual_cases!=expected_cases or len(actual_cases)!=len(adversarial['cases']):
+            raise ValueError('adversarial policy case census changed')
+        for case in adversarial['cases']:
+            text=adversarial['retained_outputs'][case['output']]
+            if (hashlib.sha256(text.encode()).hexdigest()!=case['output_sha256']
+                or 'correctness: passed' not in text or 'BENCHMARK_COMPLETE' not in text
+                or case['backend']!='metal' or not case['device'].startswith('Apple ')):
+                raise ValueError('adversarial benchmark output changed')
+    declared=json.loads((directory/index['confirmation_declaration']).read_text())
+    if declared['final_confirmation']['basis']!=decision:
+        raise ValueError('final proposal is not the reconstructed last-round decision')
+    build=runs['decoder_policies_confirmation_det_hot'][0]['build']
+    accepted=policy_confirmed_selection(directory,build,declared)
+    if accepted!=json.loads((directory/index['accepted']).read_text()):
+        raise ValueError('confirmed decoder policy lookup changed')
+    cost=policy_cost_report(directory,accepted,build)
+    if cost!=json.loads((directory/index['cost']).read_text()):
+        raise ValueError('final decoder policy cost changed')
+    final=json.loads((directory/index['holdout_numerical']).read_text())['evaluation']
+    if final['declaration'].get('accepted_lookup')!=accepted:
+        raise ValueError('final numerical execution used a different lookup')
+    regression=json.loads((directory/index['repository_validation']).read_text())
+    if (regression.get('status')!='passed' or regression.get('exit_code')!=0
+        or regression['source']['sources']!=final['build']['source']['sources']):
+        raise ValueError('final numerical source did not pass the repository regression')
+    bridge=json.loads((directory/index['build_bridge']).read_text())
+    native='src/llm_mojo/decoder_layer.mojo'
+    if (bridge.get('kind')!='decoder_policy_build_bridge'
+        or bridge['timing_commit']!=build['repository']['commit']
+        or bridge['timing_binary_sha256']!=build['binaries']['decoder_layer']
+        or bridge['numerical_commit']!=final['build']['source']['repository']['commit']
+        or bridge['numerical_binary_sha256']!=final['build']['binary_sha256']
+        or bridge['environment']!=build['environment']
+        or bridge['changed_native_sources']!=([native] if build['sources'][native]!=final['build']['source']['sources'][native] else [])
+        or bridge['timing_source_sha256']!=build['sources'][native]
+        or bridge['numerical_source_sha256']!=final['build']['source']['sources'][native]):
+        raise ValueError('timing and numerical build identities are not bridged')
+    if any(final['build']['source']['sources'].get(k)!=v for k,v in build['sources'].items()
+        if k.startswith('src/') and k.endswith('.mojo') and k!=native):
+        raise ValueError('native arithmetic changed between timing and final confirmation')
+    manifest,hashes=validation.holdout_manifest(directory/index['holdout_manifest'],
+        verify_arrays=False,policy_declaration=final['declaration'])
+    if (manifest['candidate']['binary_sha256']!=final['build']['binary_sha256']
+        or manifest['candidate']['commit']!=final['build']['source']['repository']['commit']
+        or hashes!=final['fixtures']):
+        raise ValueError('fresh decoder inputs are not bound to the final executable')
+    expected=declared['final_confirmation']['numerical']
+    if (final['variants']!=expected['variants'] or final['invariant_variants']!=expected['required_invariants']
+        or final.get('comparison_family')!=expected['comparison_family'] or final['split']!=expected['split']):
+        raise ValueError('final policy numerical contract changed')
+    _,result=replay_numerical(index['holdout_numerical'],manifest['cases'],'confirmation')
+    if result.get('family_compatible')is not True:
+        raise ValueError('final deterministic reuse modes are not compatible')
+    profile_identity=declared['rounds'][0]['baseline_profile_sha256']
+    for name,digest in profile_identity.items():
+        if sha(directory/('policies_'+name))!=digest:
+            raise ValueError('optimization rationale names different baseline profiles')
+    profile=load_decoder_profile(directory,'policies_')
+    windows=load_decoder_windows(directory,'policies_')
+    return dict(accepted=accepted,cost=cost,runs=runs,numerical=numerical,profile=profile,windows=windows)

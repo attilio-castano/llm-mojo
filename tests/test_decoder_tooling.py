@@ -13,6 +13,65 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class DecoderToolingTests(unittest.TestCase):
+    def test_recorded_policy_lookup_is_independent_of_live_dispatch(self):
+        frozen=copy.deepcopy(contract._POLICY_LOOKUP)
+        for cell in frozen['cells']:
+            if (cell['query_rows'],cell['rows'],cell['layers'])==(16,16,1):
+                cell.update(deterministic=22,fast=21)
+        different=dict(cells=[],fallbacks=dict(fast=0,deterministic=20))
+        with patch.object(contract,'_POLICY_LOOKUP',different):
+            self.assertEqual(contract.policy_configuration(True,16,16),20)
+            self.assertEqual(contract.policy_configuration(True,16,16,lookup=frozen),22)
+            self.assertEqual(contract.execution_mappings(101,16,16,frozen),(5,7,19))
+            self.assertEqual(contract.execution_mappings(100,16,16,frozen),(5,6,7))
+            self.assertEqual(contract.policy_configuration(True,17,17,lookup=frozen),20)
+            self.assertEqual(contract.policy_configuration(False,64,4095,lookup=frozen),0)
+        for cell in contract._POLICY_LOOKUP['cells']:
+            for deterministic,policy in ((False,'fast'),(True,'deterministic')):
+                self.assertEqual(contract.policy_configuration(deterministic,cell['query_rows'],
+                    cell['rows'],cell['layers']),cell[policy])
+
+    def test_compressed_numerical_archive_preserves_and_rechecks_all_records(self):
+        import gzip,hashlib
+        import test_decoder_validation as baseline_tests
+        fixture=baseline_tests.NumericalReceiptTests();fixture.setUp()
+        raw=''.join(json.dumps(r)+'\n' for r in fixture.records).encode()
+        native=b'TestSuite summary: 1 passed , 0 failed , 0 skipped\n'
+        digest=lambda data:hashlib.sha256(data).hexdigest()
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);checks=root/'checks.jsonl';output=root/'output.log'
+            checks.write_bytes(raw);output.write_bytes(native)
+            record=dict(status='passed',exit_code=0,checks_sha256=digest(raw),output_sha256=digest(native))
+            receipt=root/'evaluation.json';receipt.write_text(json.dumps(record))
+            original_sha=validation.sha(receipt)
+            wrapper=dict(format='decoder-policy-numerics-gzip-v1',evaluation=record,
+                original_evaluation_sha256=original_sha)
+            for field,data in (('checks',raw),('output',native)):
+                name=field+'.gz';compressed=gzip.compress(data,mtime=0)
+                (root/name).write_bytes(compressed)
+                wrapper[field]=dict(file=name,sha256=digest(compressed),uncompressed_sha256=digest(data))
+            wrapper['output']['original_sha256']=digest(native)
+            archive=root/'archive.json'
+            archive.write_text(json.dumps(wrapper))
+            observed,path,identity=validation.read_policy_evidence(archive)
+            self.assertEqual((observed,identity),(record,original_sha))
+            self.assertEqual(validation.validate_results(path,fixture.cases),validation.validate_results(checks,fixture.cases))
+            self.assertEqual(validation.read_policy_evidence(root),(record,checks,original_sha))
+            # A syntactically valid, freshly hashed archive still needs every gate.
+            partial=''.join(json.dumps(r)+'\n' for r in fixture.records[1:]).encode()
+            bad=root/'partial.jsonl.gz';bad.write_bytes(gzip.compress(partial,mtime=0))
+            with self.assertRaises(ValueError):validation.validate_results(bad,fixture.cases)
+            for field in ('checks','output'):
+                altered=copy.deepcopy(wrapper);altered[field]['uncompressed_sha256']='0'*64
+                archive.write_text(json.dumps(altered))
+                with self.assertRaises(ValueError):validation.read_policy_evidence(archive)
+            altered=copy.deepcopy(wrapper);altered['checks']['file']='../checks.gz'
+            archive.write_text(json.dumps(altered))
+            with self.assertRaises(ValueError):validation.read_policy_evidence(archive)
+            archive.write_text(json.dumps(wrapper))
+            (root/'checks.gz').write_bytes((root/'checks.gz').read_bytes()[:-8])
+            with self.assertRaises(ValueError):validation.read_policy_evidence(archive)
+
     def test_final_confirmation_is_frozen_and_cost_uses_the_accepted_lookup(self):
         from llm_mojo.benchmarks import study
         declaration=copy.deepcopy(contract.policy_declaration())
