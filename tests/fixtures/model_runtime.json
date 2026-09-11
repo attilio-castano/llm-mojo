@@ -1,0 +1,144 @@
+{
+  "version": "qwen-runtime-diagnostics-v1",
+  "seed": 410103,
+  "lengths": [
+    1,
+    15,
+    16,
+    17,
+    63,
+    64,
+    65,
+    256,
+    257,
+    1024,
+    1025,
+    4096
+  ],
+  "measurements": [
+    {
+      "rows": 16,
+      "total": 1024,
+      "candidates": [
+        2
+      ]
+    },
+    {
+      "rows": 16,
+      "total": 4096,
+      "candidates": [
+        2
+      ]
+    },
+    {
+      "rows": 15,
+      "total": 256,
+      "candidates": [
+        2
+      ]
+    },
+    {
+      "rows": 17,
+      "total": 256,
+      "candidates": [
+        2
+      ]
+    },
+    {
+      "rows": 64,
+      "total": 1024,
+      "candidates": [
+        3
+      ]
+    },
+    {
+      "rows": 64,
+      "total": 4096,
+      "candidates": [
+        3
+      ]
+    },
+    {
+      "rows": 256,
+      "total": 1024,
+      "candidates": [
+        3
+      ]
+    },
+    {
+      "rows": 256,
+      "total": 4096,
+      "candidates": [
+        3
+      ]
+    },
+    {
+      "rows": 65,
+      "total": 4096,
+      "candidates": [
+        3
+      ]
+    },
+    {
+      "rows": 255,
+      "total": 4096,
+      "candidates": [
+        3
+      ]
+    },
+    {
+      "rows": 16,
+      "total": 256,
+      "candidates": [
+        2,
+        21
+      ]
+    }
+  ],
+  "prompts": [
+    "The capital of France is",
+    "Explain in one sentence how a bicycle works.",
+    "Scrivi una breve frase sul caff\u00e8. \u2615"
+  ],
+  "max_new_tokens": 32,
+  "numerical_policy": "diagnostic only",
+  "reserved_inputs_used": false,
+  "mixed_schedules": [
+    {
+      "name": "mixed-21-2",
+      "length": 1025,
+      "schedule": [
+        240,
+        16,
+        752,
+        16,
+        1
+      ],
+      "configurations": [
+        0,
+        21,
+        0,
+        2,
+        0
+      ]
+    },
+    {
+      "name": "mixed-21-3",
+      "length": 1025,
+      "schedule": [
+        240,
+        16,
+        704,
+        64,
+        1
+      ],
+      "configurations": [
+        0,
+        21,
+        0,
+        3,
+        0
+      ]
+    }
+  ]
+}

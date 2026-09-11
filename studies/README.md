@@ -1,12 +1,27 @@
 # Inference on this MacBook Pro
 
-These studies explain how the existing Mojo operations map work onto the Apple
-M4 Pro. Start with the value and storage contracts in [model](../docs/model.md)
-and [layouts](../docs/layouts.md), then read a topic below. Each comparison is
-operation-level except for the composed attention/MLP sublayers and the accepted
-decoder layer. The modified HF reference passes full-model schedule
-qualification; native full-model accuracy acceptance is paused at its first
-failing input, documented in the numerical study below.
+Start with the working [terminal chat](../docs/chat.md), then follow the evidence
+from a complete model down to its kernels. These studies explain native Mojo
+inference on Apple M4 Pro / Metal through numerical observations, retained raw
+measurements and explicit timing boundaries. The [model contract](../docs/model.md)
+and [layouts](../docs/layouts.md) define the values, storage and ownership.
+
+## Completed Fast runtime and chat
+
+| Study | What it establishes |
+| --- | --- |
+| [Native terminal chat](model_generation/chat.md) | Multi-turn cache reuse, exact history and terminal lifecycle, with paired prefill and actual interaction timings |
+| [Fast full-model runtime](model_generation/runtime.md) | All 24 layers, native generation, numerical diagnostics and 11 measured dispatch choices |
+| [Decoder selection](decoder_layer/selection.md) | Which combinations improve complete prefill and decode workloads |
+
+The runtime measurements are against our optimized baseline; chat measurements
+separately compare suffix-only prefill with full-history replay. Neither is an
+HF speed comparison. Full-model differences are diagnostic, while exact cache
+and lifecycle invariants remain required. [Numerical investigations](model_generation/README.md)
+retain the earlier failed qualification policies. Schedule determinism is a
+follow-up, supported by the existing decoder policy and full-model studies.
+
+## Supporting operation and composition studies
 
 | Topic | Question |
 | --- | --- |
@@ -21,7 +36,6 @@ failing input, documented in the numerical study below.
 | [Decoder layer](decoder_layer/README.md) | How do complete layer costs shift between prefill, cached chunks and decode? |
 | [Decoder policies](decoder_layer/policies.md) | How much does schedule-invariant execution cost, and which optimizations preserve it? |
 | [CPU tokenizer](tokenizer/README.md) | When does heap BPE improve complete text encoding? |
-| [Full-model reference](model_generation/README.md) | Does BF16 full prefill agree with cached execution across all 24 layers? |
 
 The CPU tokenizer study establishes exact Rust parity in Mojo and retains 9,680
 CPU observations. Heap merging improves long single pieces but costs more than
@@ -42,12 +56,10 @@ dispatches and 9,583,121 core numerical checks. Four-row reuse lowers determinis
 prefill latency by 24–37%; the selected deterministic prefill policy still takes
 2.2–6.0 times Fast latency. Decode comparisons remain inconclusive. Both final
 deterministic lookup settings pass all fresh schedule/cache comparisons.
-The modified, pinned CPU HF reference passes 71,250 exact comparisons across
-all 24 layers. The native full-model candidate then fails seven intermediate
-accuracy gates on its first one-token input. Full-model schedule consistency,
-generation acceptance and combined prefill-plus-growing-decode performance
-remain pending. The earlier eight-failure reference confirmation is historical
-evidence, distinct from the current [native accuracy stop](model_generation/consistency.md).
+The [full-model consistency investigation](model_generation/consistency.md)
+qualified a canonical HF reference but stopped at native numerical gates.
+Those results remain distinct from the completed Fast diagnostic milestone;
+native full-model schedule invariance has not been established.
 
 The attention-sublayer study uses the explicit CPU FP32 attention policy as
 its accuracy baseline. It has 17 synthetic and three checkpoint cases; the
@@ -105,7 +117,7 @@ decode and prefill also retain compact profile records and dispatch samples.
 The larger [attention topic](attention_sublayer/README.md) separates its current
 overview, detailed experiments, numerical history and predeclared plans. It
 keeps records/CSVs in `data/` and generated PNGs in `figures/`.
-Rebuild every table and figure without a GPU:
+Rebuild the operation and attention tables and figures without a GPU:
 
 ```bash
 uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.plot
@@ -126,4 +138,9 @@ oracle arrays are regenerated and checked against their landed hashes. Fresh
 results identify their own source commit and conditions; old crossover claims
 are not silently carried forward. The composed decoder and its configuration
 study now extend those results.
-Full-model forward parity remains the next engine milestone.
+The completed model and chat studies extend this work to the usable engine.
+Replay their retained evidence and regenerate their tables without weights or a GPU:
+
+```sh
+uv run --locked python studies/model_generation/summarize.py
+```

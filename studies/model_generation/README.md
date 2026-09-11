@@ -1,10 +1,52 @@
-# Full-model reference schedule qualification
+# Qwen runtime, chat and numerical studies
+
+The Fast runtime and interactive terminal chat milestones are complete. Start
+with the current implementation and measurements:
+
+| Study | Scope |
+| --- | --- |
+| [Terminal chat](chat.md) | Native session state, exact token history, persistent caches, controls and measured cache reuse |
+| [Fast runtime](runtime.md) | Complete model composition, greedy generation, measured dispatch and HF numerical diagnostics |
+| [Usage and ownership](../../docs/generation.md) | Assets, model state, workload policy and plain-text generation |
+
+The current [diagnostic policy](../../docs/model.md#correctness-and-diagnostic-policy)
+requires exact implementation invariants and preserves independent operation
+contracts. Full-model tensor differences, distributions and token choices are
+observations to investigate. Schedule determinism and matched HF performance
+benchmarking remain follow-ups.
+
+## Numerical history and schedule-determinism follow-up
+
+These investigations explain how the policy developed. Their original failed
+gates and frozen evidence are retained unchanged:
+
+- [Fast reference qualification](fast-reference.md): intermediate-error ceilings
+  failed before native Fast integration under the later diagnostic policy.
+- [Native consistency route](consistency.md): canonical HF qualification and
+  native component results, with an unresolved full-model accuracy boundary.
+- [HF/PyTorch execution shape](backend.md): query shape and causal-prefix layout
+  explain a reproducible schedule difference.
+- [Rounding and propagation](rounding.md): attention differences crossing BF16
+  rounding boundaries, with logit and greedy-generation observations.
+
+The remaining sections record the original reference schedule qualification.
+Statements about stopped work describe that historical checkpoint; current Fast
+selection and generation results are in the runtime study above.
+
+## Historical reference schedule qualification
+
+The [Fast reference qualification](fast-reference.md) records the preceding
+reference-only checkpoint.
+It failed its predeclared intermediate-error ceilings during reference-only
+calibration; confirmation and native Fast acceptance did not run. This README
+retains the earlier schedule-qualification result below.
 
 **Historical reference confirmation failed.** The subsequently authorized
 [consistency implementation](consistency.md) qualifies a canonical reference
 through 4096 tokens and passes native primitive/layer consistency checks. Its
-first native full-model accuracy case fails seven unchanged gates. Full-model
-schedule acceptance, generation and performance promotion remain pending.
+first native full-model accuracy case fails seven unchanged gates. At that
+checkpoint, full-model schedule acceptance, generation and performance promotion
+remained pending.
 Final reserved inputs remain unopened. The original eight-failure reference
 confirmation below remains historical evidence, with unchanged budgets.
 
@@ -106,9 +148,9 @@ differences crossing BF16 rounding boundaries and propagating through layers.
 It does not establish the exact internal rounding mechanism or qualify a
 replacement reference. Querywise SDPA has not been adopted as the oracle.
 
-## Consequence and next decision
+## Historical consequence and next decision
 
-The [approved stop rule](../../docs/generation-plan.md) applies: independent
+At this checkpoint, the [approved stop rule](../../docs/generation-plan.md) applied: independent
 confirmation failed, so no native model numerical comparison, reserved
 acceptance, model benchmark or automatic configuration promotion follows.
 The three additional optimization studies remain unspent. `auto` still uses

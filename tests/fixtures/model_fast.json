@@ -1,0 +1,22 @@
+{
+  "version": "qwen-fast-model-v1",
+  "model_revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+  "scope": "batch-one BF16 stored boundaries and FP32 reductions; no exact cross-schedule requirement",
+  "reference_arms": ["hf_canonical", "fp32_split2"],
+  "schedules": "full and [1]*length through 17, otherwise [length-17,16,1]",
+  "calibration": {"seed": 310103, "lengths": [1,16,17,64,65,256,257,1024], "texts": ["Write a short explanation of how a bicycle works.", "Unicode: café, Ελληνικά, 日本語, 😀.", "red red red red red red red red red red"]},
+  "confirmation": {"seed": 310913, "lengths": [1,15,33,63,129,1025,4096], "texts": ["What is 9 + 6? Answer briefly.", "Translate the word water into Italian.", "abc abc abc abc abc abc abc abc abc abc abc"]},
+  "rtol": 0.03125,
+  "atol_floor": 0.0625,
+  "atol_quantum": 0.03125,
+  "relative_rms_floor": 0.015625,
+  "relative_rms_quantum": 0.00390625,
+  "margin": 1.5,
+  "maximum_qualified_relative_rms": 0.0625,
+  "maximum_atol": {"hidden": 2.0, "key": 1.0, "value": 1.0, "final_norm": 8.0, "logits": 1.0},
+  "prediction": {"maximum_kl_nats": 0.015625, "maximum_total_variation": 0.0625, "margin_rule": "same argmax when reference top-two margin exceeds twice the maximum permitted pointwise logit error for this reference row"},
+  "budget_rule": "Within each nonembedding boundary role, round up 1.5 times the maximum calibration required_atol and per-row relative L2 to fixed quanta, respecting floors and fixed ceilings. Embeddings exact. All reference confirmation checks must pass without changing budgets.",
+  "prior_native_outputs_observed": true,
+  "new_candidate_outputs_used_for_calibration": false,
+  "reserved_outputs_observed": false
+}

@@ -7,6 +7,8 @@ import argparse
 import gzip
 import hashlib
 import json
+import math
+from statistics import median
 from pathlib import Path
 from collections import Counter
 from fractions import Fraction
@@ -322,6 +324,385 @@ def consistency():
           'failed model accuracy and both operation diagnoses; regenerated four tables.')
 
 
+def fast_reference():
+    """Replay the complete failed Fast qualification without Torch or a model."""
+    manifest = json.loads((ROOT/'fast-reference-study.json').read_text())
+    if (manifest.get('kind') != 'fast-reference-study-v1'
+            or any(manifest.get(k) is not False for k in (
+                'calibration_passed','confirmation_executed','native_acceptance_executed'))
+            or set(manifest['files']) != {'fast-reference-result.json.gz',
+                'fast-reference-budgets.json.gz','fast-reference-observations.jsonl.gz',
+                'fast-reference-diagnosis.json.gz','fast-reference-contract.json.gz'}):
+        raise ValueError('Fast study scope or file census mismatch')
+    data = {}
+    for name, record in manifest['files'].items():
+        encoded = (ROOT/name).read_bytes()
+        raw = gzip.decompress(encoded)
+        if (sha(encoded) != record['sha256'] or sha(raw) != record['uncompressed_sha256']
+                or len(raw) != record['uncompressed_bytes']):
+            raise ValueError('Fast evidence hash mismatch')
+        data[name] = raw
+    report = json.loads(data['fast-reference-result.json.gz'])
+    frozen = json.loads(data['fast-reference-budgets.json.gz'])
+    declaration = json.loads(data['fast-reference-contract.json.gz'])
+    rows = [json.loads(line) for line in data['fast-reference-observations.jsonl.gz'].splitlines()]
+    diagnosis = json.loads(data['fast-reference-diagnosis.json.gz'])
+    if (report['source_commit'] != manifest['source_commit']
+            or report['source']['tests/fixtures/model_fast.json'] != sha(data['fast-reference-contract.json.gz'])
+            or report['declaration'] != declaration or frozen['declaration'] != declaration
+            or report['observations_sha256'] != sha(data['fast-reference-observations.jsonl.gz'])
+            or report['frozen_budgets_sha256'] != sha(data['fast-reference-budgets.json.gz'])
+            or report['gates'] != frozen['gates'] or report['checks'] != len(rows)
+            or not report['started_at'] <= report['frozen_at'] <= report['finished_at']):
+        raise ValueError('Fast result/budget/source binding mismatch')
+    boundaries = ({f'hidden_{i}' for i in range(25)} | {'final_norm','logits'} |
+                  {f'cache_{kind}_{i}' for kind in ('key','value') for i in range(24)})
+    def role(name):
+        if name == 'hidden_0': return 'embedding'
+        if name.startswith('hidden_'): return 'hidden'
+        if name.startswith('cache_key_'): return 'key'
+        if name.startswith('cache_value_'): return 'value'
+        if name in ('final_norm','logits'): return name
+        raise ValueError('unknown Fast boundary')
+    cases = report['cases']['calibration']
+    required_cases = ({f'random-{n}' for n in declaration['calibration']['lengths']} |
+        {f'text-{i}' for i in range(len(declaration['calibration']['texts']))})
+    if set(name for name, ids in cases) != required_cases or len(cases) != len(required_cases):
+        raise ValueError('incomplete Fast calibration cases')
+    expected = Counter()
+    for case, ids in cases:
+        length = len(ids)
+        if (not 1 <= length <= 4096 or any(type(i) is not int or not 0 <= i < 151936 for i in ids)
+                or (case.startswith('random-') and length != int(case.split('-')[1]))):
+            raise ValueError('invalid Fast calibration input')
+        schedules = {(length,), tuple([1]*length if length <= 17 else [length-17,16,1])}
+        for schedule in schedules:
+            for arm in declaration['reference_arms']:
+                start = 0
+                for count in schedule:
+                    for stage in boundaries:
+                        expected[('calibration',case,length,arm,schedule,start,count,stage)] += 1
+                    start += count
+    observed = Counter((r['phase'],r['case'],r['length'],r['arm'],tuple(r['schedule']),r['start'],r['rows'],r['stage']) for r in rows)
+    if observed != expected:
+        raise ValueError('incomplete or duplicated Fast reference schedule census')
+    derived, summary = {}, []
+    for group in declaration['maximum_atol']:
+        records = [r for r in rows if role(r['stage']) == group]
+        gate = dict(rtol=declaration['rtol'], exact=False)
+        for metric, field in [('required_atol','atol'),('relative_rms','relative_rms')]:
+            gate[field] = max(declaration[field+'_floor'], math.ceil(
+                declaration['margin']*max(r[metric] for r in records)/declaration[field+'_quantum'])*declaration[field+'_quantum'])
+        derived[group] = gate
+        summary.append(dict(role=group, max_observed_relative_rms=max(r['relative_rms'] for r in records),
+            derived_relative_rms=gate['relative_rms'], relative_rms_ceiling=declaration['maximum_qualified_relative_rms'],
+            derived_atol=gate['atol'], atol_ceiling=declaration['maximum_atol'][group]))
+    derived['embedding'] = dict(rtol=0.,atol=0.,relative_rms=0.,exact=True)
+    gates = {name: derived[role(name)] for name in boundaries}
+    ceiling_failures = sorted(n for n,g in gates.items() if role(n) != 'embedding' and (
+        g['atol'] > declaration['maximum_atol'][role(n)] or g['relative_rms'] > declaration['maximum_qualified_relative_rms']))
+    if gates != report['gates'] or ceiling_failures != report['ceiling_failures'] or not ceiling_failures:
+        raise ValueError('Fast budget derivation or ceiling decision mismatch')
+    for record in (report, frozen):
+        if (record['calibration_passed'] is not False
+                or record['new_candidate_outputs_used_for_calibration'] is not False
+                or record['reserved_outputs_observed'] is not False):
+            raise ValueError('Fast qualification scope/status mismatch')
+    if report['passed'] is not False or report['confirmation_executed'] is not False:
+        raise ValueError('failed Fast qualification was promoted')
+    prediction_rows, failures = [], []
+    for r in rows:
+        g = gates[r['stage']]
+        if any(not math.isfinite(r[k]) or r[k] < 0 for k in ('max_abs','required_atol','relative_rms')):
+            raise ValueError('invalid Fast numerical observation')
+        passed = (r['required_atol'] <= g['atol'] and r['relative_rms'] <= g['relative_rms']
+                  and (not g['exact'] or r['exact']))
+        if r['stage'] == 'logits':
+            p = declaration['prediction']
+            passed &= (0 <= r['kl_nats'] <= p['maximum_kl_nats']
+                and 0 <= r['total_variation'] <= p['maximum_total_variation']
+                and (r['reference_margin'] <= 2*(g['atol']+g['rtol']*r['reference_max_abs']) or r['same_token']))
+            prediction_rows.append({k:r[k] for k in ('case','length','arm','start','rows','max_abs','relative_rms','kl_nats','total_variation','same_token','reference_margin')})
+        if not passed: failures.append(r)
+    if failures != report['failures']:
+        raise ValueError('Fast numerical decision mismatch')
+    detail = diagnosis['fast_affine']
+    expected_modules = {f'model.layers.{i}.{name}' for i in range(24) for name in (
+        'self_attn.q_proj','self_attn.k_proj','self_attn.v_proj','self_attn.o_proj',
+        'mlp.gate_proj','mlp.up_proj','mlp.down_proj')} | {'lm_head'}
+    if (diagnosis['source_sha256'] != manifest['diagnosis_source_sha256']
+            or detail['qualification_sha256'] != sha(data['fast-reference-result.json.gz'])
+            or detail['observation_exact'] is not True or detail['calibration_source'] != report['source']
+            or diagnosis['reserved_outputs_observed'] is not False
+            or diagnosis['new_candidate_outputs_observed'] is not False
+            or len(detail['reproduced_boundaries']) != 75
+            or {r['stage'] for r in detail['reproduced_boundaries']} != boundaries
+            or len(detail['operations']) != 169 or {r['module'] for r in detail['operations']} != expected_modules
+            or len(detail['exact_dot_witnesses']) != 16):
+        raise ValueError('incomplete Fast affine diagnosis')
+    worst = max(rows, key=lambda r:r['relative_rms'])
+    if worst != detail['worst_record']:
+        raise ValueError('Fast diagnosis did not target the exposed maximum')
+    for r in detail['reproduced_boundaries']:
+        original = next(x for x in rows if x['case'] == worst['case'] and x['arm'] == worst['arm']
+                        and x['schedule'] == worst['schedule'] and x['stage'] == r['stage'])
+        if any(r[k] != original[k] for k in ('max_abs','required_atol','relative_rms')):
+            raise ValueError('Fast failure did not reproduce')
+    for r in detail['exact_dot_witnesses']:
+        exact = Fraction(int(r['exact_numerator']),int(r['exact_denominator']))
+        a,b = abs(Fraction(r['hf'])-exact), abs(Fraction(r['split'])-exact)
+        if (r['nearer'] != ('hf' if a < b else 'split' if b < a else 'tie')
+                or r['hf_absolute_error'] != float(a) or r['split_absolute_error'] != float(b)):
+            raise ValueError('invalid Fast exact-dot interpretation')
+    table('fast-reference-budgets.csv', summary)
+    table('fast-reference-predictions.csv', prediction_rows)
+    table('fast-reference-operations.csv', detail['operations'])
+    print(f'Verified {len(rows):,} Fast reference checks, failed calibration ceilings, '
+          '169 local affine comparisons and 16 exact witnesses; confirmation/native acceptance remain unexecuted.')
+
+
+def runtime_ratios(report):
+    samples=report['samples']
+    expected=Counter()
+    for w in report['specification']['measurements']:
+        for block in range(4):
+            for arm,config in enumerate([0,0,*w['candidates']]):
+                for sample in range(10):
+                    expected[(block,arm,w['total']-w['rows'],w['rows'],config,sample)]+=1
+    observed=Counter(tuple(r[k] for k in ('block','arm','prefix','rows','configuration','sample')) for r in samples)
+    if expected!=observed or any(r['nanoseconds']<=0 for r in samples):
+        raise ValueError('incomplete runtime measurement census')
+    results=[]
+    for w in report['specification']['measurements']:
+        def med(block,arm):
+            return median(r['nanoseconds'] for r in samples if r['block']==block and r['arm']==arm
+                and r['rows']==w['rows'] and r['prefix']+r['rows']==w['total'])
+        noise=max(abs(med(b,1)/med(b,0)-1) for b in range(4))
+        for arm,config in enumerate(w['candidates'],start=2):
+            ratios=[med(b,arm)/med(b,0) for b in range(4)]
+            gain=all(r<1 for r in ratios) and 1-median(ratios)>max(.05,noise)
+            regression=all(r>1 for r in ratios) and median(ratios)-1>max(.05,noise)
+            results.append(dict(rows=w['rows'],total=w['total'],configuration=config,
+                baseline_ms=median(med(b,0) for b in range(4))/1e6,
+                candidate_ms=median(med(b,arm) for b in range(4))/1e6,
+                median_ratio=median(ratios),min_ratio=min(ratios),max_ratio=max(ratios),control_noise=noise,
+                outcome='gain' if gain else 'regression' if regression else 'inconclusive'))
+    return results
+
+
+def runtime_diagnostic_census(diagnostics):
+    wanted=Counter();stored=Counter()
+    for case in diagnostics['specification']['cases']:
+        for mode in ('full','scheduled'):
+            schedule=[len(case['ids'])] if mode=='full' else case['schedule']
+            variants=case['full_configurations'] if mode=='full' else [None]
+            for variant in variants:
+                start=0
+                for call,rows in enumerate(schedule):
+                    config=variant if mode=='full' else case['configurations'][call]
+                    for stage in ({f'hidden_{i}' for i in range(25)} | {'logits','final_norm'} |
+                                  {f'cache_{kind}_{i}' for kind in ('key','value') for i in range(24)}):
+                        tag=(case['name'],mode,config,call,start,rows,stage)
+                        wanted[tag+('hf_same_history',)]+=1
+                        if stage.startswith('cache_'): stored[tag]+=1
+                        if mode=='scheduled' and (stage not in ('logits','final_norm') or start+rows==len(case['ids'])):
+                            wanted[tag+('native_full',)]+=1
+                    start+=rows
+    keys=('case','mode','configuration','call','start','rows','stage')
+    if Counter(tuple(r[k] for k in keys+('comparison',)) for r in diagnostics['diagnostics'])!=wanted:
+        raise ValueError('incomplete runtime diagnostic census')
+    if Counter(tuple(r[k] for k in keys) for r in diagnostics['storage'])!=stored:
+        raise ValueError('incomplete runtime storage census')
+    if diagnostics['invariants_passed'] is not True or any(not all(r[k] for k in ('prefix','append','inactive')) for r in diagnostics['storage']):
+        raise ValueError('runtime cache invariant failed')
+    if any(not r['exact'] for r in diagnostics['diagnostics'] if r['stage']=='hidden_0'):
+        raise ValueError('runtime embedding invariant failed')
+    for r in diagnostics['diagnostics']:
+        if any(not math.isfinite(r[k]) or r[k]<0 for k in ('max_abs','max_row_relative_l2')):
+            raise ValueError('invalid runtime diagnostic metric')
+        if r['stage']=='logits' and (not math.isfinite(r['kl_nats']) or not 0<=r['total_variation']<=1):
+            raise ValueError('invalid runtime prediction metric')
+    return len(wanted),len(stored)
+
+
+def runtime():
+    manifest=json.loads((ROOT/'runtime-study.json').read_text())
+    required={f'runtime-{name}.json.gz' for name in ('diagnostics','measurements','generations','reference',
+        'history-diagnostics','history-reference','propagation','lifecycle','selected-diagnostics',
+        'mixed-diagnostics','mixed-reference','public')}
+    if manifest.get('complete') is not True or set(manifest['files'])!=required:
+        raise ValueError('incomplete runtime evidence file census')
+    payload={}
+    for name,record in manifest['files'].items():
+        encoded=(ROOT/name).read_bytes();raw=gzip.decompress(encoded)
+        if sha(encoded)!=record['sha256'] or sha(raw)!=record['raw_sha256']:
+            raise ValueError('runtime evidence hash mismatch')
+        payload[name]=json.loads(raw)
+    diagnostics=payload['runtime-diagnostics.json.gz']
+    measurements=payload['runtime-measurements.json.gz']
+    generation=payload['runtime-generations.json.gz']
+    reference=payload['runtime-reference.json.gz']
+    if (diagnostics['reference_sha256']!=manifest['files']['runtime-reference.json.gz']['raw_sha256']
+            or diagnostics['specification']!=reference['specification']):
+        raise ValueError('runtime reference binding mismatch')
+    checks,storage_checks=runtime_diagnostic_census(diagnostics)
+    predictions=[dict(run='explicit',**r) for r in diagnostics['diagnostics'] if r['stage']=='logits']
+    if 'runtime-history-diagnostics.json.gz' in payload:
+        history=payload['runtime-history-diagnostics.json.gz']
+        history_reference=payload['runtime-history-reference.json.gz']
+        if (history['reference_sha256']!=manifest['files']['runtime-history-reference.json.gz']['raw_sha256']
+                or history['specification']!=history_reference['specification']
+                or history['specification']['history_source_sha256']!=manifest['files']['runtime-generations.json.gz']['raw_sha256']):
+            raise ValueError('runtime history binding mismatch')
+        extra_checks,extra_storage=runtime_diagnostic_census(history)
+        checks+=extra_checks;storage_checks+=extra_storage
+        predictions.extend(dict(run='generation-history',**r) for r in history['diagnostics'] if r['stage']=='logits')
+        for i,(case,g) in enumerate(zip(history['specification']['cases'],generation['records'],strict=True)):
+            remaining=len(g['prompt_ids']);schedule=[]
+            while remaining:
+                rows=min(remaining,g['chunk_rows'] or remaining)
+                schedule.append(rows);remaining-=rows
+            schedule += [1]*(len(g['tokens'])-1)
+            if case['ids']!=g['prompt_ids']+g['tokens'][:-1] or case['schedule']!=schedule:
+                raise ValueError('diagnostics did not follow actual native generation')
+            logits=sorted((r for r in history['diagnostics'] if r['case']==case['name']
+                and r['comparison']=='hf_same_history' and r['stage']=='logits' and r['mode']=='scheduled'
+                and r['start']+r['rows']>=len(g['prompt_ids'])),key=lambda r:r['call'])
+            if [r['token'] for r in logits]!=g['tokens']:
+                raise ValueError('captured token choices differ from actual generation')
+    summary=runtime_ratios(measurements)
+    selected={}
+    for r in sorted(summary,key=lambda r:(r['median_ratio'],r['configuration'])):
+        if r['outcome']=='gain': selected.setdefault((r['rows'],r['total']),r['configuration'])
+    for final_name,ref_name in (('runtime-selected-diagnostics.json.gz','runtime-reference.json.gz'),
+                                ('runtime-mixed-diagnostics.json.gz','runtime-mixed-reference.json.gz')):
+        if final_name not in payload: continue
+        final=payload[final_name];selected_reference=payload[ref_name]
+        if final['configuration_policy']!='fast' or final['reference_sha256']!=manifest['files'][ref_name]['raw_sha256']:
+            raise ValueError('selected runtime reference/policy mismatch')
+        for actual,original in zip(final['specification']['cases'],selected_reference['specification']['cases'],strict=True):
+            if any(actual[k]!=original[k] for k in ('name','ids','schedule')):
+                raise ValueError('selected runtime case mismatch')
+            total=0;expected=[]
+            for rows in actual['schedule']:
+                total+=rows;expected.append(selected.get((rows,total),0))
+            if (actual['configurations']!=expected or
+                    actual['full_configurations']!=[selected.get((len(actual['ids']),len(actual['ids'])),0)]):
+                raise ValueError('automatic dispatch differs from measured selection')
+        extra_checks,extra_storage=runtime_diagnostic_census(final)
+        checks+=extra_checks;storage_checks+=extra_storage
+        predictions.extend(dict(run=final_name.removesuffix('.json.gz'),**r) for r in final['diagnostics'] if r['stage']=='logits')
+    propagation=None
+    if 'runtime-propagation.json.gz' in payload:
+        prop=payload['runtime-propagation.json.gz']['result']
+        if (prop['native_result_sha256']!=manifest['files']['runtime-diagnostics.json.gz']['raw_sha256']
+                or prop['reference_manifest_sha256']!=manifest['files']['runtime-reference.json.gz']['raw_sha256']
+                or prop['baseline_reproduced_boundaries']!=75 or [r['layer'] for r in prop['layers']]!=[0,1,2,3]):
+            raise ValueError('runtime propagation binding or coverage mismatch')
+        propagation=[]
+        for r in prop['layers']:
+            for k in ('input_difference','observed_output_difference','hf_propagated_difference','identical_input_residual'):
+                values=r[k]['row_relative_l2']
+                if (len(values)!=len(prop['ids']) or any(not math.isfinite(v) or v<0 for v in values)
+                        or max(values)!=r[k]['max_row_relative_l2']):
+                    raise ValueError('incomplete propagation rows')
+            propagation.append(dict(layer=r['layer'],**{k:r[k]['max_row_relative_l2'] for k in (
+                'input_difference','observed_output_difference','hf_propagated_difference','identical_input_residual')}))
+    generations=[]
+    from llm_mojo.model_validation import validate_generation_events
+    public=payload['runtime-public.json.gz']
+    verified_public=validate_generation_events(public['events'],8)
+    if (public['exit_code']!=0 or public['default_policy']!='fast' or len(public['prompt_ids'])!=1024
+            or any(verified_public[k]!=public[k] for k in verified_public)):
+        raise ValueError('public Fast launcher evidence mismatch')
+    configurations=[r for r in public['events'] if r['event']=='configuration']
+    if ([int(r['index']) for r in configurations]!=list(range(0,1024,16)) or
+            any(int(r['value'])!=selected.get((16,int(r['index'])+16),0) for r in configurations)):
+        raise ValueError('public launcher did not execute the measured Fast choices')
+    if 'lifecycle passed:' not in payload['runtime-lifecycle.json.gz']['stdout']:
+        raise ValueError('missing native lifecycle completion')
+    declaration=reference['specification']['declaration']
+    if Counter((r['prompt'],r['chunk_rows']) for r in generation['records'])!=Counter(
+            (prompt,chunk) for prompt in declaration['prompts'] for chunk in (0,4)):
+        raise ValueError('incomplete generation prompt/chunk census')
+    if generation['empty_prompt_rejected'] is not True or generation['zero_budget']['tokens']:
+        raise ValueError('missing generation limit/input checks')
+    for r in generation['records']:
+        verified=validate_generation_events(r['events'],declaration['max_new_tokens'])
+        if any(verified[k]!=r[k] for k in verified) or r['unobserved_output_exact'] is not True:
+            raise ValueError('generation event binding or observation mismatch')
+        oracle=next(x for x in reference['generations'] if x['prompt']==r['prompt'])
+        if r['prompt_ids']!=oracle['prompt_ids']: raise ValueError('native/reference tokenizer mismatch')
+        first=next((i for i,(a,b) in enumerate(zip(r['tokens'],oracle['tokens'])) if a!=b),None)
+        if first is None and len(r['tokens'])!=len(oracle['tokens']):
+            first=min(len(r['tokens']),len(oracle['tokens']))
+        generations.append(dict(prompt=r['prompt'],chunk_rows=r['chunk_rows'],tokens=len(r['tokens']),
+            reference_tokens=len(oracle['tokens']),first_difference=first,text=r['text'],reference_text=oracle['text']))
+    table('runtime-measurements.csv',summary)
+    table('runtime-selection.csv',[dict(rows=r,total=t,configuration=c) for (r,t),c in sorted(selected.items())])
+    table('runtime-predictions.csv',predictions)
+    table('runtime-generations.csv',generations)
+    if propagation is not None: table('runtime-propagation.csv',propagation)
+    print(f"Verified {checks:,} runtime diagnostics, {storage_checks:,} storage checks and {len(measurements['samples']):,} timing samples.")
+
+
+def chat_runtime():
+    import importlib.util
+    manifest=json.loads((ROOT/'chat-study.json').read_text())
+    encoded=(ROOT/'chat-study.json.gz').read_bytes()
+    raw=gzip.decompress(encoded)
+    if sha(encoded)!=manifest['sha256'] or sha(raw)!=manifest['raw_sha256']:
+        raise ValueError('chat evidence hash mismatch')
+    report=json.loads(raw)
+    if report['complete'] is not True or report['source']['repository']['dirty']:
+        raise ValueError('incomplete or dirty chat collection')
+    driver=report['driver']
+    expected=Counter((t,b,a,s) for t in range(3) for b in range(4) for a in range(2) for s in range(5))
+    samples=driver['samples']
+    if Counter(tuple(r[k] for k in ('turn','block','arm','sample')) for r in samples)!=expected:
+        raise ValueError('incomplete chat timing census')
+    expected_storage=Counter((t,l,k) for t in range(3) for l in range(24) for k in ('key','value'))
+    if Counter((r['turn'],r['layer'],r['kind']) for r in driver['storage'])!=expected_storage:
+        raise ValueError('incomplete chat cache census')
+    if any(not all(r[k] for k in ('prefix_exact','inactive_exact','finite')) for r in driver['storage']):
+        raise ValueError('chat cache invariant failed')
+    if not driver['reset_logits_exact'] or [r['turn'] for r in driver['diagnostics']]!=[0,1,2]:
+        raise ValueError('missing chat reset or numerical cases')
+    for r in driver['diagnostics']:
+        if any(not math.isfinite(r[k]) for k in ('max_abs','max_row_relative_l2','kl_nats','total_variation')):
+            raise ValueError('nonfinite chat diagnostics')
+    module_path=Path(__file__).resolve().parents[2]/'tests/chat_terminal.py'
+    spec=importlib.util.spec_from_file_location('chat_terminal_replay',module_path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    terminal=report['terminal']
+    for name,maximum,count in [('basic',16,4),('interrupt',256,3)]:
+        turns=module.validate(terminal[name+'_events'],maximum)
+        if turns!=terminal[name+'_turns'] or len(turns)!=count:
+            raise ValueError('chat terminal event binding mismatch')
+    if not terminal['report_free_output_exact']:
+        raise ValueError('chat reporting changed output')
+    public=report['public_launcher']
+    if (public['exit_code']!=0 or public['source']!=report['source']
+            or module.validate(public['events'],16)!=public['turns'] or len(public['turns'])!=2):
+        raise ValueError('public chat launcher binding mismatch')
+    summary=[]
+    for t in range(3):
+        blocks=[]
+        for b in range(4):
+            medians=[median(r['nanoseconds'] for r in samples if r['turn']==t and r['block']==b and r['arm']==a) for a in range(2)]
+            if min(medians)<=0: raise ValueError('invalid chat timing')
+            blocks.append(medians)
+        summary.append(dict(turn=t,cached_rows=driver['diagnostics'][t]['before'],
+            prompt_rows=driver['diagnostics'][t]['prompt'],
+            cached_ms=median(b[0] for b in blocks)/1e6,full_history_ms=median(b[1] for b in blocks)/1e6,
+            median_cached_over_full=median(b[0]/b[1] for b in blocks)))
+    table('chat-forward.csv',summary)
+    table('chat-diagnostics.csv',driver['diagnostics'])
+    table('chat-terminal.csv',[dict(run=name,**{k:v for k,v in r.items() if k not in ('prompt','history','generated')},
+        generated_tokens=len(r['generated'])) for name in ('basic','interrupt') for r in terminal[name+'_turns']])
+    print('Verified chat: 3 numerical comparisons, 144 cache observations, 120 timings and 7 terminal turns.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--plot', action='store_true', help='also regenerate study figures with matplotlib')
@@ -379,6 +760,12 @@ def main():
         aten(args.plot)
     if (ROOT / 'consistency-study.json').exists():
         consistency()
+    if (ROOT / 'fast-reference-study.json').exists():
+        fast_reference()
+    if (ROOT / 'runtime-study.json').exists():
+        runtime()
+    if (ROOT / 'chat-study.json').exists():
+        chat_runtime()
 
 
 if __name__ == '__main__':

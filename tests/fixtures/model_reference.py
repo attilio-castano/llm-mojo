@@ -238,9 +238,73 @@ def self_test():
     print('synthetic upstream 24-layer capture self-test:',checked,'boundaries; not checkpoint qualification',flush=True)
 
 
+def diagnose(model, output, specification):
+    """Capture corresponding HF calls without interpreting numerical distance as acceptance."""
+    from model_consistency import calls
+    output.mkdir(parents=True,exist_ok=False)
+    spec = json.loads(specification.read_text())
+    from tokenizers import Tokenizer
+    tokenizer=Tokenizer.from_file(str(ASSETS/'tokenizer.json'))
+    for i,text in enumerate(spec['declaration']['prompts']):
+        ids=tokenizer.encode(text,add_special_tokens=False).ids
+        spec['cases'].append(dict(name=f'text-{i}',ids=ids,schedule=[1]*len(ids),
+            configurations=[0]*len(ids),full_configurations=[0]))
+    manifest = dict(kind='model-diagnostic-reference-v1', provenance=provenance(),
+        specification=spec, specification_sha256=sha(specification),
+        sources={str(p.relative_to(ROOT)):sha(p) for p in (
+            Path(__file__),Path(__file__).with_name('model_consistency.py'))}, cases=[])
+    for case in spec['cases']:
+        ids = case['ids']
+        entry = dict(name=case['name'],ids=ids,modes={})
+        for mode,schedule in [('full',[len(ids)]),('scheduled',case['schedule'])]:
+            records=[]
+            for index,(start,rows,values) in enumerate(calls(model,ids,schedule,canonical=False)):
+                directory=output/case['name']/mode/f'call_{index}'
+                directory.mkdir(parents=True)
+                arrays={}
+                for name,value in values.items():
+                    path=directory/(name+'.npy')
+                    np.save(path,value,allow_pickle=False)
+                    arrays[name]=dict(path=str(path.relative_to(output)),shape=list(value.shape),sha256=sha(path))
+                records.append(dict(start=start,rows=rows,arrays=arrays))
+            entry['modes'][mode]=records
+        manifest['cases'].append(entry)
+        print('captured',case['name'],len(ids),flush=True)
+    manifest['tokenizer_sha256']=sha(ASSETS/'tokenizer.json')
+    manifest['generations']=[]
+    for text in spec['declaration']['prompts']:
+        ids=tokenizer.encode(text,add_special_tokens=False).ids
+        generated=[]
+        cache=None
+        offset=0
+        block=ids
+        with torch.no_grad():
+            for step in range(min(spec['declaration']['max_new_tokens'],4096-len(ids))):
+                rows=len(block)
+                positions=torch.arange(offset,offset+rows)
+                mask=torch.zeros((1,1,rows,offset+rows),dtype=torch.bfloat16)
+                mask.masked_fill_(torch.arange(offset+rows)[None]>positions[:,None],float('-inf'))
+                with precision_policy() as count:
+                    result=model.model(input_ids=torch.tensor([block]),attention_mask=mask,
+                        position_ids=positions[None],past_key_values=cache,use_cache=True,return_dict=True)
+                if count[0]!=24: raise ValueError('incomplete generation layer coverage')
+                logits=model.lm_head(result.last_hidden_state[:,-1:])[0,0].float()
+                if not torch.isfinite(logits).all(): raise ValueError('nonfinite reference logits')
+                token=int(logits.argmax())
+                generated.append(token)
+                if token in (151645,151643): break
+                cache=result.past_key_values
+                offset+=rows
+                block=[token]
+        manifest['generations'].append(dict(prompt=text,prompt_ids=ids,tokens=generated,
+            text=tokenizer.decode(generated,skip_special_tokens=True)))
+    (output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=['prepare','qualify','capture','self-test'])
+    parser.add_argument('command',choices=['prepare','qualify','capture','diagnose','self-test'])
+    parser.add_argument('--specification',type=Path)
     parser.add_argument('--output',type=Path)
     parser.add_argument('--length',type=int,default=17)
     parser.add_argument('--seed',type=int,default=9103)
@@ -256,6 +320,9 @@ def main():
     model=load_model()
     if args.command=='prepare': prepare(model,args.output)
     elif args.command=='qualify': qualify(model,args.output)
+    elif args.command=='diagnose':
+        if not args.specification: parser.error('diagnose requires --specification')
+        diagnose(model,args.output,args.specification)
     else:
         if not 1<=args.length<=4096:
             parser.error('length must be 1..4096')

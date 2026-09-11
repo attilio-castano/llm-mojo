@@ -4,6 +4,35 @@ from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext
 from llm_mojo.model import _embedding, _copy_rows, load_bf16, save_bf16
 from std.memory import bitcast
+from llm_mojo.model import select_configuration
+from llm_mojo.generate_cli import generation_budget, is_stop
+
+
+def test_generation_limits_and_policy() raises:
+    assert_equal(generation_budget(4096,32),0)
+    assert_equal(generation_budget(4095,32),1)
+    assert_equal(generation_budget(1,0),0)
+    assert_equal(is_stop(151645),True)
+    assert_equal(is_stop(151643),True)
+    assert_equal(is_stop(151644),False)
+    with assert_raises():
+        _ = generation_budget(0,1)
+    with assert_raises():
+        _ = generation_budget(4097,1)
+    with assert_raises():
+        _ = generation_budget(1,-1)
+    assert_equal(select_configuration("21",16,256,"Apple M4 Pro"),21)
+    assert_equal(select_configuration("fast",1,1024,"Apple M4 Pro"),0)
+    assert_equal(select_configuration("fast",16,256,"Apple M4 Pro"),21)
+    assert_equal(select_configuration("fast",16,1024,"Apple M4 Pro"),2)
+    assert_equal(select_configuration("auto",64,4096,"Apple M4 Pro"),3)
+    assert_equal(select_configuration("fast",16,255,"Apple M4 Pro"),0)
+    assert_equal(select_configuration("fast",64,4096,"other"),0)
+    assert_equal(select_configuration("auto",17,257,"other"),0)
+    with assert_raises():
+        _ = select_configuration("fast",0,1,"")
+    with assert_raises():
+        _ = select_configuration("typo",1,1,"")
 
 
 def test_embedding_repeated_ids_and_copy_guards() raises:

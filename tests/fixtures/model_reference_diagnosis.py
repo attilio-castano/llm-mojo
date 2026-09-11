@@ -407,6 +407,138 @@ def native_operations(model, output):
     print('Observed actual HF operations:',len(arrays),'boundaries; model observation unchanged',flush=True)
 
 
+@torch.no_grad()
+def fast_affine_diagnosis(model, qualification):
+    """Reproduce the exposed calibration maximum; inspect identical operands.
+
+    This is diagnosis on already observed reference inputs, never a new
+    qualification or authorization to change any numerical threshold.
+    """
+    from fractions import Fraction
+    import model_calibration as calibration
+    from model_consistency import calls
+    from model_attention_diagnosis import exact_array
+    report = json.loads(qualification.read_text())
+    if report['passed'] or report['source'] != calibration.fast_identity():
+        raise ValueError('require the original failed Fast qualification')
+    raw_path = qualification.parent/'observations.jsonl'
+    if reference.sha(raw_path) != report['observations_sha256']:
+        raise ValueError('calibration observation hash mismatch')
+    rows = [json.loads(line) for line in raw_path.read_text().splitlines()]
+    worst = max(rows, key=lambda r: r['relative_rms'])
+    if worst['arm'] != 'fp32_split2' or worst['schedule'] != [worst['length']]:
+        raise ValueError('this bounded diagnosis requires an exposed split-affine full call')
+    ids = dict(report['cases']['calibration'])[worst['case']]
+    captured, handles = [], []
+    def hook(name):
+        def observe(module, args, output):
+            captured.append((name, module, args[0].detach().clone(), output.detach().clone()))
+        return observe
+    for name, module in model.named_modules():
+        if isinstance(module, torch.nn.Linear):
+            handles.append(module.register_forward_hook(hook(name)))
+    try:
+        observed = next(calls(model, ids, [len(ids)], canonical=False))[2]
+    finally:
+        for handle in handles:
+            handle.remove()
+    baseline = next(calls(model, ids, [len(ids)], canonical=False))[2]
+    if len(captured) != 169 or any(not exact_array(baseline[n], observed[n]) for n in baseline):
+        raise ValueError('observation altered the reference or missed an affine operation')
+    with calibration.split_linear():
+        changed = next(calls(model, ids, [len(ids)], canonical=False))[2]
+    reproduced = []
+    for name in sorted(baseline):
+        value = calibration.metrics(changed[name], baseline[name], report['declaration']['rtol'])
+        old = next(r for r in rows if r['case'] == worst['case'] and r['arm'] == worst['arm']
+                   and r['schedule'] == worst['schedule'] and r['stage'] == name)
+        if any(value[k] != old[k] for k in ('max_abs', 'required_atol', 'relative_rms')):
+            raise ValueError('exposed calibration result did not reproduce')
+        reproduced.append(dict(stage=name, **value))
+    operations, witnesses = [], []
+    for name, module, x, expected in captured:
+        with calibration.split_linear() as count:
+            actual = module(x)
+        if count[0] != 1 or actual.shape != expected.shape or actual.dtype != torch.bfloat16:
+            raise ValueError('invalid local affine replacement')
+        a, b = actual.float().numpy().reshape(-1, actual.shape[-1]), expected.float().numpy().reshape(-1, expected.shape[-1])
+        record = dict(module=name, shape=list(actual.shape), different=int(np.count_nonzero(a != b)),
+                      **calibration.metrics(a, b, report['declaration']['rtol']))
+        operations.append(record)
+        if record['different'] and len(witnesses) < 16:
+            # Freeze at most the first 16 differing affine operations in
+            # execution order, and the first differing element in each.
+            row, column = map(int, np.argwhere(a != b)[0])
+            operands = x.reshape(-1, x.shape[-1])[row].float().tolist()
+            weights = module.weight[column].float().tolist()
+            exact = sum((Fraction(v)*Fraction(w) for v, w in zip(operands, weights, strict=True)), Fraction())
+            if module.bias is not None:
+                exact += Fraction(float(module.bias[column]))
+            hf, split = Fraction(float(b[row,column])), Fraction(float(a[row,column]))
+            dh, ds = abs(hf-exact), abs(split-exact)
+            witnesses.append(dict(module=name, row=row, column=column,
+                exact_numerator=str(exact.numerator), exact_denominator=str(exact.denominator),
+                hf=float(hf), split=float(split), hf_absolute_error=float(dh), split_absolute_error=float(ds),
+                nearer='hf' if dh < ds else 'split' if ds < dh else 'tie'))
+    return dict(qualification_sha256=reference.sha(qualification), worst_record=worst,
+        ids=ids, observation_exact=True, reproduced_boundaries=reproduced,
+        operations=operations, exact_dot_witnesses=witnesses,
+        calibration_source=calibration.fast_identity(), confirmation_executed=False,
+        scope='169 identical-operand affine checks and at most 16 exact dot witnesses on one exposed reference case; no native results, no changed gates')
+
+
+def runtime_propagation(model, native_result, reference_directory):
+    """Explain the exposed early-layer amplification using HF on native operands."""
+    from model_consistency import calls
+    report=json.loads(native_result.read_text())
+    manifest_path=reference_directory/'manifest.json'
+    manifest=json.loads(manifest_path.read_text())
+    if report['reference_sha256']!=reference.sha(manifest_path):
+        raise ValueError('native/reference binding mismatch')
+    worst=max((r for r in report['diagnostics'] if r['comparison']=='hf_same_history'
+        and r['mode']=='full' and r['configuration']==0 and r['stage'].startswith('hidden_')),key=lambda r:r['max_abs'])
+    case=next(c for c in manifest['cases'] if c['name']==worst['case'])
+    ids=case['ids'];length=len(ids)
+    baseline=next(calls(model,ids,[length],canonical=False))[2]
+    for name,record in case['modes']['full'][0]['arrays'].items():
+        path=reference_directory/record['path']
+        if reference.sha(path)!=record['sha256'] or baseline[name].tobytes()!=np.load(path,allow_pickle=False).tobytes():
+            raise ValueError('unmodified HF capture did not reproduce')
+    native={};hashes={}
+    for i in range(5):
+        path=native_result.parent/case['name']/'full-0/call_0'/f'hidden_{i}.bin'
+        data=np.fromfile(path,dtype='<u2')
+        if data.size!=length*896: raise ValueError('incomplete native propagation input')
+        native[i]=(data.astype(np.uint32)<<16).view(np.float32).reshape(length,896)
+        hashes[f'hidden_{i}']=reference.sha(path)
+    def metrics(a,b):
+        a,b=a.astype(np.float64),b.astype(np.float64)
+        norm=np.linalg.norm(b,axis=1);error=np.linalg.norm(a-b,axis=1)
+        relative=np.divide(error,norm,out=np.zeros_like(error),where=norm!=0)
+        return dict(max_abs=float(np.abs(a-b).max()),max_row_relative_l2=float(relative.max()),
+            row_relative_l2=relative.tolist(),zero_reference_nonzero_rows=int(np.sum((norm==0)&(error!=0))))
+    rows=[]
+    for i in range(4):
+        seen=[0]
+        def replace(module,args):
+            seen[0]+=1
+            return (torch.from_numpy(native[i]).bfloat16().unsqueeze(0),*args[1:])
+        hook=model.model.layers[i].register_forward_pre_hook(replace)
+        try:
+            injected=next(calls(model,ids,[length],canonical=False))[2]
+        finally:
+            hook.remove()
+        if seen[0]!=1: raise ValueError('incomplete decoder input replacement')
+        expected=baseline[f'hidden_{i+1}'];propagated=injected[f'hidden_{i+1}']
+        rows.append(dict(layer=i,input_difference=metrics(native[i],baseline[f'hidden_{i}']),
+            observed_output_difference=metrics(native[i+1],expected),
+            hf_propagated_difference=metrics(propagated,expected),
+            identical_input_residual=metrics(native[i+1],propagated)))
+    return dict(native_result_sha256=reference.sha(native_result),reference_manifest_sha256=reference.sha(manifest_path),
+        selected_record=worst,ids=ids,native_input_sha256=hashes,baseline_reproduced_boundaries=75,layers=rows,
+        scope='First four layers of the exposed full-call maximum; replace each HF layer input with the recorded native input. No arithmetic or threshold changes.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path)
@@ -414,6 +546,9 @@ def main():
     modes.add_argument('--detail', action='store_true', help='trace rounding, propagation and prediction impact')
     modes.add_argument('--backend', action='store_true', help='localize ATen operations and test fixed query execution')
     modes.add_argument('--native-operations', action='store_true', help='export identical upstream operands for the exposed one-token native case')
+    modes.add_argument('--fast-affine', type=Path, help='diagnose the already exposed failed Fast qualification result.json')
+    modes.add_argument('--runtime-propagation',type=Path,help='diagnose the exposed native early-layer amplification')
+    parser.add_argument('--runtime-reference',type=Path)
     parser.add_argument('--download-sources', action='store_true', help='download hash-pinned upstream sources for --backend')
     parser.add_argument('--self-test', action='store_true')
     args = parser.parse_args()
@@ -431,6 +566,24 @@ def main():
     provenance = reference.provenance()
     ids = np.random.default_rng(9120).integers(0, 151643, size=17).tolist()
     model = reference.load_model()
+    if args.runtime_propagation:
+        if not args.runtime_reference: parser.error('--runtime-propagation requires --runtime-reference')
+        result=runtime_propagation(model,args.runtime_propagation,args.runtime_reference)
+        if source!=reference.sha(__file__) or provenance!=reference.provenance():
+            raise ValueError('source changed during propagation diagnosis')
+        args.output.parent.mkdir(parents=True,exist_ok=True)
+        args.output.write_text(json.dumps(dict(kind='model-runtime-propagation-v1',source_sha256=source,
+            reference=provenance,reserved_outputs_observed=False,native_outputs_observed=True,result=result),indent=2,allow_nan=False)+'\n')
+        return
+    if args.fast_affine:
+        result = fast_affine_diagnosis(model, args.fast_affine)
+        if source != reference.sha(__file__) or provenance != reference.provenance():
+            raise ValueError('reference source changed during Fast diagnosis')
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(dict(source_sha256=source, reference=provenance,
+            new_candidate_outputs_observed=False, reserved_outputs_observed=False,
+            fast_affine=result), indent=2, allow_nan=False)+'\n')
+        return
     if args.native_operations:
         native_operations(model,args.output)
         return

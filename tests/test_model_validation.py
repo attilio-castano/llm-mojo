@@ -1,13 +1,66 @@
 import tempfile
+import subprocess
 import json
 from pathlib import Path
 import unittest
 import numpy as np
 from llm_mojo.model_validation import (bf16, compare, consistency_accuracy,
-    verify_consistency_observations, CONSISTENCY_BOUNDARIES)
+    verify_consistency_observations, CONSISTENCY_BOUNDARIES,
+    numerical_diagnostic, prediction_diagnostic, storage_diagnostic)
+from llm_mojo.model_validation import generation_events, require_empty_prompt_rejection
 
 
 class ModelComparisonTests(unittest.TestCase):
+    def test_native_exception_on_stdout_is_a_rejection_not_generated_text(self):
+        error=b'Unhandled exception caught during execution: prompt must encode to 1..4096 tokens\n'
+        for stdout,stderr in ((error,b''),(b'',error)):
+            require_empty_prompt_rejection(subprocess.CompletedProcess([],1,stdout,stderr))
+        for result in (subprocess.CompletedProcess([],0,error,b''),
+                       subprocess.CompletedProcess([],1,b'other failure',b'')):
+            with self.assertRaises(ValueError): require_empty_prompt_rejection(result)
+
+    def test_generation_event_contract_rejects_truncation_and_bad_cache_accounting(self):
+        good=('event\tindex\tvalue\tnanoseconds\n'
+              'prompt\t0\t42\t0\n'
+              'device\t0\tApple M4 Pro/metal\t0\n'
+              'token\t0\t151645\t10\n'
+              'cache\t0\t1\t0\n'
+              'submitted\t0\t24\t0\n'
+              'finish\t1\tstop\t11\n')
+        with tempfile.TemporaryDirectory() as directory:
+            p=Path(directory)/'events.tsv';p.write_text(good)
+            self.assertEqual(generation_events(p,32)['tokens'],[151645])
+            for bad in (good.replace('finish\t1\tstop\t11\n',''),
+                        good.replace('cache\t0\t1','cache\t0\t2'),
+                        good.replace('submitted\t0\t24','submitted\t0\t48'),
+                        good.replace('151645','10')):
+                p.write_text(bad)
+                with self.assertRaises(ValueError): generation_events(p,32)
+
+    def test_diagnostics_report_distance_without_an_accuracy_gate(self):
+        expected=np.array([[1.,2.,3.]],dtype=np.float32)
+        actual=expected+100
+        metrics=numerical_diagnostic(actual,expected)
+        self.assertEqual(metrics['max_abs'],100)
+        self.assertNotIn('passed',metrics)
+        predictions=prediction_diagnostic(actual,expected)
+        self.assertAlmostEqual(predictions['kl_nats'],0)
+        self.assertAlmostEqual(predictions['total_variation'],0)
+        with self.assertRaises(ValueError):
+            numerical_diagnostic(np.array([[np.nan,0,1]]),expected)
+
+    def test_storage_checks_preserve_bits_and_cover_inactive_capacity(self):
+        prior=np.array([[0.],[-0.],[123.],[123.]],dtype=np.float32)
+        appended=np.array([[7.]],dtype=np.float32)
+        actual=prior.copy(); actual[2]=appended[0]
+        self.assertTrue(all(storage_diagnostic(actual,appended,prior,2,1).values()))
+        actual[1]=0.
+        self.assertFalse(storage_diagnostic(actual,appended,prior,2,1)['prefix'])
+        actual=prior.copy(); actual[2]=8.
+        self.assertFalse(storage_diagnostic(actual,appended,prior,2,1)['append'])
+        actual[3]=1.
+        self.assertFalse(storage_diagnostic(actual,appended,prior,2,1)['inactive'])
+
     def test_reference_rejects_omitted_schedule_even_with_complete_reported_records(self):
         # All records for the reported full call are present, but the declared
         # four-token partitions are missing. Counts alone must not qualify it.

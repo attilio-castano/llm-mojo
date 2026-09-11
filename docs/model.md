@@ -1,8 +1,8 @@
-# Initial model contract
+# Qwen model contract
 
 ## Target
 
-The first end-to-end model target is
+The native Fast runtime and terminal chat use
 [`Qwen/Qwen2.5-0.5B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/tree/7ae557604adf67be50417f59c2c2f167def9a775)
 at immutable Hugging Face revision
 `7ae557604adf67be50417f59c2c2f167def9a775`.
@@ -51,7 +51,7 @@ tensors. That workflow verifies the prefix identity and explicitly records
 that the full-file digest was not verified. See the
 [attention fixture provenance](../studies/attention_sublayer/numerics.md#reproduction).
 
-## V0 runtime boundary
+## Current runtime boundary
 
 Qwen's configuration, weights and official implementation define model
 semantics. Numerical compatibility also requires a named precision policy and
@@ -71,25 +71,31 @@ The composed attention study describes its
 [reference hierarchy and validation boundaries](attention-sublayer.md).
 The [decoder-layer contract and fixture specification](decoder-layer.md)
 defines the composition gate for attention followed by MLP. The layer has
-passed its numerical acceptance and workload selection study. The modified,
-pinned HF reference passes full-model schedule qualification. The current
-[full-model gate](../studies/model_generation/consistency.md) is paused at seven
-native accuracy failures on its first input; the earlier reference confirmation
-failure remains historical evidence. Native 24-layer schedule consistency and
-generation acceptance remain pending.
+passed its numerical acceptance and workload selection study. The completed
+[Fast runtime](../studies/model_generation/runtime.md) composes all 24 layers;
+the [terminal chat](chat.md) adds persistent multi-turn sessions. Full-model
+numerical comparisons are diagnostic under the policy below. The historical
+[consistency investigation](../studies/model_generation/consistency.md) remains
+incomplete and is a separate follow-up.
 
-V0 is deliberately narrower than the model's complete advertised capability:
+The implemented runtime is deliberately narrower than the model's complete
+advertised capability:
 
 - BF16 weights and activations, with wider accumulation only where explicitly
   documented;
 - batch size 1;
 - at most 4,096 live session tokens, including all prompt and generated tokens;
 - system, user, and assistant chat roles without tool calls;
-- deterministic greedy decoding before probabilistic sampling;
-- full prefill for the first turn;
+- greedy decoding with lowest-token-ID tie breaking;
+- first-turn prefill, optionally split into chunks;
 - incremental prefill for later user turns;
 - one-token autoregressive decode with a persistent KV cache;
-- token IDs supplied by reference tooling rather than a Mojo tokenizer.
+- native Mojo tokenization, Qwen chat framing and streaming UTF-8 decoding.
+
+Fast dispatch is the default. It selects measured M4 Pro configurations by
+workload and retains the optimized baseline elsewhere; see the
+[runtime policy](generation.md#workload-policy). Fixed greedy tie breaking does
+not guarantee identical predictions across different prefill chunk schedules.
 
 The 4,096-token limit is a V0 engineering boundary, not a statement about the
 model's 32,768-token context capability. At batch size 1, the unpadded BF16 KV
@@ -101,6 +107,12 @@ payload is 12,288 bytes per token and 48 MiB at the V0 limit:
 
 Allocator overhead, alignment, padding, and temporary buffers must be measured
 separately rather than folded into that theoretical payload.
+
+## Operation arithmetic
+
+The V0 arithmetic below defines the inspectable operation references. Optimized
+compositions retain their own documented rounding boundaries and independent
+tests; the standalone materialized GQA reference is not the Fast attention path.
 
 ### RMSNorm arithmetic
 
@@ -148,11 +160,11 @@ Y[row, output_feature] = bf16(acc + f32(B[output_feature]))
 
 The host reference uses the displayed serial reduction order. GPU reductions
 may use a different FP32 association and must match the pinned oracle under the
-predeclared tolerance. V0 keeps Q, K, and V as three source-compatible
-operations. Packing or fusing them is a later optimization that requires its
-own correctness and benchmark evidence. Bias-free projections, including the
-attention output projection, are added when their operation slice is
-implemented rather than represented by an implicit zero-bias allocation.
+predeclared tolerance. The reference keeps Q, K, and V as three source-compatible
+operations. The Fast runtime uses the validated packed projections described in
+the [attention study](../studies/attention_sublayer/README.md). Bias-free
+projections, including the attention output projection, have explicit paths
+without an implicit zero-bias allocation.
 Tensor and execution mappings use the project's
 [layout language](layouts.md#affine-linear-projection-v0).
 
@@ -265,11 +277,12 @@ defines post-attention RMSNorm, SwiGLU, and the second residual boundary.
 The upstream fixtures and numerical budgets are frozen. The materialized Mojo
 baseline, tiled prefill projections, and bounded decode experiments have passed
 their numerical checks and are documented in the [MLP study](../studies/mlp_sublayer/README.md).
-Rowwise mapping 0 remains the default; tiled mapping 7 is an explicit prefill
-option, and no decode candidate qualified for promotion. The accepted
+The standalone MLP defaults to rowwise mapping 0. The Fast model uses tiled
+mapping 7 for multi-row calls and mapping 0 for decode; no measured MLP decode
+candidate qualified for promotion. The accepted
 [decoder composition](../studies/decoder_layer/selection.md) combines attention
-and MLP with workload-specific configurations. Full-model composition is a
-[development candidate](generation.md) awaiting numerical acceptance.
+and MLP with workload-specific configurations, now integrated into the
+[complete model](generation.md).
 
 ## Conversation semantics
 
@@ -282,16 +295,17 @@ have been materialized, so the invariant is:
 0 <= cache_length <= len(token_history)
 ```
 
-Sampling appends the selected token to canonical history before that token is
+Greedy selection appends the selected token to canonical history before it is
 used as the next model input. At a generation boundary, the history may
 therefore be one token longer than the cache, including when the sampled token
 is a stop ID or generation ends at a token limit. V0 derives reusable prefixes
 from `cache_length`; it does not assume that all canonical history is cached.
 
-Reference tooling owns chat-template rendering and tokenization in V0. Fixtures
-must use an explicit system message, the pinned `tokenizer_config.json` chat
-template, and `add_generation_prompt=true`. The default template behavior must
-not be allowed to introduce an implicit system message unnoticed.
+Native `ChatHistory` owns system/user/assistant framing and token history.
+Independent HF fixtures verify seven prompt prefixes against the pinned
+`tokenizer_config.json` template, including its generation prompt, default
+system instruction and explicit custom/empty system messages. Generated token
+IDs remain authoritative; displayed assistant text is never re-tokenized.
 
 The tokenizer's chat end token is `<|im_end|>` (`151645`). The official
 generation configuration treats both `151645` and `<|endoftext|>` (`151643`) as
@@ -300,55 +314,54 @@ cached only after they have been processed as model input.
 
 For each later user turn:
 
-1. Render and tokenize the complete updated transcript with the reference
-   tooling.
-2. Verify that canonical token history is an exact prefix of that transcript.
-3. Verify that the KV cache represents exactly the first `cache_length` tokens
-   of canonical history.
-4. Prefill the updated transcript beginning at `cache_length` while attending
-   to the existing KV cache. This includes any sampled but uncached terminal
-   token as well as the new turn suffix.
-5. Decode the assistant response one token at a time and extend both token
-   history and cache.
+1. Construct the Qwen-framed user suffix and assistant generation prompt with
+   the native tokenizer. Check the complete request and reply allowance before
+   mutating history or submitting model work.
+2. Preserve the invariant that the cache represents the leading `cache_length`
+   tokens of canonical history.
+3. Submit the uncached suffix, including any pending final assistant token,
+   end marker and newline from the preceding turn, followed by the new prompt.
+4. Decode one token at a time, retaining each selected token ID and tracking
+   separately whether it has been submitted to the model.
 
-If either prefix invariant fails, the engine must invalidate and rebuild the
-cache. It must never assume that independently tokenizing only the new text
-preserves the same token boundary.
+Ending a reply appends an end marker if needed and the template newline. Those
+closure tokens can remain uncached until the next turn. Context rejection leaves
+history and caches unchanged; execution failure invalidates the session until
+reset. `/reset` synchronizes and clears the conversation and logical cache lengths
+while retaining loaded weights and the system instruction. See
+[chat ownership and turn boundaries](chat.md#ownership-and-turn-boundaries).
 
-## V0 correctness acceptance
+## Correctness and diagnostic policy
 
-V0 is complete only when all of the following are reproducible from documented
-commands and fixtures:
+The completed Fast milestone requires reproducible evidence for:
 
-1. **Artifact validation:** all required artifacts match the pinned revision and
-   checksums, and every loaded tensor has the expected name, dtype, shape, and
-   byte count.
-2. **Reference forward pass:** embeddings, every decoder block boundary, final
-   normalization, and output logits match an independently executed reference
-   oracle within predeclared absolute and relative tolerances. Tolerances and
-   accumulation dtypes belong in the fixture manifest and may not be selected
-   after observing the Mojo result.
-3. **Uncached generation:** for fixed prompts with an adequate top-logit margin,
-   greedy token selection matches the reference oracle. Logit parity remains
-   the authoritative result when an argmax is numerically ambiguous.
-4. **Cached generation:** prefill plus one-token cached decode matches full
-   uncached recomputation at every generated position within the declared
-   tolerance. Instrumentation must demonstrate that cached prefixes were not
-   recomputed and must cover generation ending on a stop ID and at a token
-   limit.
-5. **Multi-turn generation:** a fixture with an explicit system message and at
-   least three user turns produces the same per-position logits and token
-   history through incremental prefill as full-transcript recomputation. At
-   least one later turn must begin with an uncached terminal token in canonical
-   history.
-6. **Cache accounting:** cache shapes, positions, logical length, allocated
-   bytes, reset behavior, and relationship between `cache_length` and token
-   history agree with the documented layout and context limit.
-7. **Execution identity:** correctness and performance records identify the
-   commit, model revision, hardware, software, dtype, tensor shapes, and actual
-   runtime device and backend.
+1. **Artifact validation:** pinned identities and every loaded tensor's name,
+   dtype, shape and byte count.
+2. **Architecture and execution:** embeddings, all 24 learned layers, final
+   normalization, tied LM head, causal positions and finite outputs.
+3. **Local numerical contracts:** independent operation and composition tests
+   under their declared arithmetic policies and tolerances.
+4. **Cache and lifecycle invariants:** exact preserved prefixes, appended storage,
+   inactive guards, logical lengths, submission accounting, reset and invalid-input
+   handling. Previously cached tokens must not be recomputed during normal turns.
+5. **Generation and chat semantics:** greedy tie handling, nonfinite rejection,
+   stop/context limits, exact template fixtures, authoritative token history,
+   UTF-8 streaming and terminal interruption/continuation behavior.
+6. **Evidence identity:** source, executable, model revision, device/backend,
+   software, dtype, shapes and measurement boundaries.
 
-V0 has no performance threshold. Optimization begins only after this reference
-contract passes. Later work can add sampling, longer contexts, quantization,
-batching, tool-oriented templates, and additional model families without
-changing what V0 established.
+HF comparisons and comparisons between native chunk schedules record numerical
+distances, output distributions, same-history token choices and independent
+trajectories. They diagnose discrepancies rather than apply a global full-model
+closeness threshold. An exact token-ID match is distinct from approximate logit
+agreement; neither establishes byte-equal stored tensors. Suspicious differences
+are investigated on identical operands without retuning historical tolerances.
+
+The [runtime study](../studies/model_generation/runtime.md) and
+[chat study](../studies/model_generation/chat.md) define the completed evidence
+scope and observed differences. Full-model schedule determinism and a matched HF
+performance comparison remain follow-ups. The original tolerance-gated V0
+qualification and consistency plans are retained in
+[generation-plan.md](generation-plan.md), with their failures in the
+[numerical history](../studies/model_generation/README.md). Those failed results
+remain unchanged; this policy does not claim that their gates passed.
