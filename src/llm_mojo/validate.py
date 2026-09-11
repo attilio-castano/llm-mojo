@@ -54,6 +54,7 @@ def prepare():
     ensure_prepared(download=False)
     run("uv", "run", "--locked", "--script", "tests/fixtures/tokenizer_reference.py")
     run("uv", "run", "--locked", "--script", "tests/fixtures/tokenizer_reference.py", "--unicode")
+    run(sys.executable, "tests/fixtures/chat_reference.py", "--pack")
     print("All generated oracles match the frozen anchors.", flush=True)
 
 

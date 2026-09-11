@@ -122,3 +122,13 @@ tests/                   Correctness tests and independent oracle generators
 docs/                    Project direction and development guidance
 studies/                 Topic explanations, compact measurements, and graphs
 ```
+
+## Terminal chat
+
+Run the native Fast Qwen chat with persistent KV caches using verified local assets:
+
+```sh
+uv run --locked python -m llm_mojo.chat --prepared build/model-prepared-v1
+```
+
+See [chat setup, controls and context limits](docs/chat.md).

@@ -1,5 +1,7 @@
 # Qwen model composition and generation
 
+For interactive multi-turn use with persistent KV caches, see [terminal chat](chat.md).
+
 The active [Fast implementation revision](fast-generation-plan.md) uses numerical
 comparisons as diagnostics. Required checks cover assets, data flow, cache and
 generation semantics; historical full-model distance ceilings no longer block

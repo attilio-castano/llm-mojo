@@ -646,6 +646,59 @@ def runtime():
     print(f"Verified {checks:,} runtime diagnostics, {storage_checks:,} storage checks and {len(measurements['samples']):,} timing samples.")
 
 
+def chat_runtime():
+    import importlib.util
+    manifest=json.loads((ROOT/'chat-study.json').read_text())
+    encoded=(ROOT/'chat-study.json.gz').read_bytes()
+    raw=gzip.decompress(encoded)
+    if sha(encoded)!=manifest['sha256'] or sha(raw)!=manifest['raw_sha256']:
+        raise ValueError('chat evidence hash mismatch')
+    report=json.loads(raw)
+    if report['complete'] is not True or report['source']['repository']['dirty']:
+        raise ValueError('incomplete or dirty chat collection')
+    driver=report['driver']
+    expected=Counter((t,b,a,s) for t in range(3) for b in range(4) for a in range(2) for s in range(5))
+    samples=driver['samples']
+    if Counter(tuple(r[k] for k in ('turn','block','arm','sample')) for r in samples)!=expected:
+        raise ValueError('incomplete chat timing census')
+    expected_storage=Counter((t,l,k) for t in range(3) for l in range(24) for k in ('key','value'))
+    if Counter((r['turn'],r['layer'],r['kind']) for r in driver['storage'])!=expected_storage:
+        raise ValueError('incomplete chat cache census')
+    if any(not all(r[k] for k in ('prefix_exact','inactive_exact','finite')) for r in driver['storage']):
+        raise ValueError('chat cache invariant failed')
+    if not driver['reset_logits_exact'] or [r['turn'] for r in driver['diagnostics']]!=[0,1,2]:
+        raise ValueError('missing chat reset or numerical cases')
+    for r in driver['diagnostics']:
+        if any(not math.isfinite(r[k]) for k in ('max_abs','max_row_relative_l2','kl_nats','total_variation')):
+            raise ValueError('nonfinite chat diagnostics')
+    module_path=Path(__file__).resolve().parents[2]/'tests/chat_terminal.py'
+    spec=importlib.util.spec_from_file_location('chat_terminal_replay',module_path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    terminal=report['terminal']
+    for name,maximum,count in [('basic',16,4),('interrupt',256,3)]:
+        turns=module.validate(terminal[name+'_events'],maximum)
+        if turns!=terminal[name+'_turns'] or len(turns)!=count:
+            raise ValueError('chat terminal event binding mismatch')
+    if not terminal['report_free_output_exact']:
+        raise ValueError('chat reporting changed output')
+    summary=[]
+    for t in range(3):
+        blocks=[]
+        for b in range(4):
+            medians=[median(r['nanoseconds'] for r in samples if r['turn']==t and r['block']==b and r['arm']==a) for a in range(2)]
+            if min(medians)<=0: raise ValueError('invalid chat timing')
+            blocks.append(medians)
+        summary.append(dict(turn=t,cached_rows=driver['diagnostics'][t]['before'],
+            prompt_rows=driver['diagnostics'][t]['prompt'],
+            cached_ms=median(b[0] for b in blocks)/1e6,full_history_ms=median(b[1] for b in blocks)/1e6,
+            median_cached_over_full=median(b[0]/b[1] for b in blocks)))
+    table('chat-forward.csv',summary)
+    table('chat-diagnostics.csv',driver['diagnostics'])
+    table('chat-terminal.csv',[dict(run=name,**{k:v for k,v in r.items() if k not in ('prompt','history','generated')},
+        generated_tokens=len(r['generated'])) for name in ('basic','interrupt') for r in terminal[name+'_turns']])
+    print('Verified chat: 3 numerical comparisons, 144 cache observations, 120 timings and 7 terminal turns.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--plot', action='store_true', help='also regenerate study figures with matplotlib')
@@ -707,6 +760,8 @@ def main():
         fast_reference()
     if (ROOT / 'runtime-study.json').exists():
         runtime()
+    if (ROOT / 'chat-study.json').exists():
+        chat_runtime()
 
 
 if __name__ == '__main__':
