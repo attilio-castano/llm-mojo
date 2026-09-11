@@ -35,6 +35,40 @@ class ModelProfileTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     replay(directory)
 
+    def test_retained_fusion_rejects_rehashed_missing_or_changed_evidence(self):
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import fusion_replay
+        path = repository_root()/'studies/model_generation/qkv-fusion.json.gz'
+        if not path.exists():
+            self.skipTest('fusion evidence has not yet been collected')
+        original = json.loads(gzip.decompress(path.read_bytes()))
+        for damage in ('sample','cache','dispatch','terminal'):
+            record = copy.deepcopy(original)
+            if damage=='sample': record['timing']['samples'].pop()
+            elif damage=='cache': record['timing']['numerical'][0]['observations'][0]['prefix_exact']=False
+            elif damage=='dispatch': record['captures'][1]['samples'].pop()
+            else: record['terminal']['blocks'][0]['arms'][0]['turns'][0]['generated'][0]=0
+            with tempfile.TemporaryDirectory() as tmp:
+                d=Path(tmp)
+                raw=json.dumps(record).encode()
+                packed=gzip.compress(raw,mtime=0)
+                (d/'qkv-fusion.json.gz').write_bytes(packed)
+                (d/'qkv-fusion.json').write_text(json.dumps(dict(sha256=hashlib.sha256(packed).hexdigest(),
+                                                              uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with self.assertRaises(ValueError): fusion_replay(d)
+
+    def test_fusion_contract_and_promotion_require_all_contexts_and_calibration(self):
+        from llm_mojo.benchmarks.model_profile import fusion_summary
+        self.assertEqual(len(contract.stages(True)),338)
+        self.assertEqual(len(contract.command_stages(True)),342)
+        samples = [dict(prefix=p,block=b,comparison=c,arm=a,sample=s,elapsed_ns=(80 if c==1 and a==1 else 100),marks=[])
+                   for p in contract.PREFIXES for b in range(4) for c in range(2) for a in range(2) for s in range(10)]
+        self.assertTrue(all(r['promote'] for r in fusion_summary(samples)))
+        for row in samples:
+            if row['comparison']==0 and row['arm']==1: row['elapsed_ns']=130
+        self.assertFalse(any(r['promote'] for r in fusion_summary(samples)))
+        with self.assertRaises(ValueError): fusion_summary(samples[:-1])
+
     def test_whole_model_dispatch_contract(self):
         stages = contract.stages()
         self.assertEqual(len(stages), 410)

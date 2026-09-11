@@ -1,7 +1,7 @@
 """Collect and replay the bounded full-model token profiling study.
 
 Build/run/capture require a clean local checkout and verified local assets.
-Replay needs only the retained archive. No model optimization is applied here.
+Replay needs only the retained archive. The fusion experiment keeps an explicit control.
 """
 import argparse
 from collections import Counter, defaultdict
@@ -52,7 +52,7 @@ def assets(prepared):
                 prepared_sha256=sha(prepared/'manifest.json'), tables_sha256=sha(tables))
 
 
-def build(output, prepared):
+def build(output, prepared, fusion=False):
     ensure_record_location(output)
     output.mkdir(parents=True, exist_ok=False)
     source = source_identity()
@@ -62,13 +62,16 @@ def build(output, prepared):
     binaries = {}
     for name, entry in [('model', 'benchmarks/model.mojo'), ('terminal', 'chat_cli.mojo')]:
         command = [environment_tool('mojo'), 'build', '-I', 'src',
+                   *(['-D','MODEL_FUSION_STUDY'] if fusion else []),
                    'src/llm_mojo/'+entry, '-o', output/name]
         execute(command, output/f'{name}-build.log')
         binaries[name] = dict(sha256=sha(output/name), bytes=(output/name).stat().st_size)
     machine = stable_environment()
-    for prefix in contract.PREFIXES:
-        name = f'profile-{prefix}'
+    for prefix, fused in ([(1024,False),(1024,True)] if fusion else [(p,False) for p in contract.PREFIXES]):
+        name = f'profile-{prefix}'+('-fused' if fused else '')
         command = [environment_tool('mojo'), 'build', '-I', 'src',
+                   *(['-D','MODEL_FUSION_STUDY'] if fusion else []),
+                   *(['-D','MODEL_FUSION_PROFILE'] if fused else []),
                    '-D', f'MODEL_PROFILE_PREFIX={prefix}',
                    '-D', 'MODEL_PREPARED='+identity['prepared'],
                    '-D', 'MODEL_TABLES='+identity['tables'],
@@ -77,9 +80,10 @@ def build(output, prepared):
         binary = dict(sha256=sha(output/name), bytes=(output/name).stat().st_size)
         binaries[name] = binary
         provenance = dict(schema_version=1, operation=contract.OPERATION,
-                          implementation='qwen_model_fast', entrypoint='QwenModel.forward+greedy',
+                          implementation='qwen_model_fused' if fused else 'qwen_model_fast',
+                          entrypoint=contract.ENTRYPOINTS['qwen_model_fused' if fused else 'qwen_model_fast'],
                           repository=source['repository'], source_sha256=source['sources'],
-                          **machine, **contract.specification(prefix),
+                          **machine, **contract.specification(prefix,fused),
                           profile_warmup_iterations=10, profile_iterations=8,
                           profile_post_idle_milliseconds=250, binary=binary,
                           assets={k:v for k,v in identity.items() if k.endswith('_sha256')})
@@ -88,7 +92,7 @@ def build(output, prepared):
     if source_identity() != source or assets(prepared) != identity:
         raise ValueError('source or assets changed during compilation')
     write(output/'build.json', dict(source=source, assets=identity, environment=machine,
-                                    declaration=contract.DECLARATION, binaries=binaries))
+                                    declaration=contract.FUSION_DECLARATION if fusion else contract.DECLARATION, binaries=binaries))
 
 
 def verify_build(directory):
@@ -129,7 +133,7 @@ def verify_snapshots(directory, prefix):
     return dict(prefix=prefix, history=history, observations=records)
 
 
-def parse_samples(stdout, prefix, block, comparison):
+def parse_samples(stdout, prefix, block, comparison, observed=True):
     if 'device: Apple M4 Pro\napi: metal\n' not in stdout or stdout.count('BENCHMARK_COMPLETE') != 1:
         raise ValueError('missing measured device or completion')
     records = []
@@ -140,7 +144,7 @@ def parse_samples(stdout, prefix, block, comparison):
         if len(values) not in (3, 13):
             raise ValueError('invalid host observation record')
         arm, sample, elapsed, *marks = values
-        if elapsed <= 0 or bool(marks) != (comparison == 1 and arm == 1):
+        if elapsed <= 0 or bool(marks) != (observed and comparison == 1 and arm == 1):
             raise ValueError('incorrect observation arm')
         if marks and (marks != sorted(marks) or marks[0] < 0 or marks[-1] > elapsed):
             raise ValueError('invalid host timing sequence')
@@ -175,7 +179,8 @@ def collect(directory, output):
                 stdout = execute([directory/'model', 'bench', args['prepared'], args['tables'],
                                   prefix, int(reverse), comparison, ''],
                                  output/f'p{prefix}-b{block}-c{comparison}.log')
-                samples.extend(parse_samples(stdout, prefix, block, comparison))
+                samples.extend(parse_samples(stdout, prefix, block, comparison,
+                                             observed=receipt['declaration']==contract.DECLARATION))
         blocks.append(dict(block=block, before=before, after=conditions()))
         print(f'Completed timing block {block+1}/4', flush=True)
     if verify_build(directory) != receipt:
@@ -261,7 +266,7 @@ def export_trace(target):
                  '--output', target/(key+'.xml')], target/f'export-{key}.log')
 
 
-def curate(target, prefix, repeat):
+def curate(target, prefix, repeat, fused=False):
     from .analyze_trace import analyze, read_table, integer, coalesce_compute_commands, segment_compute_commands
     arguments = SimpleNamespace(capture_receipt=target/'capture.json', submissions_xml=target/'submissions.xml',
                                 gpu_intervals_xml=target/'gpu-intervals.xml', toc_xml=target/'toc.xml',
@@ -281,13 +286,13 @@ def curate(target, prefix, repeat):
     for row in intervals:
         key = tuple(integer(row,k) for k in ('cmdbuffer-id','encoder-id'))
         fragments[key].append([integer(row,'start'),integer(row,'duration')])
-    stages = contract.command_stages()
+    stages = contract.command_stages(fused)
     count = len(stages)
     intervals, joined = coalesce_compute_commands(intervals, submissions, 18*count, join_resubmissions=True)
     if joined != report['validated_sequence']['interval_coalescing']:
         raise ValueError('curation differs from validated dispatch join')
     *_, measured = segment_compute_commands(intervals, 10, 8, count, False)
-    contract.validate_command_sequence(measured)
+    contract.validate_command_sequence(measured,fused)
     by_command = {integer(r,'cmdbuffer-id'):r for r in submissions}
     rows = []
     for index, row in enumerate(measured):
@@ -305,14 +310,14 @@ def curate(target, prefix, repeat):
                 conditions=json.loads((target/'conditions.json').read_text()), samples=rows)
 
 
-def summarize(samples):
+def summarize(samples, observed=True):
     expected = Counter((p,b,c,a,s) for p in contract.PREFIXES for b in range(4)
                        for c in range(2) for a in range(2) for s in range(10))
     if Counter(tuple(r[k] for k in ('prefix','block','comparison','arm','sample')) for r in samples) != expected:
         raise ValueError('incomplete study timing census')
     for row in samples:
         marks = row['marks']
-        if (row['elapsed_ns'] <= 0 or bool(marks) != (row['comparison']==1 and row['arm']==1)
+        if (row['elapsed_ns'] <= 0 or bool(marks) != (observed and row['comparison']==1 and row['arm']==1)
                 or (marks and (len(marks)!=10 or marks != sorted(marks) or marks[0]<0 or marks[-1]>row['elapsed_ns']))):
             raise ValueError('invalid retained host observation')
     result = []
@@ -329,7 +334,7 @@ def summarize(samples):
                   'final norm/head enqueue','forward return','map/wait','CPU argmax scan','unmap']
         for block in range(4):
             records = [r for r in subset if r['block'] == block and r['marks']]
-            for i, label in enumerate(labels):
+            for i, label in enumerate(labels if records else []):
                 phases[label].append(stats.median(r['marks'][i+1]-r['marks'][i] for r in records)/1e6)
         result.append(dict(prefix=prefix, baseline_ms=baseline, equivalent_steps_per_second=1000/baseline,
                            baseline_block_ms=[medians[b,1,0]/1e6 for b in range(4)],
@@ -503,11 +508,206 @@ def plot(directory):
     plt.close(fig)
 
 
+def fusion_capture(directory, output):
+    """One control and one candidate capture at the representative context."""
+    from .capture_trace import capture_trace
+    receipt = verify_build(directory)
+    if receipt['declaration'] != contract.FUSION_DECLARATION:
+        raise ValueError('not a fusion build')
+    ensure_record_location(output)
+    output.mkdir(parents=True,exist_ok=False)
+    for fused in (False,True):
+        name = 'profile-1024'+('-fused' if fused else '')
+        target = output/('fused' if fused else 'control')
+        target.mkdir()
+        before = conditions()
+        capture_trace(profile_binary=directory/name,output_trace=target/'raw.trace',
+                      receipt_path=target/'capture.json',time_limit='30s')
+        write(target/'conditions.json',dict(before=before,after=conditions()))
+        (target/'profile.provenance.json').write_bytes((directory/(name+'.provenance.json')).read_bytes())
+        export_trace(target)
+        curated = curate(target,1024,0,fused)
+        write(target/'curated.json',curated)
+        print('Verified fusion capture',name,len(curated['samples']),flush=True)
+    verify_build(directory)
+
+
+def fusion_terminal(directory, output):
+    receipt = verify_build(directory)
+    if receipt['declaration'] != contract.FUSION_DECLARATION:
+        raise ValueError('not a fusion build')
+    ensure_record_location(output)
+    output.mkdir(parents=True,exist_ok=False)
+    sys.path.insert(0,str(repository_root()/'tests'))
+    from chat_terminal import events, validate
+    original = json.loads(gzip.decompress((repository_root()/'studies/model_generation/token-profile.json.gz').read_bytes()))
+    prompts = original['terminal']['prompts']
+    inputs = ('\n/reset\n'.join(p.replace('\n',' ') for p in prompts)+'\n/exit\n').encode()
+    identity = receipt['assets']
+    blocks = []
+    for block in range(4):
+        before = conditions()
+        arms = []
+        outputs = []
+        for fused in ([True,False] if block in (1,2) else [False,True]):
+            report = output/f'b{block}-f{int(fused)}.tsv'
+            command = list(map(str,[directory/'terminal',identity['prepared'],identity['tables'],128,256,
+                                    '',report,'fusion' if fused else 'fast']))
+            result = subprocess.run(command,cwd=repository_root(),env=environment(),input=inputs,
+                                    stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=240)
+            (output/f'b{block}-f{int(fused)}.txt').write_bytes(result.stdout)
+            if result.returncode:
+                raise ValueError('fusion terminal failed')
+            ev = events(report)
+            turns = validate(ev,128)
+            if len(turns)!=3:
+                raise ValueError('missing fusion terminal turns')
+            arms.append(dict(fused=fused,events=ev,turns=turns,output_sha256=hashlib.sha256(result.stdout).hexdigest()))
+            outputs.append(result.stdout)
+        if outputs[0]!=outputs[1] or any(a['generated']!=b['generated'] or a['history']!=b['history']
+                                       for a,b in zip(arms[0]['turns'],arms[1]['turns'])):
+            raise ValueError('fusion changed terminal text, tokens or history')
+        blocks.append(dict(block=block,before=before,after=conditions(),arms=arms,output_exact=True))
+        print('Verified fusion terminal block',block+1,flush=True)
+    verify_build(directory)
+    write(output/'terminal.json',dict(build=receipt,prompts=prompts,blocks=blocks))
+
+
+def fusion_summary(samples):
+    result = summarize(samples,observed=False)
+    for r in result:
+        ratios = r.pop('observation_ratios')
+        r.pop('host_phase_ms')
+        r['candidate_ratios'] = ratios
+        r['median_reduction'] = 1-stats.median(ratios)
+        r['promote'] = all(x<1 for x in ratios) and r['median_reduction']>r['noise_floor']
+        r['candidate_block_ms'] = [a*b for a,b in zip(r['baseline_block_ms'],ratios)]
+        r['candidate_ms'] = stats.median(r['candidate_block_ms'])
+    return result
+
+
+def fusion_archive(timings, traces, terminal_path, output):
+    record = dict(kind='qwen-qkv-fusion-v1',timing=json.loads((timings/'timings.json').read_text()),
+                  terminal=json.loads((terminal_path/'terminal.json').read_text()),
+                  captures=[json.loads((traces/name/'curated.json').read_text()) for name in ('control','fused')])
+    # Keep exact evidence and hashes; omit local asset paths from publication.
+    def scrub(value):
+        if isinstance(value,dict):
+            return {k:('<verified-local-asset>' if k in ('prepared','tables') else scrub(v)) for k,v in value.items()}
+        if isinstance(value,list): return [scrub(v) for v in value]
+        return value
+    raw = json.dumps(scrub(record),separators=(',',':'),allow_nan=False).encode()
+    packed = gzip.compress(raw,mtime=0)
+    output.mkdir(parents=True,exist_ok=True)
+    (output/'qkv-fusion.json.gz').write_bytes(packed)
+    write(output/'qkv-fusion.json',dict(kind=record['kind'],sha256=hashlib.sha256(packed).hexdigest(),
+                                      uncompressed_sha256=hashlib.sha256(raw).hexdigest(),bytes=len(packed)))
+    fusion_replay(output)
+
+
+def fusion_plot(directory):
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    fusion_replay(directory)
+    rows=json.loads((directory/'qkv-fusion-summary.json').read_text())['timing']
+    plt.rcParams.update({'font.family':'DejaVu Sans','font.size':10,'axes.spines.top':False,'axes.spines.right':False})
+    fig,axes=plt.subplots(1,2,figsize=(11,4.4),constrained_layout=True)
+    for i,r in enumerate(rows):
+        for offset,key,color,label in [(-.18,'baseline','#64798c','Control'),(.18,'candidate','#188f82','Fused')]:
+            value=r[key+'_ms'];values=r[key+'_block_ms']
+            axes[0].bar(i+offset,value,.34,color=color,label=label if i==0 else None,
+                        yerr=[[value-min(values)],[max(values)-value]],capsize=3)
+            axes[0].text(i+offset,max(values)+.2,f'{value:.2f}',ha='center',fontsize=9)
+        axes[1].scatter([i-.12,i-.04,i+.04,i+.12],r['candidate_ratios'],color='#188f82',s=30)
+        axes[1].plot([i-.3,i+.3],[1-r['noise_floor']]*2,color='#bd6a44',linewidth=2,
+                     label='Required reduction threshold' if i==0 else None)
+    axes[0].set_ylim(0,max(max(r['baseline_block_ms']+r['candidate_block_ms']) for r in rows)*1.18)
+    axes[0].set_ylabel('Milliseconds per complete token step')
+    axes[0].set_title('Untraced complete-step latency; block range')
+    axes[0].legend()
+    axes[1].axhline(1,color='#64798c',linestyle='--')
+    axes[1].set_title('Four paired block ratios per context')
+    axes[1].set_ylabel('Fused / control latency; lower is better')
+    axes[1].legend(fontsize=8)
+    for ax in axes:
+        ax.set_xticks(range(3),[str(r['prefix']) for r in rows])
+        ax.set_xlabel('Previously cached tokens')
+    fig.suptitle('Qwen2.5-0.5B · BF16 · batch one · M4 Pro / Metal',fontsize=13)
+    fig.savefig(directory/'qkv-fusion.png',dpi=170)
+    plt.close(fig)
+
+
+def fusion_replay(directory):
+    manifest = json.loads((directory/'qkv-fusion.json').read_text())
+    packed = (directory/'qkv-fusion.json.gz').read_bytes()
+    raw = gzip.decompress(packed)
+    if hashlib.sha256(packed).hexdigest()!=manifest['sha256'] or hashlib.sha256(raw).hexdigest()!=manifest['uncompressed_sha256']:
+        raise ValueError('fusion evidence hash mismatch')
+    record = json.loads(raw)
+    if record['kind']!='qwen-qkv-fusion-v1': raise ValueError('unexpected fusion evidence kind')
+    timing = record['timing']
+    build_record = timing['build']
+    if build_record['declaration']!=contract.FUSION_DECLARATION or record['terminal']['build']!=build_record:
+        raise ValueError('fusion build declaration changed')
+    summary = fusion_summary(timing['samples'])
+    if Counter(n['prefix'] for n in timing['numerical'])!=Counter(contract.PREFIXES):
+        raise ValueError('incomplete fusion numerical coverage')
+    names = ['logits']+[f'{k}{i}' for k in ('k','v') for i in range(24)]
+    for n in timing['numerical']:
+        if (len(n['history'])!=n['prefix']+1 or Counter(r['name'] for r in n['observations'])!=Counter(names)
+                or any(r[k] is not True for r in n['observations'] for k in ('exact','finite','prefix_exact','inactive_exact'))):
+            raise ValueError('fusion numerical invariant failed')
+    if len(record['captures'])!=2: raise ValueError('incomplete fusion capture census')
+    for fused,capture in zip((False,True),record['captures']):
+        provenance = capture['provenance']
+        contract.configuration(provenance)
+        name = 'profile-1024'+('-fused' if fused else '')
+        if (provenance['repository']!=build_record['source']['repository']
+                or provenance['source_sha256']!=build_record['source']['sources']
+                or provenance['binary']!=build_record['binaries'][name]
+                or provenance['assets']!={k:v for k,v in build_record['assets'].items() if k.endswith('_sha256')}
+                or provenance['implementation']!=('qwen_model_fused' if fused else 'qwen_model_fast')):
+            raise ValueError('fusion trace build identity mismatch')
+        canonical = (json.dumps(provenance,indent=2,allow_nan=False)+'\n').encode()
+        if hashlib.sha256(canonical).hexdigest()!=capture['analysis']['capture_identity']['provenance']['sha256']:
+            raise ValueError('fusion trace capture provenance mismatch')
+        stages = contract.command_stages(fused)
+        if Counter((r['iteration'],r['dispatch']) for r in capture['samples'])!=Counter((i,d) for i in range(8) for d in range(len(stages))):
+            raise ValueError('incomplete fusion dispatch census')
+        for row in capture['samples']:
+            if (row['layer'],row['stage'],row['kind'])!=stages[row['dispatch']]:
+                raise ValueError('fusion stage attribution changed')
+            parts = row['active_intervals']
+            if (not parts or len(parts)!=row['segments'] or sum(d for _,d in parts)!=row['duration_ns']
+                    or parts[0][0]!=row['start_ns'] or sum(parts[-1])!=row['end_ns']
+                    or any(d<=0 for _,d in parts) or any(a+d>b for (a,d),(b,_) in zip(parts,parts[1:]))):
+                raise ValueError('invalid fusion trace fragments')
+    blocks = record['terminal']['blocks']
+    if Counter(b['block'] for b in blocks)!=Counter(range(4)):
+        raise ValueError('incomplete fusion terminal blocks')
+    sys.path.insert(0,str(repository_root()/'tests'))
+    from chat_terminal import validate
+    for b in blocks:
+        if b['output_exact'] is not True or Counter(a['fused'] for a in b['arms'])!=Counter([False,True]):
+            raise ValueError('fusion terminal arm mismatch')
+        for a in b['arms']:
+            if validate(a['events'],128)!=a['turns'] or len(a['turns'])!=3:
+                raise ValueError('fusion terminal event evidence changed')
+        if (b['arms'][0]['output_sha256']!=b['arms'][1]['output_sha256'] or any(
+                a['generated']!=c['generated'] or a['history']!=c['history'] for a,c in zip(b['arms'][0]['turns'],b['arms'][1]['turns']))):
+            raise ValueError('fusion terminal outputs changed')
+    write(directory/'qkv-fusion-summary.json',dict(timing=summary,promote=all(r['promote'] for r in summary)))
+    print(json.dumps(summary,indent=2))
+    return record
+
+
 def main():
     # Trace capture and the reused terminal lifecycle helper inherit this process.
     os.environ.pop('MODULAR_DEBUG', None)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['build','collect','capture','terminal','archive','replay','plot'])
+    parser.add_argument('command', choices=['build','collect','capture','terminal','archive','replay','plot','fusion-capture','fusion-terminal','fusion-archive','fusion-replay','fusion-plot'])
+    parser.add_argument('--fusion', action='store_true', help='Build the bounded fusion experiment')
     parser.add_argument('--build', type=Path)
     parser.add_argument('--prepared', type=Path)
     parser.add_argument('--output', type=Path, required=True)
@@ -515,7 +715,12 @@ def main():
     parser.add_argument('--traces', type=Path)
     parser.add_argument('--terminal', type=Path)
     args = parser.parse_args()
-    if args.command == 'build': build(args.output.resolve(), args.prepared)
+    if args.command == 'build': build(args.output.resolve(), args.prepared, args.fusion)
+    elif args.command == 'fusion-capture': fusion_capture(args.build.resolve(),args.output.resolve())
+    elif args.command == 'fusion-terminal': fusion_terminal(args.build.resolve(),args.output.resolve())
+    elif args.command == 'fusion-archive': fusion_archive(args.timings,args.traces,args.terminal,args.output)
+    elif args.command == 'fusion-replay': fusion_replay(args.output)
+    elif args.command == 'fusion-plot': fusion_plot(args.output)
     elif args.command == 'collect': collect(args.build.resolve(), args.output.resolve())
     elif args.command == 'capture': capture(args.build.resolve(), args.output.resolve())
     elif args.command == 'terminal': terminal(args.build.resolve(), args.output.resolve())

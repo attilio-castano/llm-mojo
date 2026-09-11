@@ -31,14 +31,14 @@ def load_bf16(buffer: DeviceBuffer[DType.bfloat16], path: String, source_element
             dst[unsafe_offset=i] = bitcast[DType.bfloat16](UInt16(data[2*i]) | (UInt16(data[2*i+1]) << 8))
 
 
-def save_bf16(buffer: DeviceBuffer[DType.bfloat16], path: String, count: Int) raises:
+def save_bf16(buffer: DeviceBuffer[DType.bfloat16], path: String, count: Int, start: Int = 0) raises:
     """Diagnostic-only readback. Deliberately synchronizes before observation."""
-    if count < 0 or count > len(buffer):
+    if start < 0 or count < 0 or start > len(buffer) or count > len(buffer)-start:
         raise Error("invalid diagnostic extent")
     var data = List[UInt8](capacity=count*2)
     with buffer.map_to_host() as mapped:
         for i in range(count):
-            var bits = bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=i])
+            var bits = bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=start+i])
             data.append(UInt8(bits & 255))
             data.append(UInt8(bits >> 8))
     var file = open(path,"w")
@@ -83,6 +83,10 @@ def candidate_configuration(rows: Int, total: Int) -> Int:
 def select_configuration(policy: String, rows: Int, total: Int, device: String) raises -> Int:
     if rows < 1 or total < rows or total > 4096:
         raise Error("invalid configuration-selection dimensions")
+    if policy == "fusion":
+        if rows == 1 and device == "Apple M4 Pro":
+            return 25
+        return select_configuration("fast", rows, total, device)
     if policy == "baseline":
         return 0
     if policy == "auto" or policy == "fast":
@@ -236,8 +240,13 @@ struct QwenModel(Movable):
                     TileTensor(self.input,row_major(rows,896)),configuration)
                 if capture.byte_length() > 0:
                     save_bf16(self.mlp.output,capture+"/hidden_"+String(i+1)+".bin",rows*896)
-                    save_bf16(self.attention.rotated_key,capture+"/append_key_"+String(i)+".bin",rows*128)
-                    save_bf16(self.attention.raw_value,capture+"/append_value_"+String(i)+".bin",rows*128)
+                    if configuration == 25:
+                        # Fusion intentionally leaves the unpack/rotated scratch untouched.
+                        save_bf16(self.layers[i].cache.key,capture+"/append_key_"+String(i)+".bin",128,(self.layers[i].cache.length-1)*128)
+                        save_bf16(self.layers[i].cache.value,capture+"/append_value_"+String(i)+".bin",128,(self.layers[i].cache.length-1)*128)
+                    else:
+                        save_bf16(self.attention.rotated_key,capture+"/append_key_"+String(i)+".bin",rows*128)
+                        save_bf16(self.attention.raw_value,capture+"/append_value_"+String(i)+".bin",rows*128)
                     save_bf16(self.layers[i].cache.key,capture+"/cache_key_"+String(i)+".bin",self.capacity*128)
                     save_bf16(self.layers[i].cache.value,capture+"/cache_value_"+String(i)+".bin",self.capacity*128)
                 if i < 23:

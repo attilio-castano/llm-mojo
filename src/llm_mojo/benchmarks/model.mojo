@@ -8,7 +8,7 @@ from llm_mojo.tokenizer import Tokenizer, TokenizerWorkspace
 
 
 def rewind(mut model: QwenModel, prefix: Int):
-    # Previous greedy readback completed the stream. Only the logical suffix is rewound.
+    # Previous greedy readback completed model computation. Only the logical suffix is rewound.
     model.length = prefix
     model.submitted_rows = prefix * 24
     for layer in range(24):
@@ -35,12 +35,15 @@ def poison_outputs(mut model: QwenModel, prefix: Int) raises:
                 mapped.unsafe_ptr()[unsafe_offset=prefix*128+column] = sentinel
 
 
-def step[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext, ids: List[Int]) raises -> Int:
-    model.forward[OBSERVE](ctx,ids,select_configuration("fast",1,model.length+1,ctx.name()))
+def step[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext, ids: List[Int], configuration: Int = -1) raises -> Int:
+    model.forward[OBSERVE](ctx,ids,configuration if configuration >= 0 else select_configuration("fast",1,model.length+1,ctx.name()))
     return model.greedy[OBSERVE](ctx)
 
 
 def main() raises:
+    comptime FUSION = is_defined["MODEL_FUSION_STUDY"]()
+    comptime PROFILE_FUSED = is_defined["MODEL_FUSION_PROFILE"]()
+    var control = 0 if FUSION else -1
     var args = List[String]()
     comptime if is_defined["MODEL_PROFILE_PREFIX"]():
         args = ["model","profile",String(get_defined_string["MODEL_PREPARED"]()),
@@ -85,7 +88,7 @@ def main() raises:
         offset += count
     ctx.synchronize()
     var ids: List[Int] = [history[prefix]]
-    var winner = step[False](model,ctx,ids)
+    var winner = step[False](model,ctx,ids,control)
     print("device:",ctx.name())
     print("api:",ctx.api())
     print("prefix:",prefix,"token:",ids[0],"winner:",winner)
@@ -93,11 +96,15 @@ def main() raises:
         rewind(model,prefix)
         snapshot(model,args[7]+"/before")
         poison_outputs(model,prefix)
-        var plain = step[False](model,ctx,ids)
+        var plain = step[False](model,ctx,ids,control)
         snapshot(model,args[7]+"/plain")
         rewind(model,prefix)
         poison_outputs(model,prefix)
-        var observed = step[True](model,ctx,ids)
+        var observed: Int
+        comptime if FUSION:
+            observed = step[False](model,ctx,ids,25)
+        else:
+            observed = step[True](model,ctx,ids)
         snapshot(model,args[7]+"/observed")
         if plain != observed or model.length != prefix+1 or model.submitted_rows != 24*(prefix+1):
             raise Error("instrumentation changed token or accounting")
@@ -111,22 +118,22 @@ def main() raises:
     if mode == "profile":
         for _ in range(10):
             rewind(model,prefix)
-            if step[False](model,ctx,ids) != winner:
+            if step[False](model,ctx,ids,25 if PROFILE_FUSED else control) != winner:
                 raise Error("unstable profile prediction")
         print("correctness: passed")
-        print("profile implementation: QwenModel.forward+greedy")
+        print("profile implementation:", "QwenModel.forward+greedy-fused" if PROFILE_FUSED else "QwenModel.forward+greedy")
         print("rows: 1")
         print("hidden: 896")
         print("key value rows:",prefix+1)
-        print("profile workload:","model-p"+String(prefix))
-        print("profile dispatches per iteration: 410")
+        print("profile workload:","model-p"+String(prefix)+("-fused" if PROFILE_FUSED else ""))
+        print("profile dispatches per iteration:",338 if PROFILE_FUSED else 410)
         print("warmup iterations: 10")
         print("profile iterations: 8")
         print("post-profile idle milliseconds: 250")
         print("PROFILE_REGION_BEGIN")
         for _ in range(8):
             rewind(model,prefix)
-            if step[False](model,ctx,ids) != winner:
+            if step[False](model,ctx,ids,25 if PROFILE_FUSED else control) != winner:
                 raise Error("unstable profile prediction")
         print("PROFILE_REGION_END")
         sleep(0.25)
@@ -134,7 +141,7 @@ def main() raises:
     var records = String()
     for arm_index in range(2):
         var arm = (first+arm_index)%2
-        var observe = comparison == 1 and arm == 1
+        var observe = comparison == 1 and arm == 1 and not FUSION
         for sample in range(20):
             rewind(model,prefix)
             var start = _observation_clock()
@@ -142,7 +149,7 @@ def main() raises:
             if observe:
                 selected = step[True](model,ctx,ids)
             else:
-                selected = step[False](model,ctx,ids)
+                selected = step[False](model,ctx,ids,25 if FUSION and comparison == 1 and arm == 1 else control)
             var elapsed = _observation_clock()-start
             if selected != winner or model.submitted_rows != 24*(prefix+1):
                 raise Error("measurement prediction/accounting changed")

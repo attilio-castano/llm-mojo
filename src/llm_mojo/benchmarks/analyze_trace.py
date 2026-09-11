@@ -833,7 +833,8 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
     sequence_commands = workload["dispatches_per_iteration"]
     if identity['operation'] == 'qwen_model':
         from .model_contract import command_stages, validate_command_sequence
-        sequence_commands = len(command_stages())
+        model_fused = identity['implementation']=='qwen_model_fused'
+        sequence_commands = len(command_stages(model_fused))
         compute_commands = [r for r in compute_channel if any(
             kind in r['event-label'][1] for kind in (':Compute Command', ':Blit Command'))]
     required_tail = (workload["warmup_iterations"] + workload["profile_iterations"] +
@@ -849,7 +850,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         trace_correctness_dispatches=identity["operation"] == "rms_norm",
     )
     if identity['operation'] == 'qwen_model':
-        validate_command_sequence(warmup + profile)
+        validate_command_sequence(warmup + profile, model_fused)
     sequence_command_buffer_ids = {
         integer(row, "cmdbuffer-id") for row in correctness + warmup + profile
     }
@@ -937,7 +938,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
             commands_per_iteration=sequence_commands,
             profile_compute_dispatches=workload['profile_iterations']*workload['dispatches_per_iteration'],
             profile_blit_commands=workload['profile_iterations']*4,
-            segmentation_rule='Trailing verified sequence per step: two token-buffer blits, 410 compute dispatches, two logit-buffer blits. All encoded submissions require coverage; no compute-only filtering. The final logit unmap may complete after greedy returns, during the recorded post-region idle.')
+            segmentation_rule='Trailing verified sequence per step: two token-buffer blits, the declared compute dispatches, two logit-buffer blits. All encoded submissions require coverage; no compute-only filtering. The final logit unmap may complete after greedy returns, during the recorded post-region idle.')
         result['instrumented_gpu_interval_duration']['evidence_boundary'] = (
             'Active compute and blit command intervals, excluding preemption gaps. '
             'Separate diagnostic trace; not headline benchmark latency.')

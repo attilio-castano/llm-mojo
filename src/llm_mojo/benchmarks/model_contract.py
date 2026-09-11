@@ -2,7 +2,7 @@
 from .decoder_layer_contract import stages as decoder_stages
 
 OPERATION = 'qwen_model'
-ENTRYPOINTS = {'qwen_model_fast': 'QwenModel.forward+greedy'}
+ENTRYPOINTS = {'qwen_model_fast': 'QwenModel.forward+greedy', 'qwen_model_fused': 'QwenModel.forward+greedy-fused'}
 TARGET_FIELDS = ('profile_workload', 'dispatches_per_iteration', 'key_value_rows')
 PREFIXES = (64, 1024, 3968)
 DECLARATION = dict(model='Qwen2.5-0.5B-Instruct', policy='fast', batch=1,
@@ -17,16 +17,18 @@ DECLARATION = dict(model='Qwen2.5-0.5B-Instruct', policy='fast', batch=1,
                    trace_boundary='normal forward+greedy; fixed logical prefix; no layer synchronizations')
 
 
-def stages():
+def stages(fused=False):
     result = [(-1, 'embedding')]
     for layer in range(24):
-        result.extend((layer, name) for name in decoder_stages(0, 1))
+        result.extend((layer, ('fused QKV/RoPE/cache' if fused and name=='QKV unpack' else name))
+                      for name in decoder_stages(0, 1)
+                      if not (fused and name in {'Q RoPE','K RoPE','KV append'}))
         if layer < 23:
             result.append((layer, 'inter-layer copy'))
     return result + [(-1, 'final RMSNorm'), (-1, 'vocabulary projection')]
 
 
-def command_stages():
+def command_stages(fused=False):
     """Observed Metal mapping protocol: two token blits, compute, two logit blits.
 
     These transfers supplement the 410 compute dispatches in the original
@@ -34,12 +36,12 @@ def command_stages():
     submissions that lack a compute interval.
     """
     return ([(-1, 'token buffer map', 'blit'), (-1, 'token buffer unmap', 'blit')]
-            + [(layer, name, 'compute') for layer, name in stages()]
+            + [(layer, name, 'compute') for layer, name in stages(fused)]
             + [(-1, 'logit buffer map', 'blit'), (-1, 'logit buffer unmap', 'blit')])
 
 
-def validate_command_sequence(rows):
-    expected = command_stages()
+def validate_command_sequence(rows, fused=False):
+    expected = command_stages(fused)
     if not rows or len(rows) % len(expected):
         raise ValueError('incomplete model compute/transfer sequence')
     for index, row in enumerate(rows):
@@ -49,23 +51,30 @@ def validate_command_sequence(rows):
             raise ValueError('model compute/transfer ordering changed')
 
 
-def specification(prefix):
+def specification(prefix, fused=False):
     if type(prefix) is not int or prefix not in PREFIXES:
         raise ValueError('undeclared Qwen profiling context')
     return dict(profile_rows=1, hidden_size=896, key_value_rows=prefix+1,
-                profile_workload=f'model-p{prefix}', dispatches_per_iteration=len(stages()))
+                profile_workload=f'model-p{prefix}'+('-fused' if fused else ''), dispatches_per_iteration=len(stages(fused)))
 
 
 def configuration(data):
-    if (data.get('implementation') != 'qwen_model_fast'
-            or data.get('entrypoint') != ENTRYPOINTS['qwen_model_fast']):
+    if (data.get('implementation') not in ENTRYPOINTS
+            or data.get('entrypoint') != ENTRYPOINTS[data['implementation']]):
         raise ValueError('Qwen profile implementation changed')
     total = data.get('key_value_rows')
     if type(total) is not int:
         raise ValueError('invalid Qwen cache length')
-    expected = specification(total-1)
+    expected = specification(total-1, data['implementation']=='qwen_model_fused')
     if any(type(data.get(k)) is not type(v) or data.get(k) != v for k, v in expected.items()):
         raise ValueError('Qwen trace geometry changed')
     if data.get('profile_iterations') != 8 or data.get('profile_warmup_iterations') != 10:
         raise ValueError('Qwen trace capture budget changed')
     return expected
+
+
+FUSION_DECLARATION = {**DECLARATION, 'policy':'configuration 25 vs 0',
+    'comparisons':['control/control','fused/control'], 'trace_repeats':1,
+    'trace_contexts':[1024], 'trace_arms':['control','fused'],
+    'candidate':'single-row QKV unpack + Q RoPE + K RoPE + cache append fusion',
+    'promotion':'All four ratios below 1 and median reduction exceeds max(5%, largest absolute control self-pair deviation), at every declared context.'}

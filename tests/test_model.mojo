@@ -21,6 +21,9 @@ def test_generation_limits_and_policy() raises:
         _ = generation_budget(4097,1)
     with assert_raises():
         _ = generation_budget(1,-1)
+    assert_equal(select_configuration("fusion",1,1024,"Apple M4 Pro"),25)
+    assert_equal(select_configuration("fusion",16,256,"Apple M4 Pro"),21)
+    assert_equal(select_configuration("fusion",1,1024,"other"),0)
     assert_equal(select_configuration("21",16,256,"Apple M4 Pro"),21)
     assert_equal(select_configuration("fast",1,1024,"Apple M4 Pro"),0)
     assert_equal(select_configuration("fast",16,256,"Apple M4 Pro"),21)
@@ -88,6 +91,13 @@ def test_native_binary_io_preserves_bf16_bits() raises:
     with loaded.map_to_host() as mapped:
         for i in range(4):
             assert_equal(bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=i]),expected[i])
+    save_bf16(values,"build/model_io_slice.bin",2,1)
+    var slice = open("build/model_io_slice.bin","r").read_bytes()
+    assert_equal(len(slice),4)
+    for i in range(2):
+        assert_equal(UInt16(slice[2*i]) | (UInt16(slice[2*i+1]) << 8),expected[i+1])
+    with assert_raises():
+        save_bf16(values,"build/model_io_invalid.bin",2,3)
     with assert_raises():
         load_bf16(loaded,"build/model_io_test.bin",8)
 
