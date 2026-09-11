@@ -26,6 +26,29 @@ def stages():
     return result + [(-1, 'final RMSNorm'), (-1, 'vocabulary projection')]
 
 
+def command_stages():
+    """Observed Metal mapping protocol: two token blits, compute, two logit blits.
+
+    These transfers supplement the 410 compute dispatches in the original
+    build receipt. Keep them in the coverage check rather than filtering away
+    submissions that lack a compute interval.
+    """
+    return ([(-1, 'token buffer map', 'blit'), (-1, 'token buffer unmap', 'blit')]
+            + [(layer, name, 'compute') for layer, name in stages()]
+            + [(-1, 'logit buffer map', 'blit'), (-1, 'logit buffer unmap', 'blit')])
+
+
+def validate_command_sequence(rows):
+    expected = command_stages()
+    if not rows or len(rows) % len(expected):
+        raise ValueError('incomplete model compute/transfer sequence')
+    for index, row in enumerate(rows):
+        kind = expected[index % len(expected)][2]
+        label = ':Compute Command' if kind == 'compute' else ':Blit Command'
+        if label not in row['event-label'][1]:
+            raise ValueError('model compute/transfer ordering changed')
+
+
 def specification(prefix):
     if type(prefix) is not int or prefix not in PREFIXES:
         raise ValueError('undeclared Qwen profiling context')

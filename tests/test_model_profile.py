@@ -49,6 +49,42 @@ class ModelProfileTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 contract.configuration({**data,key:value})
 
+    def test_mixed_transfer_sequence_keeps_strict_coverage(self):
+        stages = contract.command_stages()
+        self.assertEqual(len(stages),414)
+        self.assertEqual([k for _,_,k in stages[:2]+stages[-2:]],['blit']*4)
+        rows = [{'event-label':('',f'Command Buffer 0:{kind.title()} Command 0')}
+                for _,_,kind in stages]
+        contract.validate_command_sequence(rows*2)
+        with self.assertRaises(ValueError):
+            contract.validate_command_sequence(rows[:-1])
+        changed = copy.deepcopy(rows)
+        changed[2] = changed[0]
+        with self.assertRaises(ValueError):
+            contract.validate_command_sequence(changed)
+
+    def test_resubmitted_encoder_preserves_active_fragments_and_rejects_overlap(self):
+        from llm_mojo.benchmarks.analyze_trace import coalesce_compute_commands
+        def row(start, duration, submission):
+            result = {k:(str(v),str(v)) for k,v in dict(start=start,duration=duration,
+                      **{'cmdbuffer-id':1,'encoder-id':2,'gpu-submission-id':submission}).items()}
+            result['event-label'] = ('','Command Buffer 0:Compute Command 0     ( target )')
+            return result
+        submitted = [{'start':('0','0'),'cmdbuffer-id':('1','1'),'num-encoders':('1','1')}]
+        parts = [row(10,4,3),row(20,6,4)]
+        joined,_ = coalesce_compute_commands(parts,submitted,1,join_resubmissions=True)
+        self.assertEqual(joined[0]['duration'][0],'10')
+        self.assertEqual(joined[0]['end'][0],'26')
+        self.assertEqual(joined[0]['active-segments'][0],'2')
+        with self.assertRaises(ValueError):
+            coalesce_compute_commands(parts,submitted,1)
+        with self.assertRaises(ValueError):
+            coalesce_compute_commands([row(10,15,3),row(20,6,4)],submitted,1,join_resubmissions=True)
+        changed = row(20,6,4)
+        changed['event-label'] = ('','Command Buffer 0:Blit Command 0     ( target )')
+        with self.assertRaises(ValueError):
+            coalesce_compute_commands([parts[0],changed],submitted,1,join_resubmissions=True)
+
     def test_missing_duplicate_or_misordered_observations_rejected(self):
         header = 'device: Apple M4 Pro\napi: metal\n'
         lines = [f'SAMPLE {a} {s} 100'+(' 1 2 3 4 5 6 7 8 9 10' if a else '')

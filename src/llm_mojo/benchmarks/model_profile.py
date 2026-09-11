@@ -275,20 +275,28 @@ def curate(target, prefix, repeat):
     ids = {integer(r, 'cmdbuffer-id') for r in submissions}
     intervals = [r for r in read_table(arguments.gpu_intervals_xml)
                  if integer(r, 'cmdbuffer-id') in ids and capture_id in r['event-label'][1]
-                 and r['channel-name'][0] == 'Compute' and ':Compute Command' in r['event-label'][1]]
-    count = len(contract.stages())
-    intervals, joined = coalesce_compute_commands(intervals, submissions, 18*count)
+                 and r['channel-name'][0] == 'Compute' and any(
+                     kind in r['event-label'][1] for kind in (':Compute Command',':Blit Command'))]
+    fragments = defaultdict(list)
+    for row in intervals:
+        key = tuple(integer(row,k) for k in ('cmdbuffer-id','encoder-id'))
+        fragments[key].append([integer(row,'start'),integer(row,'duration')])
+    stages = contract.command_stages()
+    count = len(stages)
+    intervals, joined = coalesce_compute_commands(intervals, submissions, 18*count, join_resubmissions=True)
     if joined != report['validated_sequence']['interval_coalescing']:
         raise ValueError('curation differs from validated dispatch join')
     *_, measured = segment_compute_commands(intervals, 10, 8, count, False)
+    contract.validate_command_sequence(measured)
     by_command = {integer(r,'cmdbuffer-id'):r for r in submissions}
     rows = []
     for index, row in enumerate(measured):
-        layer, stage = contract.stages()[index % count]
+        layer, stage, kind = stages[index % count]
         submitted = by_command[integer(row,'cmdbuffer-id')]
         rows.append(dict(prefix=prefix, repeat=repeat, iteration=index//count, dispatch=index%count,
-                         layer=layer, stage=stage, start_ns=integer(row, 'start'), end_ns=integer(row, 'end'),
+                         layer=layer, stage=stage, kind=kind, start_ns=integer(row, 'start'), end_ns=integer(row, 'end'),
                          duration_ns=integer(row, 'duration'), segments=integer(row, 'active-segments'),
+                         active_intervals=sorted(fragments[tuple(integer(row,k) for k in ('cmdbuffer-id','encoder-id'))]),
                          submission_start_ns=integer(submitted,'start'),
                          submission_duration_ns=integer(submitted,'duration'),
                          encoder_duration_ns=integer(submitted,'encoder-time')))
@@ -342,7 +350,11 @@ def archive(timings, traces, output, terminal_path):
                 export_trace(target)
             captures.append(curate(target, prefix, repeat))
     terminal_record = json.loads((terminal_path/'terminal.json').read_text())
-    record = dict(kind='qwen-token-profile-v1', timing=timing, captures=captures, terminal=terminal_record)
+    record = dict(kind='qwen-token-profile-v1', timing=timing, captures=captures, terminal=terminal_record,
+                  analysis_source_sha256={str(p.relative_to(repository_root())):sha(p) for p in
+                    [Path(__file__).resolve(), Path(__file__).with_name('analyze_trace.py').resolve(),
+                     Path(__file__).with_name('model_contract.py').resolve()]},
+                  rejected_captures=json.loads((traces/'rejections.json').read_text()) if (traces/'rejections.json').exists() else [])
     # Asset identities remain available without publishing machine-local paths.
     def scrub(value):
         if isinstance(value, dict):
@@ -401,11 +413,17 @@ def replay(directory):
         if hashlib.sha256(canonical).hexdigest() != capture['analysis']['capture_identity']['provenance']['sha256']:
             raise ValueError('retained provenance differs from captured build receipt')
         rows = capture['samples']
-        if Counter((r['iteration'],r['dispatch']) for r in rows) != Counter((i,d) for i in range(8) for d in range(410)):
+        stages = contract.command_stages()
+        if Counter((r['iteration'],r['dispatch']) for r in rows) != Counter((i,d) for i in range(8) for d in range(len(stages))):
             raise ValueError('incomplete captured dispatch census')
         for row in rows:
-            if (row['layer'],row['stage']) != contract.stages()[row['dispatch']] or row['duration_ns'] <= 0 or row['end_ns'] < row['start_ns']+row['duration_ns']:
+            if (row['layer'],row['stage'],row['kind']) != stages[row['dispatch']] or row['duration_ns'] <= 0 or row['end_ns'] < row['start_ns']+row['duration_ns']:
                 raise ValueError('invalid dispatch timing or stage')
+            segments = row['active_intervals']
+            if (len(segments)!=row['segments'] or sum(d for _,d in segments)!=row['duration_ns']
+                    or segments[0][0]!=row['start_ns'] or sum(segments[-1])!=row['end_ns']
+                    or any(d<=0 for _,d in segments) or any(a+d>b for (a,d),(b,_) in zip(segments,segments[1:]))):
+                raise ValueError('invalid active command fragments')
         by_stage = defaultdict(list)
         for iteration in range(8):
             step = [r for r in rows if r['iteration']==iteration]
@@ -413,6 +431,8 @@ def replay(directory):
                 by_stage[stage].append(sum(r['duration_ns'] for r in step if r['stage']==stage)/1e6)
             by_stage['GPU active total'].append(sum(r['duration_ns'] for r in step)/1e6)
             by_stage['GPU enclosing span'].append((max(r['end_ns'] for r in step)-min(r['start_ns'] for r in step))/1e6)
+            compute = [r for r in step if r['kind']=='compute']
+            by_stage['GPU compute enclosing span'].append((max(r['end_ns'] for r in compute)-min(r['start_ns'] for r in compute))/1e6)
             by_stage['Metal submission intervals'].append(sum(r['submission_duration_ns'] for r in step)/1e6)
             by_stage['Metal encoder intervals'].append(sum(r['encoder_duration_ns'] for r in step)/1e6)
         for stage, values in by_stage.items():
@@ -450,6 +470,7 @@ def plot(directory):
               ('Inter-layer copies',{'inter-layer copy'},'#b86f85')]
     used = set().union(*(s for _,s,_ in groups))
     groups.append(('Other GPU operations',set(s for _,s in contract.stages())-used,'#abb9c7'))
+    groups.append(('Buffer transfers',set(s for _,s,k in contract.command_stages() if k=='blit'),'#678d75'))
     bottoms = [0.]*3
     for name, stages, color in groups:
         values = []
@@ -470,13 +491,14 @@ def plot(directory):
     origin = min(min(r['start_ns'],r['submission_start_ns']) for r in rows)
     fig, ax = plt.subplots(figsize=(11,4.5),constrained_layout=True)
     for index,(name,stages,color) in enumerate(groups):
-        spans = [((r['start_ns']-origin)/1e6,(r['end_ns']-r['start_ns'])/1e6) for r in rows if r['stage'] in stages]
+        spans = [((start-origin)/1e6,duration/1e6) for r in rows if r['stage'] in stages
+                 for start,duration in r['active_intervals']]
         ax.broken_barh(spans,(index-.3,.6),facecolors=color)
     spans = [((r['submission_start_ns']-origin)/1e6,r['submission_duration_ns']/1e6) for r in rows]
     ax.broken_barh(spans,(len(groups)-.3,.6),facecolors='#6b5ca5')
     ax.set_yticks(range(len(groups)+1),[name for name,_,_ in groups]+['Metal submissions (host)'])
     ax.set_xlabel('Milliseconds on the shared trace clock, relative to this token step')
-    ax.set_title('One traced token at 1,024 cached tokens\nHost submission overlaps GPU work; dispatch spans include any preemption gaps.')
+    ax.set_title('One traced token at 1,024 cached tokens\nHost submission overlaps active GPU work; preemption gaps remain visible.')
     fig.savefig(directory/'token-profile-timeline.png',dpi=170)
     plt.close(fig)
 

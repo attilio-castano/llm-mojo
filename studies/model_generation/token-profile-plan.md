@@ -46,6 +46,17 @@ and before/after power/thermal/memory/display conditions. Keep all samples,
 including slow samples. Profiler runs are separate from latency collection.
 Absent counters remain unavailable, never zero or measured bandwidth.
 
+## Capture analysis amendment
+
+The observed mapping protocol adds four transfer blits to the 410 compute
+commands: two before embedding and two after the vocabulary projection.
+Retain all 414 commands per step (3312 measured commands per capture). Join
+non-overlapping active fragments by command buffer and encoder, even when a
+preempted command receives a new GPU submission ID. Require one encoder per
+submission and a complete ordered compute/transfer sequence; missing events
+reject a capture rather than shifting stage labels. Preserve rejected capture
+receipts and the reason for each replacement in the archive.
+
 ## Commands
 
 The maintained entrypoint is `python -m llm_mojo.benchmarks.model_profile`.

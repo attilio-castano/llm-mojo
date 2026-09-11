@@ -10,6 +10,7 @@ and [layouts](../docs/layouts.md) define the values, storage and ownership.
 
 | Study | What it establishes |
 | --- | --- |
+| [Complete token profile](model_generation/token-profile.md) | Where a roughly 17 ms decode step spends time, with host observations and complete Metal command traces |
 | [Native terminal chat](model_generation/chat.md) | Multi-turn cache reuse, exact history and terminal lifecycle, with paired prefill and actual interaction timings |
 | [Fast full-model runtime](model_generation/runtime.md) | All 24 layers, native generation, numerical diagnostics and 11 measured dispatch choices |
 | [Decoder selection](decoder_layer/selection.md) | Which combinations improve complete prefill and decode workloads |
