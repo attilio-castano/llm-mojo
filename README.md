@@ -92,6 +92,12 @@ BF16 rounding boundaries, propagate through layers and change a greedy predictio
 The [HF attention investigation](studies/model_generation/backend.md) traces one
 such mechanism in the reference implementation.
 
+For broader context, Thinking Machines Lab's
+[Defeating Nondeterminism in LLM Inference](https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/)
+explains why repeatable kernels can still produce different results when batch
+shapes change, and how batch-invariant execution addresses this. Our related
+question concerns prefill and KV-cache schedules for a single sequence.
+
 Preserving an existing cache byte for byte is already a required invariant.
 Producing identical cache values when building it under different schedules is
 the additional research question. Here, scheduling means how one sequence is
