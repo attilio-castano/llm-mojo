@@ -80,8 +80,34 @@ the remaining reference prediction had an exact top-logit tie. This is a bounded
 token-choice observation, not byte-identical logits or a general quality claim.
 The [runtime study](studies/model_generation/runtime.md#numerical-diagnosis) retains
 both agreements and discrepancies. Fast does not promise identical results when
-prompt chunking changes. Full-model schedule determinism is a separate follow-up,
-building on the existing [decoder policy study](studies/decoder_layer/policies.md).
+prompt chunking changes.
+
+## Open research: KV-cache scheduling and determinism
+
+Given the same weights and token sequence, should processing the prompt all at
+once, in chunks, or one token at a time produce identical KV caches and logits?
+The causal computation is mathematically equivalent, but call shapes can change
+kernel selection and floating-point reduction order. Small differences can cross
+BF16 rounding boundaries, propagate through layers and change a greedy prediction.
+The [HF attention investigation](studies/model_generation/backend.md) traces one
+such mechanism in the reference implementation.
+
+Preserving an existing cache byte for byte is already a required invariant.
+Producing identical cache values when building it under different schedules is
+the additional research question. Here, scheduling means how one sequence is
+divided into model calls; multi-request scheduling remains outside current scope.
+
+The [decoder policy study](studies/decoder_layer/policies.md) establishes exact
+schedule agreement for the tested single-layer configurations and measures its
+cost. The [full-model consistency study](studies/model_generation/consistency.md)
+records the remaining native model boundary; full-model schedule invariance has
+not been established.
+
+The follow-up asks which arithmetic and dispatch choices preserve that invariant,
+how remaining differences affect predictions, and how much determinism costs
+relative to Fast. This is a second research track alongside the working chat
+engine, with cache identity, numerical closeness and token agreement reported
+separately.
 
 ## Understand the engine
 
