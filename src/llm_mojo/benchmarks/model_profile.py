@@ -621,11 +621,11 @@ def fusion_plot(directory):
             axes[0].text(i+offset,max(values)+.2,f'{value:.2f}',ha='center',fontsize=9)
         axes[1].scatter([i-.12,i-.04,i+.04,i+.12],r['candidate_ratios'],color='#188f82',s=30)
         axes[1].plot([i-.3,i+.3],[1-r['noise_floor']]*2,color='#bd6a44',linewidth=2,
-                     label='Required reduction threshold' if i==0 else None)
+                     label='Required median-ratio threshold' if i==0 else None)
     axes[0].set_ylim(0,max(max(r['baseline_block_ms']+r['candidate_block_ms']) for r in rows)*1.18)
     axes[0].set_ylabel('Milliseconds per complete token step')
     axes[0].set_title('Untraced complete-step latency; block range')
-    axes[0].legend()
+    axes[0].legend(loc='upper center',ncol=2)
     axes[1].axhline(1,color='#64798c',linestyle='--')
     axes[1].set_title('Four paired block ratios per context')
     axes[1].set_ylabel('Fused / control latency; lower is better')

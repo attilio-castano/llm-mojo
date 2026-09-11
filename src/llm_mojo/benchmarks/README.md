@@ -412,3 +412,9 @@ separate pre-split BPE, complete encoding, decoding, streaming, and table loadin
 The last two decode modes expose whole-call and incremental API paths over the
 same byte-decoder implementation. Table loading includes deserialization and
 native structure checks, not preparation or Python's startup SHA-256 checks.
+
+The [QKV fusion experiment](../../../studies/model_generation/qkv-fusion.md)
+extends `model_profile` with `build --fusion`, the same calibrated collection
+matrix, and `fusion-capture`, `fusion-terminal`, `fusion-archive`,
+`fusion-replay` and `fusion-plot`. Configuration 25 remains experimental;
+Fast continues selecting the control for decode.
