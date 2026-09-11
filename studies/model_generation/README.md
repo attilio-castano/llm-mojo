@@ -1,3 +1,6 @@
+The [native terminal chat study](chat.md) adds multi-turn sessions with persistent
+KV caches, real terminal controls, and measured cache-reuse behavior.
+
 The active [Fast runtime plan](../../docs/fast-generation-plan.md) now treats
 full-model numerical differences as diagnostics while retaining exact
 implementation invariants. The [completed native Fast runtime study](runtime.md)

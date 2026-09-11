@@ -101,3 +101,6 @@ separate; compilation and Python asset verification are excluded. Per-token
 observations include greedy readback and stream decoding, not only GPU forward
 time. Instrumented observations are distinct from the paired study's synchronized
 forward-only measurements. Reporting is optional and adds collection overhead.
+
+The [completed chat study](../studies/model_generation/chat.md) retains numerical
+diagnostics, exact cache checks, terminal execution and timing observations.

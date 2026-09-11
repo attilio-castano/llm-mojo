@@ -1,0 +1,4 @@
+turn,before,prompt,cached,history,generated,reason,max_abs,max_row_relative_l2,zero_reference_nonzero_rows,exact,kl_nats,total_variation,token,reference_token,reference_margin
+0,0,37,46,48,10,stop,0.0,0.0,0,True,0.0,0.0,9707,9707,2.875
+1,46,61,66,68,6,stop,0.265625,0.01799793014520257,0,False,0.00034832417810995843,0.0057123090831870576,7771,7771,2.75
+2,66,87,98,101,12,limit,0.3125,0.022248052250604392,0,False,0.001533751240167926,0.024622975485949796,1,1,0.375

@@ -681,6 +681,10 @@ def chat_runtime():
             raise ValueError('chat terminal event binding mismatch')
     if not terminal['report_free_output_exact']:
         raise ValueError('chat reporting changed output')
+    public=report['public_launcher']
+    if (public['exit_code']!=0 or public['source']!=report['source']
+            or module.validate(public['events'],16)!=public['turns'] or len(public['turns'])!=2):
+        raise ValueError('public chat launcher binding mismatch')
     summary=[]
     for t in range(3):
         blocks=[]

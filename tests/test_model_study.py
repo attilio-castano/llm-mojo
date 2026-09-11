@@ -18,6 +18,30 @@ spec.loader.exec_module(study)
 
 
 class ModelStudyTests(unittest.TestCase):
+    def test_chat_evidence_replays(self):
+        with patch.object(study,'table') as table, redirect_stdout(io.StringIO()):
+            study.chat_runtime()
+        tables={call.args[0]:call.args[1] for call in table.call_args_list}
+        self.assertEqual(len(tables['chat-forward.csv']),3)
+        self.assertEqual(len(tables['chat-terminal.csv']),7)
+
+    def test_chat_replay_rejects_changed_cache_and_omitted_timing(self):
+        for damage in ('cache','timing'):
+            with self.subTest(damage=damage), tempfile.TemporaryDirectory() as temporary:
+                root=Path(temporary)
+                manifest=json.loads((STUDY/'chat-study.json').read_text())
+                report=json.loads(gzip.decompress((STUDY/'chat-study.json.gz').read_bytes()))
+                if damage=='cache': report['driver']['storage'][0]['prefix_exact']=False
+                else: report['driver']['samples'].pop()
+                raw=json.dumps(report).encode();encoded=gzip.compress(raw,mtime=0)
+                manifest.update(sha256=study.sha(encoded),raw_sha256=study.sha(raw))
+                (root/'chat-study.json.gz').write_bytes(encoded)
+                (root/'chat-study.json').write_text(json.dumps(manifest))
+                with patch.object(study,'ROOT',root), patch.object(study,'table') as table:
+                    with self.assertRaisesRegex(ValueError,'chat (cache invariant|timing census)'):
+                        study.chat_runtime()
+                    table.assert_not_called()
+
     def test_completed_runtime_replays_all_evidence(self):
         output = io.StringIO()
         with patch.object(study, 'table') as table, redirect_stdout(output):

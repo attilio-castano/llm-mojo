@@ -1,0 +1,23 @@
+{
+  "kind": "native-chat-study-archive-v1",
+  "sha256": "699aa2e1677a6be5cb8c45244f2fa62c02511625b488ac929dba2bbca58d965b",
+  "raw_sha256": "25603de49d604899fbc09194212bc321bd4244b89d48a3655132abe114700a3e",
+  "raw_bytes": 360815,
+  "compressed_bytes": 40827,
+  "validation": {
+    "python_tests": 153,
+    "python_log_sha256": "a812333a662c253324620da0d0c463871ce81a61e1c2fab284821a0f2262a06a",
+    "focused_native_exit_code": 0,
+    "focused_native_log_sha256": "84bf13f6708357b9b04d09d365bca594226f8c08598fe035dc7ac778fd0491ff",
+    "native_scope": "Chat framing/lifecycle, model primitive tests, ordinary and Unicode tokenizer/streaming parity, plus the full checkpoint chat study.",
+    "broader_run": "MLP_VARIANTS=0,7 uv run --locked llm-mojo-validate was intentionally stopped during the unchanged decoder policy sweep after fixture preparation, Python tests and preceding native attention/chat suites. This was not a numerical failure and is not an unfiltered full-suite pass.",
+    "broader_log_sha256": "b792d1df6cff703e211d0b3e094e61435fe560d6fcd3828e286bec97e75d2e04",
+    "implementation_python_tests": 151,
+    "implementation_python_log_sha256": "a25f4d60342eeb6790f54c6f8a757aff1d834c3798aadda439ee851edb22170e",
+    "python_command": "uv run --locked python -m unittest discover -s tests -p 'test_*.py'",
+    "python_exit_code": 0,
+    "replay_command": "uv run --locked python studies/model_generation/summarize.py",
+    "replay_exit_code": 0,
+    "replay_log_sha256": "0c1282f5e485c6b912f0e10aae55d13f46cb4a3563319c507d32e238c556ef8a"
+  }
+}
