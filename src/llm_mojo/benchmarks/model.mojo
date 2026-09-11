@@ -26,6 +26,8 @@ def poison_outputs(mut model: QwenModel, prefix: Int) raises:
     """Untimed verification: stale logits/cache appends must not pass parity."""
     var sentinel = bitcast[DType.bfloat16](UInt16(0x7FC0))
     model.logits.enqueue_fill(sentinel)
+    model.mlp.activated.enqueue_fill(sentinel)
+    model.mlp.gated.enqueue_fill(sentinel)
     for layer in range(24):
         with model.layers[layer].cache.key.map_to_host() as mapped:
             for column in range(128):
@@ -41,8 +43,11 @@ def step[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext, ids: List[Int]
 
 
 def main() raises:
+    comptime COMBINED = is_defined["MODEL_COMBINED_STUDY"]()
     comptime FUSION = is_defined["MODEL_FUSION_STUDY"]()
     comptime PROFILE_FUSED = is_defined["MODEL_FUSION_PROFILE"]()
+    comptime assert not COMBINED or FUSION, "combined study requires MODEL_FUSION_STUDY"
+    var candidate = 26 if COMBINED else 25
     var control = 0 if FUSION else -1
     var args = List[String]()
     comptime if is_defined["MODEL_PROFILE_PREFIX"]():
@@ -60,8 +65,10 @@ def main() raises:
     var comparison = Int(args[6])
     if ((mode != "bench" and mode != "verify" and mode != "profile")
         or (prefix != 64 and prefix != 1024 and prefix != 3968)
-        or first < 0 or first > 1 or comparison < 0 or comparison > 1):
+        or first < 0 or first > 1 or comparison < 0 or comparison > (2 if COMBINED else 1)):
         raise Error("invalid frozen model profiling workload")
+    if COMBINED and comparison == 2:
+        control = 25
     var ctx = DeviceContext()
     if ctx.api() != "metal" or ctx.name() != "Apple M4 Pro":
         raise Error("study requires Apple M4 Pro / Metal")
@@ -102,7 +109,7 @@ def main() raises:
         poison_outputs(model,prefix)
         var observed: Int
         comptime if FUSION:
-            observed = step[False](model,ctx,ids,25)
+            observed = step[False](model,ctx,ids,candidate)
         else:
             observed = step[True](model,ctx,ids)
         snapshot(model,args[7]+"/observed")
@@ -118,22 +125,22 @@ def main() raises:
     if mode == "profile":
         for _ in range(10):
             rewind(model,prefix)
-            if step[False](model,ctx,ids,25 if PROFILE_FUSED else control) != winner:
+            if step[False](model,ctx,ids,candidate if PROFILE_FUSED else control) != winner:
                 raise Error("unstable profile prediction")
         print("correctness: passed")
-        print("profile implementation:", "QwenModel.forward+greedy-fused" if PROFILE_FUSED else "QwenModel.forward+greedy")
+        print("profile implementation:", ("QwenModel.forward+greedy-combined" if COMBINED else "QwenModel.forward+greedy-fused") if PROFILE_FUSED else "QwenModel.forward+greedy")
         print("rows: 1")
         print("hidden: 896")
         print("key value rows:",prefix+1)
-        print("profile workload:","model-p"+String(prefix)+("-fused" if PROFILE_FUSED else ""))
-        print("profile dispatches per iteration:",338 if PROFILE_FUSED else 410)
+        print("profile workload:","model-p"+String(prefix)+(("-combined" if COMBINED else "-fused") if PROFILE_FUSED else ""))
+        print("profile dispatches per iteration:",(314 if COMBINED else 338) if PROFILE_FUSED else 410)
         print("warmup iterations: 10")
         print("profile iterations: 8")
         print("post-profile idle milliseconds: 250")
         print("PROFILE_REGION_BEGIN")
         for _ in range(8):
             rewind(model,prefix)
-            if step[False](model,ctx,ids,25 if PROFILE_FUSED else control) != winner:
+            if step[False](model,ctx,ids,candidate if PROFILE_FUSED else control) != winner:
                 raise Error("unstable profile prediction")
         print("PROFILE_REGION_END")
         sleep(0.25)
@@ -149,7 +156,7 @@ def main() raises:
             if observe:
                 selected = step[True](model,ctx,ids)
             else:
-                selected = step[False](model,ctx,ids,25 if FUSION and comparison == 1 and arm == 1 else control)
+                selected = step[False](model,ctx,ids,candidate if FUSION and comparison >= 1 and arm == 1 else control)
             var elapsed = _observation_clock()-start
             if selected != winner or model.submitted_rows != 24*(prefix+1):
                 raise Error("measurement prediction/accounting changed")

@@ -83,9 +83,9 @@ def candidate_configuration(rows: Int, total: Int) -> Int:
 def select_configuration(policy: String, rows: Int, total: Int, device: String) raises -> Int:
     if rows < 1 or total < rows or total > 4096:
         raise Error("invalid configuration-selection dimensions")
-    if policy == "fusion":
+    if policy == "fusion" or policy == "combined":
         if rows == 1 and device == "Apple M4 Pro":
-            return 25
+            return 26 if policy == "combined" else 25
         return select_configuration("fast", rows, total, device)
     if policy == "baseline":
         return 0
@@ -240,7 +240,7 @@ struct QwenModel(Movable):
                     TileTensor(self.input,row_major(rows,896)),configuration)
                 if capture.byte_length() > 0:
                     save_bf16(self.mlp.output,capture+"/hidden_"+String(i+1)+".bin",rows*896)
-                    if configuration == 25:
+                    if configuration == 25 or configuration == 26:
                         # Fusion intentionally leaves the unpack/rotated scratch untouched.
                         save_bf16(self.layers[i].cache.key,capture+"/append_key_"+String(i)+".bin",128,(self.layers[i].cache.length-1)*128)
                         save_bf16(self.layers[i].cache.value,capture+"/append_value_"+String(i)+".bin",128,(self.layers[i].cache.length-1)*128)

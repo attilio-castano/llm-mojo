@@ -834,7 +834,8 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
     if identity['operation'] == 'qwen_model':
         from .model_contract import command_stages, validate_command_sequence
         model_fused = identity['implementation']=='qwen_model_fused'
-        sequence_commands = len(command_stages(model_fused))
+        model_combined = identity['implementation']=='qwen_model_combined'
+        sequence_commands = len(command_stages(model_fused, model_combined))
         compute_commands = [r for r in compute_channel if any(
             kind in r['event-label'][1] for kind in (':Compute Command', ':Blit Command'))]
     required_tail = (workload["warmup_iterations"] + workload["profile_iterations"] +
@@ -850,7 +851,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         trace_correctness_dispatches=identity["operation"] == "rms_norm",
     )
     if identity['operation'] == 'qwen_model':
-        validate_command_sequence(warmup + profile, model_fused)
+        validate_command_sequence(warmup + profile, model_fused, model_combined)
     sequence_command_buffer_ids = {
         integer(row, "cmdbuffer-id") for row in correctness + warmup + profile
     }

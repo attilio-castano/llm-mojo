@@ -106,6 +106,9 @@ def test_fusion_rejects_non_decode_before_mutation() raises:
         assert_equal(k[i],bitcast[DType.uint16](Float32(-17).cast[DType.bfloat16]()))
     with assert_raises():
         _ = decoder_mappings(25,2)
+    with assert_raises():
+        _ = decoder_mappings(26,2)
+    assert_equal(decoder_mappings(26,1),decoder_mappings(0,1))
     assert_equal(decoder_mappings(25,1),decoder_mappings(0,1))
 
 

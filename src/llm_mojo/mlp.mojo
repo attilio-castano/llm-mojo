@@ -11,7 +11,7 @@ from llm_mojo.linear import (
     enqueue_linear_prefill_mma_8x16_apple_gpu,
     enqueue_linear_prefill_mma_tile_apple_gpu,
 )
-from llm_mojo.swiglu import enqueue_silu_apple_gpu, enqueue_multiply_apple_gpu
+from llm_mojo.swiglu import enqueue_silu_apple_gpu, enqueue_multiply_apple_gpu, enqueue_silu_multiply_apple_gpu
 from llm_mojo.residual import enqueue_residual_apple_gpu
 
 
@@ -289,6 +289,7 @@ def enqueue_mlp_apple_gpu[
     mut work: MLPWorkspace,
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     mapping: Int = 0,
+    fuse_activation: Bool = False,
 ) raises:
     """Six or seven ordered dispatches; no allocation, upload, or synchronization.
 
@@ -302,10 +303,22 @@ def enqueue_mlp_apple_gpu[
     Mapping 19 reuses each weight across four independent rowwise reductions.
     Isolated stage APIs always enqueue exactly that stage, even for a combined
     mapping; the complete entrypoint combines stages 1/2 into one dispatch.
+    Optional single-row mapping-zero activation fusion retains the BF16 SiLU
+    bits in registers and leaves work.activated untouched.
     """
     _validate_mlp(ctx, weights, work, x, mapping)
+    if fuse_activation and (Int(x.dim[0]()) != 1 or mapping != 0):
+        raise Error("fused MLP activation requires one row and mapping zero")
     for stage in range(7):
-        if stage == 1 and mlp_combines_gate_up(mapping):
+        if stage == 3 and fuse_activation:
+            var i = weights.intermediate
+            enqueue_silu_multiply_apple_gpu(ctx,
+                TileTensor(work.gate, row_major(1, i)),
+                TileTensor(work.up, row_major(1, i)),
+                TileTensor(work.gated, row_major(1, i)))
+        elif stage == 4 and fuse_activation:
+            continue
+        elif stage == 1 and mlp_combines_gate_up(mapping):
             var h = weights.hidden
             var i = weights.intermediate
             var normal = TileTensor(work.normalized, row_major(1, h))

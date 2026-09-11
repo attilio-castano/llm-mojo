@@ -22,9 +22,9 @@ def decoder_mappings(variant: Int, rows: Int) raises -> SIMD[DType.int64, 4]:
     if rows < 1 or (variant != 0 and variant != 1 and variant != 2
         and variant != 3 and variant != 4 and variant != 8
         and variant != 12 and variant != 14 and variant != 20
-        and variant != 21 and variant != 22 and variant != 23 and variant != 24 and variant != 25):
+        and variant != 21 and variant != 22 and variant != 23 and variant != 24 and variant != 25 and variant != 26):
         raise Error("unknown decoder configuration or invalid rows")
-    if variant == 25:
+    if variant == 25 or variant == 26:
         if rows != 1:
             raise Error("fused QKV configuration requires one decode row")
         return SIMD[DType.int64, 4](0, 0, 0, 1)
@@ -142,6 +142,7 @@ def enqueue_decoder_layer[XL: TensorLayout](
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     mlp_mapping: Int = 0, integrated: Bool = True,
     gqa_mapping: Int = 0, projection_mapping: Int = 0, fuse_qkv: Bool = False,
+    fuse_activation: Bool = False,
 ) raises -> Int:
     """Return the actual attention route; final output is in mlp.output.
 
@@ -153,6 +154,8 @@ def enqueue_decoder_layer[XL: TensorLayout](
     """
     if fuse_qkv and not integrated:
         raise Error("fused QKV requires integrated attention")
+    if fuse_activation and (Int(x.dim[0]()) != 1 or mlp_mapping != 0):
+        raise Error("fused MLP activation requires one row and mapping zero")
     _decoder_preflight(ctx, aw, cache, attention, mw, mlp, x,
                        integrated, gqa_mapping, projection_mapping, mlp_mapping)
     var actual_route: Int
@@ -163,7 +166,7 @@ def enqueue_decoder_layer[XL: TensorLayout](
         actual_route = enqueue_attention_sublayer(ctx, aw, cache, attention, x, 3)
     enqueue_mlp_apple_gpu(ctx, mw, mlp,
                          TileTensor(attention.output, row_major(Int(x.dim[0]()), aw.hidden)),
-                         mlp_mapping)
+                         mlp_mapping, fuse_activation)
     return actual_route
 
 
@@ -174,7 +177,7 @@ def enqueue_decoder_layer_configuration[XL: TensorLayout](
 ) raises -> Int:
     var mappings = decoder_mappings(variant, Int(x.dim[0]()))
     return enqueue_decoder_layer(ctx,aw,cache,attention,mw,mlp,x,
-        Int(mappings[2]),True,Int(mappings[0]),Int(mappings[1]),variant == 25)
+        Int(mappings[2]),True,Int(mappings[0]),Int(mappings[1]),variant == 25 or variant == 26,variant == 26)
 
 
 struct DecoderCache[DETERMINISTIC: Bool](Movable):

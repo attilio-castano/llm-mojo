@@ -83,6 +83,29 @@ class ModelProfileTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 contract.configuration({**data,key:value})
 
+    def test_combined_contract_and_ablation_census(self):
+        from llm_mojo.benchmarks.model_profile import combined_ablation
+        self.assertEqual(len(contract.stages(True,True)),314)
+        self.assertEqual(len(contract.command_stages(True,True)),318)
+        stages=contract.stages(True,True)
+        self.assertEqual(sum(name=='fused SiLU/multiply' for _,name in stages),24)
+        self.assertFalse(any(name in ('SiLU','multiply') for _,name in stages))
+        data=dict(implementation='qwen_model_combined',entrypoint='QwenModel.forward+greedy-combined',
+                  **contract.specification(1024,True,True),profile_iterations=8,profile_warmup_iterations=10)
+        contract.configuration(data)
+        with self.assertRaises(ValueError):
+            contract.configuration({**data,'dispatches_per_iteration':338})
+        samples=[dict(prefix=p,block=b,comparison=c,arm=a,sample=s,
+                      elapsed_ns=90 if c==2 and a==1 else 100,marks=[])
+                 for p in contract.PREFIXES for b in range(4) for c in range(3)
+                 for a in range(2) for s in range(10)]
+        self.assertTrue(all(r['all_faster'] for r in combined_ablation(samples)))
+        with self.assertRaises(ValueError): combined_ablation(samples[:-1])
+        for row in samples:
+            if row['prefix']==64 and row['block']==0 and row['comparison']==2 and row['arm']==1:
+                row['elapsed_ns']=110
+        self.assertFalse(combined_ablation(samples)[0]['all_faster'])
+
     def test_mixed_transfer_sequence_keeps_strict_coverage(self):
         stages = contract.command_stages()
         self.assertEqual(len(stages),414)
