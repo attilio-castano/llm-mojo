@@ -32,8 +32,11 @@ and remain outside Git. Preparation requires a new output directory; skip it
 if you already have the verified prepared checkpoint.
 
 ```sh
-uv run --locked python -m llm_mojo.chat --prepared build/model-prepared-v1
+uv run --locked python -m llm_mojo.chat
 ```
+
+Chat defaults to this checkout's `build/model-prepared-v1`. Use
+`--prepared /path/to/model` for a checkpoint prepared elsewhere.
 
 The first launch compiles the executable. Type a message and the reply streams
 to the terminal. `/reset` clears the conversation while keeping weights loaded;

@@ -1,13 +1,31 @@
 """Launcher boundaries: local verification precedes native execution."""
 import json
+from contextlib import chdir
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from llm_mojo import chat
+from llm_mojo import chat, model_assets
 
 
 class ChatLauncherTests(unittest.TestCase):
+    def test_default_and_relative_override_from_another_working_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            elsewhere = Path(temporary).resolve()
+            root = elsewhere / 'checkout'
+            default = root / 'build/model-prepared-v1'
+            for arguments, expected in (([], default),
+                    (['--prepared', 'custom model'], elsewhere / 'custom model')):
+                with self.subTest(arguments=arguments), chdir(elsewhere), \
+                     patch.object(model_assets, 'repository_root', return_value=root), \
+                     patch.object(chat, 'verify_prepared', return_value=(expected, {})) as verify, \
+                     patch.object(chat, 'ensure_prepared', return_value=Path('/tables')), \
+                     patch.object(chat, 'ensure_binary', return_value=Path('/native')), \
+                     patch.object(chat.os, 'execv') as execute:
+                    chat.main(arguments)
+                verify.assert_called_once_with(expected)
+                self.assertEqual(execute.call_args.args[1][1], str(expected))
+
     def test_invalid_limits_do_not_load_or_compile(self):
         for option in ('--max-new-tokens','--chunk-rows'):
             with self.subTest(option=option), patch.object(chat,'verify_prepared') as verify:

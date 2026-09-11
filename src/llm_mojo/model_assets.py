@@ -12,9 +12,14 @@ from pathlib import Path
 import subprocess
 
 from ._repository import environment_tool, repository_root
-from .tokenizer_assets import REVISION, asset_directory, ensure_prepared
+from .tokenizer_assets import REVISION, ensure_prepared
 
 CHECKPOINT_SHA = 'fdf756fa7fcbe7404d5c60e26bff1a0c8b8aa1f72ced49e7dd0210fe288fb7fe'
+
+
+def prepared_directory():
+    """Default output of the documented model preparation, rooted in this checkout."""
+    return repository_root() / 'build/model-prepared-v1'
 
 
 def tensor_shapes():
@@ -59,7 +64,7 @@ def validate_manifest(manifest):
 
 
 def verify_prepared(directory=None):
-    directory = Path(directory) if directory else asset_directory()/'model-prepared-v1'
+    directory = Path(directory) if directory is not None else prepared_directory()
     manifest = json.loads((directory/'manifest.json').read_text())
     expected = validate_manifest(manifest)
     for name in expected:

@@ -12,8 +12,12 @@ For first-time setup, follow the [README quickstart](../README.md#run-the-chat).
 With the verified prepared checkpoint already available, start from the repository:
 
 ```sh
-uv run --locked python -m llm_mojo.chat --prepared build/model-prepared-v1
+uv run --locked python -m llm_mojo.chat
 ```
+
+The default is `build/model-prepared-v1` under this source checkout, matching the
+setup command. Use `--prepared /path/to/model` to override it; relative overrides
+are resolved from your working directory.
 
 The first launch compiles the chat executable. Subsequent launches reuse it when
 source, lockfile and executable hashes match. Each launch verifies weights and

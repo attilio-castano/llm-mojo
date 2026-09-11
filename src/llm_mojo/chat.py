@@ -8,8 +8,8 @@ import sys
 import tempfile
 
 from ._repository import repository_root, environment_tool
-from .model_assets import verify_prepared
-from .tokenizer_assets import ensure_prepared, setup_lock, atomic_write, sha, asset_directory
+from .model_assets import prepared_directory, verify_prepared
+from .tokenizer_assets import ensure_prepared, setup_lock, atomic_write, sha
 
 
 def build_sources():
@@ -47,7 +47,8 @@ def ensure_binary():
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Native Qwen terminal chat with persistent KV caches and Fast inference.')
-    parser.add_argument('--prepared', type=Path, default=asset_directory()/'model-prepared-v1')
+    parser.add_argument('--prepared', type=Path, default=prepared_directory(),
+                        help='Prepared model directory (default: this checkout\'s build/model-prepared-v1)')
     parser.add_argument('--max-new-tokens', type=int, default=256)
     parser.add_argument('--chunk-rows', type=int, default=256)
     parser.add_argument('--system-file', type=Path, help='UTF-8 system message; otherwise use the pinned Qwen default')

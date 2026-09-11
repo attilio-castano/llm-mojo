@@ -68,6 +68,18 @@ class GenerationLauncherTests(unittest.TestCase):
         assets.main(['--prepared', str(self.prepared), '--prompt', str(self.prompt),
                      '--max-new-tokens', '8', '--chunk-rows', '16', '--policy', 'consistent'])
 
+    def test_default_directory_uses_documented_output_and_verifies_bytes(self):
+        expected = self.root / 'build/model-prepared-v1'
+        expected.parent.mkdir()
+        self.prepared.rename(expected)
+        with patch.object(assets, 'repository_root', return_value=self.root):
+            directory, manifest = assets.verify_prepared()
+            self.assertEqual(directory, expected)
+            self.assertEqual(manifest, self.manifest)
+            (expected / 'embedding.bin').write_bytes(b'bad')
+            with self.assertRaisesRegex(ValueError, 'checksum/extent'):
+                assets.verify_prepared()
+
     def test_verified_inputs_reach_native_driver_as_separate_arguments(self):
         tables = self.root / 'tokenizer tables.bin'
         with patch.object(assets, 'ensure_prepared', return_value=tables) as tokenizer, \
