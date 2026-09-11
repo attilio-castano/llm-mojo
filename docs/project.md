@@ -1,247 +1,127 @@
 # Project direction
 
-## Goal
+## Goal and completed milestone
 
 Build a small, understandable LLM inference engine in Mojo, initially optimized
-for Apple Silicon and Metal.
+for Apple Silicon and Metal. A reader should be able to run it, inspect the
+machinery and connect an implementation choice to numerical and performance
+evidence.
 
-The objective is not merely to generate text. The project should expose and
-measure the machinery that turns weights and tokens into next-token logits:
+The first end-to-end milestone is complete: native Fast Qwen2.5-0.5B-Instruct
+terminal chat with batch-one BF16 inference and persistent KV caches. The
+[chat guide](chat.md) is the user entry point. The [model contract](model.md)
+defines the pinned weights, arithmetic and 4,096-token runtime boundary.
+
+The implementation connects:
 
 ```text
-model architecture
-      ↓
-reference inference
-      ↓
-explicit runtime machinery
-      ↓
-custom Mojo operations
-      ↓
-custom GPU kernels
-      ↓
-SIMD, layout, and synchronization choices
-      ↓
-Metal
-      ↓
-Apple GPU
+terminal messages and exact token history
+        ↓
+native tokenizer and Qwen chat framing
+        ↓
+incremental prefill, greedy decode and persistent KV caches
+        ↓
+24 learned decoder layers, final normalization and tied LM head
+        ↓
+measured Fast kernel selection
+        ↓
+explicit layouts, work ownership and synchronization
+        ↓
+Metal on Apple Silicon
 ```
 
-Abstractions should be peelable. A reader should be able to move from a clear
-reference operation toward the memory access, execution, and synchronization
-decisions that implement it on hardware.
+Abstractions should be inspectable. The [layout language](layouts.md) separates
+logical values, storage, thread ownership and reduction order. Python supplies
+asset preparation, independent oracles and development tooling; the inference
+engine and interactive session remain Mojo-first.
 
-The project uses a small [layout language](layouts.md) to keep logical values,
-storage mappings, work partition, and reduction order explicit without
-introducing a project-specific tensor or layout algebra.
+## What the evidence establishes
+
+The [Fast runtime study](../studies/model_generation/runtime.md) completes model
+integration, native generation and workload-specific optimization. Eleven
+measured cells reduce synchronized full-model forward time by 5.6–51.2% against
+our optimized configuration 0 on M4 Pro / Metal. Other shapes retain that
+baseline; the result does not establish a universal best kernel or an HF speedup.
+
+The [chat study](../studies/model_generation/chat.md) adds exact template fixtures,
+three-turn cache checks, full-history numerical diagnostics, paired cache-reuse
+measurements and actual terminal interaction. Weights and caches stay resident;
+subsequent turns submit only the uncached suffix. Reset, interruption, stop
+handling and context rejection are part of the implemented lifecycle.
+
+Evidence is specific to its claim:
+
+- Artifact identity, architecture, causal positions, token history, cache storage,
+  submission accounting and lifecycle are required implementation invariants.
+- Independent operation tests retain their declared numerical contracts.
+- Full-model HF and cross-schedule differences are diagnostic observations,
+  including intermediate errors, logit distributions and token choices.
+- Speed claims require paired measurements with an explicit baseline and timing
+  boundary. A faster kernel does not by itself establish faster terminal chat.
+
+Greedy selection has a fixed tie rule, but changing prompt chunk sizes can change
+floating-point reductions and predictions. Schedule-invariant full-model execution
+is not part of the completed Fast contract. The earlier failed full-model
+qualification policies and their records remain [historical evidence](../studies/model_generation/README.md);
+they were not converted into passing results. The approved
+[Fast plan](fast-generation-plan.md) records the move to numerical diagnosis.
+
+## Follow-up direction
+
+The working Fast chat is the baseline for further work. These are separate
+research questions, not prerequisites for calling the current milestone complete:
+
+1. **Schedule determinism.** Define the desired invariant across full, chunked
+   and one-token execution, then diagnose and measure a dedicated consistent
+   route. The existing [decoder policy study](../studies/decoder_layer/policies.md)
+   and [full-model investigation](../studies/model_generation/consistency.md)
+   establish useful component results and an unresolved full-model boundary.
+2. **Matched HF comparison.** Numerical comparisons already exist. A performance
+   study must name the HF backend/device, precision, identical token workload,
+   cache behavior and timing boundary before comparing prefill or decode.
+3. **Further Fast optimization.** Profile complete application phases over
+   representative prompt and context lengths. Use measured bottlenecks to choose
+   the next experiment, including any allocation, copying or synchronization work.
+   Keep current measurements as the baseline and retain new numerical diagnostics.
+
+Sampling, quantization, longer contexts, batching, tool-oriented templates and
+additional model families can follow when they answer a concrete need. They are
+not current functionality or commitments for the next milestone.
 
 ## Method
 
-The development loop is:
-
-```text
-correct reference implementation
-        ↓
-measurement
-        ↓
-identify a bottleneck
-        ↓
-implement one optimization
-        ↓
-verify numerical correctness
-        ↓
-benchmark
-        ↓
-inspect generated code when useful
-```
-
-An optimization is incomplete without both correctness evidence and a benchmark
-showing what changed. The [experimental method](experiments.md) defines the
-shared vocabulary, measurement discipline, and evidence lifecycle used for
-performance work.
-
-## Initial model scope
-
-The first model is Qwen2.5-0.5B-Instruct in BF16. Its immutable artifact
-revision, runtime boundary, conversation semantics, and correctness criteria are
-defined in the [initial model contract](model.md).
-
-The first model-level milestone is numerical parity, not speed:
-
-> Given the same weights and input tokens, reproduce the reference
-> implementation's next-token logits within a documented tolerance.
-
-The path includes token embeddings, RMSNorm, Q/K/V projections, RoPE, causal or
-grouped-query attention, output projection, SwiGLU, residual connections, final
-normalization, the LM head, logits, and sampling.
-
-## Evidence-gated roadmap
-
-The roadmap expresses dependency order, not a delivery schedule. A stage is
-complete only when its exit evidence is reproducible. Work may explore a later
-stage, but claims may not skip an earlier evidence gate.
-
-### 0. Foundation
-
-Establish the stable Mojo and MAX toolchain, package boundary, test runner, and
-project principles.
-
-Exit evidence: the locked environment resolves and the package import smoke
-test passes. This is the bootstrap stage.
-
-### 1. Reference contracts
-
-Pin the reference machine, model artifacts, dtype, initial runtime boundary,
-conversation semantics, and correctness criteria.
-
-Exit evidence: the machine and model documentation is internally consistent,
-the immutable upstream artifacts and checksums resolve, and no inference or
-performance claim is made.
-
-### 2. Reference operations
-
-Implement Qwen operations in small, inspectable Mojo modules, beginning with
-RMSNorm and progressing through linear projections, RoPE, grouped-query
-attention, SwiGLU, residuals, embeddings, and the LM head. Python may generate
-small oracle fixtures but is not part of the inference path.
-
-Exit evidence: every implemented operation matches a provenance-bearing oracle
-fixture within a tolerance declared before comparison. An operation is not an
-optimization and needs no performance claim.
-
-### 3. Decoder block
-
-Compose the operations into one deterministic Qwen-compatible decoder block
-using a deliberately tiny fixture whose intermediate tensors remain easy to
-inspect.
-The [decoder-layer specification](decoder-layer.md) defines the accepted
-rounding, ownership, upstream fixture, and acceptance boundaries for this step.
-
-Exit evidence: every block boundary and the final block output match the
-reference oracle, with shapes, layouts, dtypes, and allocations documented.
-
-Completed: one Mojo decoder layer passes 43 synthetic development cases,
-three checkpoint cases and seven reserved cases, including exact cache and
-asynchronous ownership checks. The [bounded baseline](../studies/decoder_layer/README.md)
-retains 960 latency observations and three verified Metal profiles. This closes
-the layer milestone; full-model forward parity is next.
-
-### 4. Full-model forward pass
-
-Load the pinned Qwen2.5-0.5B-Instruct weights and compose embeddings, all 24
-decoder blocks, final normalization, and the LM head.
-
-Exit evidence: fixed token IDs reproduce reference next-token logits within the
-declared tolerance. This proves a forward pass, not generation quality or
-performance.
-
-### 5. Stateful generation
-
-Add deterministic greedy generation, separate full prefill from one-token
-decode, and introduce the persistent KV cache.
-
-Exit evidence: cached logits match full recomputation at every generated
-position, cache accounting is exact, and instrumentation shows that cached
-prefixes were not recomputed.
-
-### 6. Multi-turn sessions
-
-Add canonical token history, incremental prefill for appended user turns,
-prefix validation, cache invalidation, stop-token handling, and the V0 context
-limit.
-
-Exit evidence: the three-turn fixture in the
-[initial model contract](model.md#v0-correctness-acceptance) matches
-full-transcript recomputation at every turn boundary and generated position.
-
-### 7. Performance baseline
-
-Measure the correct implementation on the reference machine. Separate first
-prefill, incremental prefill, and decode workloads; vary prompt, suffix, and
-cache lengths; and prove the actual runtime device and backend.
-
-Exit evidence: a reproducible baseline records all required metadata and makes
-no causal performance claim beyond the measured implementation.
-
-### 8. Measured optimization
-
-Profile the baseline, choose one demonstrated bottleneck, implement one change,
-rerun numerical correctness, and compare against the unchanged workload. Likely
-topics include SIMD, weight layout, allocation, fusion, synchronization, and
-Apple GPU kernels, but measurement determines their order.
-
-Exit evidence: each optimization has both correctness evidence and a
-reproducible before-and-after benchmark. A faster microkernel alone does not
-establish faster model decoding.
-
-## Repository structure
-
-Keep the Mojo operations directly under `src/llm_mojo/` until implemented
-ownership boundaries justify a subpackage. Tests stay under `tests/`, with
-independent oracle generators and frozen hashes under `tests/fixtures/`.
-Generated arrays and manifests go into ignored `build/oracle_data/`.
-
-Reusable measurement instruments live under `src/llm_mojo/benchmarks/`. The six current
-`studies/` folders collect readable explanations and compact evidence by topic;
-a parameter choice is a matrix row, not a new runner or campaign directory.
-`docs/model.md` owns numerical/model contracts, `docs/layouts.md` owns storage
-notation, and studies own measured comparisons. Link between these homes.
-
-Keep model weights, download caches, compiled binaries and full traces outside
-Git. Add structure only when real code needs it. Historical campaign records
-remain in Git history at the revision linked by the study index.
-
-## Runtime direction
-
-Once the reference path is correct, the engine can progressively expose:
-
-- autoregressive decoding;
-- distinct prefill and decode paths;
-- KV caching and its memory layout;
-- block-based allocation and batching;
-- prefix reuse;
-- sampling and quantization;
-- speculative decoding;
-- unified-memory-aware execution strategies.
-
-These are directions, not claims about current functionality.
-
-## Apple Silicon
-
-Apple Silicon makes memory behavior central because CPU and GPU share unified
-memory. The project should measure rather than assume the consequences.
-
-Important questions include:
-
-- what becomes bandwidth-bound during decode;
-- how context length changes KV-cache traffic and latency;
-- which layouts and synchronization strategies work best;
-- which operations benefit from fusion;
-- how prefill and decode kernels should differ;
-- how close readable Mojo can get to mature runtimes such as MLX and llama.cpp.
-
-Closing the entire performance gap is not required. Explaining it is valuable.
+Start with a clear reference operation, measure it, identify a bottleneck,
+implement one change, verify its numerical behavior and benchmark the result.
+Inspect generated code or profiles when they help explain the outcome through
+tensor dimensions, memory traffic, reuse, work ownership and synchronization.
+An optimization is incomplete without both numerical evidence and a reproducible
+before-and-after measurement.
 
 ## Evidence
 
-Useful measurements eventually include time to first token, time per output
-token, tokens per second, memory use, KV-cache size, memory bandwidth, kernel
-latency, arithmetic intensity, and scaling with batch and sequence length.
+Record hardware, backend, software versions, source identity, model revision,
+dtype, workload, warmups, samples and synchronization boundaries. Keep operation,
+composition, model-forward and application timings distinct. The
+[experimental method](experiments.md) defines evidence retention and performance
+selection; the [study index](../studies/README.md) organizes the results.
 
-Results must identify the hardware, operating system, Mojo and MAX versions,
-commit, workload, dtype, warmup, repetitions, and synchronization boundaries.
-Recorded results follow the [experimental method](experiments.md), which keeps
-operation, composition, model-phase, and end-to-end claims distinct.
+## Repository structure
+
+Keep native operations and session machinery under `src/llm_mojo/`. Add a
+subpackage only when implemented ownership boundaries justify it. Tests live in
+`tests/`, with independent oracle generators and frozen identities in
+`tests/fixtures/`. Reusable measurement tools belong in
+`src/llm_mojo/benchmarks/`; studies own explanations and compact measured evidence.
+
+Usage and current contracts belong in `docs/`. Completed plans and numerical
+investigations remain linked as history, so they do not obscure the current
+entry point. A new parameter choice usually belongs in an existing measurement
+matrix, not a new experiment hierarchy. Weights, generated oracle arrays,
+binaries and full traces remain outside Git.
 
 ## Success
 
-The project succeeds when a technically sophisticated reader can understand:
-
-- how a decoder-only transformer performs inference;
-- what data lives in memory and how KV caching changes computation;
-- why prefill and decode behave differently;
-- where time and bandwidth are spent;
-- how the critical GPU kernels work;
-- how successive optimizations alter correctness and measured performance.
-
-Understanding, correctness, measurement, and engineering depth take priority
-over breadth.
+The project succeeds when a reader can run the model and explain how tokens
+become logits, what the cache saves, which kernels the workload selects and why
+a measured optimization helps. Understanding the remaining gap to mature
+runtimes is valuable even when closing that entire gap is not the objective.

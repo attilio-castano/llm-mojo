@@ -1,6 +1,12 @@
-# Fast full-model implementation
+# Completed Fast full-model implementation plan
 
-## Active revision: implementation with numerical diagnosis
+The [runtime study](../studies/model_generation/runtime.md) retains the completed
+results. The subsequent [terminal chat study](../studies/model_generation/chat.md)
+adds persistent multi-turn interaction. See [project direction](project.md) for
+follow-ups. The approved plan and earlier failed qualification below are retained
+as execution history.
+
+## Approved revision: implementation with numerical diagnosis
 
 Approved on 2026-09-10 after the failed reference qualification. Complete the
 native Fast runtime using the existing kernels. The historical numerical

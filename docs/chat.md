@@ -8,8 +8,8 @@ then replaces itself with the Mojo process; there is no Python inference loop.
 
 ## Start
 
-From the repository, using the verified prepared checkpoint from
-[generation.md](generation.md#prepared-checkpoint-and-reference):
+For first-time setup, follow the [README quickstart](../README.md#run-the-chat).
+With the verified prepared checkpoint already available, start from the repository:
 
 ```sh
 uv run --locked python -m llm_mojo.chat --prepared build/model-prepared-v1

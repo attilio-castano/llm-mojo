@@ -2,7 +2,7 @@
 
 For interactive multi-turn use with persistent KV caches, see [terminal chat](chat.md).
 
-The active [Fast implementation revision](fast-generation-plan.md) uses numerical
+The completed [Fast implementation revision](fast-generation-plan.md) uses numerical
 comparisons as diagnostics. Required checks cover assets, data flow, cache and
 generation semantics; historical full-model distance ceilings no longer block
 integration. `fast` is the public default, with `auto` as an alias. On Apple M4 Pro they select the eleven measured workload cells described in
@@ -12,58 +12,6 @@ Explicit configurations 0/2/3/21 and the historical `consistent` path remain
 available. The full-checkpoint generator, lifecycle checks, numerical diagnostics and
 paired model measurements have executed. Numerical differences are retained
 and explained separately from exact implementation invariants.
-
-## Historical numerical-policy studies
-
-The subsequent [Fast completion effort](fast-generation-plan.md) stopped during
-reference-only qualification: the declared intermediate-error ceilings failed
-before independent confirmation or native Fast acceptance. The
-[Fast reference study](../studies/model_generation/fast-reference.md) retains
-the complete calibration, diagnosis and stop decision. The earlier native
-configuration-20 accuracy failure below remains separate historical evidence.
-
-**Development candidate: promotion is paused at native full-model accuracy.**
-The authorized [consistency revision](../studies/model_generation/consistency.md)
-passes 71,250 exact canonical HF comparisons through 4096 tokens and native
-primitive/layer schedule tests. Its first full-model input fails seven frozen
-accuracy gates. All 336 identical-operand operation checks pass; ten projection
-elements differ by one BF16 step. Full-model schedule and generation acceptance
-remain pending, and configuration 20 is not automatically selected.
-
-The native model and generation call graphs compile. The
-embedding/copy and BF16 binary-I/O tests pass on Apple M4 Pro / Metal. The
-upstream observation code passes a tiny synthetic 24-layer self-test; that is
-not qualification of the pinned checkpoint. The full checkpoint and all 196
-prepared tensors have since passed hash/extent verification. Reference-only
-calibration completed, but independent confirmation failed 8 of 2,025 checks.
-The [retained study](../studies/model_generation/README.md) records the frozen
-budgets and diagnosis. That original confirmation remains failed; the approved
-consistency revision and native failure are recorded separately.
-
-The authorized [reference-only follow-up](../studies/model_generation/rounding.md)
-traced the discrepancy to FP32 attention differences crossing BF16 rounding
-boundaries and propagating through the model. It reproduced the normalization
-gate violation while observing identical argmax in 66 comparisons and matching
-bounded greedy sequences on three declared prompts. These results motivate
-separating corresponding-mode comparisons from cross-schedule diagnostics;
-they do not establish Mojo model acceptance or change the frozen thresholds.
-
-The deeper [HF/PyTorch study](../studies/model_generation/backend.md) locates the
-first difference in QK matrix multiplication. Normalizing SDPA query shape and
-causal-prefix layout yields 36,225 byte-equal full/cached comparisons at five
-declared lengths, while deterministic mode alone leaves the original differences
-unchanged. The approved consistency revision now qualifies this canonical
-route while preserving the original failed policy and evidence.
-
-The approved scope and stop gates are in [generation-plan.md](generation-plan.md).
-The declaration is [model_contract.json](../tests/fixtures/model_contract.json).
-The numerical thresholds are initial reference-only qualification criteria;
-they failed, and a bounded reference-only calibration also failed independent
-confirmation. Both declarations and results remain intact. The new
-[consistency declaration](../tests/fixtures/model_consistency.json) independently
-requires exact schedule agreement and adopts the unchanged frozen budgets as
-cross-engine hypotheses. The first native accuracy failure is under that new
-declaration, not acceptance under the historical failed qualification.
 
 ## Native ownership
 
@@ -130,16 +78,18 @@ upstream implementation. Python is used for preparation and reference execution;
 no Python interop runs in the native model or text generator.
 
 ```sh
-uv run --locked --script tests/fixtures/model_reference.py self-test
-uv run --locked --script tests/fixtures/model_reference.py prepare --output build/checkpoints/qwen2.5-0.5b-instruct/7ae557604adf67be50417f59c2c2f167def9a775/model-prepared-v1
-uv run --locked --script tests/fixtures/model_reference.py qualify --output build/oracle_data/model-qualification
+uv run --locked --script tests/fixtures/model_reference.py prepare --output build/model-prepared-v1
 ```
+
+Preparation requires a new output directory. It does not run the historical
+qualification workflow. For the complete interactive setup, see the
+[README quickstart](../README.md#run-the-chat).
 
 Under the historical qualification workflow, failure prevents dependent comparison.
 The new `model_reference.py diagnose` / `model_validation diagnose` workflow
 captures corresponding histories without requiring qualification; it retains
 numerical distances separately from required exact storage checks. The historical
-`model_reference.py qualify` command above is expected to reproduce its original
+`model_reference.py qualify` command is expected to reproduce its original
 failure. Use the [consistency study commands](../studies/model_generation/consistency.md)
 for the historical canonical route. That consistency workflow requires
 an explicit passing qualification from the same reference source and contract;
@@ -186,7 +136,8 @@ output count. It performs raw-logit greedy selection with lowest-ID ties,
 rejects nonfinite logits, stops at IDs 151645/151643 or the requested/context
 limit, and emits complete UTF-8 fragments. It applies no sampling or repetition
 penalty. A selected final token is in history but need not have been consumed
-into the KV cache. Chat-template rendering is outside this milestone.
+into the KV cache. This plain-text driver does not apply a chat template; [terminal chat](chat.md)
+provides native framing and persistent multi-turn state.
 
 The optional TSV report records prompt/generated IDs, selected prefill
 configurations, native initialization, prefill and decode durations, and cache
@@ -199,3 +150,55 @@ a public default-Fast smoke with a 1024-token prompt passed. Same-history
 predictions agree with HF on 191 of 192 generated choices; the exception is an
 exact HF top-logit tie. These are bounded development observations, not a
 general model-quality or exact trajectory-equivalence claim.
+
+## Historical numerical-policy studies
+
+Before the diagnostic policy, the [Fast completion effort](fast-generation-plan.md) stopped during
+reference-only qualification: the declared intermediate-error ceilings failed
+before independent confirmation or native Fast acceptance. The
+[Fast reference study](../studies/model_generation/fast-reference.md) retains
+the complete calibration, diagnosis and stop decision. The earlier native
+configuration-20 accuracy failure below remains separate historical evidence.
+
+**Historical consistency candidate: promotion paused at native full-model accuracy.**
+The authorized [consistency revision](../studies/model_generation/consistency.md)
+passes 71,250 exact canonical HF comparisons through 4096 tokens and native
+primitive/layer schedule tests. Its first full-model input fails seven frozen
+accuracy gates. All 336 identical-operand operation checks pass; ten projection
+elements differ by one BF16 step. Full-model schedule and generation acceptance
+remain pending, and configuration 20 is not automatically selected.
+
+The native model and generation call graphs compile. The
+embedding/copy and BF16 binary-I/O tests pass on Apple M4 Pro / Metal. The
+upstream observation code passes a tiny synthetic 24-layer self-test; that is
+not qualification of the pinned checkpoint. The full checkpoint and all 196
+prepared tensors have since passed hash/extent verification. Reference-only
+calibration completed, but independent confirmation failed 8 of 2,025 checks.
+The [retained study](../studies/model_generation/README.md) records the frozen
+budgets and diagnosis. That original confirmation remains failed; the approved
+consistency revision and native failure are recorded separately.
+
+The authorized [reference-only follow-up](../studies/model_generation/rounding.md)
+traced the discrepancy to FP32 attention differences crossing BF16 rounding
+boundaries and propagating through the model. It reproduced the normalization
+gate violation while observing identical argmax in 66 comparisons and matching
+bounded greedy sequences on three declared prompts. These results motivate
+separating corresponding-mode comparisons from cross-schedule diagnostics;
+they do not establish Mojo model acceptance or change the frozen thresholds.
+
+The deeper [HF/PyTorch study](../studies/model_generation/backend.md) locates the
+first difference in QK matrix multiplication. Normalizing SDPA query shape and
+causal-prefix layout yields 36,225 byte-equal full/cached comparisons at five
+declared lengths, while deterministic mode alone leaves the original differences
+unchanged. The approved consistency revision now qualifies this canonical
+route while preserving the original failed policy and evidence.
+
+The approved scope and stop gates are in [generation-plan.md](generation-plan.md).
+The declaration is [model_contract.json](../tests/fixtures/model_contract.json).
+The numerical thresholds are initial reference-only qualification criteria;
+they failed, and a bounded reference-only calibration also failed independent
+confirmation. Both declarations and results remain intact. The new
+[consistency declaration](../tests/fixtures/model_consistency.json) independently
+requires exact schedule agreement and adopts the unchanged frozen budgets as
+cross-engine hypotheses. The first native accuracy failure is under that new
+declaration, not acceptance under the historical failed qualification.

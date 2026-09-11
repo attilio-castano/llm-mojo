@@ -1,16 +1,15 @@
-The active revision is [Fast implementation with numerical diagnosis](fast-generation-plan.md).
-The qualification stop gates below describe historical plans.
+# Historical Qwen forward and generation plans
 
-# Qwen forward and generation milestone
+The Fast runtime and native terminal chat milestones are complete. Current
+behavior is documented in the [model contract](model.md), [runtime guide](generation.md)
+and [chat guide](chat.md). Results are in the
+[Fast runtime study](../studies/model_generation/runtime.md) and
+[chat study](../studies/model_generation/chat.md).
 
-## Approved Fast completion revision — 2026-09-10
-
-The active [Fast completion plan](fast-generation-plan.md) consolidates existing
-kernel selections, independently qualifies a new full-model numerical contract,
-then completes native generation acceptance and model-level selection. It does
-not require native schedule identity. The consistency investigation and its
-failed gates below remain historical evidence. Qualification failure stops
-dependent native acceptance; no historical failure is retroactively waived.
+The [completed Fast plan](fast-generation-plan.md) records the approved move to
+numerical diagnosis. The qualification and consistency stop gates below are
+historical; their failures remain unchanged. Full-model schedule determinism
+continues as a separate follow-up in the [project direction](project.md).
 
 ## Approved consistency revision — 2026-09-09
 

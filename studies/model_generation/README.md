@@ -1,13 +1,39 @@
-The [native terminal chat study](chat.md) adds multi-turn sessions with persistent
-KV caches, real terminal controls, and measured cache-reuse behavior.
+# Qwen runtime, chat and numerical studies
 
-The active [Fast runtime plan](../../docs/fast-generation-plan.md) now treats
-full-model numerical differences as diagnostics while retaining exact
-implementation invariants. The [completed native Fast runtime study](runtime.md)
-retains measured dispatch for eleven workloads, native generation and complete
-diagnostic evidence. The failed qualifications below remain historical evidence.
+The Fast runtime and interactive terminal chat milestones are complete. Start
+with the current implementation and measurements:
 
-# Full-model reference schedule qualification
+| Study | Scope |
+| --- | --- |
+| [Terminal chat](chat.md) | Native session state, exact token history, persistent caches, controls and measured cache reuse |
+| [Fast runtime](runtime.md) | Complete model composition, greedy generation, measured dispatch and HF numerical diagnostics |
+| [Usage and ownership](../../docs/generation.md) | Assets, model state, workload policy and plain-text generation |
+
+The current [diagnostic policy](../../docs/model.md#correctness-and-diagnostic-policy)
+requires exact implementation invariants and preserves independent operation
+contracts. Full-model tensor differences, distributions and token choices are
+observations to investigate. Schedule determinism and matched HF performance
+benchmarking remain follow-ups.
+
+## Numerical history and schedule-determinism follow-up
+
+These investigations explain how the policy developed. Their original failed
+gates and frozen evidence are retained unchanged:
+
+- [Fast reference qualification](fast-reference.md): intermediate-error ceilings
+  failed before native Fast integration under the later diagnostic policy.
+- [Native consistency route](consistency.md): canonical HF qualification and
+  native component results, with an unresolved full-model accuracy boundary.
+- [HF/PyTorch execution shape](backend.md): query shape and causal-prefix layout
+  explain a reproducible schedule difference.
+- [Rounding and propagation](rounding.md): attention differences crossing BF16
+  rounding boundaries, with logit and greedy-generation observations.
+
+The remaining sections record the original reference schedule qualification.
+Statements about stopped work describe that historical checkpoint; current Fast
+selection and generation results are in the runtime study above.
+
+## Historical reference schedule qualification
 
 The [Fast reference qualification](fast-reference.md) records the preceding
 reference-only checkpoint.
@@ -122,9 +148,9 @@ differences crossing BF16 rounding boundaries and propagating through layers.
 It does not establish the exact internal rounding mechanism or qualify a
 replacement reference. Querywise SDPA has not been adopted as the oracle.
 
-## Consequence and next decision
+## Historical consequence and next decision
 
-The [approved stop rule](../../docs/generation-plan.md) applies: independent
+At this checkpoint, the [approved stop rule](../../docs/generation-plan.md) applied: independent
 confirmation failed, so no native model numerical comparison, reserved
 acceptance, model benchmark or automatic configuration promotion follows.
 The three additional optimization studies remain unspent. `auto` still uses
