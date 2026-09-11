@@ -5,9 +5,11 @@ For interactive multi-turn use with persistent KV caches, see [terminal chat](ch
 The completed [Fast implementation revision](fast-generation-plan.md) uses numerical
 comparisons as diagnostics. Required checks cover assets, data flow, cache and
 generation semantics; historical full-model distance ceilings no longer block
-integration. `fast` is the public default, with `auto` as an alias. On Apple M4 Pro they select the eleven measured workload cells described in
-the [runtime study](../studies/model_generation/runtime.md), with configuration
-0 elsewhere.
+integration. `fast` is the public default, with `auto` as an alias. On Apple M4 Pro
+they select the eleven prefill workload cells described in the
+[runtime study](../studies/model_generation/runtime.md) and configuration 26 for
+single-row calls, following the [combined fusion study](../studies/model_generation/combined-fusion.md).
+Other workloads and devices retain configuration 0.
 Explicit configurations 0/2/3/21 and the historical `consistent` path remain
 available. The full-checkpoint generator, lifecycle checks, numerical diagnostics and
 paired model measurements have executed. Numerical differences are retained
@@ -46,16 +48,25 @@ and `auto` use the measured M4 Pro lookup: split8 configuration 2 at
 16/1024, 16/4096, 15/256 and 17/256; configuration 3, combining split8 and
 larger projections, at 64/1024, 64/4096, 256/1024, 256/4096, 65/4096 and
 255/4096; configuration 21 at 16/256. Pairs denote incoming rows / total
-cached rows. Every other shape and device name falls back to configuration 0.
+cached rows. Single-row M4 Pro calls use configuration 26: exact QKV/RoPE/cache
+fusion plus SiLU/multiply fusion. The combined route passed paired whole-token
+gates at histories 64, 1024 and 3968. Every other shape and device name falls
+back to configuration 0.
 Baseline 0 already includes integrated attention and optimized multi-row MLP
-7, with rowwise MLP 0 for decode. Full prefill and ordinary single-row decode
-therefore retain these existing optimized routes.
+7, with rowwise MLP projections for decode. Configuration 26 preserves those
+projection and attention reductions and the intermediate BF16 activation rounding.
 
 `baseline` always selects 0. `candidate` retains the prior split8 lookup, and
 explicit IDs 0/2/3/21 remain available for comparison. The historical
 `consistent` / 20 route uses FP32 G32 attention and rowwise projections at all
 row counts; it remains an explicit study mode. The same selected configuration
 applies to all 24 layers for a call.
+
+Native study policies `unfused`, `fusion` and `combined` select single-row
+configurations 0, 25 and 26 respectively on M4 Pro, retaining Fast's multi-row
+choices. The profiling driver uses these explicit controls so promotion does
+not change what an experiment compares. Default profiling follows current Fast;
+historical trace replay uses the route recorded in each capture's provenance.
 
 Scratch includes split8 capacity before execution, so selection allocates
 nothing within the layer loop. The diagnostic suite checks exact cache

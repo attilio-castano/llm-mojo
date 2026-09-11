@@ -1,11 +1,16 @@
 # QKV fusion: faster measurements, promotion gate not cleared
 
+This is the original QKV-only result. The subsequent
+[combined QKV and activation fusion study](combined-fusion.md) cleared its
+declared gates and promoted configuration 26. The original measurements and
+gate decision below remain unchanged.
+
 The candidate reduced complete-token latency in all twelve paired blocks.
 Median reductions were **12.3–15.1%**, and actual streaming replies reached
 **80–84 tokens/s** by prompt-group median. Numerical and cache comparisons
 were exact. However, short-context control calibration varied more than its
-measured reduction, so **Fast and auto retain configuration 0 for decode**.
-Configuration 25 remains an explicit experimental candidate.
+measured reduction, so **Fast and auto retained configuration 0 at this study's
+completion**. Configuration 25 remains available for explicit comparison.
 
 This is the completed experiment from the [frozen plan](qkv-fusion-plan.md),
 following the [complete-token profile](token-profile.md). No measurement was

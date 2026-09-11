@@ -29,8 +29,8 @@ def main() raises:
     var ctx = DeviceContext()
     var session = ChatSession(ctx,args[1],tokenizer,work,system,chunk)
     comptime if STUDY:
-        if args[7] != "fast" and args[7] != "fusion" and args[7] != "combined":
-            raise Error("fusion study requires an explicit fast, fusion or combined arm")
+        if args[7] != "fast" and args[7] != "fusion" and args[7] != "combined" and args[7] != "unfused":
+            raise Error("fusion study requires an explicit fast, unfused, fusion or combined arm")
         session.policy = String(args[7])
     print("Ready — Fast on",ctx.name(),"/",ctx.api(),flush=True)
     print("/reset: new conversation · /exit: quit · Ctrl-C: stop reply or clear input",flush=True)

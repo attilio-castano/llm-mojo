@@ -46,7 +46,7 @@ def main() raises:
     comptime COMBINED = is_defined["MODEL_COMBINED_STUDY"]()
     comptime FUSION = is_defined["MODEL_FUSION_STUDY"]()
     comptime PROFILE_FUSED = is_defined["MODEL_FUSION_PROFILE"]()
-    comptime assert not COMBINED or FUSION, "combined study requires MODEL_FUSION_STUDY"
+    comptime assert not COMBINED or FUSION or PROFILE_FUSED, "combined study requires an explicit study or profile route"
     var candidate = 26 if COMBINED else 25
     var control = 0 if FUSION else -1
     var args = List[String]()

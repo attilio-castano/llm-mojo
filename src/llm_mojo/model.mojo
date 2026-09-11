@@ -83,8 +83,10 @@ def candidate_configuration(rows: Int, total: Int) -> Int:
 def select_configuration(policy: String, rows: Int, total: Int, device: String) raises -> Int:
     if rows < 1 or total < rows or total > 4096:
         raise Error("invalid configuration-selection dimensions")
-    if policy == "fusion" or policy == "combined":
+    if policy == "fusion" or policy == "combined" or policy == "unfused":
         if rows == 1 and device == "Apple M4 Pro":
+            if policy == "unfused":
+                return 0
             return 26 if policy == "combined" else 25
         return select_configuration("fast", rows, total, device)
     if policy == "baseline":
@@ -92,6 +94,9 @@ def select_configuration(policy: String, rows: Int, total: Int, device: String) 
     if policy == "auto" or policy == "fast":
         if device != "Apple M4 Pro":
             return 0
+        # Exact QKV + activation fusion; paired full-model gate at 64/1024/3968.
+        if rows == 1:
+            return 26
         # Full-model paired measurements, including baseline self-comparisons.
         # Every other measured winner is in the shared split8 lookup below.
         if rows == 16 and total == 256:

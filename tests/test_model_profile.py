@@ -12,6 +12,36 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class ModelProfileTests(unittest.TestCase):
+    def test_retained_combined_fusion_integrity(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import fusion_replay
+        source=repository_root()/'studies/model_generation'
+        original=json.loads(gzip.decompress((source/'combined-fusion.json.gz').read_bytes()))
+        for damage in (None,'ablation','sample','cache','dispatch','terminal','provenance'):
+            record=copy.deepcopy(original)
+            if damage=='ablation':
+                record['timing']['samples']=[r for r in record['timing']['samples'] if r['comparison']!=2]
+            elif damage=='sample': record['timing']['samples'].pop()
+            elif damage=='cache': record['timing']['numerical'][0]['observations'][0]['exact']=False
+            elif damage=='dispatch': record['captures'][1]['samples'].pop()
+            elif damage=='terminal': record['terminal']['blocks'][0]['arms'][0]['turns'][0]['generated'][0]=0
+            elif damage=='provenance': record['captures'][1]['provenance']['binary']['sha256']='0'*64
+            with tempfile.TemporaryDirectory() as tmp:
+                directory=Path(tmp)
+                raw=json.dumps(record).encode()
+                packed=gzip.compress(raw,mtime=0)
+                (directory/'combined-fusion.json.gz').write_bytes(packed)
+                (directory/'combined-fusion.json').write_text(json.dumps(dict(sha256=hashlib.sha256(packed).hexdigest(),
+                    uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with redirect_stdout(StringIO()):
+                    if damage is None:
+                        fusion_replay(directory,True)
+                        self.assertTrue(json.loads((directory/'combined-fusion-summary.json').read_text())['promote'])
+                    else:
+                        with self.assertRaises(ValueError): fusion_replay(directory,True)
+
     def test_retained_archive_rejects_rehashed_missing_evidence(self):
         from llm_mojo._repository import repository_root
         from llm_mojo.benchmarks.model_profile import replay

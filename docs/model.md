@@ -278,8 +278,11 @@ The upstream fixtures and numerical budgets are frozen. The materialized Mojo
 baseline, tiled prefill projections, and bounded decode experiments have passed
 their numerical checks and are documented in the [MLP study](../studies/mlp_sublayer/README.md).
 The standalone MLP defaults to rowwise mapping 0. The Fast model uses tiled
-mapping 7 for multi-row calls and mapping 0 for decode; no measured MLP decode
-candidate qualified for promotion. The accepted
+mapping 7 for multi-row calls and mapping 0's projections for decode. Its
+single-row M4 Pro route now fuses SiLU and multiply while retaining the exact
+intermediate BF16 rounding; see the
+[combined fusion study](../studies/model_generation/combined-fusion.md).
+The earlier MLP projection candidates did not qualify for promotion. The accepted
 [decoder composition](../studies/decoder_layer/selection.md) combines attention
 and MLP with workload-specific configurations, now integrated into the
 [complete model](generation.md).

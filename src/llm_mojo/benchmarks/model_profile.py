@@ -54,6 +54,7 @@ def assets(prepared):
 
 def build(output, prepared, fusion=False, combined=False):
     fusion = fusion or combined
+    default_combined = not fusion and contract.FAST_DECODE_CONFIGURATION == 26
     ensure_record_location(output)
     output.mkdir(parents=True, exist_ok=False)
     source = source_identity()
@@ -69,11 +70,11 @@ def build(output, prepared, fusion=False, combined=False):
         execute(command, output/f'{name}-build.log')
         binaries[name] = dict(sha256=sha(output/name), bytes=(output/name).stat().st_size)
     machine = stable_environment()
-    for prefix, fused in ([(1024,False),(1024,True)] if fusion else [(p,False) for p in contract.PREFIXES]):
-        name = f'profile-{prefix}'+('-fused' if fused else '')
+    for prefix, fused in ([(1024,False),(1024,True)] if fusion else [(p,default_combined) for p in contract.PREFIXES]):
+        name = f'profile-{prefix}'+('-fused' if fusion and fused else '')
         command = [environment_tool('mojo'), 'build', '-I', 'src',
                    *(['-D','MODEL_FUSION_STUDY'] if fusion else []),
-                   *(['-D','MODEL_COMBINED_STUDY'] if combined else []),
+                   *(['-D','MODEL_COMBINED_STUDY'] if combined or default_combined else []),
                    *(['-D','MODEL_FUSION_PROFILE'] if fused else []),
                    '-D', f'MODEL_PROFILE_PREFIX={prefix}',
                    '-D', 'MODEL_PREPARED='+identity['prepared'],
@@ -82,12 +83,12 @@ def build(output, prepared, fusion=False, combined=False):
         execute(command, output/f'{name}-build.log')
         binary = dict(sha256=sha(output/name), bytes=(output/name).stat().st_size)
         binaries[name] = binary
-        implementation = 'qwen_model_combined' if fused and combined else ('qwen_model_fused' if fused else 'qwen_model_fast')
+        implementation = 'qwen_model_combined' if fused and (combined or default_combined) else ('qwen_model_fused' if fused else 'qwen_model_fast')
         provenance = dict(schema_version=1, operation=contract.OPERATION,
                           implementation=implementation,
                           entrypoint=contract.ENTRYPOINTS[implementation],
                           repository=source['repository'], source_sha256=source['sources'],
-                          **machine, **contract.specification(prefix,fused,combined and fused),
+                          **machine, **contract.specification(prefix,fused,(combined or default_combined) and fused),
                           profile_warmup_iterations=10, profile_iterations=8,
                           profile_post_idle_milliseconds=250, binary=binary,
                           assets={k:v for k,v in identity.items() if k.endswith('_sha256')})
@@ -271,7 +272,12 @@ def export_trace(target):
                  '--output', target/(key+'.xml')], target/f'export-{key}.log')
 
 
-def curate(target, prefix, repeat, fused=False, combined=False):
+def curate(target, prefix, repeat, fused=None, combined=None):
+    provenance = json.loads((target/'profile.provenance.json').read_text())
+    if fused is None:
+        fused = provenance['implementation'] != 'qwen_model_fast'
+    if combined is None:
+        combined = provenance['implementation'] == 'qwen_model_combined'
     from .analyze_trace import analyze, read_table, integer, coalesce_compute_commands, segment_compute_commands
     arguments = SimpleNamespace(capture_receipt=target/'capture.json', submissions_xml=target/'submissions.xml',
                                 gpu_intervals_xml=target/'gpu-intervals.xml', toc_xml=target/'toc.xml',
@@ -423,7 +429,8 @@ def replay(directory):
         if hashlib.sha256(canonical).hexdigest() != capture['analysis']['capture_identity']['provenance']['sha256']:
             raise ValueError('retained provenance differs from captured build receipt')
         rows = capture['samples']
-        stages = contract.command_stages()
+        stages = contract.command_stages(provenance['implementation']!='qwen_model_fast',
+                                         provenance['implementation']=='qwen_model_combined')
         if Counter((r['iteration'],r['dispatch']) for r in rows) != Counter((i,d) for i in range(8) for d in range(len(stages))):
             raise ValueError('incomplete captured dispatch census')
         for row in rows:
@@ -479,7 +486,7 @@ def plot(directory):
               ('Vocabulary projection',{'vocabulary projection'},'#e8a044'),
               ('Inter-layer copies',{'inter-layer copy'},'#b86f85')]
     used = set().union(*(s for _,s,_ in groups))
-    groups.append(('Other GPU operations',set(s for _,s in contract.stages())-used,'#abb9c7'))
+    groups.append(('Other GPU operations',(set(s for _,s in contract.stages()) | set(s for _,s in contract.stages(True,True)))-used,'#abb9c7'))
     groups.append(('Buffer transfers',set(s for _,s,k in contract.command_stages() if k=='blit'),'#678d75'))
     bottoms = [0.]*3
     for name, stages, color in groups:
@@ -557,7 +564,7 @@ def fusion_terminal(directory, output):
         for fused in ([True,False] if block in (1,2) else [False,True]):
             report = output/f'b{block}-f{int(fused)}.tsv'
             command = list(map(str,[directory/'terminal',identity['prepared'],identity['tables'],128,256,
-                                    '',report,('combined' if receipt['declaration']==contract.COMBINED_DECLARATION else 'fusion') if fused else 'fast']))
+                                    '',report,('combined' if receipt['declaration']==contract.COMBINED_DECLARATION else 'fusion') if fused else 'unfused']))
             result = subprocess.run(command,cwd=repository_root(),env=environment(),input=inputs,
                                     stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=240)
             (output/f'b{block}-f{int(fused)}.txt').write_bytes(result.stdout)

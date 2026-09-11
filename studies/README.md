@@ -10,6 +10,7 @@ and [layouts](../docs/layouts.md) define the values, storage and ownership.
 
 | Study | What it establishes |
 | --- | --- |
+| [Combined QKV and activation fusion](model_generation/combined-fusion.md) | Promoted M4 Pro single-token Fast route: 16.9–19.4% lower latency, 86–90 tokens/s streaming medians, exact outputs and cache storage |
 | [QKV fusion experiment](model_generation/qkv-fusion.md) | Exact candidate with 12–15% measured token-latency reductions; kept experimental because short-context calibration prevented promotion |
 | [Complete token profile](model_generation/token-profile.md) | Where a roughly 17 ms decode step spends time, with host observations and complete Metal command traces |
 | [Native terminal chat](model_generation/chat.md) | Multi-turn cache reuse, exact history and terminal lifecycle, with paired prefill and actual interaction timings |
