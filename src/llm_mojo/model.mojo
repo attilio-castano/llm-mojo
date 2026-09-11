@@ -4,6 +4,7 @@ The cross-layer copy keeps the existing decoder alias contract intact. Numerical
 comparisons are diagnostics; storage and lifecycle invariants remain exact.
 """
 from std.memory import bitcast
+from std.ffi import external_call
 from std.gpu import global_idx
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -12,6 +13,10 @@ from llm_mojo.mlp import MLPWeights, MLPWorkspace
 from llm_mojo.decoder_layer import _decoder_preflight, decoder_mappings, enqueue_decoder_layer_configuration
 from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.linear import enqueue_linear_apple_gpu
+
+
+def _observation_clock() -> UInt64:
+    return external_call["clock_gettime_nsec_np", UInt64](UInt32(8))
 
 
 def load_bf16(buffer: DeviceBuffer[DType.bfloat16], path: String, source_elements: Int = 0) raises:
@@ -132,6 +137,8 @@ struct QwenModel(Movable):
     var length: Int
     var valid: Bool
     var submitted_rows: Int
+    # Host-only observation storage. Default specializations contain no clocks.
+    var observation: List[UInt64]
 
     def __init__(out self, ctx: DeviceContext, path: String, capacity: Int, max_rows: Int) raises:
         if ctx.api() != "metal" or capacity < 1 or capacity > 4096 or max_rows < 1 or max_rows > capacity:
@@ -141,6 +148,9 @@ struct QwenModel(Movable):
         self.length = 0
         self.valid = True
         self.submitted_rows = 0
+        self.observation = List[UInt64](capacity=10)
+        for _ in range(10):
+            self.observation.append(0)
         self.embedding = ctx.enqueue_create_buffer[DType.bfloat16](151936*896)
         self.norm = ctx.enqueue_create_buffer[DType.bfloat16](896)
         load_bf16(self.embedding,path+"/embedding.bin")
@@ -192,24 +202,32 @@ struct QwenModel(Movable):
                 TileTensor(self.input,row_major(rows,896)),True,
                 Int(mappings[0]),Int(mappings[1]),Int(mappings[2]))
 
-    def forward(mut self, ctx: DeviceContext, ids: List[Int], configuration: Int = 0, capture: String = "") raises:
+    def forward[OBSERVE: Bool = False](mut self, ctx: DeviceContext, ids: List[Int], configuration: Int = 0, capture: String = "") raises:
         """Submit all layers. ID upload synchronizes; layer execution does not.
 
         Native inference API. The host token
         staging boundary is measured separately from a future enqueue API.
         """
+        comptime if OBSERVE:
+            self.observation[0] = _observation_clock()
         self.preflight(ctx,ids,configuration)
+        comptime if OBSERVE:
+            self.observation[1] = _observation_clock()
         var rows = len(ids)
         try:
             with self.tokens.map_to_host() as mapped:
                 for i in range(rows):
                     mapped.unsafe_ptr()[unsafe_offset=i] = Int32(ids[i])
+            comptime if OBSERVE:
+                self.observation[2] = _observation_clock()
             var token_view = TileTensor(self.tokens,row_major(rows))
             var weight_view = TileTensor(self.embedding,row_major(151936,896))
             var input_view = TileTensor(self.input,row_major(rows,896))
             comptime embedding_kernel = _embedding[type_of(token_view.layout),type_of(weight_view.layout),type_of(input_view.layout)]
             ctx.enqueue_function[embedding_kernel](token_view,weight_view,input_view,Int32(rows),
                 grid_dim=(rows*896+255)//256,block_dim=256)
+            comptime if OBSERVE:
+                self.observation[3] = _observation_clock()
             if capture.byte_length() > 0:
                 save_bf16(self.input,capture+"/hidden_0.bin",rows*896)
             for i in range(24):
@@ -226,11 +244,15 @@ struct QwenModel(Movable):
                     ctx.enqueue_function[_copy_rows[type_of(input_view.layout),type_of(input_view.layout)]](TileTensor(self.mlp.output,row_major(rows,896)),
                         TileTensor(self.input,row_major(rows,896)),Int32(rows),
                         grid_dim=(rows*896+255)//256,block_dim=256)
+            comptime if OBSERVE:
+                self.observation[4] = _observation_clock()
             enqueue_rms_norm_apple_gpu(ctx,
                 TileTensor(self.mlp.output.unsafe_ptr().unsafe_offset((rows-1)*896),row_major(1,896)),
                 TileTensor(self.norm,row_major(896)),TileTensor(self.normalized,row_major(1,896)))
             enqueue_linear_apple_gpu(ctx,TileTensor(self.normalized,row_major(1,896)),
                 TileTensor(self.embedding,row_major(151936,896)),TileTensor(self.logits,row_major(1,151936)))
+            comptime if OBSERVE:
+                self.observation[5] = _observation_clock()
             if capture.byte_length() > 0:
                 save_bf16(self.normalized,capture+"/final_norm.bin",896)
                 save_bf16(self.logits,capture+"/logits.bin",151936)
@@ -240,14 +262,18 @@ struct QwenModel(Movable):
             self.valid = False
             raise error
 
-    def greedy(mut self, ctx: DeviceContext) raises -> Int:
+    def greedy[OBSERVE: Bool = False](mut self, ctx: DeviceContext) raises -> Int:
         """Host reference argmax: lowest ID on ties; reject nonfinite logits."""
+        comptime if OBSERVE:
+            self.observation[6] = _observation_clock()
         if not self.valid or self.length == 0:
             raise Error("no valid next-token logits")
         try:
             var winner = 0
             var best = Float32(-3.402823466e38)
             with self.logits.map_to_host() as mapped:
+                comptime if OBSERVE:
+                    self.observation[7] = _observation_clock()
                 for i in range(151936):
                     var value = mapped.unsafe_ptr()[unsafe_offset=i].cast[DType.float32]()
                     if value != value or value > Float32(3.402823466e38) or value < Float32(-3.402823466e38):
@@ -255,6 +281,10 @@ struct QwenModel(Movable):
                     if value > best:
                         best = value
                         winner = i
+                comptime if OBSERVE:
+                    self.observation[8] = _observation_clock()
+            comptime if OBSERVE:
+                self.observation[9] = _observation_clock()
             return winner
         except error:
             self.valid = False

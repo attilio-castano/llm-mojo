@@ -4,12 +4,15 @@ from . import attention_prefill_contract as prefill
 from . import attention_sublayer_contract as sublayer
 from . import mlp_contract as mlp
 from . import decoder_layer_contract as decoder
+from . import model_contract as model
 
-OPERATIONS = (decode.OPERATION,prefill.OPERATION,sublayer.OPERATION,mlp.OPERATION,decoder.OPERATION)
-ENTRYPOINTS = {**decode.ENTRYPOINTS,**prefill.ENTRYPOINTS,**sublayer.ENTRYPOINTS,**mlp.ENTRYPOINTS,**decoder.ENTRYPOINTS}
+OPERATIONS = (decode.OPERATION,prefill.OPERATION,sublayer.OPERATION,mlp.OPERATION,decoder.OPERATION,model.OPERATION)
+ENTRYPOINTS = {**decode.ENTRYPOINTS,**prefill.ENTRYPOINTS,**sublayer.ENTRYPOINTS,**mlp.ENTRYPOINTS,**decoder.ENTRYPOINTS,**model.ENTRYPOINTS}
 
 
 def target_fields(operation):
+    if operation == model.OPERATION:
+        return model.TARGET_FIELDS
     if operation == decoder.OPERATION:
         return decoder.TARGET_FIELDS
     if operation == mlp.OPERATION:
@@ -20,6 +23,8 @@ def target_fields(operation):
 
 
 def configuration(data):
+    if data.get('operation') == model.OPERATION:
+        return model.configuration(data)
     if data.get("operation") == decoder.OPERATION:
         return decoder.configuration(data)
     if data.get('operation') == mlp.OPERATION:

@@ -107,6 +107,14 @@ both compressed and original hashes before returning the full record.
 
 ## Focused Metal profiling
 
+The complete resident Qwen decode study uses
+`uv run --locked python -m llm_mojo.benchmarks.model_profile` with `build`,
+`collect`, `capture`, `terminal`, `archive` and offline `replay` commands.
+Its [bounded plan](../../../studies/model_generation/token-profile-plan.md)
+defines fixed histories, observation overhead controls and full-model trace
+coverage. It reuses the capture/analyzer submission join and requires verified
+local model assets; operation-level synthetic fixtures are not a substitute.
+
 Profile curation accepts one `--attention-study` name: `baseline`, `wo`,
 `decode`, `prefill`, `projections`, `parallelism`, or `combined`. Parallelism
 also requires `--parallelism-variants` with the selected finalists. Historical

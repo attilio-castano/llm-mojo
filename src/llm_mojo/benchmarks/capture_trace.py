@@ -276,8 +276,8 @@ def parse_target_identity(output: str) -> dict[str, Any]:
             raise ValueError("expected exactly one 'profile workload' line")
         identity["profile_workload"] = workload_matches[0]
         extra_fields = (("output features", "output_features"),)
-        if workload_matches[0].startswith(("decode-", "prefill-", "sublayer-", "mlp-", "decoder-")):
-            operation = ("decoder_layer" if workload_matches[0].startswith("decoder-") else "mlp" if workload_matches[0].startswith("mlp-") else "attention_sublayer" if workload_matches[0].startswith("sublayer-") else
+        if workload_matches[0].startswith(("decode-", "prefill-", "sublayer-", "mlp-", "decoder-", "model-")):
+            operation = ("qwen_model" if workload_matches[0].startswith("model-") else "decoder_layer" if workload_matches[0].startswith("decoder-") else "mlp" if workload_matches[0].startswith("mlp-") else "attention_sublayer" if workload_matches[0].startswith("sublayer-") else
                          "grouped_query_attention_prefill" if workload_matches[0].startswith("prefill-") else
                          "grouped_query_attention_decode")
             extra_fields = tuple(
