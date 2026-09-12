@@ -13,6 +13,7 @@ from llm_mojo.mlp import MLPWeights, MLPWorkspace
 from llm_mojo.decoder_layer import _decoder_preflight, decoder_mappings, enqueue_decoder_layer_configuration
 from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.linear import enqueue_linear_apple_gpu
+from llm_mojo.token_selection import enqueue_argmax, enqueue_head_argmax
 
 
 def _observation_clock() -> UInt64:
@@ -83,6 +84,8 @@ def candidate_configuration(rows: Int, total: Int) -> Int:
 def select_configuration(policy: String, rows: Int, total: Int, device: String) raises -> Int:
     if rows < 1 or total < rows or total > 4096:
         raise Error("invalid configuration-selection dimensions")
+    if policy == "gpu-argmax" or policy == "fused-head":
+        return select_configuration("fast",rows,total,device)
     if policy == "fusion" or policy == "combined" or policy == "unfused":
         if rows == 1 and device == "Apple M4 Pro":
             if policy == "unfused":
@@ -109,6 +112,17 @@ def select_configuration(policy: String, rows: Int, total: Int, device: String) 
     if policy == "0" or policy == "2" or policy == "3" or policy == "21":
         return Int(policy)
     raise Error("unknown generation configuration policy")
+
+
+def select_token_selection(policy: String, rows: Int, device: String) raises -> Int:
+    if rows < 1:
+        raise Error("invalid selection row count")
+    if rows == 1 and device == "Apple M4 Pro":
+        if policy == "gpu-argmax":
+            return 1
+        if policy == "fused-head":
+            return 2
+    return 0
 
 
 struct ModelLayer(Movable):
@@ -140,6 +154,9 @@ struct QwenModel(Movable):
     var input: DeviceBuffer[DType.bfloat16]
     var normalized: DeviceBuffer[DType.bfloat16]
     var logits: DeviceBuffer[DType.bfloat16]
+    var selection_partials: DeviceBuffer[DType.uint32]
+    var selection_result: DeviceBuffer[DType.uint32]
+    var selection: Int
     var tokens: DeviceBuffer[DType.int32]
     var capacity: Int
     var max_rows: Int
@@ -173,6 +190,9 @@ struct QwenModel(Movable):
         self.input = ctx.enqueue_create_buffer[DType.bfloat16](max_rows*896)
         self.normalized = ctx.enqueue_create_buffer[DType.bfloat16](896)
         self.logits = ctx.enqueue_create_buffer[DType.bfloat16](151936)
+        self.selection_partials = ctx.enqueue_create_buffer[DType.uint32](2374*3)
+        self.selection_result = ctx.enqueue_create_buffer[DType.uint32](3)
+        self.selection = 0
         self.tokens = ctx.enqueue_create_buffer[DType.int32](max_rows)
         # Preparation stores all 4096 positions; only capacity rows are resident.
         load_bf16(self.attention.cosine,path+"/cosine.bin",4096*64)
@@ -195,6 +215,7 @@ struct QwenModel(Movable):
         if (len(self.embedding) != 151936*896 or len(self.norm) != 896
             or len(self.input) != self.max_rows*896 or len(self.tokens) != self.max_rows
             or len(self.normalized) != 896 or len(self.logits) != 151936
+            or len(self.selection_partials) != 2374*3 or len(self.selection_result) != 3
             or self.attention.capacity != self.capacity
             or self.attention.max_rows != self.max_rows or self.mlp.max_rows != self.max_rows):
             raise Error("inconsistent model allocation geometry")
@@ -211,14 +232,19 @@ struct QwenModel(Movable):
                 TileTensor(self.input,row_major(rows,896)),True,
                 Int(mappings[0]),Int(mappings[1]),Int(mappings[2]))
 
-    def forward[OBSERVE: Bool = False](mut self, ctx: DeviceContext, ids: List[Int], configuration: Int = 0, capture: String = "") raises:
+    def forward[OBSERVE: Bool = False](mut self, ctx: DeviceContext, ids: List[Int], configuration: Int = 0, capture: String = "", selection: Int = 0, materialize: Bool = False) raises:
         """Submit all layers. ID upload synchronizes; layer execution does not.
 
         Native inference API. The host token
         staging boundary is measured separately from a future enqueue API.
+        Selection 0 materializes logits for CPU greedy; 1 adds GPU argmax;
+        2 fuses projection/local selection and leaves logits untouched unless
+        materialize or capture is requested. greedy reads the matching result.
         """
         comptime if OBSERVE:
             self.observation[0] = _observation_clock()
+        if selection < 0 or selection > 2:
+            raise Error("unknown token selection mode")
         self.preflight(ctx,ids,configuration)
         comptime if OBSERVE:
             self.observation[1] = _observation_clock()
@@ -263,8 +289,22 @@ struct QwenModel(Movable):
             enqueue_rms_norm_apple_gpu(ctx,
                 TileTensor(self.mlp.output.unsafe_ptr().unsafe_offset((rows-1)*896),row_major(1,896)),
                 TileTensor(self.norm,row_major(896)),TileTensor(self.normalized,row_major(1,896)))
-            enqueue_linear_apple_gpu(ctx,TileTensor(self.normalized,row_major(1,896)),
-                TileTensor(self.embedding,row_major(151936,896)),TileTensor(self.logits,row_major(1,151936)))
+            var partials = TileTensor(self.selection_partials,row_major(2374,3))
+            var result = TileTensor(self.selection_result,row_major(1,3))
+            var logits = TileTensor(self.logits,row_major(1,151936))
+            if selection == 2:
+                if materialize or capture.byte_length() > 0:
+                    enqueue_head_argmax[True](ctx,TileTensor(self.normalized,row_major(1,896)),
+                        TileTensor(self.embedding,row_major(151936,896)),logits,partials,result)
+                else:
+                    enqueue_head_argmax[False](ctx,TileTensor(self.normalized,row_major(1,896)),
+                        TileTensor(self.embedding,row_major(151936,896)),logits,partials,result)
+            else:
+                enqueue_linear_apple_gpu(ctx,TileTensor(self.normalized,row_major(1,896)),
+                    TileTensor(self.embedding,row_major(151936,896)),logits)
+                if selection == 1:
+                    enqueue_argmax(ctx,logits,partials,result)
+            self.selection = selection
             comptime if OBSERVE:
                 self.observation[5] = _observation_clock()
             if capture.byte_length() > 0:
@@ -277,12 +317,27 @@ struct QwenModel(Movable):
             raise error
 
     def greedy[OBSERVE: Bool = False](mut self, ctx: DeviceContext) raises -> Int:
-        """Host reference argmax: lowest ID on ties; reject nonfinite logits."""
+        """Read the selected route: lowest ID on ties; reject any nonfinite logit."""
         comptime if OBSERVE:
             self.observation[6] = _observation_clock()
         if not self.valid or self.length == 0:
             raise Error("no valid next-token logits")
         try:
+            if self.selection != 0:
+                var selected: Int
+                with self.selection_result.map_to_host() as mapped:
+                    comptime if OBSERVE:
+                        self.observation[7] = _observation_clock()
+                    if mapped.unsafe_ptr()[unsafe_offset=2] != 0:
+                        raise Error("nonfinite model logits")
+                    selected = Int(mapped.unsafe_ptr()[unsafe_offset=1])
+                    if selected < 0 or selected >= 151936:
+                        raise Error("invalid GPU token result")
+                    comptime if OBSERVE:
+                        self.observation[8] = _observation_clock()
+                comptime if OBSERVE:
+                    self.observation[9] = _observation_clock()
+                return selected
             var winner = 0
             var best = Float32(-3.402823466e38)
             with self.logits.map_to_host() as mapped:

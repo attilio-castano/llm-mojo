@@ -37,18 +37,22 @@ def poison_outputs(mut model: QwenModel, prefix: Int) raises:
                 mapped.unsafe_ptr()[unsafe_offset=prefix*128+column] = sentinel
 
 
-def step[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext, ids: List[Int], configuration: Int = -1) raises -> Int:
-    model.forward[OBSERVE](ctx,ids,configuration if configuration >= 0 else select_configuration("fast",1,model.length+1,ctx.name()))
+def step[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext, ids: List[Int], configuration: Int = -1, selection: Int = 0, materialize: Bool = False) raises -> Int:
+    model.forward[OBSERVE](ctx,ids,configuration if configuration >= 0 else select_configuration("fast",1,model.length+1,ctx.name()),"",selection,materialize)
     return model.greedy[OBSERVE](ctx)
 
 
 def main() raises:
+    comptime SELECTION = is_defined["MODEL_SELECTION_STUDY"]()
     comptime COMBINED = is_defined["MODEL_COMBINED_STUDY"]()
     comptime FUSION = is_defined["MODEL_FUSION_STUDY"]()
     comptime PROFILE_FUSED = is_defined["MODEL_FUSION_PROFILE"]()
     comptime assert not COMBINED or FUSION or PROFILE_FUSED, "combined study requires an explicit study or profile route"
     var candidate = 26 if COMBINED else 25
-    var control = 0 if FUSION else -1
+    var control = 26 if SELECTION else (0 if FUSION else -1)
+    var selection_control = 0
+    var selection_candidate = 0
+    comptime PROFILE_SELECTION = get_defined_int["MODEL_SELECTION_PROFILE", 0]()
     var args = List[String]()
     comptime if is_defined["MODEL_PROFILE_PREFIX"]():
         args = ["model","profile",String(get_defined_string["MODEL_PREPARED"]()),
@@ -65,8 +69,14 @@ def main() raises:
     var comparison = Int(args[6])
     if ((mode != "bench" and mode != "verify" and mode != "profile")
         or (prefix != 64 and prefix != 1024 and prefix != 3968)
-        or first < 0 or first > 1 or comparison < 0 or comparison > (2 if COMBINED else 1)):
+        or first < 0 or first > 1 or comparison < 0 or comparison > (3 if SELECTION else (2 if COMBINED else 1))):
         raise Error("invalid frozen model profiling workload")
+    if SELECTION and mode == "verify" and comparison != 1 and comparison != 2:
+        raise Error("selection verification requires candidate 1 or 2")
+    if SELECTION:
+        candidate = 26
+        selection_control = 1 if comparison == 3 else 0
+        selection_candidate = 2 if comparison >= 2 else comparison
     if COMBINED and comparison == 2:
         control = 25
     var ctx = DeviceContext()
@@ -108,13 +118,38 @@ def main() raises:
         rewind(model,prefix)
         poison_outputs(model,prefix)
         var observed: Int
-        comptime if FUSION:
+        comptime if SELECTION:
+            observed = step[False](model,ctx,ids,26,selection_candidate,True)
+        elif FUSION:
             observed = step[False](model,ctx,ids,candidate)
         else:
             observed = step[True](model,ctx,ids)
         snapshot(model,args[7]+"/observed")
         if plain != observed or model.length != prefix+1 or model.submitted_rows != 24*(prefix+1):
             raise Error("instrumentation changed token or accounting")
+        comptime if SELECTION:
+            rewind(model,prefix)
+            poison_outputs(model,prefix)
+            model.selection_partials.enqueue_fill(0xDEADBEEF)
+            model.selection_result.enqueue_fill(0xDEADBEEF)
+            if step[False](model,ctx,ids,26,selection_candidate) != plain:
+                raise Error("nonmaterializing selection changed winner")
+            snapshot(model,args[7]+"/actual")
+            if selection_candidate == 2:
+                with model.logits.map_to_host() as mapped:
+                    for i in range(151936):
+                        if bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=i]) != 0x7FC0:
+                            raise Error("fused timed path wrote logits")
+            # The public greedy lifecycle must reject a nonfinite flag.
+            with model.selection_result.map_to_host() as mapped:
+                mapped.unsafe_ptr()[unsafe_offset=2] = 1
+            var rejected = False
+            try:
+                _ = model.greedy(ctx)
+            except:
+                rejected = True
+            if not rejected or model.valid:
+                raise Error("nonfinite selection did not invalidate model")
         var record = String()
         for i in range(prefix+1):
             record += String(history[i])+"\n"
@@ -125,22 +160,29 @@ def main() raises:
     if mode == "profile":
         for _ in range(10):
             rewind(model,prefix)
-            if step[False](model,ctx,ids,candidate if PROFILE_FUSED else control) != winner:
+            if step[False](model,ctx,ids,candidate if PROFILE_FUSED else control,PROFILE_SELECTION) != winner:
                 raise Error("unstable profile prediction")
         print("correctness: passed")
-        print("profile implementation:", ("QwenModel.forward+greedy-combined" if COMBINED else "QwenModel.forward+greedy-fused") if PROFILE_FUSED else "QwenModel.forward+greedy")
+        comptime if SELECTION:
+            print("profile implementation:","QwenModel.forward+greedy-"+("gpu-argmax" if PROFILE_SELECTION == 1 else ("fused-head" if PROFILE_SELECTION == 2 else "combined")))
+        else:
+            print("profile implementation:", ("QwenModel.forward+greedy-combined" if COMBINED else "QwenModel.forward+greedy-fused") if PROFILE_FUSED else "QwenModel.forward+greedy")
         print("rows: 1")
         print("hidden: 896")
         print("key value rows:",prefix+1)
-        print("profile workload:","model-p"+String(prefix)+(("-combined" if COMBINED else "-fused") if PROFILE_FUSED else ""))
-        print("profile dispatches per iteration:",(314 if COMBINED else 338) if PROFILE_FUSED else 410)
+        comptime if SELECTION:
+            print("profile workload:","model-p"+String(prefix)+("-gpu-argmax" if PROFILE_SELECTION == 1 else ("-fused-head" if PROFILE_SELECTION == 2 else "-combined")))
+            print("profile dispatches per iteration:",314+(2 if PROFILE_SELECTION == 1 else (1 if PROFILE_SELECTION == 2 else 0)))
+        else:
+            print("profile workload:","model-p"+String(prefix)+(("-combined" if COMBINED else "-fused") if PROFILE_FUSED else ""))
+            print("profile dispatches per iteration:",(314 if COMBINED else 338) if PROFILE_FUSED else 410)
         print("warmup iterations: 10")
         print("profile iterations: 8")
         print("post-profile idle milliseconds: 250")
         print("PROFILE_REGION_BEGIN")
         for _ in range(8):
             rewind(model,prefix)
-            if step[False](model,ctx,ids,candidate if PROFILE_FUSED else control) != winner:
+            if step[False](model,ctx,ids,candidate if PROFILE_FUSED else control,PROFILE_SELECTION) != winner:
                 raise Error("unstable profile prediction")
         print("PROFILE_REGION_END")
         sleep(0.25)
@@ -148,7 +190,7 @@ def main() raises:
     var records = String()
     for arm_index in range(2):
         var arm = (first+arm_index)%2
-        var observe = comparison == 1 and arm == 1 and not FUSION
+        var observe = comparison == 1 and arm == 1 and not FUSION and not SELECTION
         for sample in range(20):
             rewind(model,prefix)
             var start = _observation_clock()
@@ -156,7 +198,7 @@ def main() raises:
             if observe:
                 selected = step[True](model,ctx,ids)
             else:
-                selected = step[False](model,ctx,ids,candidate if FUSION and comparison >= 1 and arm == 1 else control)
+                selected = step[False](model,ctx,ids,candidate if FUSION and comparison >= 1 and arm == 1 else control,selection_candidate if arm == 1 else selection_control)
             var elapsed = _observation_clock()-start
             if selected != winner or model.submitted_rows != 24*(prefix+1):
                 raise Error("measurement prediction/accounting changed")

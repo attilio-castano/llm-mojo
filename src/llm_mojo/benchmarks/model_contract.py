@@ -5,6 +5,8 @@ OPERATION = 'qwen_model'
 # Current default builds follow Fast; historical receipts retain their own route.
 FAST_DECODE_CONFIGURATION = 26
 ENTRYPOINTS = {'qwen_model_fast': 'QwenModel.forward+greedy', 'qwen_model_fused': 'QwenModel.forward+greedy-fused', 'qwen_model_combined':'QwenModel.forward+greedy-combined'}
+ENTRYPOINTS.update(qwen_model_gpu_argmax='QwenModel.forward+greedy-gpu-argmax', qwen_model_fused_head='QwenModel.forward+greedy-fused-head')
+SELECTIONS = {'qwen_model_gpu_argmax':1, 'qwen_model_fused_head':2}
 TARGET_FIELDS = ('profile_workload', 'dispatches_per_iteration', 'key_value_rows')
 PREFIXES = (64, 1024, 3968)
 DECLARATION = dict(model='Qwen2.5-0.5B-Instruct', policy='fast', batch=1,
@@ -19,7 +21,8 @@ DECLARATION = dict(model='Qwen2.5-0.5B-Instruct', policy='fast', batch=1,
                    trace_boundary='normal forward+greedy; fixed logical prefix; no layer synchronizations')
 
 
-def stages(fused=False, combined=False):
+def stages(fused=False, combined=False, selection=0):
+    combined = combined or bool(selection)
     fused = fused or combined
     result = [(-1, 'embedding')]
     for layer in range(24):
@@ -29,10 +32,13 @@ def stages(fused=False, combined=False):
                       and not (combined and name=='multiply'))
         if layer < 23:
             result.append((layer, 'inter-layer copy'))
-    return result + [(-1, 'final RMSNorm'), (-1, 'vocabulary projection')]
+    head = [(-1, 'fused vocabulary/local argmax'),(-1, 'argmax finish')] if selection == 2 else [(-1, 'vocabulary projection')]
+    if selection == 1:
+        head += [(-1,'argmax partials'),(-1,'argmax finish')]
+    return result + [(-1, 'final RMSNorm')] + head
 
 
-def command_stages(fused=False, combined=False):
+def command_stages(fused=False, combined=False, selection=0):
     """Observed Metal mapping protocol: two token blits, compute, two logit blits.
 
     These transfers supplement the 410 compute dispatches in the original
@@ -40,12 +46,12 @@ def command_stages(fused=False, combined=False):
     submissions that lack a compute interval.
     """
     return ([(-1, 'token buffer map', 'blit'), (-1, 'token buffer unmap', 'blit')]
-            + [(layer, name, 'compute') for layer, name in stages(fused, combined)]
-            + [(-1, 'logit buffer map', 'blit'), (-1, 'logit buffer unmap', 'blit')])
+            + [(layer, name, 'compute') for layer, name in stages(fused, combined, selection)]
+            + [(-1, ('winner' if selection else 'logit')+' buffer map', 'blit'), (-1, ('winner' if selection else 'logit')+' buffer unmap', 'blit')])
 
 
-def validate_command_sequence(rows, fused=False, combined=False):
-    expected = command_stages(fused, combined)
+def validate_command_sequence(rows, fused=False, combined=False, selection=0):
+    expected = command_stages(fused, combined, selection)
     if not rows or len(rows) % len(expected):
         raise ValueError('incomplete model compute/transfer sequence')
     for index, row in enumerate(rows):
@@ -55,11 +61,11 @@ def validate_command_sequence(rows, fused=False, combined=False):
             raise ValueError('model compute/transfer ordering changed')
 
 
-def specification(prefix, fused=False, combined=False):
+def specification(prefix, fused=False, combined=False, selection=0):
     if type(prefix) is not int or prefix not in PREFIXES:
         raise ValueError('undeclared Qwen profiling context')
     return dict(profile_rows=1, hidden_size=896, key_value_rows=prefix+1,
-                profile_workload=f'model-p{prefix}'+('-combined' if combined else ('-fused' if fused else '')), dispatches_per_iteration=len(stages(fused, combined)))
+                profile_workload=f'model-p{prefix}'+('-gpu-argmax' if selection == 1 else ('-fused-head' if selection == 2 else ('-combined' if combined else ('-fused' if fused else '')))), dispatches_per_iteration=len(stages(fused, combined, selection)))
 
 
 def configuration(data):
@@ -69,7 +75,7 @@ def configuration(data):
     total = data.get('key_value_rows')
     if type(total) is not int:
         raise ValueError('invalid Qwen cache length')
-    expected = specification(total-1, data['implementation']=='qwen_model_fused', data['implementation']=='qwen_model_combined')
+    expected = specification(total-1, data['implementation']=='qwen_model_fused', data['implementation']=='qwen_model_combined', SELECTIONS.get(data['implementation'],0))
     if any(type(data.get(k)) is not type(v) or data.get(k) != v for k, v in expected.items()):
         raise ValueError('Qwen trace geometry changed')
     if data.get('profile_iterations') != 8 or data.get('profile_warmup_iterations') != 10:
@@ -88,3 +94,11 @@ COMBINED_DECLARATION = {**FUSION_DECLARATION, 'policy':'configuration 26 vs 0; a
     'comparisons':['control/control','combined/control','combined/qkv-only'],
     'candidate':'single-row QKV/RoPE/cache fusion plus exact SiLU/multiply fusion',
     'ablation':'Four additional paired blocks per context, ten warmups and ten samples per arm; all four combined/QKV-only ratios must be below one at every context.'}
+
+
+SELECTION_DECLARATION = {**DECLARATION, 'policy':'configuration 26 with CPU, GPU argmax, or fused head selection',
+    'comparisons':['cpu/cpu','gpu-argmax/cpu','fused-head/cpu','fused-head/gpu-argmax'],
+    'candidate':'1024-logit argmax groups; 64-logit fused projection groups; 128 threads; final reduction; 12-byte result',
+    'trace_repeats':1, 'trace_contexts':[1024], 'trace_arms':['cpu','gpu-argmax','fused-head'],
+    'promotion':FUSION_DECLARATION['promotion'],
+    'choice':'Prefer qualifying GPU argmax unless fused head also clears the same gate against it; otherwise choose the sole qualifier or retain CPU.'}

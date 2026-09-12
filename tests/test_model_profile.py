@@ -12,6 +12,33 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class ModelProfileTests(unittest.TestCase):
+    def test_selection_geometry_and_conservative_choice(self):
+        from llm_mojo.benchmarks.model_profile import selection_summary
+        self.assertEqual([len(contract.stages(True,True,s)) for s in range(3)],[314,316,315])
+        for selection,implementation in enumerate(['qwen_model_combined','qwen_model_gpu_argmax','qwen_model_fused_head']):
+            fields=contract.specification(1024,True,True,selection)
+            contract.configuration(dict(implementation=implementation,entrypoint=contract.ENTRYPOINTS[implementation],
+                **fields,profile_iterations=8,profile_warmup_iterations=10))
+        samples=[dict(prefix=p,block=b,comparison=c,arm=a,sample=s,marks=[],elapsed_ns=10000000)
+                 for p in contract.PREFIXES for b in range(4) for c in range(4) for a in range(2) for s in range(10)]
+        self.assertEqual(selection_summary(samples)['selected'],0)
+        for row in samples:
+            if row['comparison'] in (1,2) and row['arm']==1:
+                row['elapsed_ns']=9000000
+        self.assertEqual(selection_summary(samples)['selected'],1)
+        for row in samples:
+            if row['comparison']==3 and row['arm']==1:
+                row['elapsed_ns']=9000000
+        self.assertEqual(selection_summary(samples)['selected'],2)
+        # A single losing context prevents a promotion; noise is not ignored.
+        for row in samples:
+            if row['prefix']==3968 and row['comparison']==0 and row['arm']==1:
+                row['elapsed_ns']=12000000
+        self.assertEqual(selection_summary(samples)['selected'],0)
+        with self.assertRaises(ValueError): selection_summary(samples[:-1])
+        samples[0]['marks']=[1]
+        with self.assertRaises(ValueError): selection_summary(samples)
+
     def test_retained_combined_fusion_integrity(self):
         from contextlib import redirect_stdout
         from io import StringIO

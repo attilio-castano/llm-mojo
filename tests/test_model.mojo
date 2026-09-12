@@ -4,11 +4,18 @@ from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext
 from llm_mojo.model import _embedding, _copy_rows, load_bf16, save_bf16
 from std.memory import bitcast
-from llm_mojo.model import select_configuration
+from llm_mojo.model import select_configuration, select_token_selection
 from llm_mojo.generate_cli import generation_budget, is_stop
 
 
 def test_generation_limits_and_policy() raises:
+    for policy in ["fast","auto","combined","fusion","unfused","baseline"]:
+        assert_equal(select_token_selection(policy,1,"Apple M4 Pro"),0)
+    for policy in ["gpu-argmax","fused-head"]:
+        assert_equal(select_configuration(policy,1,64,"Apple M4 Pro"),26)
+        assert_equal(select_token_selection(policy,1,"Apple M4 Pro"),1 if policy == "gpu-argmax" else 2)
+        assert_equal(select_token_selection(policy,16,"Apple M4 Pro"),0)
+        assert_equal(select_token_selection(policy,1,"other"),0)
     assert_equal(generation_budget(4096,32),0)
     assert_equal(generation_budget(4095,32),1)
     assert_equal(generation_budget(1,0),0)
