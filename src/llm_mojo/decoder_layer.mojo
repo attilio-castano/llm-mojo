@@ -160,7 +160,8 @@ def enqueue_decoder_layer[XL: TensorLayout](
     before consuming mlp.output. input_normalized requires the current row's
     input normalization already stored in attention.normalized.
     """
-    if decode_variant and (decode_variant < 0 or decode_variant > 5 or Int(x.dim[0]()) != 1 or not fuse_residual_norm):
+    if decode_variant and (decode_variant < 0 or decode_variant > 5 or Int(x.dim[0]()) != 1
+        or not fuse_residual_norm or mw.hidden != 896 or mw.intermediate != 4864):
         raise Error("projection study requires all-three Qwen decode")
     if (fuse_residual_norm or input_normalized) and (not fuse_qkv or not fuse_activation or aw.hidden != 896):
         raise Error("residual/norm fusion requires Qwen configuration 26")

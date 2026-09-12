@@ -416,8 +416,10 @@ native structure checks, not preparation or Python's startup SHA-256 checks.
 The [QKV fusion experiment](../../../studies/model_generation/qkv-fusion.md)
 extends `model_profile` with `build --fusion`, the same calibrated collection
 matrix, and `fusion-capture`, `fusion-terminal`, `fusion-archive`,
-`fusion-replay` and `fusion-plot`. Configuration 25 remains experimental;
-Fast continues selecting the control for decode.
+`fusion-replay` and `fusion-plot`. Configuration 25 remains an explicit study
+arm. Default single-row M4 Pro Fast uses configuration 26 together with residual
+normalization fusion, buffer swapping and GPU argmax; see the
+[composed promotion](../../../studies/model_generation/residual-norm.md).
 
 ### Runtime enqueue boundary
 

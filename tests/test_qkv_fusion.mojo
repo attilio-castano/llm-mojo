@@ -4,7 +4,8 @@ from llm_mojo.attention_sublayer import (
     _unpack_qkv, _append, enqueue_attention_sublayer_integrated,
 )
 from llm_mojo.rope import enqueue_rope_apple_gpu
-from llm_mojo.decoder_layer import decoder_mappings
+from llm_mojo.decoder_layer import decoder_mappings, enqueue_decoder_layer
+from llm_mojo.mlp import MLPWeights, MLPWorkspace
 from max.gpu.host import DeviceBuffer, DeviceContext
 from layout import TileTensor, row_major
 from std.memory import bitcast
@@ -110,6 +111,57 @@ def test_fusion_rejects_non_decode_before_mutation() raises:
         _ = decoder_mappings(26,2)
     assert_equal(decoder_mappings(26,1),decoder_mappings(0,1))
     assert_equal(decoder_mappings(25,1),decoder_mappings(0,1))
+
+
+def test_projection_study_rejects_mlp_width_before_mutation() raises:
+    var ctx = DeviceContext()
+    var aw = AttentionWeights(ctx)
+    var mw = MLPWeights(ctx,896,12)
+    var work = AttentionWorkspace(ctx,1,4,14,2,64,False,False)
+    var mlp = MLPWorkspace(ctx,1,896,12)
+    var cache = AttentionCache(ctx,4)
+    var x = ctx.enqueue_create_buffer[DType.bfloat16](896)
+    x.enqueue_fill(1)
+    aw.norm.enqueue_fill(1)
+    aw.qkv.enqueue_fill(0)
+    aw.bias.enqueue_fill(0)
+    aw.output.enqueue_fill(0)
+    work.cosine.enqueue_fill(1)
+    work.sine.enqueue_fill(0)
+    mw.norm.enqueue_fill(1)
+    cache.key.enqueue_fill(-17)
+    cache.value.enqueue_fill(-17)
+    work.normalized.enqueue_fill(-17)
+    work.output.enqueue_fill(-17)
+    mlp.normalized.enqueue_fill(-17)
+    mlp.output.enqueue_fill(-17)
+    var before_k = _bits(cache.key)
+    var before_v = _bits(cache.value)
+    var before_a_norm = _bits(work.normalized)
+    var before_a_output = _bits(work.output)
+    var before_m_norm = _bits(mlp.normalized)
+    var before_m_output = _bits(mlp.output)
+    for variant in range(1,6):
+        with assert_raises():
+            _ = enqueue_decoder_layer(ctx,aw,cache,work,mw,mlp,
+                TileTensor(x,row_major(1,896)),fuse_qkv=True,
+                fuse_activation=True,fuse_residual_norm=True,decode_variant=variant)
+        ctx.synchronize()
+        assert_equal(cache.length,0)
+        var after_k = _bits(cache.key)
+        var after_v = _bits(cache.value)
+        var after_a_norm = _bits(work.normalized)
+        var after_a_output = _bits(work.output)
+        var after_m_norm = _bits(mlp.normalized)
+        var after_m_output = _bits(mlp.output)
+        for i in range(len(before_k)):
+            assert_equal(after_k[i],before_k[i])
+            assert_equal(after_v[i],before_v[i])
+        for i in range(896):
+            assert_equal(after_a_norm[i],before_a_norm[i])
+            assert_equal(after_a_output[i],before_a_output[i])
+            assert_equal(after_m_norm[i],before_m_norm[i])
+            assert_equal(after_m_output[i],before_m_output[i])
 
 
 def main() raises:
