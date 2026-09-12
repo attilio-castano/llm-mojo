@@ -11,6 +11,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from llm_mojo.attention_sublayer import AttentionWeights, AttentionCache, AttentionWorkspace
 from llm_mojo.mlp import MLPWeights, MLPWorkspace
 from llm_mojo.decoder_layer import _decoder_preflight, decoder_mappings, enqueue_decoder_layer_configuration
+from llm_mojo.residual_norm import enqueue_residual_norm
 from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.linear import enqueue_linear_apple_gpu
 from llm_mojo.token_selection import enqueue_argmax, enqueue_head_argmax
@@ -76,7 +77,11 @@ def swap_hidden_buffers(mut left: DeviceBuffer[DType.bfloat16], mut right: Devic
 
 
 def select_copy_free(policy: String, rows: Int, device: String) -> Bool:
-    return policy == "buffer-swap" and rows == 1 and device == "Apple M4 Pro"
+    return (policy == "buffer-swap" or policy == "swap-argmax" or policy == "all-three") and rows == 1 and device == "Apple M4 Pro"
+
+
+def select_residual_norm(policy: String, rows: Int, device: String) -> Bool:
+    return (policy == "residual-norm" or policy == "all-three") and rows == 1 and device == "Apple M4 Pro"
 
 
 def candidate_configuration(rows: Int, total: Int) -> Int:
@@ -95,7 +100,7 @@ def candidate_configuration(rows: Int, total: Int) -> Int:
 def select_configuration(policy: String, rows: Int, total: Int, device: String) raises -> Int:
     if rows < 1 or total < rows or total > 4096:
         raise Error("invalid configuration-selection dimensions")
-    if policy == "gpu-argmax" or policy == "fused-head" or policy == "buffer-swap":
+    if policy == "gpu-argmax" or policy == "fused-head" or policy == "buffer-swap" or policy == "residual-norm" or policy == "swap-argmax" or policy == "all-three":
         return select_configuration("fast",rows,total,device)
     if policy == "fusion" or policy == "combined" or policy == "unfused":
         if rows == 1 and device == "Apple M4 Pro":
@@ -129,7 +134,7 @@ def select_token_selection(policy: String, rows: Int, device: String) raises -> 
     if rows < 1:
         raise Error("invalid selection row count")
     if rows == 1 and device == "Apple M4 Pro":
-        if policy == "gpu-argmax":
+        if policy == "gpu-argmax" or policy == "swap-argmax" or policy == "all-three":
             return 1
         if policy == "fused-head":
             return 2
@@ -243,7 +248,7 @@ struct QwenModel(Movable):
                 TileTensor(self.input,row_major(rows,896)),True,
                 Int(mappings[0]),Int(mappings[1]),Int(mappings[2]))
 
-    def forward[OBSERVE: Bool = False](mut self, ctx: DeviceContext, ids: List[Int], configuration: Int = 0, capture: String = "", selection: Int = 0, materialize: Bool = False, copy_free: Bool = False) raises:
+    def forward[OBSERVE: Bool = False](mut self, ctx: DeviceContext, ids: List[Int], configuration: Int = 0, capture: String = "", selection: Int = 0, materialize: Bool = False, copy_free: Bool = False, fuse_residual_norm: Bool = False, capture_norm: Bool = False) raises:
         """Submit all layers. ID upload synchronizes; layer execution does not.
 
         Native inference API. The host token
@@ -254,6 +259,8 @@ struct QwenModel(Movable):
         """
         comptime if OBSERVE:
             self.observation[0] = _observation_clock()
+        if fuse_residual_norm and (len(ids) != 1 or configuration != 26 or selection == 2):
+            raise Error("residual RMSNorm fusion requires one configuration-26 row and ordinary vocabulary projection")
         if copy_free and len(ids) != 1:
             raise Error("buffer swapping is restricted to single-row decode")
         if selection < 0 or selection > 2:
@@ -281,7 +288,20 @@ struct QwenModel(Movable):
             for i in range(24):
                 _ = enqueue_decoder_layer_configuration(ctx,self.layers[i].attention,
                     self.layers[i].cache,self.attention,self.layers[i].mlp,self.mlp,
-                    TileTensor(self.input,row_major(rows,896)),configuration)
+                    TileTensor(self.input,row_major(rows,896)),configuration,fuse_residual_norm,fuse_residual_norm and i > 0)
+                if capture_norm and capture.byte_length() > 0:
+                    save_bf16(self.attention.normalized,capture+"/attention_norm_"+String(i)+".bin",rows*896)
+                    save_bf16(self.mlp.normalized,capture+"/mlp_norm_"+String(i)+".bin",rows*896)
+                    save_bf16(self.attention.output,capture+"/attention_residual_"+String(i)+".bin",rows*896)
+                if fuse_residual_norm:
+                    if i < 23:
+                        enqueue_residual_norm(ctx,TileTensor(self.attention.output,row_major(1,896)),
+                            TileTensor(self.mlp.down,row_major(1,896)),TileTensor(self.layers[i+1].attention.norm,row_major(896)),
+                            TileTensor(self.mlp.output,row_major(1,896)),TileTensor(self.attention.normalized,row_major(1,896)))
+                    else:
+                        enqueue_residual_norm(ctx,TileTensor(self.attention.output,row_major(1,896)),
+                            TileTensor(self.mlp.down,row_major(1,896)),TileTensor(self.norm,row_major(896)),
+                            TileTensor(self.mlp.output,row_major(1,896)),TileTensor(self.normalized,row_major(1,896)))
                 if capture.byte_length() > 0:
                     save_bf16(self.mlp.output,capture+"/hidden_"+String(i+1)+".bin",rows*896)
                     if configuration == 25 or configuration == 26:
@@ -301,9 +321,10 @@ struct QwenModel(Movable):
                         grid_dim=(rows*896+255)//256,block_dim=256)
             comptime if OBSERVE:
                 self.observation[4] = _observation_clock()
-            enqueue_rms_norm_apple_gpu(ctx,
-                TileTensor(self.mlp.output.unsafe_ptr().unsafe_offset((rows-1)*896),row_major(1,896)),
-                TileTensor(self.norm,row_major(896)),TileTensor(self.normalized,row_major(1,896)))
+            if not fuse_residual_norm:
+                enqueue_rms_norm_apple_gpu(ctx,
+                    TileTensor(self.mlp.output.unsafe_ptr().unsafe_offset((rows-1)*896),row_major(1,896)),
+                    TileTensor(self.norm,row_major(896)),TileTensor(self.normalized,row_major(1,896)))
             var partials = TileTensor(self.selection_partials,row_major(2374,3))
             var result = TileTensor(self.selection_result,row_major(1,3))
             var logits = TileTensor(self.logits,row_major(1,151936))

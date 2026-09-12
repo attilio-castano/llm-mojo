@@ -479,6 +479,8 @@ def enqueue_attention_sublayer[
     qkv_mapping: Int = 0,
     wo_tile: Int = 0,
     fuse_qkv: Bool = False,
+    input_normalized: Bool = False,
+    defer_residual: Bool = False,
 ) raises -> Int:
     """Enqueue one sublayer and advance cache length; return the launched route.
 
@@ -501,6 +503,9 @@ def enqueue_attention_sublayer[
     select those same larger tiles for Wo; zero preserves the 8x16 control.
     X must not overlap any writable workspace/cache region. Read output from
     work.output only after completion and before its next overwrite.
+    Internal input_normalized/defer_residual flags let the model compose the
+    adjacent residual and norm. The former consumes existing work.normalized;
+    the latter leaves work.projected ready and does not write work.output.
     """
     var launched_route = _validate_attention_sublayer(
         ctx, weights, cache, work, x, route, qkv_mapping, wo_tile
@@ -517,9 +522,12 @@ def enqueue_attention_sublayer[
     if fuse_qkv and (r != 1 or nq != 14 or nk != 2 or d != 64 or qkv_mapping != 1):
         raise Error("fused QKV requires one Qwen row and packed rowwise projection")
     var normal = TileTensor(work.normalized, row_major(r, h))
-    enqueue_rms_norm_apple_gpu(
-        ctx, x, TileTensor(weights.norm, row_major(h)), normal
-    )
+    if (input_normalized or defer_residual) and (r != 1 or h != 896):
+        raise Error("deferred normalization/residual requires one Qwen row")
+    if not input_normalized:
+        enqueue_rms_norm_apple_gpu(
+            ctx, x, TileTensor(weights.norm, row_major(h)), normal
+        )
     _enqueue_attention_qkv(ctx, weights, work, r, qkv_mapping, not fuse_qkv)
     var q = TileTensor(work.query, row_major(r, nq, d))
     if fuse_qkv:
@@ -637,9 +645,10 @@ def enqueue_attention_sublayer[
             ](ctx, q, keys, values, a)
     var projected = TileTensor(work.projected, row_major(r, h))
     _enqueue_attention_wo(ctx, weights, work, r, wo_mma, wo_tile)
-    enqueue_residual_apple_gpu(
-        ctx, x, projected, TileTensor(work.output, row_major(r, h))
-    )
+    if not defer_residual:
+        enqueue_residual_apple_gpu(
+            ctx, x, projected, TileTensor(work.output, row_major(r, h))
+        )
     cache.length = t
     return launched_route
 
@@ -651,6 +660,8 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     gqa_mapping: Int = 0,
     projection_mapping: Int = 0,
     fuse_qkv: Bool = False,
+    input_normalized: Bool = False,
+    defer_residual: Bool = False,
 ) raises -> Int:
     """Compose the prior Qwen projection and FP32 GQA studies on Metal.
 
@@ -676,6 +687,8 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     comptime assert x.flat_rank == 2
     if fuse_qkv and (Int(x.dim[0]()) != 1 or gqa_mapping != 0 or projection_mapping != 0):
         raise Error("fused decode requires the integrated control mappings")
+    if (input_normalized or defer_residual) and (gqa_mapping != 0 or projection_mapping != 0):
+        raise Error("deferred residual/norm requires integrated control mappings")
     if gqa_mapping < 0 or gqa_mapping > 5:
         raise Error("unknown integrated GQA mapping")
     if projection_mapping < 0 or projection_mapping > 9:
@@ -699,5 +712,5 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     return enqueue_attention_sublayer(
         ctx, weights, cache, work, x, 6 + gqa_mapping, use_mma, qkv,
         1 if projection_mapping == 5 else (projection_mapping if projection_mapping <= 2 else 0),
-        fuse_qkv,
+        fuse_qkv, input_normalized, defer_residual,
     )

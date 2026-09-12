@@ -52,7 +52,11 @@ def assets(prepared):
                 prepared_sha256=sha(prepared/'manifest.json'), tables_sha256=sha(tables))
 
 
-def build(output, prepared, fusion=False, combined=False, selection=False, copy_free=False):
+def build(output, prepared, fusion=False, combined=False, selection=False, copy_free=False, composition=False):
+    if composition:
+        if fusion or combined or selection or copy_free:
+            raise ValueError('residual-norm selects its own independent and composed matrix')
+        return selection_build(output,prepared,composition=True)
     if copy_free and (combined or selection):
         raise ValueError("copy-free is a separate bounded study")
     if selection:
@@ -168,9 +172,10 @@ def parse_samples(stdout, prefix, block, comparison, observed=True):
     return records
 
 
-def swap_capture_names():
+def swap_capture_names(extra_norm=False):
     return ([f'hidden_{i}.bin' for i in range(25)]+['final_norm.bin','logits.bin']
-            +[f'{stage}_{kind}_{i}.bin' for i in range(24) for stage in ('cache','append') for kind in ('key','value')])
+            +[f'{stage}_{kind}_{i}.bin' for i in range(24) for stage in ('cache','append') for kind in ('key','value')]
+            +([f'{name}_{i}.bin' for i in range(24) for name in ('attention_norm','mlp_norm','attention_residual')] if extra_norm else []))
 
 
 def swap_lifecycle_names():
@@ -178,10 +183,10 @@ def swap_lifecycle_names():
             +['final-'+name for name in ['logits']+[f'{k}{i}' for k in ('k','v') for i in range(24)]])
 
 
-def validate_swap_checks(checks):
+def validate_swap_checks(checks,extra_norm=False):
     if checks.get('owners_checked') is not True or checks.get('rejection_checked') is not True:
         raise ValueError('missing buffer ownership/lifecycle checks')
-    for field,names in [('layers',swap_capture_names()),('lifecycle',swap_lifecycle_names())]:
+    for field,names in [('layers',swap_capture_names(extra_norm)),('lifecycle',swap_lifecycle_names())]:
         records=checks.get(field,[])
         if Counter(r['name'] for r in records)!=Counter(names) or any(
             r['exact'] is not True or r['bytes']<=0 or len(r['sha256'])!=64 for r in records):
@@ -193,7 +198,7 @@ def validate_swap_checks(checks):
         raise ValueError('buffer-swap lifecycle state changed')
 
 
-def verify_swap_snapshots(directory):
+def verify_swap_snapshots(directory,extra_norm=False):
     if (directory/'driver.log').read_text().count('SWAP_LIFECYCLE_COMPLETE')!=1:
         raise ValueError('native buffer-swap lifecycle incomplete')
     def compare(name,left,right,size):
@@ -202,7 +207,7 @@ def verify_swap_snapshots(directory):
             raise ValueError('buffer-swap byte parity failed: '+name)
         return dict(name=name,exact=True,bytes=len(a),sha256=hashlib.sha256(a).hexdigest())
     layers=[]
-    for name in swap_capture_names():
+    for name in swap_capture_names(extra_norm):
         size = 1048576 if name.startswith('cache_') else (256 if name.startswith('append_') else (303872 if name=='logits.bin' else 1792))
         layers.append(compare(name,directory/'layers-control'/name,directory/'layers-candidate'/name,size))
     lifecycle=[]
@@ -221,7 +226,7 @@ def verify_swap_snapshots(directory):
         raise ValueError('buffer-swap lifecycle tokens/accounting changed')
     checks=dict(layers=layers,lifecycle=lifecycle,states=[list(map(int,line.split())) for line in state.splitlines()],
                 owners_checked=True,rejection_checked=True)
-    validate_swap_checks(checks)
+    validate_swap_checks(checks,extra_norm)
     return checks
 
 
@@ -234,11 +239,12 @@ def collect(directory, output):
     numerical = []
     selection = receipt['declaration']==contract.SELECTION_DECLARATION
     copy_free = receipt['declaration']==contract.COPY_FREE_DECLARATION
+    composition = receipt['declaration']==contract.COMPOSITION_DECLARATION
     for prefix in contract.PREFIXES:
-        for candidate in ([1,2] if selection else [0]):
-            target = output/(f'verify-{prefix}'+(f'-s{candidate}' if selection else ''))
+        for candidate in ([1,2,3] if composition else ([1,2] if selection else [0])):
+            target = output/(f'verify-{prefix}'+(f'-s{candidate}' if selection or composition else ''))
             target.mkdir()
-            if copy_free and prefix == 64:
+            if (copy_free or composition) and prefix == 64:
                 for name in ('layers-control','layers-candidate'):
                     (target/name).mkdir()
             stdout = execute([*base, prefix, 0, candidate, target], target/'driver.log')
@@ -256,8 +262,10 @@ def collect(directory, output):
                         raise ValueError('actual selection path changed storage')
                     actual.append(dict(name=name,exact=True,sha256=sha(path)))
                 check.update(selection=candidate,actual=actual,nonfinite_invalidates=True)
-            if copy_free and prefix == 64:
-                check["swap_checks"] = verify_swap_snapshots(target)
+            if (copy_free or composition) and prefix == 64:
+                check["swap_checks"] = verify_swap_snapshots(target,extra_norm=composition)
+            if composition:
+                check["variant"] = candidate
             numerical.append(check)
     combined = receipt['declaration']==contract.COMBINED_DECLARATION
     samples, blocks = [], []
@@ -266,7 +274,7 @@ def collect(directory, output):
         reverse = block in (1, 2)
         prefixes = list(reversed(contract.PREFIXES)) if reverse else contract.PREFIXES
         for prefix in prefixes:
-            for comparison in (([3,2,1,0] if reverse else [0,1,2,3]) if selection else (([2,1,0] if reverse else [0,1,2]) if combined else ([1, 0] if reverse else [0, 1]))):
+            for comparison in ((list(reversed(range(6))) if reverse else range(6)) if composition else (([3,2,1,0] if reverse else [0,1,2,3]) if selection else (([2,1,0] if reverse else [0,1,2]) if combined else ([1, 0] if reverse else [0, 1])))):
                 stdout = execute([directory/'model', 'bench', args['prepared'], args['tables'],
                                   prefix, int(reverse), comparison, ''],
                                  output/f'p{prefix}-b{block}-c{comparison}.log')
@@ -363,7 +371,7 @@ def curate(target, prefix, repeat, fused=None, combined=None):
         fused = provenance['implementation'] != 'qwen_model_fast'
     if combined is None:
         combined = provenance['implementation'] == 'qwen_model_combined'
-    copy_free = provenance['implementation']=='qwen_model_buffer_swap'
+    _,_,_,copy_free,residual_norm = contract.options(provenance['implementation'])
     selection = contract.SELECTIONS.get(provenance['implementation'],0)
     from .analyze_trace import analyze, read_table, integer, coalesce_compute_commands, segment_compute_commands
     arguments = SimpleNamespace(capture_receipt=target/'capture.json', submissions_xml=target/'submissions.xml',
@@ -384,13 +392,13 @@ def curate(target, prefix, repeat, fused=None, combined=None):
     for row in intervals:
         key = tuple(integer(row,k) for k in ('cmdbuffer-id','encoder-id'))
         fragments[key].append([integer(row,'start'),integer(row,'duration')])
-    stages = contract.command_stages(fused, combined and fused, selection, copy_free)
+    stages = contract.command_stages(fused, combined and fused, selection, copy_free, residual_norm)
     count = len(stages)
     intervals, joined = coalesce_compute_commands(intervals, submissions, 18*count, join_resubmissions=True)
     if joined != report['validated_sequence']['interval_coalescing']:
         raise ValueError('curation differs from validated dispatch join')
     *_, measured = segment_compute_commands(intervals, 10, 8, count, False)
-    contract.validate_command_sequence(measured,fused,combined and fused,selection,copy_free)
+    contract.validate_command_sequence(measured,fused,combined and fused,selection,copy_free,residual_norm)
     by_command = {integer(r,'cmdbuffer-id'):r for r in submissions}
     rows = []
     for index, row in enumerate(measured):
@@ -516,8 +524,7 @@ def replay(directory):
         if hashlib.sha256(canonical).hexdigest() != capture['analysis']['capture_identity']['provenance']['sha256']:
             raise ValueError('retained provenance differs from captured build receipt')
         rows = capture['samples']
-        stages = contract.command_stages(provenance['implementation']!='qwen_model_fast',
-                                         provenance['implementation']=='qwen_model_combined')
+        stages = contract.command_stages(*contract.options(provenance['implementation']))
         if Counter((r['iteration'],r['dispatch']) for r in rows) != Counter((i,d) for i in range(8) for d in range(len(stages))):
             raise ValueError('incomplete captured dispatch census')
         for row in rows:
@@ -573,8 +580,9 @@ def plot(directory):
               ('Vocabulary projection',{'vocabulary projection'},'#e8a044'),
               ('Inter-layer copies',{'inter-layer copy'},'#b86f85')]
     used = set().union(*(s for _,s,_ in groups))
-    groups.append(('Other GPU operations',(set(s for _,s in contract.stages()) | set(s for _,s in contract.stages(True,True)))-used,'#abb9c7'))
-    groups.append(('Buffer transfers',set(s for _,s,k in contract.command_stages() if k=='blit'),'#678d75'))
+    commands=[r for capture in record['captures'] for r in capture['samples']]
+    groups.append(('Other GPU operations',{r['stage'] for r in commands if r['kind']=='compute'}-used,'#abb9c7'))
+    groups.append(('Buffer transfers',{r['stage'] for r in commands if r['kind']=='blit'},'#678d75'))
     bottoms = [0.]*3
     for name, stages, color in groups:
         values = []
@@ -834,7 +842,7 @@ def fusion_replay(directory, combined=False, copy_free=False):
     return record
 
 
-def selection_build(output, prepared):
+def selection_build(output, prepared, composition=False):
     ensure_record_location(output)
     output.mkdir(parents=True,exist_ok=False)
     source = source_identity()
@@ -843,20 +851,22 @@ def selection_build(output, prepared):
     identity = assets(prepared)
     machine = stable_environment()
     binaries = {}
-    for name, entry, flags in [('model','benchmarks/model.mojo',['MODEL_SELECTION_STUDY']),
+    study_flag='MODEL_COMPOSITION_STUDY' if composition else 'MODEL_SELECTION_STUDY'
+    profile_flag='MODEL_COMPOSITION_PROFILE' if composition else 'MODEL_SELECTION_PROFILE'
+    for name, entry, flags in [('model','benchmarks/model.mojo',[study_flag]),
                                ('terminal','chat_cli.mojo',['MODEL_FUSION_STUDY'])] + [
-        (f'profile-1024-s{s}','benchmarks/model.mojo',['MODEL_SELECTION_STUDY',f'MODEL_SELECTION_PROFILE={s}',
-          'MODEL_PROFILE_PREFIX=1024','MODEL_PREPARED='+identity['prepared'],'MODEL_TABLES='+identity['tables']]) for s in range(3)]:
+        (f'profile-1024-s{s}','benchmarks/model.mojo',[study_flag,f'{profile_flag}={s}',
+          'MODEL_PROFILE_PREFIX=1024','MODEL_PREPARED='+identity['prepared'],'MODEL_TABLES='+identity['tables']]) for s in range(4 if composition else 3)]:
         execute([environment_tool('mojo'),'build','-I','src',*[item for flag in flags for item in ['-D',flag]],
                  'src/llm_mojo/'+entry,'-o',output/name],output/f'{name}-build.log')
         binary = dict(sha256=sha(output/name),bytes=(output/name).stat().st_size)
         binaries[name] = binary
         if name.startswith('profile'):
             selection = int(name[-1])
-            implementation = ['qwen_model_combined','qwen_model_gpu_argmax','qwen_model_fused_head'][selection]
+            implementation = contract.COMPOSITION_IMPLEMENTATIONS[selection] if composition else ['qwen_model_combined','qwen_model_gpu_argmax','qwen_model_fused_head'][selection]
             provenance = dict(schema_version=1,operation=contract.OPERATION,implementation=implementation,
                 entrypoint=contract.ENTRYPOINTS[implementation],repository=source['repository'],source_sha256=source['sources'],
-                **machine,**contract.specification(1024,True,True,selection),profile_warmup_iterations=10,
+                **machine,**contract.specification(1024,*contract.options(implementation)),profile_warmup_iterations=10,
                 profile_iterations=8,profile_post_idle_milliseconds=250,binary=binary,
                 assets={k:v for k,v in identity.items() if k.endswith('_sha256')})
             contract.configuration(provenance)
@@ -864,17 +874,18 @@ def selection_build(output, prepared):
     if source_identity()!=source or assets(prepared)!=identity:
         raise ValueError('source or assets changed during selection build')
     write(output/'build.json',dict(source=source,assets=identity,environment=machine,
-                                  declaration=contract.SELECTION_DECLARATION,binaries=binaries))
+                                  declaration=contract.COMPOSITION_DECLARATION if composition else contract.SELECTION_DECLARATION,binaries=binaries))
 
 
 def selection_capture(directory, output):
     from .capture_trace import capture_trace
     receipt = verify_build(directory)
-    if receipt['declaration'] != contract.SELECTION_DECLARATION:
-        raise ValueError('not a token selection build')
+    composition=receipt['declaration']==contract.COMPOSITION_DECLARATION
+    if not composition and receipt['declaration'] != contract.SELECTION_DECLARATION:
+        raise ValueError('not a token selection/composition build')
     ensure_record_location(output)
     output.mkdir(parents=True,exist_ok=False)
-    for selection in range(3):
+    for selection in range(4 if composition else 3):
         name = f'profile-1024-s{selection}'
         target = output/f's{selection}'
         target.mkdir()
@@ -891,8 +902,9 @@ def selection_capture(directory, output):
 
 def selection_terminal(directory, output):
     receipt = verify_build(directory)
-    if receipt['declaration'] != contract.SELECTION_DECLARATION:
-        raise ValueError('not a token selection build')
+    composition=receipt['declaration']==contract.COMPOSITION_DECLARATION
+    if not composition and receipt['declaration'] != contract.SELECTION_DECLARATION:
+        raise ValueError('not a token selection/composition build')
     ensure_record_location(output)
     output.mkdir(parents=True,exist_ok=False)
     sys.path.insert(0,str(repository_root()/'tests'))
@@ -905,10 +917,11 @@ def selection_terminal(directory, output):
     for block in range(4):
         before = conditions()
         arms = []
-        for selection in ([2,1,0] if block in (1,2) else [0,1,2]):
+        variants=list(range(4 if composition else 3))
+        for selection in (list(reversed(variants)) if block in (1,2) else variants):
             report = output/f'b{block}-s{selection}.tsv'
             command = list(map(str,[directory/'terminal',identity['prepared'],identity['tables'],128,256,
-                                    '',report,['combined','gpu-argmax','fused-head'][selection]]))
+                                    '',report,(contract.COMPOSITION_ARMS if composition else ['combined','gpu-argmax','fused-head'])[selection]]))
             result = subprocess.run(command,cwd=repository_root(),env=environment(),input=inputs,
                                     stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=240)
             (output/f'b{block}-s{selection}.txt').write_bytes(result.stdout)
@@ -958,10 +971,43 @@ def selection_summary(samples):
     return dict(contexts=result,selected=choice,policy=['combined','gpu-argmax','fused-head'][choice])
 
 
-def selection_archive(timings, traces, terminal_path, output):
-    record = dict(kind='qwen-token-selection-v1',timing=json.loads((timings/'timings.json').read_text()),
+def composition_summary(samples):
+    expected=Counter((p,b,c,a,s) for p in contract.PREFIXES for b in range(4)
+                     for c in range(6) for a in range(2) for s in range(10))
+    if Counter(tuple(r[k] for k in ('prefix','block','comparison','arm','sample')) for r in samples)!=expected:
+        raise ValueError('incomplete residual-norm comparison census')
+    if any(type(r['elapsed_ns']) is not int or r['elapsed_ns']<=0 or r['marks'] for r in samples):
+        raise ValueError('invalid residual-norm timing sample')
+    contexts=[]
+    for prefix in contract.PREFIXES:
+        rows=[r for r in samples if r['prefix']==prefix]
+        medians={(b,c,a):stats.median(r['elapsed_ns'] for r in rows if (r['block'],r['comparison'],r['arm'])==(b,c,a))
+                 for b in range(4) for c in range(6) for a in range(2)}
+        calibration=[medians[b,0,1]/medians[b,0,0] for b in range(4)]
+        noise=max(.05,max(abs(x-1) for x in calibration))
+        comparisons=[]
+        for c in range(1,6):
+            ratios=[medians[b,c,1]/medians[b,c,0] for b in range(4)]
+            reduction=1-stats.median(ratios)
+            comparisons.append(dict(comparison=c,arms=list(contract.COMPOSITION_PAIRS[c]),ratios=ratios,
+                median_reduction=reduction,control_block_ms=[medians[b,c,0]/1e6 for b in range(4)],
+                candidate_block_ms=[medians[b,c,1]/1e6 for b in range(4)],all_faster=all(x<1 for x in ratios),
+                qualifies=all(x<1 for x in ratios) and reduction>noise))
+        contexts.append(dict(prefix=prefix,calibration_ratios=calibration,noise_floor=noise,comparisons=comparisons))
+    qualifiers=[v for v in range(1,4) if all(c['comparisons'][v-1]['qualifies'] for c in contexts)]
+    selected=0
+    if 3 in qualifiers and all(all(c['comparisons'][4 if v==1 else 3]['all_faster'] for c in contexts) for v in qualifiers if v!=3):
+        selected=3
+    elif len(qualifiers)==1:
+        selected=qualifiers[0]
+    return dict(contexts=contexts,qualifiers=qualifiers,selected=selected,policy=contract.COMPOSITION_ARMS[selected])
+
+
+def selection_archive(timings, traces, terminal_path, output, composition=False):
+    stem='residual-norm' if composition else 'token-selection'
+    record = dict(kind='qwen-residual-norm-v1' if composition else 'qwen-token-selection-v1',timing=json.loads((timings/'timings.json').read_text()),
                   terminal=json.loads((terminal_path/'terminal.json').read_text()),
-                  captures=[json.loads((traces/f's{s}/curated.json').read_text()) for s in range(3)])
+                  captures=[json.loads((traces/f's{s}/curated.json').read_text()) for s in range(4 if composition else 3)])
     # Retain hashes/provenance while removing machine-specific model asset paths.
     for build_record in [record['timing']['build'],record['terminal']['build']]:
         for key in ('prepared','tables'):
@@ -969,85 +1015,99 @@ def selection_archive(timings, traces, terminal_path, output):
     output.mkdir(parents=True,exist_ok=True)
     raw = json.dumps(record,sort_keys=True,separators=(',',':'),allow_nan=False).encode()
     packed = gzip.compress(raw,mtime=0)
-    (output/'token-selection.json.gz').write_bytes(packed)
-    write(output/'token-selection.json',dict(sha256=hashlib.sha256(packed).hexdigest(),uncompressed_sha256=hashlib.sha256(raw).hexdigest()))
-    selection_replay(output)
+    (output/(stem+'.json.gz')).write_bytes(packed)
+    write(output/(stem+'.json'),dict(sha256=hashlib.sha256(packed).hexdigest(),uncompressed_sha256=hashlib.sha256(raw).hexdigest()))
+    selection_replay(output,composition)
 
 
-def selection_plot(directory):
+def selection_plot(directory, composition=False):
+    stem="residual-norm" if composition else "token-selection"
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
-    summary=selection_replay(directory)
+    summary=selection_replay(directory,composition)
     plt.rcParams.update({'font.family':'DejaVu Sans','font.size':10,'axes.spines.top':False,'axes.spines.right':False})
     fig,axes=plt.subplots(1,2,figsize=(11,4.4),constrained_layout=True)
     for index,context in enumerate(summary['contexts']):
-        for comparison,offset,color,label in [(0,-.13,'#277eaa','GPU argmax / CPU'),(1,.13,'#188f82','Fused head / CPU')]:
+        plotted=([(0,-.22,'#277eaa','Norm / Fast'),(1,0,'#a98230','Swap + argmax / Fast'),(2,.22,'#188f82','All three / Fast')] if composition else [(0,-.13,'#277eaa','GPU argmax / CPU'),(1,.13,'#188f82','Fused head / CPU')])
+        for comparison,offset,color,label in plotted:
             ratios=context['comparisons'][comparison]['ratios']
             axes[0].scatter([index+offset]*4,ratios,color=color,s=32,label=label if index==0 else None)
             axes[0].plot([index+offset-.08,index+offset+.08],[stats.median(ratios)]*2,color=color,linewidth=2)
         axes[0].plot([index-.35,index+.35],[1-context['noise_floor']]*2,color='#bd6a44',linewidth=1.5,
                      label='Required median threshold' if index==0 else None)
-        direct=context['comparisons'][2]['ratios']
-        axes[1].scatter([index]*4,direct,color='#6d63a6',s=32)
-        axes[1].plot([index-.08,index+.08],[stats.median(direct)]*2,color='#6d63a6',linewidth=2)
-        axes[1].plot([index-.35,index+.35],[1-context['noise_floor']]*2,color='#bd6a44',linewidth=1.5)
+        direct_pairs=[(3,-.12,'#6d63a6','All three / swap + argmax'),(4,.12,'#277eaa','All three / norm')] if composition else [(2,0,'#6d63a6','Fused head / argmax')]
+        for comparison,offset,color,label in direct_pairs:
+            direct=context['comparisons'][comparison]['ratios']
+            axes[1].scatter([index+offset]*4,direct,color=color,s=32,label=label if index==0 else None)
+            axes[1].plot([index+offset-.08,index+offset+.08],[stats.median(direct)]*2,color=color,linewidth=2)
+        if not composition:
+            axes[1].plot([index-.35,index+.35],[1-context['noise_floor']]*2,color='#bd6a44',linewidth=1.5)
     for ax in axes:
         ax.axhline(1,color='#64798c',linestyle='--')
         ax.set_xticks(range(3),[str(r['prefix']) for r in summary['contexts']])
         ax.set_xlabel('Previously cached tokens')
         ax.set_ylabel('Paired complete-token latency ratio; lower is better')
-    axes[0].set_title('Do GPU selectors improve the current Fast path?')
+    axes[0].set_title('Independent and combined changes versus Fast' if composition else 'Do GPU selectors improve the current Fast path?')
     axes[0].legend(fontsize=8)
-    axes[1].set_title('Does fusing the head improve GPU argmax?')
+    axes[1].set_title('Does combining all three add value?' if composition else 'Does fusing the head improve GPU argmax?')
+    if composition: axes[1].legend(fontsize=8)
     fig.suptitle('Qwen2.5-0.5B · BF16 · M4 Pro / Metal · four paired blocks',fontsize=13)
-    fig.savefig(directory/'token-selection.png',dpi=170)
+    fig.savefig(directory/(stem+'.png'),dpi=170)
     plt.close(fig)
 
 
-def selection_replay(directory):
-    packed = (directory/'token-selection.json.gz').read_bytes()
+def selection_replay(directory, composition=False):
+    stem='residual-norm' if composition else 'token-selection'
+    variant_count=4 if composition else 3
+    packed = (directory/(stem+'.json.gz')).read_bytes()
     raw = gzip.decompress(packed)
-    manifest = json.loads((directory/'token-selection.json').read_text())
+    manifest = json.loads((directory/(stem+'.json')).read_text())
     if manifest != dict(sha256=hashlib.sha256(packed).hexdigest(),uncompressed_sha256=hashlib.sha256(raw).hexdigest()):
         raise ValueError('selection evidence hash mismatch')
     record = json.loads(raw)
     timing = record['timing']
     build_record = timing['build']
-    if record['kind']!='qwen-token-selection-v1' or build_record['declaration']!=contract.SELECTION_DECLARATION or record['terminal']['build']!=build_record:
+    if record['kind']!=('qwen-residual-norm-v1' if composition else 'qwen-token-selection-v1') or build_record['declaration']!=(contract.COMPOSITION_DECLARATION if composition else contract.SELECTION_DECLARATION) or record['terminal']['build']!=build_record:
         raise ValueError('selection build identity mismatch')
-    summary = selection_summary(timing['samples'])
+    summary = composition_summary(timing['samples']) if composition else selection_summary(timing['samples'])
     if [b['block'] for b in timing['blocks']] != list(range(4)):
         raise ValueError('incomplete selection timing conditions')
-    for block in [*timing['blocks'],*record['terminal']['blocks']]:
+    for block in [*timing['blocks'],*record['terminal']['blocks'],*([c['conditions'] for c in record['captures']] if composition else [])]:
         for side in ('before','after'):
             require_ac(block[side])
             require_nominal_thermal_state(block[side])
             if block[side]['power_mode_raw'] != '0':
                 raise ValueError('selection power mode changed')
-    if Counter((n['prefix'],n['selection']) for n in timing['numerical'])!=Counter((p,s) for p in contract.PREFIXES for s in (1,2)):
+    if Counter((n['prefix'],n['variant' if composition else 'selection']) for n in timing['numerical'])!=Counter((p,s) for p in contract.PREFIXES for s in range(1,variant_count)):
         raise ValueError('incomplete selection numerical coverage')
     names = {'logits'}|{f'{k}{l}' for k in ('k','v') for l in range(24)}
     for check in timing['numerical']:
-        if not check['nonfinite_invalidates'] or len(check['history'])!=check['prefix']+1:
+        if (not composition and not check['nonfinite_invalidates']) or len(check['history'])!=check['prefix']+1:
             raise ValueError('invalid selection lifecycle evidence')
-        for field in ('observations','actual'):
+        if composition and check['prefix']==64:
+            validate_swap_checks(check.get('swap_checks',{}),extra_norm=True)
+        for field in (('observations',) if composition else ('observations','actual')):
             observations = check[field]
             if len(observations)!=49 or {r['name'] for r in observations}!=names or not all(r['exact'] for r in observations):
                 raise ValueError('selection numerical invariant failed')
         if not all(r['finite'] and r['prefix_exact'] and r['inactive_exact'] for r in check['observations']):
             raise ValueError('selection cache invariant failed')
-    if len(record['captures'])!=3:
+    if len(record['captures'])!=variant_count:
         raise ValueError('incomplete selection trace census')
     for selection,capture in enumerate(record['captures']):
         provenance = capture['provenance']
-        implementation = ['qwen_model_combined','qwen_model_gpu_argmax','qwen_model_fused_head'][selection]
+        implementation = contract.COMPOSITION_IMPLEMENTATIONS[selection] if composition else ['qwen_model_combined','qwen_model_gpu_argmax','qwen_model_fused_head'][selection]
         contract.configuration(provenance)
         if (provenance['implementation']!=implementation or provenance['binary']!=build_record['binaries'][f'profile-1024-s{selection}']
             or provenance['repository']!=build_record['source']['repository'] or provenance['source_sha256']!=build_record['source']['sources']
             or provenance['assets']!={k:v for k,v in build_record['assets'].items() if k.endswith('_sha256')}):
             raise ValueError('selection trace provenance mismatch')
-        stages = contract.command_stages(True,True,selection)
+        if composition:
+            canonical=(json.dumps(provenance,indent=2,allow_nan=False)+'\n').encode()
+            if hashlib.sha256(canonical).hexdigest()!=capture['analysis']['capture_identity']['provenance']['sha256']:
+                raise ValueError('residual-norm trace capture provenance changed')
+        stages = contract.command_stages(*contract.options(implementation))
         if len(capture['samples'])!=8*len(stages):
             raise ValueError('incomplete selection command census')
         for i,row in enumerate(capture['samples']):
@@ -1056,6 +1116,9 @@ def selection_replay(directory):
             intervals=row['active_intervals']
             if row['duration_ns']<=0 or not intervals or sum(d for _,d in intervals)!=row['duration_ns'] or any(d<=0 for _,d in intervals):
                 raise ValueError('invalid selection trace fragments')
+            if composition and (len(intervals)!=row['segments'] or intervals[0][0]!=row['start_ns']
+                or sum(intervals[-1])!=row['end_ns'] or any(a+d>b for (a,d),(b,_) in zip(intervals,intervals[1:]))):
+                raise ValueError('residual-norm active fragment geometry changed')
     sys.path.insert(0,str(repository_root()/'tests'))
     from chat_terminal import validate
     blocks=record['terminal']['blocks']
@@ -1063,14 +1126,14 @@ def selection_replay(directory):
         raise ValueError('incomplete selection terminal blocks')
     for block in blocks:
         arms=block['arms']
-        if len(arms)!=3 or {a['selection'] for a in arms}!={0,1,2} or len({a['output_sha256'] for a in arms})!=1:
+        if len(arms)!=variant_count or {a['selection'] for a in arms}!=set(range(variant_count)) or len({a['output_sha256'] for a in arms})!=1:
             raise ValueError('selection terminal arms changed')
         for arm in arms:
             if validate(arm['events'],128)!=arm['turns'] or len(arm['turns'])!=3:
                 raise ValueError('selection terminal events changed')
             if any(a['generated']!=b['generated'] or a['history']!=b['history'] for a,b in zip(arm['turns'],arms[0]['turns'])):
                 raise ValueError('selection terminal tokens changed')
-    write(directory/'token-selection-summary.json',summary)
+    write(directory/(stem+'-summary.json'),summary)
     print(json.dumps(summary,indent=2))
     return summary
 
@@ -1080,6 +1143,7 @@ def main():
     os.environ.pop('MODULAR_DEBUG', None)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['build','collect','capture','terminal','archive','replay','plot','fusion-capture','fusion-terminal','fusion-archive','fusion-replay','fusion-plot','selection-capture','selection-terminal','selection-archive','selection-replay','selection-plot'])
+    parser.add_argument('--residual-norm',action='store_true',help='Study independent residual normalization and composition with swap/argmax')
     parser.add_argument('--copy-free',action='store_true',help='Compare buffer ownership swapping with inter-layer copies')
     parser.add_argument('--selection',action='store_true',help='Compare CPU, GPU argmax and fused vocabulary head')
     parser.add_argument('--combined', action='store_true', help='Combine QKV and SiLU/multiply fusion')
@@ -1091,12 +1155,12 @@ def main():
     parser.add_argument('--traces', type=Path)
     parser.add_argument('--terminal', type=Path)
     args = parser.parse_args()
-    if args.command == 'build': build(args.output.resolve(), args.prepared, args.fusion, args.combined, args.selection, args.copy_free)
+    if args.command == 'build': build(args.output.resolve(), args.prepared, args.fusion, args.combined, args.selection, args.copy_free, args.residual_norm)
     elif args.command == 'selection-capture': selection_capture(args.build.resolve(),args.output.resolve())
     elif args.command == 'selection-terminal': selection_terminal(args.build.resolve(),args.output.resolve())
-    elif args.command == 'selection-archive': selection_archive(args.timings,args.traces,args.terminal,args.output)
-    elif args.command == 'selection-plot': selection_plot(args.output)
-    elif args.command == 'selection-replay': selection_replay(args.output)
+    elif args.command == 'selection-archive': selection_archive(args.timings,args.traces,args.terminal,args.output,args.residual_norm)
+    elif args.command == 'selection-plot': selection_plot(args.output,args.residual_norm)
+    elif args.command == 'selection-replay': selection_replay(args.output,args.residual_norm)
     elif args.command == 'fusion-capture': fusion_capture(args.build.resolve(),args.output.resolve())
     elif args.command == 'fusion-terminal': fusion_terminal(args.build.resolve(),args.output.resolve())
     elif args.command == 'fusion-archive': fusion_archive(args.timings,args.traces,args.terminal,args.output,args.combined,args.copy_free)

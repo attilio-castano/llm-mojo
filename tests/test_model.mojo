@@ -4,7 +4,7 @@ from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext
 from llm_mojo.model import _embedding, _copy_rows, load_bf16, save_bf16
 from std.memory import bitcast
-from llm_mojo.model import select_configuration, select_token_selection, select_copy_free, swap_hidden_buffers
+from llm_mojo.model import select_configuration, select_token_selection, select_copy_free, swap_hidden_buffers, select_residual_norm
 from llm_mojo.generate_cli import generation_budget, is_stop
 
 
@@ -37,6 +37,15 @@ def test_hidden_buffer_swaps_keep_queued_views_alive() raises:
     assert_equal(select_copy_free("buffer-swap",2,"Apple M4 Pro"),False)
     assert_equal(select_copy_free("buffer-swap",1,"other"),False)
     assert_equal(select_configuration("buffer-swap",1,64,"Apple M4 Pro"),26)
+    for policy in ["residual-norm","swap-argmax","all-three"]:
+        assert_equal(select_configuration(policy,1,64,"Apple M4 Pro"),26)
+        assert_equal(select_residual_norm(policy,1,"Apple M4 Pro"),policy != "swap-argmax")
+        assert_equal(select_copy_free(policy,1,"Apple M4 Pro"),policy != "residual-norm")
+        assert_equal(select_token_selection(policy,1,"Apple M4 Pro"),0 if policy == "residual-norm" else 1)
+        assert_equal(select_residual_norm(policy,2,"Apple M4 Pro"),False)
+        assert_equal(select_residual_norm(policy,1,"other"),False)
+    for policy in ["fast","auto","combined","buffer-swap","gpu-argmax"]:
+        assert_equal(select_residual_norm(policy,1,"Apple M4 Pro"),False)
 
 
 def test_generation_limits_and_policy() raises:

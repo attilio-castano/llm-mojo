@@ -2,7 +2,7 @@
 from std.sys import argv
 from std.ffi import external_call
 from max.gpu.host import DeviceContext
-from llm_mojo.model import QwenModel, select_configuration, select_token_selection, select_copy_free
+from llm_mojo.model import QwenModel, select_configuration, select_token_selection, select_copy_free, select_residual_norm
 from llm_mojo.tokenizer import Tokenizer, TokenizerWorkspace, TokenizerDecoder
 
 
@@ -62,7 +62,7 @@ def main() raises:
         for i in range(rows):
             ids.append(history[offset+i])
         var configuration = select_configuration(args[6],rows,offset+rows,ctx.name())
-        model.forward(ctx,ids,configuration,"",select_token_selection(args[6],rows,ctx.name()),False,select_copy_free(args[6],rows,ctx.name()))
+        model.forward(ctx,ids,configuration,"",select_token_selection(args[6],rows,ctx.name()),False,select_copy_free(args[6],rows,ctx.name()),select_residual_norm(args[6],rows,ctx.name()))
         if diagnostics:
             events += "configuration\t"+String(offset)+"\t"+String(configuration)+"\t0\n"
         offset += rows
@@ -86,7 +86,7 @@ def main() raises:
         if step+1 < budget:
             var ids: List[Int] = [token]
             var decode_started = now()
-            model.forward(ctx,ids,select_configuration(args[6],1,model.length+1,ctx.name()),"",select_token_selection(args[6],1,ctx.name()),False,select_copy_free(args[6],1,ctx.name()))
+            model.forward(ctx,ids,select_configuration(args[6],1,model.length+1,ctx.name()),"",select_token_selection(args[6],1,ctx.name()),False,select_copy_free(args[6],1,ctx.name()),select_residual_norm(args[6],1,ctx.name()))
             if diagnostics:
                 ctx.synchronize()
                 events += "decode\t"+String(step)+"\t1\t"+String(now()-decode_started)+"\n"

@@ -290,6 +290,8 @@ def enqueue_mlp_apple_gpu[
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     mapping: Int = 0,
     fuse_activation: Bool = False,
+    input_normalized: Bool = False,
+    defer_residual: Bool = False,
 ) raises:
     """Six or seven ordered dispatches; no allocation, upload, or synchronization.
 
@@ -305,11 +307,17 @@ def enqueue_mlp_apple_gpu[
     mapping; the complete entrypoint combines stages 1/2 into one dispatch.
     Optional single-row mapping-zero activation fusion retains the BF16 SiLU
     bits in registers and leaves work.activated untouched.
+    Internal input_normalized/defer_residual flags consume an already-produced
+    work.normalized or leave work.down ready for the caller's fused residual.
     """
     _validate_mlp(ctx, weights, work, x, mapping)
     if fuse_activation and (Int(x.dim[0]()) != 1 or mapping != 0):
         raise Error("fused MLP activation requires one row and mapping zero")
+    if (input_normalized or defer_residual) and (Int(x.dim[0]()) != 1 or weights.hidden != 896 or mapping != 0):
+        raise Error("deferred MLP residual/norm requires one Qwen row and mapping zero")
     for stage in range(7):
+        if (stage == 0 and input_normalized) or (stage == 6 and defer_residual):
+            continue
         if stage == 3 and fuse_activation:
             var i = weights.intermediate
             enqueue_silu_multiply_apple_gpu(ctx,

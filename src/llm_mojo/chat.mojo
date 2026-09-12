@@ -4,7 +4,7 @@ History is authoritative; model.length identifies its already submitted prefix.
 No rendered-text round trip is used for generated assistant tokens.
 """
 from max.gpu.host import DeviceContext
-from llm_mojo.model import QwenModel, select_configuration, select_token_selection, select_copy_free
+from llm_mojo.model import QwenModel, select_configuration, select_token_selection, select_copy_free, select_residual_norm
 from llm_mojo.tokenizer import Tokenizer, TokenizerWorkspace
 from llm_mojo.generate_cli import is_stop
 
@@ -98,7 +98,7 @@ struct ChatSession(Movable):
         for i in range(rows):
             ids.append(self.history.tokens[self.model.length+i])
         var config = select_configuration(self.policy,rows,self.model.length+rows,ctx.name())
-        self.model.forward(ctx,ids,config,"",select_token_selection(self.policy,rows,ctx.name()),False,select_copy_free(self.policy,rows,ctx.name()))
+        self.model.forward(ctx,ids,config,"",select_token_selection(self.policy,rows,ctx.name()),False,select_copy_free(self.policy,rows,ctx.name()),select_residual_norm(self.policy,rows,ctx.name()))
 
     def sample(mut self, ctx: DeviceContext) raises -> Int:
         if not self.history.generating or self.model.length != len(self.history.tokens):

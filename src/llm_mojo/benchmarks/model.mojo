@@ -22,12 +22,18 @@ def snapshot(mut model: QwenModel, path: String) raises:
         save_bf16(model.layers[layer].cache.value,path+"-v"+String(layer)+".bin",4096*128)
 
 
-def poison_outputs(mut model: QwenModel, prefix: Int) raises:
+def poison_outputs(mut model: QwenModel, prefix: Int, poison_norm: Bool = False) raises:
     """Untimed verification: stale logits/cache appends must not pass parity."""
     var sentinel = bitcast[DType.bfloat16](UInt16(0x7FC0))
     model.logits.enqueue_fill(sentinel)
     model.mlp.activated.enqueue_fill(sentinel)
     model.mlp.gated.enqueue_fill(sentinel)
+    if poison_norm:
+        model.attention.normalized.enqueue_fill(sentinel)
+        model.attention.output.enqueue_fill(sentinel)
+        model.mlp.normalized.enqueue_fill(sentinel)
+        model.mlp.output.enqueue_fill(sentinel)
+        model.normalized.enqueue_fill(sentinel)
     for layer in range(24):
         with model.layers[layer].cache.key.map_to_host() as mapped:
             for column in range(128):
@@ -37,12 +43,12 @@ def poison_outputs(mut model: QwenModel, prefix: Int) raises:
                 mapped.unsafe_ptr()[unsafe_offset=prefix*128+column] = sentinel
 
 
-def step[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext, ids: List[Int], configuration: Int = -1, selection: Int = 0, materialize: Bool = False, copy_free: Bool = False) raises -> Int:
-    model.forward[OBSERVE](ctx,ids,configuration if configuration >= 0 else select_configuration("fast",1,model.length+1,ctx.name()),"",selection,materialize,copy_free)
+def step[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext, ids: List[Int], configuration: Int = -1, selection: Int = 0, materialize: Bool = False, copy_free: Bool = False, fuse_norm: Bool = False) raises -> Int:
+    model.forward[OBSERVE](ctx,ids,configuration if configuration >= 0 else select_configuration("fast",1,model.length+1,ctx.name()),"",selection,materialize,copy_free,fuse_norm)
     return model.greedy[OBSERVE](ctx)
 
 
-def verify_swap_lifecycle(mut model: QwenModel, ctx: DeviceContext, history: List[Int], path: String) raises:
+def verify_swap_lifecycle(mut model: QwenModel, ctx: DeviceContext, history: List[Int], path: String, copy_free: Bool = True, selection: Int = 0, fuse_norm: Bool = False) raises:
     for arm in range(2):
         model.reset(ctx)
         for layer in range(24):
@@ -61,8 +67,8 @@ def verify_swap_lifecycle(mut model: QwenModel, ctx: DeviceContext, history: Lis
             var ids = List[Int]()
             for j in range(rows):
                 ids.append(history[prefix+j])
-            var swap = arm == 1 and rows == 1
-            model.forward(ctx,ids,select_configuration("combined",rows,prefix+rows,ctx.name()),"",0,False,swap)
+            var swap = arm == 1 and rows == 1 and copy_free
+            model.forward(ctx,ids,select_configuration("combined",rows,prefix+rows,ctx.name()),"",selection if arm == 1 and rows == 1 else 0,False,swap,fuse_norm and arm == 1 and rows == 1)
             var token = model.greedy(ctx)
             if (Int(model.input.unsafe_ptr()) != (destination if swap else before)
                 or Int(model.mlp.output.unsafe_ptr()) != (before if swap else destination)
@@ -76,7 +82,7 @@ def verify_swap_lifecycle(mut model: QwenModel, ctx: DeviceContext, history: Lis
             var bad_ids: List[Int] = [-1]
             var saved = Int(model.input.unsafe_ptr())
             try:
-                model.forward(ctx,bad_ids,26,"",0,False,arm == 1)
+                model.forward(ctx,bad_ids,26,"",selection,False,arm == 1 and copy_free,arm == 1 and fuse_norm)
             except:
                 rejected = True
             if not rejected or not model.valid or Int(model.input.unsafe_ptr()) != saved or model.length != prefix+rows:
@@ -90,6 +96,14 @@ def verify_swap_lifecycle(mut model: QwenModel, ctx: DeviceContext, history: Lis
                     rejected = True
                 if not rejected or Int(model.input.unsafe_ptr()) != saved or model.length != prefix+rows:
                     raise Error("multi-row swap rejection changed state")
+                if fuse_norm:
+                    rejected = False
+                    try:
+                        model.forward(ctx,bad_rows,0,"",0,False,False,True)
+                    except:
+                        rejected = True
+                    if not rejected or not model.valid or Int(model.input.unsafe_ptr()) != saved or model.length != prefix+rows:
+                        raise Error("multi-row residual/norm rejection changed state")
         snapshot(model,path+"/lifecycle-final-"+String(arm))
         var file = open(path+"/lifecycle-"+String(arm)+".txt","w")
         file.write(record)
@@ -97,6 +111,8 @@ def verify_swap_lifecycle(mut model: QwenModel, ctx: DeviceContext, history: Lis
 
 
 def main() raises:
+    comptime COMPOSITION = is_defined["MODEL_COMPOSITION_STUDY"]()
+    comptime PROFILE_COMPOSITION = get_defined_int["MODEL_COMPOSITION_PROFILE", 0]()
     comptime COPY_FREE = is_defined["MODEL_COPY_FREE_STUDY"]()
     comptime SELECTION = is_defined["MODEL_SELECTION_STUDY"]()
     comptime COMBINED = is_defined["MODEL_COMBINED_STUDY"]()
@@ -104,7 +120,7 @@ def main() raises:
     comptime PROFILE_FUSED = is_defined["MODEL_FUSION_PROFILE"]()
     comptime assert not COMBINED or FUSION or PROFILE_FUSED, "combined study requires an explicit study or profile route"
     var candidate = 26 if COMBINED or COPY_FREE else 25
-    var control = 26 if SELECTION or COPY_FREE else (0 if FUSION else -1)
+    var control = 26 if SELECTION or COPY_FREE or COMPOSITION else (0 if FUSION else -1)
     var selection_control = 0
     var selection_candidate = 0
     comptime PROFILE_SELECTION = get_defined_int["MODEL_SELECTION_PROFILE", 0]()
@@ -124,8 +140,12 @@ def main() raises:
     var comparison = Int(args[6])
     if ((mode != "bench" and mode != "verify" and mode != "profile")
         or (prefix != 64 and prefix != 1024 and prefix != 3968)
-        or first < 0 or first > 1 or comparison < 0 or comparison > (3 if SELECTION else (2 if COMBINED else 1))):
+        or first < 0 or first > 1 or comparison < 0 or comparison > (5 if COMPOSITION else (3 if SELECTION else (2 if COMBINED else 1)))):
         raise Error("invalid frozen model profiling workload")
+    if COMPOSITION and mode == "verify" and (comparison < 1 or comparison > 3):
+        raise Error("composition verification requires candidate 1..3")
+    var composition_control = 2 if comparison == 4 else (1 if comparison == 5 else 0)
+    var composition_candidate = min(comparison,3)
     if SELECTION and mode == "verify" and comparison != 1 and comparison != 2:
         raise Error("selection verification requires candidate 1 or 2")
     if SELECTION:
@@ -167,13 +187,15 @@ def main() raises:
     if mode == "verify":
         rewind(model,prefix)
         snapshot(model,args[7]+"/before")
-        poison_outputs(model,prefix)
+        poison_outputs(model,prefix,COMPOSITION)
         var plain = step[False](model,ctx,ids,control)
         snapshot(model,args[7]+"/plain")
         rewind(model,prefix)
-        poison_outputs(model,prefix)
+        poison_outputs(model,prefix,COMPOSITION)
         var observed: Int
-        comptime if SELECTION:
+        comptime if COMPOSITION:
+            observed = step[False](model,ctx,ids,26,1 if comparison >= 2 else 0,False,comparison >= 2,comparison != 2)
+        elif SELECTION:
             observed = step[False](model,ctx,ids,26,selection_candidate,True)
         elif FUSION:
             observed = step[False](model,ctx,ids,candidate,0,False,COPY_FREE)
@@ -205,14 +227,14 @@ def main() raises:
                 rejected = True
             if not rejected or model.valid:
                 raise Error("nonfinite selection did not invalidate model")
-        comptime if COPY_FREE:
+        comptime if COPY_FREE or COMPOSITION:
             if prefix == 64:
                 for arm in range(2):
                     rewind(model,prefix)
-                    model.forward(ctx,ids,26,args[7]+("/layers-candidate" if arm else "/layers-control"),0,False,arm == 1)
+                    model.forward(ctx,ids,26,args[7]+("/layers-candidate" if arm else "/layers-control"),1 if COMPOSITION and comparison >= 2 and arm == 1 else 0,False,arm == 1 and (COPY_FREE or comparison >= 2),COMPOSITION and comparison != 2 and arm == 1,COMPOSITION)
                     if model.greedy(ctx) != plain:
                         raise Error("layer capture changed winner")
-                verify_swap_lifecycle(model,ctx,history,args[7])
+                verify_swap_lifecycle(model,ctx,history,args[7],COPY_FREE or comparison >= 2,1 if COMPOSITION and comparison >= 2 else 0,COMPOSITION and comparison != 2)
         var record = String()
         for i in range(prefix+1):
             record += String(history[i])+"\n"
@@ -223,10 +245,12 @@ def main() raises:
     if mode == "profile":
         for _ in range(10):
             rewind(model,prefix)
-            if step[False](model,ctx,ids,candidate if PROFILE_FUSED else control,PROFILE_SELECTION,False,COPY_FREE and PROFILE_FUSED) != winner:
+            if step[False](model,ctx,ids,candidate if PROFILE_FUSED else control,1 if COMPOSITION and PROFILE_COMPOSITION >= 2 else PROFILE_SELECTION,False,(COMPOSITION and PROFILE_COMPOSITION >= 2) or (COPY_FREE and PROFILE_FUSED),COMPOSITION and (PROFILE_COMPOSITION == 1 or PROFILE_COMPOSITION == 3)) != winner:
                 raise Error("unstable profile prediction")
         print("correctness: passed")
-        comptime if COPY_FREE:
+        comptime if COMPOSITION:
+            print("profile implementation:","QwenModel.forward+greedy-"+("combined" if PROFILE_COMPOSITION == 0 else ("residual-norm" if PROFILE_COMPOSITION == 1 else ("swap-argmax" if PROFILE_COMPOSITION == 2 else "all-three"))))
+        elif COPY_FREE:
             print("profile implementation:","QwenModel.forward+greedy-"+("buffer-swap" if PROFILE_FUSED else "combined"))
         elif SELECTION:
             print("profile implementation:","QwenModel.forward+greedy-"+("gpu-argmax" if PROFILE_SELECTION == 1 else ("fused-head" if PROFILE_SELECTION == 2 else "combined")))
@@ -235,7 +259,10 @@ def main() raises:
         print("rows: 1")
         print("hidden: 896")
         print("key value rows:",prefix+1)
-        comptime if COPY_FREE:
+        comptime if COMPOSITION:
+            print("profile workload:","model-p"+String(prefix)+("-combined" if PROFILE_COMPOSITION == 0 else ("-residual-norm" if PROFILE_COMPOSITION == 1 else ("-swap-argmax" if PROFILE_COMPOSITION == 2 else "-all-three"))))
+            print("profile dispatches per iteration:",314 if PROFILE_COMPOSITION == 0 else (266 if PROFILE_COMPOSITION == 1 else (293 if PROFILE_COMPOSITION == 2 else 245)))
+        elif COPY_FREE:
             print("profile workload:","model-p"+String(prefix)+("-buffer-swap" if PROFILE_FUSED else "-combined"))
             print("profile dispatches per iteration:",291 if PROFILE_FUSED else 314)
         elif SELECTION:
@@ -250,7 +277,7 @@ def main() raises:
         print("PROFILE_REGION_BEGIN")
         for _ in range(8):
             rewind(model,prefix)
-            if step[False](model,ctx,ids,candidate if PROFILE_FUSED else control,PROFILE_SELECTION,False,COPY_FREE and PROFILE_FUSED) != winner:
+            if step[False](model,ctx,ids,candidate if PROFILE_FUSED else control,1 if COMPOSITION and PROFILE_COMPOSITION >= 2 else PROFILE_SELECTION,False,(COMPOSITION and PROFILE_COMPOSITION >= 2) or (COPY_FREE and PROFILE_FUSED),COMPOSITION and (PROFILE_COMPOSITION == 1 or PROFILE_COMPOSITION == 3)) != winner:
                 raise Error("unstable profile prediction")
         print("PROFILE_REGION_END")
         sleep(0.25)
@@ -258,15 +285,19 @@ def main() raises:
     var records = String()
     for arm_index in range(2):
         var arm = (first+arm_index)%2
-        var observe = comparison == 1 and arm == 1 and not FUSION and not SELECTION
+        var observe = comparison == 1 and arm == 1 and not FUSION and not SELECTION and not COMPOSITION
         for sample in range(20):
             rewind(model,prefix)
             var start = _observation_clock()
             var selected: Int
-            if observe:
-                selected = step[True](model,ctx,ids)
+            comptime if COMPOSITION:
+                var variant = composition_candidate if arm else composition_control
+                selected = step[False](model,ctx,ids,26,1 if variant >= 2 else 0,False,variant >= 2,variant == 1 or variant == 3)
             else:
-                selected = step[False](model,ctx,ids,candidate if FUSION and comparison >= 1 and arm == 1 else control,selection_candidate if arm == 1 else selection_control,False,COPY_FREE and comparison == 1 and arm == 1)
+                if observe:
+                    selected = step[True](model,ctx,ids)
+                else:
+                    selected = step[False](model,ctx,ids,candidate if FUSION and comparison >= 1 and arm == 1 else control,selection_candidate if arm == 1 else selection_control,False,COPY_FREE and comparison == 1 and arm == 1)
             var elapsed = _observation_clock()-start
             if selected != winner or model.submitted_rows != 24*(prefix+1):
                 raise Error("measurement prediction/accounting changed")

@@ -12,6 +12,33 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class ModelProfileTests(unittest.TestCase):
+    def test_residual_norm_composition_geometry_and_choice(self):
+        from llm_mojo.benchmarks.model_profile import composition_summary, swap_capture_names
+        self.assertEqual(len(swap_capture_names(extra_norm=True)),195)
+        self.assertEqual([len(contract.stages(*contract.options(i))) for i in contract.COMPOSITION_IMPLEMENTATIONS],[314,266,293,245])
+        for implementation in contract.COMPOSITION_IMPLEMENTATIONS:
+            fields=contract.specification(1024,*contract.options(implementation))
+            contract.configuration(dict(implementation=implementation,entrypoint=contract.ENTRYPOINTS[implementation],
+                                        **fields,profile_iterations=8,profile_warmup_iterations=10))
+        latencies=[10000,9000,8500,7500]
+        samples=[dict(prefix=p,block=b,comparison=c,arm=a,sample=s,marks=[],
+                      elapsed_ns=latencies[contract.COMPOSITION_PAIRS[c][a]])
+                 for p in contract.PREFIXES for b in range(4) for c in range(6) for a in range(2) for s in range(10)]
+        self.assertEqual(composition_summary(samples)['selected'],3)
+        with self.assertRaises(ValueError): composition_summary(samples[:-1])
+        # A qualifying combined route must also beat other qualifiers directly.
+        damaged=copy.deepcopy(samples)
+        for row in damaged:
+            if row['comparison']==4 and row['arm']==1: row['elapsed_ns']=10000
+        self.assertEqual(composition_summary(damaged)['selected'],0)
+        for row in samples:
+            variant=contract.COMPOSITION_PAIRS[row['comparison']][row['arm']]
+            if variant in (1,3): row['elapsed_ns']=11000
+        self.assertEqual(composition_summary(samples)['selected'],2)
+        for row in samples:
+            if row['comparison']==0 and row['arm']==1: row['elapsed_ns']=14000
+        self.assertEqual(composition_summary(samples)['selected'],0)
+
     def test_retained_buffer_swap_evidence_integrity(self):
         from contextlib import redirect_stdout
         from io import StringIO
