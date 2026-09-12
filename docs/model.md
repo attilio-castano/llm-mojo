@@ -406,3 +406,13 @@ The measured combined route uses 245 compute commands versus 314 previously,
 with 17.1–24.5% lower complete-token latency and 107–115 tokens/s streaming
 medians. Explicit `combined`, `residual-norm`, `swap-argmax` and `all-three`
 policies preserve the four measured arms; multi-row behavior is unchanged.
+
+### Projection load scheduling and block size
+
+The [six-arrangement study](../studies/model_generation/projection-arrangements.md)
+compares fixed-width 896/4864 loading and 64/128/256-thread blocks over the current
+Fast path. Fixed-width arms reduced projection active time in Metal traces and
+streamed about 119–120 tokens/s, but none met the frozen full-token acceptance
+gate across all three histories. Fast/auto retain the original projection kernel.
+Explicit `projection-0` through `projection-5` policies retain the measured arms;
+they use the existing prefill route for multirow calls.

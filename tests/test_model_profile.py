@@ -50,6 +50,43 @@ projection arrangement: 5
             if r['prefix']==3968 and r['arm']==1: r['elapsed_ns']=10000
         self.assertEqual(projection_summary(samples)['screen_selected'],0)
 
+    def test_retained_projection_integrity(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import selection_replay
+        source=repository_root()/'studies/model_generation/projection-arrangements.json.gz'
+        original=json.loads(gzip.decompress(source.read_bytes()))
+        damages=[None,'sample','numerical','cache','layer','dispatch','provenance',
+                 'provenance-bytes','variant','target-variant','fragment','terminal','conditions','confirmation']
+        for damage in damages:
+            record=copy.deepcopy(original)
+            if damage=='sample': record['timing']['samples'].pop()
+            elif damage=='numerical': record['timing']['numerical'].pop()
+            elif damage=='cache': record['timing']['numerical'][0]['observations'][0]['exact']=False
+            elif damage=='layer': next(n for n in record['timing']['numerical'] if n['prefix']==64)['layers'].pop()
+            elif damage=='dispatch': record['captures'][5]['samples'].pop()
+            elif damage=='provenance': record['captures'][5]['provenance']['binary']['sha256']='0'*64
+            elif damage=='provenance-bytes': record['captures'][5]['provenance_text']+=' '
+            elif damage=='variant': record['captures'][5]['provenance']['projection_variant']=4
+            elif damage=='target-variant': record['captures'][5]['analysis']['capture_identity']['workload']['projection_variant']=4
+            elif damage=='fragment': record['captures'][5]['samples'][0]['segments']+=1
+            elif damage=='terminal': record['terminal']['blocks'][0]['arms'][5]['turns'][0]['generated'][0]=0
+            elif damage=='conditions': record['captures'][0]['conditions']['after']['power_mode_raw']='1'
+            elif damage=='confirmation':
+                record['confirmation']=None if record['confirmation'] else {'selected':1}
+            with self.subTest(damage=damage), tempfile.TemporaryDirectory() as temporary:
+                directory=Path(temporary)
+                raw=json.dumps(record).encode(); packed=gzip.compress(raw,mtime=0)
+                (directory/'projection-arrangements.json.gz').write_bytes(packed)
+                (directory/'projection-arrangements.json').write_text(json.dumps(dict(sha256=hashlib.sha256(packed).hexdigest(),
+                    uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with redirect_stdout(StringIO()):
+                    if damage is None:
+                        self.assertFalse(selection_replay(directory,projection=True)['confirmation_required'])
+                    else:
+                        with self.assertRaises(ValueError): selection_replay(directory,projection=True)
+
     def test_retained_residual_norm_integrity(self):
         from contextlib import redirect_stdout
         from io import StringIO

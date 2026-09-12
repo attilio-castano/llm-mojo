@@ -113,5 +113,14 @@
     "prefill all 16 measurement routes passed in both modes",
     "attention sublayer FP32, projections, GQA parallelism and decode measurement routes passed in both modes",
     "MLP projection variants in both modes, all seven stages and isolated projection ring routes passed"
-  ]
+  ],
+  "retained_evidence_validation": {
+    "command": "uv run --locked python -m unittest discover -s tests -p 'test_*.py'",
+    "exit_code": 0,
+    "python_tests": 175,
+    "log_sha256": "e94a16e1aaf85227c89e227194eef85be5e3961d72e603034a1758192e928046",
+    "log_bytes": 3679,
+    "test_source_sha256": "35609ea5a2d6147ba05ef0e41aaf3a8f7d993d3929191cb235730095ec660884",
+    "archive_sha256": "65b3ca14549adb49807896ed3d0fac27f84c679fa4178521d0fd0e28e79cf514"
+  }
 }
