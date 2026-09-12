@@ -1,4 +1,5 @@
 """A resident Mojo Qwen terminal chat; Python is only the verifying launcher."""
+from llm_mojo.model import is_projection_policy
 from std.sys import argv, is_defined
 from max.gpu.host import DeviceContext
 from llm_mojo.chat import ChatSession, DEFAULT_SYSTEM
@@ -29,7 +30,7 @@ def main() raises:
     var ctx = DeviceContext()
     var session = ChatSession(ctx,args[1],tokenizer,work,system,chunk)
     comptime if STUDY:
-        if args[7] != "fast" and args[7] != "fusion" and args[7] != "combined" and args[7] != "unfused" and args[7] != "gpu-argmax" and args[7] != "fused-head" and args[7] != "buffer-swap" and args[7] != "residual-norm" and args[7] != "swap-argmax" and args[7] != "all-three":
+        if not is_projection_policy(args[7]) and args[7] != "fast" and args[7] != "fusion" and args[7] != "combined" and args[7] != "unfused" and args[7] != "gpu-argmax" and args[7] != "fused-head" and args[7] != "buffer-swap" and args[7] != "residual-norm" and args[7] != "swap-argmax" and args[7] != "all-three":
             raise Error("unknown native study arm")
         session.policy = String(args[7])
     print("Ready — Fast on",ctx.name(),"/",ctx.api(),flush=True)

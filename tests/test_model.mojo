@@ -4,7 +4,7 @@ from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext
 from llm_mojo.model import _embedding, _copy_rows, load_bf16, save_bf16
 from std.memory import bitcast
-from llm_mojo.model import select_configuration, select_token_selection, select_copy_free, swap_hidden_buffers, select_residual_norm
+from llm_mojo.model import select_configuration, select_token_selection, select_copy_free, swap_hidden_buffers, select_residual_norm, select_projection
 from llm_mojo.generate_cli import generation_budget, is_stop
 
 
@@ -49,6 +49,16 @@ def test_hidden_buffer_swaps_keep_queued_views_alive() raises:
 
 
 def test_generation_limits_and_policy() raises:
+    for variant in range(6):
+        var policy = "projection-"+String(variant)
+        assert_equal(select_configuration(policy,1,64,"Apple M4 Pro"),26)
+        assert_equal(select_projection(policy,1,"Apple M4 Pro"),variant)
+        assert_equal(select_copy_free(policy,1,"Apple M4 Pro"),True)
+        assert_equal(select_residual_norm(policy,1,"Apple M4 Pro"),True)
+        assert_equal(select_token_selection(policy,1,"Apple M4 Pro"),1)
+        assert_equal(select_projection(policy,2,"Apple M4 Pro"),0)
+        assert_equal(select_projection(policy,1,"other"),0)
+    assert_equal(select_projection("fast",1,"Apple M4 Pro"),0)
     for policy in ["fast","auto"]:
         assert_equal(select_configuration(policy,1,64,"Apple M4 Pro"),26)
         assert_equal(select_copy_free(policy,1,"Apple M4 Pro"),True)

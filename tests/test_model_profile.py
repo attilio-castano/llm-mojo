@@ -12,6 +12,44 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class ModelProfileTests(unittest.TestCase):
+    def test_projection_screen_requires_all_contexts_and_confirmation(self):
+        from llm_mojo.benchmarks.model_profile import projection_summary
+        implementation='qwen_model_all_three'
+        provenance=dict(implementation=implementation,entrypoint=contract.ENTRYPOINTS[implementation],
+            **contract.specification(1024,*contract.options(implementation)),profile_iterations=8,
+            profile_warmup_iterations=10,projection_variant=5)
+        self.assertEqual(contract.configuration(provenance)['projection_variant'],5)
+        for invalid in (-1,6,True):
+            with self.assertRaises(ValueError): contract.configuration(dict(provenance,projection_variant=invalid))
+        output='''device: Apple M4 Pro
+api: metal
+correctness: passed
+profile implementation: QwenModel.forward+greedy-all-three
+rows: 1
+hidden: 896
+key value rows: 1025
+profile workload: model-p1024-all-three
+profile dispatches per iteration: 245
+warmup iterations: 10
+profile iterations: 8
+post-profile idle milliseconds: 250
+projection arrangement: 5
+'''
+        self.assertEqual(parse_target_identity(output)['projection_variant'],5)
+        with self.assertRaises(ValueError): parse_target_identity(output+'projection arrangement: 5\n')
+        samples=[dict(prefix=p,block=b,comparison=c,arm=a,sample=i,marks=[],
+                      elapsed_ns=8000 if a and c==1 else 9000 if a and c else 10000)
+                 for p in contract.PREFIXES for b in range(4) for c in range(6)
+                 for a in range(2) for i in range(10)]
+        summary=projection_summary(samples)
+        self.assertEqual(summary['screen_selected'],1)
+        self.assertFalse(summary['promote'])
+        self.assertTrue(summary['confirmation_required'])
+        with self.assertRaises(ValueError): projection_summary(samples[:-1])
+        for r in samples:
+            if r['prefix']==3968 and r['arm']==1: r['elapsed_ns']=10000
+        self.assertEqual(projection_summary(samples)['screen_selected'],0)
+
     def test_retained_residual_norm_integrity(self):
         from contextlib import redirect_stdout
         from io import StringIO

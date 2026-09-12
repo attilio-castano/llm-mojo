@@ -102,6 +102,11 @@ def configuration(data):
         raise ValueError('Qwen trace geometry changed')
     if data.get('profile_iterations') != 8 or data.get('profile_warmup_iterations') != 10:
         raise ValueError('Qwen trace capture budget changed')
+    if 'projection_variant' in data:
+        variant=data['projection_variant']
+        if data['implementation']!='qwen_model_all_three' or type(variant) is not int or not 0<=variant<=5:
+            raise ValueError('invalid Qwen projection variant')
+        expected['projection_variant']=variant
     return expected
 
 
@@ -142,3 +147,13 @@ COMPOSITION_DECLARATION = {**COPY_FREE_DECLARATION,
     'trace_arms':COMPOSITION_ARMS,
     'extra_correctness':'logits and complete caches at all histories; 195 layer tensors and full ownership/reset/rejection lifecycle per candidate at history 64',
     'choice':'Prefer qualifying all-three if all direct ratios against other qualifiers are below 1; else sole qualifier; unresolved multiple qualifiers retain Fast.'}
+
+
+PROJECTION_ARMS = ['projection-'+str(v) for v in range(6)]
+PROJECTION_LABELS = ['runtime/128','fixed/128','runtime/64','runtime/256','fixed/64','fixed/256']
+PROJECTION_DECLARATION = dict(COMPOSITION_DECLARATION,
+    policy='all-three Fast; 121 rowwise projections with exact-width and block-size arrangements',
+    comparisons=[[0,v] for v in range(6)], arms=PROJECTION_ARMS, trace_arms=PROJECTION_ARMS,
+    candidate='one output per SIMD group; runtime or fixed 896/4864 width with four-iteration prefetch; 64/128/256 threads',
+    extra_correctness='15 full logits/cache comparisons and 195 extra tensors per candidate at prefix64',
+    choice='qualify at all contexts; lowest worst-context median ratio, then mean, then ID; separate confirmation required')

@@ -323,7 +323,7 @@ def _enqueue_fused_decode_qkv(ctx: DeviceContext, mut work: AttentionWorkspace,
 
 def _enqueue_attention_qkv(
     ctx: DeviceContext, mut weights: AttentionWeights,
-    mut work: AttentionWorkspace, rows: Int, mapping: Int, unpack: Bool = True,
+    mut work: AttentionWorkspace, rows: Int, mapping: Int, unpack: Bool = True, decode_variant: Int = 0,
 ) raises:
     """Projection boundary shared by composition and exact-upstream tests.
 
@@ -361,7 +361,7 @@ def _enqueue_attention_qkv(
     var weight = TileTensor(weights.qkv, row_major(h + 2 * k, h))
     var bias = TileTensor(weights.bias, row_major(h + 2 * k))
     if mapping == 1:
-        enqueue_linear_apple_gpu(ctx, normal, weight, bias, packed)
+        enqueue_linear_apple_gpu(ctx, normal, weight, bias, packed, decode_variant)
     elif mapping == 2:
         enqueue_linear_prefill_mma_8x16_apple_gpu(ctx, normal, weight, bias, packed)
     elif mapping == 3:
@@ -384,7 +384,7 @@ def _enqueue_attention_qkv(
 
 def _enqueue_attention_wo(
     ctx: DeviceContext, mut weights: AttentionWeights,
-    mut work: AttentionWorkspace, rows: Int, use_mma: Bool, tile: Int = 0,
+    mut work: AttentionWorkspace, rows: Int, use_mma: Bool, tile: Int = 0, decode_variant: Int = 0,
 ) raises:
     """Shared Wo boundary for composition and isolated timing on identical data."""
     if tile < 0 or tile > 5:
@@ -400,7 +400,7 @@ def _enqueue_attention_wo(
     elif tile == 5:
         enqueue_linear_rowwise_rows_apple_gpu[16](ctx, a, w, o)
     elif not use_mma:
-        enqueue_linear_apple_gpu(ctx, a, w, o)
+        enqueue_linear_apple_gpu(ctx, a, w, o, decode_variant)
     elif tile == 0:
         enqueue_linear_prefill_mma_8x16_apple_gpu(ctx, a, w, o)
     elif tile == 1:
@@ -481,6 +481,7 @@ def enqueue_attention_sublayer[
     fuse_qkv: Bool = False,
     input_normalized: Bool = False,
     defer_residual: Bool = False,
+    decode_variant: Int = 0,
 ) raises -> Int:
     """Enqueue one sublayer and advance cache length; return the launched route.
 
@@ -519,6 +520,8 @@ def enqueue_attention_sublayer[
     var p = cache.length
     var t = p + r
 
+    if decode_variant and (decode_variant < 0 or decode_variant > 5 or r != 1 or h != 896 or qkv_mapping != 1 or wo_mma):
+        raise Error("projection arrangement requires Qwen rowwise decode")
     if fuse_qkv and (r != 1 or nq != 14 or nk != 2 or d != 64 or qkv_mapping != 1):
         raise Error("fused QKV requires one Qwen row and packed rowwise projection")
     var normal = TileTensor(work.normalized, row_major(r, h))
@@ -528,7 +531,7 @@ def enqueue_attention_sublayer[
         enqueue_rms_norm_apple_gpu(
             ctx, x, TileTensor(weights.norm, row_major(h)), normal
         )
-    _enqueue_attention_qkv(ctx, weights, work, r, qkv_mapping, not fuse_qkv)
+    _enqueue_attention_qkv(ctx, weights, work, r, qkv_mapping, not fuse_qkv, decode_variant)
     var q = TileTensor(work.query, row_major(r, nq, d))
     if fuse_qkv:
         _enqueue_fused_decode_qkv(ctx, work, cache)
@@ -644,7 +647,7 @@ def enqueue_attention_sublayer[
                 32, 32, MMA=True, SCHEDULE=2
             ](ctx, q, keys, values, a)
     var projected = TileTensor(work.projected, row_major(r, h))
-    _enqueue_attention_wo(ctx, weights, work, r, wo_mma, wo_tile)
+    _enqueue_attention_wo(ctx, weights, work, r, wo_mma, wo_tile, decode_variant)
     if not defer_residual:
         enqueue_residual_apple_gpu(
             ctx, x, projected, TileTensor(work.output, row_major(r, h))
@@ -662,6 +665,7 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     fuse_qkv: Bool = False,
     input_normalized: Bool = False,
     defer_residual: Bool = False,
+    decode_variant: Int = 0,
 ) raises -> Int:
     """Compose the prior Qwen projection and FP32 GQA studies on Metal.
 
@@ -712,5 +716,5 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     return enqueue_attention_sublayer(
         ctx, weights, cache, work, x, 6 + gqa_mapping, use_mma, qkv,
         1 if projection_mapping == 5 else (projection_mapping if projection_mapping <= 2 else 0),
-        fuse_qkv, input_normalized, defer_residual,
+        fuse_qkv, input_normalized, defer_residual, decode_variant,
     )

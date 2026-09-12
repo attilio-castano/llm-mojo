@@ -278,6 +278,8 @@ def capture_identity(path: Path) -> tuple[dict[str, Any], str]:
         expected_target.update(
             {k: workload[k] for k in attention_target_fields(operation)}
         )
+    if 'projection_variant' in workload:
+        expected_target['projection_variant']=workload['projection_variant']
     require(
         target == expected_target,
         "capture receipt target identity does not match its provenance",
