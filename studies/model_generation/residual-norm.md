@@ -87,6 +87,24 @@ The retained evidence replay checks the original provenance file bytes as well
 as parsed contents. This preserves capture hash identity when the surrounding
 archive sorts JSON keys. Rehashed missing or altered evidence must still fail.
 
+## Public Fast promotion verification
+
+Promoted source `140e166` passes 173 Python tests and four native policy/ownership
+tests. A fresh default build matches the frozen all-three logits and all 48 full
+KV buffers at histories 64, 1024 and 3968; observed and ordinary paths agree.
+The public dynamic Fast driver matches explicit controls across all 492 files
+for a 3, 1, 2, 1 row schedule. Chat checks preserve 144 cache invariants and cover
+reset, failure recovery, interruption and pending closure. Three default-public
+128-token terminal replies match the frozen candidate text, tokens and history.
+
+A separate functional trace of the promoted default profiler confirms 245
+compute commands plus four blits per step, 1,992 commands across eight steps.
+It verifies routing and is not an additional acceptance timing campaign.
+The [promotion receipt](residual-norm-promotion.json) retains clean source,
+binary and asset identities, test results and trace identity. Historical study
+policies retain their original choices; the normal profiling builder records
+the current all-three route explicitly.
+
 ## Mechanism
 
 The control is configuration 26: existing QKV/RoPE/cache and SiLU/multiply
