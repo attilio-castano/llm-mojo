@@ -1,0 +1,1155 @@
+{
+  "timing": [
+    {
+      "prefix": 64,
+      "baseline_ms": 17.125073,
+      "equivalent_steps_per_second": 58.3939116639094,
+      "baseline_block_ms": [
+        17.397979,
+        15.9214375,
+        18.079417,
+        16.852167
+      ],
+      "observation_ratios": [
+        0.9624369589134462,
+        1.0684624739443283,
+        0.9941623117603847,
+        1.0026665413415379
+      ],
+      "calibration_ratios": [
+        0.9481085169604753,
+        0.9640858529985836,
+        0.9364352411575563,
+        0.9869977570207713
+      ],
+      "noise_floor": 0.06356475884244372,
+      "host_phase_ms": {
+        "preflight": 0.017281,
+        "token staging": 0.23846875,
+        "embedding enqueue": 0.039781,
+        "decoder stack enqueue": 13.82632325,
+        "final norm/head enqueue": 0.07710425000000001,
+        "forward return": 6.25e-05,
+        "map/wait": 1.6116565,
+        "CPU argmax scan": 0.78672875,
+        "unmap": 0.15031275
+      }
+    },
+    {
+      "prefix": 1024,
+      "baseline_ms": 16.8792815,
+      "equivalent_steps_per_second": 59.244227901525306,
+      "baseline_block_ms": [
+        16.7480835,
+        15.5935835,
+        17.586063,
+        17.0104795
+      ],
+      "observation_ratios": [
+        0.9994215756089346,
+        1.0914291445580806,
+        1.0401216861329339,
+        0.962243862673007
+      ],
+      "calibration_ratios": [
+        1.1025185888698097,
+        0.9412336370860533,
+        1.0871090095559637,
+        0.948030770176817
+      ],
+      "noise_floor": 0.10251858886980969,
+      "host_phase_ms": {
+        "preflight": 0.01686475,
+        "token staging": 0.24551024999999999,
+        "embedding enqueue": 0.03889575,
+        "decoder stack enqueue": 13.588229,
+        "final norm/head enqueue": 0.070917,
+        "forward return": 4.125e-05,
+        "map/wait": 1.74411475,
+        "CPU argmax scan": 0.7263539999999999,
+        "unmap": 0.1610105
+      }
+    },
+    {
+      "prefix": 3968,
+      "baseline_ms": 17.3035,
+      "equivalent_steps_per_second": 57.79177623024244,
+      "baseline_block_ms": [
+        16.9287915,
+        17.656521,
+        16.950479,
+        18.190563
+      ],
+      "observation_ratios": [
+        1.0047884398599864,
+        0.944317088287098,
+        0.981514799670263,
+        0.9167413619908301
+      ],
+      "calibration_ratios": [
+        1.043205927478514,
+        0.9530152933200661,
+        1.0043152167892013,
+        0.9667065223043663
+      ],
+      "noise_floor": 0.05,
+      "host_phase_ms": {
+        "preflight": 0.01697925,
+        "token staging": 0.221,
+        "embedding enqueue": 0.03754175,
+        "decoder stack enqueue": 13.721562500000001,
+        "final norm/head enqueue": 0.065021,
+        "forward return": 0.00011475,
+        "map/wait": 1.58526075,
+        "CPU argmax scan": 0.7719475,
+        "unmap": 0.142573
+      }
+    }
+  ],
+  "gpu": [
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "FP32 GQA",
+      "median_ms": 0.18102000000000001
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "K RoPE",
+      "median_ms": 0.131064
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "KV append",
+      "median_ms": 0.1055435
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "MLP RMSNorm",
+      "median_ms": 0.16052
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "MLP residual",
+      "median_ms": 0.0756455
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "Q RoPE",
+      "median_ms": 0.16321
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "QKV unpack",
+      "median_ms": 0.114417
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "SiLU",
+      "median_ms": 0.0936665
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "attention RMSNorm",
+      "median_ms": 0.175145
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "attention residual",
+      "median_ms": 0.07181299999999999
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "down projection",
+      "median_ms": 1.654187
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "embedding",
+      "median_ms": 0.003667
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "final RMSNorm",
+      "median_ms": 0.0074789999999999995
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "gate projection",
+      "median_ms": 1.2984155
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "inter-layer copy",
+      "median_ms": 0.07379150000000001
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "logit buffer map",
+      "median_ms": 0.0038755000000000005
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "logit buffer unmap",
+      "median_ms": 0.0027915
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "multiply",
+      "median_ms": 0.08393400000000001
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "output projection",
+      "median_ms": 0.42354250000000004
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "packed QKV projection",
+      "median_ms": 0.47964399999999996
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "token buffer map",
+      "median_ms": 0.0019375
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "token buffer unmap",
+      "median_ms": 0.0018124999999999999
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "up projection",
+      "median_ms": 1.2685635
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "vocabulary projection",
+      "median_ms": 1.3116664999999998
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "GPU active total",
+      "median_ms": 7.9030985000000005
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "GPU enclosing span",
+      "median_ms": 20.367103999999998
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "GPU compute enclosing span",
+      "median_ms": 19.0181875
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "Metal submission intervals",
+      "median_ms": 15.5847275
+    },
+    {
+      "prefix": 64,
+      "repeat": 0,
+      "stage": "Metal encoder intervals",
+      "median_ms": 12.0723015
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "FP32 GQA",
+      "median_ms": 0.181104
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "K RoPE",
+      "median_ms": 0.1332685
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "KV append",
+      "median_ms": 0.106688
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "MLP RMSNorm",
+      "median_ms": 0.1630005
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "MLP residual",
+      "median_ms": 0.075295
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "Q RoPE",
+      "median_ms": 0.16451949999999999
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "QKV unpack",
+      "median_ms": 0.115459
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "SiLU",
+      "median_ms": 0.09331400000000001
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "attention RMSNorm",
+      "median_ms": 0.1746865
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "attention residual",
+      "median_ms": 0.0721045
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "down projection",
+      "median_ms": 1.6425635
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "embedding",
+      "median_ms": 0.00375
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "final RMSNorm",
+      "median_ms": 0.007395499999999999
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "gate projection",
+      "median_ms": 1.279896
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "inter-layer copy",
+      "median_ms": 0.0735
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "logit buffer map",
+      "median_ms": 0.003959
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "logit buffer unmap",
+      "median_ms": 0.002625
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "multiply",
+      "median_ms": 0.0828725
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "output projection",
+      "median_ms": 0.420979
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "packed QKV projection",
+      "median_ms": 0.47985449999999996
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "token buffer map",
+      "median_ms": 0.0020415
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "token buffer unmap",
+      "median_ms": 0.0018124999999999999
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "up projection",
+      "median_ms": 1.2710395
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "vocabulary projection",
+      "median_ms": 1.3345205
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "GPU active total",
+      "median_ms": 7.8828745
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "GPU enclosing span",
+      "median_ms": 22.6738335
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "GPU compute enclosing span",
+      "median_ms": 21.4179165
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "Metal submission intervals",
+      "median_ms": 16.8082735
+    },
+    {
+      "prefix": 64,
+      "repeat": 1,
+      "stage": "Metal encoder intervals",
+      "median_ms": 12.4889715
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "FP32 GQA",
+      "median_ms": 0.4938125
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "K RoPE",
+      "median_ms": 0.13133450000000002
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "KV append",
+      "median_ms": 0.104543
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "MLP RMSNorm",
+      "median_ms": 0.160917
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "MLP residual",
+      "median_ms": 0.075168
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "Q RoPE",
+      "median_ms": 0.16227049999999998
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "QKV unpack",
+      "median_ms": 0.1140405
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "SiLU",
+      "median_ms": 0.0937525
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "attention RMSNorm",
+      "median_ms": 0.17045949999999999
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "attention residual",
+      "median_ms": 0.07245750000000001
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "down projection",
+      "median_ms": 1.628374
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "embedding",
+      "median_ms": 0.0036245
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "final RMSNorm",
+      "median_ms": 0.006999999999999999
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "gate projection",
+      "median_ms": 1.2606264999999999
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "inter-layer copy",
+      "median_ms": 0.0730835
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "logit buffer map",
+      "median_ms": 0.003771
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "logit buffer unmap",
+      "median_ms": 0.0026455000000000003
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "multiply",
+      "median_ms": 0.08239550000000001
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "output projection",
+      "median_ms": 0.4185845
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "packed QKV projection",
+      "median_ms": 0.4751665
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "token buffer map",
+      "median_ms": 0.0020629999999999997
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "token buffer unmap",
+      "median_ms": 0.001833
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "up projection",
+      "median_ms": 1.25952
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "vocabulary projection",
+      "median_ms": 1.3102084999999999
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "GPU active total",
+      "median_ms": 8.1370715
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "GPU enclosing span",
+      "median_ms": 19.3698335
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "GPU compute enclosing span",
+      "median_ms": 18.1338335
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "Metal submission intervals",
+      "median_ms": 15.34623
+    },
+    {
+      "prefix": 1024,
+      "repeat": 0,
+      "stage": "Metal encoder intervals",
+      "median_ms": 11.681925
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "FP32 GQA",
+      "median_ms": 0.50748
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "K RoPE",
+      "median_ms": 0.130585
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "KV append",
+      "median_ms": 0.1059585
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "MLP RMSNorm",
+      "median_ms": 0.1634565
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "MLP residual",
+      "median_ms": 0.083541
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "Q RoPE",
+      "median_ms": 0.16691699999999998
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "QKV unpack",
+      "median_ms": 0.114584
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "SiLU",
+      "median_ms": 0.097124
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "attention RMSNorm",
+      "median_ms": 0.172542
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "attention residual",
+      "median_ms": 0.07485549999999999
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "down projection",
+      "median_ms": 1.693104
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "embedding",
+      "median_ms": 0.003583
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "final RMSNorm",
+      "median_ms": 0.0073335
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "gate projection",
+      "median_ms": 1.326602
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "inter-layer copy",
+      "median_ms": 0.07693749999999999
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "logit buffer map",
+      "median_ms": 0.0038125
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "logit buffer unmap",
+      "median_ms": 0.0026665
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "multiply",
+      "median_ms": 0.08635499999999999
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "output projection",
+      "median_ms": 0.437874
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "packed QKV projection",
+      "median_ms": 0.517479
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "token buffer map",
+      "median_ms": 0.0019585
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "token buffer unmap",
+      "median_ms": 0.0018124999999999999
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "up projection",
+      "median_ms": 1.295356
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "vocabulary projection",
+      "median_ms": 1.3132085
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "GPU active total",
+      "median_ms": 8.559375
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "GPU enclosing span",
+      "median_ms": 24.218104
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "GPU compute enclosing span",
+      "median_ms": 22.92525
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "Metal submission intervals",
+      "median_ms": 17.1246255
+    },
+    {
+      "prefix": 1024,
+      "repeat": 1,
+      "stage": "Metal encoder intervals",
+      "median_ms": 12.6557095
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "FP32 GQA",
+      "median_ms": 1.4543545
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "K RoPE",
+      "median_ms": 0.1318955
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "KV append",
+      "median_ms": 0.104003
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "MLP RMSNorm",
+      "median_ms": 0.165147
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "MLP residual",
+      "median_ms": 0.07552049999999999
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "Q RoPE",
+      "median_ms": 0.1625425
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "QKV unpack",
+      "median_ms": 0.115083
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "SiLU",
+      "median_ms": 0.09414600000000001
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "attention RMSNorm",
+      "median_ms": 0.173875
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "attention residual",
+      "median_ms": 0.0724785
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "down projection",
+      "median_ms": 1.6364385000000001
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "embedding",
+      "median_ms": 0.00375
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "final RMSNorm",
+      "median_ms": 0.0073545
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "gate projection",
+      "median_ms": 1.2805195
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "inter-layer copy",
+      "median_ms": 0.073709
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "logit buffer map",
+      "median_ms": 0.0037920000000000002
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "logit buffer unmap",
+      "median_ms": 0.002625
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "multiply",
+      "median_ms": 0.0831665
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "output projection",
+      "median_ms": 0.423272
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "packed QKV projection",
+      "median_ms": 0.4831445
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "token buffer map",
+      "median_ms": 0.001917
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "token buffer unmap",
+      "median_ms": 0.001771
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "up projection",
+      "median_ms": 1.2676435
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "vocabulary projection",
+      "median_ms": 1.3368120000000001
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "GPU active total",
+      "median_ms": 9.157107
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "GPU enclosing span",
+      "median_ms": 20.519979499999998
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "GPU compute enclosing span",
+      "median_ms": 19.2802505
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "Metal submission intervals",
+      "median_ms": 16.1078165
+    },
+    {
+      "prefix": 3968,
+      "repeat": 0,
+      "stage": "Metal encoder intervals",
+      "median_ms": 12.237181
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "FP32 GQA",
+      "median_ms": 1.4580185
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "K RoPE",
+      "median_ms": 0.1317935
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "KV append",
+      "median_ms": 0.105939
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "MLP RMSNorm",
+      "median_ms": 0.164813
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "MLP residual",
+      "median_ms": 0.0758145
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "Q RoPE",
+      "median_ms": 0.16258299999999998
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "QKV unpack",
+      "median_ms": 0.11435500000000001
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "SiLU",
+      "median_ms": 0.09493950000000001
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "attention RMSNorm",
+      "median_ms": 0.170397
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "attention residual",
+      "median_ms": 0.071958
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "down projection",
+      "median_ms": 1.625978
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "embedding",
+      "median_ms": 0.0036875
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "final RMSNorm",
+      "median_ms": 0.0070834999999999995
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "gate projection",
+      "median_ms": 1.262355
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "inter-layer copy",
+      "median_ms": 0.072522
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "logit buffer map",
+      "median_ms": 0.0037289999999999997
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "logit buffer unmap",
+      "median_ms": 0.002646
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "multiply",
+      "median_ms": 0.082916
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "output projection",
+      "median_ms": 0.4169385
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "packed QKV projection",
+      "median_ms": 0.48346049999999996
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "token buffer map",
+      "median_ms": 0.0020204999999999997
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "token buffer unmap",
+      "median_ms": 0.00175
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "up projection",
+      "median_ms": 1.2663545
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "vocabulary projection",
+      "median_ms": 1.3063125000000002
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "GPU active total",
+      "median_ms": 9.083159
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "GPU enclosing span",
+      "median_ms": 20.169354
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "GPU compute enclosing span",
+      "median_ms": 18.9278125
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "Metal submission intervals",
+      "median_ms": 15.4391265
+    },
+    {
+      "prefix": 3968,
+      "repeat": 1,
+      "stage": "Metal encoder intervals",
+      "median_ms": 11.6564415
+    }
+  ]
+}

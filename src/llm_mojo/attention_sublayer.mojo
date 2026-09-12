@@ -16,6 +16,8 @@ from llm_mojo.linear import (
     enqueue_linear_prefill_mma_tile_apple_gpu,
 )
 from llm_mojo.rope import enqueue_rope_apple_gpu
+from std.builtin.simd import FastMathFlag
+from std.sys.info import is_apple_gpu
 from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
 from llm_mojo.attention_decode import (
     enqueue_grouped_query_attention_decode_apple_gpu,
@@ -258,9 +260,70 @@ def _unpack_qkv[PL: TensorLayout, QL: TensorLayout, KL: TensorLayout](
             value[row, column - h - k] = packed[row, column]
 
 
+def _fused_decode_qkv[PL: TensorLayout, TL: TensorLayout, QL: TensorLayout, CL: TensorLayout](
+    packed: TileTensor[DType.bfloat16, PL, MutAnyOrigin],
+    cosine: TileTensor[DType.bfloat16, TL, MutAnyOrigin],
+    sine: TileTensor[DType.bfloat16, TL, MutAnyOrigin],
+    query: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    key_cache: TileTensor[DType.bfloat16, CL, MutAnyOrigin],
+    value_cache: TileTensor[DType.bfloat16, CL, MutAnyOrigin],
+    past: Int32,
+):
+    """Qwen R=1: one rotary pair per thread; direct BF16 Q and cache stores.
+
+    Threads 0..447 own Q pairs, 448..511 own K pairs. Threads 0..127
+    also copy one V element. No inter-thread communication or scratch writes.
+    Packed input is already rounded BF16; preserve the RoPE product roundings.
+    """
+    comptime assert is_apple_gpu()
+    comptime assert packed.flat_rank == 2 and cosine.flat_rank == 2 and sine.flat_rank == 2
+    comptime assert query.flat_rank == 3 and key_cache.flat_rank == 2 and value_cache.flat_rank == 2
+    var i = global_idx.x
+    var p = Int(past)
+    if i < 512:
+        var head = i // 32
+        var pair = i % 32
+        var first_column = head * 64 + pair
+        var first = rebind[Scalar[DType.bfloat16]](packed[0, first_column])
+        var second = rebind[Scalar[DType.bfloat16]](packed[0, first_column + 32])
+        var c0 = rebind[Scalar[DType.bfloat16]](cosine[p, pair])
+        var c1 = rebind[Scalar[DType.bfloat16]](cosine[p, pair + 32])
+        var s0 = rebind[Scalar[DType.bfloat16]](sine[p, pair])
+        var s1 = rebind[Scalar[DType.bfloat16]](sine[p, pair + 32])
+        var ac: Scalar[DType.bfloat16] = first.fma[FastMathFlag.NONE](c0, 0)
+        var bs: Scalar[DType.bfloat16] = second.fma[FastMathFlag.NONE](s0, 0)
+        var bc: Scalar[DType.bfloat16] = second.fma[FastMathFlag.NONE](c1, 0)
+        var ass: Scalar[DType.bfloat16] = first.fma[FastMathFlag.NONE](s1, 0)
+        var low: Scalar[DType.bfloat16] = ac - bs
+        var high: Scalar[DType.bfloat16] = bc + ass
+        if head < 14:
+            query[0, head, pair] = rebind[query.ElementType](low)
+            query[0, head, pair + 32] = rebind[query.ElementType](high)
+        else:
+            var column = (head - 14) * 64 + pair
+            key_cache[p, column] = rebind[key_cache.ElementType](low)
+            key_cache[p, column + 32] = rebind[key_cache.ElementType](high)
+    if i < 128:
+        value_cache[p, i] = rebind[value_cache.ElementType](packed[0, 1024 + i])
+
+
+def _enqueue_fused_decode_qkv(ctx: DeviceContext, mut work: AttentionWorkspace,
+                              mut cache: AttentionCache) raises:
+    # Caller performs the complete sublayer/decoder preflight before dispatch.
+    var packed = TileTensor(work.packed, row_major(1, 1152))
+    var table = TileTensor(work.cosine, row_major(work.capacity, 64))
+    var sine = TileTensor(work.sine, row_major(work.capacity, 64))
+    var query = TileTensor(work.query, row_major(1, 14, 64))
+    var key = TileTensor(cache.key, row_major(cache.capacity, 128))
+    var value = TileTensor(cache.value, row_major(cache.capacity, 128))
+    ctx.enqueue_function[_fused_decode_qkv[type_of(packed.layout), type_of(table.layout),
+                                         type_of(query.layout), type_of(key.layout)]](
+        packed, table, sine, query, key, value, Int32(cache.length), grid_dim=4, block_dim=128)
+
+
 def _enqueue_attention_qkv(
     ctx: DeviceContext, mut weights: AttentionWeights,
-    mut work: AttentionWorkspace, rows: Int, mapping: Int,
+    mut work: AttentionWorkspace, rows: Int, mapping: Int, unpack: Bool = True, decode_variant: Int = 0,
 ) raises:
     """Projection boundary shared by composition and exact-upstream tests.
 
@@ -298,7 +361,7 @@ def _enqueue_attention_qkv(
     var weight = TileTensor(weights.qkv, row_major(h + 2 * k, h))
     var bias = TileTensor(weights.bias, row_major(h + 2 * k))
     if mapping == 1:
-        enqueue_linear_apple_gpu(ctx, normal, weight, bias, packed)
+        enqueue_linear_apple_gpu(ctx, normal, weight, bias, packed, decode_variant)
     elif mapping == 2:
         enqueue_linear_prefill_mma_8x16_apple_gpu(ctx, normal, weight, bias, packed)
     elif mapping == 3:
@@ -311,6 +374,8 @@ def _enqueue_attention_qkv(
         enqueue_linear_rowwise_rows_apple_gpu[8](ctx, normal, weight, bias, packed)
     else:
         enqueue_linear_rowwise_rows_apple_gpu[16](ctx, normal, weight, bias, packed)
+    if not unpack:
+        return
     ctx.enqueue_function[_unpack_qkv[type_of(packed.layout), type_of(q.layout), type_of(key.layout)]](
         packed, q, key, value, Int32(rows), Int32(h), Int32(k),
         grid_dim=ceildiv(rows * (h + 2 * k), 128), block_dim=128,
@@ -319,7 +384,7 @@ def _enqueue_attention_qkv(
 
 def _enqueue_attention_wo(
     ctx: DeviceContext, mut weights: AttentionWeights,
-    mut work: AttentionWorkspace, rows: Int, use_mma: Bool, tile: Int = 0,
+    mut work: AttentionWorkspace, rows: Int, use_mma: Bool, tile: Int = 0, decode_variant: Int = 0,
 ) raises:
     """Shared Wo boundary for composition and isolated timing on identical data."""
     if tile < 0 or tile > 5:
@@ -335,7 +400,7 @@ def _enqueue_attention_wo(
     elif tile == 5:
         enqueue_linear_rowwise_rows_apple_gpu[16](ctx, a, w, o)
     elif not use_mma:
-        enqueue_linear_apple_gpu(ctx, a, w, o)
+        enqueue_linear_apple_gpu(ctx, a, w, o, decode_variant)
     elif tile == 0:
         enqueue_linear_prefill_mma_8x16_apple_gpu(ctx, a, w, o)
     elif tile == 1:
@@ -413,6 +478,10 @@ def enqueue_attention_sublayer[
     wo_mma: Bool = False,
     qkv_mapping: Int = 0,
     wo_tile: Int = 0,
+    fuse_qkv: Bool = False,
+    input_normalized: Bool = False,
+    defer_residual: Bool = False,
+    decode_variant: Int = 0,
 ) raises -> Int:
     """Enqueue one sublayer and advance cache length; return the launched route.
 
@@ -435,6 +504,9 @@ def enqueue_attention_sublayer[
     select those same larger tiles for Wo; zero preserves the 8x16 control.
     X must not overlap any writable workspace/cache region. Read output from
     work.output only after completion and before its next overwrite.
+    Internal input_normalized/defer_residual flags let the model compose the
+    adjacent residual and norm. The former consumes existing work.normalized;
+    the latter leaves work.projected ready and does not write work.output.
     """
     var launched_route = _validate_attention_sublayer(
         ctx, weights, cache, work, x, route, qkv_mapping, wo_tile
@@ -448,42 +520,52 @@ def enqueue_attention_sublayer[
     var p = cache.length
     var t = p + r
 
+    if decode_variant and (decode_variant < 0 or decode_variant > 5 or r != 1 or h != 896 or qkv_mapping != 1 or wo_mma):
+        raise Error("projection arrangement requires Qwen rowwise decode")
+    if fuse_qkv and (r != 1 or nq != 14 or nk != 2 or d != 64 or qkv_mapping != 1):
+        raise Error("fused QKV requires one Qwen row and packed rowwise projection")
     var normal = TileTensor(work.normalized, row_major(r, h))
-    enqueue_rms_norm_apple_gpu(
-        ctx, x, TileTensor(weights.norm, row_major(h)), normal
-    )
-    _enqueue_attention_qkv(ctx, weights, work, r, qkv_mapping)
-    var v2 = TileTensor(work.raw_value, row_major(r, k))
+    if (input_normalized or defer_residual) and (r != 1 or h != 896):
+        raise Error("deferred normalization/residual requires one Qwen row")
+    if not input_normalized:
+        enqueue_rms_norm_apple_gpu(
+            ctx, x, TileTensor(weights.norm, row_major(h)), normal
+        )
+    _enqueue_attention_qkv(ctx, weights, work, r, qkv_mapping, not fuse_qkv, decode_variant)
     var q = TileTensor(work.query, row_major(r, nq, d))
-    var c = TileTensor(work.cosine, row_major(work.capacity, d))
-    var s = TileTensor(work.sine, row_major(work.capacity, d))
-    enqueue_rope_apple_gpu(
-        ctx, TileTensor(work.raw_query, row_major(r, nq, d)), c, s, q, p
-    )
-    enqueue_rope_apple_gpu(
-        ctx,
-        TileTensor(work.raw_key, row_major(r, nk, d)),
-        c,
-        s,
-        TileTensor(work.rotated_key, row_major(r, nk, d)),
-        p,
-    )
-    var kr = TileTensor(work.rotated_key, row_major(r, k))
-    var ck = TileTensor(cache.key, row_major(cache.capacity, k))
-    var cv = TileTensor(cache.value, row_major(cache.capacity, k))
-    ctx.enqueue_function[
-        _append[type_of(kr.layout), type_of(v2.layout), type_of(ck.layout)]
-    ](
-        kr,
-        v2,
-        ck,
-        cv,
-        Int32(r),
-        Int32(k),
-        Int32(p),
-        grid_dim=ceildiv(r * k, 128),
-        block_dim=128,
-    )
+    if fuse_qkv:
+        _enqueue_fused_decode_qkv(ctx, work, cache)
+    else:
+        var v2 = TileTensor(work.raw_value, row_major(r, k))
+        var c = TileTensor(work.cosine, row_major(work.capacity, d))
+        var s = TileTensor(work.sine, row_major(work.capacity, d))
+        enqueue_rope_apple_gpu(
+            ctx, TileTensor(work.raw_query, row_major(r, nq, d)), c, s, q, p
+        )
+        enqueue_rope_apple_gpu(
+            ctx,
+            TileTensor(work.raw_key, row_major(r, nk, d)),
+            c,
+            s,
+            TileTensor(work.rotated_key, row_major(r, nk, d)),
+            p,
+        )
+        var kr = TileTensor(work.rotated_key, row_major(r, k))
+        var ck = TileTensor(cache.key, row_major(cache.capacity, k))
+        var cv = TileTensor(cache.value, row_major(cache.capacity, k))
+        ctx.enqueue_function[
+            _append[type_of(kr.layout), type_of(v2.layout), type_of(ck.layout)]
+        ](
+            kr,
+            v2,
+            ck,
+            cv,
+            Int32(r),
+            Int32(k),
+            Int32(p),
+            grid_dim=ceildiv(r * k, 128),
+            block_dim=128,
+        )
     var keys = TileTensor(cache.key, row_major(t, nk, d))
     var values = TileTensor(cache.value, row_major(t, nk, d))
     var a = TileTensor(work.attention, row_major(r, nq, d))
@@ -565,10 +647,11 @@ def enqueue_attention_sublayer[
                 32, 32, MMA=True, SCHEDULE=2
             ](ctx, q, keys, values, a)
     var projected = TileTensor(work.projected, row_major(r, h))
-    _enqueue_attention_wo(ctx, weights, work, r, wo_mma, wo_tile)
-    enqueue_residual_apple_gpu(
-        ctx, x, projected, TileTensor(work.output, row_major(r, h))
-    )
+    _enqueue_attention_wo(ctx, weights, work, r, wo_mma, wo_tile, decode_variant)
+    if not defer_residual:
+        enqueue_residual_apple_gpu(
+            ctx, x, projected, TileTensor(work.output, row_major(r, h))
+        )
     cache.length = t
     return launched_route
 
@@ -579,6 +662,10 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     gqa_mapping: Int = 0,
     projection_mapping: Int = 0,
+    fuse_qkv: Bool = False,
+    input_normalized: Bool = False,
+    defer_residual: Bool = False,
+    decode_variant: Int = 0,
 ) raises -> Int:
     """Compose the prior Qwen projection and FP32 GQA studies on Metal.
 
@@ -602,6 +689,10 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     count; mappings 7/8/9 pack QKV and reuse rowwise weights across 4/8/16 rows.
     """
     comptime assert x.flat_rank == 2
+    if fuse_qkv and (Int(x.dim[0]()) != 1 or gqa_mapping != 0 or projection_mapping != 0):
+        raise Error("fused decode requires the integrated control mappings")
+    if (input_normalized or defer_residual) and (gqa_mapping != 0 or projection_mapping != 0):
+        raise Error("deferred residual/norm requires integrated control mappings")
     if gqa_mapping < 0 or gqa_mapping > 5:
         raise Error("unknown integrated GQA mapping")
     if projection_mapping < 0 or projection_mapping > 9:
@@ -625,4 +716,5 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     return enqueue_attention_sublayer(
         ctx, weights, cache, work, x, 6 + gqa_mapping, use_mma, qkv,
         1 if projection_mapping == 5 else (projection_mapping if projection_mapping <= 2 else 0),
+        fuse_qkv, input_normalized, defer_residual, decode_variant,
     )

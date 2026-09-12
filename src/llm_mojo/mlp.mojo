@@ -11,7 +11,7 @@ from llm_mojo.linear import (
     enqueue_linear_prefill_mma_8x16_apple_gpu,
     enqueue_linear_prefill_mma_tile_apple_gpu,
 )
-from llm_mojo.swiglu import enqueue_silu_apple_gpu, enqueue_multiply_apple_gpu
+from llm_mojo.swiglu import enqueue_silu_apple_gpu, enqueue_multiply_apple_gpu, enqueue_silu_multiply_apple_gpu
 from llm_mojo.residual import enqueue_residual_apple_gpu
 
 
@@ -51,9 +51,10 @@ def _enqueue_projection[
     weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
     mapping: Int,
+    decode_variant: Int = 0,
 ) raises:
     if mapping == 0:
-        enqueue_linear_apple_gpu(ctx, input, weight, output)
+        enqueue_linear_apple_gpu(ctx, input, weight, output, decode_variant)
     elif mapping == 1:
         enqueue_linear_prefill_mma_8x16_apple_gpu(ctx, input, weight, output)
     elif mapping == 2:
@@ -213,6 +214,7 @@ def _enqueue_mlp_stage[
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     stage: Int,
     mapping: Int,
+    decode_variant: Int = 0,
 ) raises:
     """Internal stage dispatch after preflight. Stage inputs are caller-visible.
     """
@@ -235,7 +237,7 @@ def _enqueue_mlp_stage[
             normal,
             TileTensor(weights.gate, row_major(i, h)),
             gate,
-            mlp_projection_mapping(mapping, stage),
+            mlp_projection_mapping(mapping, stage), decode_variant,
         )
     elif stage == 2:
         _enqueue_projection(
@@ -243,7 +245,7 @@ def _enqueue_mlp_stage[
             normal,
             TileTensor(weights.up, row_major(i, h)),
             up,
-            mlp_projection_mapping(mapping, stage),
+            mlp_projection_mapping(mapping, stage), decode_variant,
         )
     elif stage == 3:
         enqueue_silu_apple_gpu(ctx, gate, activated)
@@ -255,7 +257,7 @@ def _enqueue_mlp_stage[
             gated,
             TileTensor(weights.down, row_major(h, i)),
             down,
-            mlp_projection_mapping(mapping, stage),
+            mlp_projection_mapping(mapping, stage), decode_variant,
         )
     elif stage == 6:
         enqueue_residual_apple_gpu(
@@ -289,6 +291,10 @@ def enqueue_mlp_apple_gpu[
     mut work: MLPWorkspace,
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     mapping: Int = 0,
+    fuse_activation: Bool = False,
+    input_normalized: Bool = False,
+    defer_residual: Bool = False,
+    decode_variant: Int = 0,
 ) raises:
     """Six or seven ordered dispatches; no allocation, upload, or synchronization.
 
@@ -302,10 +308,30 @@ def enqueue_mlp_apple_gpu[
     Mapping 19 reuses each weight across four independent rowwise reductions.
     Isolated stage APIs always enqueue exactly that stage, even for a combined
     mapping; the complete entrypoint combines stages 1/2 into one dispatch.
+    Optional single-row mapping-zero activation fusion retains the BF16 SiLU
+    bits in registers and leaves work.activated untouched.
+    Internal input_normalized/defer_residual flags consume an already-produced
+    work.normalized or leave work.down ready for the caller's fused residual.
     """
     _validate_mlp(ctx, weights, work, x, mapping)
+    if decode_variant and (decode_variant < 0 or decode_variant > 5 or Int(x.dim[0]()) != 1 or weights.hidden != 896 or weights.intermediate != 4864 or mapping != 0):
+        raise Error("projection arrangement requires Qwen rowwise MLP")
+    if fuse_activation and (Int(x.dim[0]()) != 1 or mapping != 0):
+        raise Error("fused MLP activation requires one row and mapping zero")
+    if (input_normalized or defer_residual) and (Int(x.dim[0]()) != 1 or weights.hidden != 896 or mapping != 0):
+        raise Error("deferred MLP residual/norm requires one Qwen row and mapping zero")
     for stage in range(7):
-        if stage == 1 and mlp_combines_gate_up(mapping):
+        if (stage == 0 and input_normalized) or (stage == 6 and defer_residual):
+            continue
+        if stage == 3 and fuse_activation:
+            var i = weights.intermediate
+            enqueue_silu_multiply_apple_gpu(ctx,
+                TileTensor(work.gate, row_major(1, i)),
+                TileTensor(work.up, row_major(1, i)),
+                TileTensor(work.gated, row_major(1, i)))
+        elif stage == 4 and fuse_activation:
+            continue
+        elif stage == 1 and mlp_combines_gate_up(mapping):
             var h = weights.hidden
             var i = weights.intermediate
             var normal = TileTensor(work.normalized, row_major(1, h))
@@ -322,4 +348,4 @@ def enqueue_mlp_apple_gpu[
                     ctx, normal, wg, wu, g, u
                 )
         elif stage != 2 or not mlp_combines_gate_up(mapping):
-            _enqueue_mlp_stage(ctx, weights, work, x, stage, mapping)
+            _enqueue_mlp_stage(ctx, weights, work, x, stage, mapping, decode_variant)
