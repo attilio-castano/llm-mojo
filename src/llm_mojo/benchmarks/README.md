@@ -432,6 +432,7 @@ uv run --locked python -m llm_mojo.benchmarks.model_profile enqueue-build --prep
 uv run --locked python -m llm_mojo.benchmarks.model_profile enqueue-collect --build /private/tmp/enqueue-build --output /private/tmp/enqueue-timings
 uv run --locked python -m llm_mojo.benchmarks.model_profile enqueue-archive --timings /private/tmp/enqueue-timings --output studies/model_generation
 uv run --locked python -m llm_mojo.benchmarks.model_profile enqueue-replay --output studies/model_generation
+uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_profile enqueue-plot --output studies/model_generation
 ```
 
 The C interposer records all runtime calls to temporary logs, retaining measured

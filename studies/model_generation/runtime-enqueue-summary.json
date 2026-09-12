@@ -1,0 +1,343 @@
+{
+  "model_samples": 4608,
+  "micro_samples": 640,
+  "queue_samples": 80,
+  "measured_runtime_calls": 396800,
+  "attribution": [
+    {
+      "prefix": 64,
+      "variant": 0,
+      "plain": {
+        "token_ms": 9.959573,
+        "forward_ms": 7.409208,
+        "enqueue_window_ms": 7.195979
+      },
+      "disabled": {
+        "token_ms": 9.68246875,
+        "forward_ms": 7.156781,
+        "enqueue_window_ms": 6.92674975,
+        "token_ratios_to_plain": [
+          1.0312843114531383,
+          0.8469132292583365,
+          1.0015609485738461,
+          0.9438179318169206
+        ]
+      },
+      "enabled": {
+        "token_ms": 10.0593435,
+        "forward_ms": 7.61659375,
+        "enqueue_window_ms": 7.39732275,
+        "runtime_ms": 7.254725,
+        "outside_runtime_ms": 0.13814125,
+        "runtime_fraction": 0.9816117682148855,
+        "token_ratios_to_plain": [
+          1.044576854022483,
+          0.8032598344394714,
+          1.0728401439112707,
+          1.1240280920699712
+        ]
+      }
+    },
+    {
+      "prefix": 64,
+      "variant": 1,
+      "plain": {
+        "token_ms": 9.7648435,
+        "forward_ms": 7.31898925,
+        "enqueue_window_ms": 7.0981875
+      },
+      "disabled": {
+        "token_ms": 9.12919825,
+        "forward_ms": 7.25131225,
+        "enqueue_window_ms": 7.019531,
+        "token_ratios_to_plain": [
+          1.0076210939876389,
+          0.8377232275397156,
+          1.0803564010229112,
+          0.8978414015135106
+        ]
+      },
+      "enabled": {
+        "token_ms": 9.45133325,
+        "forward_ms": 7.23988525,
+        "enqueue_window_ms": 7.02279175,
+        "runtime_ms": 6.8887265,
+        "outside_runtime_ms": 0.1345825,
+        "runtime_fraction": 0.9805892759072339,
+        "token_ratios_to_plain": [
+          1.0119994300728266,
+          0.8608694796831824,
+          0.9727463076039873,
+          1.0162199685260715
+        ]
+      }
+    },
+    {
+      "prefix": 1024,
+      "variant": 0,
+      "plain": {
+        "token_ms": 9.18766675,
+        "forward_ms": 7.20225025,
+        "enqueue_window_ms": 6.9699065
+      },
+      "disabled": {
+        "token_ms": 10.12347875,
+        "forward_ms": 7.66190625,
+        "enqueue_window_ms": 7.45342725,
+        "token_ratios_to_plain": [
+          1.1165401342640862,
+          1.0896102652494495,
+          0.98183287634989,
+          1.0081247271395462
+        ]
+      },
+      "enabled": {
+        "token_ms": 9.3148125,
+        "forward_ms": 7.04104175,
+        "enqueue_window_ms": 6.813281,
+        "runtime_ms": 6.6694765,
+        "outside_runtime_ms": 0.13423275,
+        "runtime_fraction": 0.9797650100601689,
+        "token_ratios_to_plain": [
+          1.0036109404974083,
+          1.0228073925117303,
+          0.9314029840657386,
+          1.0170810719314105
+        ]
+      }
+    },
+    {
+      "prefix": 1024,
+      "variant": 1,
+      "plain": {
+        "token_ms": 8.700677,
+        "forward_ms": 7.09428125,
+        "enqueue_window_ms": 6.86324975
+      },
+      "disabled": {
+        "token_ms": 9.24614575,
+        "forward_ms": 7.233698,
+        "enqueue_window_ms": 6.99909375,
+        "token_ratios_to_plain": [
+          1.06428577055665,
+          1.0611246451681173,
+          1.1036752298815105,
+          1.0166471652869118
+        ]
+      },
+      "enabled": {
+        "token_ms": 8.97960425,
+        "forward_ms": 7.1501145,
+        "enqueue_window_ms": 6.916396,
+        "runtime_ms": 6.78414175,
+        "outside_runtime_ms": 0.13813675,
+        "runtime_fraction": 0.9796619449370942,
+        "token_ratios_to_plain": [
+          0.9927545046704546,
+          1.1510323221712713,
+          1.0461106024790594,
+          0.9996408083585718
+        ]
+      }
+    },
+    {
+      "prefix": 3968,
+      "variant": 0,
+      "plain": {
+        "token_ms": 9.55975,
+        "forward_ms": 7.17387525,
+        "enqueue_window_ms": 6.94111475
+      },
+      "disabled": {
+        "token_ms": 10.56643775,
+        "forward_ms": 7.64365625,
+        "enqueue_window_ms": 7.43351025,
+        "token_ratios_to_plain": [
+          0.995793979152593,
+          1.051923836279704,
+          1.00309966890818,
+          1.2801985968777976
+        ]
+      },
+      "enabled": {
+        "token_ms": 9.7816875,
+        "forward_ms": 7.280594,
+        "enqueue_window_ms": 7.04662525,
+        "runtime_ms": 6.902391,
+        "outside_runtime_ms": 0.14416325,
+        "runtime_fraction": 0.9797421673248101,
+        "token_ratios_to_plain": [
+          0.9974994306956829,
+          0.8963078066425629,
+          1.0019912157916993,
+          1.3261910317288794
+        ]
+      }
+    },
+    {
+      "prefix": 3968,
+      "variant": 1,
+      "plain": {
+        "token_ms": 8.6736355,
+        "forward_ms": 6.9050935,
+        "enqueue_window_ms": 6.6682395
+      },
+      "disabled": {
+        "token_ms": 8.6236045,
+        "forward_ms": 7.030125,
+        "enqueue_window_ms": 6.78761475,
+        "token_ratios_to_plain": [
+          1.0685953783853979,
+          0.8933306056752138,
+          0.9456588707677251,
+          1.240316130506564
+        ]
+      },
+      "enabled": {
+        "token_ms": 8.99163525,
+        "forward_ms": 7.3151045,
+        "enqueue_window_ms": 7.085521,
+        "runtime_ms": 6.938329,
+        "outside_runtime_ms": 0.13656275,
+        "runtime_fraction": 0.9800943083541604,
+        "token_ratios_to_plain": [
+          1.0885175556516455,
+          0.8926969603090243,
+          1.0160386644411823,
+          1.389124527783125
+        ]
+      }
+    }
+  ],
+  "compiled_handle": [
+    {
+      "shape": "tiny",
+      "batch": 1,
+      "submit": {
+        "original_us": 7.79125,
+        "compiled_us": 7.7915,
+        "ratios": [
+          0.9165131650232962,
+          1.035848014240992,
+          1.0393454545454546,
+          0.9244318945811483
+        ],
+        "self_deviation": 0.2097902097902098,
+        "qualifies": false
+      },
+      "complete": {
+        "original_us": 104.9795,
+        "compiled_us": 102.70825,
+        "ratios": [
+          0.9592811594202899,
+          0.979895901795747,
+          1.0281461463861132,
+          0.9605405405405405
+        ],
+        "self_deviation": 0.026515376458112416,
+        "qualifies": false
+      }
+    },
+    {
+      "shape": "tiny",
+      "batch": 256,
+      "submit": {
+        "original_us": 8.4656171875,
+        "compiled_us": 7.357830078125,
+        "ratios": [
+          0.9500545184369199,
+          0.8279214212548851,
+          0.8998600287863889,
+          0.9125213222455684
+        ],
+        "self_deviation": 0.23969228379138752,
+        "qualifies": false
+      },
+      "complete": {
+        "original_us": 9.15889453125,
+        "compiled_us": 8.8114814453125,
+        "ratios": [
+          1.0248051798823505,
+          0.9226182912903561,
+          0.9603623509003251,
+          0.9915282514679131
+        ],
+        "self_deviation": 0.16640898054012654,
+        "qualifies": false
+      }
+    },
+    {
+      "shape": "down",
+      "batch": 1,
+      "submit": {
+        "original_us": 7.54175,
+        "compiled_us": 8.6665,
+        "ratios": [
+          0.8854375,
+          1.3323215924331193,
+          1.216,
+          0.8487977303381238
+        ],
+        "self_deviation": 0.2474147836078131,
+        "qualifies": false
+      },
+      "complete": {
+        "original_us": 144.698,
+        "compiled_us": 145.771,
+        "ratios": [
+          0.9839299376638363,
+          1.0059535295925441,
+          1.0369503427520481,
+          0.9960997865920965
+        ],
+        "self_deviation": 0.05081366907491969,
+        "qualifies": false
+      }
+    },
+    {
+      "shape": "down",
+      "batch": 256,
+      "submit": {
+        "original_us": 37.78340625,
+        "compiled_us": 37.76395703125,
+        "ratios": [
+          1.001025220454187,
+          0.9985333428373325,
+          0.9979451125341674,
+          0.99428874106659
+        ],
+        "self_deviation": 0.00322125771355386,
+        "qualifies": false
+      },
+      "complete": {
+        "original_us": 50.2635078125,
+        "compiled_us": 50.234416015625,
+        "ratios": [
+          1.0006638645293575,
+          0.9987883032495366,
+          0.9981786366049358,
+          0.9924568794264748
+        ],
+        "self_deviation": 0.003283950820059389,
+        "qualifies": false
+      }
+    }
+  ],
+  "queue_pressure": [
+    {
+      "shape": "tiny",
+      "early_call_us": 6.875,
+      "late_call_us": 8.69825,
+      "runtime_per_call_us": 9.8765390625,
+      "submission_per_call_us": 10.247720703125
+    },
+    {
+      "shape": "down",
+      "early_call_us": 6.88525,
+      "late_call_us": 51.208,
+      "runtime_per_call_us": 42.0501328125,
+      "submission_per_call_us": 42.422365234375
+    }
+  ],
+  "promote": false
+}

@@ -6,6 +6,7 @@ with the current implementation and measurements:
 | Study | Scope |
 | --- | --- |
 | [Terminal chat](chat.md) | Native session state, exact token history, persistent caches, controls and measured cache reuse |
+| [Runtime enqueue diagnosis](runtime-enqueue.md) | Runtime wall-time attribution, compiled-handle comparison and queue behavior |
 | [Fast runtime](runtime.md) | Complete model composition, greedy generation, measured dispatch and HF numerical diagnostics |
 | [Usage and ownership](../../docs/generation.md) | Assets, model state, workload policy and plain-text generation |
 

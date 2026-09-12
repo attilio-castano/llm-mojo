@@ -1580,6 +1580,8 @@ def enqueue_build(output, prepared):
     source=source_identity(); probe_sha=sha(repository_root()/PROBE_SOURCE)
     if source['repository']['dirty']: raise ValueError('enqueue build requires clean source')
     identity=assets(prepared); machine=stable_environment()
+    if machine['software']['max']!='26.5.0' or machine['software']['mojo']!='1.0.0' or machine['hardware']['chip']!='Apple M4 Pro':
+        raise ValueError('probe ABI is verified only for pinned MAX 26.5.0 on M4 Pro')
     lib=repository_root()/'.venv/lib/python3.12/site-packages/modular/lib'
     commands=[['xcrun','clang','-dynamiclib','-O2','-Wall','-Werror',PROBE_SOURCE,
                '-L',lib,'-lAsyncRTMojoBindings','-Wl,-rpath,'+str(lib),'-o',output/'probe.dylib'],
@@ -1724,6 +1726,9 @@ def enqueue_summary(record):
     keys=[]
     for run in runs:
         kind=run['kind']
+        if (kind=='micro' and run['state']!='plain') or (kind=='queue' and
+            (run['state']!='enabled' or run['batch']!=256 or run['comparison']!=0)):
+            raise ValueError('enqueue workload conditions changed')
         if kind=='model': keys.append((kind,run['block'],run['prefix'],run['state']))
         elif kind=='micro': keys.append((kind,run['block'],run['shape'],run['batch'],run['comparison']))
         elif kind=='queue': keys.append((kind,run['repeat'],run['shape']))
@@ -1828,11 +1833,35 @@ def enqueue_replay(directory):
     return summary
 
 
+def enqueue_plot(directory):
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    summary=enqueue_replay(directory)
+    fig,axes=plt.subplots(1,2,figsize=(11,4.3),layout='constrained')
+    rows=summary['attribution'];positions=np.arange(len(rows))
+    axes[0].barh(positions,[r['enabled']['runtime_ms'] for r in rows],color='#306998',label='Inside runtime')
+    axes[0].barh(positions,[r['enabled']['outside_runtime_ms'] for r in rows],
+        left=[r['enabled']['runtime_ms'] for r in rows],color='#e5a43c',label='Outside runtime')
+    axes[0].set_yticks(positions,[str(r['prefix'])+(' original' if r['variant']==0 else ' fixed') for r in rows])
+    axes[0].invert_yaxis();axes[0].set_xlabel('Milliseconds per token (recording enabled)')
+    axes[0].set_title('Where does launch submission spend time?')
+    axes[0].legend(loc='upper center',bbox_to_anchor=(.5,-.15),ncol=2)
+    axes[0].set_xlim(0,9)
+    pressure=summary['queue_pressure'];x=np.arange(2)
+    axes[1].bar(x-.18,[r['early_call_us'] for r in pressure],.36,label='First 16 enqueues',color='#306998')
+    axes[1].bar(x+.18,[r['late_call_us'] for r in pressure],.36,label='Last 16 enqueues',color='#e5a43c')
+    axes[1].set_xticks(x,['Tiny projection','Down projection']);axes[1].set_ylabel('Runtime wall time per call (microseconds)')
+    axes[1].set_title('Enqueues can wait as GPU work accumulates');axes[1].legend()
+    fig.suptitle('M4 Pro / Metal: runtime time includes blocking, not only CPU work',fontsize=12)
+    fig.savefig(directory/'runtime-enqueue.png',dpi=160);plt.close(fig)
+
+
 def main():
     # Trace capture and the reused terminal lifecycle helper inherit this process.
     os.environ.pop('MODULAR_DEBUG', None)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['enqueue-build','enqueue-collect','enqueue-archive','enqueue-replay','scheduling-plot','scheduling-build','scheduling-collect','scheduling-capture','scheduling-archive','scheduling-replay','projection-confirm','build','collect','capture','terminal','archive','replay','plot','fusion-capture','fusion-terminal','fusion-archive','fusion-replay','fusion-plot','selection-capture','selection-terminal','selection-archive','selection-replay','selection-plot'])
+    parser.add_argument('command', choices=['enqueue-plot','enqueue-build','enqueue-collect','enqueue-archive','enqueue-replay','scheduling-plot','scheduling-build','scheduling-collect','scheduling-capture','scheduling-archive','scheduling-replay','projection-confirm','build','collect','capture','terminal','archive','replay','plot','fusion-capture','fusion-terminal','fusion-archive','fusion-replay','fusion-plot','selection-capture','selection-terminal','selection-archive','selection-replay','selection-plot'])
     parser.add_argument('--projections',action='store_true',help='Study exact-width and thread-block projection arrangements')
     parser.add_argument('--residual-norm',action='store_true',help='Study independent residual normalization and composition with swap/argmax')
     parser.add_argument('--copy-free',action='store_true',help='Compare buffer ownership swapping with inter-layer copies')
@@ -1847,7 +1876,8 @@ def main():
     parser.add_argument('--traces', type=Path)
     parser.add_argument('--terminal', type=Path)
     args = parser.parse_args()
-    if args.command == 'enqueue-build': enqueue_build(args.output.resolve(),args.prepared)
+    if args.command == 'enqueue-plot': enqueue_plot(args.output)
+    elif args.command == 'enqueue-build': enqueue_build(args.output.resolve(),args.prepared)
     elif args.command == 'enqueue-collect': enqueue_collect(args.build.resolve(),args.output.resolve())
     elif args.command == 'enqueue-archive': enqueue_archive(args.timings,args.output)
     elif args.command == 'enqueue-replay': print(json.dumps(enqueue_replay(args.output),indent=2))

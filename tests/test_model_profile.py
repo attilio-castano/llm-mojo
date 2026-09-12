@@ -12,6 +12,22 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class ModelProfileTests(unittest.TestCase):
+    def test_retained_enqueue_evidence(self):
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import enqueue_summary
+        original=json.loads(gzip.decompress((repository_root()/'studies/model_generation/runtime-enqueue.json.gz').read_bytes()))
+        self.assertEqual(enqueue_summary(original),original['summary'])
+        for damage in ('run','call','boundary','numerical','state'):
+            record=copy.deepcopy(original)
+            probe=next(r['probe'] for r in record['runs'] if r['probe'])
+            if damage=='run': record['runs'].pop()
+            elif damage=='call': probe['groups'][0].pop()
+            elif damage=='boundary': probe['groups'][0][0][0]=1
+            elif damage=='numerical': record['numerical'][0]['observations'][0]['inactive_exact']=False
+            elif damage=='state': next(r for r in record['runs'] if r['kind']=='micro')['state']='disabled'
+            with self.subTest(damage=damage), self.assertRaises(ValueError): enqueue_summary(record)
+
+
     def test_enqueue_partition_rejects_boundary_and_count_errors(self):
         from llm_mojo.benchmarks.model_profile import enqueue_partition, enqueue_windows
         rows=[dict(start_ns=100,end_ns=200),dict(start_ns=300,end_ns=400)]
