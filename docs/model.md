@@ -368,3 +368,15 @@ qualification and consistency plans are retained in
 [generation-plan.md](generation-plan.md), with their failures in the
 [numerical history](../studies/model_generation/README.md). Those failed results
 remain unchanged; this policy does not claim that their gates passed.
+
+
+### GPU selection experiment
+
+The [token selection study](../studies/model_generation/token-selection.md)
+compares configuration 26 with CPU greedy, a separate GPU argmax, and a fused
+vocabulary projection/local argmax. Both GPU routes preserve rounded BF16
+scores, lowest-ID ties and rejection of any nonfinite score. The fused route
+leaves logits untouched except during explicit diagnostic materialization.
+Neither candidate passed the full promotion rule, so Fast/auto retain CPU
+selection. Native study policies `gpu-argmax` and `fused-head` enable these
+experiments only for single-row Apple M4 Pro calls.

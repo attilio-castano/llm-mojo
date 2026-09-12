@@ -12,6 +12,36 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class ModelProfileTests(unittest.TestCase):
+    def test_retained_selection_evidence_rejects_missing_or_changed_records(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import selection_replay
+        source=repository_root()/'studies/model_generation'
+        original=json.loads(gzip.decompress((source/'token-selection.json.gz').read_bytes()))
+        for damage in (None,'sample','cache','actual','nonfinite','dispatch','provenance','terminal','conditions'):
+            record=copy.deepcopy(original)
+            if damage=='sample': record['timing']['samples'].pop()
+            elif damage=='cache': record['timing']['numerical'][0]['observations'][0]['exact']=False
+            elif damage=='actual': record['timing']['numerical'][1]['actual'][0]['exact']=False
+            elif damage=='nonfinite': record['timing']['numerical'][0]['nonfinite_invalidates']=False
+            elif damage=='dispatch': record['captures'][1]['samples'].pop()
+            elif damage=='provenance': record['captures'][2]['provenance']['binary']['sha256']='0'*64
+            elif damage=='terminal': record['terminal']['blocks'][0]['arms'][0]['turns'][0]['generated'][0]=0
+            elif damage=='conditions': record['timing']['blocks'][0]['before']['power_mode_raw']='1'
+            with tempfile.TemporaryDirectory() as temporary:
+                directory=Path(temporary)
+                raw=json.dumps(record).encode()
+                packed=gzip.compress(raw,mtime=0)
+                (directory/'token-selection.json.gz').write_bytes(packed)
+                (directory/'token-selection.json').write_text(json.dumps(dict(sha256=hashlib.sha256(packed).hexdigest(),
+                    uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with redirect_stdout(StringIO()):
+                    if damage is None:
+                        self.assertEqual(selection_replay(directory)['selected'],0)
+                    else:
+                        with self.assertRaises(ValueError): selection_replay(directory)
+
     def test_selection_geometry_and_conservative_choice(self):
         from llm_mojo.benchmarks.model_profile import selection_summary
         self.assertEqual([len(contract.stages(True,True,s)) for s in range(3)],[314,316,315])
