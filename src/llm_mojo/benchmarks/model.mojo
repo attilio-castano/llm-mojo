@@ -115,8 +115,52 @@ def verify_swap_lifecycle(mut model: QwenModel, ctx: DeviceContext, history: Lis
     print("SWAP_LIFECYCLE_COMPLETE")
 
 
+def scheduling_pair[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext,
+        seed: Int, prefix: Int, first: Int, comparison: Int, advance: Bool,
+        output: String) raises:
+    # Only these benchmark modes change. Production inference is untouched.
+    var records = String()
+    for arm_index in range(2):
+        var arm = (first+arm_index)%2
+        var variant = comparison if arm else 0
+        var ids: List[Int] = [seed]
+        for _ in range(16):
+            rewind(model,prefix)
+            _ = step[OBSERVE](model,ctx,ids,26,1,False,True,True,variant)
+        rewind(model,prefix)
+        var times = List[UInt64](capacity=64*11)
+        var tokens = List[Int](capacity=64)
+        for sample in range(64):
+            if not advance: rewind(model,prefix)
+            var start = _observation_clock()
+            var selected = step[OBSERVE](model,ctx,ids,26,1,False,True,True,variant)
+            var elapsed = _observation_clock()-start
+            times.append(elapsed)
+            comptime if OBSERVE:
+                for j in range(10): times.append(model.observation[j]-start)
+            tokens.append(selected)
+            if advance: ids[0] = selected
+        var expected = prefix+(64 if advance else 1)
+        if model.length != expected or model.submitted_rows != 24*expected:
+            raise Error("scheduling cache accounting changed")
+        for layer in range(24):
+            if model.layers[layer].cache.length != expected:
+                raise Error("scheduling layer length changed")
+        for sample in range(64):
+            records += "SCHED_SAMPLE "+String(arm)+" "+String(sample)+" "+String(tokens[sample])
+            for j in range(11 if OBSERVE else 1):
+                records += " "+String(times[sample*(11 if OBSERVE else 1)+j])
+            records += "\n"
+        if output.byte_length():
+            snapshot(model,output+("/observed" if arm else "/plain"))
+    print(records,end="")
+    print("SCHEDULING_COMPLETE")
+
+
 def main() raises:
+    comptime SCHEDULING = is_defined["MODEL_SCHEDULING_STUDY"]()
     comptime PROJECTION = is_defined["MODEL_PROJECTION_STUDY"]()
+    comptime assert not SCHEDULING or PROJECTION
     comptime PROFILE_PROJECTION = get_defined_int["MODEL_PROJECTION_PROFILE",0]()
     comptime COMPOSITION = is_defined["MODEL_COMPOSITION_STUDY"]()
     comptime DEFAULT_VARIANT = get_defined_int["MODEL_DEFAULT_VARIANT", 0]()
@@ -146,10 +190,13 @@ def main() raises:
     var prefix = Int(args[4])
     var first = Int(args[5])
     var comparison = Int(args[6])
-    if ((mode != "bench" and mode != "verify" and mode != "profile")
+    var scheduling = SCHEDULING and (mode == "fixed" or mode == "advance" or mode == "observed-fixed" or mode == "observed-advance")
+    if ((not scheduling and mode != "bench" and mode != "verify" and mode != "profile")
         or (prefix != 64 and prefix != 1024 and prefix != 3968)
         or first < 0 or first > 1 or comparison < 0 or comparison > (5 if COMPOSITION or PROJECTION else (3 if SELECTION else (2 if COMBINED else 1)))):
         raise Error("invalid frozen model profiling workload")
+    if scheduling and comparison > 1:
+        raise Error("scheduling compares projection variants 0/1 only")
     if PROJECTION and mode == "verify" and comparison == 0:
         raise Error("projection verification requires candidate 1..5")
     if COMPOSITION and mode == "verify" and (comparison < 1 or comparison > 3):
@@ -194,6 +241,18 @@ def main() raises:
     print("device:",ctx.name())
     print("api:",ctx.api())
     print("prefix:",prefix,"token:",ids[0],"winner:",winner)
+    if scheduling:
+        if args[7].byte_length():
+            snapshot(model,args[7]+"/before")
+            var record = String()
+            for i in range(prefix+1): record += String(history[i])+"\n"
+            var file = open(args[7]+"/history.txt","w")
+            file.write(record)
+        if mode == "observed-fixed" or mode == "observed-advance":
+            scheduling_pair[True](model,ctx,ids[0],prefix,first,comparison,mode == "observed-advance",args[7])
+        else:
+            scheduling_pair[False](model,ctx,ids[0],prefix,first,comparison,mode == "advance",args[7])
+        return
     if mode == "verify":
         rewind(model,prefix)
         snapshot(model,args[7]+"/before")
@@ -264,7 +323,7 @@ def main() raises:
     if mode == "profile":
         for _ in range(10):
             rewind(model,prefix)
-            if step[False](model,ctx,ids,26 if PROJECTION else (candidate if PROFILE_FUSED else control),1 if PROJECTION or (COMPOSITION and PROFILE_COMPOSITION >= 2) else PROFILE_SELECTION,False,PROJECTION or (COMPOSITION and PROFILE_COMPOSITION >= 2) or (COPY_FREE and PROFILE_FUSED),PROJECTION or (COMPOSITION and (PROFILE_COMPOSITION == 1 or PROFILE_COMPOSITION == 3)),PROFILE_PROJECTION if PROJECTION else 0) != winner:
+            if step[SCHEDULING](model,ctx,ids,26 if PROJECTION else (candidate if PROFILE_FUSED else control),1 if PROJECTION or (COMPOSITION and PROFILE_COMPOSITION >= 2) else PROFILE_SELECTION,False,PROJECTION or (COMPOSITION and PROFILE_COMPOSITION >= 2) or (COPY_FREE and PROFILE_FUSED),PROJECTION or (COMPOSITION and (PROFILE_COMPOSITION == 1 or PROFILE_COMPOSITION == 3)),PROFILE_PROJECTION if PROJECTION else 0) != winner:
                 raise Error("unstable profile prediction")
         print("correctness: passed")
         comptime if PROJECTION:
@@ -300,11 +359,25 @@ def main() raises:
         print("profile iterations: 8")
         print("post-profile idle milliseconds: 250")
         print("PROFILE_REGION_BEGIN")
+        var host_records = List[UInt64](capacity=8*11)
         for _ in range(8):
             rewind(model,prefix)
-            if step[False](model,ctx,ids,26 if PROJECTION else (candidate if PROFILE_FUSED else control),1 if PROJECTION or (COMPOSITION and PROFILE_COMPOSITION >= 2) else PROFILE_SELECTION,False,PROJECTION or (COMPOSITION and PROFILE_COMPOSITION >= 2) or (COPY_FREE and PROFILE_FUSED),PROJECTION or (COMPOSITION and (PROFILE_COMPOSITION == 1 or PROFILE_COMPOSITION == 3)),PROFILE_PROJECTION if PROJECTION else 0) != winner:
+            var host_start: UInt64 = 0
+            comptime if SCHEDULING: host_start = _observation_clock()
+            if step[SCHEDULING](model,ctx,ids,26 if PROJECTION else (candidate if PROFILE_FUSED else control),1 if PROJECTION or (COMPOSITION and PROFILE_COMPOSITION >= 2) else PROFILE_SELECTION,False,PROJECTION or (COMPOSITION and PROFILE_COMPOSITION >= 2) or (COPY_FREE and PROFILE_FUSED),PROJECTION or (COMPOSITION and (PROFILE_COMPOSITION == 1 or PROFILE_COMPOSITION == 3)),PROFILE_PROJECTION if PROJECTION else 0) != winner:
                 raise Error("unstable profile prediction")
+            comptime if SCHEDULING:
+                var elapsed = _observation_clock()-host_start
+                host_records.append(elapsed)
+                for j in range(10): host_records.append(model.observation[j]-host_start)
         print("PROFILE_REGION_END")
+        comptime if SCHEDULING:
+            var text = String()
+            for iteration in range(8):
+                text += "SCHED_HOST "+String(iteration)
+                for j in range(11): text += " "+String(host_records[iteration*11+j])
+                text += "\n"
+            print(text,end="")
         sleep(0.25)
         return
     var records = String()

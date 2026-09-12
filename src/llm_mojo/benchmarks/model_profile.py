@@ -135,7 +135,7 @@ def verify_build(directory):
     return receipt
 
 
-def verify_snapshots(directory, prefix):
+def verify_snapshots(directory, prefix, appended=1):
     records = []
     for name in ['logits'] + [f'{kind}{layer}' for kind in ('k', 'v') for layer in range(24)]:
         paths = [directory/f'{mode}-{name}.bin' for mode in ('before', 'plain', 'observed')]
@@ -147,7 +147,7 @@ def verify_snapshots(directory, prefix):
         exact = np.array_equal(plain, observed)
         finite = all(np.isfinite((a.astype(np.uint32) << 16).view(np.float32)).all() for a in arrays)
         prefix_exact = name == 'logits' or np.array_equal(before[:prefix*128], plain[:prefix*128])
-        inactive_exact = name == 'logits' or np.array_equal(before[(prefix+1)*128:], plain[(prefix+1)*128:])
+        inactive_exact = name == 'logits' or np.array_equal(before[(prefix+appended)*128:], plain[(prefix+appended)*128:])
         if not all((exact, finite, prefix_exact, inactive_exact)):
             raise ValueError('profiling changed numerical/cache invariants')
         records.append(dict(name=name, exact=bool(exact), finite=bool(finite),
@@ -1268,11 +1268,302 @@ def selection_replay(directory, composition=False, projection=False):
     return summary
 
 
+SCHEDULING_MODES = ['fixed','advance','observed-fixed','observed-advance']
+SCHEDULING_DECLARATION = dict(kind='projection-scheduling-v1',variants=[0,1],prefixes=[64,1024,3968],
+    modes=SCHEDULING_MODES,blocks=4,warmups=16,samples=64,comparisons=['self','candidate'],
+    trace_repeats=2,trace_warmups=10,trace_samples=8,promotion=False)
+
+
+def scheduling_build(output, prepared):
+    ensure_record_location(output);output.mkdir(parents=True,exist_ok=False)
+    source=source_identity()
+    if source['repository']['dirty']: raise ValueError('scheduling requires clean source')
+    identity=assets(prepared);machine=stable_environment();binaries={}
+    entries=[('model',[])] + [(f'profile-{p}-s{v}',[f'MODEL_PROFILE_PREFIX={p}',
+        f'MODEL_PROJECTION_PROFILE={v}','MODEL_PREPARED='+identity['prepared'],
+        'MODEL_TABLES='+identity['tables']]) for p in contract.PREFIXES for v in (0,1)]
+    for name,flags in entries:
+        execute([environment_tool('mojo'),'build','-I','src','-D','MODEL_PROJECTION_STUDY',
+                 '-D','MODEL_SCHEDULING_STUDY',*[x for f in flags for x in ['-D',f]],
+                 'src/llm_mojo/benchmarks/model.mojo','-o',output/name],output/f'{name}-build.log')
+        binaries[name]=dict(sha256=sha(output/name),bytes=(output/name).stat().st_size)
+        if name!='model':
+            p=int(name.split('-')[1]);v=int(name[-1]);implementation='qwen_model_all_three'
+            provenance=dict(schema_version=1,operation=contract.OPERATION,implementation=implementation,
+                entrypoint=contract.ENTRYPOINTS[implementation],repository=source['repository'],
+                source_sha256=source['sources'],**machine,**contract.specification(p,*contract.options(implementation)),
+                profile_warmup_iterations=10,profile_iterations=8,profile_post_idle_milliseconds=250,
+                binary=binaries[name],projection_variant=v,
+                assets={k:x for k,x in identity.items() if k.endswith('_sha256')})
+            contract.configuration(provenance);write(output/(name+'.provenance.json'),provenance)
+    if source_identity()!=source or assets(prepared)!=identity: raise ValueError('scheduling build changed')
+    write(output/'build.json',dict(source=source,assets=identity,environment=machine,
+                                  declaration=SCHEDULING_DECLARATION,binaries=binaries))
+
+
+def scheduling_parse(stdout, mode, prefix, block, comparison):
+    if 'device: Apple M4 Pro\napi: metal\n' not in stdout or stdout.count('SCHEDULING_COMPLETE')!=1:
+        raise ValueError('missing scheduling runtime identity/completion')
+    observed=mode.startswith('observed-');rows=[]
+    for line in stdout.splitlines():
+        if not line.startswith('SCHED_SAMPLE '): continue
+        values=list(map(int,line.split()[1:]))
+        if len(values)!=(14 if observed else 4): raise ValueError('invalid scheduling sample width')
+        arm,sample,token,elapsed,*marks=values
+        if elapsed<=0 or not 0<=token<151936 or (observed and (marks!=sorted(marks) or marks[0]<0 or marks[-1]>elapsed)):
+            raise ValueError('invalid scheduling sample')
+        rows.append(dict(mode=mode,prefix=prefix,block=block,comparison=comparison,arm=arm,
+                         sample=sample,token=token,elapsed_ns=elapsed,marks=marks))
+    if Counter((x['arm'],x['sample']) for x in rows)!=Counter((a,i) for a in (0,1) for i in range(64)):
+        raise ValueError('incomplete scheduling pair')
+    if [x['token'] for x in rows if x['arm']==0]!=[x['token'] for x in rows if x['arm']==1]:
+        raise ValueError('scheduling trajectory changed')
+    if mode.endswith('fixed') and len({x['token'] for x in rows})!=1:
+        raise ValueError('fixed-position prediction changed')
+    return rows
+
+
+def scheduling_collect(directory, output):
+    receipt=verify_build(directory)
+    if receipt['declaration']!=SCHEDULING_DECLARATION: raise ValueError('not a scheduling build')
+    ensure_record_location(output);output.mkdir(parents=True,exist_ok=False)
+    a=receipt['assets'];rows=[];blocks=[];numerical=[]
+    workloads=[(p,m,c) for p in contract.PREFIXES for m in SCHEDULING_MODES for c in (0,1)]
+    for block in range(4):
+        before=conditions();reverse=block in (1,2)
+        for p,m,c in (reversed(workloads) if reverse else workloads):
+            target=output/f'p{p}-{m}-b{block}-c{c}'
+            capture=block==0 and c==1
+            if capture: target.mkdir()
+            stdout=execute([directory/'model',m,a['prepared'],a['tables'],p,int(reverse),c,
+                            target if capture else ''],output/(target.name+'.log'))
+            rows.extend(scheduling_parse(stdout,m,p,block,c))
+            if capture:
+                check=verify_snapshots(target,p,64 if m.endswith('advance') else 1)
+                check['mode']=m;numerical.append(check)
+        blocks.append(dict(block=block,before=before,after=conditions()))
+        print('Scheduling timing block',block+1,flush=True)
+    verify_build(directory)
+    summary=scheduling_summary(rows)
+    write(output/'timings.json',dict(build=receipt,samples=rows,blocks=blocks,numerical=numerical,summary=summary))
+
+
+def scheduling_host(stdout):
+    rows=[]
+    for line in stdout.splitlines():
+        if line.startswith('SCHED_HOST '):
+            values=list(map(int,line.split()[1:]))
+            if len(values)!=12: raise ValueError('invalid scheduling host record width')
+            iteration,elapsed,*marks=values
+            if elapsed<=0 or marks!=sorted(marks) or marks[0]<0 or marks[-1]>elapsed:
+                raise ValueError('invalid scheduling host marks')
+            rows.append(dict(iteration=iteration,elapsed_ns=elapsed,marks=marks))
+    if [x['iteration'] for x in rows]!=list(range(8)): raise ValueError('incomplete scheduling host records')
+    return rows
+
+
+def scheduling_capture(directory, output):
+    from .capture_trace import capture_trace
+    receipt=verify_build(directory)
+    if receipt['declaration']!=SCHEDULING_DECLARATION: raise ValueError('not a scheduling build')
+    ensure_record_location(output);output.mkdir(parents=True,exist_ok=False)
+    variants=[(p,v) for p in contract.PREFIXES for v in (0,1)]
+    for repeat in range(2):
+        for p,v in (reversed(variants) if repeat else variants):
+            name=f'profile-{p}-s{v}';target=output/f'p{p}-s{v}-r{repeat}';target.mkdir()
+            before=conditions()
+            def retain_runner(command, **kwargs):
+                result=subprocess.run(command,**kwargs)
+                if '--target-stdout' in command:
+                    (target/'target-output.txt').write_text(result.stdout or '')
+                return result
+            capture_trace(profile_binary=directory/name,output_trace=target/'raw.trace',
+                          receipt_path=target/'capture.json',time_limit='30s',runner=retain_runner)
+            write(target/'conditions.json',dict(before=before,after=conditions()))
+            (target/'profile.provenance.json').write_bytes((directory/(name+'.provenance.json')).read_bytes())
+            export_trace(target);record=curate(target,p,repeat)
+            record['provenance_text']=(target/'profile.provenance.json').read_text()
+            # target output is retained by the capture tool beside its receipt.
+            record['capture_receipt_text']=(target/'capture.json').read_text()
+            receipt_capture=json.loads(record['capture_receipt_text'])
+            record['target_output']=receipt_capture['capture']['target_output']
+            output_path=target/'target-output.txt'
+            if not output_path.exists():
+                raise ValueError('capture target output file missing')
+            record['target_text']=output_path.read_text()
+            record['host']=scheduling_host(record['target_text'])
+            write(target/'curated.json',record)
+            print('Scheduling trace',p,v,repeat,flush=True)
+    verify_build(directory)
+
+
+def scheduling_summary(rows):
+    expected=Counter((m,p,b,c,a,i) for m in SCHEDULING_MODES for p in contract.PREFIXES
+                     for b in range(4) for c in (0,1) for a in (0,1) for i in range(64))
+    if Counter(tuple(x[k] for k in ('mode','prefix','block','comparison','arm','sample')) for x in rows)!=expected:
+        raise ValueError('incomplete scheduling timing census')
+    for x in rows:
+        marks=x['marks']
+        if (type(x['elapsed_ns']) is not int or x['elapsed_ns']<=0 or not 0<=x['token']<151936
+            or len(marks)!=(10 if x['mode'].startswith('observed-') else 0)
+            or (marks and (marks!=sorted(marks) or marks[0]<0 or marks[-1]>x['elapsed_ns']))):
+            raise ValueError('invalid scheduling retained sample')
+    results=[]
+    for m in SCHEDULING_MODES:
+        for p in contract.PREFIXES:
+            rr=[x for x in rows if x['mode']==m and x['prefix']==p]
+            med={(b,c,a):stats.median(x['elapsed_ns'] for x in rr if (x['block'],x['comparison'],x['arm'])==(b,c,a))
+                 for b in range(4) for c in (0,1) for a in (0,1)}
+            for b in range(4):
+                for c in (0,1):
+                    tokens=[[x['token'] for x in sorted(rr,key=lambda x:x['sample']) if (x['block'],x['comparison'],x['arm'])==(b,c,a)] for a in (0,1)]
+                    if tokens[0]!=tokens[1]: raise ValueError('retained scheduling tokens differ')
+                    if m.endswith('fixed') and len(set(tokens[0]))!=1: raise ValueError('retained fixed prediction changed')
+            cal=[med[b,0,1]/med[b,0,0] for b in range(4)];ratios=[med[b,1,1]/med[b,1,0] for b in range(4)]
+            noise=max(.05,max(abs(x-1) for x in cal));reduction=1-stats.median(ratios)
+            result=dict(mode=m,prefix=p,calibration_ratios=cal,ratios=ratios,noise_floor=noise,
+                median_reduction=reduction,qualifies=all(x<1 for x in ratios) and reduction>noise,
+                control_block_ms=[med[b,1,0]/1e6 for b in range(4)],candidate_block_ms=[med[b,1,1]/1e6 for b in range(4)])
+            result['quarters']=[dict(arm=a,block=b,first_ms=stats.median(x['elapsed_ns'] for x in rr if x['comparison']==1 and x['block']==b and x['arm']==a and x['sample']<16)/1e6,
+                last_ms=stats.median(x['elapsed_ns'] for x in rr if x['comparison']==1 and x['block']==b and x['arm']==a and x['sample']>=48)/1e6) for a in (0,1) for b in range(4)]
+            if m.startswith('observed-'):
+                result['host']=[dict(arm=a,block=b,
+                    forward_ms=stats.median(x['marks'][5] for x in rr if x['comparison']==1 and x['block']==b and x['arm']==a)/1e6,
+                    readback_ms=stats.median(x['marks'][7]-x['marks'][6] for x in rr if x['comparison']==1 and x['block']==b and x['arm']==a)/1e6) for a in (0,1) for b in range(4)]
+            results.append(result)
+    return results
+
+
+def scheduling_timeline(capture):
+    rows=capture['samples'];result=[]
+    matrix={'packed QKV projection','output projection','gate projection','up projection','down projection','vocabulary projection'}
+    for i in range(8):
+        rr=[x for x in rows if x['iteration']==i and x['kind']=='compute']
+        intervals=sorted((a,a+d) for x in rr for a,d in x['active_intervals'])
+        end=intervals[0][0];union=0
+        for a,b in intervals:
+            union+=max(0,b-max(a,end));end=max(end,b)
+        span=end-intervals[0][0]
+        result.append(dict(iteration=i,active_ns=union,span_ns=span,uncovered_ns=span-union,
+            projections_ns=sum(x['duration_ns'] for x in rr if x['stage'] in matrix),
+            attention_ns=sum(x['duration_ns'] for x in rr if x['stage']=='FP32 GQA'),
+            submission_span_ns=max(x['submission_start_ns']+x['submission_duration_ns'] for x in rr)-min(x['submission_start_ns'] for x in rr),
+            fragmented_commands=sum(x['segments']>1 for x in rr)))
+    return result
+
+
+def scheduling_archive(timings, traces, output):
+    record=dict(kind='projection-scheduling-v1',timing=json.loads((timings/'timings.json').read_text()),
+        captures=[json.loads((traces/f'p{p}-s{v}-r{r}'/'curated.json').read_text()) for r in range(2) for p in contract.PREFIXES for v in (0,1)])
+    for key in ('prepared','tables'): record['timing']['build']['assets'].pop(key,None)
+    raw=json.dumps(record,sort_keys=True,separators=(',',':'),allow_nan=False).encode();packed=gzip.compress(raw,mtime=0)
+    output.mkdir(parents=True,exist_ok=True);(output/'projection-scheduling.json.gz').write_bytes(packed)
+    write(output/'projection-scheduling.json',dict(sha256=hashlib.sha256(packed).hexdigest(),uncompressed_sha256=hashlib.sha256(raw).hexdigest()))
+    scheduling_replay(output)
+
+
+def scheduling_replay(directory):
+    packed=(directory/'projection-scheduling.json.gz').read_bytes();raw=gzip.decompress(packed)
+    if json.loads((directory/'projection-scheduling.json').read_text())!=dict(sha256=hashlib.sha256(packed).hexdigest(),uncompressed_sha256=hashlib.sha256(raw).hexdigest()):
+        raise ValueError('scheduling archive hash mismatch')
+    r=json.loads(raw);t=r['timing'];build=t['build']
+    if r['kind']!='projection-scheduling-v1' or build['declaration']!=SCHEDULING_DECLARATION or build['source']['repository']['dirty']:
+        raise ValueError('scheduling declaration/source changed')
+    summary=scheduling_summary(t['samples'])
+    if summary!=t['summary']: raise ValueError('scheduling summary changed')
+    if [b['block'] for b in t['blocks']]!=list(range(4)): raise ValueError('scheduling conditions missing')
+    if Counter((x['mode'],x['prefix']) for x in t['numerical'])!=Counter((m,p) for m in SCHEDULING_MODES for p in contract.PREFIXES):
+        raise ValueError('scheduling numerical coverage missing')
+    for n in t['numerical']:
+        obs=n['observations'];names={'logits'}|{f'{k}{i}' for k in ('k','v') for i in range(24)}
+        if (len(n['history'])!=n['prefix']+1 or len(obs)!=49 or {x['name'] for x in obs}!=names
+            or not all(all(x[k] for k in ('exact','finite','prefix_exact','inactive_exact')) for x in obs)):
+            raise ValueError('scheduling numerical invariant changed')
+    if Counter((c['prefix'],c['provenance']['projection_variant'],c['repeat']) for c in r['captures'])!=Counter((p,v,r) for p in contract.PREFIXES for v in (0,1) for r in range(2)):
+        raise ValueError('scheduling capture coverage missing')
+    for block in [*t['blocks'],*[c['conditions'] for c in r['captures']]]:
+        for side in ('before','after'):
+            require_ac(block[side]);require_nominal_thermal_state(block[side])
+            if block[side]['power_mode_raw']!='0': raise ValueError('scheduling power changed')
+    traces=[]
+    for c in r['captures']:
+        p=c['prefix'];prov=c['provenance'];v=prov['projection_variant'];contract.configuration(prov)
+        identity=c['analysis']['capture_identity'];original=c['provenance_text'].encode()
+        if (prov['implementation']!='qwen_model_all_three' or prov['binary']!=build['binaries'][f'profile-{p}-s{v}']
+            or prov['repository']!=build['source']['repository'] or prov['source_sha256']!=build['source']['sources']
+            or prov['assets']!={k:x for k,x in build['assets'].items() if k.endswith('_sha256')}
+            or identity['workload']['projection_variant']!=v or prov['profile_workload']!=f'model-p{p}-all-three'
+            or hashlib.sha256(original).hexdigest()!=identity['provenance']['sha256']
+            or len(original)!=identity['provenance']['bytes'] or json.loads(original)!=prov):
+            raise ValueError('scheduling trace provenance changed')
+        receipt_bytes=c['capture_receipt_text'].encode()
+        receipt_capture=json.loads(receipt_bytes)['capture']
+        if (hashlib.sha256(receipt_bytes).hexdigest()!=identity['capture_receipt']['sha256']
+            or len(receipt_bytes)!=identity['capture_receipt']['bytes']
+            or receipt_capture['capture_id']!=identity['capture_id']
+            or receipt_capture['target_output']!=c['target_output']):
+            raise ValueError('scheduling capture receipt changed')
+        output=c['target_text'].encode()
+        if c['target_output']['sha256']!=hashlib.sha256(output).hexdigest() or c['target_output']['bytes']!=len(output) or scheduling_host(c['target_text'])!=c['host']:
+            raise ValueError('scheduling host capture changed')
+        stages=contract.command_stages(*contract.options('qwen_model_all_three'))
+        if len(c['samples'])!=8*len(stages): raise ValueError('scheduling command census changed')
+        for i,x in enumerate(c['samples']):
+            if (x['iteration'],x['dispatch'],x['layer'],x['stage'],x['kind'])!=(i//len(stages),i%len(stages),*stages[i%len(stages)]):
+                raise ValueError('scheduling command identity changed')
+            parts=x['active_intervals']
+            if (not parts or len(parts)!=x['segments'] or sum(d for _,d in parts)!=x['duration_ns'] or parts[0][0]!=x['start_ns']
+                or sum(parts[-1])!=x['end_ns'] or any(d<=0 for _,d in parts) or any(a+d>b for (a,d),(b,_) in zip(parts,parts[1:]))):
+                raise ValueError('scheduling command fragments changed')
+        traces.append(dict(prefix=p,variant=v,repeat=c['repeat'],timeline=scheduling_timeline(c),host=c['host']))
+    result=dict(timing=summary,traces=traces,promote=False)
+    write(directory/'projection-scheduling-summary.json',result)
+    print('Verified scheduling archive: 12288 timings, 12 numerical cases, 23904 commands, 96 host records')
+    return result
+
+
+def scheduling_plot(directory):
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    result=scheduling_replay(directory)
+    fig,axes=plt.subplots(2,2,figsize=(12,8),constrained_layout=True)
+    colors=['#247da3','#cf8531'];positions=list(range(3))
+    for mode,color in zip(['fixed','advance'],colors):
+        values=[next(x for x in result['timing'] if x['mode']==mode and x['prefix']==p) for p in contract.PREFIXES]
+        for arm,style in [('control','--'),('candidate','-')]:
+            axes[0,0].plot(positions,[stats.median(x[arm+'_block_ms']) for x in values],style,marker='o',color=color,label=mode+' '+arm)
+        for i,x in enumerate(values):
+            pos=i+(-.1 if mode=='fixed' else .1)
+            axes[0,1].scatter([pos]*4,x['ratios'],color=color,label=mode if i==0 else None)
+    axes[0,0].set_title('Untraced complete-token latency');axes[0,0].set_ylabel('ms/token')
+    axes[0,0].legend(fontsize=8);axes[0,1].axhline(1,color='gray',linestyle='--')
+    axes[0,1].set_title('Paired fixed-width / original ratios');axes[0,1].set_ylabel('Lower is better');axes[0,1].legend()
+    for i,p in enumerate(contract.PREFIXES):
+        obs=next(x for x in result['timing'] if x['mode']=='observed-fixed' and x['prefix']==p)
+        for v in (0,1):
+            pos=i+(-.17 if v==0 else .17)
+            hh=[x for x in obs['host'] if x['arm']==v]
+            forward=stats.median(x['forward_ms'] for x in hh);wait=stats.median(x['readback_ms'] for x in hh)
+            axes[1,0].bar(pos,forward,.3,color='#247da3',label='Forward wall interval' if i==v==0 else None)
+            axes[1,0].bar(pos,wait,.3,bottom=forward,color='#b7cfda',label='Readback wait interval' if i==v==0 else None)
+            tt=[x for c in result['traces'] if c['prefix']==p and c['variant']==v for x in c['timeline']]
+            active=stats.median(x['active_ns'] for x in tt)/1e6;gap=stats.median(x['uncovered_ns'] for x in tt)/1e6
+            axes[1,1].bar(pos,active,.3,color='#31877c',label='Target compute active' if i==v==0 else None)
+            axes[1,1].bar(pos,gap,.3,bottom=active,color='#c9dbce',label='Uncovered by target compute' if i==v==0 else None)
+    axes[1,0].set_title('Untraced observed fixed-position host intervals');axes[1,0].set_ylabel('ms; GPU work overlaps forward')
+    axes[1,1].set_title('Separate fixed-position traces');axes[1,1].set_ylabel('ms; medians of per-token intervals')
+    for ax in axes[1]: ax.legend(fontsize=8);ax.set_xlabel('Cached tokens · original left, fixed-width right')
+    for ax in axes.flat: ax.set_xticks(positions,list(contract.PREFIXES))
+    fig.suptitle('Why does fixed-width projection speedup depend on the measurement?\nQwen2.5-0.5B · M4 Pro / Metal · BF16 · fixed 128-thread blocks',fontsize=13)
+    fig.savefig(directory/'projection-scheduling.png',dpi=170);plt.close(fig)
+
+
 def main():
     # Trace capture and the reused terminal lifecycle helper inherit this process.
     os.environ.pop('MODULAR_DEBUG', None)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['projection-confirm','build','collect','capture','terminal','archive','replay','plot','fusion-capture','fusion-terminal','fusion-archive','fusion-replay','fusion-plot','selection-capture','selection-terminal','selection-archive','selection-replay','selection-plot'])
+    parser.add_argument('command', choices=['scheduling-plot','scheduling-build','scheduling-collect','scheduling-capture','scheduling-archive','scheduling-replay','projection-confirm','build','collect','capture','terminal','archive','replay','plot','fusion-capture','fusion-terminal','fusion-archive','fusion-replay','fusion-plot','selection-capture','selection-terminal','selection-archive','selection-replay','selection-plot'])
     parser.add_argument('--projections',action='store_true',help='Study exact-width and thread-block projection arrangements')
     parser.add_argument('--residual-norm',action='store_true',help='Study independent residual normalization and composition with swap/argmax')
     parser.add_argument('--copy-free',action='store_true',help='Compare buffer ownership swapping with inter-layer copies')
@@ -1287,7 +1578,13 @@ def main():
     parser.add_argument('--traces', type=Path)
     parser.add_argument('--terminal', type=Path)
     args = parser.parse_args()
-    if args.command == 'build': build(args.output.resolve(), args.prepared, args.fusion, args.combined, args.selection, args.copy_free, args.residual_norm, args.projections)
+    if args.command == 'scheduling-plot': scheduling_plot(args.output)
+    elif args.command == 'scheduling-build': scheduling_build(args.output.resolve(),args.prepared)
+    elif args.command == 'scheduling-collect': scheduling_collect(args.build.resolve(),args.output.resolve())
+    elif args.command == 'scheduling-capture': scheduling_capture(args.build.resolve(),args.output.resolve())
+    elif args.command == 'scheduling-archive': scheduling_archive(args.timings,args.traces,args.output)
+    elif args.command == 'scheduling-replay': scheduling_replay(args.output)
+    elif args.command == 'build': build(args.output.resolve(), args.prepared, args.fusion, args.combined, args.selection, args.copy_free, args.residual_norm, args.projections)
     elif args.command == 'projection-confirm': projection_confirm(args.build.resolve(),args.timings.resolve(),args.output.resolve())
     elif args.command == 'selection-capture': selection_capture(args.build.resolve(),args.output.resolve())
     elif args.command == 'selection-terminal': selection_terminal(args.build.resolve(),args.output.resolve())

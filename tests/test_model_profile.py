@@ -12,6 +12,39 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class ModelProfileTests(unittest.TestCase):
+    def test_scheduling_parser_and_frozen_census(self):
+        from llm_mojo.benchmarks.model_profile import scheduling_parse, scheduling_summary, SCHEDULING_MODES, scheduling_host
+        stdout='device: Apple M4 Pro\napi: metal\n'
+        stdout+=''.join(f'SCHED_SAMPLE {a} {i} 42 100\n' for a in (0,1) for i in range(64))
+        stdout+='SCHEDULING_COMPLETE\n'
+        self.assertEqual(len(scheduling_parse(stdout,'fixed',64,0,1)),128)
+        for invalid in (stdout.replace('SCHED_SAMPLE 1 0 42','SCHED_SAMPLE 1 0 43'),
+                        stdout.replace('SCHED_SAMPLE 1 0 42 100\n',''),stdout.replace('api: metal','api: cpu')):
+            with self.assertRaises(ValueError): scheduling_parse(invalid,'fixed',64,0,1)
+        rows=[dict(mode=m,prefix=p,block=b,comparison=c,arm=a,sample=i,token=42,
+                   elapsed_ns=80 if c and a else 100,marks=list(range(10)) if m.startswith('observed-') else [])
+              for m in SCHEDULING_MODES for p in contract.PREFIXES for b in range(4)
+              for c in (0,1) for a in (0,1) for i in range(64)]
+        self.assertEqual(len(rows),12288)
+        self.assertTrue(all(x['qualifies'] for x in scheduling_summary(rows)))
+        with self.assertRaises(ValueError): scheduling_summary(rows[:-1])
+        broken=copy.deepcopy(rows);broken[0]['token']=43
+        with self.assertRaises(ValueError): scheduling_summary(broken)
+        text=''.join('SCHED_HOST '+str(i)+' 100 '+' '.join(map(str,range(10)))+'\n' for i in range(8))
+        self.assertEqual(len(scheduling_host(text)),8)
+        with self.assertRaises(ValueError): scheduling_host(text+text)
+
+    def test_scheduling_timeline_unions_overlapping_fragments(self):
+        from llm_mojo.benchmarks.model_profile import scheduling_timeline
+        rows=[]
+        for i in range(8):
+            for stage,parts in [('gate projection',[[0,5],[7,2]]),('FP32 GQA',[[4,4]])]:
+                rows.append(dict(iteration=i,kind='compute',stage=stage,active_intervals=parts,
+                    duration_ns=sum(d for _,d in parts),segments=len(parts),submission_start_ns=0,submission_duration_ns=2))
+        row=scheduling_timeline(dict(samples=rows))[0]
+        self.assertEqual((row['active_ns'],row['span_ns'],row['uncovered_ns']),(9,9,0))
+        self.assertEqual((row['projections_ns'],row['attention_ns'],row['fragmented_commands']),(7,4,1))
+
     def test_projection_screen_requires_all_contexts_and_confirmation(self):
         from llm_mojo.benchmarks.model_profile import projection_summary
         implementation='qwen_model_all_three'
