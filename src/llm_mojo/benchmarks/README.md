@@ -418,3 +418,24 @@ extends `model_profile` with `build --fusion`, the same calibrated collection
 matrix, and `fusion-capture`, `fusion-terminal`, `fusion-archive`,
 `fusion-replay` and `fusion-plot`. Configuration 25 remains experimental;
 Fast continues selecting the control for decode.
+
+### Runtime enqueue boundary
+
+The [bounded enqueue plan](../../../studies/model_generation/runtime-enqueue-plan.md)
+uses the same model executable with absent, inactive and recording process-local
+wrappers, plus compiled-handle and queue-depth diagnostic microbenchmarks. It
+requires the pinned macOS arm64 MAX runtime; it does not alter installed libraries.
+Run serially on M4 Pro / Metal from a clean checkout:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile enqueue-build --prepared /absolute/prepared-v1 --output /private/tmp/enqueue-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile enqueue-collect --build /private/tmp/enqueue-build --output /private/tmp/enqueue-timings
+uv run --locked python -m llm_mojo.benchmarks.model_profile enqueue-archive --timings /private/tmp/enqueue-timings --output studies/model_generation
+uv run --locked python -m llm_mojo.benchmarks.model_profile enqueue-replay --output studies/model_generation
+```
+
+The C interposer records all runtime calls to temporary logs, retaining measured
+windows in the archive. No dropped calls, runtime errors, boundary straddles or
+multithreaded overlaps are accepted. Runtime wall time includes possible blocking;
+it is not a measure of exclusive CPU execution. Read the calibration before
+interpreting attribution or extrapolating microbenchmark savings to generation.

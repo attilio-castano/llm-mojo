@@ -1568,11 +1568,271 @@ def scheduling_plot(directory):
     fig.savefig(directory/'projection-scheduling.png',dpi=170);plt.close(fig)
 
 
+ENQUEUE_DECLARATION = dict(kind='runtime-enqueue-v1', blocks=4, prefixes=[64,1024,3968],
+    states=['plain','disabled','enabled'], model_samples=64, model_warmups=16,
+    shapes=['tiny','down'], batches=[1,256], micro_samples=10, micro_warmups=10,
+    queue_passes=2, expected_model_calls=245, promotion=False)
+PROBE_SOURCE = 'src/llm_mojo/benchmarks/enqueue_probe.c'
+
+
+def enqueue_build(output, prepared):
+    ensure_record_location(output); output.mkdir(parents=True,exist_ok=False)
+    source=source_identity(); probe_sha=sha(repository_root()/PROBE_SOURCE)
+    if source['repository']['dirty']: raise ValueError('enqueue build requires clean source')
+    identity=assets(prepared); machine=stable_environment()
+    lib=repository_root()/'.venv/lib/python3.12/site-packages/modular/lib'
+    commands=[['xcrun','clang','-dynamiclib','-O2','-Wall','-Werror',PROBE_SOURCE,
+               '-L',lib,'-lAsyncRTMojoBindings','-Wl,-rpath,'+str(lib),'-o',output/'probe.dylib'],
+              [environment_tool('mojo'),'build','-I','src','-D','MODEL_PROJECTION_STUDY',
+               '-D','MODEL_SCHEDULING_STUDY','-D','MODEL_LAUNCH_PROBE',
+               'src/llm_mojo/benchmarks/model.mojo','-o',output/'model']]
+    for i,cmd in enumerate(commands): execute(cmd,output/f'build-{i}.log')
+    compiler=execute(['xcrun','clang','--version'],output/'clang.log')
+    if source_identity()!=source or sha(repository_root()/PROBE_SOURCE)!=probe_sha or assets(prepared)!=identity:
+        raise ValueError('enqueue build source/assets changed')
+    write(output/'build.json',dict(source=source,assets=identity,environment=machine,
+        declaration=ENQUEUE_DECLARATION,probe_source_sha256=probe_sha,clang=compiler,
+        runtime_sha256=sha(lib/'libAsyncRTMojoBindings.dylib'),
+        commands=[[str(x) for x in c] for c in commands],
+        binaries={n:dict(sha256=sha(output/n),bytes=(output/n).stat().st_size) for n in ('model','probe.dylib')}))
+
+
+def enqueue_verify_build(directory):
+    r=verify_build(directory)
+    if r['declaration']!=ENQUEUE_DECLARATION or r['probe_source_sha256']!=sha(repository_root()/PROBE_SOURCE):
+        raise ValueError('enqueue declaration/probe changed')
+    lib=repository_root()/'.venv/lib/python3.12/site-packages/modular/lib/libAsyncRTMojoBindings.dylib'
+    if sha(lib)!=r['runtime_sha256']: raise ValueError('enqueue runtime changed')
+    return r
+
+
+def enqueue_windows(stdout, kind, **metadata):
+    if kind=='model':
+        rows=scheduling_parse(stdout,'observed-fixed',metadata['prefix'],metadata['block'],1)
+        windows={}
+        for line in stdout.splitlines():
+            if line.startswith('ENQUEUE_WINDOW '):
+                a,i,t=map(int,line.split()[1:])
+                if (a,i) in windows: raise ValueError('duplicate enqueue window')
+                windows[a,i]=t
+        if set(windows)!={(r['arm'],r['sample']) for r in rows}: raise ValueError('missing enqueue windows')
+        for r in rows:
+            t=windows[r['arm'],r['sample']]
+            r.update(start_ns=t+r['marks'][2],end_ns=t+r['marks'][5])
+    else:
+        if 'device: Apple M4 Pro\napi: metal\n' not in stdout or stdout.count('LAUNCH_MICRO_COMPLETE')!=1:
+            raise ValueError('missing micro runtime identity/completion')
+        rows=[]
+        for line in stdout.splitlines():
+            if line.startswith('LAUNCH_SAMPLE '):
+                a,i,start,end,done=map(int,line.split()[1:])
+                if not 0<start<end<done: raise ValueError('invalid launch timing')
+                rows.append(dict(arm=a,sample=i,start_ns=start,end_ns=end,elapsed_ns=done-start))
+        if Counter((r['arm'],r['sample']) for r in rows)!=Counter((a,i) for a in (0,1) for i in range(10)):
+            raise ValueError('incomplete launch microbenchmark')
+    rows.sort(key=lambda r:r['start_ns'])
+    if any(r['start_ns']<=0 or r['end_ns']<=r['start_ns'] for r in rows) or any(a['end_ns']>b['start_ns'] for a,b in zip(rows,rows[1:])):
+        raise ValueError('invalid/overlapping enqueue windows')
+    return rows
+
+
+def enqueue_partition(rows, calls, expected):
+    # Calls are complete runtime-wall intervals; reject overlaps or straddling.
+    if any(len(c)!=11 or c[0]>=c[1] or c[-1]!=0 or min(c[3:10])<=0 for c in calls):
+        raise ValueError('invalid enqueue call/error')
+    if any(a[1]>b[0] for a,b in zip(calls,calls[1:])) or len({c[2] for c in calls})!=1:
+        raise ValueError('overlapping or multithreaded enqueue calls')
+    selected=[];index=0
+    for r in rows:
+        start,end=r['start_ns'],r['end_ns']
+        while index<len(calls) and calls[index][1]<=start: index+=1
+        group=[]
+        while index<len(calls) and calls[index][0]<end:
+            c=calls[index]
+            if c[0]<start or c[1]>end: raise ValueError('enqueue straddles timing boundary')
+            group.append(c);index+=1
+        if len(group)!=expected: raise ValueError('unexpected enqueue count per window')
+        selected.append(group)
+    return selected
+
+
+def enqueue_process(directory, command, target, state, kind, **metadata):
+    env=environment()
+    for key in ('MODULAR_DEBUG','DYLD_INSERT_LIBRARIES','LLM_MOJO_ENQUEUE_RECORD'): env.pop(key,None)
+    if state!='plain': env['DYLD_INSERT_LIBRARIES']=str(directory/'probe.dylib')
+    if state=='enabled': env['LLM_MOJO_ENQUEUE_RECORD']=str(target.with_suffix('.tsv'))
+    result=subprocess.run(list(map(str,command)),cwd=repository_root(),env=env,
+        stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=600)
+    target.with_suffix('.log').write_text(result.stdout)
+    if result.returncode: raise RuntimeError(f'enqueue run failed; see {target}.log')
+    rows=enqueue_windows(result.stdout,kind,**metadata)
+    probe=None
+    if state=='enabled':
+        path=target.with_suffix('.tsv');lines=path.read_text().splitlines()
+        label,count,dropped=lines[0].split();calls=[list(map(int,l.split())) for l in lines[1:]]
+        if label!='ENQUEUE_PROBE_V1' or int(dropped)!=0 or int(count)!=len(calls):
+            raise ValueError('incomplete enqueue probe')
+        groups=enqueue_partition(rows,calls,245 if kind=='model' else metadata['batch'])
+        probe=dict(total_calls=len(calls),dropped=0,raw_sha256=sha(path),groups=groups)
+    return dict(kind=kind,state=state,**metadata,stdout=result.stdout,
+        stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest(),probe=probe)
+
+
+def enqueue_collect(directory, output):
+    receipt=enqueue_verify_build(directory)
+    ensure_record_location(output);output.mkdir(parents=True,exist_ok=False)
+    runs=[];blocks=[];numerical=[];a=receipt['assets']
+    workloads=[(p,s) for p in contract.PREFIXES for s in ENQUEUE_DECLARATION['states']]
+    micros=[(s,n,c) for s in ('tiny','down') for n in (1,256) for c in (0,1)]
+    for block in range(4):
+        before=conditions();reverse=block in (1,2)
+        for p,state in (list(reversed(workloads)) if reverse else workloads):
+            target=output/f'model-b{block}-p{p}-{state}';capture=block==0
+            if capture: target.mkdir()
+            runs.append(enqueue_process(directory,[directory/'model','observed-fixed',a['prepared'],a['tables'],
+                p,int(reverse),1,target if capture else ''],target,state,'model',block=block,prefix=p))
+            if capture:
+                check=verify_snapshots(target,p);check['state']=state;numerical.append(check)
+        for shape,batch,comparison in (list(reversed(micros)) if reverse else micros):
+            target=output/f'micro-b{block}-{shape}-n{batch}-c{comparison}'
+            runs.append(enqueue_process(directory,[directory/'model','launch',shape,batch,int(reverse),comparison,'',''],
+                target,'plain','micro',block=block,shape=shape,batch=batch,comparison=comparison))
+        blocks.append(dict(block=block,before=before,after=conditions()))
+        write(output/'checkpoint.json',dict(build=receipt,runs=runs,blocks=blocks,numerical=numerical))
+        print('Runtime enqueue block',block+1,flush=True)
+    for repeat in range(2):
+        before=conditions()
+        for shape in (['down','tiny'] if repeat else ['tiny','down']):
+            target=output/f'queue-r{repeat}-{shape}'
+            runs.append(enqueue_process(directory,[directory/'model','launch',shape,256,repeat,0,'',''],
+                target,'enabled','queue',repeat=repeat,shape=shape,batch=256,comparison=0))
+        blocks.append(dict(repeat=repeat,before=before,after=conditions()))
+    enqueue_verify_build(directory)
+    record=dict(kind=ENQUEUE_DECLARATION['kind'],build=receipt,runs=runs,blocks=blocks,numerical=numerical)
+    record['summary']=enqueue_summary(record)
+    write(output/'timings.json',record)
+    print(json.dumps(record['summary'],indent=2))
+
+
+def enqueue_summary(record):
+    if record['kind']!=ENQUEUE_DECLARATION['kind'] or record['build']['declaration']!=ENQUEUE_DECLARATION or record['build']['source']['repository']['dirty']:
+        raise ValueError('invalid enqueue study identity')
+    runs=record['runs']; model=[];micro=[];queue=[]
+    expected=Counter([('model',b,p,s) for b in range(4) for p in contract.PREFIXES for s in ENQUEUE_DECLARATION['states']]
+        +[('micro',b,s,n,c) for b in range(4) for s in ('tiny','down') for n in (1,256) for c in (0,1)]
+        +[('queue',r,s) for r in range(2) for s in ('tiny','down')])
+    keys=[]
+    for run in runs:
+        kind=run['kind']
+        if kind=='model': keys.append((kind,run['block'],run['prefix'],run['state']))
+        elif kind=='micro': keys.append((kind,run['block'],run['shape'],run['batch'],run['comparison']))
+        elif kind=='queue': keys.append((kind,run['repeat'],run['shape']))
+        else: raise ValueError('unknown enqueue run')
+        if run['stdout_sha256']!=hashlib.sha256(run['stdout'].encode()).hexdigest(): raise ValueError('enqueue stdout hash changed')
+        rows=enqueue_windows(run['stdout'],kind,**{k:v for k,v in run.items() if k not in ('kind','stdout')})
+        if run['state']=='enabled':
+            probe=run['probe'];groups=probe['groups'];count=245 if kind=='model' else run['batch']
+            if probe['dropped']!=0 or len(groups)!=len(rows) or probe['total_calls']<len(rows)*count:
+                raise ValueError('incomplete retained probe')
+            if enqueue_partition(rows,[c for g in groups for c in g],count)!=groups:
+                raise ValueError('retained enqueue partition changed')
+            for r,g in zip(rows,groups):
+                r['runtime_ns']=sum(c[1]-c[0] for c in g)
+                r['early_ns']=stats.median(c[1]-c[0] for c in g[:16])
+                r['late_ns']=stats.median(c[1]-c[0] for c in g[-16:])
+        elif run['probe'] is not None or run['state'] not in ('plain','disabled'):
+            raise ValueError('unexpected probe')
+        for r in rows:
+            r.update({k:v for k,v in run.items() if k not in ('stdout','stdout_sha256','probe')})
+            (model if kind=='model' else micro if kind=='micro' else queue).append(r)
+    if Counter(keys)!=expected: raise ValueError('incomplete enqueue census')
+    if [(x.get('block'),x.get('repeat')) for x in record['blocks']]!=[(b,None) for b in range(4)]+[(None,r) for r in range(2)]:
+        raise ValueError('missing enqueue conditions')
+    for block in record['blocks']:
+        for side in ('before','after'):
+            require_ac(block[side]);require_nominal_thermal_state(block[side])
+            if block[side]['power_mode_raw']!='0': raise ValueError('enqueue power mode changed')
+    numerical=record['numerical']
+    if Counter((n['prefix'],n['state']) for n in numerical)!=Counter((p,s) for p in contract.PREFIXES for s in ENQUEUE_DECLARATION['states']):
+        raise ValueError('missing enqueue numerical coverage')
+    names={'logits'}|{f'{k}{i}' for k in ('k','v') for i in range(24)}
+    for n in numerical:
+        if len(n['history'])!=n['prefix']+1 or len(n['observations'])!=49 or {x['name'] for x in n['observations']}!=names or not all(all(x[k] for k in ('exact','finite','prefix_exact','inactive_exact')) for x in n['observations']):
+            raise ValueError('enqueue numerical invariant changed')
+    for p in contract.PREFIXES:
+        if len({x['token'] for x in model if x['prefix']==p})!=1: raise ValueError('enqueue trajectory changed')
+        captures=[n for n in numerical if n['prefix']==p]
+        if any(n['history']!=captures[0]['history'] for n in captures): raise ValueError('enqueue history changed')
+        for name in names:
+            hashes=[next(x for x in n['observations'] if x['name']==name)['hashes'] for n in captures]
+            if any(h!=hashes[0] for h in hashes): raise ValueError('probe changed complete output bytes')
+    attribution=[]
+    for p in contract.PREFIXES:
+        for arm in (0,1):
+            entry=dict(prefix=p,variant=arm)
+            for state in ENQUEUE_DECLARATION['states']:
+                subset=[x for x in model if x['prefix']==p and x['arm']==arm and x['state']==state]
+                metric=lambda fn:stats.median(stats.median(fn(x) for x in subset if x['block']==b) for b in range(4))
+                entry[state]=dict(token_ms=metric(lambda x:x['elapsed_ns'])/1e6,
+                    forward_ms=metric(lambda x:x['marks'][5]-x['marks'][0])/1e6,
+                    enqueue_window_ms=metric(lambda x:x['end_ns']-x['start_ns'])/1e6)
+                if state=='enabled':
+                    entry[state].update(runtime_ms=metric(lambda x:x['runtime_ns'])/1e6,
+                        outside_runtime_ms=metric(lambda x:x['end_ns']-x['start_ns']-x['runtime_ns'])/1e6,
+                        runtime_fraction=metric(lambda x:x['runtime_ns']/(x['end_ns']-x['start_ns'])))
+            for state in ('disabled','enabled'):
+                entry[state]['token_ratios_to_plain']=[stats.median(x['elapsed_ns'] for x in model if x['prefix']==p and x['arm']==arm and x['state']==state and x['block']==b)/stats.median(x['elapsed_ns'] for x in model if x['prefix']==p and x['arm']==arm and x['state']=='plain' and x['block']==b) for b in range(4)]
+            attribution.append(entry)
+    cache=[]
+    for shape in ('tiny','down'):
+        for batch in (1,256):
+            s=[x for x in micro if x['shape']==shape and x['batch']==batch]
+            entry=dict(shape=shape,batch=batch)
+            for boundary in ('submit','complete'):
+                def med(b,c,a):
+                    return stats.median((x['end_ns']-x['start_ns'] if boundary=='submit' else x['elapsed_ns'])/batch for x in s if x['block']==b and x['comparison']==c and x['arm']==a)
+                ratios=[med(b,1,1)/med(b,1,0) for b in range(4)]
+                noise=max(abs(med(b,0,1)/med(b,0,0)-1) for b in range(4))
+                entry[boundary]=dict(original_us=stats.median(med(b,1,0) for b in range(4))/1e3,
+                    compiled_us=stats.median(med(b,1,1) for b in range(4))/1e3,ratios=ratios,
+                    self_deviation=noise,qualifies=all(r<1 for r in ratios) and 1-stats.median(ratios)>max(.05,noise))
+            cache.append(entry)
+    pressure=[]
+    for shape in ('tiny','down'):
+        s=[x for x in queue if x['shape']==shape]
+        pressure.append(dict(shape=shape,early_call_us=stats.median(x['early_ns'] for x in s)/1e3,
+            late_call_us=stats.median(x['late_ns'] for x in s)/1e3,
+            runtime_per_call_us=stats.median(x['runtime_ns']/256 for x in s)/1e3,
+            submission_per_call_us=stats.median((x['end_ns']-x['start_ns'])/256 for x in s)/1e3))
+    return dict(model_samples=len(model),micro_samples=len(micro),queue_samples=len(queue),
+        measured_runtime_calls=sum(len(g) for r in runs if r['probe'] for g in r['probe']['groups']),
+        attribution=attribution,compiled_handle=cache,queue_pressure=pressure,promote=False)
+
+
+def enqueue_archive(timings, output):
+    record=json.loads((timings/'timings.json').read_text())
+    if enqueue_summary(record)!=record['summary']: raise ValueError('enqueue summary changed')
+    output.mkdir(parents=True,exist_ok=True)
+    raw=json.dumps(record,separators=(',',':'),sort_keys=True).encode();packed=gzip.compress(raw,mtime=0)
+    (output/'runtime-enqueue.json.gz').write_bytes(packed)
+    write(output/'runtime-enqueue.json',dict(sha256=hashlib.sha256(packed).hexdigest(),uncompressed_sha256=hashlib.sha256(raw).hexdigest()))
+    write(output/'runtime-enqueue-summary.json',enqueue_replay(output))
+
+
+def enqueue_replay(directory):
+    packed=(directory/'runtime-enqueue.json.gz').read_bytes();raw=gzip.decompress(packed)
+    if json.loads((directory/'runtime-enqueue.json').read_text())!=dict(sha256=hashlib.sha256(packed).hexdigest(),uncompressed_sha256=hashlib.sha256(raw).hexdigest()):
+        raise ValueError('enqueue archive hash mismatch')
+    r=json.loads(raw);summary=enqueue_summary(r)
+    if summary!=r['summary']: raise ValueError('enqueue archived summary changed')
+    return summary
+
+
 def main():
     # Trace capture and the reused terminal lifecycle helper inherit this process.
     os.environ.pop('MODULAR_DEBUG', None)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['scheduling-plot','scheduling-build','scheduling-collect','scheduling-capture','scheduling-archive','scheduling-replay','projection-confirm','build','collect','capture','terminal','archive','replay','plot','fusion-capture','fusion-terminal','fusion-archive','fusion-replay','fusion-plot','selection-capture','selection-terminal','selection-archive','selection-replay','selection-plot'])
+    parser.add_argument('command', choices=['enqueue-build','enqueue-collect','enqueue-archive','enqueue-replay','scheduling-plot','scheduling-build','scheduling-collect','scheduling-capture','scheduling-archive','scheduling-replay','projection-confirm','build','collect','capture','terminal','archive','replay','plot','fusion-capture','fusion-terminal','fusion-archive','fusion-replay','fusion-plot','selection-capture','selection-terminal','selection-archive','selection-replay','selection-plot'])
     parser.add_argument('--projections',action='store_true',help='Study exact-width and thread-block projection arrangements')
     parser.add_argument('--residual-norm',action='store_true',help='Study independent residual normalization and composition with swap/argmax')
     parser.add_argument('--copy-free',action='store_true',help='Compare buffer ownership swapping with inter-layer copies')
@@ -1587,7 +1847,11 @@ def main():
     parser.add_argument('--traces', type=Path)
     parser.add_argument('--terminal', type=Path)
     args = parser.parse_args()
-    if args.command == 'scheduling-plot': scheduling_plot(args.output)
+    if args.command == 'enqueue-build': enqueue_build(args.output.resolve(),args.prepared)
+    elif args.command == 'enqueue-collect': enqueue_collect(args.build.resolve(),args.output.resolve())
+    elif args.command == 'enqueue-archive': enqueue_archive(args.timings,args.output)
+    elif args.command == 'enqueue-replay': print(json.dumps(enqueue_replay(args.output),indent=2))
+    elif args.command == 'scheduling-plot': scheduling_plot(args.output)
     elif args.command == 'scheduling-build': scheduling_build(args.output.resolve(),args.prepared)
     elif args.command == 'scheduling-collect': scheduling_collect(args.build.resolve(),args.output.resolve())
     elif args.command == 'scheduling-capture': scheduling_capture(args.build.resolve(),args.output.resolve())

@@ -12,6 +12,23 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class ModelProfileTests(unittest.TestCase):
+    def test_enqueue_partition_rejects_boundary_and_count_errors(self):
+        from llm_mojo.benchmarks.model_profile import enqueue_partition, enqueue_windows
+        rows=[dict(start_ns=100,end_ns=200),dict(start_ns=300,end_ns=400)]
+        call=lambda a,b:[a,b,7,1,1,1,128,1,1,7,0]
+        calls=[call(110,130),call(140,160),call(310,330),call(340,360)]
+        self.assertEqual(enqueue_partition(rows,calls,2),[calls[:2],calls[2:]])
+        for broken in (calls[:-1],[call(90,110)]+calls,calls[:1]+[call(120,145)]+calls[2:],
+                       [calls[0][:-1]+[1]]+calls[1:]):
+            with self.assertRaises(ValueError): enqueue_partition(rows,broken,2)
+        text='device: Apple M4 Pro\napi: metal\n'
+        text+=''.join(f'LAUNCH_SAMPLE {a} {i} {1000*(a*10+i)+1} {1000*(a*10+i)+100} {1000*(a*10+i)+200}\n' for a in (0,1) for i in range(10))
+        text+='LAUNCH_MICRO_COMPLETE\n'
+        self.assertEqual(len(enqueue_windows(text,'micro')),20)
+        for invalid in (text.replace('api: metal','api: cpu'),text.replace('LAUNCH_SAMPLE 0 0 1 100 200\n',''),text.replace('0 0 1 100 200','0 0 1 200 100')):
+            with self.assertRaises(ValueError): enqueue_windows(invalid,'micro')
+
+
     def test_retained_scheduling_integrity(self):
         from contextlib import redirect_stdout
         from io import StringIO

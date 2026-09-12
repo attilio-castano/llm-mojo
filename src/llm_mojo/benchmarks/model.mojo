@@ -130,12 +130,14 @@ def scheduling_pair[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext,
         rewind(model,prefix)
         var times = List[UInt64](capacity=64*11)
         var tokens = List[Int](capacity=64)
+        var starts = List[UInt64](capacity=64 if is_defined["MODEL_LAUNCH_PROBE"]() else 0)
         for sample in range(64):
             if not advance: rewind(model,prefix)
             var start = _observation_clock()
             var selected = step[OBSERVE](model,ctx,ids,26,1,False,True,True,variant)
             var elapsed = _observation_clock()-start
             times.append(elapsed)
+            comptime if is_defined["MODEL_LAUNCH_PROBE"](): starts.append(start)
             comptime if OBSERVE:
                 for j in range(10): times.append(model.observation[j]-start)
             tokens.append(selected)
@@ -151,16 +153,73 @@ def scheduling_pair[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext,
             for j in range(11 if OBSERVE else 1):
                 records += " "+String(times[sample*(11 if OBSERVE else 1)+j])
             records += "\n"
+        comptime if is_defined["MODEL_LAUNCH_PROBE"]():
+            for sample in range(64):
+                records += "ENQUEUE_WINDOW "+String(arm)+" "+String(sample)+" "+String(starts[sample])+"\n"
         if output.byte_length():
             snapshot(model,output+("/observed" if arm else "/plain"))
     print(records,end="")
     print("SCHEDULING_COMPLETE")
 
 
+def launch_micro[DOWN: Bool](batch: Int, first: Int, comparison: Int) raises:
+    """Same projection and views; isolate explicit compiled-handle reuse."""
+    from layout import TileTensor, row_major
+    from llm_mojo.linear import _linear_rowwise_apple_gpu_kernel
+    from std.math import ceildiv
+    comptime K = 4864 if DOWN else 32
+    comptime N = 896 if DOWN else 1
+    var ctx = DeviceContext()
+    if ctx.name() != "Apple M4 Pro" or ctx.api() != "metal": raise Error("launch probe requires M4 Pro / Metal")
+    var xb = ctx.enqueue_create_buffer[DType.bfloat16](K)
+    var wb = ctx.enqueue_create_buffer[DType.bfloat16](N*K)
+    var bb = ctx.enqueue_create_buffer[DType.bfloat16](N)
+    var yb = ctx.enqueue_create_buffer[DType.bfloat16](N+2)
+    xb.enqueue_fill(1); wb.enqueue_fill(1); yb.enqueue_fill(-77)
+    var x = TileTensor(xb,row_major(1,K))
+    var w = TileTensor(wb,row_major(N,K))
+    var b = TileTensor(bb,row_major(N))
+    var y = TileTensor(yb.unsafe_ptr().unsafe_offset(1),row_major(1,N))
+    comptime kernel = _linear_rowwise_apple_gpu_kernel[type_of(x.layout),type_of(w.layout),type_of(b.layout),type_of(y.layout),False]
+    var compiled = ctx.compile_function[kernel]()
+    ctx.synchronize()
+    print("device:",ctx.name());print("api:",ctx.api())
+    var record = String()
+    for arm_index in range(2):
+        var arm = (first+arm_index)%2
+        var cached = comparison == 1 and arm == 1
+        var times = List[UInt64](capacity=30)
+        for sample in range(20):
+            var start = _observation_clock()
+            for _ in range(batch):
+                if cached:
+                    ctx.enqueue_function(compiled,x,w,b,y,Int32(1),Int32(K),Int32(N),grid_dim=ceildiv(N,4),block_dim=128)
+                else:
+                    ctx.enqueue_function[kernel](x,w,b,y,Int32(1),Int32(K),Int32(N),grid_dim=ceildiv(N,4),block_dim=128)
+            var queued = _observation_clock()
+            ctx.synchronize()
+            var done = _observation_clock()
+            if sample >= 10:
+                times.append(start);times.append(queued);times.append(done)
+        with yb.map_to_host() as mapped:
+            if mapped.unsafe_ptr()[unsafe_offset=0] != -77 or mapped.unsafe_ptr()[unsafe_offset=N+1] != -77:
+                raise Error("launch probe guard changed")
+            for i in range(N):
+                if mapped.unsafe_ptr()[unsafe_offset=i+1] != Scalar[DType.bfloat16](K):
+                    raise Error("launch probe output differs from exact integer oracle")
+        for sample in range(10):
+            record += "LAUNCH_SAMPLE "+String(arm)+" "+String(sample)
+            for j in range(3): record += " "+String(times[sample*3+j])
+            record += "\n"
+    print(record,end="");print("LAUNCH_MICRO_COMPLETE")
+
+
 def main() raises:
+    comptime LAUNCH_PROBE = is_defined["MODEL_LAUNCH_PROBE"]()
     comptime SCHEDULING = is_defined["MODEL_SCHEDULING_STUDY"]()
     comptime PROJECTION = is_defined["MODEL_PROJECTION_STUDY"]()
     comptime assert not SCHEDULING or PROJECTION
+    comptime assert not LAUNCH_PROBE or SCHEDULING
     comptime PROFILE_PROJECTION = get_defined_int["MODEL_PROJECTION_PROFILE",0]()
     comptime COMPOSITION = is_defined["MODEL_COMPOSITION_STUDY"]()
     comptime DEFAULT_VARIANT = get_defined_int["MODEL_DEFAULT_VARIANT", 0]()
@@ -186,6 +245,14 @@ def main() raises:
             args.append(String(arg))
     if len(args) != 8:
         raise Error("model mode prepared tables prefix first comparison output-directory")
+    if LAUNCH_PROBE and args[1] == "launch":
+        var batch = Int(args[3]);var first = Int(args[4]);var comparison = Int(args[5])
+        if (batch != 1 and batch != 256) or first < 0 or first > 1 or comparison < 0 or comparison > 1:
+            raise Error("invalid launch microbenchmark")
+        if args[2] == "down": launch_micro[True](batch,first,comparison)
+        elif args[2] == "tiny": launch_micro[False](batch,first,comparison)
+        else: raise Error("unknown launch microbenchmark")
+        return
     var mode = args[1]
     var prefix = Int(args[4])
     var first = Int(args[5])
