@@ -37,19 +37,74 @@ def poison_outputs(mut model: QwenModel, prefix: Int) raises:
                 mapped.unsafe_ptr()[unsafe_offset=prefix*128+column] = sentinel
 
 
-def step[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext, ids: List[Int], configuration: Int = -1, selection: Int = 0, materialize: Bool = False) raises -> Int:
-    model.forward[OBSERVE](ctx,ids,configuration if configuration >= 0 else select_configuration("fast",1,model.length+1,ctx.name()),"",selection,materialize)
+def step[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext, ids: List[Int], configuration: Int = -1, selection: Int = 0, materialize: Bool = False, copy_free: Bool = False) raises -> Int:
+    model.forward[OBSERVE](ctx,ids,configuration if configuration >= 0 else select_configuration("fast",1,model.length+1,ctx.name()),"",selection,materialize,copy_free)
     return model.greedy[OBSERVE](ctx)
 
 
+def verify_swap_lifecycle(mut model: QwenModel, ctx: DeviceContext, history: List[Int], path: String) raises:
+    for arm in range(2):
+        model.reset(ctx)
+        for layer in range(24):
+            model.layers[layer].cache.key.enqueue_fill(0)
+            model.layers[layer].cache.value.enqueue_fill(0)
+        var record = String()
+        var lengths: List[Int] = [3,1,1,2,1,0,1,2,1]
+        for index in range(len(lengths)):
+            var rows = lengths[index]
+            if rows == 0:
+                model.reset(ctx)
+                continue
+            var before = Int(model.input.unsafe_ptr())
+            var destination = Int(model.mlp.output.unsafe_ptr())
+            var prefix = model.length
+            var ids = List[Int]()
+            for j in range(rows):
+                ids.append(history[prefix+j])
+            var swap = arm == 1 and rows == 1
+            model.forward(ctx,ids,select_configuration("combined",rows,prefix+rows,ctx.name()),"",0,False,swap)
+            var token = model.greedy(ctx)
+            if (Int(model.input.unsafe_ptr()) != (destination if swap else before)
+                or Int(model.mlp.output.unsafe_ptr()) != (before if swap else destination)
+                or before == destination or model.length != prefix+rows
+                or model.submitted_rows != 24*(prefix+rows)):
+                raise Error("buffer owner or accounting invariant failed")
+            save_bf16(model.logits,path+"/lifecycle-"+String(arm)+"-"+String(index)+".bin",151936)
+            record += String(index)+" "+String(rows)+" "+String(model.length)+" "+String(token)+"\n"
+            # Reject invalid IDs before moving any owner or modifying caches.
+            var rejected = False
+            var bad_ids: List[Int] = [-1]
+            var saved = Int(model.input.unsafe_ptr())
+            try:
+                model.forward(ctx,bad_ids,26,"",0,False,arm == 1)
+            except:
+                rejected = True
+            if not rejected or not model.valid or Int(model.input.unsafe_ptr()) != saved or model.length != prefix+rows:
+                raise Error("rejected forward changed valid ownership/state")
+            if arm == 1:
+                rejected = False
+                var bad_rows: List[Int] = [0,1]
+                try:
+                    model.forward(ctx,bad_rows,0,"",0,False,True)
+                except:
+                    rejected = True
+                if not rejected or Int(model.input.unsafe_ptr()) != saved or model.length != prefix+rows:
+                    raise Error("multi-row swap rejection changed state")
+        snapshot(model,path+"/lifecycle-final-"+String(arm))
+        var file = open(path+"/lifecycle-"+String(arm)+".txt","w")
+        file.write(record)
+    print("SWAP_LIFECYCLE_COMPLETE")
+
+
 def main() raises:
+    comptime COPY_FREE = is_defined["MODEL_COPY_FREE_STUDY"]()
     comptime SELECTION = is_defined["MODEL_SELECTION_STUDY"]()
     comptime COMBINED = is_defined["MODEL_COMBINED_STUDY"]()
     comptime FUSION = is_defined["MODEL_FUSION_STUDY"]()
     comptime PROFILE_FUSED = is_defined["MODEL_FUSION_PROFILE"]()
     comptime assert not COMBINED or FUSION or PROFILE_FUSED, "combined study requires an explicit study or profile route"
-    var candidate = 26 if COMBINED else 25
-    var control = 26 if SELECTION else (0 if FUSION else -1)
+    var candidate = 26 if COMBINED or COPY_FREE else 25
+    var control = 26 if SELECTION or COPY_FREE else (0 if FUSION else -1)
     var selection_control = 0
     var selection_candidate = 0
     comptime PROFILE_SELECTION = get_defined_int["MODEL_SELECTION_PROFILE", 0]()
@@ -121,7 +176,7 @@ def main() raises:
         comptime if SELECTION:
             observed = step[False](model,ctx,ids,26,selection_candidate,True)
         elif FUSION:
-            observed = step[False](model,ctx,ids,candidate)
+            observed = step[False](model,ctx,ids,candidate,0,False,COPY_FREE)
         else:
             observed = step[True](model,ctx,ids)
         snapshot(model,args[7]+"/observed")
@@ -150,6 +205,14 @@ def main() raises:
                 rejected = True
             if not rejected or model.valid:
                 raise Error("nonfinite selection did not invalidate model")
+        comptime if COPY_FREE:
+            if prefix == 64:
+                for arm in range(2):
+                    rewind(model,prefix)
+                    model.forward(ctx,ids,26,args[7]+("/layers-candidate" if arm else "/layers-control"),0,False,arm == 1)
+                    if model.greedy(ctx) != plain:
+                        raise Error("layer capture changed winner")
+                verify_swap_lifecycle(model,ctx,history,args[7])
         var record = String()
         for i in range(prefix+1):
             record += String(history[i])+"\n"
@@ -160,17 +223,22 @@ def main() raises:
     if mode == "profile":
         for _ in range(10):
             rewind(model,prefix)
-            if step[False](model,ctx,ids,candidate if PROFILE_FUSED else control,PROFILE_SELECTION) != winner:
+            if step[False](model,ctx,ids,candidate if PROFILE_FUSED else control,PROFILE_SELECTION,False,COPY_FREE and PROFILE_FUSED) != winner:
                 raise Error("unstable profile prediction")
         print("correctness: passed")
-        comptime if SELECTION:
+        comptime if COPY_FREE:
+            print("profile implementation:","QwenModel.forward+greedy-"+("buffer-swap" if PROFILE_FUSED else "combined"))
+        elif SELECTION:
             print("profile implementation:","QwenModel.forward+greedy-"+("gpu-argmax" if PROFILE_SELECTION == 1 else ("fused-head" if PROFILE_SELECTION == 2 else "combined")))
         else:
             print("profile implementation:", ("QwenModel.forward+greedy-combined" if COMBINED else "QwenModel.forward+greedy-fused") if PROFILE_FUSED else "QwenModel.forward+greedy")
         print("rows: 1")
         print("hidden: 896")
         print("key value rows:",prefix+1)
-        comptime if SELECTION:
+        comptime if COPY_FREE:
+            print("profile workload:","model-p"+String(prefix)+("-buffer-swap" if PROFILE_FUSED else "-combined"))
+            print("profile dispatches per iteration:",291 if PROFILE_FUSED else 314)
+        elif SELECTION:
             print("profile workload:","model-p"+String(prefix)+("-gpu-argmax" if PROFILE_SELECTION == 1 else ("-fused-head" if PROFILE_SELECTION == 2 else "-combined")))
             print("profile dispatches per iteration:",314+(2 if PROFILE_SELECTION == 1 else (1 if PROFILE_SELECTION == 2 else 0)))
         else:
@@ -182,7 +250,7 @@ def main() raises:
         print("PROFILE_REGION_BEGIN")
         for _ in range(8):
             rewind(model,prefix)
-            if step[False](model,ctx,ids,candidate if PROFILE_FUSED else control,PROFILE_SELECTION) != winner:
+            if step[False](model,ctx,ids,candidate if PROFILE_FUSED else control,PROFILE_SELECTION,False,COPY_FREE and PROFILE_FUSED) != winner:
                 raise Error("unstable profile prediction")
         print("PROFILE_REGION_END")
         sleep(0.25)
@@ -198,7 +266,7 @@ def main() raises:
             if observe:
                 selected = step[True](model,ctx,ids)
             else:
-                selected = step[False](model,ctx,ids,candidate if FUSION and comparison >= 1 and arm == 1 else control,selection_candidate if arm == 1 else selection_control)
+                selected = step[False](model,ctx,ids,candidate if FUSION and comparison >= 1 and arm == 1 else control,selection_candidate if arm == 1 else selection_control,False,COPY_FREE and comparison == 1 and arm == 1)
             var elapsed = _observation_clock()-start
             if selected != winner or model.submitted_rows != 24*(prefix+1):
                 raise Error("measurement prediction/accounting changed")

@@ -1,6 +1,6 @@
 """Fixed Qwen model ownership. Native execution; prepared files are verified by tooling.
 
-The cross-layer copy keeps the existing decoder alias contract intact. Numerical
+The cross-layer copy or owner swap keeps the decoder alias contract intact. Numerical
 comparisons are diagnostics; storage and lifecycle invariants remain exact.
 """
 from std.memory import bitcast
@@ -68,6 +68,17 @@ def _copy_rows[IL: TensorLayout, OL: TensorLayout](
         output[i//896,i%896] = input[i//896,i%896]
 
 
+def swap_hidden_buffers(mut left: DeviceBuffer[DType.bfloat16], mut right: DeviceBuffer[DType.bfloat16]):
+    """Exchange owners, keeping both allocations alive for queued GPU readers."""
+    var previous = left^
+    left = right^
+    right = previous^
+
+
+def select_copy_free(policy: String, rows: Int, device: String) -> Bool:
+    return policy == "buffer-swap" and rows == 1 and device == "Apple M4 Pro"
+
+
 def candidate_configuration(rows: Int, total: Int) -> Int:
     """Split8 choices measured in the real 24-layer model on Apple M4 Pro."""
     if (rows == 16 and (total == 1024 or total == 4096)) or (
@@ -84,7 +95,7 @@ def candidate_configuration(rows: Int, total: Int) -> Int:
 def select_configuration(policy: String, rows: Int, total: Int, device: String) raises -> Int:
     if rows < 1 or total < rows or total > 4096:
         raise Error("invalid configuration-selection dimensions")
-    if policy == "gpu-argmax" or policy == "fused-head":
+    if policy == "gpu-argmax" or policy == "fused-head" or policy == "buffer-swap":
         return select_configuration("fast",rows,total,device)
     if policy == "fusion" or policy == "combined" or policy == "unfused":
         if rows == 1 and device == "Apple M4 Pro":
@@ -232,7 +243,7 @@ struct QwenModel(Movable):
                 TileTensor(self.input,row_major(rows,896)),True,
                 Int(mappings[0]),Int(mappings[1]),Int(mappings[2]))
 
-    def forward[OBSERVE: Bool = False](mut self, ctx: DeviceContext, ids: List[Int], configuration: Int = 0, capture: String = "", selection: Int = 0, materialize: Bool = False) raises:
+    def forward[OBSERVE: Bool = False](mut self, ctx: DeviceContext, ids: List[Int], configuration: Int = 0, capture: String = "", selection: Int = 0, materialize: Bool = False, copy_free: Bool = False) raises:
         """Submit all layers. ID upload synchronizes; layer execution does not.
 
         Native inference API. The host token
@@ -243,6 +254,8 @@ struct QwenModel(Movable):
         """
         comptime if OBSERVE:
             self.observation[0] = _observation_clock()
+        if copy_free and len(ids) != 1:
+            raise Error("buffer swapping is restricted to single-row decode")
         if selection < 0 or selection > 2:
             raise Error("unknown token selection mode")
         self.preflight(ctx,ids,configuration)
@@ -280,7 +293,9 @@ struct QwenModel(Movable):
                         save_bf16(self.attention.raw_value,capture+"/append_value_"+String(i)+".bin",rows*128)
                     save_bf16(self.layers[i].cache.key,capture+"/cache_key_"+String(i)+".bin",self.capacity*128)
                     save_bf16(self.layers[i].cache.value,capture+"/cache_value_"+String(i)+".bin",self.capacity*128)
-                if i < 23:
+                if i < 23 and copy_free:
+                    swap_hidden_buffers(self.input,self.mlp.output)
+                elif i < 23:
                     ctx.enqueue_function[_copy_rows[type_of(input_view.layout),type_of(input_view.layout)]](TileTensor(self.mlp.output,row_major(rows,896)),
                         TileTensor(self.input,row_major(rows,896)),Int32(rows),
                         grid_dim=(rows*896+255)//256,block_dim=256)

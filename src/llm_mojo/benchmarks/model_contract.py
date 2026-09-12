@@ -6,6 +6,7 @@ OPERATION = 'qwen_model'
 FAST_DECODE_CONFIGURATION = 26
 ENTRYPOINTS = {'qwen_model_fast': 'QwenModel.forward+greedy', 'qwen_model_fused': 'QwenModel.forward+greedy-fused', 'qwen_model_combined':'QwenModel.forward+greedy-combined'}
 ENTRYPOINTS.update(qwen_model_gpu_argmax='QwenModel.forward+greedy-gpu-argmax', qwen_model_fused_head='QwenModel.forward+greedy-fused-head')
+ENTRYPOINTS['qwen_model_buffer_swap'] = 'QwenModel.forward+greedy-buffer-swap'
 SELECTIONS = {'qwen_model_gpu_argmax':1, 'qwen_model_fused_head':2}
 TARGET_FIELDS = ('profile_workload', 'dispatches_per_iteration', 'key_value_rows')
 PREFIXES = (64, 1024, 3968)
@@ -21,8 +22,8 @@ DECLARATION = dict(model='Qwen2.5-0.5B-Instruct', policy='fast', batch=1,
                    trace_boundary='normal forward+greedy; fixed logical prefix; no layer synchronizations')
 
 
-def stages(fused=False, combined=False, selection=0):
-    combined = combined or bool(selection)
+def stages(fused=False, combined=False, selection=0, copy_free=False):
+    combined = combined or bool(selection) or copy_free
     fused = fused or combined
     result = [(-1, 'embedding')]
     for layer in range(24):
@@ -30,7 +31,7 @@ def stages(fused=False, combined=False, selection=0):
                       for name in decoder_stages(0, 1)
                       if not (fused and name in {'Q RoPE','K RoPE','KV append'})
                       and not (combined and name=='multiply'))
-        if layer < 23:
+        if layer < 23 and not copy_free:
             result.append((layer, 'inter-layer copy'))
     head = [(-1, 'fused vocabulary/local argmax'),(-1, 'argmax finish')] if selection == 2 else [(-1, 'vocabulary projection')]
     if selection == 1:
@@ -38,7 +39,7 @@ def stages(fused=False, combined=False, selection=0):
     return result + [(-1, 'final RMSNorm')] + head
 
 
-def command_stages(fused=False, combined=False, selection=0):
+def command_stages(fused=False, combined=False, selection=0, copy_free=False):
     """Observed Metal mapping protocol: two token blits, compute, two logit blits.
 
     These transfers supplement the 410 compute dispatches in the original
@@ -46,12 +47,12 @@ def command_stages(fused=False, combined=False, selection=0):
     submissions that lack a compute interval.
     """
     return ([(-1, 'token buffer map', 'blit'), (-1, 'token buffer unmap', 'blit')]
-            + [(layer, name, 'compute') for layer, name in stages(fused, combined, selection)]
+            + [(layer, name, 'compute') for layer, name in stages(fused, combined, selection, copy_free)]
             + [(-1, ('winner' if selection else 'logit')+' buffer map', 'blit'), (-1, ('winner' if selection else 'logit')+' buffer unmap', 'blit')])
 
 
-def validate_command_sequence(rows, fused=False, combined=False, selection=0):
-    expected = command_stages(fused, combined, selection)
+def validate_command_sequence(rows, fused=False, combined=False, selection=0, copy_free=False):
+    expected = command_stages(fused, combined, selection, copy_free)
     if not rows or len(rows) % len(expected):
         raise ValueError('incomplete model compute/transfer sequence')
     for index, row in enumerate(rows):
@@ -61,11 +62,11 @@ def validate_command_sequence(rows, fused=False, combined=False, selection=0):
             raise ValueError('model compute/transfer ordering changed')
 
 
-def specification(prefix, fused=False, combined=False, selection=0):
+def specification(prefix, fused=False, combined=False, selection=0, copy_free=False):
     if type(prefix) is not int or prefix not in PREFIXES:
         raise ValueError('undeclared Qwen profiling context')
     return dict(profile_rows=1, hidden_size=896, key_value_rows=prefix+1,
-                profile_workload=f'model-p{prefix}'+('-gpu-argmax' if selection == 1 else ('-fused-head' if selection == 2 else ('-combined' if combined else ('-fused' if fused else '')))), dispatches_per_iteration=len(stages(fused, combined, selection)))
+                profile_workload=f'model-p{prefix}'+('-buffer-swap' if copy_free else ('-gpu-argmax' if selection == 1 else ('-fused-head' if selection == 2 else ('-combined' if combined else ('-fused' if fused else ''))))), dispatches_per_iteration=len(stages(fused, combined, selection, copy_free)))
 
 
 def configuration(data):
@@ -75,7 +76,7 @@ def configuration(data):
     total = data.get('key_value_rows')
     if type(total) is not int:
         raise ValueError('invalid Qwen cache length')
-    expected = specification(total-1, data['implementation']=='qwen_model_fused', data['implementation']=='qwen_model_combined', SELECTIONS.get(data['implementation'],0))
+    expected = specification(total-1, data['implementation']=='qwen_model_fused', data['implementation']=='qwen_model_combined', SELECTIONS.get(data['implementation'],0), data['implementation']=='qwen_model_buffer_swap')
     if any(type(data.get(k)) is not type(v) or data.get(k) != v for k, v in expected.items()):
         raise ValueError('Qwen trace geometry changed')
     if data.get('profile_iterations') != 8 or data.get('profile_warmup_iterations') != 10:
@@ -102,3 +103,9 @@ SELECTION_DECLARATION = {**DECLARATION, 'policy':'configuration 26 with CPU, GPU
     'trace_repeats':1, 'trace_contexts':[1024], 'trace_arms':['cpu','gpu-argmax','fused-head'],
     'promotion':FUSION_DECLARATION['promotion'],
     'choice':'Prefer qualifying GPU argmax unless fused head also clears the same gate against it; otherwise choose the sole qualifier or retain CPU.'}
+
+
+COPY_FREE_DECLARATION = {**FUSION_DECLARATION, 'policy':'configuration 26 with copy vs owner swap; CPU greedy',
+    'candidate':'swap input and MLP-output owners after layers 0..22; no extra allocation or synchronization',
+    'comparisons':['copy/copy','swap/copy'],
+    'extra_correctness':'all hidden states at history 64; consecutive single/multi-row calls, reset, invalid IDs and owner identities'}

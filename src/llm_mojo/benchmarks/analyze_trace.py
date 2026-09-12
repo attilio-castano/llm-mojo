@@ -833,10 +833,11 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
     sequence_commands = workload["dispatches_per_iteration"]
     if identity['operation'] == 'qwen_model':
         from .model_contract import command_stages, validate_command_sequence, SELECTIONS
+        model_copy_free = identity['implementation']=='qwen_model_buffer_swap'
         model_selection = SELECTIONS.get(identity['implementation'],0)
         model_fused = identity['implementation']=='qwen_model_fused'
         model_combined = identity['implementation']=='qwen_model_combined'
-        sequence_commands = len(command_stages(model_fused, model_combined, model_selection))
+        sequence_commands = len(command_stages(model_fused, model_combined, model_selection, model_copy_free))
         compute_commands = [r for r in compute_channel if any(
             kind in r['event-label'][1] for kind in (':Compute Command', ':Blit Command'))]
     required_tail = (workload["warmup_iterations"] + workload["profile_iterations"] +
@@ -852,7 +853,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         trace_correctness_dispatches=identity["operation"] == "rms_norm",
     )
     if identity['operation'] == 'qwen_model':
-        validate_command_sequence(warmup + profile, model_fused, model_combined, model_selection)
+        validate_command_sequence(warmup + profile, model_fused, model_combined, model_selection, model_copy_free)
     sequence_command_buffer_ids = {
         integer(row, "cmdbuffer-id") for row in correctness + warmup + profile
     }

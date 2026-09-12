@@ -12,6 +12,26 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class ModelProfileTests(unittest.TestCase):
+    def test_buffer_swap_trace_geometry_and_lifecycle_census(self):
+        from llm_mojo.benchmarks.model_profile import validate_swap_checks, swap_capture_names, swap_lifecycle_names
+        stages=contract.stages(copy_free=True)
+        self.assertEqual(len(stages),291)
+        self.assertNotIn('inter-layer copy',[stage for _,stage in stages])
+        implementation='qwen_model_buffer_swap'
+        fields=contract.specification(1024,copy_free=True)
+        contract.configuration(dict(implementation=implementation,entrypoint=contract.ENTRYPOINTS[implementation],
+            **fields,profile_iterations=8,profile_warmup_iterations=10))
+        check=dict(owners_checked=True,rejection_checked=True,
+            layers=[dict(name=n,exact=True,bytes=2,sha256='0'*64) for n in swap_capture_names()],
+            lifecycle=[dict(name=n,exact=True,bytes=2,sha256='0'*64) for n in swap_lifecycle_names()],
+            states=[[i,r,t,0] for i,r,t in [(0,3,3),(1,1,4),(2,1,5),(3,2,7),(4,1,8),(6,1,1),(7,2,3),(8,1,4)]])
+        validate_swap_checks(check)
+        for field in ('layers','lifecycle'):
+            damaged=copy.deepcopy(check);damaged[field].pop()
+            with self.assertRaises(ValueError): validate_swap_checks(damaged)
+        check['owners_checked']=False
+        with self.assertRaises(ValueError): validate_swap_checks(check)
+
     def test_retained_selection_evidence_rejects_missing_or_changed_records(self):
         from contextlib import redirect_stdout
         from io import StringIO
