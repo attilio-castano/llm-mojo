@@ -12,6 +12,40 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class ModelProfileTests(unittest.TestCase):
+    def test_retained_buffer_swap_evidence_integrity(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import fusion_replay
+        source=repository_root()/'studies/model_generation'
+        original=json.loads(gzip.decompress((source/'buffer-swap.json.gz').read_bytes()))
+        for damage in (None,'sample','cache','layer','lifecycle','owners','dispatch','provenance','terminal','conditions','trace-conditions','block'):
+            record=copy.deepcopy(original)
+            if damage=='sample': record['timing']['samples'].pop()
+            elif damage=='cache': record['timing']['numerical'][0]['observations'][0]['exact']=False
+            elif damage=='layer': record['timing']['numerical'][0]['swap_checks']['layers'].pop()
+            elif damage=='lifecycle': record['timing']['numerical'][0]['swap_checks']['states'][1][2]=3
+            elif damage=='owners': record['timing']['numerical'][0]['swap_checks']['owners_checked']=False
+            elif damage=='dispatch': record['captures'][1]['samples'].pop()
+            elif damage=='provenance': record['captures'][1]['provenance']['binary']['sha256']='0'*64
+            elif damage=='terminal': record['terminal']['blocks'][0]['arms'][0]['turns'][0]['generated'][0]=0
+            elif damage=='conditions': record['timing']['blocks'][0]['before']['power_mode_raw']='1'
+            elif damage=='trace-conditions': record['captures'][0]['conditions']['after']['power_mode_raw']='1'
+            elif damage=='block': record['timing']['blocks'].pop()
+            with tempfile.TemporaryDirectory() as temporary:
+                directory=Path(temporary)
+                raw=json.dumps(record).encode()
+                packed=gzip.compress(raw,mtime=0)
+                (directory/'buffer-swap.json.gz').write_bytes(packed)
+                (directory/'buffer-swap.json').write_text(json.dumps(dict(sha256=hashlib.sha256(packed).hexdigest(),
+                    uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with redirect_stdout(StringIO()):
+                    if damage is None:
+                        fusion_replay(directory,copy_free=True)
+                        self.assertFalse(json.loads((directory/'buffer-swap-summary.json').read_text())['promote'])
+                    else:
+                        with self.assertRaises(ValueError): fusion_replay(directory,copy_free=True)
+
     def test_buffer_swap_trace_geometry_and_lifecycle_census(self):
         from llm_mojo.benchmarks.model_profile import validate_swap_checks, swap_capture_names, swap_lifecycle_names
         stages=contract.stages(copy_free=True)

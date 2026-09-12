@@ -782,6 +782,14 @@ def fusion_replay(directory, combined=False, copy_free=False):
             raise ValueError('fusion numerical invariant failed')
     if copy_free:
         validate_swap_checks(next(n for n in timing['numerical'] if n['prefix']==64).get('swap_checks',{}))
+        if [b['block'] for b in timing['blocks']] != list(range(4)):
+            raise ValueError('incomplete buffer-swap timing conditions')
+        for block in [*timing['blocks'],*record['terminal']['blocks'],*[c['conditions'] for c in record['captures']]]:
+            for side in ('before','after'):
+                require_ac(block[side])
+                require_nominal_thermal_state(block[side])
+                if block[side]['power_mode_raw'] != '0':
+                    raise ValueError('buffer-swap power mode changed')
     if len(record['captures'])!=2: raise ValueError('incomplete fusion capture census')
     for fused,capture in zip((False,True),record['captures']):
         provenance = capture['provenance']

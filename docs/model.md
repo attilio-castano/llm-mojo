@@ -380,3 +380,16 @@ leaves logits untouched except during explicit diagnostic materialization.
 Neither candidate passed the full promotion rule, so Fast/auto retain CPU
 selection. Native study policies `gpu-argmax` and `fused-head` enable these
 experiments only for single-row Apple M4 Pro calls.
+
+### Inter-layer buffer ownership experiment
+
+The [buffer-swap study](../studies/model_generation/buffer-swap.md) exchanges the
+input and MLP-output DeviceBuffer owners between layers, removing 23 compute
+copies while retaining both allocations and the decoder's disjoint input/output
+contract. Each next layer rebuilds its input view from the current owner. The
+last layer does not swap, so final normalization still reads `mlp.output`.
+Exact hidden-state, cache, lifecycle and streaming comparisons pass. Median
+paired reductions are 5.3–8.3%, but the full promotion gate fails; Fast/auto keep
+copying. Native study policy `buffer-swap` enables the candidate only for
+single-row Apple M4 Pro calls. Multi-row calls retain the copy path, including
+after a swapping call; explicit low-level multi-row swapping is rejected.
