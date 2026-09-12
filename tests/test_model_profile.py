@@ -12,6 +12,17 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class ModelProfileTests(unittest.TestCase):
+    def test_batch_support_distinguishes_backend_failure_from_bad_results(self):
+        from llm_mojo.benchmarks.model_profile import batch_support_parse
+        base='device: Apple M4 Pro\napi: metal\nBATCH_EAGER_PASS 15\n'
+        unsupported=base+'BATCH_GRAPH_ERROR createGraphBuilder() not supported on this device context\nBATCH_SUPPORT_COMPLETE\n'
+        self.assertEqual(batch_support_parse(unsupported)['status'],'graph-unsupported')
+        supported=base+'BATCH_BUILDER_ENTERED\nBATCH_GRAPH_PASS 15 63\nBATCH_SUPPORT_COMPLETE\n'
+        self.assertEqual(batch_support_parse(supported)['status'],'graph-replay-supported')
+        for invalid in (unsupported.replace('api: metal','api: cpu'), unsupported.replace('BATCH_EAGER_PASS 15\n',''), unsupported.replace('createGraphBuilder() not supported on this device context','graph first replay failed'), unsupported+'BATCH_BUILDER_ENTERED\n', supported.replace('15 63','15 15')):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError): batch_support_parse(invalid)
+
+
     def test_retained_enqueue_evidence(self):
         from llm_mojo._repository import repository_root
         from llm_mojo.benchmarks.model_profile import enqueue_summary

@@ -1857,11 +1857,78 @@ def enqueue_plot(directory):
     fig.savefig(directory/'runtime-enqueue.png',dpi=160);plt.close(fig)
 
 
+BATCH_SUPPORT_DECLARATION = dict(kind='metal-batch-support-v1',repeats=2,
+    control='two ordered int32 x=2*x+1 dispatches from x=3',
+    graph='same dependent dispatches, replay twice: 15 then 63',timing=False)
+
+
+def batch_support_parse(stdout):
+    if 'device: Apple M4 Pro\napi: metal\n' not in stdout or stdout.count('BATCH_EAGER_PASS 15')!=1 or stdout.count('BATCH_SUPPORT_COMPLETE')!=1:
+        raise ValueError('missing batching control/device/completion')
+    errors=[l for l in stdout.splitlines() if l.startswith('BATCH_GRAPH_ERROR ')]
+    if errors:
+        if len(errors)!=1 or 'createGraphBuilder() not supported on this device context' not in errors[0] or 'BATCH_BUILDER_ENTERED' in stdout or 'BATCH_GRAPH_PASS' in stdout:
+            raise ValueError('unexpected graph failure')
+        return dict(status='graph-unsupported',eager_value=15,builder_entered=False,error=errors[0])
+    if stdout.count('BATCH_BUILDER_ENTERED')!=1 or stdout.count('BATCH_GRAPH_PASS 15 63')!=1:
+        raise ValueError('incomplete graph replay validation')
+    return dict(status='graph-replay-supported',eager_value=15,builder_entered=True,graph_values=[15,63])
+
+
+def batch_support_collect(output):
+    ensure_record_location(output);output.mkdir(parents=True,exist_ok=False)
+    source=source_identity();machine=stable_environment();before=conditions()
+    if source['repository']['dirty']: raise ValueError('batch support requires clean source')
+    if machine['software']['max']!='26.5.0' or machine['software']['mojo']!='1.0.0' or machine['hardware']['chip']!='Apple M4 Pro':
+        raise ValueError('batch support probe targets pinned M4 Pro / MAX 26.5.0')
+    runtime=repository_root()/'.venv/lib/python3.12/site-packages/modular/lib/libAsyncRTMojoBindings.dylib'
+    command=[environment_tool('mojo'),'build','-I','src','-D','MODEL_BATCH_SUPPORT',
+        'src/llm_mojo/benchmarks/model.mojo','-o',output/'probe']
+    execute(command,output/'build.log')
+    exports=execute(['xcrun','dyld_info','-exports',runtime],output/'exports.log')
+    entrypoints=[line.split()[-1] for line in exports.splitlines()
+                 if '_AsyncRT_DeviceContext_' in line or '_AsyncRT_DeviceStream_' in line or '_AsyncRT_DeviceGraph' in line]
+    runs=[]
+    for repeat in range(2):
+        stdout=execute([output/'probe'],output/f'run-{repeat}.log')
+        runs.append(dict(repeat=repeat,stdout=stdout,stdout_sha256=hashlib.sha256(stdout.encode()).hexdigest(),result=batch_support_parse(stdout)))
+    if source_identity()!=source or stable_environment()!=machine: raise ValueError('batch probe source/environment changed')
+    record=dict(declaration=BATCH_SUPPORT_DECLARATION,source=source,environment=machine,
+        conditions=dict(before=before,after=conditions()),command=[str(x) for x in command],
+        binary=dict(sha256=sha(output/'probe'),bytes=(output/'probe').stat().st_size),
+        runtime=dict(sha256=sha(runtime),bytes=runtime.stat().st_size),
+        entrypoints=entrypoints,exports_sha256=sha(output/'exports.log'),runs=runs)
+    write(output/'batch-support.json',record)
+    print(json.dumps([r['result'] for r in runs],indent=2))
+
+
+def batch_support_replay(path):
+    record=json.loads(path.read_text())
+    if record['declaration']!=BATCH_SUPPORT_DECLARATION or record['source']['repository']['dirty']:
+        raise ValueError('batch support declaration/source changed')
+    if [r['repeat'] for r in record['runs']]!=[0,1]: raise ValueError('batch support repeats missing')
+    if record['environment']['hardware']['chip']!='Apple M4 Pro' or record['environment']['hardware']['gpu_api']!='metal' or record['environment']['software']['max']!='26.5.0':
+        raise ValueError('batch support device/backend changed')
+    for side in ('before','after'):
+        require_ac(record['conditions'][side]);require_nominal_thermal_state(record['conditions'][side])
+        if record['conditions'][side]['power_mode_raw']!='0': raise ValueError('batch probe power mode changed')
+    results=[]
+    for r in record['runs']:
+        if hashlib.sha256(r['stdout'].encode()).hexdigest()!=r['stdout_sha256']: raise ValueError('batch probe output hash changed')
+        result=batch_support_parse(r['stdout'])
+        if result!=r['result']: raise ValueError('batch probe result changed')
+        results.append(result)
+    if results[0]!=results[1]: raise ValueError('batch capability differed between processes')
+    if '_AsyncRT_DeviceContext_createGraphBuilder' not in record['entrypoints'] or '_AsyncRT_DeviceContext_enqueueFunctionDirect' not in record['entrypoints']:
+        raise ValueError('missing runtime entrypoints')
+    return dict(status=results[0]['status'],timing_run=False,promote=False)
+
+
 def main():
     # Trace capture and the reused terminal lifecycle helper inherit this process.
     os.environ.pop('MODULAR_DEBUG', None)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['enqueue-plot','enqueue-build','enqueue-collect','enqueue-archive','enqueue-replay','scheduling-plot','scheduling-build','scheduling-collect','scheduling-capture','scheduling-archive','scheduling-replay','projection-confirm','build','collect','capture','terminal','archive','replay','plot','fusion-capture','fusion-terminal','fusion-archive','fusion-replay','fusion-plot','selection-capture','selection-terminal','selection-archive','selection-replay','selection-plot'])
+    parser.add_argument('command', choices=['batch-support','batch-support-replay','enqueue-plot','enqueue-build','enqueue-collect','enqueue-archive','enqueue-replay','scheduling-plot','scheduling-build','scheduling-collect','scheduling-capture','scheduling-archive','scheduling-replay','projection-confirm','build','collect','capture','terminal','archive','replay','plot','fusion-capture','fusion-terminal','fusion-archive','fusion-replay','fusion-plot','selection-capture','selection-terminal','selection-archive','selection-replay','selection-plot'])
     parser.add_argument('--projections',action='store_true',help='Study exact-width and thread-block projection arrangements')
     parser.add_argument('--residual-norm',action='store_true',help='Study independent residual normalization and composition with swap/argmax')
     parser.add_argument('--copy-free',action='store_true',help='Compare buffer ownership swapping with inter-layer copies')
@@ -1876,7 +1943,9 @@ def main():
     parser.add_argument('--traces', type=Path)
     parser.add_argument('--terminal', type=Path)
     args = parser.parse_args()
-    if args.command == 'enqueue-plot': enqueue_plot(args.output)
+    if args.command == 'batch-support': batch_support_collect(args.output.resolve())
+    elif args.command == 'batch-support-replay': print(json.dumps(batch_support_replay(args.output),indent=2))
+    elif args.command == 'enqueue-plot': enqueue_plot(args.output)
     elif args.command == 'enqueue-build': enqueue_build(args.output.resolve(),args.prepared)
     elif args.command == 'enqueue-collect': enqueue_collect(args.build.resolve(),args.output.resolve())
     elif args.command == 'enqueue-archive': enqueue_archive(args.timings,args.output)

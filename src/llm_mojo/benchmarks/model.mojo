@@ -2,7 +2,9 @@
 from std.sys import argv, is_defined, get_defined_int, get_defined_string
 from std.time import sleep
 from std.memory import bitcast
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceContext, DeviceGraph, DeviceGraphBuilder
+from layout import TileTensor, TensorLayout, row_major
+from std.gpu import global_idx
 from llm_mojo.model import QwenModel, select_configuration, save_bf16, _observation_clock
 from llm_mojo.tokenizer import Tokenizer, TokenizerWorkspace
 
@@ -214,7 +216,47 @@ def launch_micro[DOWN: Bool](batch: Int, first: Int, comparison: Int) raises:
     print(record,end="");print("LAUNCH_MICRO_COMPLETE")
 
 
+def _batch_advance[LT: TensorLayout](x: TileTensor[DType.int32, LT, MutAnyOrigin]):
+    comptime assert x.flat_rank == 1
+    if global_idx.x == 0:
+        x[0] = x[0]*2+1
+
+def batch_support() raises:
+    var ctx = DeviceContext()
+    print("device:",ctx.name()); print("api:",ctx.api())
+    if ctx.name() != "Apple M4 Pro" or ctx.api() != "metal": raise Error("requires M4 Pro / Metal")
+    var buf = ctx.enqueue_create_buffer[DType.int32](1)
+    buf.enqueue_fill(3)
+    var x = TileTensor(buf,row_major(1))
+    var compiled = ctx.compile_function[_batch_advance[type_of(x.layout)]]()
+    ctx.enqueue_function(compiled,x,grid_dim=1,block_dim=32)
+    ctx.enqueue_function(compiled,x,grid_dim=1,block_dim=32)
+    with buf.map_to_host() as mapped:
+        if mapped.unsafe_ptr()[unsafe_offset=0] != 15: raise Error("eager control failed")
+    print("BATCH_EAGER_PASS 15")
+    buf.enqueue_fill(3);ctx.synchronize()
+    def build(mut builder: DeviceGraphBuilder) raises {mut x, imm compiled}:
+        print("BATCH_BUILDER_ENTERED")
+        var first = builder.add_function(compiled,x,grid_dim=1,block_dim=32,dependencies=[])
+        _ = builder.add_function(compiled,x,grid_dim=1,block_dim=32,dependencies=[first])
+    try:
+        var graph = DeviceGraph.create(ctx,build)
+        graph.replay();ctx.synchronize()
+        with buf.map_to_host() as mapped:
+            if mapped.unsafe_ptr()[unsafe_offset=0] != 15: raise Error("graph first replay failed")
+        graph.replay();ctx.synchronize()
+        with buf.map_to_host() as mapped:
+            if mapped.unsafe_ptr()[unsafe_offset=0] != 63: raise Error("graph second replay failed")
+        print("BATCH_GRAPH_PASS 15 63")
+    except e:
+        print("BATCH_GRAPH_ERROR",e)
+    print("BATCH_SUPPORT_COMPLETE")
+
+
 def main() raises:
+    comptime if is_defined["MODEL_BATCH_SUPPORT"]():
+        batch_support()
+        return
     comptime LAUNCH_PROBE = is_defined["MODEL_LAUNCH_PROBE"]()
     comptime SCHEDULING = is_defined["MODEL_SCHEDULING_STUDY"]()
     comptime PROJECTION = is_defined["MODEL_PROJECTION_STUDY"]()

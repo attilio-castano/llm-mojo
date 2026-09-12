@@ -440,3 +440,19 @@ windows in the archive. No dropped calls, runtime errors, boundary straddles or
 multithreaded overlaps are accepted. Runtime wall time includes possible blocking;
 it is not a measure of exclusive CPU execution. Read the calibration before
 interpreting attribution or extrapolating microbenchmark savings to generation.
+
+### Metal batching feasibility
+
+The [batching gate](../../../studies/model_generation/batch-support-plan.md)
+checks the installed backend with a real dependent-kernel control and graph
+replay attempt before any model timing. From a clean checkout on M4 Pro:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-support --output /private/tmp/batch-support-proof
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-support-replay --output /private/tmp/batch-support-proof/batch-support.json
+```
+
+The receipt distinguishes successful graph replay, the specific unsupported
+builder error, and unexpected correctness/runtime failures. Graph support alone
+would still require verifying actual command-buffer grouping before measuring
+Qwen. This gate does not upgrade or modify installed MAX dependencies.
