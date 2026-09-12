@@ -10,6 +10,7 @@ and [layouts](../docs/layouts.md) define the values, storage and ownership.
 
 | Study | What it establishes |
 | --- | --- |
+| [Residual/RMSNorm alone and composed](model_generation/residual-norm.md) | Promoted all-three Fast route: 17.1–24.5% lower latency, 107–115 tokens/s; exact independent and composed checks |
 | [Inter-layer buffer swapping](model_generation/buffer-swap.md) | Exact outputs with 23 fewer compute commands; 5.3–8.3% median paired reductions and 90–94 tokens/s streaming, but the full promotion gate fails |
 | [GPU token selection](model_generation/token-selection.md) | Standalone argmax gains 4.5–7% but misses the full promotion gate; the tested fused head is slower; exact outputs and complete retained evidence |
 | [Combined QKV and activation fusion](model_generation/combined-fusion.md) | Promoted M4 Pro single-token Fast route: 16.9–19.4% lower latency, 86–90 tokens/s streaming medians, exact outputs and cache storage |

@@ -4,7 +4,7 @@ from std.ffi import external_call
 from std.memory import bitcast
 from std.testing import assert_equal, assert_raises
 from max.gpu.host import DeviceContext
-from llm_mojo.model import QwenModel, select_configuration
+from llm_mojo.model import select_copy_free, select_residual_norm, select_token_selection, QwenModel, select_configuration
 from model_operation_support import capture_operations
 
 
@@ -171,6 +171,9 @@ def main() raises:
             chunk.append(ids[offset+j])
         var capture = args[5]+"/call_"+String(i) if args[5] != "-" else String("")
         var configuration = select_configuration(args[4],schedule[i],offset+schedule[i],ctx.name()) if dynamic else configurations[i]
-        model.forward(ctx,chunk,configuration,capture)
+        model.forward(ctx,chunk,configuration,capture,
+            select_token_selection(args[4],schedule[i],ctx.name()) if dynamic else 0,False,
+            dynamic and select_copy_free(args[4],schedule[i],ctx.name()),
+            dynamic and select_residual_norm(args[4],schedule[i],ctx.name()))
         print("call",i,"token",model.greedy(ctx),"cache_length",model.length,"submitted_layer_rows",model.submitted_rows,"configuration",configuration)
         offset += schedule[i]

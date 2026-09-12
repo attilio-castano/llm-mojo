@@ -12,6 +12,40 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class ModelProfileTests(unittest.TestCase):
+    def test_retained_residual_norm_integrity(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import selection_replay
+        source=repository_root()/'studies/model_generation/residual-norm.json.gz'
+        original=json.loads(gzip.decompress(source.read_bytes()))
+        for damage in (None,'sample','numerical','cache','layer','lifecycle','owners',
+                       'dispatch','provenance','provenance-bytes','fragment','terminal','conditions'):
+            record=copy.deepcopy(original)
+            if damage=='sample': record['timing']['samples'].pop()
+            elif damage=='numerical': record['timing']['numerical'].pop()
+            elif damage=='cache': record['timing']['numerical'][0]['observations'][0]['exact']=False
+            elif damage=='layer': record['timing']['numerical'][0]['swap_checks']['layers'].pop()
+            elif damage=='lifecycle': record['timing']['numerical'][0]['swap_checks']['states'][1][2]=3
+            elif damage=='owners': record['timing']['numerical'][0]['swap_checks']['owners_checked']=False
+            elif damage=='dispatch': record['captures'][3]['samples'].pop()
+            elif damage=='provenance': record['captures'][3]['provenance']['binary']['sha256']='0'*64
+            elif damage=='provenance-bytes': record['captures'][3]['provenance_text']+=' '
+            elif damage=='fragment': record['captures'][3]['samples'][0]['segments']+=1
+            elif damage=='terminal': record['terminal']['blocks'][0]['arms'][3]['turns'][0]['generated'][0]=0
+            elif damage=='conditions': record['captures'][0]['conditions']['after']['power_mode_raw']='1'
+            with self.subTest(damage=damage), tempfile.TemporaryDirectory() as temporary:
+                directory=Path(temporary)
+                raw=json.dumps(record).encode(); packed=gzip.compress(raw,mtime=0)
+                (directory/'residual-norm.json.gz').write_bytes(packed)
+                (directory/'residual-norm.json').write_text(json.dumps(dict(sha256=hashlib.sha256(packed).hexdigest(),
+                    uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with redirect_stdout(StringIO()):
+                    if damage is None:
+                        self.assertEqual(selection_replay(directory,composition=True)['selected'],3)
+                    else:
+                        with self.assertRaises(ValueError): selection_replay(directory,composition=True)
+
     def test_residual_norm_composition_geometry_and_choice(self):
         from llm_mojo.benchmarks.model_profile import composition_summary, swap_capture_names
         self.assertEqual(len(swap_capture_names(extra_norm=True)),195)

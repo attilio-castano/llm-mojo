@@ -8,7 +8,8 @@ generation semantics; historical full-model distance ceilings no longer block
 integration. `fast` is the public default, with `auto` as an alias. On Apple M4 Pro
 they select the eleven prefill workload cells described in the
 [runtime study](../studies/model_generation/runtime.md) and configuration 26 for
-single-row calls, following the [combined fusion study](../studies/model_generation/combined-fusion.md).
+single-row calls, plus residual/RMSNorm fusion, buffer swapping and GPU argmax
+following the [composed study](../studies/model_generation/residual-norm.md).
 Other workloads and devices retain configuration 0.
 Explicit configurations 0/2/3/21 and the historical `consistent` path remain
 available. The full-checkpoint generator, lifecycle checks, numerical diagnostics and
@@ -49,8 +50,9 @@ and `auto` use the measured M4 Pro lookup: split8 configuration 2 at
 larger projections, at 64/1024, 64/4096, 256/1024, 256/4096, 65/4096 and
 255/4096; configuration 21 at 16/256. Pairs denote incoming rows / total
 cached rows. Single-row M4 Pro calls use configuration 26: exact QKV/RoPE/cache
-fusion plus SiLU/multiply fusion. The combined route passed paired whole-token
-gates at histories 64, 1024 and 3968. Every other shape and device name falls
+fusion plus SiLU/multiply fusion. Shared selectors additionally enable residual/RMSNorm
+fusion, inter-layer buffer swapping and separate GPU argmax. The composed route
+passed paired whole-token gates at histories 64, 1024 and 3968. Every other shape and device name falls
 back to configuration 0.
 Baseline 0 already includes integrated attention and optimized multi-row MLP
 7, with rowwise MLP projections for decode. Configuration 26 preserves those

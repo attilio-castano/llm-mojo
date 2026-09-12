@@ -31,7 +31,7 @@ def test_hidden_buffer_swaps_keep_queued_views_alive() raises:
     with left.map_to_host() as mapped:
         for i in range(896):
             assert_equal(bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=i]),UInt16(i+1))
-    for policy in ["fast","auto","combined","gpu-argmax","fused-head","baseline"]:
+    for policy in ["combined","gpu-argmax","fused-head","baseline"]:
         assert_equal(select_copy_free(policy,1,"Apple M4 Pro"),False)
     assert_equal(select_copy_free("buffer-swap",1,"Apple M4 Pro"),True)
     assert_equal(select_copy_free("buffer-swap",2,"Apple M4 Pro"),False)
@@ -44,12 +44,23 @@ def test_hidden_buffer_swaps_keep_queued_views_alive() raises:
         assert_equal(select_token_selection(policy,1,"Apple M4 Pro"),0 if policy == "residual-norm" else 1)
         assert_equal(select_residual_norm(policy,2,"Apple M4 Pro"),False)
         assert_equal(select_residual_norm(policy,1,"other"),False)
-    for policy in ["fast","auto","combined","buffer-swap","gpu-argmax"]:
+    for policy in ["combined","buffer-swap","gpu-argmax"]:
         assert_equal(select_residual_norm(policy,1,"Apple M4 Pro"),False)
 
 
 def test_generation_limits_and_policy() raises:
-    for policy in ["fast","auto","combined","fusion","unfused","baseline"]:
+    for policy in ["fast","auto"]:
+        assert_equal(select_configuration(policy,1,64,"Apple M4 Pro"),26)
+        assert_equal(select_copy_free(policy,1,"Apple M4 Pro"),True)
+        assert_equal(select_residual_norm(policy,1,"Apple M4 Pro"),True)
+        assert_equal(select_token_selection(policy,1,"Apple M4 Pro"),1)
+        assert_equal(select_copy_free(policy,2,"Apple M4 Pro"),False)
+        assert_equal(select_residual_norm(policy,2,"Apple M4 Pro"),False)
+        assert_equal(select_token_selection(policy,2,"Apple M4 Pro"),0)
+        assert_equal(select_copy_free(policy,1,"other"),False)
+        assert_equal(select_residual_norm(policy,1,"other"),False)
+        assert_equal(select_token_selection(policy,1,"other"),0)
+    for policy in ["combined","fusion","unfused","baseline"]:
         assert_equal(select_token_selection(policy,1,"Apple M4 Pro"),0)
     for policy in ["gpu-argmax","fused-head"]:
         assert_equal(select_configuration(policy,1,64,"Apple M4 Pro"),26)

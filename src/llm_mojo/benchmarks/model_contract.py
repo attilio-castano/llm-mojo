@@ -4,6 +4,7 @@ from .decoder_layer_contract import stages as decoder_stages
 OPERATION = 'qwen_model'
 # Current default builds follow Fast; historical receipts retain their own route.
 FAST_DECODE_CONFIGURATION = 26
+FAST_DECODE_VARIANT = 3
 ENTRYPOINTS = {'qwen_model_fast': 'QwenModel.forward+greedy', 'qwen_model_fused': 'QwenModel.forward+greedy-fused', 'qwen_model_combined':'QwenModel.forward+greedy-combined'}
 ENTRYPOINTS.update(qwen_model_gpu_argmax='QwenModel.forward+greedy-gpu-argmax', qwen_model_fused_head='QwenModel.forward+greedy-fused-head')
 ENTRYPOINTS['qwen_model_buffer_swap'] = 'QwenModel.forward+greedy-buffer-swap'

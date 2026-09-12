@@ -44,7 +44,12 @@ def poison_outputs(mut model: QwenModel, prefix: Int, poison_norm: Bool = False)
 
 
 def step[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext, ids: List[Int], configuration: Int = -1, selection: Int = 0, materialize: Bool = False, copy_free: Bool = False, fuse_norm: Bool = False) raises -> Int:
-    model.forward[OBSERVE](ctx,ids,configuration if configuration >= 0 else select_configuration("fast",1,model.length+1,ctx.name()),"",selection,materialize,copy_free,fuse_norm)
+    # Only current-default builds set this; explicit historical study arms stay fixed.
+    comptime DEFAULT_VARIANT = get_defined_int["MODEL_DEFAULT_VARIANT", 0]()
+    model.forward[OBSERVE](ctx,ids,configuration if configuration >= 0 else select_configuration("fast",1,model.length+1,ctx.name()),"",
+        1 if DEFAULT_VARIANT >= 2 else selection,materialize,
+        copy_free or DEFAULT_VARIANT >= 2,
+        fuse_norm or DEFAULT_VARIANT == 1 or DEFAULT_VARIANT == 3)
     return model.greedy[OBSERVE](ctx)
 
 
@@ -112,7 +117,8 @@ def verify_swap_lifecycle(mut model: QwenModel, ctx: DeviceContext, history: Lis
 
 def main() raises:
     comptime COMPOSITION = is_defined["MODEL_COMPOSITION_STUDY"]()
-    comptime PROFILE_COMPOSITION = get_defined_int["MODEL_COMPOSITION_PROFILE", 0]()
+    comptime DEFAULT_VARIANT = get_defined_int["MODEL_DEFAULT_VARIANT", 0]()
+    comptime PROFILE_COMPOSITION = get_defined_int["MODEL_COMPOSITION_PROFILE", DEFAULT_VARIANT]()
     comptime COPY_FREE = is_defined["MODEL_COPY_FREE_STUDY"]()
     comptime SELECTION = is_defined["MODEL_SELECTION_STUDY"]()
     comptime COMBINED = is_defined["MODEL_COMBINED_STUDY"]()
@@ -248,7 +254,7 @@ def main() raises:
             if step[False](model,ctx,ids,candidate if PROFILE_FUSED else control,1 if COMPOSITION and PROFILE_COMPOSITION >= 2 else PROFILE_SELECTION,False,(COMPOSITION and PROFILE_COMPOSITION >= 2) or (COPY_FREE and PROFILE_FUSED),COMPOSITION and (PROFILE_COMPOSITION == 1 or PROFILE_COMPOSITION == 3)) != winner:
                 raise Error("unstable profile prediction")
         print("correctness: passed")
-        comptime if COMPOSITION:
+        comptime if COMPOSITION or DEFAULT_VARIANT != 0:
             print("profile implementation:","QwenModel.forward+greedy-"+("combined" if PROFILE_COMPOSITION == 0 else ("residual-norm" if PROFILE_COMPOSITION == 1 else ("swap-argmax" if PROFILE_COMPOSITION == 2 else "all-three"))))
         elif COPY_FREE:
             print("profile implementation:","QwenModel.forward+greedy-"+("buffer-swap" if PROFILE_FUSED else "combined"))
@@ -259,7 +265,7 @@ def main() raises:
         print("rows: 1")
         print("hidden: 896")
         print("key value rows:",prefix+1)
-        comptime if COMPOSITION:
+        comptime if COMPOSITION or DEFAULT_VARIANT != 0:
             print("profile workload:","model-p"+String(prefix)+("-combined" if PROFILE_COMPOSITION == 0 else ("-residual-norm" if PROFILE_COMPOSITION == 1 else ("-swap-argmax" if PROFILE_COMPOSITION == 2 else "-all-three"))))
             print("profile dispatches per iteration:",314 if PROFILE_COMPOSITION == 0 else (266 if PROFILE_COMPOSITION == 1 else (293 if PROFILE_COMPOSITION == 2 else 245)))
         elif COPY_FREE:

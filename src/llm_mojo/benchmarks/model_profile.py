@@ -63,6 +63,7 @@ def build(output, prepared, fusion=False, combined=False, selection=False, copy_
         return selection_build(output,prepared)
     fusion = fusion or combined or copy_free
     default_combined = not fusion and contract.FAST_DECODE_CONFIGURATION == 26
+    default_variant = contract.FAST_DECODE_VARIANT if not fusion else 0
     ensure_record_location(output)
     output.mkdir(parents=True, exist_ok=False)
     source = source_identity()
@@ -74,6 +75,7 @@ def build(output, prepared, fusion=False, combined=False, selection=False, copy_
         command = [environment_tool('mojo'), 'build', '-I', 'src',
                    *(['-D','MODEL_FUSION_STUDY'] if fusion else []),
                    *(['-D','MODEL_COPY_FREE_STUDY'] if copy_free else []),
+                   *(['-D',f'MODEL_DEFAULT_VARIANT={default_variant}'] if default_variant else []),
                    *(['-D','MODEL_COMBINED_STUDY'] if combined else []),
                    'src/llm_mojo/'+entry, '-o', output/name]
         execute(command, output/f'{name}-build.log')
@@ -84,6 +86,7 @@ def build(output, prepared, fusion=False, combined=False, selection=False, copy_
         command = [environment_tool('mojo'), 'build', '-I', 'src',
                    *(['-D','MODEL_FUSION_STUDY'] if fusion else []),
                    *(['-D','MODEL_COPY_FREE_STUDY'] if copy_free else []),
+                   *(['-D',f'MODEL_DEFAULT_VARIANT={default_variant}'] if default_variant else []),
                    *(['-D','MODEL_COMBINED_STUDY'] if combined or default_combined else []),
                    *(['-D','MODEL_FUSION_PROFILE'] if fused else []),
                    '-D', f'MODEL_PROFILE_PREFIX={prefix}',
@@ -96,11 +99,13 @@ def build(output, prepared, fusion=False, combined=False, selection=False, copy_
         implementation = 'qwen_model_combined' if fused and (combined or default_combined) else ('qwen_model_fused' if fused else 'qwen_model_fast')
         if copy_free:
             implementation = 'qwen_model_buffer_swap' if fused else 'qwen_model_combined'
+        if default_variant:
+            implementation = contract.COMPOSITION_IMPLEMENTATIONS[default_variant]
         provenance = dict(schema_version=1, operation=contract.OPERATION,
                           implementation=implementation,
                           entrypoint=contract.ENTRYPOINTS[implementation],
                           repository=source['repository'], source_sha256=source['sources'],
-                          **machine, **contract.specification(prefix,fused,copy_free or (combined or default_combined) and fused,copy_free=copy_free and fused),
+                          **machine, **contract.specification(prefix,*contract.options(implementation)),
                           profile_warmup_iterations=10, profile_iterations=8,
                           profile_post_idle_milliseconds=250, binary=binary,
                           assets={k:v for k,v in identity.items() if k.endswith('_sha256')})
@@ -437,7 +442,7 @@ def summarize(samples, observed=True):
         baseline = stats.median(medians[b,1,0] for b in range(4))/1e6
         phases = defaultdict(list)
         labels = ['preflight','token staging','embedding enqueue','decoder stack enqueue',
-                  'final norm/head enqueue','forward return','map/wait','CPU argmax scan','unmap']
+                  'final norm/head enqueue','forward return','map/wait','host winner processing','unmap']
         for block in range(4):
             records = [r for r in subset if r['block'] == block and r['marks']]
             for i, label in enumerate(labels if records else []):
@@ -1008,6 +1013,10 @@ def selection_archive(timings, traces, terminal_path, output, composition=False)
     record = dict(kind='qwen-residual-norm-v1' if composition else 'qwen-token-selection-v1',timing=json.loads((timings/'timings.json').read_text()),
                   terminal=json.loads((terminal_path/'terminal.json').read_text()),
                   captures=[json.loads((traces/f's{s}/curated.json').read_text()) for s in range(4 if composition else 3)])
+    if composition:
+        # JSON archive key sorting cannot reproduce the captured file's byte order.
+        for variant, capture in enumerate(record['captures']):
+            capture['provenance_text'] = (traces/f's{variant}/profile.provenance.json').read_text()
     # Retain hashes/provenance while removing machine-specific model asset paths.
     for build_record in [record['timing']['build'],record['terminal']['build']]:
         for key in ('prepared','tables'):
@@ -1104,8 +1113,10 @@ def selection_replay(directory, composition=False):
             or provenance['assets']!={k:v for k,v in build_record['assets'].items() if k.endswith('_sha256')}):
             raise ValueError('selection trace provenance mismatch')
         if composition:
-            canonical=(json.dumps(provenance,indent=2,allow_nan=False)+'\n').encode()
-            if hashlib.sha256(canonical).hexdigest()!=capture['analysis']['capture_identity']['provenance']['sha256']:
+            original=capture.get('provenance_text','').encode()
+            identity=capture['analysis']['capture_identity']['provenance']
+            if (not original or hashlib.sha256(original).hexdigest()!=identity['sha256']
+                or len(original)!=identity['bytes'] or json.loads(original)!=provenance):
                 raise ValueError('residual-norm trace capture provenance changed')
         stages = contract.command_stages(*contract.options(implementation))
         if len(capture['samples'])!=8*len(stages):

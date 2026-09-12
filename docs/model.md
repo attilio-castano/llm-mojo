@@ -377,8 +377,9 @@ compares configuration 26 with CPU greedy, a separate GPU argmax, and a fused
 vocabulary projection/local argmax. Both GPU routes preserve rounded BF16
 scores, lowest-ID ties and rejection of any nonfinite score. The fused route
 leaves logits untouched except during explicit diagnostic materialization.
-Neither candidate passed the full promotion rule, so Fast/auto retain CPU
-selection. Native study policies `gpu-argmax` and `fused-head` enable these
+Neither candidate passed that standalone promotion rule. The later
+[composed study](../studies/model_generation/residual-norm.md) promotes the
+separate GPU argmax together with residual/RMSNorm fusion and buffer swapping. Native study policies `gpu-argmax` and `fused-head` enable these
 experiments only for single-row Apple M4 Pro calls.
 
 ### Inter-layer buffer ownership experiment
@@ -389,7 +390,19 @@ copies while retaining both allocations and the decoder's disjoint input/output
 contract. Each next layer rebuilds its input view from the current owner. The
 last layer does not swap, so final normalization still reads `mlp.output`.
 Exact hidden-state, cache, lifecycle and streaming comparisons pass. Median
-paired reductions are 5.3–8.3%, but the full promotion gate fails; Fast/auto keep
-copying. Native study policy `buffer-swap` enables the candidate only for
+paired reductions are 5.3–8.3%, but that standalone promotion gate fails. The
+later composed study qualifies and promotes swapping as part of all three. Native study policy `buffer-swap` enables the candidate only for
 single-row Apple M4 Pro calls. Multi-row calls retain the copy path, including
 after a swapping call; explicit low-level multi-row swapping is rejected.
+
+
+### Residual addition and normalization
+
+The [independent and composed study](../studies/model_generation/residual-norm.md)
+fuses 48 residual/RMSNorm boundaries per decode token while retaining both the
+BF16 residual sum and normalized result. Fast/auto now enable this together with
+buffer swapping and separate GPU argmax on single-row M4 Pro / Metal calls.
+The measured combined route uses 245 compute commands versus 314 previously,
+with 17.1–24.5% lower complete-token latency and 107–115 tokens/s streaming
+medians. Explicit `combined`, `residual-norm`, `swap-argmax` and `all-three`
+policies preserve the four measured arms; multi-row behavior is unchanged.

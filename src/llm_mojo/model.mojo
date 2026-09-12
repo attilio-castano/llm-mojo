@@ -77,11 +77,11 @@ def swap_hidden_buffers(mut left: DeviceBuffer[DType.bfloat16], mut right: Devic
 
 
 def select_copy_free(policy: String, rows: Int, device: String) -> Bool:
-    return (policy == "buffer-swap" or policy == "swap-argmax" or policy == "all-three") and rows == 1 and device == "Apple M4 Pro"
+    return (policy == "fast" or policy == "auto" or policy == "buffer-swap" or policy == "swap-argmax" or policy == "all-three") and rows == 1 and device == "Apple M4 Pro"
 
 
 def select_residual_norm(policy: String, rows: Int, device: String) -> Bool:
-    return (policy == "residual-norm" or policy == "all-three") and rows == 1 and device == "Apple M4 Pro"
+    return (policy == "fast" or policy == "auto" or policy == "residual-norm" or policy == "all-three") and rows == 1 and device == "Apple M4 Pro"
 
 
 def candidate_configuration(rows: Int, total: Int) -> Int:
@@ -134,7 +134,7 @@ def select_token_selection(policy: String, rows: Int, device: String) raises -> 
     if rows < 1:
         raise Error("invalid selection row count")
     if rows == 1 and device == "Apple M4 Pro":
-        if policy == "gpu-argmax" or policy == "swap-argmax" or policy == "all-three":
+        if policy == "fast" or policy == "auto" or policy == "gpu-argmax" or policy == "swap-argmax" or policy == "all-three":
             return 1
         if policy == "fused-head":
             return 2
