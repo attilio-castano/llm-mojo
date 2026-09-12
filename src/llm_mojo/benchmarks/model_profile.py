@@ -1408,6 +1408,15 @@ def scheduling_summary(rows):
             or len(marks)!=(10 if x['mode'].startswith('observed-') else 0)
             or (marks and (marks!=sorted(marks) or marks[0]<0 or marks[-1]>x['elapsed_ns']))):
             raise ValueError('invalid scheduling retained sample')
+    # Observation clocks and block order must not change the generated workload.
+    for p in contract.PREFIXES:
+        for mode in ('fixed','advance'):
+            groups=defaultdict(list)
+            for x in rows:
+                if x['prefix']==p and x['mode'].removeprefix('observed-')==mode:
+                    groups[x['mode'],x['block'],x['comparison'],x['arm']].append(x)
+            sequences={tuple(x['token'] for x in sorted(xs,key=lambda x:x['sample'])) for xs in groups.values()}
+            if len(sequences)!=1: raise ValueError('scheduling trajectory differs across observation modes/blocks')
     results=[]
     for m in SCHEDULING_MODES:
         for p in contract.PREFIXES:
@@ -1552,7 +1561,7 @@ def scheduling_plot(directory):
             axes[1,1].bar(pos,active,.3,color='#31877c',label='Target compute active' if i==v==0 else None)
             axes[1,1].bar(pos,gap,.3,bottom=active,color='#c9dbce',label='Uncovered by target compute' if i==v==0 else None)
     axes[1,0].set_title('Untraced observed fixed-position host intervals');axes[1,0].set_ylabel('ms; GPU work overlaps forward')
-    axes[1,1].set_title('Separate fixed-position traces');axes[1,1].set_ylabel('ms; medians of per-token intervals')
+    axes[1,1].set_title('Separate fixed-position traces');axes[1,1].set_ylabel('ms; medians of interval components')
     for ax in axes[1]: ax.legend(fontsize=8);ax.set_xlabel('Cached tokens · original left, fixed-width right')
     for ax in axes.flat: ax.set_xticks(positions,list(contract.PREFIXES))
     fig.suptitle('Why does fixed-width projection speedup depend on the measurement?\nQwen2.5-0.5B · M4 Pro / Metal · BF16 · fixed 128-thread blocks',fontsize=13)

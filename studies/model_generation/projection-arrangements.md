@@ -90,6 +90,12 @@ The retained evidence justifies keeping this as a possible follow-up, with a
 newly declared experiment if pursued. It does not justify changing the default
 or combining its apparent speedup arithmetically with earlier studies.
 
+The subsequent [scheduling diagnosis](projection-scheduling.md) reproduces the
+context pattern in longer fixed-position and advancing runs with cleaner controls.
+It supports host submission limiting short-context completion while projection
+savings reduce a GPU backlog at long context. The original screen and its decision
+above remain unchanged.
+
 ## What changed
 
 The control is the already-promoted all-three Fast path: configuration 26's

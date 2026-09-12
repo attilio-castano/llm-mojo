@@ -12,6 +12,35 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class ModelProfileTests(unittest.TestCase):
+    def test_retained_scheduling_integrity(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import scheduling_replay
+        original=json.loads(gzip.decompress((repository_root()/'studies/model_generation/projection-scheduling.json.gz').read_bytes()))
+        for damage in (None,'sample','token','marks','numerical','cache','capture','fragment','provenance','host','target','receipt','conditions'):
+            record=copy.deepcopy(original)
+            if damage=='sample': record['timing']['samples'].pop()
+            elif damage=='token': record['timing']['samples'][0]['token']+=1
+            elif damage=='marks': next(x for x in record['timing']['samples'] if x['marks'])['marks'][0]=-1
+            elif damage=='numerical': record['timing']['numerical'].pop()
+            elif damage=='cache': record['timing']['numerical'][0]['observations'][0]['prefix_exact']=False
+            elif damage=='capture': record['captures'].pop()
+            elif damage=='fragment': record['captures'][0]['samples'][0]['segments']+=1
+            elif damage=='provenance': record['captures'][0]['provenance_text']+=' '
+            elif damage=='host': record['captures'][0]['host'][0]['elapsed_ns']+=1
+            elif damage=='target': record['captures'][0]['target_text']+=' '
+            elif damage=='receipt': record['captures'][0]['capture_receipt_text']+=' '
+            elif damage=='conditions': record['captures'][0]['conditions']['after']['power_mode_raw']='1'
+            with self.subTest(damage=damage), tempfile.TemporaryDirectory() as tmp:
+                directory=Path(tmp);raw=json.dumps(record).encode();packed=gzip.compress(raw,mtime=0)
+                (directory/'projection-scheduling.json.gz').write_bytes(packed)
+                (directory/'projection-scheduling.json').write_text(json.dumps(dict(sha256=hashlib.sha256(packed).hexdigest(),uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with redirect_stdout(StringIO()):
+                    if damage is None: self.assertFalse(scheduling_replay(directory)['promote'])
+                    else:
+                        with self.assertRaises(ValueError): scheduling_replay(directory)
+
     def test_scheduling_parser_and_frozen_census(self):
         from llm_mojo.benchmarks.model_profile import scheduling_parse, scheduling_summary, SCHEDULING_MODES, scheduling_host
         stdout='device: Apple M4 Pro\napi: metal\n'

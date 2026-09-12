@@ -416,3 +416,10 @@ streamed about 119–120 tokens/s, but none met the frozen full-token acceptance
 gate across all three histories. Fast/auto retain the original projection kernel.
 Explicit `projection-0` through `projection-5` policies retain the measured arms;
 they use the existing prefill route for multirow calls.
+
+The [scheduling diagnosis](../studies/model_generation/projection-scheduling.md)
+reproduces the larger long-context gain in advancing decoding. Host forward
+submission remains about 6.7 ms while long-context readback wait drops from
+2.3–2.4 ms to 1.2 ms. Fixed-width projection active time stays near 4.9 ms across
+contexts, supporting a submission/backlog explanation without changing MLP shapes.
+Profiler perturbation prevents treating traced gaps as exclusive CPU time.
