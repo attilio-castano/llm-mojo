@@ -22,7 +22,8 @@ import torch
 from contract import HOLDOUT, QWEN, case_id, case_spec
 from reference import inputs, checkpoint, provenance
 from generate import execute_case, load_frozen, sources, write_json
-from llm_mojo.decoder_validation import verify_build, sha
+from llm_mojo.validation.decoder import verify_build
+from llm_mojo.validation.evidence import sha
 from llm_mojo.benchmarks.environment import ensure_record_location, utc_now
 from llm_mojo.benchmarks import decoder_layer_contract as selection
 

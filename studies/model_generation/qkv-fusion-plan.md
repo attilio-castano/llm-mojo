@@ -43,7 +43,7 @@ Use the existing driver with `uv run --locked python -m
 llm_mojo.benchmarks.model_profile`:
 
 ```sh
-uv run --locked llm-mojo-validate
+uv run --locked llm-mojo validate
 uv run --locked python -m llm_mojo.benchmarks.model_profile build --fusion --prepared PREPARED --output /private/tmp/qkv-fusion-build
 uv run --locked python -m llm_mojo.benchmarks.model_profile collect --build /private/tmp/qkv-fusion-build --output /private/tmp/qkv-fusion-timings
 uv run --locked python -m llm_mojo.benchmarks.model_profile fusion-capture --build /private/tmp/qkv-fusion-build --output /private/tmp/qkv-fusion-traces

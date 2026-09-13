@@ -64,7 +64,7 @@ Use `uv run --locked` for every Python command below. All output directories
 must be new. `PREPARED` denotes an existing hash-verified local checkpoint.
 
 ```sh
-uv run --locked llm-mojo-validate
+uv run --locked llm-mojo validate
 uv run --locked python -m llm_mojo.benchmarks.model_profile build --prepared PREPARED --output /private/tmp/qwen-token-build
 uv run --locked python -m llm_mojo.benchmarks.model_profile collect --build /private/tmp/qwen-token-build --output /private/tmp/qwen-token-timings
 uv run --locked python -m llm_mojo.benchmarks.model_profile capture --build /private/tmp/qwen-token-build --output /private/tmp/qwen-token-traces

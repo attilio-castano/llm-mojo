@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class EvidenceTests(unittest.TestCase):
     def test_decoder_retained_acceptance_matches_measured_source(self):
-        from llm_mojo.decoder_validation import validate_results
+        from llm_mojo.validation.decoder import validate_results
         from llm_mojo.benchmarks.study import load_decoder_windows
         directory=ROOT/'studies/decoder_layer'
         numerics=load_numerical_record(directory/'numerics.json')
@@ -44,7 +44,7 @@ class EvidenceTests(unittest.TestCase):
 
     @unittest.skipUnless((ROOT/'studies/decoder_layer/selection_numerics.json').exists(),'selection evidence not yet collected')
     def test_decoder_selection_is_bound_to_acceptance_and_complete_trials(self):
-        from llm_mojo import decoder_validation
+        from llm_mojo.validation import decoder as decoder_validation
         from llm_mojo.benchmarks import decoder_layer_contract as contract
         from llm_mojo.benchmarks.study import STUDIES,comparisons
         directory=ROOT/'studies/decoder_layer'

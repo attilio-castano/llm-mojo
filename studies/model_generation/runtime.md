@@ -144,21 +144,21 @@ against the exact current clean source. Use new output paths; collection refuses
 to replace evidence. The following names assume they do not already exist:
 
 ```sh
-uv run --locked python -m llm_mojo.model_validation build --binary build/repeat-model
-uv run --locked python -m llm_mojo.model_validation build --generation --binary build/repeat-generator
-uv run --locked python -m llm_mojo.model_validation specification --output build/repeat-specification.json
-uv run --locked python -m llm_mojo.model_validation lifecycle --binary build/repeat-model --prepared build/model-prepared-v1 --output build/repeat-lifecycle.json
-uv run --locked python -m llm_mojo.model_validation generate --binary build/repeat-generator --prepared build/model-prepared-v1 --output build/repeat-generation
+uv run --locked python -m llm_mojo.validation.model build --binary build/repeat-model
+uv run --locked python -m llm_mojo.validation.model build --generation --binary build/repeat-generator
+uv run --locked python -m llm_mojo.validation.model specification --output build/repeat-specification.json
+uv run --locked python -m llm_mojo.validation.model lifecycle --binary build/repeat-model --prepared build/model-prepared-v1 --output build/repeat-lifecycle.json
+uv run --locked python -m llm_mojo.validation.model generate --binary build/repeat-generator --prepared build/model-prepared-v1 --output build/repeat-generation
 uv run --locked --script tests/fixtures/model_reference.py diagnose --specification build/repeat-specification.json --output build/repeat-reference
-uv run --locked python -m llm_mojo.model_validation diagnose --binary build/repeat-model --prepared build/model-prepared-v1 --reference build/repeat-reference --output build/repeat-diagnostics
-uv run --locked python -m llm_mojo.model_validation benchmark --binary build/repeat-model --prepared build/model-prepared-v1 --specification build/repeat-specification.json --output build/repeat-measurements
-uv run --locked python -m llm_mojo.model_validation diagnose --binary build/repeat-model --prepared build/model-prepared-v1 --reference build/repeat-reference --policy fast --output build/repeat-selected
-uv run --locked python -m llm_mojo.model_validation specification --generations build/repeat-generation/result.json --output build/repeat-history-specification.json
+uv run --locked python -m llm_mojo.validation.model diagnose --binary build/repeat-model --prepared build/model-prepared-v1 --reference build/repeat-reference --output build/repeat-diagnostics
+uv run --locked python -m llm_mojo.validation.model benchmark --binary build/repeat-model --prepared build/model-prepared-v1 --specification build/repeat-specification.json --output build/repeat-measurements
+uv run --locked python -m llm_mojo.validation.model diagnose --binary build/repeat-model --prepared build/model-prepared-v1 --reference build/repeat-reference --policy fast --output build/repeat-selected
+uv run --locked python -m llm_mojo.validation.model specification --generations build/repeat-generation/result.json --output build/repeat-history-specification.json
 uv run --locked --script tests/fixtures/model_reference.py diagnose --specification build/repeat-history-specification.json --output build/repeat-history-reference
-uv run --locked python -m llm_mojo.model_validation diagnose --binary build/repeat-model --prepared build/model-prepared-v1 --reference build/repeat-history-reference --output build/repeat-history
-uv run --locked python -m llm_mojo.model_validation specification --mixed-only --output build/repeat-mixed-specification.json
+uv run --locked python -m llm_mojo.validation.model diagnose --binary build/repeat-model --prepared build/model-prepared-v1 --reference build/repeat-history-reference --output build/repeat-history
+uv run --locked python -m llm_mojo.validation.model specification --mixed-only --output build/repeat-mixed-specification.json
 uv run --locked --script tests/fixtures/model_reference.py diagnose --specification build/repeat-mixed-specification.json --output build/repeat-mixed-reference
-uv run --locked python -m llm_mojo.model_validation diagnose --binary build/repeat-model --prepared build/model-prepared-v1 --reference build/repeat-mixed-reference --policy fast --output build/repeat-mixed
+uv run --locked python -m llm_mojo.validation.model diagnose --binary build/repeat-model --prepared build/model-prepared-v1 --reference build/repeat-mixed-reference --policy fast --output build/repeat-mixed
 uv run --locked --script tests/fixtures/model_reference_diagnosis.py --runtime-propagation build/repeat-diagnostics/result.json --runtime-reference build/repeat-reference --output build/repeat-propagation.json
 ```
 

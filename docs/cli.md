@@ -88,10 +88,37 @@ rewritten by configuration resolution.
 
 `bench select-decoder`, `bench confirm-decoder` and `bench tokenizer` expose the
 existing qualification and tokenizer workflows. `tokenizer` exposes setup,
-encode and decode tooling. Every group has help. The older installed tokenizer,
-benchmark and validation commands remain compatibility entry points. The old
-`python -m llm_mojo.chat` delegates to the new chat parser; the model asset module
-retains its explicit research-policy interface.
+encode and decode tooling. Every group has help.
+
+## Validation and compatibility
+
+Use `llm-mojo validate` for the full repository suite. Numerical study tools live
+under `llm_mojo.validation`: `mlp`, `decoder`, and `model` each retain their
+existing build/evaluation arguments and support `--help`. Their shared
+`evidence.py` owns source hashes and JSON receipt writing; test cases and oracle
+generators remain under `tests/`.
+
+The supported compatibility surface is deliberately limited:
+
+| Retained entry point | Recommended interface | Reason retained |
+| --- | --- | --- |
+| `llm-mojo-validate` and `python -m llm_mojo.validate` | `llm-mojo validate` | Existing validation and study instructions |
+| `python -m llm_mojo.mlp_validation` | `python -m llm_mojo.validation.mlp` | Existing numerical reproduction commands |
+| `python -m llm_mojo.decoder_validation` | `python -m llm_mojo.validation.decoder` | Existing numerical reproduction commands |
+| `python -m llm_mojo.model_validation` | `python -m llm_mojo.validation.model` | Existing numerical reproduction commands |
+| `python -m llm_mojo.model_assets` | `python -m llm_mojo.models.qwen2.assets` | Explicit research policies beyond the public Fast mode |
+| `llm-mojo-tokenizer` | `llm-mojo tokenizer` | Existing installed command and study instructions |
+| `llm-mojo-bench` | `llm-mojo bench` | Existing measurement command and study instructions |
+
+The installed aliases call their implementations directly. Root-level Python
+wrappers support command execution only; maintained imports use the owning
+packages. Remove an alias when its reproduction workflow has been retired or
+explicitly migrated, rather than extending it with new behavior.
+
+The unused `llm_mojo.chat` and `llm_mojo.tokenizer_assets` module wrappers were
+removed. Use `llm-mojo chat` and `llm-mojo tokenizer`, respectively. Historical
+receipts retain their original source paths and hashes; reproducing an exact
+historical source identity requires checking out the recorded commit.
 
 ## Code ownership
 
@@ -103,6 +130,7 @@ retains its explicit research-policy interface.
 | `runtime/` | Native builds, launch preparation, terminal and clock services |
 | `layers/` | Decoder, attention and MLP composition |
 | `kernels/` | Reusable numerical operations |
+| `validation/` | Numerical acceptance, source receipts and repository validation |
 | `benchmarks/` | Measurement protocols, qualification and retained evidence readers |
 
 Python finishes preparation before native inference. Chat replaces the launcher

@@ -42,7 +42,7 @@ def ensure_source(directory, *, download=False):
             )
         return path
     if not download:
-        raise FileNotFoundError(f'{path}; run llm-mojo-tokenizer setup first')
+        raise FileNotFoundError(f'{path}; run llm-mojo tokenizer setup first')
     print(
         "Downloading pinned tokenizer.json (7 MB)...",
         file=sys.stderr,

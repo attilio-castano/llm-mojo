@@ -28,7 +28,7 @@ def data_root(path):
 def holdout_catalog(optimization=False, decode=False):
     if os.environ.get('MLP_CANDIDATE_BINARY'):
         raise ValueError('MLP_CANDIDATE_BINARY cannot identify the running executable; '
-                         'use python -m llm_mojo.mlp_validation evaluate')
+                         'use python -m llm_mojo.validation.mlp evaluate')
     path = ROOT.parent / ('mlp_decode_holdout' if decode else 'mlp_optimization_holdout' if optimization else 'mlp_holdout') / 'manifest.json'
     data = json.loads(path.read_text())
     expected = data.pop('manifest_payload_sha256')

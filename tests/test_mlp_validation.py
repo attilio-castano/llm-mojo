@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from llm_mojo import mlp_validation as validation
+from llm_mojo.validation import mlp as validation
 
 
 class MLPEvaluationTests(unittest.TestCase):

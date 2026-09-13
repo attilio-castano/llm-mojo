@@ -59,10 +59,3 @@ def launch_generate(config):
         prompt.write_text(text, encoding='utf-8')
         subprocess.run([str(binary), prepared, tables, str(prompt), str(w.max_new_tokens),
                         str(w.chunk_rows), config.mode.name, *([w.report] if w.report else [])], check=True)
-
-
-def main(argv=None):
-    """Compatibility for python -m llm_mojo.chat, using the public parser."""
-    import sys
-    from llm_mojo.cli.app import app
-    app(['chat', *(sys.argv[1:] if argv is None else argv)])

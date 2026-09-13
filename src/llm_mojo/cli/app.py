@@ -174,7 +174,7 @@ def tokenizer(ctx: typer.Context):
 @app.command()
 def validate(prepare_only: bool = False):
     """Run the repository's frozen-oracle, Python, Mojo and smoke validation."""
-    from llm_mojo.validate import main
+    from llm_mojo.validation.suite import main
     main(['--prepare-only'] if prepare_only else [])
 
 

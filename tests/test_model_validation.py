@@ -4,10 +4,10 @@ import json
 from pathlib import Path
 import unittest
 import numpy as np
-from llm_mojo.model_validation import (bf16, compare, consistency_accuracy,
+from llm_mojo.validation.model import (bf16, compare, consistency_accuracy,
     verify_consistency_observations, CONSISTENCY_BOUNDARIES,
     numerical_diagnostic, prediction_diagnostic, storage_diagnostic)
-from llm_mojo.model_validation import generation_events, require_empty_prompt_rejection
+from llm_mojo.validation.model import generation_events, require_empty_prompt_rejection
 
 
 class ModelComparisonTests(unittest.TestCase):

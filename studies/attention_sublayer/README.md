@@ -52,7 +52,7 @@ rounding boundaries, tested mappings and fixture generation.
 - [Data](data/): compact raw samples, numerical records, provenance and regenerated tables.
 - [Figures](figures/): generated views of the retained evidence.
 
-Run `uv run --locked llm-mojo-validate` for correctness. Regenerate the tables
+Run `uv run --locked llm-mojo validate` for correctness. Regenerate the tables
 and figures with `uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.plot`.
 See the [benchmark commands](../../src/llm_mojo/benchmarks/README.md) before
 collecting new measurements; historical records keep their measured source IDs.

@@ -57,7 +57,7 @@ def manifest():
             if sha(REPO/path)!=digest:
                 raise ValueError('decoder reference source changed: '+path)
         if record.get('kind') in ('decoder_holdout','decoder_selection_holdout','decoder_policy_holdout'):
-            from llm_mojo.decoder_validation import holdout_manifest
+            from llm_mojo.validation.decoder import holdout_manifest
             holdout_manifest(ROOT)
             EXPECTED_CASES=set(record['cases'])
         else:

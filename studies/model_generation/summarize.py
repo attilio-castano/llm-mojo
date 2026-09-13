@@ -232,7 +232,7 @@ def aten(plot=False):
 
 
 def consistency():
-    from llm_mojo.model_validation import required_consistency_schedules
+    from llm_mojo.validation.model import required_consistency_schedules
 
     manifest = json.loads((ROOT/'consistency-study.json').read_text())
     data = {}
@@ -609,7 +609,7 @@ def runtime():
             propagation.append(dict(layer=r['layer'],**{k:r[k]['max_row_relative_l2'] for k in (
                 'input_difference','observed_output_difference','hf_propagated_difference','identical_input_residual')}))
     generations=[]
-    from llm_mojo.model_validation import validate_generation_events
+    from llm_mojo.validation.model import validate_generation_events
     public=payload['runtime-public.json.gz']
     verified_public=validate_generation_events(public['events'],8)
     if (public['exit_code']!=0 or public['default_policy']!='fast' or len(public['prompt_ids'])!=1024

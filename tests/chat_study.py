@@ -6,10 +6,10 @@ import subprocess
 
 import numpy as np
 from llm_mojo._repository import environment_tool, repository_root
-from llm_mojo.mlp_validation import source_identity, sha, write
+from llm_mojo.validation.evidence import source_identity, sha, write
 from llm_mojo.models.qwen2.assets import verify_prepared
 from llm_mojo.models.qwen2.tokenizer_assets import ensure_prepared
-from llm_mojo.model_validation import bf16, numerical_diagnostic, prediction_diagnostic, environment
+from llm_mojo.validation.model import bf16, numerical_diagnostic, prediction_diagnostic, environment
 from llm_mojo.benchmarks.environment import stable_environment, conditions_snapshot, require_ac, require_nominal_thermal_state
 from chat_terminal import run as terminal_run
 

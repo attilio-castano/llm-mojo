@@ -260,7 +260,7 @@ def policy_round1_decision(directory,numerical_directories,build):
 def policy_round_decision(directory,numerical_directories,build,round_number):
     """Bind selection to raw timing, full numerical census and one clean build."""
     import copy
-    from .. import decoder_validation as validation
+    from ..validation import decoder as validation
     from .study import STUDIES,load_run
     numerical_directories=list(map(Path,numerical_directories))
     if not numerical_directories:raise ValueError('missing policy numerical split')
@@ -599,7 +599,7 @@ def policy_cost_report(directory,accepted,build):
 def replay_policy_campaign(directory):
     """Reconstruct the entire bounded campaign from adjacent retained evidence."""
     import copy
-    from .. import decoder_validation as validation
+    from ..validation import decoder as validation
     from .study import load_run,load_decoder_profile,load_decoder_windows,load_numerical_record
     directory=Path(directory)
     index=json.loads((directory/'policies-evidence.json').read_text())

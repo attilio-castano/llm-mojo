@@ -81,7 +81,7 @@ projection mapping 5 selects both 16×16 projections. Their composition is the
 only additional nonzero mapping pair enabled by the latest experiment.
 
 ```sh
-uv run --locked llm-mojo-validate
+uv run --locked llm-mojo validate
 uv run --locked --script tests/fixtures/generate.py attention_sublayer
 uv run --locked --script tests/fixtures/generate.py attention_precision
 ```

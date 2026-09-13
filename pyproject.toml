@@ -17,8 +17,8 @@ dependencies = [
 
 [project.scripts]
 llm-mojo = "llm_mojo.cli.app:main"
-llm-mojo-tokenizer = "llm_mojo.tokenizer_assets:main"
-llm-mojo-validate = "llm_mojo.validate:main"
+llm-mojo-tokenizer = "llm_mojo.models.qwen2.tokenizer_assets:main"
+llm-mojo-validate = "llm_mojo.validation.suite:main"
 llm-mojo-bench = "llm_mojo.benchmarks.run:main"
 
 [build-system]

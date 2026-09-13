@@ -297,7 +297,7 @@ retaining FP32 state without the full score matrix is a possible later study.
 Generate and validate the selected reference and all standalone operations:
 
 ```sh
-uv run --locked python -m llm_mojo.validate
+uv run --locked llm-mojo validate
 ```
 
 The historical BF16 calibration and holdout can still be reproduced with

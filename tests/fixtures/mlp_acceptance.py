@@ -11,7 +11,7 @@
 The adjacent lock is a symlink to the existing reference script lock. This
 entrypoint extends evaluation without modifying any frozen reference source.
 Completion means fixtures were captured; candidate execution is recorded
-separately by llm_mojo.mlp_validation in the locked project environment.
+separately by llm_mojo.validation.mlp in the locked project environment.
 """
 import os
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
@@ -186,7 +186,7 @@ def main():
     # Read the numerical build receipt before any holdout exposure. The
     # verifier uses only stdlib dependencies in this isolated reference env.
     sys.path.insert(0, str(REPO / 'src'))
-    from llm_mojo.mlp_validation import verify_build
+    from llm_mojo.validation.mlp import verify_build
     build_record = verify_build(args.candidate_binary)
     candidate = dict(commit=git('rev-parse','HEAD'), binary_sha256=sha(args.candidate_binary),
                      generator_sha256=sha(__file__), reference_sha256=sha(HERE/'mlp/checksums.json'))

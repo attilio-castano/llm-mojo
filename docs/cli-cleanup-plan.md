@@ -14,6 +14,8 @@ change numerical policies. Baseline Python validation: 181 tests passed.
 - `layers/` owns decoder, attention and MLP composition.
 - `kernels/` owns reusable numerical operations.
 - `benchmarks/` retains measurement protocols, qualification and evidence.
+- `validation/` owns the repository suite, numerical acceptance and shared
+  source/receipt helpers; tests and oracle generators stay under `tests/`.
 
 Dependencies flow from commands through preparation/model composition to
 layers and kernels. Native reusable code must not import executable entry points.
@@ -75,3 +77,30 @@ without changing their implementations. Retained study evidence and frozen
 oracle identities were not rewritten. These are correctness and usability
 checks; they establish no new speed claim. Local validation outputs and baseline
 executables remain outside Git under `build/cleanup/`.
+
+## Validation ownership follow-up
+
+The follow-up moves the repository runner and MLP, decoder and model acceptance
+tools into `validation/`. Their shared source hashing and JSON receipt helpers
+now live in `validation/evidence.py`, so model, decoder, profiling and chat-study
+tooling no longer import those helpers from MLP validation. Function bodies are
+unchanged after normalizing the relative import depth.
+
+Maintained Python consumers and current reproduction instructions use canonical
+paths. Installed tokenizer and validation aliases point directly at their
+implementations. The unused chat and tokenizer module wrappers are removed;
+four old validation module commands and the model research-policy command remain
+as thin entry points for existing reproduction workflows. The exact retained
+surface and replacements are documented in [the CLI guide](cli.md#validation-and-compatibility).
+Historical evidence keeps its original paths, hashes and source commits.
+
+Follow-up validation passed with `uv run --locked llm-mojo validate`: all frozen
+oracle anchors, 194 Python tests, all 24 native suites on Apple M4 Pro / Metal,
+the additional Unicode tokenizer invocation, and every benchmark smoke route.
+The native suite census was checked against `tests/test_*.mojo`. Separate command
+checks verified matching legacy/canonical help, direct installed alias targets,
+identical tokenizer encode output, and current-source receipt generation and
+JSON round-trip. Local Markdown file targets and `git diff --check` also passed.
+No native code, lockfiles, frozen arrays or retained raw measurements changed.
+The full run log is outside Git at
+`/private/tmp/llm-mojo-validation-package-full.log`.

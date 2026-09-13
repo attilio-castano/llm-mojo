@@ -125,11 +125,11 @@ must continue to reproduce unchanged.
 | `tests/fixtures/decoder_layer/contract.py` | Recipes, stages, schedules, gates and holdout declaration |
 | `tests/fixtures/decoder_layer/reference.py` | Actual upstream decoder capture and verified checkpoint input loading |
 | `tests/fixtures/decoder_layer/generate.py`, `test_reference.py` | Development generation, observation tests and immutable anchors |
-| `tests/fixtures/decoder_reference.py` and shared-lock symlink, `src/llm_mojo/validate.py` | Register the new reference and tests in the locked workflow |
+| `tests/fixtures/decoder_reference.py` and shared-lock symlink, `src/llm_mojo/validation/suite.py` | Register the new reference and tests in the locked workflow |
 | `src/llm_mojo/layers/decoder_layer.mojo` | Whole-call preflight and ordered attention/MLP composition |
 | `src/llm_mojo/layers/attention_sublayer.mojo`, `src/llm_mojo/layers/mlp.mojo` | Minimal validation extraction needed by composition; preserve arithmetic |
 | `tests/decoder_layer_support.mojo`, `tests/test_decoder_layer.mojo` | Fixture loading, boundary checks, cache and asynchronous behavior |
-| `src/llm_mojo/decoder_validation.py`, `tests/test_decoder_validation.py` | Candidate build/evaluation receipts and coverage verification |
+| `src/llm_mojo/validation/decoder.py`, `tests/test_decoder_validation.py` | Candidate build/evaluation receipts and coverage verification |
 | `tests/fixtures/decoder_acceptance.py` | Explicit, candidate-bound holdout capture through the existing script lock |
 | `src/llm_mojo/benchmarks/decoder_layer.mojo`, `decoder_layer_contract.py` | One layer workload and its route/dispatch identity |
 | Existing benchmark dispatcher, study, smoke, profile, analysis and plot modules | Integrate this operation into the shared tools |
@@ -189,7 +189,7 @@ unavailable through the default development command, and contract tests pass.
 uv run --locked --script tests/fixtures/decoder_reference.py --self-test
 uv run --locked --script tests/fixtures/decoder_reference.py --freeze-development --checkpoint-assets "$DECODER_ASSETS"
 uv run --locked --script tests/fixtures/decoder_reference.py
-uv run --locked llm-mojo-validate
+uv run --locked llm-mojo validate
 git diff --check
 ```
 
@@ -234,7 +234,7 @@ This is the first numerical-policy stop point if the targets fail upstream.
 ```sh
 uv run --locked mojo run -I src -I build -I tests tests/test_decoder_layer.mojo
 env -u MODULAR_DEBUG uv run --locked mojo run -I src -I build -I tests tests/test_decoder_layer.mojo
-uv run --locked llm-mojo-validate
+uv run --locked llm-mojo validate
 git diff --check
 ```
 
@@ -311,10 +311,10 @@ retained timing or reserved output has been collected.
   record it in progress notes, and refuse existing outputs. Implement and run:
 
 ```sh
-uv run --locked python -m llm_mojo.decoder_validation build --binary "$DECODER_RUN_ROOT/numerical-candidate"
+uv run --locked python -m llm_mojo.validation.decoder build --binary "$DECODER_RUN_ROOT/numerical-candidate"
 uv run --locked llm-mojo-bench build --build-dir "$DECODER_RUN_ROOT/bench-build"
 uv run --locked --script tests/fixtures/decoder_acceptance.py --candidate-binary "$DECODER_RUN_ROOT/numerical-candidate" --checkpoint-assets "$DECODER_ASSETS" --output "$DECODER_RUN_ROOT/holdout"
-uv run --locked python -m llm_mojo.decoder_validation evaluate --binary "$DECODER_RUN_ROOT/numerical-candidate" --fixtures "$DECODER_RUN_ROOT/holdout" --output "$DECODER_RUN_ROOT/acceptance"
+uv run --locked python -m llm_mojo.validation.decoder evaluate --binary "$DECODER_RUN_ROOT/numerical-candidate" --fixtures "$DECODER_RUN_ROOT/holdout" --output "$DECODER_RUN_ROOT/acceptance"
 ```
 
 **Exit:** all six reserved synthetic cases and the reserved checkpoint case
