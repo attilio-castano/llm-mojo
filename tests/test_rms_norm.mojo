@@ -13,7 +13,7 @@ from oracle_data.rms_norm.reference_data import (
     small_weight,
 )
 from layout import TensorLayout, TileTensor, row_major
-from llm_mojo.rms_norm import (
+from llm_mojo.kernels.rms_norm import (
     enqueue_rms_norm_apple_gpu,
     enqueue_rms_norm_apple_gpu_shared_tree,
     rms_norm_reference,

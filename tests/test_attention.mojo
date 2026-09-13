@@ -43,7 +43,7 @@ from oracle_data.attention.reference_data import (
     tiny_incremental_prefill_value,
 )
 from layout import TensorLayout, TileTensor, row_major
-from llm_mojo.attention import (
+from llm_mojo.kernels.attention import (
     enqueue_grouped_query_attention_apple_gpu,
     grouped_query_attention_reference,
 )

@@ -3,7 +3,7 @@ from layout import TensorLayout, TileTensor
 from max.gpu.host import DeviceContext
 from std.gpu import global_idx
 from std.math import ceildiv
-from llm_mojo.bf16_arithmetic import add_bits
+from llm_mojo.kernels.bf16_arithmetic import add_bits
 
 
 def residual_reference[

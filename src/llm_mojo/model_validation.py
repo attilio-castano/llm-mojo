@@ -10,7 +10,7 @@ import numpy as np
 
 from ._repository import environment_tool, repository_root
 from .mlp_validation import source_identity, sha, write
-from .model_assets import verify_prepared
+from llm_mojo.models.qwen2.assets import verify_prepared
 
 CONSISTENCY_BOUNDARIES = ({f'hidden_{i}' for i in range(25)} | {'final_norm', 'logits'} |
                           {f'cache_{kind}_{i}' for kind in ('key', 'value') for i in range(24)})
@@ -29,7 +29,7 @@ def build(binary, generation=False):
     if source['repository']['dirty']:
         raise ValueError('model numerical build requires clean source')
     binary.parent.mkdir(parents=True,exist_ok=True)
-    entry='src/llm_mojo/generate_cli.mojo' if generation else 'tests/model_driver.mojo'
+    entry='src/llm_mojo/cli/generate_cli.mojo' if generation else 'tests/model_driver.mojo'
     command=[environment_tool('mojo'),'build','-I','src','-I','tests',entry,'-o',str(binary)]
     subprocess.run(command,cwd=repository_root(),env=environment(),check=True)
     if source_identity()!=source:
@@ -459,7 +459,7 @@ def diagnose(binary, reference, output, prepared=None, policy=None):
     prepared,_=verify_prepared(prepared)
     manifest=json.loads((reference/'manifest.json').read_text())
     effective=json.loads(json.dumps(manifest['specification']))
-    from .tokenizer_assets import SOURCE_SHA
+    from llm_mojo.models.qwen2.tokenizer_assets import SOURCE_SHA
     if manifest.get('tokenizer_sha256')!=SOURCE_SHA: raise ValueError('wrong diagnostic tokenizer')
     if manifest['kind']!='model-diagnostic-reference-v1':
         raise ValueError('wrong diagnostic reference kind')
@@ -625,7 +625,7 @@ def require_empty_prompt_rejection(result):
 
 
 def generation_study(binary, output, prepared=None, policy='fast'):
-    from .tokenizer_assets import ensure_prepared
+    from llm_mojo.models.qwen2.tokenizer_assets import ensure_prepared
     from .benchmarks.environment import stable_environment, conditions_snapshot
     binary,output=Path(binary).resolve(),Path(output).resolve()
     receipt=verify_build(binary)

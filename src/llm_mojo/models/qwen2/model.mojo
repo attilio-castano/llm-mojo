@@ -8,13 +8,13 @@ from std.ffi import external_call
 from std.gpu import global_idx
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
-from llm_mojo.attention_sublayer import AttentionWeights, AttentionCache, AttentionWorkspace
-from llm_mojo.mlp import MLPWeights, MLPWorkspace
-from llm_mojo.decoder_layer import _decoder_preflight, decoder_mappings, enqueue_decoder_layer_configuration
-from llm_mojo.residual_norm import enqueue_residual_norm
-from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
-from llm_mojo.linear import enqueue_linear_apple_gpu
-from llm_mojo.token_selection import enqueue_argmax, enqueue_head_argmax
+from llm_mojo.layers.attention_sublayer import AttentionWeights, AttentionCache, AttentionWorkspace
+from llm_mojo.layers.mlp import MLPWeights, MLPWorkspace
+from llm_mojo.layers.decoder_layer import _decoder_preflight, decoder_mappings, enqueue_decoder_layer_configuration
+from llm_mojo.kernels.residual_norm import enqueue_residual_norm
+from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
+from llm_mojo.kernels.linear import enqueue_linear_apple_gpu
+from llm_mojo.kernels.token_selection import enqueue_argmax, enqueue_head_argmax
 
 
 def _observation_clock() -> UInt64:

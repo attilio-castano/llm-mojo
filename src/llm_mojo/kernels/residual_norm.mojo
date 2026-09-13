@@ -9,8 +9,8 @@ from std.gpu.primitives import warp
 from std.math import rsqrt
 from std.memory import bitcast
 from std.sys.info import is_apple_gpu
-from llm_mojo.bf16_arithmetic import add_bits
-from llm_mojo.rms_norm import RMS_NORM_EPSILON
+from llm_mojo.kernels.bf16_arithmetic import add_bits
+from llm_mojo.kernels.rms_norm import RMS_NORM_EPSILON
 
 
 def _residual_norm[XL: TensorLayout, BL: TensorLayout, WL: TensorLayout,

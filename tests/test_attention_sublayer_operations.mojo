@@ -5,22 +5,22 @@ The FP32 route has a strict accuracy gate. BF16 eager comparisons remain
 diagnostic unless SUBLAYER_BF16_COMPATIBILITY=1 explicitly requests their
 historical compatibility gate. Standalone operation contracts are unchanged.
 """
-from llm_mojo.attention_sublayer import AttentionWeights, AttentionWorkspace, _enqueue_attention_qkv
-from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
-from llm_mojo.linear import (
+from llm_mojo.layers.attention_sublayer import AttentionWeights, AttentionWorkspace, _enqueue_attention_qkv
+from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
+from llm_mojo.kernels.linear import (
     enqueue_linear_apple_gpu, enqueue_linear_prefill_mma_8x16_apple_gpu,
     enqueue_linear_prefill_mma_tile_apple_gpu,
 )
-from llm_mojo.rope import enqueue_rope_apple_gpu
-from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
-from llm_mojo.attention_decode import (
+from llm_mojo.kernels.rope import enqueue_rope_apple_gpu
+from llm_mojo.kernels.attention import enqueue_grouped_query_attention_apple_gpu
+from llm_mojo.kernels.attention_decode import (
     enqueue_grouped_query_attention_decode_apple_gpu,
 )
-from llm_mojo.attention_prefill import (
+from llm_mojo.kernels.attention_prefill import (
     enqueue_grouped_query_attention_prefill_apple_gpu,
 )
 from test_attention_prefill import _fp32_candidate
-from llm_mojo.residual import enqueue_residual_apple_gpu
+from llm_mojo.kernels.residual import enqueue_residual_apple_gpu
 from max.gpu.host import DeviceContext
 from layout import TileTensor, row_major
 from std.testing import TestSuite, assert_equal

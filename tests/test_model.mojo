@@ -2,10 +2,10 @@
 from std.testing import TestSuite, assert_equal, assert_raises
 from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext
-from llm_mojo.model import _embedding, _copy_rows, load_bf16, save_bf16
+from llm_mojo.models.qwen2.model import _embedding, _copy_rows, load_bf16, save_bf16
 from std.memory import bitcast
-from llm_mojo.model import select_configuration, select_token_selection, select_copy_free, swap_hidden_buffers, select_residual_norm, select_projection
-from llm_mojo.generate_cli import generation_budget, is_stop
+from llm_mojo.models.qwen2.model import select_configuration, select_token_selection, select_copy_free, swap_hidden_buffers, select_residual_norm, select_projection
+from llm_mojo.cli.generate_cli import generation_budget, is_stop
 
 
 def test_hidden_buffer_swaps_keep_queued_views_alive() raises:

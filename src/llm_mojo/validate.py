@@ -50,7 +50,7 @@ def prepare():
     run("uv", "run", "--locked", "--script", "tests/fixtures/decoder_reference.py", "--self-test")
     run("uv", "run", "--locked", "--script", "tests/fixtures/model_calibration.py", "--self-test")
     run("uv", "run", "--locked", "--script", "tests/fixtures/decoder_reference.py")
-    from .tokenizer_assets import ensure_prepared
+    from llm_mojo.models.qwen2.tokenizer_assets import ensure_prepared
     ensure_prepared(download=False)
     run("uv", "run", "--locked", "--script", "tests/fixtures/tokenizer_reference.py")
     run("uv", "run", "--locked", "--script", "tests/fixtures/tokenizer_reference.py", "--unicode")
@@ -58,10 +58,10 @@ def prepare():
     print("All generated oracles match the frozen anchors.", flush=True)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prepare-only", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     prepare()
     if not args.prepare_only:
         run(sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py")

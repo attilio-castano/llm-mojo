@@ -1,11 +1,12 @@
 """A resident Mojo Qwen terminal chat; Python is only the verifying launcher."""
-from llm_mojo.model import is_projection_policy
+from llm_mojo.models.qwen2.model import is_projection_policy
 from std.sys import argv, is_defined
 from max.gpu.host import DeviceContext
-from llm_mojo.chat import ChatSession, DEFAULT_SYSTEM
-from llm_mojo.tokenizer import Tokenizer, TokenizerWorkspace, TokenizerDecoder
-from llm_mojo.terminal import block_interrupt, interrupted, read_line
-from llm_mojo.generate_cli import now, is_stop
+from llm_mojo.models.qwen2.chat import ChatSession, DEFAULT_SYSTEM
+from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace, TokenizerDecoder
+from llm_mojo.runtime.terminal import block_interrupt, interrupted, read_line
+from llm_mojo.runtime.clock import now
+from llm_mojo.models.qwen2.tokens import is_stop
 
 
 def main() raises:

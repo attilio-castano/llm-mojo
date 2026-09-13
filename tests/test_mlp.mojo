@@ -1,7 +1,7 @@
 from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.testing import TestSuite, assert_equal, assert_raises
-from llm_mojo.mlp import (
+from llm_mojo.layers.mlp import (
     MLPWeights,
     MLPWorkspace,
     enqueue_mlp_apple_gpu,

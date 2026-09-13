@@ -4,7 +4,7 @@ Python only reads fixture arrays before timing. All enqueues are engine Mojo.
 Ring24 owns distinct weights, inputs and caches; scratch/output are shared.
 Odd ring entries negate X, Wqkv and Wo, preserving Q/K/V and negating Y.
 """
-from llm_mojo.attention_sublayer import (
+from llm_mojo.layers.attention_sublayer import (
     AttentionWeights, AttentionCache, AttentionWorkspace, enqueue_attention_sublayer,
     enqueue_attention_sublayer_integrated, _enqueue_attention_wo,
 )

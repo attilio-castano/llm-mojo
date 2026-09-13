@@ -1,7 +1,7 @@
 """Exact chat framing and state transitions; no model weights required."""
 from std.testing import assert_equal, assert_raises
-from llm_mojo.chat import ChatHistory, DEFAULT_SYSTEM, IM_END, NEWLINE
-from llm_mojo.tokenizer import Tokenizer, TokenizerWorkspace, TableReader
+from llm_mojo.models.qwen2.chat import ChatHistory, DEFAULT_SYSTEM, IM_END, NEWLINE
+from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace, TableReader
 from test_tokenizer import equal_ids, fixture_bytes
 
 

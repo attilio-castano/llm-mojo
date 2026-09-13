@@ -3,9 +3,9 @@ from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.memory import bitcast
 from std.testing import TestSuite, assert_equal, assert_raises
-from llm_mojo.attention_decode import enqueue_grouped_query_attention_consistent_apple_gpu, enqueue_grouped_query_attention_decode_apple_gpu
-from llm_mojo.decoder_layer import decoder_mappings
-from llm_mojo.linear import enqueue_linear_apple_gpu, enqueue_linear_rowwise_rows_apple_gpu
+from llm_mojo.kernels.attention_decode import enqueue_grouped_query_attention_consistent_apple_gpu, enqueue_grouped_query_attention_decode_apple_gpu
+from llm_mojo.layers.decoder_layer import decoder_mappings
+from llm_mojo.kernels.linear import enqueue_linear_apple_gpu, enqueue_linear_rowwise_rows_apple_gpu
 from decoder_layer_support import decoder_support
 from test_decoder_layer import _case
 

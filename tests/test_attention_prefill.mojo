@@ -6,8 +6,8 @@ from std.utils.numerics import neg_inf
 from std.gpu import lane_id
 from std.sys.info import is_apple_gpu
 from max.gpu.compute.arch.mma_apple import _mma_apple_8x8
-from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
-from llm_mojo.attention_prefill import (
+from llm_mojo.kernels.attention import enqueue_grouped_query_attention_apple_gpu
+from llm_mojo.kernels.attention_prefill import (
     enqueue_grouped_query_attention_prefill_apple_gpu,
     enqueue_grouped_query_attention_prefill_split_apple_gpu, _merge_prefill_splits,
 )

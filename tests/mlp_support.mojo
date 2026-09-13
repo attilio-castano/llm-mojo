@@ -1,7 +1,7 @@
 """Host-only NumPy transport; never imported by engine operations."""
 from std.python import Python, PythonObject
 from max.gpu.host import DeviceBuffer
-from llm_mojo.mlp import MLPWorkspace
+from llm_mojo.layers.mlp import MLPWorkspace
 
 
 def mlp_support() raises -> PythonObject:

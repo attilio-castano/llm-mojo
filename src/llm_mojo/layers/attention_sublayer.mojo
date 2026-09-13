@@ -8,26 +8,26 @@ from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import global_idx
 from std.math import ceildiv
-from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
-from llm_mojo.linear import (
+from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
+from llm_mojo.kernels.linear import (
     enqueue_linear_apple_gpu,
     enqueue_linear_rowwise_rows_apple_gpu,
     enqueue_linear_prefill_mma_8x16_apple_gpu,
     enqueue_linear_prefill_mma_tile_apple_gpu,
 )
-from llm_mojo.rope import enqueue_rope_apple_gpu
+from llm_mojo.kernels.rope import enqueue_rope_apple_gpu
 from std.builtin.simd import FastMathFlag
 from std.sys.info import is_apple_gpu
-from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
-from llm_mojo.attention_decode import (
+from llm_mojo.kernels.attention import enqueue_grouped_query_attention_apple_gpu
+from llm_mojo.kernels.attention_decode import (
     enqueue_grouped_query_attention_decode_apple_gpu,
     enqueue_grouped_query_attention_consistent_apple_gpu,
 )
-from llm_mojo.attention_prefill import (
+from llm_mojo.kernels.attention_prefill import (
     enqueue_grouped_query_attention_prefill_apple_gpu,
     enqueue_grouped_query_attention_prefill_split_apple_gpu,
 )
-from llm_mojo.residual import enqueue_residual_apple_gpu
+from llm_mojo.kernels.residual import enqueue_residual_apple_gpu
 
 
 struct AttentionWeights(Movable):

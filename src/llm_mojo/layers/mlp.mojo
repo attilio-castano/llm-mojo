@@ -1,8 +1,8 @@
 """Materialized Qwen MLP. Caller owns storage and one ordered Metal stream."""
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
-from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
-from llm_mojo.linear import (
+from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
+from llm_mojo.kernels.linear import (
     enqueue_linear_apple_gpu,
     enqueue_linear_rowwise_rows_apple_gpu,
     enqueue_linear_apple_gpu_two_output,
@@ -11,8 +11,8 @@ from llm_mojo.linear import (
     enqueue_linear_prefill_mma_8x16_apple_gpu,
     enqueue_linear_prefill_mma_tile_apple_gpu,
 )
-from llm_mojo.swiglu import enqueue_silu_apple_gpu, enqueue_multiply_apple_gpu, enqueue_silu_multiply_apple_gpu
-from llm_mojo.residual import enqueue_residual_apple_gpu
+from llm_mojo.kernels.swiglu import enqueue_silu_apple_gpu, enqueue_multiply_apple_gpu, enqueue_silu_multiply_apple_gpu
+from llm_mojo.kernels.residual import enqueue_residual_apple_gpu
 
 
 def mlp_projection_mapping(mapping: Int, stage: Int) -> Int:

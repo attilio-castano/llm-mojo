@@ -4,7 +4,7 @@ from std.ffi import external_call
 from std.memory import bitcast
 from std.testing import assert_equal, assert_raises
 from max.gpu.host import DeviceContext
-from llm_mojo.model import select_copy_free, select_residual_norm, select_token_selection, QwenModel, select_configuration
+from llm_mojo.models.qwen2.model import select_copy_free, select_residual_norm, select_token_selection, QwenModel, select_configuration
 from model_operation_support import capture_operations
 
 

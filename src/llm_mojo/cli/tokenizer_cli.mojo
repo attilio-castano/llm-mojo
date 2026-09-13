@@ -1,6 +1,6 @@
 """Standalone native tokenizer; setup and artifact verification precede launch."""
 from std.sys import argv
-from llm_mojo.tokenizer import Tokenizer, TokenizerWorkspace
+from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
 
 
 def main() raises:

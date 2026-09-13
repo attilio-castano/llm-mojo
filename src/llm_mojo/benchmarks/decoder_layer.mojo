@@ -1,7 +1,7 @@
 """One fixed, receipt-bound decoder workload; host fixture work precedes timing."""
-from llm_mojo.decoder_layer import enqueue_decoder_layer, enqueue_decoder_layer_configuration, decoder_mappings
-from llm_mojo.attention_sublayer import AttentionWeights, AttentionCache, AttentionWorkspace
-from llm_mojo.mlp import MLPWeights, MLPWorkspace
+from llm_mojo.layers.decoder_layer import enqueue_decoder_layer, enqueue_decoder_layer_configuration, decoder_mappings
+from llm_mojo.layers.attention_sublayer import AttentionWeights, AttentionCache, AttentionWorkspace
+from llm_mojo.layers.mlp import MLPWeights, MLPWorkspace
 from layout import TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.python import Python, PythonObject

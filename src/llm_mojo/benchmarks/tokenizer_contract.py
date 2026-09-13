@@ -10,7 +10,7 @@ import platform
 import subprocess
 
 from .._repository import repository_root, environment_tool
-from ..tokenizer_assets import (
+from llm_mojo.models.qwen2.tokenizer_assets import (
     ensure_prepared,
     prepared_directory,
     asset_directory,
@@ -38,10 +38,12 @@ MODES = ("bpe", "encode", "decode", "stream", "load")
 
 def sources():
     root = repository_root()
+    from llm_mojo.runtime.build import build_sources
+    identity = build_sources("src/llm_mojo/benchmarks/tokenizer.mojo", root)
     names = [
-        "src/llm_mojo/tokenizer.mojo",
-        "src/llm_mojo/tokenizer_assets.py",
-        "src/llm_mojo/benchmarks/tokenizer.mojo",
+        "src/llm_mojo/runtime/build.py",
+        "src/llm_mojo/runtime/artifacts.py",
+        "src/llm_mojo/models/qwen2/tokenizer_assets.py",
         "src/llm_mojo/benchmarks/tokenizer_contract.py",
         "src/llm_mojo/benchmarks/study.py",
         "src/llm_mojo/benchmarks/run.py",
@@ -51,7 +53,8 @@ def sources():
         "tests/fixtures/generate.py.lock",
         "uv.lock",
     ]
-    return {name: sha(root / name) for name in names}
+    identity.update({name: sha(root / name) for name in names})
+    return identity
 
 
 def environment():
@@ -106,7 +109,6 @@ def build(directory):
         "build",
         "-I",
         "src",
-        "src/llm_mojo/benchmarks/tokenizer.mojo",
         "-o",
         str(binary),
     ]
@@ -135,8 +137,7 @@ def build(directory):
                 "build",
                 "-I",
                 "src",
-                "src/llm_mojo/benchmarks/tokenizer.mojo",
-                "-o",
+                        "-o",
                 "<binary>",
             ],
         ),

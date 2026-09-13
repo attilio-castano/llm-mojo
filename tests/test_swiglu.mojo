@@ -2,12 +2,12 @@ from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext
 from std.python import Python
 from std.testing import TestSuite, assert_equal
-from llm_mojo.swiglu import enqueue_silu_apple_gpu, enqueue_multiply_apple_gpu
+from llm_mojo.kernels.swiglu import enqueue_silu_apple_gpu, enqueue_multiply_apple_gpu
 
 
 def test_fused_silu_multiply_exact() raises:
     from std.memory import bitcast
-    from llm_mojo.swiglu import enqueue_silu_multiply_apple_gpu
+    from llm_mojo.kernels.swiglu import enqueue_silu_multiply_apple_gpu
 
     var ctx = DeviceContext()
     assert_equal(ctx.api(), "metal")
@@ -120,7 +120,7 @@ def test_arbitrary_bf16_products() raises:
 
 
 def test_host_silu_reference() raises:
-    from llm_mojo.swiglu import silu_reference
+    from llm_mojo.kernels.swiglu import silu_reference
 
     var sys = Python.import_module("sys")
     sys.path.insert(0, "tests")
@@ -141,8 +141,8 @@ def test_host_silu_reference() raises:
 
 
 def test_rounding_boundaries() raises:
-    from llm_mojo.linear import enqueue_linear_apple_gpu
-    from llm_mojo.residual import enqueue_residual_apple_gpu
+    from llm_mojo.kernels.linear import enqueue_linear_apple_gpu
+    from llm_mojo.kernels.residual import enqueue_residual_apple_gpu
 
     var ctx = DeviceContext()
     var g = ctx.enqueue_create_buffer[DType.bfloat16](2)
@@ -190,7 +190,7 @@ def test_rounding_boundaries() raises:
 
 
 def test_residual_bf16_boundaries() raises:
-    from llm_mojo.residual import enqueue_residual_apple_gpu
+    from llm_mojo.kernels.residual import enqueue_residual_apple_gpu
 
     var sys = Python.import_module("sys")
     sys.path.insert(0, "tests")
@@ -216,7 +216,7 @@ def test_residual_bf16_boundaries() raises:
 
 
 def test_host_multiply_reference() raises:
-    from llm_mojo.swiglu import multiply_reference
+    from llm_mojo.kernels.swiglu import multiply_reference
 
     var sys = Python.import_module("sys")
     sys.path.insert(0, "tests")
@@ -241,7 +241,7 @@ def test_host_multiply_reference() raises:
 
 
 def test_every_finite_bf16_plus_every_subnormal() raises:
-    from llm_mojo.residual import enqueue_residual_apple_gpu
+    from llm_mojo.kernels.residual import enqueue_residual_apple_gpu
 
     var sys = Python.import_module("sys")
     sys.path.insert(0, "tests")

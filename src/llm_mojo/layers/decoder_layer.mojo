@@ -6,13 +6,13 @@ MLP input; there is no intervening allocation, copy, or synchronization.
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.collections import InlineArray
-from llm_mojo.attention_sublayer import (
+from llm_mojo.layers.attention_sublayer import (
     AttentionWeights, AttentionCache, AttentionWorkspace,
     _validate_attention_sublayer, enqueue_attention_sublayer,
     enqueue_attention_sublayer_integrated,
 )
-from llm_mojo.residual_norm import enqueue_residual_norm
-from llm_mojo.mlp import MLPWeights, MLPWorkspace, _validate_mlp, enqueue_mlp_apple_gpu
+from llm_mojo.kernels.residual_norm import enqueue_residual_norm
+from llm_mojo.layers.mlp import MLPWeights, MLPWorkspace, _validate_mlp, enqueue_mlp_apple_gpu
 
 
 def decoder_mappings(variant: Int, rows: Int) raises -> SIMD[DType.int64, 4]:

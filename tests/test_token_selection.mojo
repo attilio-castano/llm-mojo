@@ -3,8 +3,8 @@ from std.memory import bitcast
 from std.testing import assert_equal, assert_raises
 from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext
-from llm_mojo.linear import enqueue_linear_apple_gpu
-from llm_mojo.token_selection import enqueue_argmax, enqueue_head_argmax, bf16_rank
+from llm_mojo.kernels.linear import enqueue_linear_apple_gpu
+from llm_mojo.kernels.token_selection import enqueue_argmax, enqueue_head_argmax, bf16_rank
 
 
 def reduction(ctx: DeviceContext, count: Int, pattern: Int) raises:

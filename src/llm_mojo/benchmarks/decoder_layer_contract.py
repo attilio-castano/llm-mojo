@@ -714,7 +714,7 @@ def replay_policy_campaign(directory):
         or regression['source']['sources']!=final['build']['source']['sources']):
         raise ValueError('final numerical source did not pass the repository regression')
     bridge=json.loads((directory/index['build_bridge']).read_text())
-    native='src/llm_mojo/decoder_layer.mojo'
+    native='src/llm_mojo/layers/decoder_layer.mojo'
     if (bridge.get('kind')!='decoder_policy_build_bridge'
         or bridge['timing_commit']!=build['repository']['commit']
         or bridge['timing_binary_sha256']!=build['binaries']['decoder_layer']

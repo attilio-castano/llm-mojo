@@ -1,10 +1,10 @@
-from llm_mojo.linear import (
+from llm_mojo.kernels.linear import (
     linear_reference,
     enqueue_linear_apple_gpu,
     enqueue_linear_prefill_register_2x2_apple_gpu,
     enqueue_linear_prefill_mma_8x16_apple_gpu,
 )
-from llm_mojo.residual import residual_reference, enqueue_residual_apple_gpu
+from llm_mojo.kernels.residual import residual_reference, enqueue_residual_apple_gpu
 from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext
 from std.testing import TestSuite, assert_equal, assert_raises

@@ -30,7 +30,7 @@ from oracle_data.rope.reference_data import (
     tiny_sine_rows,
 )
 from layout import TensorLayout, TileTensor, row_major
-from llm_mojo.rope import enqueue_rope_apple_gpu, rope_reference
+from llm_mojo.kernels.rope import enqueue_rope_apple_gpu, rope_reference
 from max.gpu.host import DeviceContext
 from std.math import isfinite
 from std.sys.info import has_apple_gpu_accelerator
