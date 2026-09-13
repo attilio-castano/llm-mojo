@@ -1,0 +1,18 @@
+{
+  "sha256": "8d39379cff932ec346c81b5ef9cbc9f006687fa57864c9e8c3b9d2020e8500d6",
+  "uncompressed_sha256": "35811f35fe1f9ee3efb42ae21a23650b9f688a3d620856f2f0fadb7ffaf6cfc6",
+  "compressed_bytes": 15190,
+  "uncompressed_bytes": 194886,
+  "final_validation": {
+    "command": "uv run --locked python -m unittest discover -s tests -p 'test_*.py'",
+    "exit_code": 0,
+    "python_tests": 178,
+    "log_sha256": "c06e528b6f6dd7653dba917f1332f69cec56d8e943aa23b56f7fbfe7420f1c20",
+    "log_bytes": 3682,
+    "source_sha256": {
+      "src/llm_mojo/benchmarks/model_profile.py": "d777ff7caa2716d4404df0e1ec13fe8779f64262484077abbaaba73359f38a57",
+      "tests/test_model_profile.py": "3ffcaf5723c30c78161b1f6a57a224c5f3e032e1ef9535b01dea7c79ebdfad5c"
+    },
+    "archive_sha256": "35d6a925524a9f80875a607dcc97930c55c230d775f2a8007590efb7dac7b811"
+  }
+}

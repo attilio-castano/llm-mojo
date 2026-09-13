@@ -5,6 +5,60 @@ from std.testing import TestSuite, assert_equal
 from llm_mojo.swiglu import enqueue_silu_apple_gpu, enqueue_multiply_apple_gpu
 
 
+def test_fused_silu_multiply_exact() raises:
+    from std.memory import bitcast
+    from llm_mojo.swiglu import enqueue_silu_multiply_apple_gpu
+
+    var ctx = DeviceContext()
+    assert_equal(ctx.api(), "metal")
+    # All finite BF16 gate values, plus the actual Qwen width and ragged tails.
+    for count in [1, 127, 129, 4864, 65280]:
+        var g = ctx.enqueue_create_buffer[DType.bfloat16](count)
+        var u = ctx.enqueue_create_buffer[DType.bfloat16](count)
+        var a = ctx.enqueue_create_buffer[DType.bfloat16](count)
+        var expected = ctx.enqueue_create_buffer[DType.bfloat16](count)
+        var actual = ctx.enqueue_create_buffer[DType.bfloat16](count + 17)
+        with g.map_to_host() as gm:
+            for i in range(count):
+                gm.unsafe_ptr().unsafe_bitcast[UInt16]()[unsafe_offset=i] = UInt16(i if i < 32640 else i + 128)
+        for pattern in range(8):
+            with u.map_to_host() as um:
+                for i in range(count):
+                    var bits: UInt16
+                    if pattern == 0:
+                        bits = 0
+                    elif pattern == 1:
+                        bits = 0x8000
+                    elif pattern == 2:
+                        bits = 0x0001
+                    elif pattern == 3:
+                        bits = 0x807F
+                    elif pattern == 4:
+                        bits = 0x3FC0
+                    elif pattern == 5:
+                        bits = 0xBF80
+                    else:
+                        var value = (i * 4051 + pattern * 37) % 65280
+                        bits = UInt16(value if value < 32640 else value + 128)
+                    um.unsafe_ptr().unsafe_bitcast[UInt16]()[unsafe_offset=i] = bits
+            enqueue_silu_apple_gpu(ctx, TileTensor(g, row_major(1, count)), TileTensor(a, row_major(1, count)))
+            enqueue_multiply_apple_gpu(ctx, TileTensor(a, row_major(1, count)),
+                TileTensor(u, row_major(1, count)), TileTensor(expected, row_major(1, count)))
+            # The fused route must not depend on an old activation or output.
+            a.enqueue_fill(bitcast[DType.bfloat16](UInt16(0x7FC0)))
+            actual.enqueue_fill(bitcast[DType.bfloat16](UInt16(0x7FC0)))
+            enqueue_silu_multiply_apple_gpu(ctx, TileTensor(g, row_major(1, count)),
+                TileTensor(u, row_major(1, count)), TileTensor(actual, row_major(1, count)))
+            with expected.map_to_host() as em:
+                with actual.map_to_host() as am:
+                    for i in range(count):
+                        assert_equal(am.unsafe_ptr().unsafe_bitcast[UInt16]()[unsafe_offset=i],
+                            em.unsafe_ptr().unsafe_bitcast[UInt16]()[unsafe_offset=i])
+                    for i in range(count, count + 17):
+                        assert_equal(am.unsafe_ptr().unsafe_bitcast[UInt16]()[unsafe_offset=i], UInt16(0x7FC0))
+    print("Fused SiLU multiply: 40 exact sweeps with protected tails")
+
+
 def test_finite_bf16_sweep() raises:
     var sys = Python.import_module("sys")
     sys.path.insert(0, "tests")

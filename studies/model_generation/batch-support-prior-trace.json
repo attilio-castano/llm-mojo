@@ -1,0 +1,112 @@
+{
+  "description": "Reanalysis of the existing original-projection scheduling trace; not a new capture",
+  "prefix": 1024,
+  "variant": 0,
+  "source_commit": "524e4471f8caac3953d0bddcf5aa8db3c20bfb8f",
+  "environment": {
+    "hardware": {
+      "model": "Mac16,7",
+      "chip": "Apple M4 Pro",
+      "logical_cpu_count": "14",
+      "gpu_api": "metal",
+      "gpu_target": "metal:4-metal4",
+      "physical_memory_bytes": 25769803776
+    },
+    "software": {
+      "macos": "26.6.2",
+      "macos_build": "25G83",
+      "darwin": "25.6.0",
+      "xcode": [
+        "Xcode 26.6",
+        "Build version 17F113"
+      ],
+      "metal": [
+        "Apple metal version 32023.883 (metalfe-32023.883)",
+        "Target: air64-apple-darwin25.6.0",
+        "Thread model: posix"
+      ],
+      "uv": "uv 0.12.5 (210d1f678 2026-08-14 aarch64-apple-darwin)",
+      "mojo": "1.0.0",
+      "max": "26.5.0"
+    }
+  },
+  "trace_inputs": {
+    "curated.json": "ed5a460ba6bcce35f5fc5306965f86c1eb3ebd97748c6646c54d6e9ec56ee012",
+    "submissions.xml": "afc2da5c22d99ab24750651a9a5c2252fc3b045a8e0e8c04b3184692ce9a5e18"
+  },
+  "capture_id": "attention-1eb7cfae519948c18a34ad4bc36f8de1",
+  "records": [
+    {
+      "iteration": 0,
+      "commands": {
+        "blit": 4,
+        "compute": 245
+      },
+      "distinct_command_buffers": 249,
+      "encoders_per_buffer": 1
+    },
+    {
+      "iteration": 1,
+      "commands": {
+        "blit": 4,
+        "compute": 245
+      },
+      "distinct_command_buffers": 249,
+      "encoders_per_buffer": 1
+    },
+    {
+      "iteration": 2,
+      "commands": {
+        "blit": 4,
+        "compute": 245
+      },
+      "distinct_command_buffers": 249,
+      "encoders_per_buffer": 1
+    },
+    {
+      "iteration": 3,
+      "commands": {
+        "blit": 4,
+        "compute": 245
+      },
+      "distinct_command_buffers": 249,
+      "encoders_per_buffer": 1
+    },
+    {
+      "iteration": 4,
+      "commands": {
+        "blit": 4,
+        "compute": 245
+      },
+      "distinct_command_buffers": 249,
+      "encoders_per_buffer": 1
+    },
+    {
+      "iteration": 5,
+      "commands": {
+        "blit": 4,
+        "compute": 245
+      },
+      "distinct_command_buffers": 249,
+      "encoders_per_buffer": 1
+    },
+    {
+      "iteration": 6,
+      "commands": {
+        "blit": 4,
+        "compute": 245
+      },
+      "distinct_command_buffers": 249,
+      "encoders_per_buffer": 1
+    },
+    {
+      "iteration": 7,
+      "commands": {
+        "blit": 4,
+        "compute": 245
+      },
+      "distinct_command_buffers": 249,
+      "encoders_per_buffer": 1
+    }
+  ]
+}

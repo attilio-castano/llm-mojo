@@ -160,3 +160,39 @@ def enqueue_multiply_apple_gpu[
     ctx.enqueue_function[_multiply[XL, UL, YL]](
         x, u, y, Int32(r), Int32(w), grid_dim=ceildiv(r * w, 128), block_dim=128
     )
+
+
+def _silu_multiply[XL: TensorLayout, UL: TensorLayout, YL: TensorLayout](
+    x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
+    u: TileTensor[DType.bfloat16, UL, MutAnyOrigin],
+    y: TileTensor[DType.bfloat16, YL, MutAnyOrigin],
+    count: Int32,
+):
+    comptime assert x.flat_rank == 2 and u.flat_rank == 2 and y.flat_rank == 2
+    var i = global_idx.x
+    if i < Int(count):
+        # Retain the materialized path's BF16 rounding as integer bits.
+        # Each thread owns one output; no inter-thread communication.
+        var activated = silu_bits(x.ptr.unsafe_bitcast[UInt16]()[unsafe_offset=i])
+        y.ptr.unsafe_bitcast[UInt16]()[unsafe_offset=i] = multiply_bits(
+            activated, u.ptr.unsafe_bitcast[UInt16]()[unsafe_offset=i]
+        )
+
+
+def enqueue_silu_multiply_apple_gpu[
+    XL: TensorLayout, UL: TensorLayout, YL: TensorLayout
+](
+    ctx: DeviceContext,
+    x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
+    u: TileTensor[DType.bfloat16, UL, MutAnyOrigin],
+    y: TileTensor[DType.bfloat16, YL, MutAnyOrigin],
+) raises:
+    """Exact SiLU then multiply for contiguous, disjoint row-major views."""
+    _validate_shape(x, y)
+    _validate_shape(x, u)
+    if ctx.api() != "metal":
+        raise Error("fused SiLU multiply requires Metal")
+    var count = Int(x.dim[0]()) * Int(x.dim[1]())
+    ctx.enqueue_function[_silu_multiply[XL, UL, YL]](
+        x, u, y, Int32(count), grid_dim=ceildiv(count, 128), block_dim=128
+    )

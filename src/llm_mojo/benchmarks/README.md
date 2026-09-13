@@ -107,6 +107,14 @@ both compressed and original hashes before returning the full record.
 
 ## Focused Metal profiling
 
+The complete resident Qwen decode study uses
+`uv run --locked python -m llm_mojo.benchmarks.model_profile` with `build`,
+`collect`, `capture`, `terminal`, `archive` and offline `replay` commands.
+Its [bounded plan](../../../studies/model_generation/token-profile-plan.md)
+defines fixed histories, observation overhead controls and full-model trace
+coverage. It reuses the capture/analyzer submission join and requires verified
+local model assets; operation-level synthetic fixtures are not a substitute.
+
 Profile curation accepts one `--attention-study` name: `baseline`, `wo`,
 `decode`, `prefill`, `projections`, `parallelism`, or `combined`. Parallelism
 also requires `--parallelism-variants` with the selected finalists. Historical
@@ -404,3 +412,49 @@ separate pre-split BPE, complete encoding, decoding, streaming, and table loadin
 The last two decode modes expose whole-call and incremental API paths over the
 same byte-decoder implementation. Table loading includes deserialization and
 native structure checks, not preparation or Python's startup SHA-256 checks.
+
+The [QKV fusion experiment](../../../studies/model_generation/qkv-fusion.md)
+extends `model_profile` with `build --fusion`, the same calibrated collection
+matrix, and `fusion-capture`, `fusion-terminal`, `fusion-archive`,
+`fusion-replay` and `fusion-plot`. Configuration 25 remains an explicit study
+arm. Default single-row M4 Pro Fast uses configuration 26 together with residual
+normalization fusion, buffer swapping and GPU argmax; see the
+[composed promotion](../../../studies/model_generation/residual-norm.md).
+
+### Runtime enqueue boundary
+
+The [bounded enqueue plan](../../../studies/model_generation/runtime-enqueue-plan.md)
+uses the same model executable with absent, inactive and recording process-local
+wrappers, plus compiled-handle and queue-depth diagnostic microbenchmarks. It
+requires the pinned macOS arm64 MAX runtime; it does not alter installed libraries.
+Run serially on M4 Pro / Metal from a clean checkout:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile enqueue-build --prepared /absolute/prepared-v1 --output /private/tmp/enqueue-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile enqueue-collect --build /private/tmp/enqueue-build --output /private/tmp/enqueue-timings
+uv run --locked python -m llm_mojo.benchmarks.model_profile enqueue-archive --timings /private/tmp/enqueue-timings --output studies/model_generation
+uv run --locked python -m llm_mojo.benchmarks.model_profile enqueue-replay --output studies/model_generation
+uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_profile enqueue-plot --output studies/model_generation
+```
+
+The C interposer records all runtime calls to temporary logs, retaining measured
+windows in the archive. No dropped calls, runtime errors, boundary straddles or
+multithreaded overlaps are accepted. Runtime wall time includes possible blocking;
+it is not a measure of exclusive CPU execution. Read the calibration before
+interpreting attribution or extrapolating microbenchmark savings to generation.
+
+### Metal batching feasibility
+
+The [batching gate](../../../studies/model_generation/batch-support-plan.md)
+checks the installed backend with a real dependent-kernel control and graph
+replay attempt before any model timing. From a clean checkout on M4 Pro:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-support --output /private/tmp/batch-support-proof
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-support-replay --output /private/tmp/batch-support-proof/batch-support.json
+```
+
+The receipt distinguishes successful graph replay, the specific unsupported
+builder error, and unexpected correctness/runtime failures. Graph support alone
+would still require verifying actual command-buffer grouping before measuring
+Qwen. This gate does not upgrade or modify installed MAX dependencies.

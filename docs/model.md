@@ -278,8 +278,11 @@ The upstream fixtures and numerical budgets are frozen. The materialized Mojo
 baseline, tiled prefill projections, and bounded decode experiments have passed
 their numerical checks and are documented in the [MLP study](../studies/mlp_sublayer/README.md).
 The standalone MLP defaults to rowwise mapping 0. The Fast model uses tiled
-mapping 7 for multi-row calls and mapping 0 for decode; no measured MLP decode
-candidate qualified for promotion. The accepted
+mapping 7 for multi-row calls and mapping 0's projections for decode. Its
+single-row M4 Pro route now fuses SiLU and multiply while retaining the exact
+intermediate BF16 rounding; see the
+[combined fusion study](../studies/model_generation/combined-fusion.md).
+The earlier MLP projection candidates did not qualify for promotion. The accepted
 [decoder composition](../studies/decoder_layer/selection.md) combines attention
 and MLP with workload-specific configurations, now integrated into the
 [complete model](generation.md).
@@ -365,3 +368,58 @@ qualification and consistency plans are retained in
 [generation-plan.md](generation-plan.md), with their failures in the
 [numerical history](../studies/model_generation/README.md). Those failed results
 remain unchanged; this policy does not claim that their gates passed.
+
+
+### GPU selection experiment
+
+The [token selection study](../studies/model_generation/token-selection.md)
+compares configuration 26 with CPU greedy, a separate GPU argmax, and a fused
+vocabulary projection/local argmax. Both GPU routes preserve rounded BF16
+scores, lowest-ID ties and rejection of any nonfinite score. The fused route
+leaves logits untouched except during explicit diagnostic materialization.
+Neither candidate passed that standalone promotion rule. The later
+[composed study](../studies/model_generation/residual-norm.md) promotes the
+separate GPU argmax together with residual/RMSNorm fusion and buffer swapping. Native study policies `gpu-argmax` and `fused-head` enable these
+experiments only for single-row Apple M4 Pro calls.
+
+### Inter-layer buffer ownership experiment
+
+The [buffer-swap study](../studies/model_generation/buffer-swap.md) exchanges the
+input and MLP-output DeviceBuffer owners between layers, removing 23 compute
+copies while retaining both allocations and the decoder's disjoint input/output
+contract. Each next layer rebuilds its input view from the current owner. The
+last layer does not swap, so final normalization still reads `mlp.output`.
+Exact hidden-state, cache, lifecycle and streaming comparisons pass. Median
+paired reductions are 5.3–8.3%, but that standalone promotion gate fails. The
+later composed study qualifies and promotes swapping as part of all three. Native study policy `buffer-swap` enables the candidate only for
+single-row Apple M4 Pro calls. Multi-row calls retain the copy path, including
+after a swapping call; explicit low-level multi-row swapping is rejected.
+
+
+### Residual addition and normalization
+
+The [independent and composed study](../studies/model_generation/residual-norm.md)
+fuses 48 residual/RMSNorm boundaries per decode token while retaining both the
+BF16 residual sum and normalized result. Fast/auto now enable this together with
+buffer swapping and separate GPU argmax on single-row M4 Pro / Metal calls.
+The measured combined route uses 245 compute commands versus 314 previously,
+with 17.1–24.5% lower complete-token latency and 107–115 tokens/s streaming
+medians. Explicit `combined`, `residual-norm`, `swap-argmax` and `all-three`
+policies preserve the four measured arms; multi-row behavior is unchanged.
+
+### Projection load scheduling and block size
+
+The [six-arrangement study](../studies/model_generation/projection-arrangements.md)
+compares fixed-width 896/4864 loading and 64/128/256-thread blocks over the current
+Fast path. Fixed-width arms reduced projection active time in Metal traces and
+streamed about 119–120 tokens/s, but none met the frozen full-token acceptance
+gate across all three histories. Fast/auto retain the original projection kernel.
+Explicit `projection-0` through `projection-5` policies retain the measured arms;
+they use the existing prefill route for multirow calls.
+
+The [scheduling diagnosis](../studies/model_generation/projection-scheduling.md)
+reproduces the larger long-context gain in advancing decoding. Host forward
+submission remains about 6.7 ms while long-context readback wait drops from
+2.3–2.4 ms to 1.2 ms. Fixed-width projection active time stays near 4.9 ms across
+contexts, supporting a submission/backlog explanation without changing MLP shapes.
+Profiler perturbation prevents treating traced gaps as exclusive CPU time.

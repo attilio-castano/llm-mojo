@@ -76,7 +76,11 @@ intervals. Join these by command buffer, encoder and GPU submission before
 assigning stage names. Sum active durations while excluding preemption gaps;
 retain the true end timestamp for the enclosing counter window. Require every
 declared trailing submission to have unambiguous compute coverage. Counting
-interval rows alone can shift stage labels or conceal a missing dispatch.
+interval rows alone can shift stage labels or conceal a missing dispatch. The
+full-model profile additionally accounts for four buffer blits per step and
+GPU resubmissions of the same encoder. Its stricter mixed-command sequence
+checks preserve non-overlapping active fragments across submission IDs; see
+[the token study](../studies/model_generation/token-profile.md).
 
 ## What belongs in Git
 

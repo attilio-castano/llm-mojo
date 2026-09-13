@@ -1,0 +1,3883 @@
+{
+  "timing": [
+    {
+      "mode": "fixed",
+      "prefix": 64,
+      "calibration_ratios": [
+        1.0262597725549658,
+        1.0046183213678084,
+        0.9893933716079911,
+        0.9834333087437366
+      ],
+      "ratios": [
+        1.0208392773984747,
+        0.9814678423315163,
+        0.99068215270559,
+        0.9847707462916434
+      ],
+      "noise_floor": 0.05,
+      "median_reduction": 0.012273550501383346,
+      "qualifies": false,
+      "control_block_ms": [
+        8.604521,
+        8.2435625,
+        8.145229,
+        8.1942295
+      ],
+      "candidate_block_ms": [
+        8.783833,
+        8.0907915,
+        8.069333,
+        8.0694375
+      ],
+      "quarters": [
+        {
+          "arm": 0,
+          "block": 0,
+          "first_ms": 8.7586875,
+          "last_ms": 8.574604
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "first_ms": 8.2562915,
+          "last_ms": 8.2729375
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "first_ms": 8.1227085,
+          "last_ms": 8.0721045
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "first_ms": 8.331,
+          "last_ms": 8.183417
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "first_ms": 8.8157705,
+          "last_ms": 8.4954165
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "first_ms": 8.0907915,
+          "last_ms": 8.2731045
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "first_ms": 8.114229,
+          "last_ms": 7.950875
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "first_ms": 7.9911665,
+          "last_ms": 8.0713335
+        }
+      ]
+    },
+    {
+      "mode": "fixed",
+      "prefix": 1024,
+      "calibration_ratios": [
+        0.9981476005586388,
+        0.9717613816597687,
+        0.9962069801826208,
+        1.0032368412558181
+      ],
+      "ratios": [
+        0.9999974960876369,
+        0.9770113411151218,
+        0.9836568895957933,
+        0.9731874980700974
+      ],
+      "noise_floor": 0.05,
+      "median_reduction": 0.019665884644542442,
+      "qualifies": false,
+      "control_block_ms": [
+        8.5865625,
+        8.2939375,
+        8.1494585,
+        8.387729
+      ],
+      "candidate_block_ms": [
+        8.586541,
+        8.103271,
+        8.016271,
+        8.162833
+      ],
+      "quarters": [
+        {
+          "arm": 0,
+          "block": 0,
+          "first_ms": 8.4358125,
+          "last_ms": 8.595937
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "first_ms": 8.142688,
+          "last_ms": 8.2153545
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "first_ms": 8.12875,
+          "last_ms": 8.175313
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "first_ms": 9.811521,
+          "last_ms": 8.3163125
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "first_ms": 8.6378955,
+          "last_ms": 8.478479
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "first_ms": 8.2087915,
+          "last_ms": 8.0641255
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "first_ms": 8.0691045,
+          "last_ms": 7.7337495
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "first_ms": 8.1626455,
+          "last_ms": 8.1341875
+        }
+      ]
+    },
+    {
+      "mode": "fixed",
+      "prefix": 3968,
+      "calibration_ratios": [
+        0.9910758801724312,
+        0.9990583339075312,
+        0.978203853681695,
+        1.002033509946403
+      ],
+      "ratios": [
+        0.8554813558109925,
+        0.905604025928152,
+        0.8829801339295784,
+        0.8998710583183076
+      ],
+      "noise_floor": 0.05,
+      "median_reduction": 0.10857440387605699,
+      "qualifies": true,
+      "control_block_ms": [
+        9.396708,
+        9.070604,
+        9.088209,
+        9.081625
+      ],
+      "candidate_block_ms": [
+        8.0387085,
+        8.2143755,
+        8.024708,
+        8.1722915
+      ],
+      "quarters": [
+        {
+          "arm": 0,
+          "block": 0,
+          "first_ms": 9.3362705,
+          "last_ms": 9.0133755
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "first_ms": 9.0643125,
+          "last_ms": 9.079417
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "first_ms": 9.0551045,
+          "last_ms": 9.0961455
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "first_ms": 9.061875,
+          "last_ms": 9.0737085
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "first_ms": 7.980563,
+          "last_ms": 7.743062
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "first_ms": 8.2663755,
+          "last_ms": 8.2079375
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "first_ms": 8.024708,
+          "last_ms": 8.05675
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "first_ms": 8.2520415,
+          "last_ms": 8.0208125
+        }
+      ]
+    },
+    {
+      "mode": "advance",
+      "prefix": 64,
+      "calibration_ratios": [
+        0.9961804364250477,
+        0.9931217528325955,
+        1.001309558859239,
+        0.9911656136850863
+      ],
+      "ratios": [
+        1.0114927082352725,
+        0.9967457986190978,
+        0.9824660495612556,
+        0.9880098066749148
+      ],
+      "noise_floor": 0.05,
+      "median_reduction": 0.007622197352993743,
+      "qualifies": false,
+      "control_block_ms": [
+        8.572479,
+        8.290667,
+        8.245917,
+        8.2341875
+      ],
+      "candidate_block_ms": [
+        8.671,
+        8.2636875,
+        8.1013335,
+        8.135458
+      ],
+      "quarters": [
+        {
+          "arm": 0,
+          "block": 0,
+          "first_ms": 8.7694995,
+          "last_ms": 8.425125
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "first_ms": 8.305792,
+          "last_ms": 8.2655
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "first_ms": 8.2179375,
+          "last_ms": 8.411979
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "first_ms": 8.1176665,
+          "last_ms": 8.4328955
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "first_ms": 9.169521,
+          "last_ms": 8.571646
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "first_ms": 8.401854,
+          "last_ms": 8.2755415
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "first_ms": 8.206,
+          "last_ms": 8.0447295
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "first_ms": 8.029438,
+          "last_ms": 8.216375
+        }
+      ]
+    },
+    {
+      "mode": "advance",
+      "prefix": 1024,
+      "calibration_ratios": [
+        0.9822101653541019,
+        1.0005250341062155,
+        1.0036646419034598,
+        1.0024225728955947
+      ],
+      "ratios": [
+        0.978148392355613,
+        0.971276812036496,
+        0.9258293102186563,
+        0.9869232895773056
+      ],
+      "noise_floor": 0.05,
+      "median_reduction": 0.02528739780394551,
+      "qualifies": false,
+      "control_block_ms": [
+        8.590146,
+        8.3048755,
+        8.3425205,
+        8.2238955
+      ],
+      "candidate_block_ms": [
+        8.4024375,
+        8.066333,
+        7.72375,
+        8.116354
+      ],
+      "quarters": [
+        {
+          "arm": 0,
+          "block": 0,
+          "first_ms": 8.414042,
+          "last_ms": 8.694
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "first_ms": 8.238625,
+          "last_ms": 8.1986455
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "first_ms": 8.251938,
+          "last_ms": 8.398458
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "first_ms": 8.149729,
+          "last_ms": 8.297229
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "first_ms": 8.4709585,
+          "last_ms": 8.307021
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "first_ms": 7.931,
+          "last_ms": 8.141271
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "first_ms": 7.7982915,
+          "last_ms": 7.712875
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "first_ms": 8.16875,
+          "last_ms": 7.9997085
+        }
+      ]
+    },
+    {
+      "mode": "advance",
+      "prefix": 3968,
+      "calibration_ratios": [
+        0.997354735596715,
+        1.0000505069532157,
+        0.9978392910517874,
+        0.9992096788725597
+      ],
+      "ratios": [
+        0.8636698736595718,
+        0.880113515815522,
+        0.8946650171737656,
+        0.9080386978941369
+      ],
+      "noise_floor": 0.05,
+      "median_reduction": 0.11261073350535622,
+      "qualifies": true,
+      "control_block_ms": [
+        9.161438,
+        9.077854,
+        9.0706665,
+        9.1025625
+      ],
+      "candidate_block_ms": [
+        7.912458,
+        7.989542,
+        8.115208,
+        8.265479
+      ],
+      "quarters": [
+        {
+          "arm": 0,
+          "block": 0,
+          "first_ms": 9.063396,
+          "last_ms": 9.0144375
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "first_ms": 9.077646,
+          "last_ms": 9.0845415
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "first_ms": 9.0395,
+          "last_ms": 9.086646
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "first_ms": 9.0936455,
+          "last_ms": 9.1106665
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "first_ms": 7.771959,
+          "last_ms": 7.893729
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "first_ms": 7.9848535,
+          "last_ms": 7.96125
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "first_ms": 8.182396,
+          "last_ms": 8.1582085
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "first_ms": 8.3614165,
+          "last_ms": 8.294021
+        }
+      ]
+    },
+    {
+      "mode": "observed-fixed",
+      "prefix": 64,
+      "calibration_ratios": [
+        1.0030863700150257,
+        1.0045506144032486,
+        1.0047376112079398,
+        1.0016838095238094
+      ],
+      "ratios": [
+        0.9970937863825643,
+        1.0000409508038808,
+        0.9879312072336266,
+        0.9690766012134254
+      ],
+      "noise_floor": 0.05,
+      "median_reduction": 0.00748750319190461,
+      "qualifies": false,
+      "control_block_ms": [
+        8.7099585,
+        8.1317085,
+        8.184,
+        8.36475
+      ],
+      "candidate_block_ms": [
+        8.6846455,
+        8.1320415,
+        8.085229,
+        8.1060835
+      ],
+      "quarters": [
+        {
+          "arm": 0,
+          "block": 0,
+          "first_ms": 9.077979,
+          "last_ms": 8.669354
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "first_ms": 8.1121875,
+          "last_ms": 8.1851665
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "first_ms": 8.12,
+          "last_ms": 8.184
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "first_ms": 8.396458,
+          "last_ms": 8.379209
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "first_ms": 8.8855,
+          "last_ms": 8.437875
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "first_ms": 8.170521,
+          "last_ms": 8.152438
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "first_ms": 8.0691665,
+          "last_ms": 7.8990625
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "first_ms": 8.0956045,
+          "last_ms": 8.3087915
+        }
+      ],
+      "host": [
+        {
+          "arm": 0,
+          "block": 0,
+          "forward_ms": 6.921375,
+          "readback_ms": 1.591125
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "forward_ms": 6.5434375,
+          "readback_ms": 1.446479
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "forward_ms": 6.59975,
+          "readback_ms": 1.410479
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "forward_ms": 6.777625,
+          "readback_ms": 1.425396
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "forward_ms": 6.974896,
+          "readback_ms": 1.575208
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "forward_ms": 6.751,
+          "readback_ms": 1.19725
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "forward_ms": 6.678229,
+          "readback_ms": 1.199271
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "forward_ms": 6.7484375,
+          "readback_ms": 1.190521
+        }
+      ]
+    },
+    {
+      "mode": "observed-fixed",
+      "prefix": 1024,
+      "calibration_ratios": [
+        0.9933082879377957,
+        1.0206368474605598,
+        1.0013045217157972,
+        0.9796390504451039
+      ],
+      "ratios": [
+        0.9433252928478857,
+        0.9738474811508309,
+        0.9703535391138615,
+        1.1061552249749906
+      ],
+      "noise_floor": 0.05,
+      "median_reduction": 0.027899489867653893,
+      "qualifies": false,
+      "control_block_ms": [
+        9.6824585,
+        8.3309375,
+        8.2802295,
+        8.2673745
+      ],
+      "candidate_block_ms": [
+        9.133708,
+        8.1130625,
+        8.03475,
+        9.1449995
+      ],
+      "quarters": [
+        {
+          "arm": 0,
+          "block": 0,
+          "first_ms": 9.5748125,
+          "last_ms": 8.6555205
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "first_ms": 8.3309375,
+          "last_ms": 8.2236875
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "first_ms": 8.23525,
+          "last_ms": 8.6808125
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "first_ms": 8.2690415,
+          "last_ms": 8.319312
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "first_ms": 9.56925,
+          "last_ms": 8.9216255
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "first_ms": 8.119562,
+          "last_ms": 8.050104
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "first_ms": 8.167271,
+          "last_ms": 8.0007505
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "first_ms": 8.685,
+          "last_ms": 8.496438
+        }
+      ],
+      "host": [
+        {
+          "arm": 0,
+          "block": 0,
+          "forward_ms": 7.454542,
+          "readback_ms": 1.3891875
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "forward_ms": 6.6885205,
+          "readback_ms": 1.464854
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "forward_ms": 6.585396,
+          "readback_ms": 1.4692915
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "forward_ms": 6.636708,
+          "readback_ms": 1.514167
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "forward_ms": 7.2233335,
+          "readback_ms": 1.591958
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "forward_ms": 6.7668955,
+          "readback_ms": 1.199791
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "forward_ms": 6.6590625,
+          "readback_ms": 1.19525
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "forward_ms": 7.367646,
+          "readback_ms": 1.1932295
+        }
+      ]
+    },
+    {
+      "mode": "observed-fixed",
+      "prefix": 3968,
+      "calibration_ratios": [
+        1.0039243065323737,
+        1.003056536486128,
+        0.9993853449551848,
+        1.0007479462543483
+      ],
+      "ratios": [
+        0.8880688132941303,
+        0.8873239553152757,
+        0.8958626830203903,
+        0.90119744114222
+      ],
+      "noise_floor": 0.05,
+      "median_reduction": 0.10803425184273974,
+      "qualifies": true,
+      "control_block_ms": [
+        9.061563,
+        9.0647085,
+        9.0315415,
+        9.0470835
+      ],
+      "candidate_block_ms": [
+        8.0472915,
+        8.043333,
+        8.091021,
+        8.1532085
+      ],
+      "quarters": [
+        {
+          "arm": 0,
+          "block": 0,
+          "first_ms": 9.1426875,
+          "last_ms": 9.0746045
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "first_ms": 9.059667,
+          "last_ms": 9.0699795
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "first_ms": 9.046313,
+          "last_ms": 9.0824375
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "first_ms": 9.055167,
+          "last_ms": 9.0733125
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "first_ms": 8.09325,
+          "last_ms": 8.0259165
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "first_ms": 8.2252085,
+          "last_ms": 8.172875
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "first_ms": 7.9627085,
+          "last_ms": 8.049396
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "first_ms": 8.1320625,
+          "last_ms": 8.226375
+        }
+      ],
+      "host": [
+        {
+          "arm": 0,
+          "block": 0,
+          "forward_ms": 6.6502715,
+          "readback_ms": 2.3285625
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "forward_ms": 6.6527915,
+          "readback_ms": 2.3313545
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "forward_ms": 6.6546665,
+          "readback_ms": 2.288542
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "forward_ms": 6.606625,
+          "readback_ms": 2.3786045
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "forward_ms": 6.693791,
+          "readback_ms": 1.216854
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "forward_ms": 6.654,
+          "readback_ms": 1.2242505
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "forward_ms": 6.698542,
+          "readback_ms": 1.2219165
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "forward_ms": 6.7607085,
+          "readback_ms": 1.2168335
+        }
+      ]
+    },
+    {
+      "mode": "observed-advance",
+      "prefix": 64,
+      "calibration_ratios": [
+        0.9922370736509654,
+        1.0156352795160966,
+        1.0431470168983357,
+        0.9572500788103806
+      ],
+      "ratios": [
+        1.0095186123790396,
+        0.9816944644610978,
+        0.9765203551170897,
+        0.9720346893253985
+      ],
+      "noise_floor": 0.05,
+      "median_reduction": 0.02089259021090628,
+      "qualifies": false,
+      "control_block_ms": [
+        8.5578125,
+        8.1897085,
+        8.2491665,
+        8.299729
+      ],
+      "candidate_block_ms": [
+        8.639271,
+        8.0397915,
+        8.055479,
+        8.0676245
+      ],
+      "quarters": [
+        {
+          "arm": 0,
+          "block": 0,
+          "first_ms": 8.9288955,
+          "last_ms": 8.3159375
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "first_ms": 8.200375,
+          "last_ms": 8.240063
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "first_ms": 8.1838335,
+          "last_ms": 8.490417
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "first_ms": 8.339292,
+          "last_ms": 8.244042
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "first_ms": 8.726958,
+          "last_ms": 8.512083
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "first_ms": 8.0397915,
+          "last_ms": 8.0269165
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "first_ms": 7.9634375,
+          "last_ms": 8.1838335
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "first_ms": 8.258375,
+          "last_ms": 8.0676245
+        }
+      ],
+      "host": [
+        {
+          "arm": 0,
+          "block": 0,
+          "forward_ms": 6.8453745,
+          "readback_ms": 1.4171245
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "forward_ms": 6.613188,
+          "readback_ms": 1.4388125
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "forward_ms": 6.672042,
+          "readback_ms": 1.419
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "forward_ms": 6.7255415,
+          "readback_ms": 1.4126045
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "forward_ms": 6.9561665,
+          "readback_ms": 1.5839165
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "forward_ms": 6.692062,
+          "readback_ms": 1.1979585
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "forward_ms": 6.6987915,
+          "readback_ms": 1.194542
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "forward_ms": 6.725625,
+          "readback_ms": 1.206771
+        }
+      ]
+    },
+    {
+      "mode": "observed-advance",
+      "prefix": 1024,
+      "calibration_ratios": [
+        1.032183920175963,
+        0.9930606078834854,
+        0.9971746816924141,
+        1.005149244881316
+      ],
+      "ratios": [
+        1.1068538659395337,
+        0.9665550845856145,
+        0.9822743473142189,
+        0.9762016217930326
+      ],
+      "noise_floor": 0.05,
+      "median_reduction": 0.020762015446374238,
+      "qualifies": false,
+      "control_block_ms": [
+        8.893375,
+        8.3476665,
+        8.322458,
+        8.277875
+      ],
+      "candidate_block_ms": [
+        9.8436665,
+        8.0684795,
+        8.174937,
+        8.080875
+      ],
+      "quarters": [
+        {
+          "arm": 0,
+          "block": 0,
+          "first_ms": 8.501521,
+          "last_ms": 9.669875
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "first_ms": 8.30975,
+          "last_ms": 8.3477915
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "first_ms": 8.3746875,
+          "last_ms": 8.42575
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "first_ms": 8.276646,
+          "last_ms": 8.3285625
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "first_ms": 9.4075835,
+          "last_ms": 10.212646
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "first_ms": 8.1476045,
+          "last_ms": 8.1999375
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "first_ms": 8.0806875,
+          "last_ms": 8.105604
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "first_ms": 8.1287915,
+          "last_ms": 8.04675
+        }
+      ],
+      "host": [
+        {
+          "arm": 0,
+          "block": 0,
+          "forward_ms": 6.7888545,
+          "readback_ms": 1.6453125
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "forward_ms": 6.6865205,
+          "readback_ms": 1.470292
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "forward_ms": 6.7173335,
+          "readback_ms": 1.486417
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "forward_ms": 6.7038755,
+          "readback_ms": 1.4405
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "forward_ms": 7.133229,
+          "readback_ms": 1.962125
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "forward_ms": 6.7055005,
+          "readback_ms": 1.2075005
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "forward_ms": 6.814583,
+          "readback_ms": 1.195104
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "forward_ms": 6.728875,
+          "readback_ms": 1.213396
+        }
+      ]
+    },
+    {
+      "mode": "observed-advance",
+      "prefix": 3968,
+      "calibration_ratios": [
+        0.9990436877404608,
+        1.0019076617574052,
+        0.9984085126085203,
+        1.0013564228708722
+      ],
+      "ratios": [
+        0.8865202337603337,
+        0.903248030337909,
+        0.8970929601825217,
+        0.8897480408062924
+      ],
+      "noise_floor": 0.05,
+      "median_reduction": 0.10657949950559287,
+      "qualifies": true,
+      "control_block_ms": [
+        9.0798125,
+        9.0508545,
+        9.051854,
+        9.022334
+      ],
+      "candidate_block_ms": [
+        8.0494375,
+        8.1751665,
+        8.1203545,
+        8.027604
+      ],
+      "quarters": [
+        {
+          "arm": 0,
+          "block": 0,
+          "first_ms": 9.10525,
+          "last_ms": 9.0647495
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "first_ms": 9.0683965,
+          "last_ms": 9.0655
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "first_ms": 9.042125,
+          "last_ms": 9.0515
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "first_ms": 9.0164165,
+          "last_ms": 9.0657295
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "first_ms": 8.1110205,
+          "last_ms": 7.956458
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "first_ms": 8.4081245,
+          "last_ms": 8.090854
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "first_ms": 8.2429795,
+          "last_ms": 8.2369585
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "first_ms": 7.9936455,
+          "last_ms": 8.012562
+        }
+      ],
+      "host": [
+        {
+          "arm": 0,
+          "block": 0,
+          "forward_ms": 6.6364375,
+          "readback_ms": 2.356771
+        },
+        {
+          "arm": 0,
+          "block": 1,
+          "forward_ms": 6.398125,
+          "readback_ms": 2.6391045
+        },
+        {
+          "arm": 0,
+          "block": 2,
+          "forward_ms": 6.706167,
+          "readback_ms": 2.206479
+        },
+        {
+          "arm": 0,
+          "block": 3,
+          "forward_ms": 6.485438,
+          "readback_ms": 2.484229
+        },
+        {
+          "arm": 1,
+          "block": 0,
+          "forward_ms": 6.654167,
+          "readback_ms": 1.217687
+        },
+        {
+          "arm": 1,
+          "block": 1,
+          "forward_ms": 6.772896,
+          "readback_ms": 1.223625
+        },
+        {
+          "arm": 1,
+          "block": 2,
+          "forward_ms": 6.7256455,
+          "readback_ms": 1.2028955
+        },
+        {
+          "arm": 1,
+          "block": 3,
+          "forward_ms": 6.682625,
+          "readback_ms": 1.217979
+        }
+      ]
+    }
+  ],
+  "traces": [
+    {
+      "prefix": 64,
+      "variant": 0,
+      "repeat": 0,
+      "timeline": [
+        {
+          "iteration": 0,
+          "active_ns": 9109168,
+          "span_ns": 10711583,
+          "uncovered_ns": 1602415,
+          "projections_ns": 8110002,
+          "attention_ns": 230003,
+          "submission_span_ns": 8404458,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 1,
+          "active_ns": 9009744,
+          "span_ns": 10627959,
+          "uncovered_ns": 1618215,
+          "projections_ns": 8031824,
+          "attention_ns": 224877,
+          "submission_span_ns": 8238916,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 2,
+          "active_ns": 9082622,
+          "span_ns": 14851916,
+          "uncovered_ns": 5769294,
+          "projections_ns": 8094373,
+          "attention_ns": 228833,
+          "submission_span_ns": 10751750,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 3,
+          "active_ns": 8861043,
+          "span_ns": 10036583,
+          "uncovered_ns": 1175540,
+          "projections_ns": 7880294,
+          "attention_ns": 224832,
+          "submission_span_ns": 7080083,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 4,
+          "active_ns": 9093494,
+          "span_ns": 10303917,
+          "uncovered_ns": 1210423,
+          "projections_ns": 8091664,
+          "attention_ns": 230834,
+          "submission_span_ns": 8158792,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 5,
+          "active_ns": 8905044,
+          "span_ns": 10521542,
+          "uncovered_ns": 1616498,
+          "projections_ns": 7937081,
+          "attention_ns": 222710,
+          "submission_span_ns": 8240166,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 6,
+          "active_ns": 8851832,
+          "span_ns": 10514041,
+          "uncovered_ns": 1662209,
+          "projections_ns": 7886125,
+          "attention_ns": 219708,
+          "submission_span_ns": 8779792,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 7,
+          "active_ns": 8466385,
+          "span_ns": 10645834,
+          "uncovered_ns": 2179449,
+          "projections_ns": 7526006,
+          "attention_ns": 217711,
+          "submission_span_ns": 8828791,
+          "fragmented_commands": 0
+        }
+      ],
+      "host": [
+        {
+          "elapsed_ns": 11524167,
+          "iteration": 0,
+          "marks": [
+            42,
+            14500,
+            347750,
+            380292,
+            8653875,
+            8756375,
+            8756375,
+            11323125,
+            11323375,
+            11524000
+          ]
+        },
+        {
+          "elapsed_ns": 11461750,
+          "iteration": 1,
+          "marks": [
+            41,
+            13000,
+            363416,
+            397500,
+            8505291,
+            8606000,
+            8608041,
+            11251458,
+            11251666,
+            11461750
+          ]
+        },
+        {
+          "elapsed_ns": 15602750,
+          "iteration": 2,
+          "marks": [
+            42,
+            12792,
+            357875,
+            390875,
+            10957000,
+            11129292,
+            11129584,
+            15440125,
+            15440292,
+            15602584
+          ]
+        },
+        {
+          "elapsed_ns": 10746500,
+          "iteration": 3,
+          "marks": [
+            292,
+            13917,
+            301208,
+            341000,
+            7298125,
+            7385750,
+            7386958,
+            10591417,
+            10591583,
+            10746458
+          ]
+        },
+        {
+          "elapsed_ns": 11073542,
+          "iteration": 4,
+          "marks": [
+            42,
+            12083,
+            319583,
+            351583,
+            8380708,
+            8481583,
+            8481667,
+            10880375,
+            10880583,
+            11073542
+          ]
+        },
+        {
+          "elapsed_ns": 11344041,
+          "iteration": 5,
+          "marks": [
+            41,
+            13083,
+            366166,
+            396500,
+            8481833,
+            8610500,
+            8610625,
+            11147375,
+            11147583,
+            11343958
+          ]
+        },
+        {
+          "elapsed_ns": 11273334,
+          "iteration": 6,
+          "marks": [
+            42,
+            13000,
+            351417,
+            383959,
+            8972542,
+            9136209,
+            9136292,
+            11096542,
+            11096750,
+            11273334
+          ]
+        },
+        {
+          "elapsed_ns": 11379709,
+          "iteration": 7,
+          "marks": [
+            125,
+            14167,
+            324750,
+            369584,
+            9056084,
+            9159709,
+            9159750,
+            11211334,
+            11211500,
+            11379667
+          ]
+        }
+      ]
+    },
+    {
+      "prefix": 64,
+      "variant": 1,
+      "repeat": 0,
+      "timeline": [
+        {
+          "iteration": 0,
+          "active_ns": 5669543,
+          "span_ns": 12142750,
+          "uncovered_ns": 6473207,
+          "projections_ns": 4873419,
+          "attention_ns": 177709,
+          "submission_span_ns": 11113125,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 1,
+          "active_ns": 5697122,
+          "span_ns": 10030333,
+          "uncovered_ns": 4333211,
+          "projections_ns": 4888128,
+          "attention_ns": 177084,
+          "submission_span_ns": 8364834,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 2,
+          "active_ns": 5674781,
+          "span_ns": 11939250,
+          "uncovered_ns": 6264469,
+          "projections_ns": 4877702,
+          "attention_ns": 175246,
+          "submission_span_ns": 10895125,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 3,
+          "active_ns": 5940631,
+          "span_ns": 12449333,
+          "uncovered_ns": 6508702,
+          "projections_ns": 5135333,
+          "attention_ns": 177458,
+          "submission_span_ns": 11286084,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 4,
+          "active_ns": 5883873,
+          "span_ns": 13286958,
+          "uncovered_ns": 7403085,
+          "projections_ns": 5055834,
+          "attention_ns": 184249,
+          "submission_span_ns": 12162291,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 5,
+          "active_ns": 5739285,
+          "span_ns": 12439125,
+          "uncovered_ns": 6699840,
+          "projections_ns": 4928081,
+          "attention_ns": 180789,
+          "submission_span_ns": 9291666,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 6,
+          "active_ns": 5762206,
+          "span_ns": 10663125,
+          "uncovered_ns": 4900919,
+          "projections_ns": 4946041,
+          "attention_ns": 183083,
+          "submission_span_ns": 7924708,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 7,
+          "active_ns": 5739756,
+          "span_ns": 11800167,
+          "uncovered_ns": 6060411,
+          "projections_ns": 4933671,
+          "attention_ns": 178919,
+          "submission_span_ns": 10818250,
+          "fragmented_commands": 0
+        }
+      ],
+      "host": [
+        {
+          "elapsed_ns": 12975042,
+          "iteration": 0,
+          "marks": [
+            42,
+            14709,
+            413375,
+            450709,
+            11423709,
+            11530042,
+            11530084,
+            12791084,
+            12791334,
+            12974667
+          ]
+        },
+        {
+          "elapsed_ns": 10776209,
+          "iteration": 1,
+          "marks": [
+            84,
+            13042,
+            349584,
+            393334,
+            8627750,
+            8720209,
+            8720209,
+            10611667,
+            10611875,
+            10776125
+          ]
+        },
+        {
+          "elapsed_ns": 12657833,
+          "iteration": 2,
+          "marks": [
+            0,
+            12125,
+            320958,
+            351750,
+            11091291,
+            11219541,
+            11219541,
+            12478750,
+            12478958,
+            12657791
+          ]
+        },
+        {
+          "elapsed_ns": 13177291,
+          "iteration": 3,
+          "marks": [
+            41,
+            13625,
+            329291,
+            366125,
+            11449166,
+            11622333,
+            11622375,
+            12993500,
+            12993666,
+            13177208
+          ]
+        },
+        {
+          "elapsed_ns": 14104708,
+          "iteration": 4,
+          "marks": [
+            125,
+            16541,
+            369416,
+            434416,
+            12369541,
+            12538625,
+            12538625,
+            13933166,
+            13933375,
+            14104708
+          ]
+        },
+        {
+          "elapsed_ns": 13124208,
+          "iteration": 5,
+          "marks": [
+            125,
+            14208,
+            296875,
+            339583,
+            9449250,
+            9594875,
+            9594875,
+            12963750,
+            12963916,
+            13124208
+          ]
+        },
+        {
+          "elapsed_ns": 11365458,
+          "iteration": 6,
+          "marks": [
+            125,
+            12791,
+            301291,
+            344791,
+            8117500,
+            8235041,
+            8235041,
+            11190000,
+            11190250,
+            11365416
+          ]
+        },
+        {
+          "elapsed_ns": 12536959,
+          "iteration": 7,
+          "marks": [
+            42,
+            14709,
+            332584,
+            365834,
+            11040625,
+            11163084,
+            11163125,
+            12369459,
+            12369667,
+            12536875
+          ]
+        }
+      ]
+    },
+    {
+      "prefix": 1024,
+      "variant": 0,
+      "repeat": 0,
+      "timeline": [
+        {
+          "iteration": 0,
+          "active_ns": 7430048,
+          "span_ns": 10126333,
+          "uncovered_ns": 2696285,
+          "projections_ns": 6306875,
+          "attention_ns": 492130,
+          "submission_span_ns": 8598583,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 1,
+          "active_ns": 7446203,
+          "span_ns": 9888250,
+          "uncovered_ns": 2442047,
+          "projections_ns": 6322618,
+          "attention_ns": 496002,
+          "submission_span_ns": 8000500,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 2,
+          "active_ns": 7432702,
+          "span_ns": 9785834,
+          "uncovered_ns": 2353132,
+          "projections_ns": 6310203,
+          "attention_ns": 493793,
+          "submission_span_ns": 8010708,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 3,
+          "active_ns": 7416751,
+          "span_ns": 10757667,
+          "uncovered_ns": 3340916,
+          "projections_ns": 6299961,
+          "attention_ns": 490916,
+          "submission_span_ns": 9615083,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 4,
+          "active_ns": 7441296,
+          "span_ns": 10676375,
+          "uncovered_ns": 3235079,
+          "projections_ns": 6320960,
+          "attention_ns": 491668,
+          "submission_span_ns": 9540375,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 5,
+          "active_ns": 7688579,
+          "span_ns": 10502875,
+          "uncovered_ns": 2814296,
+          "projections_ns": 6551790,
+          "attention_ns": 501959,
+          "submission_span_ns": 8551375,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 6,
+          "active_ns": 7635663,
+          "span_ns": 14350583,
+          "uncovered_ns": 6714920,
+          "projections_ns": 6504085,
+          "attention_ns": 504208,
+          "submission_span_ns": 10038708,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 7,
+          "active_ns": 7593830,
+          "span_ns": 13977208,
+          "uncovered_ns": 6383378,
+          "projections_ns": 6457918,
+          "attention_ns": 503289,
+          "submission_span_ns": 10352375,
+          "fragmented_commands": 0
+        }
+      ],
+      "host": [
+        {
+          "elapsed_ns": 10907542,
+          "iteration": 0,
+          "marks": [
+            83,
+            15458,
+            346083,
+            387375,
+            8838833,
+            8949250,
+            8949375,
+            10717042,
+            10717250,
+            10907458
+          ]
+        },
+        {
+          "elapsed_ns": 10761667,
+          "iteration": 1,
+          "marks": [
+            42,
+            15292,
+            347875,
+            380584,
+            8258500,
+            8352292,
+            8352334,
+            10588709,
+            10588917,
+            10761500
+          ]
+        },
+        {
+          "elapsed_ns": 10524583,
+          "iteration": 2,
+          "marks": [
+            41,
+            13625,
+            329083,
+            360541,
+            8244541,
+            8344000,
+            8344083,
+            10347500,
+            10347833,
+            10524541
+          ]
+        },
+        {
+          "elapsed_ns": 11497041,
+          "iteration": 3,
+          "marks": [
+            0,
+            13333,
+            331750,
+            363375,
+            9800291,
+            9955000,
+            9955000,
+            11318083,
+            11318333,
+            11497041
+          ]
+        },
+        {
+          "elapsed_ns": 11446375,
+          "iteration": 4,
+          "marks": [
+            0,
+            13625,
+            335125,
+            375458,
+            9724583,
+            9884458,
+            9884458,
+            11254542,
+            11254833,
+            11446375
+          ]
+        },
+        {
+          "elapsed_ns": 11255209,
+          "iteration": 5,
+          "marks": [
+            42,
+            13084,
+            336292,
+            375209,
+            8763459,
+            8893042,
+            8893042,
+            11070167,
+            11070334,
+            11254834
+          ]
+        },
+        {
+          "elapsed_ns": 15052583,
+          "iteration": 6,
+          "marks": [
+            250,
+            13875,
+            326833,
+            371750,
+            10274458,
+            10372500,
+            10372750,
+            14897625,
+            14897792,
+            15052417
+          ]
+        },
+        {
+          "elapsed_ns": 14648500,
+          "iteration": 7,
+          "marks": [
+            208,
+            14791,
+            285750,
+            325458,
+            10511333,
+            10645500,
+            10645708,
+            14486125,
+            14486416,
+            14648375
+          ]
+        }
+      ]
+    },
+    {
+      "prefix": 1024,
+      "variant": 1,
+      "repeat": 0,
+      "timeline": [
+        {
+          "iteration": 0,
+          "active_ns": 6017417,
+          "span_ns": 10004750,
+          "uncovered_ns": 3987333,
+          "projections_ns": 4896588,
+          "attention_ns": 488790,
+          "submission_span_ns": 8477709,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 1,
+          "active_ns": 6044868,
+          "span_ns": 10513375,
+          "uncovered_ns": 4468507,
+          "projections_ns": 4926123,
+          "attention_ns": 490624,
+          "submission_span_ns": 9508333,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 2,
+          "active_ns": 6322499,
+          "span_ns": 13542541,
+          "uncovered_ns": 7220042,
+          "projections_ns": 5173832,
+          "attention_ns": 506336,
+          "submission_span_ns": 9925333,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 3,
+          "active_ns": 6033998,
+          "span_ns": 11355667,
+          "uncovered_ns": 5321669,
+          "projections_ns": 4920711,
+          "attention_ns": 487544,
+          "submission_span_ns": 10344292,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 4,
+          "active_ns": 6026764,
+          "span_ns": 11877458,
+          "uncovered_ns": 5850694,
+          "projections_ns": 4911209,
+          "attention_ns": 488254,
+          "submission_span_ns": 10855792,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 5,
+          "active_ns": 6121918,
+          "span_ns": 11580625,
+          "uncovered_ns": 5458707,
+          "projections_ns": 5005461,
+          "attention_ns": 490374,
+          "submission_span_ns": 10523083,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 6,
+          "active_ns": 6096454,
+          "span_ns": 11942250,
+          "uncovered_ns": 5845796,
+          "projections_ns": 4962785,
+          "attention_ns": 495879,
+          "submission_span_ns": 10370958,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 7,
+          "active_ns": 6088753,
+          "span_ns": 11640667,
+          "uncovered_ns": 5551914,
+          "projections_ns": 4971211,
+          "attention_ns": 489209,
+          "submission_span_ns": 10630917,
+          "fragmented_commands": 0
+        }
+      ],
+      "host": [
+        {
+          "elapsed_ns": 10744750,
+          "iteration": 0,
+          "marks": [
+            42,
+            14750,
+            323334,
+            357084,
+            8690834,
+            8807667,
+            8807792,
+            10566459,
+            10566709,
+            10744459
+          ]
+        },
+        {
+          "elapsed_ns": 11260500,
+          "iteration": 1,
+          "marks": [
+            42,
+            14084,
+            336959,
+            371125,
+            9705209,
+            9850375,
+            9850500,
+            11080375,
+            11080709,
+            11260500
+          ]
+        },
+        {
+          "elapsed_ns": 14275334,
+          "iteration": 2,
+          "marks": [
+            84,
+            14250,
+            326042,
+            366542,
+            10101417,
+            10257125,
+            10257250,
+            14095834,
+            14096125,
+            14275292
+          ]
+        },
+        {
+          "elapsed_ns": 12040792,
+          "iteration": 3,
+          "marks": [
+            167,
+            15375,
+            299167,
+            342375,
+            10538667,
+            10651417,
+            10651500,
+            11884125,
+            11884292,
+            12040584
+          ]
+        },
+        {
+          "elapsed_ns": 12572000,
+          "iteration": 4,
+          "marks": [
+            83,
+            12791,
+            295041,
+            329708,
+            10965708,
+            11158416,
+            11158416,
+            12401583,
+            12402000,
+            12572000
+          ]
+        },
+        {
+          "elapsed_ns": 12333167,
+          "iteration": 5,
+          "marks": [
+            84,
+            14417,
+            331375,
+            375917,
+            10710750,
+            10861167,
+            10861209,
+            12155542,
+            12156000,
+            12333167
+          ]
+        },
+        {
+          "elapsed_ns": 12696833,
+          "iteration": 6,
+          "marks": [
+            83,
+            14416,
+            333666,
+            376166,
+            10569833,
+            10710208,
+            10710375,
+            12516458,
+            12516625,
+            12696625
+          ]
+        },
+        {
+          "elapsed_ns": 12465792,
+          "iteration": 7,
+          "marks": [
+            125,
+            30792,
+            389750,
+            453750,
+            10927042,
+            11030917,
+            11031083,
+            12294542,
+            12294750,
+            12465667
+          ]
+        }
+      ]
+    },
+    {
+      "prefix": 3968,
+      "variant": 0,
+      "repeat": 0,
+      "timeline": [
+        {
+          "iteration": 0,
+          "active_ns": 8354760,
+          "span_ns": 10013167,
+          "uncovered_ns": 1658407,
+          "projections_ns": 6264502,
+          "attention_ns": 1455918,
+          "submission_span_ns": 8845333,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 1,
+          "active_ns": 8365571,
+          "span_ns": 9882166,
+          "uncovered_ns": 1516595,
+          "projections_ns": 6270704,
+          "attention_ns": 1461289,
+          "submission_span_ns": 8486208,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 2,
+          "active_ns": 8390997,
+          "span_ns": 10145125,
+          "uncovered_ns": 1754128,
+          "projections_ns": 6296541,
+          "attention_ns": 1455876,
+          "submission_span_ns": 8462708,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 3,
+          "active_ns": 8388212,
+          "span_ns": 10027250,
+          "uncovered_ns": 1639038,
+          "projections_ns": 6287957,
+          "attention_ns": 1468169,
+          "submission_span_ns": 8621667,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 4,
+          "active_ns": 8872664,
+          "span_ns": 13226334,
+          "uncovered_ns": 4353670,
+          "projections_ns": 6731458,
+          "attention_ns": 1496582,
+          "submission_span_ns": 10544292,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 5,
+          "active_ns": 8455245,
+          "span_ns": 11683083,
+          "uncovered_ns": 3227838,
+          "projections_ns": 6351164,
+          "attention_ns": 1464460,
+          "submission_span_ns": 10203500,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 6,
+          "active_ns": 8411495,
+          "span_ns": 11899375,
+          "uncovered_ns": 3487880,
+          "projections_ns": 6319831,
+          "attention_ns": 1457834,
+          "submission_span_ns": 10265542,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 7,
+          "active_ns": 8415373,
+          "span_ns": 11170125,
+          "uncovered_ns": 2754752,
+          "projections_ns": 6328000,
+          "attention_ns": 1456042,
+          "submission_span_ns": 9988917,
+          "fragmented_commands": 0
+        }
+      ],
+      "host": [
+        {
+          "elapsed_ns": 10868417,
+          "iteration": 0,
+          "marks": [
+            250,
+            15125,
+            352292,
+            388167,
+            9063625,
+            9203500,
+            9203500,
+            10649792,
+            10650209,
+            10868417
+          ]
+        },
+        {
+          "elapsed_ns": 10740333,
+          "iteration": 1,
+          "marks": [
+            166,
+            13250,
+            376541,
+            412291,
+            8751291,
+            8867208,
+            8867375,
+            10552791,
+            10553041,
+            10740041
+          ]
+        },
+        {
+          "elapsed_ns": 10924917,
+          "iteration": 2,
+          "marks": [
+            84,
+            12875,
+            350709,
+            384167,
+            8714459,
+            8818667,
+            8818917,
+            10748709,
+            10748917,
+            10924792
+          ]
+        },
+        {
+          "elapsed_ns": 10822959,
+          "iteration": 3,
+          "marks": [
+            125,
+            14792,
+            321334,
+            362750,
+            8845917,
+            8949542,
+            8949542,
+            10623459,
+            10623667,
+            10822875
+          ]
+        },
+        {
+          "elapsed_ns": 14053709,
+          "iteration": 4,
+          "marks": [
+            459,
+            13125,
+            362750,
+            394834,
+            10758125,
+            10913459,
+            10913584,
+            13850250,
+            13850542,
+            14053667
+          ]
+        },
+        {
+          "elapsed_ns": 12460583,
+          "iteration": 5,
+          "marks": [
+            125,
+            15750,
+            363666,
+            422833,
+            10481250,
+            10574250,
+            10574416,
+            12298833,
+            12299041,
+            12460541
+          ]
+        },
+        {
+          "elapsed_ns": 12577209,
+          "iteration": 6,
+          "marks": [
+            42,
+            13792,
+            284542,
+            318250,
+            10446750,
+            10554625,
+            10554792,
+            12403459,
+            12403709,
+            12577209
+          ]
+        },
+        {
+          "elapsed_ns": 11902833,
+          "iteration": 7,
+          "marks": [
+            166,
+            14166,
+            328791,
+            365708,
+            10175291,
+            10323458,
+            10323458,
+            11727375,
+            11728000,
+            11902833
+          ]
+        }
+      ]
+    },
+    {
+      "prefix": 3968,
+      "variant": 1,
+      "repeat": 0,
+      "timeline": [
+        {
+          "iteration": 0,
+          "active_ns": 6984836,
+          "span_ns": 9777500,
+          "uncovered_ns": 2792664,
+          "projections_ns": 4893037,
+          "attention_ns": 1457044,
+          "submission_span_ns": 8442583,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 1,
+          "active_ns": 7185296,
+          "span_ns": 12296583,
+          "uncovered_ns": 5111287,
+          "projections_ns": 5059797,
+          "attention_ns": 1483586,
+          "submission_span_ns": 11323750,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 2,
+          "active_ns": 6988038,
+          "span_ns": 9428042,
+          "uncovered_ns": 2440004,
+          "projections_ns": 4896334,
+          "attention_ns": 1454500,
+          "submission_span_ns": 7601541,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 3,
+          "active_ns": 6986752,
+          "span_ns": 10688750,
+          "uncovered_ns": 3701998,
+          "projections_ns": 4900251,
+          "attention_ns": 1453707,
+          "submission_span_ns": 9690500,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 4,
+          "active_ns": 6992787,
+          "span_ns": 10024708,
+          "uncovered_ns": 3031921,
+          "projections_ns": 4897246,
+          "attention_ns": 1456997,
+          "submission_span_ns": 8470917,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 5,
+          "active_ns": 7010001,
+          "span_ns": 10033875,
+          "uncovered_ns": 3023874,
+          "projections_ns": 4920621,
+          "attention_ns": 1450541,
+          "submission_span_ns": 8949041,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 6,
+          "active_ns": 6997955,
+          "span_ns": 10012625,
+          "uncovered_ns": 3014670,
+          "projections_ns": 4901541,
+          "attention_ns": 1453707,
+          "submission_span_ns": 8535167,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 7,
+          "active_ns": 6989632,
+          "span_ns": 11240750,
+          "uncovered_ns": 4251118,
+          "projections_ns": 4903671,
+          "attention_ns": 1455293,
+          "submission_span_ns": 10277875,
+          "fragmented_commands": 0
+        }
+      ],
+      "host": [
+        {
+          "elapsed_ns": 10574500,
+          "iteration": 0,
+          "marks": [
+            0,
+            14459,
+            349792,
+            382459,
+            8696084,
+            8799459,
+            8799459,
+            10375834,
+            10376042,
+            10574375
+          ]
+        },
+        {
+          "elapsed_ns": 13222125,
+          "iteration": 1,
+          "marks": [
+            42,
+            12709,
+            495584,
+            524875,
+            11666750,
+            11829084,
+            11829209,
+            13056584,
+            13056792,
+            13222000
+          ]
+        },
+        {
+          "elapsed_ns": 10158250,
+          "iteration": 2,
+          "marks": [
+            208,
+            14916,
+            291875,
+            337250,
+            7784666,
+            7898875,
+            7898875,
+            9957750,
+            9957958,
+            10158208
+          ]
+        },
+        {
+          "elapsed_ns": 11468125,
+          "iteration": 3,
+          "marks": [
+            125,
+            13334,
+            366250,
+            398000,
+            9923625,
+            10063000,
+            10063042,
+            11281542,
+            11281834,
+            11468125
+          ]
+        },
+        {
+          "elapsed_ns": 10836250,
+          "iteration": 4,
+          "marks": [
+            0,
+            13708,
+            367916,
+            415083,
+            8752166,
+            8844833,
+            8844833,
+            10638666,
+            10638916,
+            10836125
+          ]
+        },
+        {
+          "elapsed_ns": 10828208,
+          "iteration": 5,
+          "marks": [
+            0,
+            13333,
+            354958,
+            385916,
+            9193000,
+            9308166,
+            9308166,
+            10629333,
+            10629541,
+            10828083
+          ]
+        },
+        {
+          "elapsed_ns": 10802250,
+          "iteration": 6,
+          "marks": [
+            0,
+            12833,
+            356250,
+            389000,
+            8770041,
+            8896166,
+            8896208,
+            10632541,
+            10632791,
+            10802208
+          ]
+        },
+        {
+          "elapsed_ns": 11956291,
+          "iteration": 7,
+          "marks": [
+            0,
+            12875,
+            322416,
+            358708,
+            10440000,
+            10604125,
+            10604125,
+            11788500,
+            11788708,
+            11956125
+          ]
+        }
+      ]
+    },
+    {
+      "prefix": 64,
+      "variant": 0,
+      "repeat": 1,
+      "timeline": [
+        {
+          "iteration": 0,
+          "active_ns": 7095502,
+          "span_ns": 10447292,
+          "uncovered_ns": 3351790,
+          "projections_ns": 6288462,
+          "attention_ns": 182044,
+          "submission_span_ns": 8529833,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 1,
+          "active_ns": 7281501,
+          "span_ns": 14413000,
+          "uncovered_ns": 7131499,
+          "projections_ns": 6455998,
+          "attention_ns": 184290,
+          "submission_span_ns": 10524333,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 2,
+          "active_ns": 7004928,
+          "span_ns": 10027083,
+          "uncovered_ns": 3022155,
+          "projections_ns": 6198174,
+          "attention_ns": 180585,
+          "submission_span_ns": 8168625,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 3,
+          "active_ns": 7001341,
+          "span_ns": 10167459,
+          "uncovered_ns": 3166118,
+          "projections_ns": 6200133,
+          "attention_ns": 182036,
+          "submission_span_ns": 8772750,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 4,
+          "active_ns": 7031584,
+          "span_ns": 10340167,
+          "uncovered_ns": 3308583,
+          "projections_ns": 6223543,
+          "attention_ns": 180958,
+          "submission_span_ns": 8610708,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 5,
+          "active_ns": 6984663,
+          "span_ns": 12785708,
+          "uncovered_ns": 5801045,
+          "projections_ns": 6186169,
+          "attention_ns": 176166,
+          "submission_span_ns": 11108750,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 6,
+          "active_ns": 7048629,
+          "span_ns": 10247417,
+          "uncovered_ns": 3198788,
+          "projections_ns": 6237793,
+          "attention_ns": 182792,
+          "submission_span_ns": 8725458,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 7,
+          "active_ns": 7009040,
+          "span_ns": 12477625,
+          "uncovered_ns": 5468585,
+          "projections_ns": 6209883,
+          "attention_ns": 178498,
+          "submission_span_ns": 11323583,
+          "fragmented_commands": 0
+        }
+      ],
+      "host": [
+        {
+          "elapsed_ns": 11193500,
+          "iteration": 0,
+          "marks": [
+            42,
+            14333,
+            334208,
+            369292,
+            8758500,
+            8867875,
+            8868083,
+            11019042,
+            11019208,
+            11193500
+          ]
+        },
+        {
+          "elapsed_ns": 15155250,
+          "iteration": 1,
+          "marks": [
+            125,
+            19666,
+            333583,
+            380291,
+            10708291,
+            10869125,
+            10869291,
+            14987833,
+            14988041,
+            15155041
+          ]
+        },
+        {
+          "elapsed_ns": 10743792,
+          "iteration": 2,
+          "marks": [
+            125,
+            14125,
+            305667,
+            345875,
+            8368209,
+            8479250,
+            8479459,
+            10561750,
+            10562000,
+            10743709
+          ]
+        },
+        {
+          "elapsed_ns": 10935709,
+          "iteration": 3,
+          "marks": [
+            125,
+            13167,
+            356375,
+            389584,
+            9030000,
+            9133042,
+            9133209,
+            10741584,
+            10741792,
+            10935625
+          ]
+        },
+        {
+          "elapsed_ns": 11122959,
+          "iteration": 4,
+          "marks": [
+            42,
+            14750,
+            335000,
+            375792,
+            8829667,
+            8950959,
+            8951167,
+            10919417,
+            10919667,
+            11122959
+          ]
+        },
+        {
+          "elapsed_ns": 13572334,
+          "iteration": 5,
+          "marks": [
+            0,
+            14584,
+            363959,
+            401917,
+            11367250,
+            11477334,
+            11477500,
+            13380667,
+            13380875,
+            13572084
+          ]
+        },
+        {
+          "elapsed_ns": 10982833,
+          "iteration": 6,
+          "marks": [
+            83,
+            13166,
+            331541,
+            365625,
+            8911416,
+            9062000,
+            9062000,
+            10807791,
+            10808083,
+            10982833
+          ]
+        },
+        {
+          "elapsed_ns": 13206916,
+          "iteration": 7,
+          "marks": [
+            0,
+            15750,
+            321291,
+            359416,
+            11549416,
+            11648833,
+            11649041,
+            13022791,
+            13023000,
+            13206791
+          ]
+        }
+      ]
+    },
+    {
+      "prefix": 64,
+      "variant": 1,
+      "repeat": 1,
+      "timeline": [
+        {
+          "iteration": 0,
+          "active_ns": 5683204,
+          "span_ns": 12232459,
+          "uncovered_ns": 6549255,
+          "projections_ns": 4890078,
+          "attention_ns": 176001,
+          "submission_span_ns": 11148792,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 1,
+          "active_ns": 5716459,
+          "span_ns": 12611000,
+          "uncovered_ns": 6894541,
+          "projections_ns": 4914788,
+          "attention_ns": 176127,
+          "submission_span_ns": 11499084,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 2,
+          "active_ns": 5713547,
+          "span_ns": 10185167,
+          "uncovered_ns": 4471620,
+          "projections_ns": 4905377,
+          "attention_ns": 177539,
+          "submission_span_ns": 8982959,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 3,
+          "active_ns": 5703876,
+          "span_ns": 10097125,
+          "uncovered_ns": 4393249,
+          "projections_ns": 4902752,
+          "attention_ns": 177833,
+          "submission_span_ns": 8875208,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 4,
+          "active_ns": 5703793,
+          "span_ns": 10109833,
+          "uncovered_ns": 4406040,
+          "projections_ns": 4899752,
+          "attention_ns": 178207,
+          "submission_span_ns": 8956416,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 5,
+          "active_ns": 5916419,
+          "span_ns": 11913917,
+          "uncovered_ns": 5997498,
+          "projections_ns": 5101630,
+          "attention_ns": 183333,
+          "submission_span_ns": 10945375,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 6,
+          "active_ns": 5685299,
+          "span_ns": 11721750,
+          "uncovered_ns": 6036451,
+          "projections_ns": 4889043,
+          "attention_ns": 176373,
+          "submission_span_ns": 10684042,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 7,
+          "active_ns": 5726747,
+          "span_ns": 11764292,
+          "uncovered_ns": 6037545,
+          "projections_ns": 4920998,
+          "attention_ns": 179501,
+          "submission_span_ns": 9058625,
+          "fragmented_commands": 0
+        }
+      ],
+      "host": [
+        {
+          "elapsed_ns": 12980167,
+          "iteration": 0,
+          "marks": [
+            125,
+            14667,
+            344875,
+            375834,
+            11390667,
+            11498459,
+            11498459,
+            12800125,
+            12800334,
+            12980084
+          ]
+        },
+        {
+          "elapsed_ns": 13363458,
+          "iteration": 1,
+          "marks": [
+            42,
+            14833,
+            319500,
+            361667,
+            11722042,
+            11823500,
+            11823500,
+            13164958,
+            13165167,
+            13363333
+          ]
+        },
+        {
+          "elapsed_ns": 10970833,
+          "iteration": 2,
+          "marks": [
+            41,
+            13291,
+            359333,
+            393958,
+            9244458,
+            9348916,
+            9348916,
+            10775791,
+            10775875,
+            10970791
+          ]
+        },
+        {
+          "elapsed_ns": 10855625,
+          "iteration": 3,
+          "marks": [
+            42,
+            12500,
+            333292,
+            365708,
+            9101750,
+            9213167,
+            9213250,
+            10656958,
+            10657208,
+            10855625
+          ]
+        },
+        {
+          "elapsed_ns": 10900334,
+          "iteration": 4,
+          "marks": [
+            42,
+            13375,
+            362542,
+            395375,
+            9213334,
+            9323750,
+            9323792,
+            10715375,
+            10715584,
+            10900292
+          ]
+        },
+        {
+          "elapsed_ns": 12687542,
+          "iteration": 5,
+          "marks": [
+            42,
+            12542,
+            355208,
+            386667,
+            11155000,
+            11314833,
+            11314833,
+            12526000,
+            12526208,
+            12687542
+          ]
+        },
+        {
+          "elapsed_ns": 12404084,
+          "iteration": 6,
+          "marks": [
+            209,
+            14792,
+            287209,
+            330417,
+            10863709,
+            10977542,
+            10977542,
+            12237084,
+            12237334,
+            12403959
+          ]
+        },
+        {
+          "elapsed_ns": 12470416,
+          "iteration": 7,
+          "marks": [
+            41,
+            13416,
+            321791,
+            355708,
+            9277208,
+            9384250,
+            9384375,
+            12303375,
+            12303583,
+            12470416
+          ]
+        }
+      ]
+    },
+    {
+      "prefix": 1024,
+      "variant": 0,
+      "repeat": 1,
+      "timeline": [
+        {
+          "iteration": 0,
+          "active_ns": 7345725,
+          "span_ns": 9869208,
+          "uncovered_ns": 2523483,
+          "projections_ns": 6234845,
+          "attention_ns": 491504,
+          "submission_span_ns": 7232958,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 1,
+          "active_ns": 7340955,
+          "span_ns": 12787500,
+          "uncovered_ns": 5446545,
+          "projections_ns": 6236623,
+          "attention_ns": 488333,
+          "submission_span_ns": 11262125,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 2,
+          "active_ns": 7341625,
+          "span_ns": 11807833,
+          "uncovered_ns": 4466208,
+          "projections_ns": 6236211,
+          "attention_ns": 488083,
+          "submission_span_ns": 10602125,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 3,
+          "active_ns": 7413665,
+          "span_ns": 12174042,
+          "uncovered_ns": 4760377,
+          "projections_ns": 6298459,
+          "attention_ns": 491165,
+          "submission_span_ns": 10990458,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 4,
+          "active_ns": 7364967,
+          "span_ns": 12514750,
+          "uncovered_ns": 5149783,
+          "projections_ns": 6257544,
+          "attention_ns": 486166,
+          "submission_span_ns": 10523708,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 5,
+          "active_ns": 7337620,
+          "span_ns": 11413459,
+          "uncovered_ns": 4075839,
+          "projections_ns": 6237117,
+          "attention_ns": 487207,
+          "submission_span_ns": 10259333,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 6,
+          "active_ns": 7629342,
+          "span_ns": 12541292,
+          "uncovered_ns": 4911950,
+          "projections_ns": 6509541,
+          "attention_ns": 494792,
+          "submission_span_ns": 11126833,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 7,
+          "active_ns": 7599922,
+          "span_ns": 13124375,
+          "uncovered_ns": 5524453,
+          "projections_ns": 6464172,
+          "attention_ns": 506707,
+          "submission_span_ns": 12018708,
+          "fragmented_commands": 0
+        }
+      ],
+      "host": [
+        {
+          "elapsed_ns": 10669000,
+          "iteration": 0,
+          "marks": [
+            42,
+            13917,
+            297250,
+            332417,
+            7446958,
+            7535208,
+            7535417,
+            10392125,
+            10392333,
+            10668833
+          ]
+        },
+        {
+          "elapsed_ns": 13524541,
+          "iteration": 1,
+          "marks": [
+            41,
+            12416,
+            319666,
+            359041,
+            11488333,
+            11587875,
+            11588083,
+            13346708,
+            13346875,
+            13524333
+          ]
+        },
+        {
+          "elapsed_ns": 12550167,
+          "iteration": 2,
+          "marks": [
+            167,
+            15709,
+            327292,
+            362375,
+            10845000,
+            10936459,
+            10936625,
+            12376917,
+            12377167,
+            12550125
+          ]
+        },
+        {
+          "elapsed_ns": 12884250,
+          "iteration": 3,
+          "marks": [
+            83,
+            12958,
+            322583,
+            354666,
+            11200833,
+            11317208,
+            11317375,
+            12713791,
+            12714000,
+            12884166
+          ]
+        },
+        {
+          "elapsed_ns": 13238292,
+          "iteration": 4,
+          "marks": [
+            292,
+            14792,
+            313792,
+            356500,
+            10737583,
+            10845625,
+            10845625,
+            13064542,
+            13064792,
+            13238125
+          ]
+        },
+        {
+          "elapsed_ns": 12139875,
+          "iteration": 5,
+          "marks": [
+            42,
+            14708,
+            322708,
+            355458,
+            10460042,
+            10586333,
+            10586375,
+            11970250,
+            11970458,
+            12139875
+          ]
+        },
+        {
+          "elapsed_ns": 13294500,
+          "iteration": 6,
+          "marks": [
+            209,
+            14375,
+            317000,
+            349917,
+            11341917,
+            11448667,
+            11448792,
+            13103209,
+            13103292,
+            13294167
+          ]
+        },
+        {
+          "elapsed_ns": 13894917,
+          "iteration": 7,
+          "marks": [
+            125,
+            16875,
+            339917,
+            395708,
+            12209583,
+            12369958,
+            12370125,
+            13722083,
+            13722417,
+            13894875
+          ]
+        }
+      ]
+    },
+    {
+      "prefix": 1024,
+      "variant": 1,
+      "repeat": 1,
+      "timeline": [
+        {
+          "iteration": 0,
+          "active_ns": 6094793,
+          "span_ns": 11125375,
+          "uncovered_ns": 5030582,
+          "projections_ns": 4984294,
+          "attention_ns": 487915,
+          "submission_span_ns": 9943042,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 1,
+          "active_ns": 6248753,
+          "span_ns": 13982292,
+          "uncovered_ns": 7733539,
+          "projections_ns": 5113960,
+          "attention_ns": 499957,
+          "submission_span_ns": 9930125,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 2,
+          "active_ns": 6025420,
+          "span_ns": 9341625,
+          "uncovered_ns": 3316205,
+          "projections_ns": 4907418,
+          "attention_ns": 488666,
+          "submission_span_ns": 7646375,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 3,
+          "active_ns": 6004383,
+          "span_ns": 10803000,
+          "uncovered_ns": 4798617,
+          "projections_ns": 4895801,
+          "attention_ns": 488875,
+          "submission_span_ns": 9832708,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 4,
+          "active_ns": 6050665,
+          "span_ns": 12672083,
+          "uncovered_ns": 6621418,
+          "projections_ns": 4927295,
+          "attention_ns": 491001,
+          "submission_span_ns": 9001291,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 5,
+          "active_ns": 6001160,
+          "span_ns": 11966208,
+          "uncovered_ns": 5965048,
+          "projections_ns": 4892455,
+          "attention_ns": 487331,
+          "submission_span_ns": 11074708,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 6,
+          "active_ns": 6014336,
+          "span_ns": 10108000,
+          "uncovered_ns": 4093664,
+          "projections_ns": 4900546,
+          "attention_ns": 492207,
+          "submission_span_ns": 9132875,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 7,
+          "active_ns": 6003419,
+          "span_ns": 12100500,
+          "uncovered_ns": 6097081,
+          "projections_ns": 4893461,
+          "attention_ns": 486873,
+          "submission_span_ns": 11133959,
+          "fragmented_commands": 0
+        }
+      ],
+      "host": [
+        {
+          "elapsed_ns": 11873833,
+          "iteration": 0,
+          "marks": [
+            42,
+            14625,
+            352208,
+            382750,
+            10185625,
+            10299500,
+            10299500,
+            11704083,
+            11704417,
+            11873708
+          ]
+        },
+        {
+          "elapsed_ns": 14679500,
+          "iteration": 1,
+          "marks": [
+            83,
+            15208,
+            310291,
+            349666,
+            10124208,
+            10248916,
+            10249333,
+            14518291,
+            14518458,
+            14679291
+          ]
+        },
+        {
+          "elapsed_ns": 10032083,
+          "iteration": 2,
+          "marks": [
+            167,
+            13792,
+            292125,
+            328292,
+            7850958,
+            7943208,
+            7943375,
+            9852333,
+            9852500,
+            10031958
+          ]
+        },
+        {
+          "elapsed_ns": 11517042,
+          "iteration": 3,
+          "marks": [
+            42,
+            13875,
+            316000,
+            346500,
+            9998709,
+            10156500,
+            10156500,
+            11347334,
+            11347667,
+            11517042
+          ]
+        },
+        {
+          "elapsed_ns": 13402709,
+          "iteration": 4,
+          "marks": [
+            0,
+            13792,
+            325459,
+            371250,
+            9139334,
+            9334000,
+            9334167,
+            13236000,
+            13236209,
+            13402667
+          ]
+        },
+        {
+          "elapsed_ns": 12776750,
+          "iteration": 5,
+          "marks": [
+            42,
+            14250,
+            322625,
+            399542,
+            11304625,
+            11402583,
+            11402625,
+            12612917,
+            12613083,
+            12776542
+          ]
+        },
+        {
+          "elapsed_ns": 10825917,
+          "iteration": 6,
+          "marks": [
+            84,
+            13542,
+            320334,
+            350667,
+            9293334,
+            9461834,
+            9461834,
+            10652584,
+            10652792,
+            10825917
+          ]
+        },
+        {
+          "elapsed_ns": 12931500,
+          "iteration": 7,
+          "marks": [
+            83,
+            13583,
+            320583,
+            365541,
+            11317708,
+            11463166,
+            11463333,
+            12764250,
+            12764416,
+            12931291
+          ]
+        }
+      ]
+    },
+    {
+      "prefix": 3968,
+      "variant": 0,
+      "repeat": 1,
+      "timeline": [
+        {
+          "iteration": 0,
+          "active_ns": 8521870,
+          "span_ns": 14064250,
+          "uncovered_ns": 5542380,
+          "projections_ns": 6395459,
+          "attention_ns": 1478998,
+          "submission_span_ns": 10450459,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 1,
+          "active_ns": 8289034,
+          "span_ns": 10978833,
+          "uncovered_ns": 2689799,
+          "projections_ns": 6210083,
+          "attention_ns": 1450123,
+          "submission_span_ns": 9855500,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 2,
+          "active_ns": 8310376,
+          "span_ns": 10394166,
+          "uncovered_ns": 2083790,
+          "projections_ns": 6225708,
+          "attention_ns": 1453793,
+          "submission_span_ns": 9300083,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 3,
+          "active_ns": 8301636,
+          "span_ns": 10087625,
+          "uncovered_ns": 1785989,
+          "projections_ns": 6217670,
+          "attention_ns": 1454334,
+          "submission_span_ns": 8847875,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 4,
+          "active_ns": 8365993,
+          "span_ns": 10046958,
+          "uncovered_ns": 1680965,
+          "projections_ns": 6275078,
+          "attention_ns": 1462500,
+          "submission_span_ns": 8333166,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 5,
+          "active_ns": 8355420,
+          "span_ns": 9984750,
+          "uncovered_ns": 1629330,
+          "projections_ns": 6270916,
+          "attention_ns": 1456001,
+          "submission_span_ns": 8881584,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 6,
+          "active_ns": 8308550,
+          "span_ns": 12123458,
+          "uncovered_ns": 3814908,
+          "projections_ns": 6218798,
+          "attention_ns": 1459915,
+          "submission_span_ns": 10367333,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 7,
+          "active_ns": 8325669,
+          "span_ns": 12029542,
+          "uncovered_ns": 3703873,
+          "projections_ns": 6242960,
+          "attention_ns": 1456872,
+          "submission_span_ns": 10821500,
+          "fragmented_commands": 0
+        }
+      ],
+      "host": [
+        {
+          "elapsed_ns": 14787875,
+          "iteration": 0,
+          "marks": [
+            125,
+            16833,
+            329000,
+            381708,
+            10486500,
+            10788750,
+            10789000,
+            14635541,
+            14635708,
+            14787500
+          ]
+        },
+        {
+          "elapsed_ns": 11681916,
+          "iteration": 1,
+          "marks": [
+            250,
+            13500,
+            291750,
+            325041,
+            9994666,
+            10155000,
+            10155083,
+            11488625,
+            11488958,
+            11681875
+          ]
+        },
+        {
+          "elapsed_ns": 11195625,
+          "iteration": 2,
+          "marks": [
+            125,
+            13334,
+            356000,
+            400209,
+            9480125,
+            9664792,
+            9664959,
+            10999417,
+            10999709,
+            11195625
+          ]
+        },
+        {
+          "elapsed_ns": 10860834,
+          "iteration": 3,
+          "marks": [
+            0,
+            13709,
+            339959,
+            377000,
+            9047959,
+            9193417,
+            9193459,
+            10657542,
+            10658250,
+            10860792
+          ]
+        },
+        {
+          "elapsed_ns": 10814042,
+          "iteration": 4,
+          "marks": [
+            0,
+            13083,
+            352458,
+            387333,
+            8588000,
+            8689917,
+            8690083,
+            10632333,
+            10632500,
+            10814000
+          ]
+        },
+        {
+          "elapsed_ns": 10764000,
+          "iteration": 5,
+          "marks": [
+            167,
+            13792,
+            358667,
+            393417,
+            9079250,
+            9248750,
+            9248750,
+            10586958,
+            10587167,
+            10764000
+          ]
+        },
+        {
+          "elapsed_ns": 12847625,
+          "iteration": 6,
+          "marks": [
+            84,
+            13584,
+            322459,
+            362709,
+            10593209,
+            10694292,
+            10694375,
+            12673167,
+            12673375,
+            12847542
+          ]
+        },
+        {
+          "elapsed_ns": 12764875,
+          "iteration": 7,
+          "marks": [
+            125,
+            15167,
+            333875,
+            370500,
+            11063834,
+            11160000,
+            11160042,
+            12596584,
+            12596792,
+            12764834
+          ]
+        }
+      ]
+    },
+    {
+      "prefix": 3968,
+      "variant": 1,
+      "repeat": 1,
+      "timeline": [
+        {
+          "iteration": 0,
+          "active_ns": 7225543,
+          "span_ns": 12994750,
+          "uncovered_ns": 5769207,
+          "projections_ns": 5099455,
+          "attention_ns": 1476293,
+          "submission_span_ns": 9860958,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 1,
+          "active_ns": 6961987,
+          "span_ns": 12048000,
+          "uncovered_ns": 5086013,
+          "projections_ns": 4886366,
+          "attention_ns": 1445246,
+          "submission_span_ns": 11086666,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 2,
+          "active_ns": 6991637,
+          "span_ns": 9771459,
+          "uncovered_ns": 2779822,
+          "projections_ns": 4904922,
+          "attention_ns": 1452796,
+          "submission_span_ns": 8395083,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 3,
+          "active_ns": 7013288,
+          "span_ns": 9603500,
+          "uncovered_ns": 2590212,
+          "projections_ns": 4924621,
+          "attention_ns": 1454292,
+          "submission_span_ns": 8167625,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 4,
+          "active_ns": 7011871,
+          "span_ns": 11041583,
+          "uncovered_ns": 4029712,
+          "projections_ns": 4923418,
+          "attention_ns": 1453164,
+          "submission_span_ns": 9973084,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 5,
+          "active_ns": 7007379,
+          "span_ns": 12782667,
+          "uncovered_ns": 5775288,
+          "projections_ns": 4914584,
+          "attention_ns": 1451167,
+          "submission_span_ns": 8681791,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 6,
+          "active_ns": 7002910,
+          "span_ns": 9844292,
+          "uncovered_ns": 2841382,
+          "projections_ns": 4919325,
+          "attention_ns": 1453248,
+          "submission_span_ns": 8884458,
+          "fragmented_commands": 0
+        },
+        {
+          "iteration": 7,
+          "active_ns": 7025739,
+          "span_ns": 12619333,
+          "uncovered_ns": 5593594,
+          "projections_ns": 4927828,
+          "attention_ns": 1463460,
+          "submission_span_ns": 9679041,
+          "fragmented_commands": 0
+        }
+      ],
+      "host": [
+        {
+          "elapsed_ns": 13717291,
+          "iteration": 0,
+          "marks": [
+            125,
+            15166,
+            339958,
+            372166,
+            10115958,
+            10206000,
+            10206166,
+            13552958,
+            13553083,
+            13717166
+          ]
+        },
+        {
+          "elapsed_ns": 12754792,
+          "iteration": 1,
+          "marks": [
+            250,
+            14875,
+            303417,
+            340375,
+            11237167,
+            11413500,
+            11413833,
+            12581292,
+            12581542,
+            12754625
+          ]
+        },
+        {
+          "elapsed_ns": 10537333,
+          "iteration": 2,
+          "marks": [
+            125,
+            15875,
+            343708,
+            385750,
+            8617333,
+            8744083,
+            8744166,
+            10351208,
+            10351458,
+            10537166
+          ]
+        },
+        {
+          "elapsed_ns": 10334750,
+          "iteration": 3,
+          "marks": [
+            125,
+            14833,
+            350917,
+            382750,
+            8416917,
+            8522583,
+            8522625,
+            10174542,
+            10174750,
+            10334708
+          ]
+        },
+        {
+          "elapsed_ns": 11717167,
+          "iteration": 4,
+          "marks": [
+            208,
+            12583,
+            288167,
+            321167,
+            10169458,
+            10265417,
+            10265500,
+            11551750,
+            11551958,
+            11717167
+          ]
+        },
+        {
+          "elapsed_ns": 13447458,
+          "iteration": 5,
+          "marks": [
+            125,
+            12750,
+            288875,
+            320500,
+            8865875,
+            8975042,
+            8975042,
+            13287958,
+            13288125,
+            13447417
+          ]
+        },
+        {
+          "elapsed_ns": 10577625,
+          "iteration": 6,
+          "marks": [
+            0,
+            12125,
+            313042,
+            345875,
+            9044625,
+            9205750,
+            9205917,
+            10394917,
+            10395125,
+            10577459
+          ]
+        },
+        {
+          "elapsed_ns": 13331541,
+          "iteration": 7,
+          "marks": [
+            0,
+            13666,
+            327750,
+            366541,
+            9899958,
+            10011541,
+            10011625,
+            13169875,
+            13170083,
+            13331291
+          ]
+        }
+      ]
+    }
+  ],
+  "promote": false
+}

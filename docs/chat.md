@@ -49,7 +49,9 @@ An execution failure invalidates the session; `/reset` is required before reuse.
 `ChatHistory` owns exact token IDs. `QwenModel.length` identifies the prefix
 already submitted to all 24 caches. Every model call receives a suffix beginning
 at that position and selects Fast using the actual row count and cumulative
-context length. Normal generation never resets the cache between turns.
+context length. Single-row M4 Pro Fast calls combine residual/RMSNorm fusion,
+buffer swapping and GPU argmax; see the [measured study](../studies/model_generation/residual-norm.md).
+Normal generation never resets the cache between turns.
 
 Generated assistant tokens stay as token IDs; they are never decoded and
 re-tokenized to rebuild history. The displayed text uses the existing incremental

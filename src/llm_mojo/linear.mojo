@@ -814,6 +814,63 @@ def _linear_two_output_apple_gpu_kernel[
                 )
 
 
+def _linear_decode_arranged[
+    BLOCK: Int, WIDTH: Int, IL: TensorLayout, WL: TensorLayout,
+    BL: TensorLayout, OL: TensorLayout, HAS_BIAS: Bool,
+](
+    x: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    w: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    bias: TileTensor[DType.bfloat16, BL, MutAnyOrigin],
+    y: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+    rows: Int32, inputs: Int32, outputs: Int32,
+):
+    comptime assert is_apple_gpu()
+    comptime assert x.flat_rank == 2 and w.flat_rank == 2 and y.flat_rank == 2 and bias.flat_rank == 1
+    comptime assert BLOCK == 64 or BLOCK == 128 or BLOCK == 256
+    comptime assert WIDTH == 0 or WIDTH == 896 or WIDTH == 4864
+    var lane = lane_id()
+    var dot = block_idx.x * (BLOCK // WARP_SIZE) + thread_idx.x // WARP_SIZE
+    if dot < Int(rows) * Int(outputs):
+        var row = dot // Int(outputs)
+        var column = dot % Int(outputs)
+        var acc: Float32 = 0
+        comptime if WIDTH:
+            # Prefetch four lane-strided operands, then retain the original
+            # sequential FP32 updates and SIMD-group reduction order.
+            for base in range(0, WIDTH, 4 * WARP_SIZE):
+                var xv = SIMD[DType.float32, 4](0)
+                var wv = SIMD[DType.float32, 4](0)
+                comptime for j in range(4):
+                    var k = base + lane + j * WARP_SIZE
+                    xv[j] = rebind[Scalar[DType.bfloat16]](x[row,k]).cast[DType.float32]()
+                    wv[j] = rebind[Scalar[DType.bfloat16]](w[column,k]).cast[DType.float32]()
+                comptime for j in range(4):
+                    acc += xv[j] * wv[j]
+        else:
+            var k = lane
+            while k < Int(inputs):
+                acc += (rebind[Scalar[DType.bfloat16]](x[row,k]).cast[DType.float32]()
+                        * rebind[Scalar[DType.bfloat16]](w[column,k]).cast[DType.float32]())
+                k += WARP_SIZE
+        var total = warp.sum(acc)
+        if lane == 0:
+            var b: Scalar[DType.bfloat16] = 0
+            comptime if HAS_BIAS:
+                b = rebind[Scalar[DType.bfloat16]](bias[column])
+            y[row,column] = rebind[y.ElementType]((total + b.cast[DType.float32]()).cast[DType.bfloat16]())
+
+
+def _enqueue_linear_arranged[
+    BLOCK: Int, WIDTH: Int, IL: TensorLayout, WL: TensorLayout,
+    BL: TensorLayout, OL: TensorLayout, HAS_BIAS: Bool,
+](ctx: DeviceContext, x: TileTensor[DType.bfloat16,IL,MutAnyOrigin],
+  w: TileTensor[DType.bfloat16,WL,MutAnyOrigin], b: TileTensor[DType.bfloat16,BL,MutAnyOrigin],
+  y: TileTensor[DType.bfloat16,OL,MutAnyOrigin]) raises:
+    comptime kernel = _linear_decode_arranged[BLOCK,WIDTH,IL,WL,BL,OL,HAS_BIAS]
+    ctx.enqueue_function[kernel](x,w,b,y,Int32(x.dim[0]()),Int32(x.dim[1]()),Int32(w.dim[0]()),
+        grid_dim=ceildiv(Int(w.dim[0]()),BLOCK // WARP_SIZE),block_dim=BLOCK)
+
+
 def enqueue_linear_apple_gpu[
     InputLayout: TensorLayout,
     WeightLayout: TensorLayout,
@@ -826,6 +883,7 @@ def enqueue_linear_apple_gpu[
     weight: TileTensor[DType.bfloat16, WeightLayout, MutAnyOrigin],
     bias: TileTensor[DType.bfloat16, BiasLayout, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OutputLayout, MutAnyOrigin],
+    decode_variant: Int = 0,
 ) raises:
     """Validate and enqueue the rowwise Apple GPU projection baseline."""
 
@@ -839,6 +897,22 @@ def enqueue_linear_apple_gpu[
     if context.api() != "metal":
         raise Error("Apple GPU linear projection requires the Metal device API")
 
+    if decode_variant < 0 or decode_variant > 5:
+        raise Error("unknown projection arrangement")
+    if decode_variant:
+        if Int(input.dim[0]()) != 1 or (Int(input.dim[1]()) != 896 and Int(input.dim[1]()) != 4864):
+            raise Error("projection arrangement requires one row and width 896 or 4864")
+        comptime for variant in range(1,6):
+            if decode_variant == variant:
+                comptime block = 64 if variant == 2 or variant == 4 else (256 if variant == 3 or variant == 5 else 128)
+                comptime if variant == 2 or variant == 3:
+                    _enqueue_linear_arranged[block,0,InputLayout,WeightLayout,BiasLayout,OutputLayout,HAS_BIAS](context,input,weight,bias,output)
+                else:
+                    if Int(input.dim[1]()) == 896:
+                        _enqueue_linear_arranged[block,896,InputLayout,WeightLayout,BiasLayout,OutputLayout,HAS_BIAS](context,input,weight,bias,output)
+                    else:
+                        _enqueue_linear_arranged[block,4864,InputLayout,WeightLayout,BiasLayout,OutputLayout,HAS_BIAS](context,input,weight,bias,output)
+        return
     var rows = Int(input.dim[0]())
     var input_features = Int(input.dim[1]())
     var output_features = Int(weight.dim[0]())
@@ -1330,13 +1404,14 @@ def enqueue_linear_apple_gpu[
     input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
     weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+    decode_variant: Int = 0,
 ) raises:
     """Explicit bias-free overload; no bias allocation or load."""
     # Borrow a metadata-only view to specialize the shared implementation.
     # HAS_BIAS=False removes every access to this argument at compile time.
     var unused_bias = TileTensor(weight.ptr, row_major(1))
     enqueue_linear_apple_gpu[IL, WL, type_of(unused_bias.layout), OL, False](
-        context, input, weight, unused_bias, output
+        context, input, weight, unused_bias, output, decode_variant
     )
 
 

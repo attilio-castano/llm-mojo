@@ -11,6 +11,7 @@ from llm_mojo.attention_sublayer import (
     _validate_attention_sublayer, enqueue_attention_sublayer,
     enqueue_attention_sublayer_integrated,
 )
+from llm_mojo.residual_norm import enqueue_residual_norm
 from llm_mojo.mlp import MLPWeights, MLPWorkspace, _validate_mlp, enqueue_mlp_apple_gpu
 
 
@@ -22,8 +23,12 @@ def decoder_mappings(variant: Int, rows: Int) raises -> SIMD[DType.int64, 4]:
     if rows < 1 or (variant != 0 and variant != 1 and variant != 2
         and variant != 3 and variant != 4 and variant != 8
         and variant != 12 and variant != 14 and variant != 20
-        and variant != 21 and variant != 22 and variant != 23 and variant != 24):
+        and variant != 21 and variant != 22 and variant != 23 and variant != 24 and variant != 25 and variant != 26):
         raise Error("unknown decoder configuration or invalid rows")
+    if variant == 25 or variant == 26:
+        if rows != 1:
+            raise Error("fused QKV configuration requires one decode row")
+        return SIMD[DType.int64, 4](0, 0, 0, 1)
     if variant == 20:
         return SIMD[DType.int64, 4](5, 0, 0, 1)
     if variant == 21:
@@ -137,7 +142,10 @@ def enqueue_decoder_layer[XL: TensorLayout](
     mut attention: AttentionWorkspace, mut mw: MLPWeights, mut mlp: MLPWorkspace,
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     mlp_mapping: Int = 0, integrated: Bool = True,
-    gqa_mapping: Int = 0, projection_mapping: Int = 0,
+    gqa_mapping: Int = 0, projection_mapping: Int = 0, fuse_qkv: Bool = False,
+    fuse_activation: Bool = False,
+    fuse_residual_norm: Bool = False, input_normalized: Bool = False,
+    decode_variant: Int = 0,
 ) raises -> Int:
     """Return the actual attention route; final output is in mlp.output.
 
@@ -146,18 +154,38 @@ def enqueue_decoder_layer[XL: TensorLayout](
     starts invalidates this execution; the caller must drain and reset the cache.
     Mapping selection is explicit. Tiny fixtures use integrated=False; the
     optimized attention path requires the Qwen dimensions.
+    Residual/norm fusion is an internal composition route: attention.output and
+    mlp.normalized are produced together, and the final MLP residual is deferred.
+    Its caller must combine attention.output and mlp.down with the next norm
+    before consuming mlp.output. input_normalized requires the current row's
+    input normalization already stored in attention.normalized.
     """
+    if decode_variant and (decode_variant < 0 or decode_variant > 5 or Int(x.dim[0]()) != 1
+        or not fuse_residual_norm or mw.hidden != 896 or mw.intermediate != 4864):
+        raise Error("projection study requires all-three Qwen decode")
+    if (fuse_residual_norm or input_normalized) and (not fuse_qkv or not fuse_activation or aw.hidden != 896):
+        raise Error("residual/norm fusion requires Qwen configuration 26")
+    if input_normalized and not fuse_residual_norm:
+        raise Error("precomputed normalization requires residual fusion")
+    if fuse_qkv and not integrated:
+        raise Error("fused QKV requires integrated attention")
+    if fuse_activation and (Int(x.dim[0]()) != 1 or mlp_mapping != 0):
+        raise Error("fused MLP activation requires one row and mapping zero")
     _decoder_preflight(ctx, aw, cache, attention, mw, mlp, x,
                        integrated, gqa_mapping, projection_mapping, mlp_mapping)
     var actual_route: Int
     if integrated:
         actual_route = enqueue_attention_sublayer_integrated(ctx, aw, cache, attention, x,
-                                                           gqa_mapping, projection_mapping)
+                                                           gqa_mapping, projection_mapping, fuse_qkv, input_normalized, fuse_residual_norm, decode_variant)
     else:
         actual_route = enqueue_attention_sublayer(ctx, aw, cache, attention, x, 3)
+    if fuse_residual_norm:
+        enqueue_residual_norm(ctx,x,TileTensor(attention.projected,row_major(1,896)),
+            TileTensor(mw.norm,row_major(896)),TileTensor(attention.output,row_major(1,896)),
+            TileTensor(mlp.normalized,row_major(1,896)))
     enqueue_mlp_apple_gpu(ctx, mw, mlp,
                          TileTensor(attention.output, row_major(Int(x.dim[0]()), aw.hidden)),
-                         mlp_mapping)
+                         mlp_mapping, fuse_activation, fuse_residual_norm, fuse_residual_norm, decode_variant)
     return actual_route
 
 
@@ -165,10 +193,12 @@ def enqueue_decoder_layer_configuration[XL: TensorLayout](
     ctx: DeviceContext, mut aw: AttentionWeights, mut cache: AttentionCache,
     mut attention: AttentionWorkspace, mut mw: MLPWeights, mut mlp: MLPWorkspace,
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin], variant: Int,
+    fuse_residual_norm: Bool = False, input_normalized: Bool = False,
+    decode_variant: Int = 0,
 ) raises -> Int:
     var mappings = decoder_mappings(variant, Int(x.dim[0]()))
     return enqueue_decoder_layer(ctx,aw,cache,attention,mw,mlp,x,
-        Int(mappings[2]),True,Int(mappings[0]),Int(mappings[1]))
+        Int(mappings[2]),True,Int(mappings[0]),Int(mappings[1]),variant == 25 or variant == 26,variant == 26,fuse_residual_norm,input_normalized,decode_variant)
 
 
 struct DecoderCache[DETERMINISTIC: Bool](Movable):

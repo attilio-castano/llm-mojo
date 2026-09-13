@@ -278,6 +278,8 @@ def capture_identity(path: Path) -> tuple[dict[str, Any], str]:
         expected_target.update(
             {k: workload[k] for k in attention_target_fields(operation)}
         )
+    if 'projection_variant' in workload:
+        expected_target['projection_variant']=workload['projection_variant']
     require(
         target == expected_target,
         "capture receipt target identity does not match its provenance",
@@ -717,7 +719,7 @@ def spill_events(
     }
 
 
-def coalesce_compute_commands(rows, submissions, required_tail):
+def coalesce_compute_commands(rows, submissions, required_tail, *, join_resubmissions=False):
     """Join preempted dispatch segments; verify every trailing submission.
 
     Instruments can emit several non-overlapping active intervals for one
@@ -733,7 +735,8 @@ def coalesce_compute_commands(rows, submissions, required_tail):
         raise ValueError('duplicate target command-buffer submission')
     grouped = {}
     for row in rows:
-        key = tuple(integer(row,k) for k in ('cmdbuffer-id','encoder-id','gpu-submission-id'))
+        fields = ('cmdbuffer-id','encoder-id') if join_resubmissions else ('cmdbuffer-id','encoder-id','gpu-submission-id')
+        key = tuple(integer(row,k) for k in fields)
         if key[0] not in id_set:
             raise ValueError('compute interval lacks a target submission')
         grouped.setdefault(key,[]).append(row)
@@ -741,6 +744,9 @@ def coalesce_compute_commands(rows, submissions, required_tail):
     fragmented = 0
     for key,segments in grouped.items():
         segments.sort(key=lambda r:integer(r,'start'))
+        labels = {r['event-label'][1].split('     ')[0] for r in segments} if join_resubmissions else set()
+        if len(labels) > 1:
+            raise ValueError('multiple commands in one encoder')
         total = 0
         end = -1
         for row in segments:
@@ -764,7 +770,7 @@ def coalesce_compute_commands(rows, submissions, required_tail):
     ordered = [r for cb in ids for r in sorted(by_buffer.get(cb,[]),key=lambda r:integer(r,'start'))]
     return ordered, dict(active_intervals=len(rows),dispatches=len(ordered),
                          fragmented_dispatches=fragmented,verified_trailing_submissions=required_tail,
-                         duration_rule='Sum non-overlapping active segments per command buffer, encoder and GPU submission; exclude preemption gaps. Counter windows retain the final segment end.')
+                         duration_rule=('Sum non-overlapping active segments per command buffer and encoder, including GPU resubmissions.' if join_resubmissions else 'Sum non-overlapping active segments per command buffer, encoder and GPU submission.')+' Exclude preemption gaps; retain the final segment end.')
 
 
 def analyze(args: argparse.Namespace) -> dict[str, Any]:
@@ -826,17 +832,27 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         for row in compute_channel
         if ":Compute Command" in row["event-label"][1]
     ]
+    sequence_commands = workload["dispatches_per_iteration"]
+    if identity['operation'] == 'qwen_model':
+        from .model_contract import command_stages, validate_command_sequence, options
+        model_options = options(identity['implementation'])
+        sequence_commands = len(command_stages(*model_options))
+        compute_commands = [r for r in compute_channel if any(
+            kind in r['event-label'][1] for kind in (':Compute Command', ':Blit Command'))]
     required_tail = (workload["warmup_iterations"] + workload["profile_iterations"] +
-                     (1 if identity["operation"] == "rms_norm" else 0)) * workload["dispatches_per_iteration"]
+                     (1 if identity["operation"] == "rms_norm" else 0)) * sequence_commands
     compute_commands, coalescing = coalesce_compute_commands(
-        compute_commands, encoded_submissions, required_tail)
+        compute_commands, encoded_submissions, required_tail,
+        join_resubmissions=identity['operation']=='qwen_model')
     setup, correctness, warmup, profile = segment_compute_commands(
         compute_commands,
         workload["warmup_iterations"],
         workload["profile_iterations"],
-        workload["dispatches_per_iteration"],
+        sequence_commands,
         trace_correctness_dispatches=identity["operation"] == "rms_norm",
     )
+    if identity['operation'] == 'qwen_model':
+        validate_command_sequence(warmup + profile, *model_options)
     sequence_command_buffer_ids = {
         integer(row, "cmdbuffer-id") for row in correctness + warmup + profile
     }
@@ -860,7 +876,7 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
         "schema_version": 3,
         "analysis": identity["operation"] + "_metal_trace",
         "analysis_source_sha256": {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
-            for name in ("analyze_trace.py", "attention_contract.py", "attention_decode_contract.py", "attention_prefill_contract.py", "attention_sublayer_contract.py", "mlp_contract.py", "decoder_layer_contract.py")},
+            for name in ("analyze_trace.py", "attention_contract.py", "attention_decode_contract.py", "attention_prefill_contract.py", "attention_sublayer_contract.py", "mlp_contract.py", "decoder_layer_contract.py", "model_contract.py")},
         "capture_identity": identity,
         "inputs": inputs,
         "trace": trace,
@@ -919,6 +935,15 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
             "A missing profiler event is bounded to this capture and is not a universal absence claim.",
         ],
     }
+    if identity['operation'] == 'qwen_model':
+        result['validated_sequence'].update(
+            commands_per_iteration=sequence_commands,
+            profile_compute_dispatches=workload['profile_iterations']*workload['dispatches_per_iteration'],
+            profile_blit_commands=workload['profile_iterations']*4,
+            segmentation_rule='Trailing verified sequence per step: two token-buffer blits, the declared compute dispatches, two logit-buffer blits. All encoded submissions require coverage; no compute-only filtering. The final logit unmap may complete after greedy returns, during the recorded post-region idle.')
+        result['instrumented_gpu_interval_duration']['evidence_boundary'] = (
+            'Active compute and blit command intervals, excluding preemption gaps. '
+            'Separate diagnostic trace; not headline benchmark latency.')
     if args.counter_info_xml is not None:
         counter_settings = result["trace"]["metal_application_gpu_settings"]
         has_named_counter_set = any(

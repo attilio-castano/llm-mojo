@@ -1,5 +1,6 @@
 """A resident Mojo Qwen terminal chat; Python is only the verifying launcher."""
-from std.sys import argv
+from llm_mojo.model import is_projection_policy
+from std.sys import argv, is_defined
 from max.gpu.host import DeviceContext
 from llm_mojo.chat import ChatSession, DEFAULT_SYSTEM
 from llm_mojo.tokenizer import Tokenizer, TokenizerWorkspace, TokenizerDecoder
@@ -9,7 +10,8 @@ from llm_mojo.generate_cli import now, is_stop
 
 def main() raises:
     var args = argv()
-    if len(args) != 7:
+    comptime STUDY = is_defined["MODEL_FUSION_STUDY"]()
+    if len(args) != (8 if STUDY else 7):
         raise Error("chat prepared tokenizer maximum chunk-rows system-file report-file (empty = defaults)")
     var maximum = Int(args[3])
     var chunk = Int(args[4])
@@ -27,6 +29,10 @@ def main() raises:
         system = String(from_utf8=open(args[5],"r").read_bytes())
     var ctx = DeviceContext()
     var session = ChatSession(ctx,args[1],tokenizer,work,system,chunk)
+    comptime if STUDY:
+        if not is_projection_policy(args[7]) and args[7] != "fast" and args[7] != "fusion" and args[7] != "combined" and args[7] != "unfused" and args[7] != "gpu-argmax" and args[7] != "fused-head" and args[7] != "buffer-swap" and args[7] != "residual-norm" and args[7] != "swap-argmax" and args[7] != "all-three":
+            raise Error("unknown native study arm")
+        session.policy = String(args[7])
     print("Ready — Fast on",ctx.name(),"/",ctx.api(),flush=True)
     print("/reset: new conversation · /exit: quit · Ctrl-C: stop reply or clear input",flush=True)
     if observed:

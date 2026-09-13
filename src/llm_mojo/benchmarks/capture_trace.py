@@ -276,8 +276,8 @@ def parse_target_identity(output: str) -> dict[str, Any]:
             raise ValueError("expected exactly one 'profile workload' line")
         identity["profile_workload"] = workload_matches[0]
         extra_fields = (("output features", "output_features"),)
-        if workload_matches[0].startswith(("decode-", "prefill-", "sublayer-", "mlp-", "decoder-")):
-            operation = ("decoder_layer" if workload_matches[0].startswith("decoder-") else "mlp" if workload_matches[0].startswith("mlp-") else "attention_sublayer" if workload_matches[0].startswith("sublayer-") else
+        if workload_matches[0].startswith(("decode-", "prefill-", "sublayer-", "mlp-", "decoder-", "model-")):
+            operation = ("qwen_model" if workload_matches[0].startswith("model-") else "decoder_layer" if workload_matches[0].startswith("decoder-") else "mlp" if workload_matches[0].startswith("mlp-") else "attention_sublayer" if workload_matches[0].startswith("sublayer-") else
                          "grouped_query_attention_prefill" if workload_matches[0].startswith("prefill-") else
                          "grouped_query_attention_decode")
             extra_fields = tuple(
@@ -295,6 +295,11 @@ def parse_target_identity(output: str) -> dict[str, Any]:
             ):
                 raise ValueError(f"target {label} is not a positive integer")
             identity[key] = int(value)
+    if re.search(r'^projection arrangement:',output,flags=re.MULTILINE):
+        variant=output_field(output,'projection arrangement')
+        if re.fullmatch(r'[0-5]',variant) is None:
+            raise ValueError('invalid projection arrangement')
+        identity['projection_variant']=int(variant)
     return identity
 
 
@@ -327,6 +332,8 @@ def validate_target_identity(
         )
     if configuration["operation"] in ATTENTION_OPERATIONS:
         expected.update({k: configuration[k] for k in attention_target_fields(configuration["operation"])})
+    if 'projection_variant' in configuration:
+        expected['projection_variant']=configuration['projection_variant']
     for key, expected_value in expected.items():
         if identity.get(key) != expected_value:
             raise ValueError(
