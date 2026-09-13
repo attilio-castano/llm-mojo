@@ -3,6 +3,10 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
+
+from typer.testing import CliRunner
+from llm_mojo.cli.app import app
 from llm_mojo.benchmarks import tokenizer_contract as contract
 from llm_mojo.benchmarks.study import (
     BLOCKS,
@@ -14,6 +18,40 @@ from llm_mojo.benchmarks.study import (
 
 
 class TokenizerBenchmarkTests(unittest.TestCase):
+    def test_public_build_compiles_source_and_records_matching_command(self):
+        entry = "src/llm_mojo/benchmarks/tokenizer.mojo"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            table = root / "tables.bin"
+            table.write_bytes(b"prepared tokenizer tables")
+            (root / "manifest.json").write_text("{}")
+            directory = root / "build"
+            compiled = []
+
+            def execute(command, **kwargs):
+                if command[0] == "mojo":
+                    self.assertEqual(command[1:-2], ["build", "-I", "src", entry])
+                    self.assertEqual(command[-2:], ["-o", str(directory / "tokenizer")])
+                    self.assertTrue((kwargs["cwd"] / entry).is_file())
+                    compiled.append(command)
+                    Path(command[-1]).write_bytes(b"compiled tokenizer benchmark")
+
+            with patch.object(contract, "ensure_record_location"), \
+                 patch.object(contract, "ensure_prepared", return_value=table), \
+                 patch.object(contract, "fixtures", return_value=(root / "fixture.bin", {})), \
+                 patch.object(contract, "repository_state", return_value={"dirty": False, "commit": "fixed"}), \
+                 patch.object(contract, "sources", return_value={entry: "source digest"}), \
+                 patch.object(contract, "environment", return_value={"backend": "cpu"}), \
+                 patch.object(contract, "environment_tool", return_value="mojo"), \
+                 patch.object(contract.subprocess, "run", side_effect=execute):
+                result = CliRunner().invoke(app, ["bench", "tokenizer", "build", "--build-dir", str(directory)])
+
+            self.assertEqual(result.exit_code, 0, str(result.exception) + result.output)
+            self.assertEqual(len(compiled), 1)
+            receipt = json.loads((directory / "build.json").read_text())
+            self.assertEqual(receipt["command"], [*compiled[0][:-1], "<binary>"])
+            self.assertEqual(receipt["binary_sha256"], sha(directory / "tokenizer"))
+
     def output(self, first=False):
         lines = [
             "api: cpu",

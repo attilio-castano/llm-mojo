@@ -109,6 +109,7 @@ def build(directory):
         "build",
         "-I",
         "src",
+        "src/llm_mojo/benchmarks/tokenizer.mojo",
         "-o",
         str(binary),
     ]
@@ -137,7 +138,8 @@ def build(directory):
                 "build",
                 "-I",
                 "src",
-                        "-o",
+                "src/llm_mojo/benchmarks/tokenizer.mojo",
+                "-o",
                 "<binary>",
             ],
         ),
