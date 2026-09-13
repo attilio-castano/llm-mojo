@@ -28,9 +28,9 @@ This distinction is part of both the numerical tests and measurement identity.
 
 The caller provides contiguous, non-overlapping BF16 views, with
 `1 <= R <= T <= 4096`, and owns allocation, projections, RoPE, KV-cache updates
-and synchronization. The [original operation](../../src/llm_mojo/attention.mojo)
+and synchronization. The [original operation](../../src/llm_mojo/kernels/attention.mojo)
 still exposes its probability scratch. The
-[new fused operation](../../src/llm_mojo/attention_prefill.mojo) exposes only O.
+[new fused operation](../../src/llm_mojo/kernels/attention_prefill.mojo) exposes only O.
 
 At `R=T=4096`, the materialized `[R,14,T]` BF16 scratch is **448 MiB**.
 Unique K+V occupy 2 MiB; Q and O each occupy 7 MiB. Fused prefill removes that

@@ -28,7 +28,7 @@ block ratios, not confidence intervals. See the [method](../../docs/experiments.
 For each token row of width 896, compute the FP32 mean square, its inverse
 square root with epsilon, then normalize and multiply by learned BF16 weights.
 The precise cast order is in the [model contract](../../docs/model.md);
-[the implementation](../../src/llm_mojo/rms_norm.mojo) makes it explicit.
+[the implementation](../../src/llm_mojo/kernels/rms_norm.mojo) makes it explicit.
 
 A row has 896 BF16 input values (1,792 bytes), the same amount of output,
 and a 1,792-byte weight vector shared across rows. Arithmetic is modest; the

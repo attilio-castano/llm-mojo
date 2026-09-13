@@ -32,7 +32,7 @@ block ratios, not confidence intervals. See the [method](../../docs/experiments.
 Prefill computes X[M,896] times W[1152,896] transposed, plus bias, yielding
 O[M,1152]. All arrays are BF16 and contiguous along their last dimension;
 dot products accumulate in FP32. Increasing M supplies more token rows and
-creates opportunities to reuse weights. See [the source](../../src/llm_mojo/linear.mojo).
+creates opportunities to reuse weights. See [the source](../../src/llm_mojo/kernels/linear.mojo).
 
 The work is approximately 2 × M × 896 × 1152 floating-point operations.
 At M=256 that is about 528 million operations per packed projection. The

@@ -39,3 +39,39 @@ pairing, qualification and evidence remain owned by the study registry.
 Local edits, dependency setup, validation and incremental commits are approved.
 Publication, new checkpoint downloads, toolchain upgrades and numerical-contract
 changes require a separate decision.
+
+## Completed validation — 2026-09-13
+
+Implementation commit: `c434b72`. Baseline: `c5f586c`. The installed environment
+uses Typer 0.27.2 and Hydra 1.3.6; every previously locked dependency version,
+including Mojo 1.0.0 and MAX 26.5.0, was preserved.
+
+- Frozen oracles passed via `uv run --locked llm-mojo validate --prepare-only`.
+- The complete Python discovery command passed 194 tests.
+- All 24 native test files passed on Apple M4 Pro / Metal, using the documented
+  `-I src -I build -I tests` invocation and `MODULAR_DEBUG=device-sync-mode`.
+  Execution was split into two batches covering the complete suite; no inherited
+  MLP, decoder or prefill filters restricted the tests. The extra Unicode
+  tokenizer invocation passed as well.
+- `llm_mojo.benchmarks.smoke` passed every maintained route, including the
+  complete decoder workload grid and adversarial rings.
+- Local model preparation produced and verified 196 BF16 tensors. Repeated
+  preparation reused the verified model. No checkpoint download was needed.
+- For the fixed raw prompt `The capital of France is`, 16-token generation
+  through the new command matched the baseline text and every non-timing event
+  exactly with identical chunk size and Fast selection.
+- The existing terminal harness exercised the public CLI through an adapter:
+  four piped turns, three PTY turns, Ctrl-C, EOF, reset, Unicode, context rejection
+  and report-free output parity passed. Baseline and current piped conversation
+  output and generated token IDs matched exactly. Interrupted replies were
+  checked for lifecycle/accounting correctness, not identical interruption timing.
+- Invocation from another working directory resolved explicit relative prompt
+  and report paths correctly. Legacy command help and tokenizer encode worked.
+- 561 local Markdown file targets resolved; `git diff --check` passed.
+
+The 18 relocated numerical/model/terminal modules retain identical bodies after
+normalizing import paths. Shared stop-token and clock helpers were extracted
+without changing their implementations. Retained study evidence and frozen
+oracle identities were not rewritten. These are correctness and usability
+checks; they establish no new speed claim. Local validation outputs and baseline
+executables remain outside Git under `build/cleanup/`.

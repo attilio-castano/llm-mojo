@@ -12,7 +12,7 @@ For first-time setup, follow the [README quickstart](../README.md#run-the-chat).
 With the verified prepared checkpoint already available, start from the repository:
 
 ```sh
-uv run --locked python -m llm_mojo.chat
+uv run llm-mojo chat
 ```
 
 The default is `build/model-prepared-v1` under this source checkout, matching the
@@ -99,7 +99,10 @@ and exercises actual terminal Ctrl-C, continuation, reset and EOF through a
 controlling pseudo-terminal. Numerical differences remain diagnostic; token
 accounting, finite outputs, cache preservation and reset replay are exact checks.
 
+Named workloads and option precedence are described in the [CLI guide](cli.md).
+
 For a session report, add `--report build/my-chat.tsv` with a new output path.
+An adjacent `.config.json` records the resolved launch configuration.
 The optional report contains conversation token IDs, cache counters and timing
 observations. First visible text is timestamped after terminal output is flushed,
 starting before formatting/tokenizing the user message. Native loading is

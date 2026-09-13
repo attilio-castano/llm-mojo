@@ -72,7 +72,7 @@ the strict BF16 compatibility failures and understand the reference decision.
 
 ## Implementation and reproduction
 
-The public API lives in `src/llm_mojo/attention_sublayer.mojo`:
+The public API lives in `src/llm_mojo/layers/attention_sublayer.mojo`:
 `AttentionWeights`, `AttentionCache`, `AttentionWorkspace`, and
 `enqueue_attention_sublayer_integrated`. The caller owns buffers and chooses
 mappings explicitly. The integrated default uses packed 8×16 QKV/Wo for R≥16

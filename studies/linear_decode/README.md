@@ -27,7 +27,7 @@ block ratios, not confidence intervals. See the [method](../../docs/experiments.
 One token produces Q[896], K[128] and V[128] from X[896]. The affine operation
 uses weights W[N,K] with contiguous K, FP32 accumulation, promoted BF16 bias,
 and one final BF16 output cast. Here K=896 and packed N=1152.
-[The source](../../src/llm_mojo/linear.mojo) keeps each implementation explicit.
+[The source](../../src/llm_mojo/kernels/linear.mojo) keeps each implementation explicit.
 
 Packed weights contain 1,032,192 BF16 elements: 2,064,384 bytes per layer,
 about 47.25 MiB across 24 layers. The input is only 1,792 bytes. Decode has one

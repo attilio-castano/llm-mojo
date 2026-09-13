@@ -25,18 +25,16 @@ Prepare the pinned tokenizer and checkpoint once, from the repository root:
 
 ```sh
 uv sync --locked
-uv run --locked llm-mojo-tokenizer setup
-uv run --locked --script tests/fixtures/generate.py attention_checkpoint -- --download --download-only
-uv run --locked --script tests/fixtures/model_reference.py prepare --output build/model-prepared-v1
+uv run llm-mojo models prepare qwen2.5-0.5b-instruct --download
 ```
 
 The checkpoint download is approximately 988 MB; preparation writes additional
 model tensors locally. Assets are verified against the [pinned model contract](docs/model.md)
-and remain outside Git. Preparation requires a new output directory; skip it
-if you already have the verified prepared checkpoint.
+and remain outside Git. Preparation verifies and reuses an existing prepared
+model. Omit `--download` to require local checkpoint assets.
 
 ```sh
-uv run --locked python -m llm_mojo.chat
+uv run llm-mojo chat
 ```
 
 Chat defaults to this checkout's `build/model-prepared-v1`. Use
@@ -52,6 +50,20 @@ uncached suffix. It supports system/user/assistant messages, greedy decoding,
 and up to 4,096 total conversation tokens, including formatting and replies.
 Tokenization, chat state, model execution and streaming are native Mojo; Python
 handles asset preparation, verification and building before handing off execution.
+
+Explore commands, generate from a prompt, or inspect configuration before launch:
+
+```sh
+uv run llm-mojo --help
+uv run llm-mojo models list
+uv run llm-mojo generate --prompt "The capital of France is" --preset short
+uv run llm-mojo chat --preset short --max-new-tokens 64 --show-config
+uv run llm-mojo bench list
+```
+
+The [CLI and configuration guide](docs/cli.md) explains presets, precedence,
+reports and benchmark commands. Commands currently require this source checkout.
+Validation and recorded measurements retain `uv run --locked`.
 
 ## What makes it fast
 

@@ -126,8 +126,8 @@ must continue to reproduce unchanged.
 | `tests/fixtures/decoder_layer/reference.py` | Actual upstream decoder capture and verified checkpoint input loading |
 | `tests/fixtures/decoder_layer/generate.py`, `test_reference.py` | Development generation, observation tests and immutable anchors |
 | `tests/fixtures/decoder_reference.py` and shared-lock symlink, `src/llm_mojo/validate.py` | Register the new reference and tests in the locked workflow |
-| `src/llm_mojo/decoder_layer.mojo` | Whole-call preflight and ordered attention/MLP composition |
-| `src/llm_mojo/attention_sublayer.mojo`, `src/llm_mojo/mlp.mojo` | Minimal validation extraction needed by composition; preserve arithmetic |
+| `src/llm_mojo/layers/decoder_layer.mojo` | Whole-call preflight and ordered attention/MLP composition |
+| `src/llm_mojo/layers/attention_sublayer.mojo`, `src/llm_mojo/layers/mlp.mojo` | Minimal validation extraction needed by composition; preserve arithmetic |
 | `tests/decoder_layer_support.mojo`, `tests/test_decoder_layer.mojo` | Fixture loading, boundary checks, cache and asynchronous behavior |
 | `src/llm_mojo/decoder_validation.py`, `tests/test_decoder_validation.py` | Candidate build/evaluation receipts and coverage verification |
 | `tests/fixtures/decoder_acceptance.py` | Explicit, candidate-bound holdout capture through the existing script lock |

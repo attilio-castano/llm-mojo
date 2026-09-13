@@ -86,7 +86,7 @@ There is no need to activate `.venv`; `uv run` executes commands in the managed
 environment. Each worktree has its own `.venv`; uv reuses its package cache when
 setting up another checkout.
 
-For everyday commands, use `uv run mojo ...` or `uv run python ...`. Plain
+For everyday commands, use `uv run llm-mojo ...`, `uv run mojo ...` or `uv run python ...`. Plain
 `uv run` uses the existing lockfile and does not upgrade packages just because
 new releases exist. Validation and recorded measurements use `--locked` so an
 outdated lockfile fails explicitly instead of changing during a run. Their
@@ -107,7 +107,7 @@ local artifacts. See [the tokenizer contract](tokenizer.md).
 Run the complete validation workflow from a clean checkout:
 
 ```bash
-uv run --locked llm-mojo-validate
+uv run --locked llm-mojo validate
 ```
 
 This regenerates every independent oracle into ignored `build/oracle_data/`,
