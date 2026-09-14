@@ -1,7 +1,7 @@
 # Inspect intermediate device lowering; this is not a timing instrument.
 from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext
-from llm_mojo.attention_prefill import _mma, _mma_tuned
+from llm_mojo.kernels.attention_prefill import _mma, _mma_tuned
 from std.sys import argv, get_defined_int
 
 

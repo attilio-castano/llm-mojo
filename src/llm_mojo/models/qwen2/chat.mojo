@@ -4,9 +4,9 @@ History is authoritative; model.length identifies its already submitted prefix.
 No rendered-text round trip is used for generated assistant tokens.
 """
 from max.gpu.host import DeviceContext
-from llm_mojo.model import select_projection, QwenModel, select_configuration, select_token_selection, select_copy_free, select_residual_norm
-from llm_mojo.tokenizer import Tokenizer, TokenizerWorkspace
-from llm_mojo.generate_cli import is_stop
+from llm_mojo.models.qwen2.model import select_projection, QwenModel, select_configuration, select_token_selection, select_copy_free, select_residual_norm
+from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
+from llm_mojo.models.qwen2.tokens import is_stop
 
 comptime DEFAULT_SYSTEM = "You are Qwen, created by Alibaba Cloud. You are a helpful assistant."
 comptime IM_END = 151645

@@ -1,23 +1,16 @@
 """Native plain-text greedy generation with optional diagnostic events."""
 from std.sys import argv
-from std.ffi import external_call
+from llm_mojo.runtime.clock import now
+from llm_mojo.models.qwen2.tokens import is_stop
 from max.gpu.host import DeviceContext
-from llm_mojo.model import select_projection, QwenModel, select_configuration, select_token_selection, select_copy_free, select_residual_norm
-from llm_mojo.tokenizer import Tokenizer, TokenizerWorkspace, TokenizerDecoder
-
-
-def now() -> UInt64:
-    return external_call["clock_gettime_nsec_np", UInt64](UInt32(8))
+from llm_mojo.models.qwen2.model import select_projection, QwenModel, select_configuration, select_token_selection, select_copy_free, select_residual_norm
+from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace, TokenizerDecoder
 
 
 def generation_budget(prompt_length: Int, maximum: Int) raises -> Int:
     if prompt_length < 1 or prompt_length > 4096 or maximum < 0 or maximum > 4096:
         raise Error("invalid prompt or generation limit")
     return min(maximum,4096-prompt_length)
-
-
-def is_stop(token: Int) -> Bool:
-    return token == 151645 or token == 151643
 
 
 def main() raises:

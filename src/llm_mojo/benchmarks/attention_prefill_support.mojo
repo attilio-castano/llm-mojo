@@ -1,8 +1,8 @@
 """Deterministic prefill inputs and explicit benchmark routing."""
 from layout import TensorLayout, TileTensor
 from llm_mojo.benchmarks.attention_decode_support import decode_input
-from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
-from llm_mojo.attention_prefill import (
+from llm_mojo.kernels.attention import enqueue_grouped_query_attention_apple_gpu
+from llm_mojo.kernels.attention_prefill import (
     enqueue_grouped_query_attention_prefill_apple_gpu,
     enqueue_grouped_query_attention_prefill_materialized_apple_gpu,
 )

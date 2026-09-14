@@ -6,7 +6,7 @@ weights to BF16 before PV by default. The explicit FP32 rolled-MMA option
 retains FP32 scores and weights through PV. These paths are separately tested.
 """
 from layout import TensorLayout, TileTensor, row_major, stack_allocation
-from llm_mojo.attention import (
+from llm_mojo.kernels.attention import (
     _validate_grouped_query_attention,
     _grouped_query_attention_qk_apple_gpu_kernel,
     _grouped_query_attention_pv_apple_gpu_kernel,

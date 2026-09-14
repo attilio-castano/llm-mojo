@@ -64,7 +64,7 @@ def checked_conditions():
     return conditions
 
 
-def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=None, tile_kernel_screen=None, mlp_decode_screen=None, decoder_screen=None, policy_confirmation=None):
+def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=None, tile_kernel_screen=None, mlp_decode_screen=None, decoder_screen=None, policy_confirmation=None, resolved_configuration=None):
     ensure_record_location(output)
     provenance = json.loads((build_dir / 'build.json').read_text())
     repo, sources = repository_state(), source_hashes()
@@ -77,6 +77,8 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
         if sha(build_dir / name) != digest:
             raise RuntimeError('binary identity changed')
     output.mkdir(parents=True, exist_ok=False)
+    if resolved_configuration is not None:
+        write_json(output / 'configuration.json', resolved_configuration)
     env = {k: v for k, v in os.environ.items() if k != 'MODULAR_DEBUG'}
     for name in study_names:
         policy_selection = None
@@ -164,6 +166,8 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
                       timing=spec.get('timing','Host monotonic enqueue through one synchronization per sample; microseconds per call. 24 distinct input or weight buffers, divided by 24; output/scratch reused.'),
                       inputs=spec.get('inputs','GQA deterministic signed recipe, seed + 13*layer; other operations analytical constants varying by layer, see operations.mojo. Numerical suites cover nonuniform data.'),
                       started_utc=utc_now(), conditions=[])
+        if resolved_configuration is not None:
+            record['configuration'] = resolved_configuration
         if selection is not None:
             record['selection'] = selection
         samples = []
@@ -219,7 +223,7 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
         write_json(directory / 'run.json', record)
 
 
-def main():
+def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('command', choices=['build', 'run', 'select-decoder', 'confirm-decoder', 'build-tokenizer', 'run-tokenizer', 'report-tokenizer'])
     p.add_argument('--build-dir', type=Path, required=True)
@@ -237,7 +241,7 @@ def main():
                             and name not in ('attention_sublayer_wo','attention_sublayer_decode','attention_sublayer_prefill',
                                              'attention_sublayer_projections','attention_sublayer_integrated',
                                              'attention_sublayer_parallelism')])
-    args = p.parse_args()
+    args = p.parse_args(argv)
     if args.command.endswith('-tokenizer'):
         from . import tokenizer_contract
         if args.command == 'build-tokenizer':

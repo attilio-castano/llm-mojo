@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from llm_mojo.decoder_validation import validate_results
+from llm_mojo.validation.decoder import validate_results
 
 
 class NumericalReceiptTests(unittest.TestCase):
@@ -87,7 +87,7 @@ class NumericalReceiptTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.validate(bad)
 
     def test_policy_acceptance_requires_every_schedule_comparison(self):
-        from llm_mojo.decoder_validation import STAGES, BOUNDARIES
+        from llm_mojo.validation.decoder import STAGES, BOUNDARIES
         records=copy.deepcopy(self.records)
         for stage in STAGES:
             boundary=next(r for r in records if r['kind']=='boundary' and r['mode']=='layer'
@@ -114,7 +114,7 @@ class NumericalReceiptTests(unittest.TestCase):
 
 
     def test_family_compatibility_is_complete_and_separate_from_self_invariance(self):
-        from llm_mojo.decoder_validation import STAGES, BOUNDARIES
+        from llm_mojo.validation.decoder import STAGES, BOUNDARIES
         records=[dict(r) for r in self.records if r['mode']=='negative']
         for variant in (0,3):
             base=[{**r,'policy':variant} for r in self.records if r['mode']!='negative']

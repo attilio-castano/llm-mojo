@@ -1,7 +1,7 @@
 """Exact Rust-oracle parity, both BPE algorithms, Unicode, and streaming."""
 from std.testing import assert_equal, assert_true, assert_raises
 from std.sys import argv
-from llm_mojo.tokenizer import (
+from llm_mojo.models.qwen2.tokenizer import (
     Tokenizer,
     TokenizerWorkspace,
     TokenizerDecoder,

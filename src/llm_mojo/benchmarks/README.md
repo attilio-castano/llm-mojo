@@ -11,7 +11,7 @@ locked toolchain. Offline analysis and plotting also work from an installed
 package when given explicit data directories. Plotting adds pinned Matplotlib
 only to the command environment.
 
-From a clean commit, after `uv run --locked llm-mojo-validate` passes:
+From a clean commit, after `uv run --locked llm-mojo validate` passes:
 
 ```bash
 uv run --locked llm-mojo-bench build --build-dir /private/tmp/mojo-study-build

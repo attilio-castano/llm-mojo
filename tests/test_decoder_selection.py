@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 from llm_mojo.benchmarks import decoder_layer_contract as contract
 from llm_mojo.benchmarks import study
-from llm_mojo import decoder_validation as validation
+from llm_mojo.validation import decoder as validation
 import test_decoder_validation as baseline_tests
 
 

@@ -1,17 +1,17 @@
 """Composed decoder boundaries and cache state, against the pinned CPU layer."""
 from layout import TensorLayout, TileTensor, row_major, col_major
-from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
-from llm_mojo.rope import enqueue_rope_apple_gpu
-from llm_mojo.residual import enqueue_residual_apple_gpu
-from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
-from llm_mojo.attention_decode import enqueue_grouped_query_attention_decode_apple_gpu, enqueue_grouped_query_attention_consistent_apple_gpu
-from llm_mojo.attention_prefill import enqueue_grouped_query_attention_prefill_apple_gpu, enqueue_grouped_query_attention_prefill_split_apple_gpu
+from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
+from llm_mojo.kernels.rope import enqueue_rope_apple_gpu
+from llm_mojo.kernels.residual import enqueue_residual_apple_gpu
+from llm_mojo.kernels.attention import enqueue_grouped_query_attention_apple_gpu
+from llm_mojo.kernels.attention_decode import enqueue_grouped_query_attention_decode_apple_gpu, enqueue_grouped_query_attention_consistent_apple_gpu
+from llm_mojo.kernels.attention_prefill import enqueue_grouped_query_attention_prefill_apple_gpu, enqueue_grouped_query_attention_prefill_split_apple_gpu
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.testing import TestSuite, assert_equal, assert_raises
 from std.python import PythonObject
-from llm_mojo.attention_sublayer import AttentionWeights, AttentionCache, AttentionWorkspace, _enqueue_attention_qkv, _enqueue_attention_wo
-from llm_mojo.mlp import MLPWeights, MLPWorkspace, enqueue_mlp_stage_apple_gpu, enqueue_mlp_apple_gpu
-from llm_mojo.decoder_layer import enqueue_decoder_layer, decoder_mappings, decoder_policy_configuration, _enqueue_decoder_layer_policy_storage
+from llm_mojo.layers.attention_sublayer import AttentionWeights, AttentionCache, AttentionWorkspace, _enqueue_attention_qkv, _enqueue_attention_wo
+from llm_mojo.layers.mlp import MLPWeights, MLPWorkspace, enqueue_mlp_stage_apple_gpu, enqueue_mlp_apple_gpu
+from llm_mojo.layers.decoder_layer import enqueue_decoder_layer, decoder_mappings, decoder_policy_configuration, _enqueue_decoder_layer_policy_storage
 from decoder_layer_support import decoder_support, load_decoder, check_decoder, poison_decoder, decoder_snapshot, exact_decoder, check_decoder_cache, check_decoder_active, check_decoder_slice
 
 

@@ -32,12 +32,12 @@ universal invariant.
 
 ## Artifact initialization
 
-Run `uv run --locked llm-mojo-tokenizer setup` to prepare ahead of time. The
+Run `uv run --locked llm-mojo tokenizer setup` to prepare ahead of time. The
 `encode` and `decode` entrypoints perform the same initialization automatically:
 
 ```sh
-uv run --locked llm-mojo-tokenizer encode 'Hello world'
-uv run --locked llm-mojo-tokenizer decode '9707,1879'
+uv run --locked llm-mojo tokenizer encode 'Hello world'
+uv run --locked llm-mojo tokenizer decode '9707,1879'
 ```
 
 The asset root is `build/checkpoints/qwen2.5-0.5b-instruct/` followed by immutable
@@ -107,7 +107,7 @@ Generate development fixtures after setup:
 ```sh
 uv run --locked --script tests/fixtures/tokenizer_reference.py
 uv run --locked mojo run -I src tests/test_tokenizer.mojo
-uv run --locked llm-mojo-validate
+uv run --locked llm-mojo validate
 ```
 
 Ordinary validation requires the local artifact and never downloads model data.

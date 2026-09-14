@@ -7,7 +7,7 @@ from llm_mojo.benchmarks.attention_prefill_support import (
     PREFILL_VARIANT_COUNT,
 )
 from layout import TensorLayout, TileTensor, row_major
-from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
+from llm_mojo.kernels.attention import enqueue_grouped_query_attention_apple_gpu
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys import argv, is_defined, get_defined_int
 from std.time import perf_counter_ns, sleep

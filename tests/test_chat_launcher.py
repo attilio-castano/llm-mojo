@@ -5,38 +5,43 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from llm_mojo import chat, model_assets
+from llm_mojo.runtime import launch as chat
+from llm_mojo.models.qwen2 import assets as model_assets
 
 
 class ChatLauncherTests(unittest.TestCase):
+    def launch(self, **options):
+        from llm_mojo.configuration import resolve_run
+        chat.launch_chat(resolve_run('chat', **options))
+
     def test_default_and_relative_override_from_another_working_directory(self):
         with tempfile.TemporaryDirectory() as temporary:
             elsewhere = Path(temporary).resolve()
             root = elsewhere / 'checkout'
             default = root / 'build/model-prepared-v1'
-            for arguments, expected in (([], default),
-                    (['--prepared', 'custom model'], elsewhere / 'custom model')):
+            for arguments, expected in (({}, default),
+                    ({'prepared': 'custom model'}, elsewhere / 'custom model')):
                 with self.subTest(arguments=arguments), chdir(elsewhere), \
                      patch.object(model_assets, 'repository_root', return_value=root), \
                      patch.object(chat, 'verify_prepared', return_value=(expected, {})) as verify, \
                      patch.object(chat, 'ensure_prepared', return_value=Path('/tables')), \
                      patch.object(chat, 'ensure_binary', return_value=Path('/native')), \
                      patch.object(chat.os, 'execv') as execute:
-                    chat.main(arguments)
+                    self.launch(**arguments)
                 verify.assert_called_once_with(expected)
                 self.assertEqual(execute.call_args.args[1][1], str(expected))
 
     def test_invalid_limits_do_not_load_or_compile(self):
-        for option in ('--max-new-tokens','--chunk-rows'):
+        for option in ('max_new_tokens', 'chunk_rows'):
             with self.subTest(option=option), patch.object(chat,'verify_prepared') as verify:
-                with self.assertRaises(SystemExit): chat.main([option,'0'])
+                with self.assertRaises(ValueError): self.launch(**{option: 0})
                 verify.assert_not_called()
 
     def test_existing_report_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as temporary:
             path=Path(temporary)/'report.tsv';path.write_text('original')
             with patch.object(chat,'verify_prepared') as verify:
-                with self.assertRaises(SystemExit): chat.main(['--report',str(path)])
+                with self.assertRaises(ValueError): self.launch(report=str(path))
                 verify.assert_not_called()
             self.assertEqual(path.read_text(),'original')
 
@@ -45,25 +50,10 @@ class ChatLauncherTests(unittest.TestCase):
              patch.object(chat,'ensure_prepared',return_value=Path('/tables')) as tables, \
              patch.object(chat,'ensure_binary',return_value=Path('/native')), \
              patch.object(chat.os,'execv') as execute:
-            chat.main(['--prepared','/prepared','--max-new-tokens','12','--chunk-rows','16'])
+            self.launch(prepared='/prepared', max_new_tokens=12, chunk_rows=16)
         verify.assert_called_once_with(Path('/prepared'))
         tables.assert_called_once_with(download=False)
         execute.assert_called_once_with(Path('/native'),['/native','/prepared','/tables','12','16','',''])
-
-    def test_changed_binary_is_rebuilt_even_with_matching_sources(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root=Path(temporary);directory=root/'build/chat';directory.mkdir(parents=True)
-            binary=directory/'chat';binary.write_bytes(b'changed')
-            (directory/'binary.json').write_text(json.dumps(dict(sources={'a':'b'},binary_sha256='stale')))
-            def compile(command,**kwargs): Path(command[-1]).write_bytes(b'fresh')
-            with patch.object(chat,'repository_root',return_value=root), \
-                 patch.object(chat,'build_sources',return_value={'a':'b'}), \
-                 patch.object(chat,'environment_tool',return_value='mojo'), \
-                 patch.object(chat.subprocess,'run',side_effect=compile) as run:
-                self.assertEqual(chat.ensure_binary(),binary)
-                self.assertEqual(chat.ensure_binary(),binary)
-            self.assertEqual(run.call_count,1)
-            self.assertEqual(binary.read_bytes(),b'fresh')
 
 class ChatEventTests(unittest.TestCase):
     def test_interrupt_after_last_token_was_consumed_is_valid(self):

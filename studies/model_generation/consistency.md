@@ -129,11 +129,11 @@ the new reference, native accuracy and diagnosis in fresh output directories:
 ```sh
 uv run --locked --script tests/fixtures/model_consistency.py --self-test
 uv run --locked --script tests/fixtures/model_consistency.py --output build/reproduce-consistency-reference
-uv run --locked python -m llm_mojo.model_validation build --binary build/reproduce-consistency-model
-uv run --locked python -m llm_mojo.model_validation consistency --binary build/reproduce-consistency-model --reference build/reproduce-consistency-reference --output build/reproduce-consistency-accuracy --length 1
+uv run --locked python -m llm_mojo.validation.model build --binary build/reproduce-consistency-model
+uv run --locked python -m llm_mojo.validation.model consistency --binary build/reproduce-consistency-model --reference build/reproduce-consistency-reference --output build/reproduce-consistency-accuracy --length 1
 # The preceding command records seven failures and exits nonzero.
 uv run --locked --script tests/fixtures/model_reference_diagnosis.py --native-operations --output build/reproduce-consistency-operations-reference
-uv run --locked python -m llm_mojo.model_validation operations --binary build/reproduce-consistency-model --reference build/reproduce-consistency-operations-reference --output build/reproduce-consistency-operations
+uv run --locked python -m llm_mojo.validation.model operations --binary build/reproduce-consistency-model --reference build/reproduce-consistency-operations-reference --output build/reproduce-consistency-operations
 DECODER_RECORDS=build/reproduce-consistency-layer.jsonl uv run --locked mojo run -I src -I build -I tests tests/test_consistency.mojo
 ```
 

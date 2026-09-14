@@ -5,8 +5,8 @@ from std.memory import bitcast
 from max.gpu.host import DeviceContext, DeviceGraph, DeviceGraphBuilder
 from layout import TileTensor, TensorLayout, row_major
 from std.gpu import global_idx
-from llm_mojo.model import QwenModel, select_configuration, save_bf16, _observation_clock
-from llm_mojo.tokenizer import Tokenizer, TokenizerWorkspace
+from llm_mojo.models.qwen2.model import QwenModel, select_configuration, save_bf16, _observation_clock
+from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
 
 
 def rewind(mut model: QwenModel, prefix: Int):
@@ -167,7 +167,7 @@ def scheduling_pair[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext,
 def launch_micro[DOWN: Bool](batch: Int, first: Int, comparison: Int) raises:
     """Same projection and views; isolate explicit compiled-handle reuse."""
     from layout import TileTensor, row_major
-    from llm_mojo.linear import _linear_rowwise_apple_gpu_kernel
+    from llm_mojo.kernels.linear import _linear_rowwise_apple_gpu_kernel
     from std.math import ceildiv
     comptime K = 4864 if DOWN else 32
     comptime N = 896 if DOWN else 1

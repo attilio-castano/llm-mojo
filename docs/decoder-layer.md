@@ -398,7 +398,7 @@ checkpoint; it does not yet qualify the newly added Mojo decoder wrapper.
 
 ## Decoder implementation checkpoint
 
-`src/llm_mojo/decoder_layer.mojo` composes the existing attention and MLP
+`src/llm_mojo/layers/decoder_layer.mojo` composes the existing attention and MLP
 entrypoints. A shared, side-effect-free attention preflight plus MLP preflight
 runs before the first dispatch. The wrapper rejects invalid geometry, layout,
 capacity, mapping, short buffers and overlapping writable storage. Attention's

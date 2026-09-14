@@ -36,7 +36,7 @@ y[d+32] = x[d+32] * cosine[d+32] + x[d] * sine[d+32]
 One GPU thread owns a pair: it reads both input values before writing either
 output. Across heads and rows, pairs are independent. This makes ownership
 simple and avoids a reduction or threadgroup barrier. The
-[implementation](../../src/llm_mojo/rope.mojo) performs the contract's BF16 casts
+[implementation](../../src/llm_mojo/kernels/rope.mojo) performs the contract's BF16 casts
 explicitly; FP32 algebra without matching cast points is a different oracle.
 
 For query heads, X and O each contain M×14×64 BF16 values, or 1,792 bytes per

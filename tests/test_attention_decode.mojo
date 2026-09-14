@@ -14,8 +14,8 @@ from oracle_data.attention.reference_data import (
 )
 from test_attention import fill_fixture
 from layout import TensorLayout, TileTensor, row_major
-from llm_mojo.attention import enqueue_grouped_query_attention_apple_gpu
-from llm_mojo.attention_decode import (
+from llm_mojo.kernels.attention import enqueue_grouped_query_attention_apple_gpu
+from llm_mojo.kernels.attention_decode import (
     enqueue_grouped_query_attention_decode_apple_gpu,
 )
 from max.gpu.host import DeviceContext

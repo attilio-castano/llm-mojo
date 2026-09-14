@@ -1,11 +1,11 @@
 """Exact comparison with the existing four-kernel BF16 path, including guards."""
-from llm_mojo.attention_sublayer import (
+from llm_mojo.layers.attention_sublayer import (
     AttentionWorkspace, AttentionCache, AttentionWeights, _enqueue_fused_decode_qkv,
     _unpack_qkv, _append, enqueue_attention_sublayer_integrated,
 )
-from llm_mojo.rope import enqueue_rope_apple_gpu
-from llm_mojo.decoder_layer import decoder_mappings, enqueue_decoder_layer
-from llm_mojo.mlp import MLPWeights, MLPWorkspace
+from llm_mojo.kernels.rope import enqueue_rope_apple_gpu
+from llm_mojo.layers.decoder_layer import decoder_mappings, enqueue_decoder_layer
+from llm_mojo.layers.mlp import MLPWeights, MLPWorkspace
 from max.gpu.host import DeviceBuffer, DeviceContext
 from layout import TileTensor, row_major
 from std.memory import bitcast

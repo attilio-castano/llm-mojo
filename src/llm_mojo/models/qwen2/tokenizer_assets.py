@@ -7,19 +7,18 @@ from __future__ import annotations
 
 import argparse
 import array
-from contextlib import contextmanager
-import fcntl
 import hashlib
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import urllib.request
 
-from ._repository import repository_root, environment_tool
+from llm_mojo._repository import repository_root
+from llm_mojo.runtime.artifacts import sha, atomic_write, setup_lock
 
+MODEL_ID = "qwen2.5-0.5b-instruct"
 REVISION = "7ae557604adf67be50417f59c2c2f167def9a775"
 SOURCE_SHA = "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539"
 URL = f'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/resolve/{REVISION}/tokenizer.json'
@@ -30,36 +29,8 @@ PATTERN = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p
 
 def asset_directory():
     return (
-        repository_root() / "build/checkpoints/qwen2.5-0.5b-instruct" / REVISION
+        repository_root() / "build/checkpoints" / MODEL_ID / REVISION
     )
-
-
-def sha(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-
-def atomic_write(path, data):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(
-        prefix=path.name + ".", suffix=".part", dir=path.parent
-    )
-    try:
-        with os.fdopen(fd, "wb") as out:
-            out.write(data)
-            out.flush()
-            os.fsync(out.fileno())
-        os.replace(temporary, path)
-    finally:
-        Path(temporary).unlink(missing_ok=True)
-
-
-@contextmanager
-def setup_lock(directory):
-    directory.mkdir(parents=True, exist_ok=True)
-    with (directory / ".setup.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        yield
 
 
 def ensure_source(directory, *, download=False):
@@ -71,7 +42,7 @@ def ensure_source(directory, *, download=False):
             )
         return path
     if not download:
-        raise FileNotFoundError(f'{path}; run llm-mojo-tokenizer setup first')
+        raise FileNotFoundError(f'{path}; run llm-mojo tokenizer setup first')
     print(
         "Downloading pinned tokenizer.json (7 MB)...",
         file=sys.stderr,
@@ -145,7 +116,8 @@ def validate_config(data):
 def generator_identity():
     root = repository_root()
     names = [
-        "src/llm_mojo/tokenizer_assets.py",
+        "src/llm_mojo/models/qwen2/tokenizer_assets.py",
+        "src/llm_mojo/runtime/artifacts.py",
         "tests/fixtures/tokenizer/generate.py",
         "tests/fixtures/generate.py.lock",
         "tests/fixtures/tokenizer_reference.py",
@@ -299,68 +271,11 @@ def ensure_prepared(directory=None, *, download=True):
 
 
 def ensure_binary():
-    root = repository_root()
-    directory = root / "build/tokenizer"
-    source_paths = [
-        root / "src/llm_mojo/tokenizer.mojo",
-        root / "src/llm_mojo/tokenizer_cli.mojo",
-        root / "uv.lock",
-    ]
-    identity = {str(p.relative_to(root)): sha(p) for p in source_paths}
-    binary = directory / "tokenizer"
-    manifest_path = directory / "binary.json"
-    with setup_lock(directory):
-        try:
-            previous = json.loads(manifest_path.read_text())
-            valid = previous["sources"] == identity and previous[
-                "binary_sha256"
-            ] == sha(binary)
-        except (OSError, ValueError, KeyError, TypeError):
-            valid = False
-        if not valid:
-            fd, name = tempfile.mkstemp(
-                prefix="tokenizer.", suffix=".part", dir=directory
-            )
-            os.close(fd)
-            temporary = Path(name)
-            try:
-                subprocess.run(
-                    [
-                        environment_tool("mojo"),
-                        "build",
-                        "-I",
-                        "src",
-                        str(source_paths[1]),
-                        "-o",
-                        str(temporary),
-                    ],
-                    cwd=root,
-                    check=True,
-                )
-                if identity != {
-                    str(p.relative_to(root)): sha(p) for p in source_paths
-                }:
-                    raise ValueError(
-                        "tokenizer source changed during compilation"
-                    )
-                digest = sha(temporary)
-                os.replace(temporary, binary)
-                atomic_write(
-                    manifest_path,
-                    (
-                        json.dumps(
-                            dict(sources=identity, binary_sha256=digest),
-                            indent=2,
-                        )
-                        + "\n"
-                    ).encode(),
-                )
-            finally:
-                temporary.unlink(missing_ok=True)
-    return binary
+    from llm_mojo.runtime.build import ensure_binary as build
+    return build('tokenizer', 'src/llm_mojo/cli/tokenizer_cli.mojo')
 
 
-def main():
+def main(argv=None):
     p = argparse.ArgumentParser(
         description="Prepare or execute the pure Mojo Qwen tokenizer."
     )
@@ -377,7 +292,7 @@ def main():
         action="store_true",
         help="Require existing tokenizer.json; never download it.",
     )
-    a = p.parse_args()
+    a = p.parse_args(argv)
     table = ensure_prepared(a.asset_dir, download=not a.offline)
     binary = ensure_binary()
     if a.operation == "setup":

@@ -7,8 +7,8 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from llm_mojo import model_assets as assets
-from llm_mojo.model_assets import CHECKPOINT_SHA, REVISION, tensor_shapes, validate_manifest
+from llm_mojo.models.qwen2 import assets
+from llm_mojo.models.qwen2.assets import CHECKPOINT_SHA, REVISION, tensor_shapes, validate_manifest
 
 
 class ModelAssetTests(unittest.TestCase):
@@ -27,14 +27,14 @@ class ModelAssetTests(unittest.TestCase):
 
     def test_wrong_checkpoint_missing_layer_and_transposed_weight(self):
         original=self.manifest()
-        cases=[]
+        cases=[[], None, dict(original, tensors=None)]
         bad=copy.deepcopy(original); bad['checkpoint_sha256']='0'*64; cases.append(bad)
         bad=copy.deepcopy(original); del bad['tensors']['layer_23_qkv']; cases.append(bad)
         bad=copy.deepcopy(original); bad['tensors']['layer_0_down']['shape']=[4864,896]; cases.append(bad)
         bad=copy.deepcopy(original); bad['tensors']['embedding']['dtype']='F16'; cases.append(bad)
         bad=copy.deepcopy(original); bad['tensors']['cosine']['bytes']-=2; cases.append(bad)
         for bad in cases:
-            with self.subTest(bad=bad.keys()), self.assertRaises(ValueError):
+            with self.subTest(bad=type(bad).__name__), self.assertRaises(ValueError):
                 validate_manifest(bad)
 
 
@@ -89,7 +89,7 @@ class GenerationLauncherTests(unittest.TestCase):
         tokenizer.assert_called_once_with(download=False)
         root = assets.repository_root()
         run.assert_called_once_with([
-            '/locked/bin/mojo', 'run', '-I', 'src', str(root / 'src/llm_mojo/generate_cli.mojo'),
+            '/locked/bin/mojo', 'run', '-I', 'src', str(root / 'src/llm_mojo/cli/generate_cli.mojo'),
             str(self.prepared.resolve()), str(tables), str(self.prompt.resolve()), '8', '16', 'consistent',
         ], cwd=root, check=True)
 

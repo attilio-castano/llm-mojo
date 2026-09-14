@@ -7,7 +7,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from llm_mojo import tokenizer_assets as assets
+from llm_mojo.models.qwen2 import tokenizer_assets as assets
+from llm_mojo.runtime import artifacts
 
 
 class TokenizerAssetTests(unittest.TestCase):
@@ -84,10 +85,10 @@ class TokenizerAssetTests(unittest.TestCase):
             path = Path(tmp) / "tables.bin"
             path.write_bytes(b"old")
             with patch.object(
-                assets.os, "replace", side_effect=OSError("interrupted")
+                artifacts.os, "replace", side_effect=OSError("interrupted")
             ):
                 with self.assertRaises(OSError):
-                    assets.atomic_write(path, b"new")
+                    artifacts.atomic_write(path, b"new")
             self.assertEqual(path.read_bytes(), b"old")
             self.assertEqual(list(Path(tmp).glob("*.part")), [])
 

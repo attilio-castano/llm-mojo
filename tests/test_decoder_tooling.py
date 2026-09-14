@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from llm_mojo import decoder_validation as validation
+from llm_mojo.validation import decoder as validation
 from llm_mojo.benchmarks import decoder_layer_contract as contract
 from llm_mojo.benchmarks.study import STUDIES,summarize,parse_output
 from llm_mojo.benchmarks.capture_trace import parse_target_identity

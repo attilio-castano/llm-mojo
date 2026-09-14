@@ -124,8 +124,8 @@ incremental encoding are outside this milestone.
 Initialize and use the pipeline from the repository:
 
 ```sh
-uv run --locked llm-mojo-tokenizer encode 'Hello world'
-uv run --locked llm-mojo-tokenizer decode '9707,1879'
+uv run --locked llm-mojo tokenizer encode 'Hello world'
+uv run --locked llm-mojo tokenizer decode '9707,1879'
 ```
 
 The first call downloads and verifies the pinned JSON, prepares tables, and

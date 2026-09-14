@@ -5,7 +5,7 @@ from std.gpu import global_idx
 from std.memory import bitcast
 from std.sys.info import is_gpu
 from std.ffi import external_call
-from llm_mojo.bf16_arithmetic import multiply_bits
+from llm_mojo.kernels.bf16_arithmetic import multiply_bits
 from std.math import ceildiv, exp
 
 

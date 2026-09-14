@@ -4,13 +4,13 @@ All allocations and output checks precede timing. Each sample enqueues a hot
 call or a 24-buffer sweep, synchronizes once, and divides by the layer count.
 """
 from layout import TensorLayout, TileTensor, row_major
-from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu, enqueue_rms_norm_apple_gpu_shared_tree
-from llm_mojo.linear import (
+from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu, enqueue_rms_norm_apple_gpu_shared_tree
+from llm_mojo.kernels.linear import (
     enqueue_linear_apple_gpu, enqueue_linear_apple_gpu_two_output,
     enqueue_linear_prefill_direct_apple_gpu, enqueue_linear_prefill_tiled_apple_gpu_bk,
     enqueue_linear_prefill_register_2x2_apple_gpu, enqueue_linear_prefill_mma_8x16_apple_gpu,
 )
-from llm_mojo.rope import enqueue_rope_apple_gpu
+from llm_mojo.kernels.rope import enqueue_rope_apple_gpu
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.sys import argv
 from std.time import perf_counter_ns

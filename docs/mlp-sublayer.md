@@ -458,7 +458,7 @@ arrays are ignored under `build/oracle_data/mlp/`.
 ```sh
 uv run --locked --script tests/fixtures/generate.py mlp -- --self-test
 uv run --locked --script tests/fixtures/generate.py mlp
-uv run --locked llm-mojo-validate
+uv run --locked llm-mojo validate
 ```
 
 The full workflow regenerates and verifies the synthetic MLP references and runs

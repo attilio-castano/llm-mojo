@@ -2,7 +2,7 @@ from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext
 from std.memory import bitcast
 from std.testing import assert_equal, assert_raises, TestSuite
-from llm_mojo.linear import enqueue_linear_apple_gpu
+from llm_mojo.kernels.linear import enqueue_linear_apple_gpu
 
 
 def test_arrangements_preserve_bits_and_guards() raises:

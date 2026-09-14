@@ -192,7 +192,7 @@ Full replay remains local and does not require external artifact downloads.
 To recover an original JSONL stream into a new external file:
 
 ```sh
-uv run --locked python -m llm_mojo.decoder_validation expand-checks --input studies/decoder_layer/policies_holdout_checks.columns.jsonl.xz --output "$POLICY_CHECKS"
+uv run --locked python -m llm_mojo.validation.decoder expand-checks --input studies/decoder_layer/policies_holdout_checks.columns.jsonl.xz --output "$POLICY_CHECKS"
 ```
 
 Its SHA-256 must match the corresponding `uncompressed_sha256` in the storage
@@ -227,9 +227,9 @@ paths for `POLICY_BINARY`, `POLICY_FIXTURES` and `POLICY_RESULTS`, and point
 `POLICY_ASSETS` at the prepared pinned checkpoint directory:
 
 ```sh
-uv run --locked python -m llm_mojo.decoder_validation build --selection --binary "$POLICY_BINARY"
+uv run --locked python -m llm_mojo.validation.decoder build --selection --binary "$POLICY_BINARY"
 uv run --locked --script tests/fixtures/decoder_acceptance.py --policies --candidate-binary "$POLICY_BINARY" --checkpoint-assets "$POLICY_ASSETS" --output "$POLICY_FIXTURES"
-uv run --locked python -m llm_mojo.decoder_validation evaluate-policies --binary "$POLICY_BINARY" --fixtures "$POLICY_FIXTURES" --output "$POLICY_RESULTS" --variants 100 101 102 103 --invariant-variants 101 103 --comparison-family 101 103 --split holdout
+uv run --locked python -m llm_mojo.validation.decoder evaluate-policies --binary "$POLICY_BINARY" --fixtures "$POLICY_FIXTURES" --output "$POLICY_RESULTS" --variants 100 101 102 103 --invariant-variants 101 103 --comparison-family 101 103 --split holdout
 ```
 
 The evaluation receipt must report `status: passed` and

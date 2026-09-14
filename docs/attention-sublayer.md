@@ -72,7 +72,7 @@ the strict BF16 compatibility failures and understand the reference decision.
 
 ## Implementation and reproduction
 
-The public API lives in `src/llm_mojo/attention_sublayer.mojo`:
+The public API lives in `src/llm_mojo/layers/attention_sublayer.mojo`:
 `AttentionWeights`, `AttentionCache`, `AttentionWorkspace`, and
 `enqueue_attention_sublayer_integrated`. The caller owns buffers and chooses
 mappings explicitly. The integrated default uses packed 8×16 QKV/Wo for R≥16
@@ -81,7 +81,7 @@ projection mapping 5 selects both 16×16 projections. Their composition is the
 only additional nonzero mapping pair enabled by the latest experiment.
 
 ```sh
-uv run --locked llm-mojo-validate
+uv run --locked llm-mojo validate
 uv run --locked --script tests/fixtures/generate.py attention_sublayer
 uv run --locked --script tests/fixtures/generate.py attention_precision
 ```

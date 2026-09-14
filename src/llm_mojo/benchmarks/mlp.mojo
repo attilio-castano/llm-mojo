@@ -1,7 +1,7 @@
 """Seven materialized MLP stages, checked before paired timing or tracing."""
 from layout import TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
-from llm_mojo.mlp import (
+from llm_mojo.layers.mlp import (
     MLPWeights,
     mlp_combines_gate_up,
     MLPWorkspace,

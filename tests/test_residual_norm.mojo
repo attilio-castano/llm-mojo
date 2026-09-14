@@ -2,9 +2,9 @@ from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext
 from std.memory import bitcast
 from std.testing import assert_equal, assert_raises, TestSuite
-from llm_mojo.residual import enqueue_residual_apple_gpu
-from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
-from llm_mojo.residual_norm import enqueue_residual_norm
+from llm_mojo.kernels.residual import enqueue_residual_apple_gpu
+from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
+from llm_mojo.kernels.residual_norm import enqueue_residual_norm
 
 
 def test_exact_composition_and_storage() raises:

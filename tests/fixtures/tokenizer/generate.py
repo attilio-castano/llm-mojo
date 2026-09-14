@@ -10,7 +10,7 @@ import unicodedata as ud
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "src"))
-from llm_mojo.tokenizer_assets import (
+from llm_mojo.models.qwen2.tokenizer_assets import (
     asset_directory,
     ensure_source,
     prepare_tables,

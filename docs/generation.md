@@ -131,7 +131,7 @@ and final Fast dispatch verification. Historical reserved inputs remain unopened
 The verified development launcher is:
 
 ```sh
-uv run --locked python -m llm_mojo.model_assets --prepared "$MODEL_PREPARED" --prompt "$PROMPT_FILE" --max-new-tokens 16 --policy fast --report build/generation-events.tsv
+uv run --locked python -m llm_mojo.models.qwen2.assets --prepared "$MODEL_PREPARED" --prompt "$PROMPT_FILE" --max-new-tokens 16 --policy fast --report build/generation-events.tsv
 ```
 
 `MODEL_PREPARED` names the prepared model directory and `PROMPT_FILE` contains

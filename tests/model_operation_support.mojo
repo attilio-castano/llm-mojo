@@ -1,12 +1,12 @@
 """Identical-operand native operation capture for an exposed development case."""
 from max.gpu.host import DeviceContext
 from layout import TileTensor, row_major
-from llm_mojo.model import ModelLayer, load_bf16, save_bf16
-from llm_mojo.attention_sublayer import AttentionWorkspace, _enqueue_attention_qkv, _enqueue_attention_wo
-from llm_mojo.attention_decode import enqueue_grouped_query_attention_consistent_apple_gpu
-from llm_mojo.mlp import MLPWorkspace, enqueue_mlp_stage_apple_gpu
-from llm_mojo.rms_norm import enqueue_rms_norm_apple_gpu
-from llm_mojo.residual import enqueue_residual_apple_gpu
+from llm_mojo.models.qwen2.model import ModelLayer, load_bf16, save_bf16
+from llm_mojo.layers.attention_sublayer import AttentionWorkspace, _enqueue_attention_qkv, _enqueue_attention_wo
+from llm_mojo.kernels.attention_decode import enqueue_grouped_query_attention_consistent_apple_gpu
+from llm_mojo.layers.mlp import MLPWorkspace, enqueue_mlp_stage_apple_gpu
+from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
+from llm_mojo.kernels.residual import enqueue_residual_apple_gpu
 
 
 def capture_operations(ctx: DeviceContext, prepared: String, reference: String, output: String) raises:

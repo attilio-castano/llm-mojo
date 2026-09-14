@@ -18,10 +18,10 @@ from types import SimpleNamespace
 import numpy as np
 
 from .._repository import environment_tool, repository_root
-from ..mlp_validation import source_identity, sha, write
-from ..model_assets import verify_prepared
-from ..model_validation import environment
-from ..tokenizer_assets import ensure_prepared
+from ..validation.evidence import source_identity, sha, write
+from llm_mojo.models.qwen2.assets import verify_prepared
+from ..validation.model import environment
+from llm_mojo.models.qwen2.tokenizer_assets import ensure_prepared
 from .environment import stable_environment, conditions_snapshot, require_ac, require_nominal_thermal_state, ensure_record_location
 from . import model_contract as contract
 

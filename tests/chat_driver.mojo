@@ -2,10 +2,10 @@
 from std.sys import argv
 from std.testing import assert_equal, assert_raises
 from max.gpu.host import DeviceContext
-from llm_mojo.chat import ChatSession, DEFAULT_SYSTEM
-from llm_mojo.model import select_copy_free, select_residual_norm, select_token_selection, QwenModel, save_bf16, select_configuration
-from llm_mojo.tokenizer import Tokenizer, TokenizerWorkspace
-from llm_mojo.generate_cli import now
+from llm_mojo.models.qwen2.chat import ChatSession, DEFAULT_SYSTEM
+from llm_mojo.models.qwen2.model import select_copy_free, select_residual_norm, select_token_selection, QwenModel, save_bf16, select_configuration
+from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
+from llm_mojo.cli.generate_cli import now
 
 
 def caches(model: QwenModel, directory: String) raises:

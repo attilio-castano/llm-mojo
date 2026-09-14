@@ -107,8 +107,9 @@ selection; the [study index](../studies/README.md) organizes the results.
 
 ## Repository structure
 
-Keep native operations and session machinery under `src/llm_mojo/`. Add a
-subpackage only when implemented ownership boundaries justify it. Tests live in
+The [CLI guide](cli.md#code-ownership) maps commands, Qwen composition, runtime
+services, layers and kernels under `src/llm_mojo/`. Add a subpackage only when
+implemented ownership boundaries justify it. Tests live in
 `tests/`, with independent oracle generators and frozen identities in
 `tests/fixtures/`. Reusable measurement tools belong in
 `src/llm_mojo/benchmarks/`; studies own explanations and compact measured evidence.

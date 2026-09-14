@@ -86,7 +86,7 @@ There is no need to activate `.venv`; `uv run` executes commands in the managed
 environment. Each worktree has its own `.venv`; uv reuses its package cache when
 setting up another checkout.
 
-For everyday commands, use `uv run mojo ...` or `uv run python ...`. Plain
+For everyday commands, use `uv run llm-mojo ...`, `uv run mojo ...` or `uv run python ...`. Plain
 `uv run` uses the existing lockfile and does not upgrade packages just because
 new releases exist. Validation and recorded measurements use `--locked` so an
 outdated lockfile fails explicitly instead of changing during a run. Their
@@ -99,7 +99,7 @@ for setup rather than adding these flags to project commands.
 
 ## Tests
 
-Prepare the tokenizer once with `uv run --locked llm-mojo-tokenizer setup`.
+Prepare the tokenizer once with `uv run --locked llm-mojo tokenizer setup`.
 This downloads only the pinned tokenizer artifact when missing, verifies it,
 and prepares tables and the native executable. Subsequent tokenizer calls reuse
 local artifacts. See [the tokenizer contract](tokenizer.md).
@@ -107,8 +107,15 @@ local artifacts. See [the tokenizer contract](tokenizer.md).
 Run the complete validation workflow from a clean checkout:
 
 ```bash
-uv run --locked llm-mojo-validate
+uv run --locked llm-mojo validate
 ```
+
+The runner lives in `src/llm_mojo/validation/suite.py`. The `mlp`, `decoder`,
+and `model` modules in that package own numerical qualification, and
+`evidence.py` owns their shared source identity and receipt helpers. Tests and
+independent oracle generators remain under `tests/`. See the
+[CLI compatibility table](cli.md#validation-and-compatibility) for retained
+study commands and their canonical replacements.
 
 This regenerates every independent oracle into ignored `build/oracle_data/`,
 checks its SHA-256 against the frozen anchors (the original fixtures at
@@ -182,8 +189,8 @@ For recorded evaluation, build and launch the numerical candidate through the
 project environment:
 
 ```bash
-uv run --locked python -m llm_mojo.mlp_validation build --binary /private/tmp/mlp-numerical-candidate
-uv run --locked python -m llm_mojo.mlp_validation evaluate --binary /private/tmp/mlp-numerical-candidate --output /private/tmp/mlp-numerical-regression --split decode_holdout --variants 0 12 --regression
+uv run --locked python -m llm_mojo.validation.mlp build --binary /private/tmp/mlp-numerical-candidate
+uv run --locked python -m llm_mojo.validation.mlp evaluate --binary /private/tmp/mlp-numerical-candidate --output /private/tmp/mlp-numerical-regression --split decode_holdout --variants 0 12 --regression
 ```
 
 The build requires clean source and writes an adjacent `.provenance.json`.

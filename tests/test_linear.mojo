@@ -17,7 +17,7 @@ from oracle_data.linear.reference_data import (
     tiny_decode_weight,
 )
 from layout import TensorLayout, TileTensor, row_major
-from llm_mojo.linear import (
+from llm_mojo.kernels.linear import (
     enqueue_linear_apple_gpu,
     enqueue_linear_apple_gpu_two_output,
     enqueue_linear_prefill_direct_apple_gpu,

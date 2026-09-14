@@ -1,7 +1,7 @@
 """Native CPU timings, excluding setup/oracles and including call allocations."""
 from std.sys import argv
 from std.ffi import external_call
-from llm_mojo.tokenizer import (
+from llm_mojo.models.qwen2.tokenizer import (
     Tokenizer,
     TokenizerWorkspace,
     TokenizerDecoder,

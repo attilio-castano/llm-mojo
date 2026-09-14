@@ -305,7 +305,7 @@ the study figures, while original traces are required to repeat trace analysis.
 For a fresh run, use clean source and fresh external output directories:
 
 ```sh
-uv run --locked llm-mojo-validate
+uv run --locked llm-mojo validate
 uv run --locked llm-mojo-bench build --build-dir /private/tmp/mlp-build
 uv run --locked llm-mojo-bench run --build-dir /private/tmp/mlp-build --output /private/tmp/mlp-run --studies mlp_final
 ```

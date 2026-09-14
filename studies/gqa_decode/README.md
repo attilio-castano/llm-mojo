@@ -35,8 +35,8 @@ One query token has 14 heads of 64 BF16 values. K and V each hold T×2×64
 values: seven query heads share one KV head. Query head h uses KV head h//7,
 attends to all T visible tokens, and scales its dot product by 1/8. The caller
 owns projections, RoPE, KV-cache updates, allocation and synchronization.
-The [materialized path](../../src/llm_mojo/attention.mojo) exposes probability
-scratch; the [decode alternatives](../../src/llm_mojo/attention_decode.mojo)
+The [materialized path](../../src/llm_mojo/kernels/attention.mojo) exposes probability
+scratch; the [decode alternatives](../../src/llm_mojo/kernels/attention_decode.mojo)
 return only O[1,14,64].
 
 Online softmax keeps a running maximum m, normalizer z, and unnormalized
