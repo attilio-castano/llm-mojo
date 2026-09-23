@@ -1,6 +1,6 @@
 """Shared model store, toolchain checks and one-step setup without network or Metal."""
 import ast
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
 import hashlib
 import io
 import json
@@ -286,6 +286,22 @@ class ProvisionTests(unittest.TestCase):
              redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             return assets.provision(self.store, **options)
 
+    def sources(self, root):
+        return ([root / 'build/checkpoints' / assets.MODEL_ID / assets.REVISION], [root / 'build/model-prepared-v1'])
+
+    def passing_toolchain(self, **overrides):
+        """Every toolchain check passes unless named, e.g. uv_check=<a failing Check>."""
+        passing = toolchain.Check('ok', True, 'ok')
+        stack = ExitStack()
+        checks = {'platform_check': passing, 'xcode_checks': [passing], 'mojo_check': passing,
+                  'uv_check': passing, **overrides}
+        for name, value in checks.items():
+            stack.enter_context(patch.object(toolchain, name, return_value=value))
+        stack.enter_context(patch.object(toolchain, 'device', return_value='Apple M4 Pro'))
+        stack.enter_context(patch.object(assets, 'prepared_valid', return_value=True))
+        stack.enter_context(patch('llm_mojo.runtime.build.binary_status', return_value='current'))
+        return stack
+
     def snapshot(self, *roots):
         return {str(p): (p.is_symlink(), stat.S_IMODE(p.lstat().st_mode),
                          p.read_bytes() if p.is_file() and not p.is_symlink() else None)
@@ -400,14 +416,7 @@ class ProvisionTests(unittest.TestCase):
 
     def test_check_is_read_only_and_reports_readiness(self):
         other = self.worktree()
-        passing = toolchain.Check('ok', True, 'ok')
-        with patch.object(toolchain, 'xcode_checks', return_value=[passing]), \
-             patch.object(toolchain, 'platform_check', return_value=passing), \
-             patch.object(toolchain, 'mojo_check', return_value=passing), \
-             patch.object(toolchain, 'uv_check', return_value=passing), \
-             patch.object(toolchain, 'device', return_value='Apple M4 Pro'), \
-             patch.object(assets, 'prepared_valid', return_value=True), \
-             patch('llm_mojo.runtime.build.binary_status', return_value='current'):
+        with self.passing_toolchain():
             before = self.snapshot(self.root)
             lines = []
             self.assertEqual(assets.setup(self.store, check=True, log=lines.append), 1)
@@ -418,6 +427,46 @@ class ProvisionTests(unittest.TestCase):
             self.assertEqual(assets.setup(self.store, check=True, log=lines.append), 0)
             self.assertEqual(self.snapshot(self.root), before)
         self.assertEqual(lines[-1], 'Ready: uv run llm-mojo chat')
+
+    def test_failed_preparation_prerequisites_stop_setup_before_any_change(self):
+        failures = {'uv_check': toolchain.Check('uv on PATH', False, 'not found', 'Install uv', 'prepare'),
+                    'disk_check': toolchain.Check('Free space for the store', False, '0.1 GB free',
+                                                  'Free space', 'prepare')}
+        other = self.worktree()
+        for name, failure in failures.items():
+            with self.subTest(check=name), self.passing_toolchain(**{name: failure}), \
+                 patch.object(assets, 'import_sources', return_value=self.sources(other)):
+                before = self.snapshot(self.root)
+                lines = []
+                self.assertEqual(assets.setup(self.store, build=False, log=lines.append), 1)
+                self.assertEqual(self.snapshot(self.root), before)
+                self.assertIn('Stopped before changing anything', lines[-1])
+
+    def test_space_requirement_counts_what_the_store_lacks(self):
+        requested = []
+
+        def disk_check(directory, required):
+            requested.append(required)
+            return toolchain.Check('Free space for the store', True, 'enough', blocks='prepare')
+
+        with patch.object(toolchain, 'disk_check', disk_check):
+            assets.preparation_checks(self.store)
+            self.provision(self.sources(self.worktree()))
+            assets.preparation_checks(self.store)
+            # With the checkpoint cached, a prepared model moved aside still means writing a whole model.
+            with redirect_stderr(io.StringIO()):
+                store.set_aside(assets.store_prepared(self.store))
+            assets.preparation_checks(self.store)
+        downloads = sum(size for size, _ in assets.CHECKPOINT_FILES.values())
+        self.assertEqual(requested, [downloads + assets.PREPARED_BYTES, 0, assets.PREPARED_BYTES])
+
+    def test_prepare_refuses_when_preparation_prerequisites_fail(self):
+        missing_uv = toolchain.Check('uv on PATH', False, 'not found', 'Install uv', 'prepare')
+        with patch.object(toolchain, 'uv_check', return_value=missing_uv), \
+             patch.object(assets, 'provision') as provision:
+            with self.assertRaisesRegex(RuntimeError, 'uv on PATH: not found'):
+                assets.prepare(root=self.store)
+        provision.assert_not_called()
 
 
 if __name__ == '__main__':

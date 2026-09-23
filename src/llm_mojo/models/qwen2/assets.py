@@ -311,17 +311,36 @@ def provision(root=None, *, download=False, import_from=(), log=print):
     return dict(checkpoint_links=checkpoint_links, model_link=model_link, tables=tables)
 
 
-def status(root=None):
-    """Read-only readiness report: nothing is created, locked, downloaded or built."""
-    from llm_mojo.runtime.build import binary_status
+def store_state(root=None):
+    """The pinned files the store lacks, and why its prepared model fails verification (None if it passes)."""
     checkpoint = store_checkpoint(root)
     missing = [name for name, (size, digest) in CHECKPOINT_FILES.items()
                if not store.verified(checkpoint/name, size, digest)]
     try:
         verify_pinned_model(store_prepared(root))
-        model = 'verified'
+        model_error = None
     except (OSError, ValueError, KeyError, TypeError) as error:
-        model = 'missing or invalid: ' + str(error)
+        model_error = str(error)
+    return missing, model_error
+
+
+def preparation_checks(root=None, state=None):
+    """What provisioning needs: uv, and room for everything the store still lacks.
+
+    The space is an upper bound. An import may clone instead of copying, and an
+    invalid entry set aside keeps its bytes.
+    """
+    missing, model_error = state or store_state(root)
+    required = sum(CHECKPOINT_FILES[name][0] for name in missing) + (PREPARED_BYTES if model_error else 0)
+    return [toolchain.uv_check(), toolchain.disk_check(store.store_root(root), required)]
+
+
+def status(root=None, state=None):
+    """Read-only readiness report: nothing is created, locked, downloaded or built."""
+    from llm_mojo.runtime.build import binary_status
+    checkpoint = store_checkpoint(root)
+    missing, model_error = state or store_state(root)
+    model = 'missing or invalid: ' + model_error if model_error else 'verified'
     links = {name: store.link_state(asset_directory()/name, checkpoint/name) for name in CHECKPOINT_FILES}
     links['model-prepared-v1'] = store.link_state(prepared_directory(), store_prepared(root))
     device = toolchain.device()
@@ -335,11 +354,9 @@ def status(root=None):
 
 def setup(root=None, *, offline=False, check=False, import_from=(), build=True, log=print):
     """Check the toolchain, provision the shared store, link this checkout and build; return an exit status."""
-    location = store.store_root(root)
-    required = 0 if store.verified(store_checkpoint(root)/'model.safetensors', *CHECKPOINT_FILES['model.safetensors']) \
-        else sum(size for size, _ in CHECKPOINT_FILES.values()) + PREPARED_BYTES
+    state = store_state(root)
     checks = [toolchain.platform_check(), *toolchain.xcode_checks(), toolchain.mojo_check(),
-              toolchain.uv_check(), toolchain.disk_check(location, required), toolchain.device_check()]
+              *preparation_checks(root, state), toolchain.device_check()]
     for item in checks:
         log(f"{'ok  ' if item.ok else 'FAIL'}  {item.name}: {item.detail}"
             + ('' if item.ok else f'\n      fix: {item.remedy}'))
@@ -347,7 +364,7 @@ def setup(root=None, *, offline=False, check=False, import_from=(), build=True, 
     if 'all' in blocked:
         return 1
     if check:
-        report = status(root)
+        report = status(root, state)
         log(json.dumps(report, indent=2))
         ready = (report['checkpoint'] == 'verified' and report['prepared_model'] == 'verified'
                  and all(state in ('linked', 'local') for state in report['links'].values())
@@ -355,6 +372,9 @@ def setup(root=None, *, offline=False, check=False, import_from=(), build=True, 
                  and all(state == 'current' for state in report['binaries'].values()))
         log('Ready: uv run llm-mojo chat' if ready and not blocked else 'Not ready: run uv run llm-mojo setup')
         return 0 if ready and not blocked else 1
+    if 'prepare' in blocked:
+        log('Stopped before changing anything: fix the checks marked FAIL above.')
+        return 1
     log(f'Shared store: {store_directory(root)}')
     result = provision(root, download=not offline, import_from=import_from, log=log)
     local = [name for name, state in [*result['checkpoint_links'].items(), ('model-prepared-v1', result['model_link'])]
@@ -373,12 +393,16 @@ def setup(root=None, *, offline=False, check=False, import_from=(), build=True, 
     return 0
 
 
-def prepare(output=None, *, download=False):
+def prepare(output=None, *, download=False, root=None):
     """Provision the shared store and link this checkout, or write a separate verified copy to output."""
-    provision(download=download)
+    failed = [item for item in preparation_checks(root) if not item.ok]
+    if failed:
+        raise RuntimeError('cannot prepare the model: ' + '; '.join(
+            f'{item.name}: {item.detail} (fix: {item.remedy})' for item in failed))
+    provision(root, download=download)
     if output is None:
         target = prepared_directory()
-        print('Prepared model:', target, '->', store_prepared())
+        print('Prepared model:', target, '->', store_prepared(root))
         return target
     target = Path(output).resolve()
     if target.exists():
@@ -388,7 +412,7 @@ def prepare(output=None, *, download=False):
     staged = target.with_name(f'.{target.name}.partial')
     store.remove_staged(staged)
     try:
-        store.clone(store_prepared(), staged)
+        store.clone(store_prepared(root), staged)
         verify_pinned_model(staged)
         # A requested extra copy belongs to the caller; only the store is read-only.
         staged.chmod(0o755)

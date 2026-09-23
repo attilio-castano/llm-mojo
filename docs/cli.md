@@ -22,6 +22,8 @@ missing pinned file is imported from a verified copy when one exists (this
 checkout, another Git worktree, or `--import-from PATH`, cloned copy-on-write) and
 downloaded otherwise; `--offline` forbids downloads and `--no-build` skips
 compilation. `--check` changes nothing and exits nonzero until everything is ready.
+If `uv` is missing or the store's volume lacks room for what the store still
+needs, setup and `models prepare` stop before changing anything.
 
 The store lives outside every checkout: `--store`, else `LLM_MOJO_CACHE_DIR`, else
 `$XDG_CACHE_HOME/llm-mojo`, else `~/.cache/llm-mojo`. Files enter it only after
