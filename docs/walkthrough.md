@@ -148,8 +148,9 @@ A stop token ([`is_stop`](../src/llm_mojo/models/qwen2/tokens.mojo): IDs 151643 
 
 The new token is in the history but not in the cache, so the loop calls
 `submit_next` again, now with one row. For one row on M4 Pro, `fast_plan` returns
-configuration 26 with three decode features. This is the route every generated
-token takes:
+configuration 26, which fuses two pairs of steps, together with its three decode
+features: residual/RMSNorm fusion, buffer swapping and GPU argmax. This is the
+route every generated token takes:
 
 - **Fused kernels.** One kernel unpacks the QKV projection, applies RoPE and
   appends to the cache ([`_enqueue_fused_decode_qkv`](../src/llm_mojo/layers/attention_sublayer.mojo)),
@@ -179,11 +180,12 @@ token into bytes and holds back an incomplete UTF-8 character until the rest
 arrives, so the terminal only ever prints whole characters. At the end of a turn,
 [`ChatHistory.finish`](../src/llm_mojo/models/qwen2/chat.mojo) makes sure the
 history ends with `<|im_end|>` and a newline, exactly as Qwen's template
-expects. Your next message only prefills its own new tokens: the cache already
-holds the conversation so far.
+expects. Your next message prefills only what is not cached yet, the end
+markers and the new message: the cache already holds the rest of the
+conversation.
 
 `/reset` ([`ChatSession.reset`](../src/llm_mojo/models/qwen2/chat.mojo)) waits for
-the GPU, empties every cache and restores the system prompt. The weights stay
+the GPU, marks every cache empty and restores the system prompt. The weights stay
 loaded.
 
 ## 8. Where the time goes
@@ -202,8 +204,8 @@ Measured on the reference M4 Pro:
   recording enabled ([runtime enqueue study](../studies/model_generation/runtime-enqueue.md)).
 
 So decode is limited by launching work, not by memory bandwidth, and the fusions
-above help mostly by issuing fewer commands. Prefill is different: for a
-3,839-token prompt the first token takes about 2.1 s, which is now the largest
+above help mostly by issuing fewer commands. Prefill is a separate cost: for a
+3,839-token prompt the first token arrives after about 2.1 s, now the largest
 wait a user sees.
 
 ## 9. What is exact and what is compared
