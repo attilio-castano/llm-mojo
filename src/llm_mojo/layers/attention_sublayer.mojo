@@ -102,6 +102,26 @@ struct AttentionCache(Movable):
             capacity * kv_heads * head_dim
         )
 
+    def __init__(
+        out self,
+        var key: DeviceBuffer[DType.bfloat16],
+        var value: DeviceBuffer[DType.bfloat16],
+        capacity: Int,
+        kv_heads: Int = 2,
+        head_dim: Int = 64,
+    ) raises:
+        """Adopt caller-owned storage, such as views into a shared KV pool."""
+        if capacity < 1 or capacity > 4096 or kv_heads <= 0 or head_dim <= 0:
+            raise Error("invalid cache capacity or shape")
+        if len(key) != capacity * kv_heads * head_dim or len(value) != len(key):
+            raise Error("cache storage does not match its shape")
+        self.capacity = capacity
+        self.length = 0
+        self.kv_heads = kv_heads
+        self.head_dim = head_dim
+        self.key = key^
+        self.value = value^
+
     def reset(mut self, ctx: DeviceContext) raises:
         """Finish pending use before making all stored entries logically absent.
         """
