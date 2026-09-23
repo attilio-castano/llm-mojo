@@ -25,28 +25,30 @@ comptime DECODER_CONSISTENT_REUSE4 = 22  # G32 attention; each weight reused acr
 comptime DECODER_FUSED_DECODE = 26  # one row: fused QKV/RoPE/cache and SiLU/multiply
 
 
-def decoder_mappings(variant: Int, rows: Int) raises -> SIMD[DType.int64, 4]:
+def decoder_mappings(configuration: Int, rows: Int) raises -> SIMD[DType.int64, 4]:
     """Configuration ID -> (GQA mapping, projection mapping, MLP mapping, prefill splits).
 
     A registry of the configurations above, not a performance-based selector.
     """
     if rows < 1:
         raise Error("invalid decoder rows")
-    if variant == DECODER_FUSED_DECODE:
+    if configuration == DECODER_FUSED_DECODE:
         if rows != 1:
             raise Error("fused QKV configuration requires one decode row")
         return SIMD[DType.int64, 4](0, 0, 0, 1)
-    if variant == DECODER_CONSISTENT:
+    if configuration == DECODER_CONSISTENT:
         return SIMD[DType.int64, 4](5, 0, 0, 1)
-    if variant == DECODER_CONSISTENT_MMA:
+    if configuration == DECODER_CONSISTENT_MMA:
         return SIMD[DType.int64, 4](5, 6, 7, 1)
-    if variant == DECODER_CONSISTENT_REUSE4:
+    if configuration == DECODER_CONSISTENT_REUSE4:
         return SIMD[DType.int64, 4](5, 7, 19, 1)
-    if variant == DECODER_BASELINE or variant == DECODER_SPLIT8 or variant == DECODER_SPLIT8_TILED:
-        var split8 = variant != DECODER_BASELINE
-        return SIMD[DType.int64, 4](Int64(4 if split8 else 0), Int64(5 if variant == DECODER_SPLIT8_TILED else 0),
+    if (configuration == DECODER_BASELINE or configuration == DECODER_SPLIT8
+            or configuration == DECODER_SPLIT8_TILED):
+        var split8 = configuration != DECODER_BASELINE
+        var tiled = configuration == DECODER_SPLIT8_TILED
+        return SIMD[DType.int64, 4](Int64(4 if split8 else 0), Int64(5 if tiled else 0),
                                     Int64(0 if rows == 1 else 7), Int64(8 if split8 else 1))
-    raise Error("unknown decoder configuration " + String(variant))
+    raise Error("unknown decoder configuration " + String(configuration))
 
 
 def _region[dtype: DType](
@@ -205,9 +207,12 @@ def enqueue_decoder_layer[XL: TensorLayout](
 def enqueue_decoder_layer_configuration[XL: TensorLayout](
     ctx: DeviceContext, mut aw: AttentionWeights, mut cache: AttentionCache,
     mut attention: AttentionWorkspace, mut mw: MLPWeights, mut mlp: MLPWorkspace,
-    x: TileTensor[DType.bfloat16, XL, MutAnyOrigin], variant: Int,
+    x: TileTensor[DType.bfloat16, XL, MutAnyOrigin], configuration: Int,
     fuse_residual_norm: Bool = False, input_normalized: Bool = False,
 ) raises -> Int:
-    var mappings = decoder_mappings(variant, Int(x.dim[0]()))
+    var mappings = decoder_mappings(configuration, Int(x.dim[0]()))
+    # Configuration 26 fuses QKV/RoPE/cache append and SiLU/multiply.
+    var fused = configuration == DECODER_FUSED_DECODE
     return enqueue_decoder_layer(ctx,aw,cache,attention,mw,mlp,x,
-        Int(mappings[2]),True,Int(mappings[0]),Int(mappings[1]),variant == 26,variant == 26,fuse_residual_norm,input_normalized)
+        Int(mappings[2]),True,Int(mappings[0]),Int(mappings[1]),fused,fused,
+        fuse_residual_norm,input_normalized)

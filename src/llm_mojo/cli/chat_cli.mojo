@@ -6,7 +6,7 @@ from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace, Token
 from llm_mojo.runtime.terminal import block_interrupt, interrupted, read_line
 from llm_mojo.runtime.clock import now
 from llm_mojo.models.qwen2.tokens import is_stop
-from llm_mojo.models.qwen2.plan import MEASURED_DEVICE
+from llm_mojo.models.qwen2.plan import MAX_CONTEXT, MEASURED_DEVICE
 
 
 def main() raises:
@@ -15,7 +15,7 @@ def main() raises:
         raise Error("chat prepared tokenizer maximum chunk-rows system-file report-file (empty = defaults)")
     var maximum = Int(args[3])
     var chunk = Int(args[4])
-    if maximum < 1 or maximum > 4096 or chunk < 1 or chunk > 4096:
+    if maximum < 1 or maximum > MAX_CONTEXT or chunk < 1 or chunk > MAX_CONTEXT:
         raise Error("invalid chat limits")
     var started = now()
     var observed = args[6].byte_length()>0

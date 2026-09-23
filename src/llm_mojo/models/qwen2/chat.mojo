@@ -4,8 +4,8 @@ History is authoritative; model.length identifies its already submitted prefix.
 No rendered-text round trip is used for generated assistant tokens.
 """
 from max.gpu.host import DeviceContext
-from llm_mojo.models.qwen2.model import QwenModel
-from llm_mojo.models.qwen2.plan import fast_plan
+from llm_mojo.models.qwen2.model import QwenModel, VOCABULARY
+from llm_mojo.models.qwen2.plan import MAX_CONTEXT, fast_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
 from llm_mojo.models.qwen2.tokens import IM_END, is_stop
 
@@ -37,7 +37,7 @@ struct ChatHistory(Movable):
 
     def begin(mut self, tokenizer: Tokenizer, mut work: TokenizerWorkspace,
               message: String, maximum: Int, capacity: Int) raises:
-        if self.generating or maximum < 1 or maximum > 4096 or message.byte_length() == 0:
+        if self.generating or maximum < 1 or maximum > MAX_CONTEXT or message.byte_length() == 0:
             raise Error("invalid chat turn")
         var suffix = tokenizer.encode("<|im_start|>user\n"+message+"<|im_end|>\n<|im_start|>assistant\n",work)
         # Reserve the entire reply plus a forced end marker and its newline.
@@ -60,7 +60,7 @@ struct ChatHistory(Movable):
         self.reason = reason
 
     def accept(mut self, token: Int) raises:
-        if not self.generating or token < 0 or token >= 151936:
+        if not self.generating or token < 0 or token >= VOCABULARY:
             raise Error("invalid generated chat token")
         self.tokens.append(token)
         self.generated += 1
@@ -76,7 +76,7 @@ struct ChatSession(Movable):
 
     def __init__(out self, ctx: DeviceContext, prepared: String,
                  tokenizer: Tokenizer, mut work: TokenizerWorkspace,
-                 system: String, chunk_rows: Int = 256, capacity: Int = 4096) raises:
+                 system: String, chunk_rows: Int = 256, capacity: Int = MAX_CONTEXT) raises:
         self.history = ChatHistory(tokenizer,work,system)
         if len(self.history.tokens)+3 >= capacity:
             raise Error("system message exceeds chat capacity")

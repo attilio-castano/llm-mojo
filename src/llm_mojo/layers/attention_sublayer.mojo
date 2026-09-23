@@ -368,7 +368,7 @@ def _enqueue_attention_qkv(
         enqueue_linear_prefill_mma_tile_apple_gpu[16, 16](ctx, normal, weight, bias, packed)
     elif mapping == 4:
         enqueue_linear_prefill_mma_tile_apple_gpu[8, 32](ctx, normal, weight, bias, packed)
-    else:
+    else:  # 5
         enqueue_linear_rowwise_rows_apple_gpu[4](ctx, normal, weight, bias, packed)
     if not unpack:
         return

@@ -18,11 +18,12 @@ from llm_mojo.kernels.residual import enqueue_residual_apple_gpu
 def mlp_projection_mapping(mapping: Int, stage: Int) -> Int:
     """0 rowwise; 1/2/3 tile gate/up; 4/5/6 tile down; 7 combines finalists.
 
-    Tile IDs 1/2/3 mean 8x16, 16x16, 8x32. No row-count selector.
+    Tile IDs 1/2/3 mean 8x16, 16x16, 8x32. No row-count selector. Mapping 19
+    reuses each rowwise weight across four rows for all three projections.
     Public entrypoints validate the configuration before enqueue.
     """
-    if mapping >= 19:
-        return mapping - 12 if stage == 1 or stage == 2 or stage == 5 else 0
+    if mapping == 19:
+        return 7 if stage == 1 or stage == 2 or stage == 5 else 0
     if mapping >= 8:
         var gate_mapping = mapping if mapping <= 10 else 0
         var down_mapping = mapping if mapping == 11 or mapping == 12 else 0
@@ -81,7 +82,7 @@ def _enqueue_projection[
 
 
 def mlp_combines_gate_up(mapping: Int) -> Bool:
-    if mapping >= 19:
+    if mapping == 19:
         return False
     var gate_mapping = 8 + (mapping - 13) // 2 if mapping >= 13 else mapping
     return gate_mapping == 8 or gate_mapping == 10

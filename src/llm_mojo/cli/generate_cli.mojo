@@ -4,7 +4,7 @@ from llm_mojo.runtime.clock import now
 from llm_mojo.models.qwen2.tokens import is_stop
 from max.gpu.host import DeviceContext
 from llm_mojo.models.qwen2.model import QwenModel, generation_budget
-from llm_mojo.models.qwen2.plan import execution_plan
+from llm_mojo.models.qwen2.plan import MAX_CONTEXT, execution_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace, TokenizerDecoder
 
 
@@ -17,7 +17,7 @@ def main() raises:
     var maximum = Int(args[4])
     var chunk_rows = Int(args[5])
     var mode = String(args[6])
-    if maximum < 0 or maximum > 4096 or chunk_rows < 0 or chunk_rows > 4096:
+    if maximum < 0 or maximum > MAX_CONTEXT or chunk_rows < 0 or chunk_rows > MAX_CONTEXT:
         raise Error("invalid generation or chunk limit")
     _ = execution_plan(mode,1,1,"")
     var tokenizer = Tokenizer(args[2])
@@ -25,7 +25,7 @@ def main() raises:
     var text = open(args[3],"r").read_bytes()
     var history = tokenizer.encode_bytes(text,workspace)
     var prompt_length = len(history)
-    if prompt_length < 1 or prompt_length > 4096:
+    if prompt_length < 1 or prompt_length > MAX_CONTEXT:
         raise Error("prompt must encode to 1..4096 tokens")
     var budget = generation_budget(prompt_length,maximum)
     var events = String("event\tindex\tvalue\tnanoseconds\n")
@@ -40,7 +40,7 @@ def main() raises:
         return
     var max_rows = min(chunk_rows,prompt_length) if chunk_rows > 0 else prompt_length
     var ctx = DeviceContext()
-    var model = QwenModel(ctx,args[1],4096,max_rows)
+    var model = QwenModel(ctx,args[1],MAX_CONTEXT,max_rows)
     if diagnostics:
         events += "device\t0\t"+ctx.name()+"/"+ctx.api()+"\t0\n"
         events += "load\t0\t0\t"+String(now()-started)+"\n"

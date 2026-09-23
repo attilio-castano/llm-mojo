@@ -18,14 +18,13 @@ from llm_mojo.kernels.residual_norm import enqueue_residual_norm
 from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.kernels.linear import enqueue_linear_apple_gpu
 from llm_mojo.kernels.token_selection import enqueue_argmax
-from llm_mojo.models.qwen2.plan import ExecutionPlan
+from llm_mojo.models.qwen2.plan import ExecutionPlan, MAX_CONTEXT
 from llm_mojo.runtime.clock import now
 
 comptime HIDDEN = 896
 comptime VOCABULARY = 151936
 comptime LAYERS = 24
 comptime KV_WIDTH = 128
-comptime MAX_CONTEXT = 4096
 # One (score, token, nonfinite) record per 1024-logit argmax group.
 comptime ARGMAX_GROUPS = (VOCABULARY + 1023) // 1024
 

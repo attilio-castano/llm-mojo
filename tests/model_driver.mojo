@@ -3,8 +3,8 @@ from std.sys import argv
 from std.memory import bitcast
 from std.testing import assert_equal, assert_raises
 from max.gpu.host import DeviceContext
-from llm_mojo.models.qwen2.model import CaptureRequest, QwenModel
-from llm_mojo.models.qwen2.plan import ExecutionPlan, baseline_plan, configured_plan, execution_plan
+from llm_mojo.models.qwen2.model import CaptureRequest, LAYERS, QwenModel, VOCABULARY
+from llm_mojo.models.qwen2.plan import MAX_CONTEXT, baseline_plan, configured_plan, execution_plan
 from llm_mojo.runtime.clock import now
 from model_operation_support import capture_operations
 
@@ -23,27 +23,27 @@ def lifecycle(path: String) raises:
         model.forward(ctx,ids,configured_plan(configuration,3,3))
         _ = model.greedy(ctx)
         assert_equal(model.length,3)
-        assert_equal(model.submitted_rows,72)
+        assert_equal(model.submitted_rows,3*LAYERS)
         with assert_raises():
             model.forward(ctx,List[Int](),one)
         with assert_raises():
             model.forward(ctx,[-1],one)
         with assert_raises():
-            model.forward(ctx,[151936],one)
+            model.forward(ctx,[VOCABULARY],one)
         with assert_raises():
             model.forward(ctx,[1,2],baseline_plan(2,5))
         with assert_raises():
             model.forward(ctx,[1],configured_plan(999,1,4))
-        model.layers[23].cache.length = 2
+        model.layers[LAYERS-1].cache.length = 2
         with assert_raises():
             model.forward(ctx,[1],one)
-        model.layers[23].cache.length = 3
+        model.layers[LAYERS-1].cache.length = 3
         assert_equal(model.length,3)
-        assert_equal(model.submitted_rows,72)
+        assert_equal(model.submitted_rows,3*LAYERS)
         assert_equal(model.valid,True)
         model.forward(ctx,[2],configured_plan(0,1,4))
         _ = model.greedy(ctx)
-        for i in range(24):
+        for i in range(LAYERS):
             assert_equal(model.layers[i].cache.length,4)
         with assert_raises():
             model.forward(ctx,[1],one)
@@ -52,13 +52,13 @@ def lifecycle(path: String) raises:
     var first = model.greedy(ctx)
     var bits = List[UInt16]()
     with model.logits.map_to_host() as mapped:
-        for i in range(151936):
+        for i in range(VOCABULARY):
             bits.append(bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=i]))
     model.reset(ctx)
     model.forward(ctx,ids,configured_plan(0,3,3))
     assert_equal(model.greedy(ctx),first)
     with model.logits.map_to_host() as mapped:
-        for i in range(151936):
+        for i in range(VOCABULARY):
             assert_equal(bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=i]),bits[i])
     model.logits.enqueue_fill(-3)
     with model.logits.map_to_host() as mapped:
@@ -69,7 +69,7 @@ def lifecycle(path: String) raises:
     for pattern in patterns:
         model.logits.enqueue_fill(0)
         with model.logits.map_to_host() as mapped:
-            mapped.unsafe_ptr()[unsafe_offset=151935] = bitcast[DType.bfloat16](pattern)
+            mapped.unsafe_ptr()[unsafe_offset=VOCABULARY-1] = bitcast[DType.bfloat16](pattern)
         with assert_raises():
             _ = model.greedy(ctx)
         assert_equal(model.valid,False)
@@ -85,7 +85,7 @@ def lifecycle(path: String) raises:
 def benchmark(path: String, plan: String, warmups: Int, samples: Int) raises:
     var ctx = DeviceContext()
     print("model device",ctx.name(),"backend",ctx.api())
-    var model = QwenModel(ctx,path,4096,4096)
+    var model = QwenModel(ctx,path,MAX_CONTEXT,MAX_CONTEXT)
     var active_prefix = -1
     for line in open(plan,"r").read().splitlines():
         var spec = integers(String(line))
@@ -107,8 +107,8 @@ def benchmark(path: String, plan: String, warmups: Int, samples: Int) raises:
         for sample in range(-warmups,samples):
             # Reuse the unchanged real prefix, overwriting only the suffix.
             model.length = prefix
-            model.submitted_rows = prefix*24
-            for i in range(24):
+            model.submitted_rows = prefix*LAYERS
+            for i in range(LAYERS):
                 model.layers[i].cache.length = prefix
             var started = now()
             model.forward(ctx,ids,configured_plan(config,rows,prefix+rows))
@@ -153,13 +153,13 @@ def main() raises:
             raise Error("empty schedule call")
         maximum = max(maximum,rows)
         total += rows
-    if total != len(ids) or total > 4096:
+    if total != len(ids) or total > MAX_CONTEXT:
         raise Error("schedule does not cover token IDs")
     var ctx = DeviceContext()
     print("model device",ctx.name(),"backend",ctx.api())
-    var model = QwenModel(ctx,args[1],min(4096,len(ids)+3),maximum)
+    var model = QwenModel(ctx,args[1],min(MAX_CONTEXT,len(ids)+3),maximum)
     # Exact untouched-cache checks use a finite recognizable poison pattern.
-    for i in range(24):
+    for i in range(LAYERS):
         model.layers[i].cache.key.enqueue_fill(123)
         model.layers[i].cache.value.enqueue_fill(123)
     var offset = 0
