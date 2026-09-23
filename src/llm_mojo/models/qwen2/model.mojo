@@ -160,10 +160,16 @@ struct ModelLayer(Movable):
     var mlp: MLPWeights
     var cache: AttentionCache
 
-    def __init__(out self, ctx: DeviceContext, path: String, index: Int, capacity: Int) raises:
+    def __init__(out self, ctx: DeviceContext, capacity: Int) raises:
         self.attention = AttentionWeights(ctx)
         self.mlp = MLPWeights(ctx)
         self.cache = AttentionCache(ctx,capacity)
+
+    def __init__(out self, ctx: DeviceContext, path: String, index: Int, capacity: Int) raises:
+        self = Self(ctx,capacity)
+        self.load(path,index)
+
+    def load(mut self, path: String, index: Int) raises:
         var prefix = path + "/layer_" + String(index) + "_"
         load_bf16(self.attention.norm,prefix+"attention_norm.bin")
         load_bf16(self.attention.qkv,prefix+"qkv.bin")
@@ -196,9 +202,11 @@ struct QwenModel(Movable):
     # Host-only observation storage. Default specializations contain no clocks.
     var observation: List[UInt64]
 
-    def __init__(out self, ctx: DeviceContext, path: String, capacity: Int, max_rows: Int) raises:
-        if ctx.api() != "metal" or capacity < 1 or capacity > 4096 or max_rows < 1 or max_rows > capacity:
-            raise Error("Qwen requires Metal and valid row/context capacity")
+    def __init__(out self, ctx: DeviceContext, layer_count: Int, capacity: Int, max_rows: Int) raises:
+        """Allocate without loading; the path constructor loads the prepared checkpoint."""
+        if (ctx.api() != "metal" or layer_count < 1 or capacity < 1 or capacity > 4096
+                or max_rows < 1 or max_rows > capacity):
+            raise Error("Qwen requires Metal and valid layer, row and context capacity")
         self.capacity = capacity
         self.max_rows = max_rows
         self.length = 0
@@ -209,11 +217,9 @@ struct QwenModel(Movable):
             self.observation.append(0)
         self.embedding = ctx.enqueue_create_buffer[DType.bfloat16](151936*896)
         self.norm = ctx.enqueue_create_buffer[DType.bfloat16](896)
-        load_bf16(self.embedding,path+"/embedding.bin")
-        load_bf16(self.norm,path+"/final_norm.bin")
-        self.layers = List[ModelLayer](capacity=24)
-        for i in range(24):
-            self.layers.append(ModelLayer(ctx,path,i,capacity))
+        self.layers = List[ModelLayer](capacity=layer_count)
+        for _ in range(layer_count):
+            self.layers.append(ModelLayer(ctx,capacity))
         self.attention = AttentionWorkspace(ctx,max_rows,capacity,
             materialized=False,fp32_materialized=False,prefill_splits=8)
         self.mlp = MLPWorkspace(ctx,max_rows)
@@ -224,10 +230,23 @@ struct QwenModel(Movable):
         self.selection_result = ctx.enqueue_create_buffer[DType.uint32](3)
         self.selection = 0
         self.tokens = ctx.enqueue_create_buffer[DType.int32](max_rows)
+
+    def __init__(out self, ctx: DeviceContext, path: String, capacity: Int, max_rows: Int) raises:
+        """Allocate all 24 layers and load the verified prepared checkpoint at path."""
+        self = Self(ctx,24,capacity,max_rows)
+        load_bf16(self.embedding,path+"/embedding.bin")
+        load_bf16(self.norm,path+"/final_norm.bin")
+        for i in range(24):
+            self.layers[i].load(path,i)
         # Preparation stores all 4096 positions; only capacity rows are resident.
         load_bf16(self.attention.cosine,path+"/cosine.bin",4096*64)
         load_bf16(self.attention.sine,path+"/sine.bin",4096*64)
         ctx.synchronize()
+
+    @staticmethod
+    def allocate(ctx: DeviceContext, layer_count: Int, capacity: Int, max_rows: Int) raises -> QwenModel:
+        """Unloaded model storage for tests that supply their own weights."""
+        return QwenModel(ctx,layer_count,capacity,max_rows)
 
     def reset(mut self, ctx: DeviceContext) raises:
         self.valid = False
@@ -253,8 +272,8 @@ struct QwenModel(Movable):
             if id < 0 or id >= 151936:
                 raise Error("model token ID out of range")
         var mappings = decoder_mappings(configuration,rows)
-        if len(self.layers) != 24:
-            raise Error("incomplete Qwen layer stack")
+        if len(self.layers) < 1:
+            raise Error("empty Qwen layer stack")
         for i in range(len(self.layers)):
             if self.layers[i].cache.length != self.length or self.layers[i].cache.capacity != self.capacity:
                 raise Error("inconsistent model cache lengths")
@@ -301,7 +320,8 @@ struct QwenModel(Movable):
                 self.observation[3] = _observation_clock()
             if capture.byte_length() > 0:
                 save_bf16(self.input,capture+"/hidden_0.bin",rows*896)
-            for i in range(24):
+            var layer_count = len(self.layers)
+            for i in range(layer_count):
                 _ = enqueue_decoder_layer_configuration(ctx,self.layers[i].attention,
                     self.layers[i].cache,self.attention,self.layers[i].mlp,self.mlp,
                     TileTensor(self.input,row_major(rows,896)),configuration,fuse_residual_norm,fuse_residual_norm and i > 0,decode_variant)
@@ -310,7 +330,7 @@ struct QwenModel(Movable):
                     save_bf16(self.mlp.normalized,capture+"/mlp_norm_"+String(i)+".bin",rows*896)
                     save_bf16(self.attention.output,capture+"/attention_residual_"+String(i)+".bin",rows*896)
                 if fuse_residual_norm:
-                    if i < 23:
+                    if i+1 < layer_count:
                         enqueue_residual_norm(ctx,TileTensor(self.attention.output,row_major(1,896)),
                             TileTensor(self.mlp.down,row_major(1,896)),TileTensor(self.layers[i+1].attention.norm,row_major(896)),
                             TileTensor(self.mlp.output,row_major(1,896)),TileTensor(self.attention.normalized,row_major(1,896)))
@@ -329,9 +349,9 @@ struct QwenModel(Movable):
                         save_bf16(self.attention.raw_value,capture+"/append_value_"+String(i)+".bin",rows*128)
                     save_bf16(self.layers[i].cache.key,capture+"/cache_key_"+String(i)+".bin",self.capacity*128)
                     save_bf16(self.layers[i].cache.value,capture+"/cache_value_"+String(i)+".bin",self.capacity*128)
-                if i < 23 and copy_free:
+                if i+1 < layer_count and copy_free:
                     swap_hidden_buffers(self.input,self.mlp.output)
-                elif i < 23:
+                elif i+1 < layer_count:
                     ctx.enqueue_function[_copy_rows[type_of(input_view.layout),type_of(input_view.layout)]](TileTensor(self.mlp.output,row_major(rows,896)),
                         TileTensor(self.input,row_major(rows,896)),Int32(rows),
                         grid_dim=(rows*896+255)//256,block_dim=256)
@@ -363,7 +383,7 @@ struct QwenModel(Movable):
                 save_bf16(self.normalized,capture+"/final_norm.bin",896)
                 save_bf16(self.logits,capture+"/logits.bin",151936)
             self.length += rows
-            self.submitted_rows += rows*24
+            self.submitted_rows += rows*layer_count
         except error:
             self.valid = False
             raise error
