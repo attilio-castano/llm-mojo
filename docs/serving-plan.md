@@ -107,7 +107,9 @@ frontend therefore holds every in-flight request's authoritative token history
 and never shares a process with the GPU. After an engine exit, the supervisor
 restarts it and the frontend resubmits each in-flight request as its prompt
 plus the tokens generated so far. The client stream continues with no lost or
-duplicated tokens.
+duplicated tokens. Replay recomputes the generated tokens as prompt rows, so the
+continuation can differ numerically from an uninterrupted run; that difference
+is a recorded diagnostic, not a failure.
 
 This requires that all per-request engine state can be rebuilt from
 (parameters, token history). KV contents are a cache, never the source of
@@ -388,46 +390,62 @@ Restored bytes equal stored bytes, so a disk hit is as exact as a memory hit.
 - Fast single-row decode attention uses the unsplit 32-simdgroup route.
   It gains a sequence index, per-sequence lengths and block-table translation.
   A future split-K variant must fix the split size, not the split count, so
-  that each sequence's partitions still depend only on its own length.
+  each sequence's partitions still depend only on its own length and the exact
+  batched-versus-solo check below stays valid.
 - Decode projections use the existing multi-row rowwise kernel
   (`_linear_rowwise_rows_apple_gpu_kernel`), which keeps the one-row kernel's
   lane-strided FP32 accumulation and `warp.sum` order. The other
   configuration-26 decode kernels need multi-row forms with unchanged per-row
   reductions: SiLU/multiply fusion, residual RMSNorm fusion and GPU argmax.
 
-### Batch invariance
+### Numerical policy
 
-A row's reduction strategy depends only on its own sequence, never on batch
-size or co-scheduled work. With the kernels above, a decode row computed in a
-batch must be byte-identical to the same row decoded alone.
+Serving uses Fast, the only application policy. Correctness follows the split
+in the [model contract](model.md#correctness-and-diagnostic-policy): system
+behavior is checked exactly, and numerical differences that depend on how work
+is scheduled are recorded as diagnostics.
 
-Mixed steps are the hazard: choosing an MMA projection because N grew would
-change decode arithmetic whenever a prefill is co-scheduled. The two policies
-differ here:
+In Fast, a row's arithmetic can depend on its step. A decode row scheduled with
+a prefill chunk may use a different projection kernel. A prefix-cache hit
+reuses KV computed inside another request's chunk. Replay recomputes generated
+tokens as prompt rows. As with today's cached chat turns versus full replay,
+these can change logits and occasionally a greedy token.
 
-| Policy | Mixed-step projections | Equality across batches and schedules |
-| --- | --- | --- |
-| Fast (default) | fastest measured choice for the step shape | diagnostic |
-| Deterministic | decode rows keep rowwise order; prefill uses its invariant route | required, exact |
+### Exact gates
 
-Prefix caching is transparent only if prefill is schedule-invariant. Under
-Fast, a reused block computed inside another request's chunk can differ from
-recomputation, just as a cached chat turn can differ from full replay today.
-Under Deterministic, a hit must equal recomputation byte for byte. This extends
-the [decoder policy study](../studies/decoder_layer/policies.md) and the
-[consistency investigation](../studies/model_generation/consistency.md) from
-chunk schedules to batch composition and cache history.
-
-### Exact gates in every policy
+These hold by construction under Fast, so they test data movement and
+ownership rather than arithmetic:
 
 - S = 1 through StepBatch equals today's forward: logits and all KV bytes.
+- A decode-only batch equals decoding each sequence alone with the
+  rowwise-order kernels above. Wrong positions, wrong blocks and
+  cross-sequence writes break this equality even when outputs look plausible.
 - Paged attention equals contiguous attention on identical inputs; paging
   changes addresses, not arithmetic.
 - Asynchronous stepping produces the same token streams as synchronous
   stepping.
+- Reused and restored blocks keep the exact bytes and token IDs they were
+  stored with.
 - No sequence writes outside its own Partial blocks, checked with guarded and
   poisoned inactive storage as today's cache checks do.
 - Allocator invariants hold, and replaying events reconstructs the index.
+
+### Diagnostics
+
+These comparisons record token agreement, first-divergence position and logit
+distances, never pass/fail thresholds:
+
+- mixed steps against solo execution;
+- prefix-cache hits against recomputation;
+- replayed continuations against uninterrupted runs;
+- outputs across replicas.
+
+Whether serving can be made batch-invariant, and at what cost, belongs to the
+[schedule-determinism follow-up](project.md#follow-up-direction). That work
+would extend the [decoder policy study](../studies/decoder_layer/policies.md)
+and the [consistency investigation](../studies/model_generation/consistency.md)
+to batch composition, cache history and replay. It is optional research, not a
+gate for any phase.
 
 ## Evidence
 
@@ -461,11 +479,11 @@ configuration and trace identity.
 | --- | --- | --- | --- |
 | 1. Batched decode | StepBatch; multi-row configuration-26 decode kernels; one maximum-context block per sequence; a batch axis in the existing model benchmark | S = 1 equals today; batched rows equal solo rows | How do throughput and per-token latency scale for B = 1–32 at contexts 64, 1024 and 3968? |
 | 2. Paged KV | block-major pool, block manager, block states, events, paged decode and prefill attention | paged equals contiguous; invariants; event replay | What does translation cost at each block size, and does head-major order help? |
-| 3. Engine core | EngineCore, Scheduler, both runners, chunked prefill, preemption, aborts, step records, trace driver, fitted budget, asynchronous stepping | simulated invariants; per-request equality under Deterministic; asynchronous equals synchronous | How do latency percentiles respond to arrival rate across the scheduling arms, and where does the simulator disagree? |
-| 4. Prefix caching | prefix index, eviction, pinning, chat as an engine client | Deterministic hits equal recomputation; existing chat checks pass | How does time to first token depend on shared-prefix length, hit rate and pool size? |
-| 5. Frontend and API | frontend process, token protocol, model card, HTTP/SSE, supervisor, replay, backpressure, HTTP load generator | replay loses and duplicates nothing; Deterministic replay equals uninterrupted output | What do the edge and recovery cost end to end? |
+| 3. Engine core | EngineCore, Scheduler, both runners, chunked prefill, preemption, aborts, step records, trace driver, fitted budget, asynchronous stepping | scheduler and allocator invariants in simulation and on Metal; exact token accounting; asynchronous equals synchronous | How do latency percentiles respond to arrival rate across the scheduling arms, and where does the simulator disagree? |
+| 4. Prefix caching | prefix index, eviction, pinning, chat as an engine client | reused blocks keep their bytes and token IDs; only the uncached suffix is computed; existing chat checks pass | How does time to first token depend on shared-prefix length, hit rate and pool size? |
+| 5. Frontend and API | frontend process, token protocol, model card, HTTP/SSE, supervisor, replay, backpressure, HTTP load generator | replay loses and duplicates nothing and preserves delivered tokens | What do the edge and recovery cost end to end? |
 | 6. SSD tier | slab file, index, asynchronous loading, integrity checks | restored bytes equal stored bytes; disk and memory hits agree | At what prefix length does restoring beat recomputing? |
-| 7. Replicas (optional) | several engines behind a KV-aware router in the frontend | routing never changes Deterministic output | Do independent submission threads raise throughput, and what does KV-aware routing gain over round-robin? |
+| 7. Replicas (optional) | several engines behind a KV-aware router in the frontend | routing preserves histories and token accounting | Do independent submission threads raise throughput, and what does KV-aware routing gain over round-robin? |
 
 `src/llm_mojo/serving/` starts in phase 1 with StepBatch and grows only as each
 phase lands. The Qwen template, stop IDs and card values stay in
@@ -497,14 +515,14 @@ before:
 | Hash-chained prefix caching | vLLM automatic prefix caching | prefix index |
 | Radix-tree prefix sharing | SGLang RadixAttention | later alternative |
 | Overlapped scheduling | vLLM asynchronous scheduling, SGLang overlap scheduler | asynchronous stepping |
-| Batch invariance | [Thinking Machines](https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/) | Deterministic policy |
+| Batch invariance | [Thinking Machines](https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/) | optional research follow-up |
 | Frontend tokenization, token-only engines | [Dynamo frontend](https://docs.nvidia.com/dynamo/v1.3.0/backends/sg-lang/reference-guide) | token protocol |
-| Request migration | [Dynamo fault tolerance](https://docs.nvidia.com/dynamo/user-guides/fault-tolerance/request-migration) | failure domains, replay |
-| KV events with gap detection | [Dynamo router design](https://docs.nvidia.com/dynamo/dev/knowledge-base/modular-components/router/router-design) | event plane |
-| Block states, tiered KV | [Dynamo KVBM](https://docs.nvidia.com/dynamo/v1.2.1/design-docs/component-design/kvbm-design) | block states, SSD tier |
-| Engine simulation | [Dynamo mocker](https://docs.nvidia.com/dynamo/dev/knowledge-base/concepts/simulation/simulation-model) | SimulatedRunner |
-| Per-iteration metrics | [Dynamo forward-pass metrics](https://docs.nvidia.com/dynamo/reference/observability/forward-pass-metrics-traces) | step records |
-| KV-aware routing | [Dynamo KV router](https://docs.nvidia.com/dynamo/latest/router/README.html) | phase 7 |
+| Request migration | [Dynamo fault tolerance](https://docs.nvidia.com/dynamo/v1.3.0/user-guides/fault-tolerance/request-migration) | failure domains, replay |
+| KV events with gap detection | [Dynamo router design](https://docs.nvidia.com/dynamo/v1.3.0/design-docs/component-design/router-design) | event plane |
+| Block states, tiered KV | [Dynamo KVBM](https://docs.nvidia.com/dynamo/v1.3.0/design-docs/component-design/kvbm-design) | block states, SSD tier |
+| Engine simulation | [Dynamo mocker](https://docs.nvidia.com/dynamo/v1.3.0/user-guides/dynosim/mocker) | SimulatedRunner |
+| Per-iteration metrics | [Dynamo forward-pass metrics](https://github.com/ai-dynamo/dynamo/blob/v1.5.0/docs/fern/pages/developer-guide/knowledge-base/concepts/observability/forward-pass-metrics-rfc.md) | step records |
+| KV-aware routing | [Dynamo KV router](https://docs.nvidia.com/dynamo/v1.3.0/components/router/routing-concepts) | phase 7 |
 
 ## Not adopted
 

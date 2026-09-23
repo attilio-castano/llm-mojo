@@ -76,6 +76,8 @@ research questions, not prerequisites for calling the current milestone complete
    route. The existing [decoder policy study](../studies/decoder_layer/policies.md)
    and [full-model investigation](../studies/model_generation/consistency.md)
    establish useful component results and an unresolved full-model boundary.
+   Serving adds batch composition, cache history and replay as further sources
+   of difference; a batch-invariant serving mode is an optional extension.
 2. **Matched HF comparison.** Numerical comparisons already exist. A performance
    study must name the HF backend/device, precision, identical token workload,
    cache behavior and timing boundary before comparing prefill or decode.
@@ -86,8 +88,8 @@ research questions, not prerequisites for calling the current milestone complete
 4. **Serving engine.** Serve many concurrent requests with batched decode, a
    paged KV cache, continuous batching and prefix caching, behind a separate
    frontend process that survives engine failures. The [serving plan](serving-plan.md)
-   defines its architecture, exact gates and phases. Its batch-invariance
-   requirement extends schedule determinism to batch composition and cache history.
+   defines its architecture, exact gates and phases. It serves with Fast and
+   records numerical differences from batching, cache reuse and replay as diagnostics.
 
 Sampling, quantization, longer contexts, tool-oriented templates and additional
 model families can follow when they answer a concrete need. They are not current
