@@ -202,10 +202,18 @@ simulator explores policies quickly; hardware measurements confirm them.
 
 ### KV events and step records
 
-KV events carry `{event_id, step_id, kind, tier, block_hash, parent_hash}` with
-kinds `stored`, `removed`, `cleared`, `offloaded` and `onboarded`. IDs increase
-by one. A consumer that sees a gap discards its view and requests a snapshot.
-Replaying the log must reconstruct the manager's prefix index exactly.
+KV events describe what is cached, not where. Each carries
+`{event_id, step_id, kind, tier, block_hash, parent_hash}`, and `stored` events
+also carry the block's token IDs. The three kinds, `stored`, `removed` and
+`cleared`, each apply to one tier: writing a block to SSD is `stored` in the
+disk tier, and dropping it from memory is `removed` in the memory tier. IDs
+increase by one. A consumer that sees a gap discards its view and requests a
+snapshot.
+
+Replaying the log must reconstruct the logical index, the set of
+(key, parent key, tier), exactly. Recomputing each stored key from its parent,
+token IDs and salt must reproduce it. Physical placement, reference counts and
+eviction order stay private; the step invariants check them.
 
 Each step emits one versioned record:
 
@@ -317,12 +325,18 @@ decode kernel. Neither order changes arithmetic.
 
 ### Block size
 
-Block size is a multiple of the prefill attention KV tile, so address
-translation happens once per tile. Phase 1 gives each sequence one block of
-the maximum context, which reproduces today's contiguous caches exactly.
-Phase 2 measures 16, 32 and 64. Larger blocks mean fewer lookups. Smaller
-blocks waste less of each sequence's final block and share prefixes more
-finely.
+Every multi-row attention route the model uses reads KV in 32-row tiles that
+start at multiples of 32; split prefill rounds its boundaries to whole tiles.
+A block size that is a multiple of 32 therefore keeps each tile inside one
+block, so address translation happens once per tile. Phase 1 gives each
+sequence one block of the maximum context, which reproduces today's contiguous
+caches exactly.
+
+Phase 2 measures 32, 64 and 128. Larger blocks mean fewer block-table lookups
+in both prefill and decode. Smaller blocks would split tiles across blocks and
+buy little here: KV memory is plentiful (constraint 3), and a partial prefix hit
+recomputes at most one block inside a step dominated by fixed launch cost.
+Revisit smaller blocks only if a larger model makes KV memory scarce.
 
 ### Block states
 
@@ -354,9 +368,10 @@ Checked after every step in debug builds and in every scheduler simulation:
 A block key is `SHA-256(parent_key, block_token_ids, cache_salt)`, so a key
 commits to the complete prefix and tenant. Each Registered block also stores
 its token IDs, which are compared on every hit: the hash is an index, not
-proof. On admission, the manager finds the longest chain of Registered blocks
-and always leaves at least the final prompt token to compute, because its
-logits are needed.
+proof. On admission, the manager finds the longest chain of Registered blocks.
+At least the final prompt token must be computed, because its logits are
+needed. When the whole prompt hits, the final block is recomputed into a
+private block, so shared blocks are never written.
 
 Eviction is least recently used among unreferenced Registered blocks. A
 finished sequence releases its blocks tail-first, so descendants are evicted
@@ -428,7 +443,8 @@ ownership rather than arithmetic:
   stored with.
 - No sequence writes outside its own Partial blocks, checked with guarded and
   poisoned inactive storage as today's cache checks do.
-- Allocator invariants hold, and replaying events reconstructs the index.
+- Allocator invariants hold; replaying events reconstructs the logical index,
+  and every recomputed key matches.
 
 ### Diagnostics
 
@@ -478,7 +494,7 @@ configuration and trace identity.
 | Phase | Delivers | Exact gate | Study question |
 | --- | --- | --- | --- |
 | 1. Batched decode | StepBatch; multi-row configuration-26 decode kernels; one maximum-context block per sequence; a batch axis in the existing model benchmark | S = 1 equals today; batched rows equal solo rows | How do throughput and per-token latency scale for B = 1–32 at contexts 64, 1024 and 3968? |
-| 2. Paged KV | block-major pool, block manager, block states, events, paged decode and prefill attention | paged equals contiguous; invariants; event replay | What does translation cost at each block size, and does head-major order help? |
+| 2. Paged KV | block-major pool, block manager, block states, events, paged decode and prefill attention | paged equals contiguous; invariants; logical event replay | What does translation cost at each block size, and does head-major order help? |
 | 3. Engine core | EngineCore, Scheduler, both runners, chunked prefill, preemption, aborts, step records, trace driver, fitted budget, asynchronous stepping | scheduler and allocator invariants in simulation and on Metal; exact token accounting; asynchronous equals synchronous | How do latency percentiles respond to arrival rate across the scheduling arms, and where does the simulator disagree? |
 | 4. Prefix caching | prefix index, eviction, pinning, chat as an engine client | reused blocks keep their bytes and token IDs; only the uncached suffix is computed; existing chat checks pass | How does time to first token depend on shared-prefix length, hit rate and pool size? |
 | 5. Frontend and API | frontend process, token protocol, model card, HTTP/SSE, supervisor, replay, backpressure, HTTP load generator | replay loses and duplicates nothing and preserves delivered tokens | What do the edge and recovery cost end to end? |
