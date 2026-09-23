@@ -312,6 +312,20 @@ class ProvisionTests(unittest.TestCase):
         self.assertEqual(self.provision(sources)['model_link'], 'linked')
         self.assertEqual(list((self.store / '.staging').iterdir()), [])
 
+    def test_a_read_only_store_copy_can_be_imported_into_another_store(self):
+        other = self.worktree()
+        self.provision(([other / 'build/checkpoints' / assets.MODEL_ID / assets.REVISION],
+                        [other / 'build/model-prepared-v1']))
+        published = assets.store_prepared(self.store)
+        self.assertEqual(stat.S_IMODE(published.stat().st_mode), 0o555)
+        second = self.root / 'second-store'
+        with patch.object(assets, 'import_sources', return_value=([assets.store_checkpoint(self.store)], [published])), \
+             redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            assets.provision(second)
+        assets.verify_pinned_model(assets.store_prepared(second))
+        self.assertEqual(stat.S_IMODE(assets.store_prepared(second).stat().st_mode), 0o555)
+        self.assertEqual(stat.S_IMODE(published.stat().st_mode), 0o555)
+
     def test_second_checkout_reuses_the_store_without_sources(self):
         other = self.worktree()
         self.provision(([other / 'build/checkpoints' / assets.MODEL_ID / assets.REVISION],

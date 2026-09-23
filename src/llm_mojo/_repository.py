@@ -8,7 +8,7 @@ def repository_root() -> Path:
     if not (root / "pyproject.toml").is_file() or not (root / "uv.lock").is_file():
         raise RuntimeError(
             "This command requires the llm-mojo source checkout; "
-            "run it there with uv run --locked python -m llm_mojo.<command>."
+            "run it from a clone of the repository, for example: uv run llm-mojo chat"
         )
     return root
 

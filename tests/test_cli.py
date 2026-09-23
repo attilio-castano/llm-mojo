@@ -67,6 +67,20 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(run.call_args.args, (Path('/build'), Path('/output'), ['rms_norm']))
         self.assertEqual(run.call_args.kwargs['resolved_configuration']['studies'], ['rms_norm'])
 
+    def test_setup_passes_options_and_returns_readiness(self):
+        with patch('llm_mojo.models.qwen2.assets.setup', return_value=1) as setup:
+            result = CliRunner().invoke(app, ['setup', '--check', '--offline', '--no-build', '--store', '/s',
+                                             '--import-from', '/a', '--import-from', '/b'])
+        self.assertEqual(result.exit_code, 1, result.output)
+        self.assertEqual(setup.call_args.args, (Path('/s'),))
+        options = setup.call_args.kwargs
+        self.assertEqual((options['offline'], options['check'], options['build']), (True, True, False))
+        self.assertEqual(list(options['import_from']), [Path('/a'), Path('/b')])
+        with patch('llm_mojo.models.qwen2.assets.setup', return_value=0) as setup:
+            self.assertEqual(CliRunner().invoke(app, ['setup']).exit_code, 0)
+        self.assertEqual(setup.call_args.kwargs['import_from'], ())
+        self.assertFalse(setup.call_args.kwargs['offline'])
+
     def test_prepare_is_explicit_and_local_by_default(self):
         with patch('llm_mojo.models.qwen2.assets.prepare') as prepare:
             result = CliRunner().invoke(app, ['models', 'prepare', 'qwen2.5-0.5b-instruct'])

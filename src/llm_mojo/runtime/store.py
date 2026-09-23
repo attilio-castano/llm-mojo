@@ -135,6 +135,9 @@ def publish_directory(staged, final):
     for child in staged.iterdir():
         if child.is_file() and not child.is_symlink():
             os.chmod(child, 0o444)
+    # Moving a directory to a new parent rewrites its '..' entry, which needs write
+    # permission; a clone of another store's read-only directory would lack it.
+    os.chmod(staged, 0o755)
     final.parent.mkdir(parents=True, exist_ok=True)
     os.rename(staged, final)
     os.chmod(final, 0o555)
