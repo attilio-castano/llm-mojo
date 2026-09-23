@@ -67,21 +67,38 @@ def build_sources(entrypoint, root=None):
     return {str(p.relative_to(root)): sha(p) for p in sorted(visited)}
 
 
+def _current(binary, receipt, identity):
+    if not binary.exists() or not receipt.exists():
+        return False
+    try:
+        record = json.loads(receipt.read_text())
+    except (OSError, ValueError):
+        return False
+    return isinstance(record, dict) and record.get('sources') == identity and record.get('binary_sha256') == sha(binary)
+
+
+def binary_status(name, entrypoint):
+    """current, stale or missing, without locking, creating or building anything."""
+    root = repository_root()
+    directory = root / 'build' / name
+    binary, receipt = directory / name, directory / 'binary.json'
+    if not binary.exists() or not receipt.exists():
+        return 'missing'
+    try:
+        identity = build_sources(entrypoint, root)
+    except ValueError:
+        return 'stale'
+    return 'current' if _current(binary, receipt, identity) else 'stale'
+
+
 def ensure_binary(name, entrypoint):
     root = repository_root()
     directory = root / 'build' / name
     binary, receipt = directory / name, directory / 'binary.json'
     with setup_lock(directory):
         identity = build_sources(entrypoint, root)
-        if binary.exists() and receipt.exists():
-            try:
-                record = json.loads(receipt.read_text())
-            except (OSError, ValueError):
-                record = {}
-            if not isinstance(record, dict):
-                record = {}
-            if record.get('sources') == identity and record.get('binary_sha256') == sha(binary):
-                return binary
+        if _current(binary, receipt, identity):
+            return binary
         print(f'Building native {name} (reused on subsequent launches)…', flush=True, file=sys.stderr)
         fd, filename = tempfile.mkstemp(prefix=name + '.', suffix='.part', dir=directory)
         os.close(fd)

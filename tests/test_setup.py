@@ -1,14 +1,19 @@
 """Shared model store, toolchain checks and one-step setup without network or Metal."""
-from contextlib import redirect_stderr
+import ast
+from contextlib import redirect_stderr, redirect_stdout
 import hashlib
 import io
+import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 
+from llm_mojo.models.qwen2 import assets, tokenizer_assets
 from llm_mojo.runtime import store, toolchain
 
 
@@ -183,6 +188,221 @@ class ToolchainTests(unittest.TestCase):
             missing = Path(directory) / 'not/yet/created'
             self.assertTrue(toolchain.disk_check(missing, 1).ok)
             self.assertFalse(toolchain.disk_check(missing, 1 << 62).ok)
+
+
+REPOSITORY = Path(__file__).resolve().parents[1]
+
+
+def commands(action):
+    """Stand in for the subprocess module as seen by assets.py; store.clone keeps real cp."""
+    def run(*args, **kwargs):
+        stub.calls += 1
+        return action(*args, **kwargs)
+    stub = types.SimpleNamespace(run=run, calls=0, SubprocessError=subprocess.SubprocessError,
+                                 CalledProcessError=subprocess.CalledProcessError)
+    return stub
+
+
+def literal(path, name):
+    """A module-level literal assignment from a fixture script, without importing it."""
+    for node in ast.parse((REPOSITORY / path).read_text()).body:
+        if isinstance(node, ast.Assign) and any(getattr(t, 'id', None) == name for t in node.targets):
+            return ast.literal_eval(node.value)
+    raise KeyError(name)
+
+
+class PinTests(unittest.TestCase):
+    def test_checkpoint_pins_agree_everywhere(self):
+        pinned = {name: digest for name, (_, digest) in assets.CHECKPOINT_FILES.items()}
+        self.assertEqual(pinned, literal('tests/fixtures/attention_sublayer/checkpoint.py', 'ASSET_HASHES'))
+        self.assertIn('988097824', (REPOSITORY / 'tests/fixtures/attention_sublayer/checkpoint.py').read_text())
+        self.assertEqual(assets.CHECKPOINT_FILES['model.safetensors'][0], 988097824)
+        self.assertEqual(pinned['model.safetensors'], assets.CHECKPOINT_SHA)
+        self.assertEqual(pinned['model.safetensors'], literal('tests/fixtures/model_reference.py', 'WEIGHT_SHA'))
+        self.assertEqual(pinned['config.json'], literal('tests/fixtures/model_reference.py', 'CONFIG_SHA'))
+        self.assertEqual(pinned['tokenizer.json'], tokenizer_assets.SOURCE_SHA)
+        for name, digest in literal('tests/fixtures/chat_reference.py', 'HASHES').items():
+            self.assertEqual(pinned[name], digest)
+        documented = dict(reversed(line.split()) for line in
+                          (REPOSITORY / 'docs/model.md').read_text().split('```text\n', 1)[1].split('```')[0].splitlines())
+        self.assertEqual(pinned, documented)
+        self.assertEqual(assets.store_checkpoint(REPOSITORY / 'store'),
+                         REPOSITORY / 'store' / assets.MODEL_ID / assets.REVISION / 'checkpoint')
+
+    def test_tensor_identity_ignores_manifest_provenance(self):
+        records = {'b': dict(sha256='2' * 64), 'a': dict(sha256='1' * 64)}
+        first = assets.prepared_tensors_sha256(dict(tensors=records, source_sha256='x'))
+        self.assertEqual(first, assets.prepared_tensors_sha256(dict(tensors=dict(reversed(records.items())))))
+        self.assertEqual(first, hashlib.sha256(f"a {'1' * 64}\nb {'2' * 64}\n".encode()).hexdigest())
+
+
+class ProvisionTests(unittest.TestCase):
+    """A temporary store, this checkout and another worktree holding verified assets."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.checkout = self.root / 'checkout'
+        (self.checkout / 'build').mkdir(parents=True)
+        self.store = self.root / 'store'
+        self.files = {'config.json': b'{"hidden_size": 896}', 'model.safetensors': b'weights' * 100}
+        self.tensors = {'embedding': b'\x80\x3f\x00\x40', 'final_norm': b'\x00\x3f\x80\xbf'}
+        self.manifest = dict(format='qwen-model-prepared-v1', model_revision=assets.REVISION,
+                             checkpoint_sha256=assets.CHECKPOINT_SHA, source_sha256='provenance',
+                             tensors={name: dict(shape=[2], dtype='BF16', bytes=len(data),
+                                                 sha256=hashlib.sha256(data).hexdigest())
+                                      for name, data in self.tensors.items()})
+        pins = {name: (len(data), hashlib.sha256(data).hexdigest()) for name, data in self.files.items()}
+        for module, name, value in [(assets, 'CHECKPOINT_FILES', pins),
+                                    (assets, 'PREPARED_TENSORS_SHA256', assets.prepared_tensors_sha256(self.manifest)),
+                                    (assets, 'tensor_shapes', lambda: {name: (2,) for name in self.tensors}),
+                                    (assets, 'repository_root', lambda: self.checkout),
+                                    (tokenizer_assets, 'repository_root', lambda: self.checkout),
+                                    (assets, 'ensure_prepared', lambda download: self.checkout / 'tables.bin')]:
+            patcher = patch.object(module, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def worktree(self, name='other'):
+        """Another checkout that prepared real (unlinked) assets before the store existed."""
+        root = self.root / name
+        checkpoint = root / 'build/checkpoints' / assets.MODEL_ID / assets.REVISION
+        checkpoint.mkdir(parents=True)
+        for filename, data in self.files.items():
+            (checkpoint / filename).write_bytes(data)
+        self.write_model(root / 'build/model-prepared-v1')
+        return root
+
+    def write_model(self, directory):
+        directory.mkdir(parents=True)
+        for name, data in self.tensors.items():
+            (directory / (name + '.bin')).write_bytes(data)
+        (directory / 'manifest.json').write_text(json.dumps(self.manifest))
+
+    def provision(self, sources=((), ()), **options):
+        with patch.object(assets, 'import_sources', return_value=sources), \
+             redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            return assets.provision(self.store, **options)
+
+    def snapshot(self, *roots):
+        return {str(p): (p.is_symlink(), stat.S_IMODE(p.lstat().st_mode),
+                         p.read_bytes() if p.is_file() and not p.is_symlink() else None)
+                for root in roots for p in sorted(root.rglob('*'))}
+
+    def test_import_links_checkout_and_leaves_source_untouched(self):
+        other = self.worktree()
+        before = self.snapshot(other)
+        sources = ([other / 'build/checkpoints' / assets.MODEL_ID / assets.REVISION],
+                   [other / 'build/model-prepared-v1'])
+        result = self.provision(sources)
+        self.assertEqual(self.snapshot(other), before)
+        self.assertEqual(set(result['checkpoint_links'].values()), {'linked'})
+        self.assertEqual(result['model_link'], 'linked')
+        prepared = self.checkout / 'build/model-prepared-v1'
+        self.assertTrue(prepared.is_symlink())
+        self.assertEqual(prepared.resolve(), assets.store_prepared(self.store))
+        self.assertEqual(stat.S_IMODE(assets.store_prepared(self.store).stat().st_mode), 0o555)
+        for filename, data in self.files.items():
+            link = tokenizer_assets.asset_directory() / filename
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(link.read_bytes(), data)
+        assets.verify_prepared(prepared)
+        # Idempotent: a second run finds the store and links in place.
+        self.assertEqual(self.provision(sources)['model_link'], 'linked')
+        self.assertEqual(list((self.store / '.staging').iterdir()), [])
+
+    def test_second_checkout_reuses_the_store_without_sources(self):
+        other = self.worktree()
+        self.provision(([other / 'build/checkpoints' / assets.MODEL_ID / assets.REVISION],
+                        [other / 'build/model-prepared-v1']))
+        second = self.root / 'second'
+        (second / 'build').mkdir(parents=True)
+        with patch.object(assets, 'repository_root', lambda: second), \
+             patch.object(tokenizer_assets, 'repository_root', lambda: second):
+            self.provision(download=False)
+            self.assertEqual((second / 'build/model-prepared-v1').resolve(), assets.store_prepared(self.store))
+
+    def test_downloads_only_missing_files_then_offline_requires_the_store(self):
+        with self.assertRaisesRegex(FileNotFoundError, 'uv run llm-mojo setup'):
+            self.provision(download=False)
+        requested = []
+
+        def urlopen(url, timeout):
+            requested.append(url.rsplit('/', 1)[1])
+            return io.BytesIO(self.files[requested[-1]])
+
+        def prepare(command, **kwargs):
+            self.assertIn('model_reference.py', command[4])
+            # Preparation reads the checkpoint through this checkout's links.
+            self.assertTrue((tokenizer_assets.asset_directory() / 'model.safetensors').is_symlink())
+            self.write_model(Path(command[command.index('--output') + 1]))
+
+        with patch.object(store.urllib.request, 'urlopen', side_effect=urlopen), \
+             patch.object(assets, 'subprocess', commands(prepare)) as run:
+            self.provision(download=True)
+        self.assertEqual(sorted(requested), sorted(self.files))
+        self.assertEqual(run.calls, 1)
+        assets.verify_pinned_model(assets.store_prepared(self.store))
+
+    def test_failed_preparation_publishes_nothing(self):
+        other = self.worktree()
+        sources = ([other / 'build/checkpoints' / assets.MODEL_ID / assets.REVISION], [])
+
+        def interrupted(command, **kwargs):
+            output = Path(command[command.index('--output') + 1])
+            output.mkdir()
+            (output / 'embedding.bin').write_bytes(self.tensors['embedding'])
+            raise subprocess.CalledProcessError(1, command)
+
+        with patch.object(assets, 'subprocess', commands(interrupted)):
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.provision(sources)
+        self.assertFalse(assets.store_prepared(self.store).exists())
+        self.assertEqual(list((self.store / '.staging').iterdir()), [])
+
+    def test_real_entries_are_kept_when_valid_and_refused_when_not(self):
+        other = self.worktree()
+        sources = ([other / 'build/checkpoints' / assets.MODEL_ID / assets.REVISION],
+                   [other / 'build/model-prepared-v1'])
+        self.write_model(self.checkout / 'build/model-prepared-v1')
+        self.assertEqual(self.provision(sources)['model_link'], 'local')
+        local = tokenizer_assets.asset_directory() / 'config.json'
+        local.unlink()
+        local.write_bytes(b'{"hidden_size": 1}')
+        with self.assertRaisesRegex(ValueError, 'mv "'):
+            self.provision(sources)
+        self.assertEqual(local.read_bytes(), b'{"hidden_size": 1}')
+
+    def test_other_worktrees_are_discovered_from_git(self):
+        listing = f'worktree {self.checkout}\nHEAD abc\n\nworktree {self.root / "other"}\nbranch x\n'
+        with patch.object(assets, 'subprocess', commands(lambda *a, **k: subprocess.CompletedProcess([], 0, listing))):
+            checkpoints, models = assets.import_sources([self.root / 'explicit'])
+        self.assertEqual(models, [self.root / 'explicit/build/model-prepared-v1',
+                                  self.checkout / 'build/model-prepared-v1',
+                                  self.root / 'other/build/model-prepared-v1'])
+        self.assertEqual(len(checkpoints), 3)
+
+    def test_check_is_read_only_and_reports_readiness(self):
+        other = self.worktree()
+        passing = toolchain.Check('ok', True, 'ok')
+        with patch.object(toolchain, 'xcode_checks', return_value=[passing]), \
+             patch.object(toolchain, 'platform_check', return_value=passing), \
+             patch.object(toolchain, 'mojo_check', return_value=passing), \
+             patch.object(toolchain, 'uv_check', return_value=passing), \
+             patch.object(toolchain, 'device', return_value='Apple M4 Pro'), \
+             patch.object(assets, 'prepared_valid', return_value=True), \
+             patch('llm_mojo.runtime.build.binary_status', return_value='current'):
+            before = self.snapshot(self.root)
+            lines = []
+            self.assertEqual(assets.setup(self.store, check=True, log=lines.append), 1)
+            self.assertEqual(self.snapshot(self.root), before)
+            self.provision(([other / 'build/checkpoints' / assets.MODEL_ID / assets.REVISION],
+                            [other / 'build/model-prepared-v1']))
+            before = self.snapshot(self.root)
+            self.assertEqual(assets.setup(self.store, check=True, log=lines.append), 0)
+            self.assertEqual(self.snapshot(self.root), before)
+        self.assertEqual(lines[-1], 'Ready: uv run llm-mojo chat')
 
 
 if __name__ == '__main__':
