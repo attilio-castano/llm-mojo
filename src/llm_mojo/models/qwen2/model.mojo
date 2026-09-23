@@ -337,7 +337,7 @@ struct QwenModel(Movable):
                     route.deferred_residual_norms += 1
                 comptime if CAPTURE:
                     save_bf16(self.mlp.output,capture+"/hidden_"+String(i+1)+".bin",rows*HIDDEN)
-                    if plan.configuration == DECODER_FUSED_DECODE or plan.configuration == 25:
+                    if plan.configuration == DECODER_FUSED_DECODE:
                         # Fusion intentionally leaves the unpack/rotated scratch untouched.
                         var appended = (self.layers[i].cache.length-1)*KV_WIDTH
                         save_bf16(self.layers[i].cache.key,capture+"/append_key_"+String(i)+".bin",KV_WIDTH,appended)

@@ -1,10 +1,10 @@
 """Exact greedy selection of rounded BF16 logits on Metal, without atomics.
 
-Callers own nonoverlapping input, logits, partial and result storage and retain
-it through device completion. Each record is (ordered score, lowest token ID,
+Callers own nonoverlapping logits, partial and result storage and retain it
+through device completion. Each record is (ordered score, lowest token ID,
 any-nonfinite flag). No interpretation of the ID is valid when the flag is set.
-The fused nonmaterializing specialization leaves logits untouched; its view
-still declares vocabulary extent. Tensor indexing respects the supplied layouts.
+Tensor indexing respects the supplied layouts. The fused vocabulary-projection
+variant measured in studies/model_generation/token-selection.md was not promoted.
 """
 from layout import TensorLayout, TileTensor, row_major, stack_allocation
 from max.gpu.host import DeviceContext
@@ -99,44 +99,6 @@ def _finish[IL: TensorLayout, OL: TensorLayout](
     _group_winner(result,best,winner,bad)
 
 
-def _head[WRITE_LOGITS: Bool, IL: TensorLayout, WL: TensorLayout, LL: TensorLayout, PL: TensorLayout](
-    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
-    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
-    logits: TileTensor[DType.bfloat16, LL, MutAnyOrigin],
-    partials: TileTensor[DType.uint32, PL, MutAnyOrigin], width: Int32, count: Int32,
-):
-    comptime assert is_apple_gpu() and WARP_SIZE == 32
-    comptime assert input.flat_rank == 2 and weight.flat_rank == 2 and logits.flat_rank == 2
-    var lane = lane_id()
-    var group = thread_idx.x // WARP_SIZE
-    var best: UInt32 = 0
-    var winner = UInt32(0xFFFFFFFF)
-    var bad: UInt32 = 0
-    for j in range(16):
-        var token = block_idx.x*64 + j*4 + group
-        if token < Int(count):
-            var accumulator: Float32 = 0
-            var k = lane
-            while k < Int(width):
-                var x = rebind[Scalar[DType.bfloat16]](input[0,k])
-                var w = rebind[Scalar[DType.bfloat16]](weight[token,k])
-                accumulator += x.cast[DType.float32]() * w.cast[DType.float32]()
-                k += WARP_SIZE
-            var total = warp.sum(accumulator)
-            if lane == 0:
-                # Exactly the bias-free linear kernel's materialization boundary.
-                var rounded = (total + Float32(0)).cast[DType.bfloat16]()
-                comptime if WRITE_LOGITS:
-                    logits[0,token] = rebind[logits.ElementType](rounded)
-                var bits = bitcast[DType.uint16](rounded)
-                bad |= UInt32((bits & 0x7F80) == 0x7F80)
-                var rank = bf16_rank(bits)
-                if rank > best or (rank == best and UInt32(token) < winner):
-                    best = rank
-                    winner = UInt32(token)
-    _group_winner(partials,best,winner,bad)
-
-
 def _validate[LL: TensorLayout, PL: TensorLayout, RL: TensorLayout](
     ctx: DeviceContext, logits: TileTensor[DType.bfloat16, LL, MutAnyOrigin],
     partials: TileTensor[DType.uint32, PL, MutAnyOrigin],
@@ -160,24 +122,4 @@ def enqueue_argmax[LL: TensorLayout, PL: TensorLayout, RL: TensorLayout](
     comptime first = _argmax[LL,PL]
     comptime last = _finish[PL,RL]
     ctx.enqueue_function[first](logits,partials,Int32(count),grid_dim=groups,block_dim=128)
-    ctx.enqueue_function[last](partials,result,Int32(groups),grid_dim=1,block_dim=128)
-
-
-def enqueue_head_argmax[WRITE_LOGITS: Bool, IL: TensorLayout, WL: TensorLayout, LL: TensorLayout, PL: TensorLayout, RL: TensorLayout](
-    ctx: DeviceContext, input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
-    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
-    logits: TileTensor[DType.bfloat16, LL, MutAnyOrigin],
-    partials: TileTensor[DType.uint32, PL, MutAnyOrigin],
-    result: TileTensor[DType.uint32, RL, MutAnyOrigin],
-) raises:
-    comptime assert input.flat_rank == 2 and weight.flat_rank == 2
-    var count = Int(logits.dim[1]())
-    var groups = (count+63)//64
-    _validate(ctx,logits,partials,result,groups)
-    var width = Int(input.dim[1]())
-    if Int(input.dim[0]()) != 1 or width < 1 or Int(weight.dim[0]()) != count or Int(weight.dim[1]()) != width:
-        raise Error("invalid fused head shape")
-    comptime first = _head[WRITE_LOGITS,IL,WL,LL,PL]
-    comptime last = _finish[PL,RL]
-    ctx.enqueue_function[first](input,weight,logits,partials,Int32(width),Int32(count),grid_dim=groups,block_dim=128)
     ctx.enqueue_function[last](partials,result,Int32(groups),grid_dim=1,block_dim=128)
