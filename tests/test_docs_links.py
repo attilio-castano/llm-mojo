@@ -8,8 +8,8 @@ IGNORED = {'.git', '.venv', 'build'}
 # Reachability covers the reader-facing trees; other READMEs link into them freely.
 MAPPED = ('docs', 'studies')
 # Pages the documentation map does not reach yet.
-UNMAPPED = {'docs/cli-cleanup-plan.md', 'docs/gqa-prefill-resources.md',
-            'studies/decoder_layer/policies_results.md'}
+UNMAPPED = {'studies/decoder_layer/policies_results.md'}
+HISTORY_BANNER = '> **Historical record**, kept as written.'
 
 
 def pages():
@@ -77,6 +77,13 @@ class DocumentationLinkTests(unittest.TestCase):
         mapped = {p for p in pages() if p.relative_to(ROOT).parts[0] in MAPPED}
         unreached = {str(p.relative_to(ROOT)) for p in mapped - reached}
         self.assertEqual(unreached, UNMAPPED)
+
+    def test_history_pages_are_labelled(self):
+        records = [p for p in (ROOT / 'docs/history').glob('*.md') if p.name != 'README.md']
+        self.assertTrue(records)
+        for page in records:
+            with self.subTest(page=page.name):
+                self.assertIn(HISTORY_BANNER, page.read_text().split('\n\n', 2)[1])
 
     def test_slugs_follow_github_rules(self):
         self.assertEqual(slug('Run the `chat` command'), 'run-the-chat-command')

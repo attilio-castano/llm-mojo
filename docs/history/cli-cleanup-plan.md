@@ -1,5 +1,8 @@
 # CLI and configuration cleanup
 
+> **Historical record**, kept as written. The [history index](README.md) says what it
+> led to and where current guidance lives.
+
 Baseline: `c5f586c` (Fast Qwen decode, configuration 26). This local milestone
 unifies access to the existing engine; it does not qualify another model or
 change numerical policies. Baseline Python validation: 181 tests passed.
@@ -91,7 +94,7 @@ paths. Installed tokenizer and validation aliases point directly at their
 implementations. The unused chat and tokenizer module wrappers are removed;
 four old validation module commands and the model research-policy command remain
 as thin entry points for existing reproduction workflows. The exact retained
-surface and replacements are documented in [the CLI guide](cli.md#validation-and-compatibility).
+surface and replacements are documented in [the CLI guide](../cli.md#validation-and-compatibility).
 Historical evidence keeps its original paths, hashes and source commits.
 
 Follow-up validation passed with `uv run --locked llm-mojo validate`: all frozen

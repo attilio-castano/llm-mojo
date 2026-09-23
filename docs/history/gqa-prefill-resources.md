@@ -1,6 +1,9 @@
 # GQA prefill resource study
 
-Completed: see the [retained results and figures](../studies/gqa_prefill/README.md#compiler-resources-and-synchronization).
+> **Historical record**, kept as written. The [history index](README.md) says what it
+> led to and where current guidance lives.
+
+Completed: see the [retained results and figures](../../studies/gqa_prefill/README.md#compiler-resources-and-synchronization).
 This document preserves the original bounded plan and frozen selection.
 
 This bounded follow-up keeps the original 32x32 MMA kernel (route 8) as its

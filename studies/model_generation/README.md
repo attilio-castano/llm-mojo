@@ -152,7 +152,7 @@ replacement reference. Querywise SDPA has not been adopted as the oracle.
 
 ## Historical consequence and next decision
 
-At this checkpoint, the [approved stop rule](../../docs/generation-plan.md) applied: independent
+At this checkpoint, the [approved stop rule](../../docs/history/generation-plan.md) applied: independent
 confirmation failed, so no native model numerical comparison, reserved
 acceptance, model benchmark or automatic configuration promotion follows.
 The three additional optimization studies remain unspent. `auto` still uses

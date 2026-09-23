@@ -7,7 +7,7 @@ and generation benchmarks did not run. The original reserved model outputs
 remain unopened. No numerical limit or inference arithmetic was changed in
 response to the result.
 
-The [approved plan](../../docs/fast-generation-plan.md) and
+The [approved plan](../../docs/history/fast-generation-plan.md) and
 [declaration](../../tests/fixtures/model_fast.json) were committed at `ce1a8e6`
 before collection. This is a new failed qualification, separate from the older
 HF schedule confirmation and native configuration-20 failures. It establishes

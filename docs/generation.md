@@ -2,7 +2,7 @@
 
 For interactive multi-turn use with persistent KV caches, see [terminal chat](chat.md).
 
-The completed [Fast implementation revision](fast-generation-plan.md) uses numerical
+The completed [Fast implementation revision](history/fast-generation-plan.md) uses numerical
 comparisons as diagnostics. Required checks cover assets, data flow, cache and
 generation semantics; historical full-model distance ceilings no longer block
 integration. `fast` is the public default. On Apple M4 Pro it selects the eleven
@@ -190,7 +190,7 @@ comparison on three synthetic layers in default validation.
 
 ## Historical numerical-policy studies
 
-Before the diagnostic policy, the [Fast completion effort](fast-generation-plan.md) stopped during
+Before the diagnostic policy, the [Fast completion effort](history/fast-generation-plan.md) stopped during
 reference-only qualification: the declared intermediate-error ceilings failed
 before independent confirmation or native Fast acceptance. The
 [Fast reference study](../studies/model_generation/fast-reference.md) retains
@@ -230,7 +230,7 @@ declared lengths, while deterministic mode alone leaves the original differences
 unchanged. The approved consistency revision now qualifies this canonical
 route while preserving the original failed policy and evidence.
 
-The approved scope and stop gates are in [generation-plan.md](generation-plan.md).
+The approved scope and stop gates are in [generation-plan.md](history/generation-plan.md).
 The declaration is [model_contract.json](../tests/fixtures/model_contract.json).
 The numerical thresholds are initial reference-only qualification criteria;
 they failed, and a bounded reference-only calibration also failed independent

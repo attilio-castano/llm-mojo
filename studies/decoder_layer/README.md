@@ -224,7 +224,7 @@ uv run --locked python -m unittest discover -s tests -p 'test_*.py'
 uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.plot studies/decoder_layer
 ```
 
-The [execution plan](../../docs/decoder-layer-plan.md) records the numerical
+The [execution plan](../../docs/history/decoder-layer-plan.md) records the numerical
 build, reserved capture/evaluation and six-workload timing commands. Original
 artifacts live under `/private/tmp/llm-mojo-decoder-20260908`; timings are in
 `timing/decoder_layer`, numerical receipts in `acceptance`, and profiles in

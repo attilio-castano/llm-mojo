@@ -1,5 +1,8 @@
 # Decoder Layer Implementation Plan
 
+> **Historical record**, kept as written. The [history index](README.md) says what it
+> led to and where current guidance lives.
+
 > **For agentic workers:** Use `superpowers:executing-plans` to execute this
 > plan inline, task by task. Checkboxes track completed evidence gates. Do not
 > create separate tasks or delegate unless the user requests it.
@@ -15,7 +18,7 @@ tools rather than creating a second framework.
 **Tech stack:** Locked Mojo/MAX, Apple Metal, BF16 storage with documented FP32
 arithmetic, and the pinned Torch 2.4.0 / Transformers 4.43.1 CPU reference.
 
-Specification: [decoder-layer.md](decoder-layer.md). Starting point:
+Specification: [decoder-layer.md](../decoder-layer.md). Starting point:
 `codex/decoder-layer-baseline`, based on `7f16d6f`, plus the documentation drafts
 already in this worktree. The user approved execution on 2026-09-08.
 

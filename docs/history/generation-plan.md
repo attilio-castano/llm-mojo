@@ -1,15 +1,18 @@
 # Historical Qwen forward and generation plans
 
+> **Historical record**, kept as written. The [history index](README.md) says what it
+> led to and where current guidance lives.
+
 The Fast runtime and native terminal chat milestones are complete. Current
-behavior is documented in the [model contract](model.md), [runtime guide](generation.md)
-and [chat guide](chat.md). Results are in the
-[Fast runtime study](../studies/model_generation/runtime.md) and
-[chat study](../studies/model_generation/chat.md).
+behavior is documented in the [model contract](../model.md), [runtime guide](../generation.md)
+and [chat guide](../chat.md). Results are in the
+[Fast runtime study](../../studies/model_generation/runtime.md) and
+[chat study](../../studies/model_generation/chat.md).
 
 The [completed Fast plan](fast-generation-plan.md) records the approved move to
 numerical diagnosis. The qualification and consistency stop gates below are
 historical; their failures remain unchanged. Full-model schedule determinism
-continues as a separate follow-up in the [project direction](project.md).
+continues as a separate follow-up in the [project direction](../project.md).
 
 ## Approved consistency revision — 2026-09-09
 
@@ -53,7 +56,7 @@ pass. Ten projection elements differ by one BF16 step; exact rational sums
 favor Mojo in five and HF in five. No local gate defect was identified on this
 input. Promotion is paused at the numerical-policy decision, with no enlarged
 gate, new precision, optimization study or final reserved exposure. The
-[consistency study](../studies/model_generation/consistency.md) contains the
+[consistency study](../../studies/model_generation/consistency.md) contains the
 evidence and reproduction commands. Stage 2 full-model schedule/generation
 acceptance and stage 3 remain incomplete.
 

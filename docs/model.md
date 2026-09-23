@@ -365,7 +365,7 @@ The [runtime study](../studies/model_generation/runtime.md) and
 scope and observed differences. Full-model schedule determinism and a matched HF
 performance comparison remain follow-ups. The original tolerance-gated V0
 qualification and consistency plans are retained in
-[generation-plan.md](generation-plan.md), with their failures in the
+[generation-plan.md](history/generation-plan.md), with their failures in the
 [numerical history](../studies/model_generation/README.md). Those failed results
 remain unchanged; this policy does not claim that their gates passed.
 

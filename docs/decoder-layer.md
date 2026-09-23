@@ -7,7 +7,7 @@ behavior and seven reserved cases at frozen candidate `d67fd94`. The completed
 [layer study](../studies/decoder_layer/README.md) retains 960 latency observations
 and 2,400 measured profile dispatches. Recipes and
 initial acceptance targets were declared before the new layer outputs.
-The [execution plan](decoder-layer-plan.md) defines the local work scope,
+The [execution plan](history/decoder-layer-plan.md) defines the local work scope,
 ordered evidence gates, measurement budget, and stop conditions. The subsequent
 [configuration selection](../studies/decoder_layer/selection.md) is also complete;
 it confirms cached-prefill improvements and retains the baseline for full/short

@@ -64,7 +64,7 @@ floating-point reductions and predictions. Schedule-invariant full-model executi
 is not part of the completed Fast contract. The earlier failed full-model
 qualification policies and their records remain [historical evidence](../studies/model_generation/README.md);
 they were not converted into passing results. The approved
-[Fast plan](fast-generation-plan.md) records the move to numerical diagnosis.
+[Fast plan](history/fast-generation-plan.md) records the move to numerical diagnosis.
 
 ## Follow-up direction
 
@@ -122,10 +122,10 @@ implemented ownership boundaries justify it. Tests live in
 `src/llm_mojo/benchmarks/`; studies own explanations and compact measured evidence.
 
 Usage and current contracts belong in `docs/`. Completed plans and numerical
-investigations remain linked as history, so they do not obscure the current
-entry point. A new parameter choice usually belongs in an existing measurement
-matrix, not a new experiment hierarchy. Weights, generated oracle arrays,
-binaries and full traces remain outside Git.
+investigations remain linked as [history](history/README.md), so they do not
+obscure the current entry point. A new parameter choice usually belongs in an
+existing measurement matrix, not a new experiment hierarchy. Weights, generated
+oracle arrays, binaries and full traces remain outside Git.
 
 ## Success
 
