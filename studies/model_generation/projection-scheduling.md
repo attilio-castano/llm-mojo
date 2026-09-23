@@ -159,7 +159,10 @@ Engine, policy, numerical contracts, model assets and kernels are unchanged.
 
 ## Reproduction and retained evidence
 
-With the measured checkout clean and the verified local prepared model:
+Collect with the measured checkout clean and the verified local prepared model.
+`scheduling-build`, `scheduling-collect`, `scheduling-capture` and
+`scheduling-archive` exist through `edb610a`; later commits keep the replay and
+plot commands, which need no GPU or weights:
 
 ```sh
 uv run --locked python -m llm_mojo.benchmarks.model_profile scheduling-build --prepared "$PREPARED" --output "$RUN/build"

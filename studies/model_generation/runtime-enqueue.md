@@ -164,5 +164,7 @@ and hashes. The final full Python suite passed all 180 tests; archive replay and
 Reproduce with `enqueue-build`, `enqueue-collect`, `enqueue-archive`,
 `enqueue-replay` and `enqueue-plot` in the existing
 [benchmark tool](../../src/llm_mojo/benchmarks/README.md#runtime-enqueue-boundary).
+The three collection commands exist through `edb610a`; later commits keep the
+replay and plot commands, which need no GPU or weights.
 Full probe logs, snapshots and binaries remain outside Git under
 `/private/tmp/enqueue-build` and `/private/tmp/enqueue-timings`.

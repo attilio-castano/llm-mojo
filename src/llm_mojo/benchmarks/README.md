@@ -416,11 +416,16 @@ same byte-decoder implementation. Table loading includes deserialization and
 native structure checks, not preparation or Python's startup SHA-256 checks.
 
 The [QKV fusion experiment](../../../studies/model_generation/qkv-fusion.md)
-extends `model_profile` with `build --fusion`, the same calibrated collection
-matrix, and `fusion-capture`, `fusion-terminal`, `fusion-archive`,
-`fusion-replay` and `fusion-plot`. Configuration 25 remains an explicit study
-arm. Default single-row M4 Pro Fast uses configuration 26 together with residual
-normalization fusion, buffer swapping and GPU argmax; see the
+extended `model_profile` with `build --fusion`, the same calibrated collection
+matrix, and `fusion-capture`, `fusion-terminal` and `fusion-archive`. The
+collectors of this and the other completed model-level experiments exist through
+`edb610a`: the `build` flags `--fusion`, `--combined`, `--copy-free`,
+`--selection`, `--residual-norm` and `--projections`, and the `selection-*`,
+`scheduling-*` and `enqueue-*` collection commands, including
+`projection-confirm`. So does configuration 25. Later commits keep every replay
+and plot command, which need no GPU or weights. Default single-row M4 Pro Fast
+uses configuration 26 together with residual normalization fusion, buffer
+swapping and GPU argmax; see the
 [composed promotion](../../../studies/model_generation/residual-norm.md).
 
 ### Runtime enqueue boundary
@@ -429,7 +434,8 @@ The [bounded enqueue plan](../../../studies/model_generation/runtime-enqueue-pla
 uses the same model executable with absent, inactive and recording process-local
 wrappers, plus compiled-handle and queue-depth diagnostic microbenchmarks. It
 requires the pinned macOS arm64 MAX runtime; it does not alter installed libraries.
-Run serially on M4 Pro / Metal from a clean checkout:
+Run serially on M4 Pro / Metal from a clean checkout of `edb610a` or earlier;
+`enqueue-build`, `enqueue-collect` and `enqueue-archive` are retired after it:
 
 ```sh
 uv run --locked python -m llm_mojo.benchmarks.model_profile enqueue-build --prepared /absolute/prepared-v1 --output /private/tmp/enqueue-build
