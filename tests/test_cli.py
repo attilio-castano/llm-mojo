@@ -67,6 +67,20 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(run.call_args.args, (Path('/build'), Path('/output'), ['rms_norm']))
         self.assertEqual(run.call_args.kwargs['resolved_configuration']['studies'], ['rms_norm'])
 
+    def test_replay_only_studies_are_listed_but_never_run(self):
+        from llm_mojo.benchmarks.study import REPLAY_ONLY
+        from llm_mojo.benchmarks.run import run
+        self.assertTrue(REPLAY_ONLY)
+        self.assertTrue(all(name.startswith(('decoder_selection_', 'decoder_policies_round2_'))
+                            for name in REPLAY_ONLY))
+        name = sorted(REPLAY_ONLY)[0]
+        with self.assertRaises(ValueError): resolve_bench(studies=[name])
+        with self.assertRaisesRegex(ValueError, 'edb610a'): run(Path('/build'), Path('/output'), [name])
+        listed = json.loads(CliRunner().invoke(app, ['bench', 'list']).output)
+        self.assertEqual(set(listed['replay_only']), REPLAY_ONLY)
+        self.assertFalse(set(listed['studies']) & REPLAY_ONLY)
+        self.assertIn('decoder_selection_calibration', listed['studies'])
+
     def test_setup_passes_options_and_returns_readiness(self):
         with patch('llm_mojo.models.qwen2.assets.setup', return_value=1) as setup:
             result = CliRunner().invoke(app, ['setup', '--check', '--offline', '--no-build', '--store', '/s',

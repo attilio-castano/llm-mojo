@@ -379,9 +379,11 @@ multi-row execution.
 The common builder includes the composed decoder. `--studies decoder_layer`
 runs its six-workload baseline in hot and ring24 modes. The opt-in
 `decoder_selection_*` studies reuse this runner for calibration, screening and
-independent confirmation of explicit decoder configurations. `select-decoder`
-freezes screen proposals; confirmation runs require `--decoder-screen`, and
-`confirm-decoder` records accepted exact shape/mode cells with ID 0 fallback.
+independent confirmation of explicit decoder configurations. The screens and
+confirmations are replay-only: their arms include configurations that exist
+through `edb610a`, together with the `select-decoder` and `confirm-decoder`
+commands that froze their decisions. `decoder_layer_contract.screen_decision`
+and `confirmed_selection` still recompute those decisions from the retained runs.
 Decoder IDs differ from standalone attention and MLP mapping IDs.
 
 See the [selection plan](../../../studies/decoder_layer/selection-plan.md) for

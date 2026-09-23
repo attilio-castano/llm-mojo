@@ -78,10 +78,6 @@ def _enqueue_projection[
 
     elif mapping == 7:
         enqueue_linear_rowwise_rows_apple_gpu[4](ctx, input, weight, output)
-    elif mapping == 8:
-        enqueue_linear_rowwise_rows_apple_gpu[8](ctx, input, weight, output)
-    elif mapping == 9:
-        enqueue_linear_rowwise_rows_apple_gpu[16](ctx, input, weight, output)
 
 
 def mlp_combines_gate_up(mapping: Int) -> Bool:
@@ -187,7 +183,7 @@ def _validate_mlp[
     mapping: Int,
 ) raises:
     comptime assert x.flat_rank == 2
-    if mapping < 0 or mapping > 21:
+    if mapping < 0 or mapping > 19:
         raise Error("unknown MLP projection mapping")
     var r = Int(x.dim[0]())
     if mapping >= 8 and mapping <= 18 and r != 1:

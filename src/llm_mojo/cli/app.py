@@ -110,11 +110,12 @@ def prepare_model(model: Annotated[str, typer.Argument()] = MODEL, output: Path 
 
 @bench.command('list')
 def list_studies():
-    """List named presets and maintained studies."""
+    """List named presets, runnable studies and studies kept for replay only."""
     from llm_mojo.configuration import BENCH_PRESETS
-    from llm_mojo.benchmarks.study import STUDIES
+    from llm_mojo.benchmarks.study import STUDIES, REPLAY_ONLY
     typer.echo(json.dumps(dict(presets={k: v.studies for k, v in BENCH_PRESETS.items()},
-                              studies=list(STUDIES)), indent=2))
+                              studies=[name for name in STUDIES if name not in REPLAY_ONLY],
+                              replay_only=[name for name in STUDIES if name in REPLAY_ONLY]), indent=2))
 
 
 @bench.command('build')
@@ -129,14 +130,14 @@ def run_bench(preset: str = 'core', study: Annotated[list[str] | None, typer.Opt
               build_dir: Path | None = None, output: Path | None = None,
               parallelism_screen: Path | None = None, tile_screen: Path | None = None,
               tile_kernel_screen: Path | None = None, mlp_decode_screen: Path | None = None,
-              decoder_screen: Path | None = None, policy_confirmation: Path | None = None,
+              policy_confirmation: Path | None = None,
               show_config: Inspect = False):
     """Run complete existing study grids with their original evidence checks."""
     try:
         cfg = resolve_bench(preset, studies=study, build_dir=build_dir, output=output,
                             parallelism_screen=parallelism_screen, tile_screen=tile_screen,
                             tile_kernel_screen=tile_kernel_screen, mlp_decode_screen=mlp_decode_screen,
-                            decoder_screen=decoder_screen, policy_confirmation=policy_confirmation)
+                            policy_confirmation=policy_confirmation)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from error
     if show_config:
@@ -148,25 +149,6 @@ def run_bench(preset: str = 'core', study: Annotated[list[str] | None, typer.Opt
     options = {k: Path(v) if v is not None else None for k, v in asdict(cfg).items()
                if k not in ('studies', 'build_dir', 'output')}
     run(Path(cfg.build_dir), Path(cfg.output), cfg.studies, resolved_configuration=resolved_dict(cfg), **options)
-
-
-@bench.command('select-decoder')
-def select_decoder(build_dir: Annotated[Path, typer.Option()],
-                   decoder_screen: Annotated[Path, typer.Option()]):
-    """Freeze selection from a complete decoder screen."""
-    from llm_mojo.benchmarks.run import main
-    main(['select-decoder', '--build-dir', str(build_dir.resolve()),
-          '--decoder-screen', str(decoder_screen.resolve())])
-
-
-@bench.command('confirm-decoder')
-def confirm_decoder(build_dir: Annotated[Path, typer.Option()],
-                    decoder_screen: Annotated[Path, typer.Option()],
-                    output: Annotated[Path, typer.Option()]):
-    """Confirm decoder selection against its complete qualification run."""
-    from llm_mojo.benchmarks.run import main
-    main(['confirm-decoder', '--build-dir', str(build_dir.resolve()),
-          '--decoder-screen', str(decoder_screen.resolve()), '--output', str(output.resolve())])
 
 
 @bench.command('tokenizer')

@@ -103,9 +103,13 @@ Resolved selection and paths are saved in the run's `configuration.json` and
 in each study's `run.json` beside existing provenance. Historical evidence and its specifications are not
 rewritten by configuration resolution.
 
-`bench select-decoder`, `bench confirm-decoder` and `bench tokenizer` expose the
-existing qualification and tokenizer workflows. `tokenizer` exposes setup,
-encode and decode tooling. Every group has help.
+`bench tokenizer` exposes the existing tokenizer workflows. `tokenizer` exposes
+setup, encode and decode tooling. Every group has help.
+
+`bench list` shows replay-only studies separately: the decoder selection screens
+and confirmations and the policy round 2 studies. Their arms include decoder
+configurations the engine no longer implements. Their retained runs still replay. Rerunning one requires the
+commit recorded in its `run.json`; the configurations exist through `edb610a`.
 
 ## Validation and compatibility
 

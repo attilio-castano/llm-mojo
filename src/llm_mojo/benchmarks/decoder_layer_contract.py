@@ -13,6 +13,10 @@ MEASUREMENT_VARIANTS = VARIANTS | {20,21,22,23,24}
 # Numerical harness IDs for the public lookup: Fast/Deterministic, hot/ring24.
 POLICY_EXECUTIONS = {100:(False,1),101:(True,1),102:(False,24),103:(True,24)}
 POLICY_TEST_VARIANTS = MEASUREMENT_VARIANTS | POLICY_EXECUTIONS.keys()
+# Configurations the engine still implements. The registries above stay frozen so
+# retained runs replay; configurations 1, 4, 8, 12, 14, 23 and 24 exist through edb610a.
+RUNNABLE_VARIANTS = frozenset({0,2,3,20,21,22})
+RUNNABLE_POLICY_VARIANTS = RUNNABLE_VARIANTS | POLICY_EXECUTIONS.keys()
 ENTRYPOINTS = {f'decoder_layer_{v}':'enqueue_decoder_layer' for v in MEASUREMENT_VARIANTS}
 NAMES = {0:'integrated control',1:'both 16x16 attention projections',
          2:'split8 attention',3:'split8 + both 16x16 projections',4:'rowwise MLP',

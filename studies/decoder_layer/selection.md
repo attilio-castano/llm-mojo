@@ -234,9 +234,11 @@ Array hashes, binary hashes, numerical receipts and complete timing/profile sour
 identities are retained. Arrays, binaries, full traces and XML exports remain
 outside Git at `/private/tmp/llm-mojo-decoder-selection-20260908`.
 
-The existing `benchmarks.run` commands `select-decoder` and `confirm-decoder`
-reconstruct decisions from complete runs. Its `--decoder-screen` argument binds
-confirmation to the frozen screen selection; the `profile_summary` tool uses
+`decoder_layer_contract.screen_decision` and `confirmed_selection` reconstruct
+decisions from complete runs. The `select-decoder` and `confirm-decoder` commands,
+and the `--decoder-screen` argument that binds confirmation to the frozen screen
+selection, exist through `edb610a`; later commits replay these studies but do
+not rerun them. The `profile_summary` tool uses
 `--decoder-layer --decoder-selection FILE --prefix selection_`. Fresh execution
 requires new output paths and clean recorded builds. The published seeds are
 now regression cases; another optimization study must declare its own fresh

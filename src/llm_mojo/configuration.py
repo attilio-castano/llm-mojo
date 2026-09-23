@@ -51,7 +51,6 @@ class BenchConfig:
     tile_screen: str | None = None
     tile_kernel_screen: str | None = None
     mlp_decode_screen: str | None = None
-    decoder_screen: str | None = None
     policy_confirmation: str | None = None
 
 
@@ -132,9 +131,10 @@ def resolve_bench(preset='core', **options):
                 setattr(result, key, value.copy())
             else:
                 setattr(result, key, str(Path(value).resolve()))
-    from llm_mojo.benchmarks.study import STUDIES
-    from llm_mojo.benchmarks.decoder_layer_contract import MEASUREMENT_VARIANTS
-    names = set(STUDIES) | {f'decoder_policies_cost_{v}_{m}' for v in MEASUREMENT_VARIANTS for m in ('hot', 'ring')}
+    from llm_mojo.benchmarks.study import STUDIES, REPLAY_ONLY
+    from llm_mojo.benchmarks.decoder_layer_contract import MEASUREMENT_VARIANTS, RUNNABLE_VARIANTS
+    names = (set(STUDIES) - REPLAY_ONLY) | {f'decoder_policies_cost_{v}_{m}' for v in MEASUREMENT_VARIANTS & RUNNABLE_VARIANTS
+                                            for m in ('hot', 'ring')}
     if not result.studies or len(set(result.studies)) != len(result.studies):
         raise ValueError('select at least one study, with no duplicates')
     if set(result.studies) - names:

@@ -3,7 +3,8 @@ from layout import TileTensor, row_major
 from max.gpu.host import DeviceContext
 from std.testing import TestSuite, assert_equal, assert_raises
 from std.memory import bitcast
-from llm_mojo.layers.decoder_layer import decoder_mappings, enqueue_decoder_layer, enqueue_decoder_layer_configuration, DecoderCache, decoder_policy_configuration, enqueue_decoder_layer_policy
+from llm_mojo.layers.decoder_layer import decoder_mappings, enqueue_decoder_layer, enqueue_decoder_layer_configuration
+from llm_mojo.layers.decoder_policy import DecoderCache, decoder_policy_configuration, enqueue_decoder_layer_policy
 from llm_mojo.layers.attention_sublayer import AttentionWeights, AttentionCache, AttentionWorkspace
 from llm_mojo.layers.mlp import MLPWeights, MLPWorkspace
 from decoder_layer_support import decoder_support, decoder_snapshot, exact_decoder, load_decoder, poison_decoder, check_decoder_active
