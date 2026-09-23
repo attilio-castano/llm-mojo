@@ -10,7 +10,7 @@ import numpy as np
 
 from .._repository import environment_tool, repository_root
 from .evidence import source_identity, sha, write
-from llm_mojo.models.qwen2.assets import verify_prepared
+from llm_mojo.models.qwen2.assets import GENERATION_MODES, verify_prepared
 
 CONSISTENCY_BOUNDARIES = ({f'hidden_{i}' for i in range(25)} | {'final_norm', 'logits'} |
                           {f'cache_{kind}_{i}' for kind in ('key', 'value') for i in range(24)})
@@ -688,13 +688,13 @@ def main():
     b.add_argument('--generation',action='store_true')
     g=sub.add_parser('generate');g.add_argument('--binary',required=True,type=Path)
     g.add_argument('--output',required=True,type=Path);g.add_argument('--prepared',type=Path)
-    g.add_argument('--policy',default='fast')
+    g.add_argument('--policy',default='fast',choices=GENERATION_MODES)
     l=sub.add_parser('lifecycle');l.add_argument('--binary',required=True,type=Path)
     l.add_argument('--output',required=True,type=Path);l.add_argument('--prepared',type=Path)
     d=sub.add_parser('diagnose');d.add_argument('--binary',required=True,type=Path)
     d.add_argument('--reference',required=True,type=Path);d.add_argument('--output',required=True,type=Path)
     d.add_argument('--prepared',type=Path)
-    d.add_argument('--policy',choices=['fast','baseline','consistent'])
+    d.add_argument('--policy',choices=GENERATION_MODES)
     m=sub.add_parser('benchmark');m.add_argument('--binary',required=True,type=Path)
     m.add_argument('--specification',required=True,type=Path);m.add_argument('--output',required=True,type=Path)
     m.add_argument('--prepared',type=Path)

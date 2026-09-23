@@ -38,12 +38,16 @@ never download assets. `models list` reports capabilities and store, link, table
 binary and device state; it does not prepare or compile anything. Checksum
 verification reads the model weights.
 
-The supported application model is `qwen2.5-0.5b-instruct`, with `--mode fast`,
-BF16 storage, Metal, batch one and 4096-token capacity. These are implementation
-constraints. A model name or preset cannot grant another architecture, dtype,
-backend or context capacity. Generation consumes raw text; chat applies Qwen's
-plain system/user/assistant template. Generation requires exactly one prompt
-source; an empty prompt is rejected.
+The supported application model is `qwen2.5-0.5b-instruct`, with BF16 storage,
+Metal, batch one and 4096-token capacity. These are implementation constraints.
+A model name or preset cannot grant another architecture, dtype, backend or
+context capacity. Generation consumes raw text; chat applies Qwen's plain
+system/user/assistant template. Generation requires exactly one prompt source; an
+empty prompt is rejected.
+
+Chat runs the Fast route. `generate --mode` also accepts two reference routes:
+`baseline` runs decoder configuration 0 for every call, and `consistent` runs the
+deterministic research route. Both are slower than `fast`.
 
 ## Presets and precedence
 
@@ -108,8 +112,9 @@ setup, encode and decode tooling. Every group has help.
 
 `bench list` shows replay-only studies separately: the decoder selection screens
 and confirmations and the policy round 2 studies. Their arms include decoder
-configurations the engine no longer implements. Their retained runs still replay. Rerunning one requires the
-commit recorded in its `run.json`; the configurations exist through `edb610a`.
+configurations the engine no longer implements. Their retained runs still
+replay. Rerunning one requires the commit recorded in its `run.json`; the
+configurations exist through `edb610a`.
 
 ## Validation and compatibility
 
@@ -127,7 +132,6 @@ The supported compatibility surface is deliberately limited:
 | `python -m llm_mojo.mlp_validation` | `python -m llm_mojo.validation.mlp` | Existing numerical reproduction commands |
 | `python -m llm_mojo.decoder_validation` | `python -m llm_mojo.validation.decoder` | Existing numerical reproduction commands |
 | `python -m llm_mojo.model_validation` | `python -m llm_mojo.validation.model` | Existing numerical reproduction commands |
-| `python -m llm_mojo.model_assets` | `python -m llm_mojo.models.qwen2.assets` | Explicit research policies beyond the public Fast mode |
 | `llm-mojo-tokenizer` | `llm-mojo tokenizer` | Existing installed command and study instructions |
 | `llm-mojo-bench` | `llm-mojo bench` | Existing measurement command and study instructions |
 

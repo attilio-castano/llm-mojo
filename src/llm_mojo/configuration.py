@@ -7,7 +7,8 @@ from hydra.core.config_store import ConfigStore
 from omegaconf import MISSING, OmegaConf
 
 from llm_mojo.models.qwen2.assets import (prepared_directory, MODEL_ID as MODEL,
-                                         REVISION, CHECKPOINT_SHA, CONTEXT_CAPACITY, APPLICATION_MODE)
+                                         REVISION, CHECKPOINT_SHA, CONTEXT_CAPACITY, APPLICATION_MODE,
+                                         GENERATION_MODES)
 
 
 @dataclass
@@ -65,7 +66,8 @@ def _register():
     store = ConfigStore.instance()
     store.store(name='llm_run', node=RunConfig)
     store.store(group='model', name=MODEL, node=ModelConfig)
-    store.store(group='mode', name='fast', node=ModeConfig)
+    for name in GENERATION_MODES:
+        store.store(group='mode', name=name, node=ModeConfig(name=name))
     for name, node in WORKLOADS.items():
         store.store(group='workload', name=name, node=node)
     for name, node in BENCH_PRESETS.items():
@@ -82,10 +84,11 @@ def resolve_run(command, *, preset='interactive', model=None, mode=None, **optio
         raise ValueError('unknown workload preset: ' + preset)
     if model is not None and model != MODEL:
         raise ValueError('unsupported model: ' + model)
-    if mode is not None and mode != 'fast':
-        raise ValueError('unsupported application mode: ' + mode + '; supported: fast')
+    modes = GENERATION_MODES if command == 'generate' else (APPLICATION_MODE,)
+    if mode is not None and mode not in modes:
+        raise ValueError(f'unsupported {command} mode: {mode}; supported: ' + ', '.join(modes))
     with initialize(version_base='1.3', config_path=None):
-        cfg = compose(config_name='llm_run', overrides=['workload=' + preset])
+        cfg = compose(config_name='llm_run', overrides=['workload=' + preset, 'mode=' + (mode or APPLICATION_MODE)])
     result = OmegaConf.to_object(cfg)
     w = result.workload
     # Literal CLI text never enters OmegaConf interpolation or override grammar.

@@ -18,7 +18,8 @@ app.add_typer(bench, name='bench')
 
 Preset = Annotated[str, typer.Option(help='Workload preset: interactive, short, whole-prompt.')]
 Model = Annotated[str | None, typer.Option(help='Supported model identifier; Qwen is the default.')]
-Mode = Annotated[str | None, typer.Option(help='Application execution mode; supported: fast.')]
+Mode = Annotated[str | None, typer.Option(
+    help='Execution mode: fast (default). generate also accepts baseline and consistent.')]
 Inspect = Annotated[bool, typer.Option('--show-config', help='Print resolved configuration without loading or compiling.')]
 
 

@@ -21,11 +21,22 @@ class ConfigurationTests(unittest.TestCase):
         with self.assertRaises(ValueError): resolve_run('chat', preset='whole-prompt')
 
     def test_unsupported_selections_and_conflicting_inputs(self):
-        for options in ({'model': 'llama'}, {'mode': 'consistent'}, {'preset': 'unknown'},
+        for options in ({'model': 'llama'}, {'mode': 'auto'}, {'preset': 'unknown'},
                         {'prompt': 'hello', 'prompt_file': 'file'}, {'system_file': 'file'},
                         {'chunk_rows': 4097}, {'max_new_tokens': -1}):
             with self.subTest(options=options), self.assertRaises(ValueError):
                 resolve_run('generate', **options)
+
+    def test_generate_accepts_reference_modes_and_chat_stays_fast(self):
+        self.assertEqual(resolve_run('chat').mode.name, 'fast')
+        self.assertEqual(resolve_run('generate').mode.name, 'fast')
+        for mode in ('fast', 'baseline', 'consistent'):
+            self.assertEqual(resolve_run('generate', mode=mode).mode.name, mode)
+        for mode in ('baseline', 'consistent', 'auto'):
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, 'supported: fast$'):
+                resolve_run('chat', mode=mode)
+        with self.assertRaisesRegex(ValueError, 'supported: fast, baseline, consistent$'):
+            resolve_run('generate', mode='projection-0')
 
     def test_inspection_is_read_only_and_keeps_literal_prompt(self):
         runner = CliRunner()
@@ -42,12 +53,13 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_cli_rejects_inputs_before_launch(self):
         runner = CliRunner()
-        with patch.object(launch, 'launch_generate') as generate:
-            for arguments in (['generate'], ['generate', '--mode', 'consistent'],
-                              ['generate', '--prompt', 'x', '--prompt-file', 'x']):
+        with patch.object(launch, 'launch_generate') as generate, patch.object(launch, 'launch_chat') as chat:
+            for arguments in (['generate'], ['generate', '--prompt', 'x', '--mode', 'auto'],
+                              ['generate', '--prompt', 'x', '--prompt-file', 'x'],
+                              ['chat', '--mode', 'consistent']):
                 result = runner.invoke(app, arguments)
                 self.assertNotEqual(result.exit_code, 0)
-            generate.assert_not_called()
+            generate.assert_not_called(); chat.assert_not_called()
 
     def test_benchmark_presets_preserve_existing_grids(self):
         from llm_mojo.benchmarks.study import STUDIES

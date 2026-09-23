@@ -128,14 +128,15 @@ and final Fast dispatch verification. Historical reserved inputs remain unopened
 
 ## Native plain-text generation
 
-The verified development launcher is:
+Run it through the public command:
 
 ```sh
-uv run --locked python -m llm_mojo.models.qwen2.assets --prepared "$MODEL_PREPARED" --prompt "$PROMPT_FILE" --max-new-tokens 16 --policy fast --report build/generation-events.tsv
+uv run --locked llm-mojo generate --mode fast --prompt-file "$PROMPT_FILE" --max-new-tokens 16 --report build/generation-events.tsv
 ```
 
-`MODEL_PREPARED` names the prepared model directory and `PROMPT_FILE` contains
-raw prompt bytes. The launcher verifies the checkpoint identity, manifest,
+`PROMPT_FILE` contains UTF-8 prompt text; `--prepared` selects a prepared model
+directory other than the checkout's default. `--mode baseline` and
+`--mode consistent` run the reference routes. The launcher verifies the checkpoint identity, manifest,
 all 196 tensor extents and hashes, and pinned tokenizer tables before starting
 the native driver. Missing model artifacts fail; tokenizer preparation uses
 local assets without downloads. Keep the prepared files unchanged during
