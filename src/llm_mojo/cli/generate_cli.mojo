@@ -30,6 +30,7 @@ def main() raises:
     var budget = generation_budget(prompt_length,maximum)
     var events = String("event\tindex\tvalue\tnanoseconds\n")
     if diagnostics:
+        events += "mode\t0\t"+mode+"\t0\n"
         for i in range(prompt_length):
             events += "prompt\t"+String(i)+"\t"+String(history[i])+"\t0\n"
     if budget == 0:
@@ -44,6 +45,7 @@ def main() raises:
         events += "device\t0\t"+ctx.name()+"/"+ctx.api()+"\t0\n"
         events += "load\t0\t0\t"+String(now()-started)+"\n"
     var prefill_started = now()
+    var calls = 0
     var offset = 0
     while offset < prompt_length:
         var rows = min(max_rows,prompt_length-offset)
@@ -54,6 +56,8 @@ def main() raises:
         model.forward(ctx,ids,plan)
         if diagnostics:
             events += "configuration\t"+String(offset)+"\t"+String(plan.configuration)+"\t0\n"
+            events += "route\t"+String(calls)+"\t"+model.last_route.describe()+"\t0\n"
+        calls += 1
         offset += rows
     if diagnostics:
         ctx.synchronize()
@@ -79,6 +83,8 @@ def main() raises:
             if diagnostics:
                 ctx.synchronize()
                 events += "decode\t"+String(step)+"\t1\t"+String(now()-decode_started)+"\n"
+                events += "route\t"+String(calls)+"\t"+model.last_route.describe()+"\t0\n"
+            calls += 1
     var bytes = List[UInt8]()
     decoder.finish(bytes)
     if len(bytes) > 0:

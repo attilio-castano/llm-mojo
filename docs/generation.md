@@ -153,9 +153,14 @@ penalty. A selected final token is in history but need not have been consumed
 into the KV cache. This plain-text driver does not apply a chat template; [terminal chat](chat.md)
 provides native framing and persistent multi-turn state.
 
-The optional TSV report records prompt/generated IDs, selected prefill
-configurations, native initialization, prefill and decode durations, and cache
-accounting. Native durations exclude Python asset verification and compilation.
+The optional TSV report records the mode, prompt/generated IDs, selected prefill
+configurations, one route record per model call, native initialization, prefill
+and decode durations, and cache accounting. A route record is what the model
+enqueued (`ForwardRoute`): the configuration, the fused residual/RMSNorm steps,
+buffer swaps versus copies, whether the final RMSNorm ran separately, and GPU
+argmax. In Fast mode on M4 Pro every decode call must report configuration 26
+with 23 swaps and GPU argmax, so a silent fallback to the baseline route cannot
+pass `validation.model generate`. Native durations exclude Python asset verification and compilation.
 TTFT includes native initialization/tokenization; decode timings end at device
 synchronization. Output remains generated UTF-8 text on stdout.
 
@@ -164,6 +169,20 @@ a public default-Fast smoke with a 1024-token prompt passed. Same-history
 predictions agree with HF on 191 of 192 generated choices; the exception is an
 exact HF top-logit tie. These are bounded development observations, not a
 general model-quality or exact trajectory-equivalence claim.
+
+`decode-parity` checks the Fast decode route against baseline on the real
+24-layer model:
+
+```sh
+uv run --locked python -m llm_mojo.validation.model build --binary build/parity-model
+uv run --locked python -m llm_mojo.validation.model decode-parity --binary build/parity-model --output build/decode-parity.json
+```
+
+Both runs prefill the same 53 fixed tokens with configuration 0 and then decode
+32 fixed tokens one row at a time, so every call sees the same input. Every
+call's hidden states, final norm, logits and K/V must be byte-identical. The
+receipt keeps hashes only. `tests/test_decode_route.mojo` runs the same
+comparison on three synthetic layers in default validation.
 
 ## Historical numerical-policy studies
 

@@ -12,6 +12,11 @@ from .._repository import environment_tool, repository_root
 from .evidence import source_identity, sha, write
 from llm_mojo.models.qwen2.assets import GENERATION_MODES, verify_prepared
 
+LAYERS = 24
+FUSED_DECODE = 26
+# Fast multi-row cells come from the measured lookup; single rows use configuration 26.
+FAST_PREFILL_CONFIGURATIONS = {0, 2, 3, 21}
+FIXED_MODE_CONFIGURATIONS = {'baseline': 0, 'consistent': 20}
 CONSISTENCY_BOUNDARIES = ({f'hidden_{i}' for i in range(25)} | {'final_norm', 'logits'} |
                           {f'cache_{kind}_{i}' for kind in ('key', 'value') for i in range(24)})
 
@@ -588,13 +593,50 @@ def benchmark(binary, specification, output, prepared=None):
         boundary='resident 24-layer forward including token upload and tied head, ending at device synchronization; prefix setup and greedy readback excluded'))
 
 
-def generation_events(path, maximum):
+def generation_events(path, maximum, mode=None):
     import csv
     events=list(csv.DictReader(Path(path).read_text().splitlines(),delimiter='\t'))
-    return validate_generation_events(events,maximum)
+    return validate_generation_events(events,maximum,mode)
 
 
-def validate_generation_events(events, maximum):
+def route_record(configuration):
+    """ForwardRoute.describe() for one complete call; configuration 26 is the fused single-row route."""
+    fused=configuration==FUSED_DECODE
+    return dict(configuration=configuration,layers=LAYERS,normalized_inputs=LAYERS-1 if fused else 0,
+                residual_norms=2*LAYERS if fused else 0,swaps=LAYERS-1 if fused else 0,
+                copies=0 if fused else LAYERS-1,final_rms_norm=int(not fused),gpu_argmax=int(fused))
+
+
+def parse_route(text):
+    fields=dict(item.split('=',1) for item in text.split())
+    return {key:int(value) for key,value in fields.items()}
+
+
+def validate_generation_routes(events, mode, prompt_length):
+    """The mode event and one route record per call prove which route every call ran."""
+    def group(name): return [r for r in events if r['event']==name]
+    if [r['value'] for r in group('mode')]!=[mode]: raise ValueError('missing generation mode')
+    offsets=[int(r['index']) for r in group('configuration')]
+    configurations=[int(r['value']) for r in group('configuration')]
+    rows=[end-start for start,end in zip(offsets,offsets[1:]+[prompt_length])]
+    routes=group('route')
+    decodes=len(group('decode'))
+    if [int(r['index']) for r in routes]!=list(range(len(routes))) or len(routes)!=len(offsets)+decodes:
+        raise ValueError('missing generation route records')
+    expected=[]
+    for r,configuration in zip(rows,configurations):
+        if mode in FIXED_MODE_CONFIGURATIONS:
+            allowed={FIXED_MODE_CONFIGURATIONS[mode]}
+        else:
+            allowed={FUSED_DECODE} if r==1 else FAST_PREFILL_CONFIGURATIONS
+        if configuration not in allowed: raise ValueError('prefill configuration does not belong to the mode')
+        expected.append(route_record(configuration))
+    expected+=[route_record(FIXED_MODE_CONFIGURATIONS.get(mode,FUSED_DECODE))]*decodes
+    if [parse_route(r['value']) for r in routes]!=expected:
+        raise ValueError('generation route differs from its mode')
+
+
+def validate_generation_events(events, maximum, mode=None):
     def group(name): return [r for r in events if r['event']==name]
     prompt,tokens=group('prompt'),group('token')
     for values in (prompt,tokens):
@@ -615,6 +657,8 @@ def validate_generation_events(events, maximum):
         if len(group('cache'))!=1 or int(group('cache')[0]['value'])!=expected: raise ValueError('generation cache mismatch')
         if len(group('submitted'))!=1 or int(group('submitted')[0]['value'])!=24*expected: raise ValueError('generation submission mismatch')
         if len(group('decode'))!=len(tokens)-1: raise ValueError('generation decode count mismatch')
+    # Retained reports predate mode and route events; new runs name their mode.
+    if mode is not None: validate_generation_routes(events,mode,len(prompt))
     return dict(prompt_ids=[int(r['value']) for r in prompt],tokens=ids,events=events)
 
 
@@ -644,7 +688,7 @@ def generation_study(binary, output, prepared=None, policy='fast'):
             generated=result.stdout.decode('utf-8',errors='strict')
             unobserved=subprocess.run(command[:-1],cwd=repository_root(),env=environment(),capture_output=True,check=True)
             if unobserved.stdout!=result.stdout: raise ValueError('reporting changed generated output')
-            record=generation_events(report,declaration['max_new_tokens'])
+            record=generation_events(report,declaration['max_new_tokens'],policy)
             records.append(dict(prompt=text,chunk_rows=chunk,text=generated,unobserved_output_exact=True,**record))
             print('generated',i,'chunk',chunk,len(record['tokens']),'tokens',flush=True)
     prompt=output/'zero.txt';prompt.write_text('Hello')
@@ -652,7 +696,7 @@ def generation_study(binary, output, prepared=None, policy='fast'):
     result=subprocess.run([str(binary),str(prepared),str(tables),str(prompt),'0','0',policy,str(report)],
         cwd=repository_root(),env=environment(),capture_output=True,check=True)
     if result.stdout: raise ValueError('zero budget emitted text')
-    zero=generation_events(report,0)
+    zero=generation_events(report,0,policy)
     prompt.write_text('')
     invalid=subprocess.run([str(binary),str(prepared),str(tables),str(prompt),'1','0',policy],
         cwd=repository_root(),env=environment(),capture_output=True)
@@ -678,6 +722,58 @@ def lifecycle_study(binary, output, prepared=None):
         prepared_manifest_sha256=sha(prepared/'manifest.json'),stdout=result.stdout))
 
 
+def decode_parity(binary, output, prepared=None, prefix=53, steps=32):
+    """Teacher-forced 24-layer decode: the Fast single-row route against baseline, byte for byte.
+
+    Both runs prefill the same fixed prefix with configuration 0 and then take the same
+    fixed token IDs one row at a time, so every call sees identical inputs. The Fast run
+    decodes with configuration 26, GPU argmax, buffer swapping and residual/RMSNorm
+    fusion. Every captured boundary of every call must match: hidden states, final
+    norm, logits and all K/V. Only hashes are kept; the captures are discarded.
+    """
+    import hashlib
+    import tempfile
+    binary,output=Path(binary).resolve(),Path(output).resolve()
+    if output.exists() or not output.parent.is_dir():
+        raise ValueError('decode parity receipt must be a new file in an existing directory')
+    receipt=verify_build(binary)
+    prepared,_=verify_prepared(prepared)
+    ids=[(i*103+42)%151643 for i in range(prefix+steps)]
+    schedule=[prefix]+[1]*steps
+    runs={}
+    with tempfile.TemporaryDirectory(prefix='llm-mojo-decode-parity-') as scratch:
+        for mode in ('fast','baseline'):
+            root=Path(scratch)/mode
+            for call in range(len(schedule)):
+                (root/f'call_{call}').mkdir(parents=True)
+            result=subprocess.run([str(binary),str(prepared),','.join(map(str,ids)),','.join(map(str,schedule)),
+                                   mode,str(root)],cwd=repository_root(),env=environment(),
+                                  capture_output=True,text=True,check=True)
+            if 'model device Apple M4 Pro backend metal' not in result.stdout:
+                raise ValueError('decode parity requires the measured Apple M4 Pro on Metal')
+            calls=[line.split() for line in result.stdout.splitlines() if line.startswith('call ')]
+            files={str(p.relative_to(root)):sha(p) for p in sorted(root.rglob('*')) if p.is_file()}
+            runs[mode]=dict(calls=[' '.join(c[:-2]) for c in calls],
+                            configurations=[int(c[-1]) for c in calls],files=files)
+    fast,baseline=runs['fast'],runs['baseline']
+    if fast['configurations']!=[0]+[FUSED_DECODE]*steps or baseline['configurations']!=[0]*(steps+1):
+        raise ValueError('decode parity did not run the Fast decode route against baseline')
+    if fast['calls']!=baseline['calls'] or len(fast['calls'])!=steps+1:
+        raise ValueError('Fast and baseline decode selected different tokens or cache accounting')
+    if not fast['files'] or fast['files']!=baseline['files']:
+        changed=sorted(k for k in set(fast['files'])|set(baseline['files'])
+                       if fast['files'].get(k)!=baseline['files'].get(k))
+        raise ValueError(f'{len(changed)} captured boundaries differ, e.g. {changed[:4]}')
+    verify_build(binary)
+    captures=json.dumps(fast['files'],sort_keys=True).encode()
+    write(output,dict(kind='model-decode-parity-v1',build=receipt,
+        prepared_manifest_sha256=sha(prepared/'manifest.json'),prefix=prefix,steps=steps,
+        token_ids=ids,schedule=schedule,calls=fast['calls'],
+        configurations={mode:run['configurations'] for mode,run in runs.items()},
+        captured_files=len(fast['files']),captures_sha256=hashlib.sha256(captures).hexdigest()))
+    print('decode parity:',steps,'Fast decode calls match baseline in',len(fast['files']),'captured files')
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     sub=parser.add_subparsers(dest='command',required=True)
@@ -689,6 +785,9 @@ def main():
     g=sub.add_parser('generate');g.add_argument('--binary',required=True,type=Path)
     g.add_argument('--output',required=True,type=Path);g.add_argument('--prepared',type=Path)
     g.add_argument('--policy',default='fast',choices=GENERATION_MODES)
+    p=sub.add_parser('decode-parity');p.add_argument('--binary',required=True,type=Path)
+    p.add_argument('--output',required=True,type=Path);p.add_argument('--prepared',type=Path)
+    p.add_argument('--steps',type=int,default=32)
     l=sub.add_parser('lifecycle');l.add_argument('--binary',required=True,type=Path)
     l.add_argument('--output',required=True,type=Path);l.add_argument('--prepared',type=Path)
     d=sub.add_parser('diagnose');d.add_argument('--binary',required=True,type=Path)
@@ -713,6 +812,7 @@ def main():
     elif args.command=='build':build(args.binary,args.generation)
     elif args.command=='generate':generation_study(args.binary,args.output,args.prepared,args.policy)
     elif args.command=='lifecycle':lifecycle_study(args.binary,args.output,args.prepared)
+    elif args.command=='decode-parity':decode_parity(args.binary,args.output,args.prepared,steps=args.steps)
     elif args.command=='diagnose':diagnose(args.binary,args.reference,args.output,args.prepared,args.policy)
     elif args.command=='benchmark':benchmark(args.binary,args.specification,args.output,args.prepared)
     elif args.command=='consistency':evaluate_consistency(args.binary,args.reference,args.output,args.length,args.prepared)
