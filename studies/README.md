@@ -6,26 +6,45 @@ inference on Apple M4 Pro / Metal through numerical observations, retained raw
 measurements and explicit timing boundaries. The [model contract](../docs/model.md)
 and [layouts](../docs/layouts.md) define the values, storage and ownership.
 
-## Completed Fast runtime and chat
+## Current Fast route
 
 | Study | What it establishes |
 | --- | --- |
 | [Residual/RMSNorm alone and composed](model_generation/residual-norm.md) | Promoted all-three Fast route: 17.1–24.5% lower latency, 107–115 tokens/s; exact independent and composed checks |
-| [Inter-layer buffer swapping](model_generation/buffer-swap.md) | Exact outputs with 23 fewer compute commands; 5.3–8.3% median paired reductions and 90–94 tokens/s streaming, but the full promotion gate fails |
-| [GPU token selection](model_generation/token-selection.md) | Standalone argmax gains 4.5–7% but misses the full promotion gate; the tested fused head is slower; exact outputs and complete retained evidence |
 | [Combined QKV and activation fusion](model_generation/combined-fusion.md) | Promoted M4 Pro single-token Fast route: 16.9–19.4% lower latency, 86–90 tokens/s streaming medians, exact outputs and cache storage |
-| [QKV fusion experiment](model_generation/qkv-fusion.md) | Exact candidate with 12–15% measured token-latency reductions; kept experimental because short-context calibration prevented promotion |
-| [Complete token profile](model_generation/token-profile.md) | Where a roughly 17 ms decode step spends time, with host observations and complete Metal command traces |
 | [Native terminal chat](model_generation/chat.md) | Multi-turn cache reuse, exact history and terminal lifecycle, with paired prefill and actual interaction timings |
 | [Fast full-model runtime](model_generation/runtime.md) | All 24 layers, native generation, numerical diagnostics and 11 measured dispatch choices |
-| [Decoder selection](decoder_layer/selection.md) | Which combinations improve complete prefill and decode workloads |
 
 The runtime measurements are against our optimized baseline; chat measurements
 separately compare suffix-only prefill with full-history replay. Neither is an
 HF speed comparison. Full-model differences are diagnostic, while exact cache
-and lifecycle invariants remain required. [Numerical investigations](model_generation/README.md)
+and lifecycle invariants remain required. [Numerical investigations](model_generation/README.md#numerical-history)
 retain the earlier failed qualification policies. Schedule determinism is a
 follow-up, supported by the existing decoder policy and full-model studies.
+
+## Decode experiments
+
+The [model study index](model_generation/README.md) gives each study's status:
+promoted, promoted only as part of the composed route, superseded, diagnostic or
+blocked.
+
+| Study | What it establishes |
+| --- | --- |
+| [Inter-layer buffer swapping](model_generation/buffer-swap.md) | Exact outputs with 23 fewer compute commands; 5.3–8.3% median paired reductions and 90–94 tokens/s streaming, but the full promotion gate fails |
+| [GPU token selection](model_generation/token-selection.md) | Standalone argmax gains 4.5–7% but misses the full promotion gate; the tested fused head is slower; exact outputs and complete retained evidence |
+| [QKV fusion experiment](model_generation/qkv-fusion.md) | Exact candidate with 12–15% measured token-latency reductions; kept experimental because short-context calibration prevented promotion |
+| [Complete token profile](model_generation/token-profile.md) | Where a roughly 17 ms decode step spends time, with host observations and complete Metal command traces |
+| [Projection arrangements](model_generation/projection-arrangements.md) | None of five fixed-width and block-size arrangements met the frozen full-token gate |
+| [Projection scheduling](model_generation/projection-scheduling.md) | Host submission limits short-context decode; a GPU backlog appears at long context |
+| [Runtime enqueue](model_generation/runtime-enqueue.md) | Most launch-submission time is inside MAX's enqueue runtime; reusing compiled handles gave no qualifying speedup |
+| [Metal batching feasibility](model_generation/batch-support.md) | The pinned MAX Metal backend cannot record a graph, so command batching is unavailable |
+
+## Numerical history
+
+The [numerical history](model_generation/README.md#numerical-history) explains
+how the diagnostic policy developed: the failed tolerance-gated qualifications,
+the rounding and HF/PyTorch execution-shape diagnoses, and the native
+consistency route. Their original gates and evidence are unchanged.
 
 ## Supporting operation and composition studies
 
@@ -40,6 +59,7 @@ follow-up, supported by the existing decoder policy and full-model studies.
 | [MLP sublayer](mlp_sublayer/README.md) | How do tiled projections change complete SwiGLU latency under its frozen BF16 rounding contract? |
 | [Attention sublayer](attention_sublayer/README.md) | Where does time go in the complete block under the selected FP32 attention policy? |
 | [Decoder layer](decoder_layer/README.md) | How do complete layer costs shift between prefill, cached chunks and decode? |
+| [Decoder selection](decoder_layer/selection.md) | Which combinations improve complete prefill and decode workloads |
 | [Decoder policies](decoder_layer/policies.md) | How much does schedule-invariant execution cost, and which optimizations preserve it? |
 | [CPU tokenizer](tokenizer/README.md) | When does heap BPE improve complete text encoding? |
 

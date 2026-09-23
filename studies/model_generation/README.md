@@ -1,191 +1,65 @@
 # Qwen runtime, chat and numerical studies
 
-The Fast runtime and interactive terminal chat milestones are complete. Start
-with the current implementation and measurements:
+These studies take the complete Qwen2.5-0.5B-Instruct model on Apple M4 Pro /
+Metal from its first composition to today's Fast route. They show how it runs,
+where a token's time goes, which decode optimizations were promoted and how the
+numerical policy developed. The [runtime guide](../../docs/generation.md)
+describes current behavior; each study keeps its evidence, limits and
+reproduction commands.
 
-| Study | Scope |
-| --- | --- |
-| [Terminal chat](chat.md) | Native session state, exact token history, persistent caches, controls and measured cache reuse |
-| [Metal batching feasibility](batch-support.md) | Executed backend capability gate and the missing submission interface |
-| [Runtime enqueue diagnosis](runtime-enqueue.md) | Runtime wall-time attribution, compiled-handle comparison and queue behavior |
-| [Fast runtime](runtime.md) | Complete model composition, greedy generation, measured dispatch and HF numerical diagnostics |
-| [Usage and ownership](../../docs/generation.md) | Assets, model state, workload policy and plain-text generation |
+**Status** says what each result means for the engine today:
+
+- **Current**: describes the runtime as it runs today.
+- **Promoted**: its candidate is part of Fast.
+- **Not promoted alone**: exact, but it missed its own gate; it was later
+  promoted as part of a composition.
+- **Superseded**: a later study replaced the result.
+- **Diagnostic**: explains behavior without a promotion decision.
+- **Blocked**: stopped at a capability the backend does not provide.
+- **Failed gate**: a qualification that did not pass; its evidence is kept unchanged.
+
+## Current route
+
+| Study | Status | What it establishes |
+| --- | --- | --- |
+| [Fast runtime](runtime.md) | Current | All 24 layers, native generation, the eleven measured multi-row configuration cells and HF numerical diagnostics |
+| [Terminal chat](chat.md) | Current | Session state, exact token history, persistent caches, controls and measured cache reuse |
+| [Residual/RMSNorm alone and composed](residual-norm.md) | Promoted | Today's single-row decode route: configuration 26 with GPU argmax, buffer swapping and residual/RMSNorm fusion; 17.1–24.5% lower latency and 107–115 tokens/s |
+| [Combined QKV and activation fusion](combined-fusion.md) | Promoted | Configuration 26, the decode configuration: 16.9–19.4% lower latency with exact outputs and cache storage |
+
+## Decode experiments
+
+| Study | Status | What it establishes |
+| --- | --- | --- |
+| [Inter-layer buffer swapping](buffer-swap.md) | Not promoted alone | 23 fewer compute copies with exact outputs; 5.3–8.3% median paired reductions missed the standalone gate |
+| [GPU token selection](token-selection.md) | Not promoted alone | A separate GPU argmax gains 4.5–7% but missed its standalone gate; the fused vocabulary head was slower |
+| [QKV fusion](qkv-fusion.md) | Superseded | Configuration 25: exact, with 12–15% lower token latency, but short-context calibration prevented promotion; configuration 26 replaced it |
+| [Complete token profile](token-profile.md) | Diagnostic | Where a roughly 17 ms decode step spent its time before the decode fusions |
+| [Projection arrangements](projection-arrangements.md) | Failed gate | None of five fixed-width and block-size arrangements met the frozen full-token gate |
+| [Projection scheduling](projection-scheduling.md) | Diagnostic | Host submission limits short-context decode; a GPU backlog appears at long context |
+| [Runtime enqueue](runtime-enqueue.md) | Diagnostic | Most launch-submission time is inside MAX's enqueue runtime; reusing compiled handles gave no qualifying speedup |
+| [Metal batching feasibility](batch-support.md) | Blocked | The pinned MAX Metal backend cannot record a graph, so command batching is unavailable |
+
+## Numerical history
 
 The current [diagnostic policy](../../docs/model.md#correctness-and-diagnostic-policy)
 requires exact implementation invariants and preserves independent operation
 contracts. Full-model tensor differences, distributions and token choices are
-observations to investigate. Schedule determinism and matched HF performance
-benchmarking remain follow-ups.
+observations to investigate. These studies explain how that policy developed;
+their original gates and frozen evidence are unchanged.
 
-## Numerical history and schedule-determinism follow-up
+| Study | Status | What it establishes |
+| --- | --- | --- |
+| [Reference schedule qualification](reference-qualification.md) | Failed gate | The original tolerance-gated qualification: independent confirmation failed 8 of 2,025 checks |
+| [Fast reference qualification](fast-reference.md) | Failed gate | Reference-only calibration stopped: the intermediate-error ceilings did not cover measured arithmetic variation |
+| [Native consistency route](consistency.md) | Failed gate | 71,250 exact canonical HF comparisons pass; the first native full-model input fails seven frozen accuracy gates |
+| [Rounding and propagation](rounding.md) | Diagnostic | Schedule-dependent roundoff crosses BF16 rounding boundaries and propagates; no prediction difference was observed |
+| [HF/PyTorch execution shape](backend.md) | Diagnostic | The first difference is in PyTorch's QK matrix multiplication; query shape and causal-prefix layout remove it |
 
-These investigations explain how the policy developed. Their original failed
-gates and frozen evidence are retained unchanged:
-
-- [Fast reference qualification](fast-reference.md): intermediate-error ceilings
-  failed before native Fast integration under the later diagnostic policy.
-- [Native consistency route](consistency.md): canonical HF qualification and
-  native component results, with an unresolved full-model accuracy boundary.
-- [HF/PyTorch execution shape](backend.md): query shape and causal-prefix layout
-  explain a reproducible schedule difference.
-- [Rounding and propagation](rounding.md): attention differences crossing BF16
-  rounding boundaries, with logit and greedy-generation observations.
-
-The remaining sections record the original reference schedule qualification.
-Statements about stopped work describe that historical checkpoint; current Fast
-selection and generation results are in the runtime study above.
-
-## Historical reference schedule qualification
-
-The [Fast reference qualification](fast-reference.md) records the preceding
-reference-only checkpoint.
-It failed its predeclared intermediate-error ceilings during reference-only
-calibration; confirmation and native Fast acceptance did not run. This README
-retains the earlier schedule-qualification result below.
-
-**Historical reference confirmation failed.** The subsequently authorized
-[consistency implementation](consistency.md) qualifies a canonical reference
-through 4096 tokens and passes native primitive/layer consistency checks. Its
-first native full-model accuracy case fails seven unchanged gates. At that
-checkpoint, full-model schedule acceptance, generation and performance promotion
-remained pending.
-Final reserved inputs remain unopened. The original eight-failure reference
-confirmation below remains historical evidence, with unchanged budgets.
-
-The subsequent [rounding investigation](rounding.md) explains the first
-attention difference, its propagation, and the actual failing normalization
-coordinate. All 66 declared next-token comparisons and all six bounded cached
-greedy trajectories agree with full recomputation. That diagnostic evidence
-informs a review of the acceptance criteria; the original failed gate and its
-records remain unchanged.
-
-The deeper [HF/PyTorch investigation](backend.md) localizes the first difference
-to QK matrix multiplication and demonstrates a stable diagnostic invocation:
-one contiguous query and its causal prefix yield 36,225 byte-equal model
-boundary comparisons across five declared lengths. This does not replace the
-original reference policy or its failed gate.
-
-## Question and contract
-
-Can a full-prefill reference and a cached reference agree within a qualified
-numerical budget across all 24 Qwen layers, before comparing Mojo?
-
-The checkpoint is Qwen2.5-0.5B-Instruct at revision
-`7ae557604adf67be50417f59c2c2f167def9a775`, with full safetensors SHA-256
-`fdf756fa7fcbe7404d5c60e26bff1a0c8b8aa1f72ced49e7dd0210fe288fb7fe`.
-The upstream executes on CPU with one thread, Torch 2.4.0, Transformers 4.43.1
-and NumPy 1.26.4. Hardware is Apple M4 Pro, macOS 26.6.2. These are numerical
-observations, with no latency or GPU-performance claim.
-
-Weights and stored boundaries are BF16. SDPA uses FP32 Q/K/V/masks with the
-Torch math backend, then rounds its result to BF16. The real upstream model
-executes embeddings, all decoder layers and final norm; its tied head produces
-BF16 logits exposed as FP32. Each call checks 75 boundaries: 25 hidden states,
-final norm, logits, and keys/values for all 24 layer caches. Hidden tensors are
-row-major `[R,896]`, caches are recorded `[T,2,64]`, and next-token logits are
-`[1,151936]`. Explicit causal masks and positions account for the cached prefix.
-
-The initial qualification compared full and scheduled upstream execution at
-lengths 1, 17, 65 and 257 with `atol=0.0625, rtol=0.03125`. It failed 130 of
-1,800 checks. That draft was not an accepted full-model contract; its original
-report is retained losslessly. No Mojo model output was examined.
-
-## Bounded calibration and independent confirmation
-
-The [declaration](../../tests/fixtures/model_calibration.json) and
-[runner](../../tests/fixtures/model_calibration.py) were committed at `5993f50`
-before execution. Calibration uses lengths 1, 17, 65, 257 and 1024, seed
-`9103 + length`. Confirmation uses lengths 15, 33, 129, 1025 and 4096, seed
-`9133 + length`. IDs come from NumPy PCG64, uniformly in `[0,151643)`.
-Lengths at most 17 use one-token calls; others use `[length-17,16,1]`.
-
-Calibration fixes `rtol=1/32` and derives one absolute budget for each boundary
-from `max(abs(actual-expected) - rtol*abs(expected))`, with a 1.5 margin and
-rounding upward to multiples of 1/32. A second check bounds the relative L2
-error **of every token row**, flattening the head dimensions for cache rows.
-Those budgets receive the same margin, round upward to 1/256, and may not
-exceed 6.25%. Embeddings must be exact. Both checks must pass: low average
-error cannot excuse a failing element. Budgets are written and hashed before
-any confirmation output is observed.
-
-All 2,025 calibration checks pass the resulting budgets. Independent
-confirmation fails eight of 2,025 checks:
-
-| Confirmation length | Checks | Pointwise failures | Row relative-RMS failures | Largest row relative RMS |
-| ---: | ---: | ---: | ---: | ---: |
-| 15 | 1,125 | 8 | 0 | 3.432% |
-| 33 | 225 | 0 | 0 | 2.494% |
-| 129 | 225 | 0 | 0 | 2.292% |
-| 1025 | 225 | 0 | 0 | 2.228% |
-| 4096 | 225 | 0 | 0 | 2.728% |
-
-The failing boundaries are hidden states 22–24 and final norm in the 15-token
-case. At its second consumed token, final norm has maximum absolute error 5.0
-and requires `atol=3.76953125` after accounting for `rtol`; its frozen budget
-is `2.40625`. Its row relative RMS is 3.408%, within its 4.297% budget. This is
-localized pointwise drift, not failure of the aggregate error check. Passing
-the largest context does not establish the short-context contract.
-
-## Diagnosis of execution shape
-
-A separate [reproducer](../../tests/fixtures/model_reference_diagnosis.py),
-committed at `311ce4d`, repeats the previously inspected 17-token input
-(`PCG64(9120)`). Each arm executes full prefill twice and cached one-token calls.
-All 75 captured boundaries are bitwise equal between repeated full executions.
-The table compares the last token and complete active caches across schedules.
-
-| Reference arm | Changed boundaries | Last hidden relative RMS | Logit relative RMS | Maximum logit error |
-| --- | ---: | ---: | ---: | ---: |
-| Original | 72 | 2.310% | 2.246% | 0.317139 |
-| Rowwise linear | 72 | 2.310% | 2.246% | 0.317139 |
-| Rowwise RMSNorm | 72 | 2.310% | 2.246% | 0.317139 |
-| Query-by-query SDPA over each causal prefix | 0 | 0% | 0% | 0 |
-
-For this input, the first block already differs by up to 0.0078125; the final
-hidden state differs by up to 0.2421875. Changing linear/norm row scheduling
-does not alter these results. Changing SDPA query/key execution extents removes
-the observed difference. This isolates execution shape within SDPA as the
-source of variation in this ablation, consistent with FP32 reduction-order
-differences crossing BF16 rounding boundaries and propagating through layers.
-It does not establish the exact internal rounding mechanism or qualify a
-replacement reference. Querywise SDPA has not been adopted as the oracle.
-
-## Historical consequence and next decision
-
-At this checkpoint, the [approved stop rule](../../docs/history/generation-plan.md) applied: independent
-confirmation failed, so no native model numerical comparison, reserved
-acceptance, model benchmark or automatic configuration promotion follows.
-The three additional optimization studies remain unspent. `auto` still uses
-decoder configuration 0; existing per-layer choices remain explicit candidates.
-
-The next bounded study should establish the desired full-model numerical
-contract: how schedule-dependent BF16 rounding is assessed, which intermediate
-outliers are acceptable, and how next-token margin and generation agreement
-constrain that policy. The present evidence cannot justify simply increasing
-the failed thresholds. Any revised policy needs a new declared confirmation
-set and explicit approval before this milestone resumes. Existing component
-contracts remain unchanged.
-
-## Evidence and reproduction
-
-`reference-study.json` binds all retained raw records and their original uncompressed bytes.
-The initial qualification, 4,050 calibration/confirmation observations and new
-diagnosis are compressed losslessly. Frozen budgets and the failed decision are
-readable JSON. Together the five evidence files occupy about 86 KB. The source
-anchors identify committed bytes; the reports additionally record source,
-declaration, checkpoint and pinned upstream implementation hashes. The earlier
-temporary diagnostic reports are superseded by this committed-source rerun.
-
-Regenerate both CSV tables without weights or model execution:
+Schedule determinism at the full-model level and a matched HF performance
+comparison remain follow-ups. Replay the retained model evidence and regenerate
+its tables without weights or a GPU:
 
 ```sh
 uv run --locked python studies/model_generation/summarize.py
 ```
-
-The exact model-execution commands are recorded in `reference-study.json`. Run them from
-the listed source revisions with the pinned checkpoint available, using fresh
-output directories: the reference tools refuse to overwrite evidence. The
-initial qualification and calibration commands are expected to exit nonzero
-because their numerical gates fail. The diagnosis command records observations
-without changing qualification. Arrays, weights, binaries and temporary logs
-remain outside Git.

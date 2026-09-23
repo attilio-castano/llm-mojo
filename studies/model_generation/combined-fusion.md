@@ -1,5 +1,10 @@
 # Combined fusion clears the promotion gate
 
+> **Status update, 2026-09-23.** Configuration 26 is still the decode configuration.
+> The current route adds GPU argmax, buffer swapping and residual/RMSNorm fusion,
+> promoted by the [residual/RMSNorm study](residual-norm.md). The `unfused` and
+> `combined` study policies exist through `edb610a`.
+
 Combining QKV/RoPE/cache fusion with exact SiLU/multiply fusion reduced measured
 whole-token latency by **16.9–19.4%** against the original Fast route. It also
 beat QKV fusion alone in every paired block. Native streaming replies reached

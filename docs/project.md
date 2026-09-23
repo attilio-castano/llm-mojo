@@ -62,7 +62,7 @@ Evidence is specific to its claim:
 Greedy selection has a fixed tie rule, but changing prompt chunk sizes can change
 floating-point reductions and predictions. Schedule-invariant full-model execution
 is not part of the completed Fast contract. The earlier failed full-model
-qualification policies and their records remain [historical evidence](../studies/model_generation/README.md);
+qualification policies and their records remain [historical evidence](../studies/model_generation/README.md#numerical-history);
 they were not converted into passing results. The approved
 [Fast plan](history/fast-generation-plan.md) records the move to numerical diagnosis.
 

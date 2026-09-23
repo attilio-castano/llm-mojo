@@ -28,7 +28,7 @@ upstream observation code passes a tiny synthetic 24-layer self-test; that is
 not qualification of the pinned checkpoint. The full checkpoint and all 196
 prepared tensors have since passed hash/extent verification. Reference-only
 calibration completed, but independent confirmation failed 8 of 2,025 checks.
-The [retained study](../../studies/model_generation/README.md) records the frozen
+The [retained study](../../studies/model_generation/reference-qualification.md) records the frozen
 budgets and diagnosis. That original confirmation remains failed; the approved
 consistency revision and native failure are recorded separately.
 

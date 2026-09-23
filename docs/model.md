@@ -366,7 +366,7 @@ scope and observed differences. Full-model schedule determinism and a matched HF
 performance comparison remain follow-ups. The original tolerance-gated V0
 qualification and consistency plans are retained in
 [generation-plan.md](history/generation-plan.md), with their failures in the
-[numerical history](../studies/model_generation/README.md). Those failed results
+[numerical history](../studies/model_generation/README.md#numerical-history). Those failed results
 remain unchanged; this policy does not claim that their gates passed.
 
 Summaries of the decode experiments behind Fast (GPU token selection, inter-layer

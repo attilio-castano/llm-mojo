@@ -1,5 +1,9 @@
 # Native Fast Qwen runtime
 
+> **Status update, 2026-09-23.** Its multi-row lookup is still current. Single-row
+> decode now uses the composed route promoted by the [residual/RMSNorm
+> study](residual-norm.md).
+
 Completed locally on 2026-09-10: native batch-one BF16 Qwen2.5-0.5B-Instruct
 plain-text greedy generation on Apple M4 Pro / Metal, with at most 4096 prompt
 plus generated tokens. The runtime composes the existing Mojo tokenizer, all
