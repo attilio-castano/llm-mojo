@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from llm_mojo.runtime import store
+from llm_mojo.runtime import store, toolchain
 
 
 class Stream(io.BytesIO):
@@ -128,6 +128,61 @@ class StoreTests(unittest.TestCase):
         self.assertFalse(final.exists())
         store.remove_staged(aside)
         self.assertFalse(aside.exists())
+
+
+class ToolchainTests(unittest.TestCase):
+    OUTPUTS = {
+        ('xcode-select', '-p'): (0, '/Applications/Xcode.app/Contents/Developer'),
+        ('xcodebuild', '-version'): (0, 'Xcode 26.6\nBuild version 17F113'),
+        ('xcrun', '-f', 'metal'): (0, '/toolchain/usr/bin/metal'),
+        ('xcrun', '-f', 'metallib'): (0, '/toolchain/usr/bin/metallib'),
+        ('xcodebuild', '-showComponent', 'MetalToolchain', '-json'):
+            (0, '{\n  "buildVersion" : "17F109",\n  "status" : "installed"\n}'),
+        ('sysctl', '-n', 'machdep.cpu.brand_string'): (0, 'Apple M4 Pro'),
+    }
+
+    def runner(self, changes=None):
+        outputs = {**self.OUTPUTS, **(changes or {})}
+        return lambda *command: outputs.get(command, (1, 'not found'))
+
+    def test_documented_toolchain_passes(self):
+        checks = toolchain.xcode_checks(self.runner())
+        self.assertEqual([c.name for c in checks], ['Xcode selected', 'Xcode 16 or later',
+                                                    'Metal compiler', 'Metal toolchain component'])
+        self.assertTrue(all(c.ok for c in checks), checks)
+
+    def test_each_missing_prerequisite_names_its_remedy(self):
+        cases = {
+            ('xcode-select', '-p'): (0, '/Library/Developer/CommandLineTools'),
+            ('xcodebuild', '-version'): (1, 'xcode-select: error: tool requires Xcode'),
+            ('xcrun', '-f', 'metallib'): (1, 'unable to find utility'),
+            ('xcodebuild', '-showComponent', 'MetalToolchain', '-json'): (0, '{"status" : "uninstalled"}'),
+        }
+        for command, output in cases.items():
+            with self.subTest(command=command):
+                failed = [c for c in toolchain.xcode_checks(self.runner({command: output})) if not c.ok]
+                self.assertEqual(len(failed), 1, failed)
+                self.assertTrue(failed[0].remedy)
+                self.assertEqual(failed[0].blocks, 'build')
+
+    def test_older_xcode_has_no_separate_metal_component(self):
+        checks = toolchain.xcode_checks(self.runner({('xcodebuild', '-version'): (0, 'Xcode 16.4')}))
+        self.assertNotIn('Metal toolchain component', [c.name for c in checks])
+
+    def test_platform_and_device_notes(self):
+        self.assertTrue(toolchain.platform_check(lambda: 'Darwin', lambda: 'arm64').ok)
+        self.assertEqual(toolchain.platform_check(lambda: 'Linux', lambda: 'x86_64').blocks, 'all')
+        self.assertIn('measured configurations apply', toolchain.device_check(self.runner()).detail)
+        other = toolchain.device_check(self.runner({
+            ('sysctl', '-n', 'machdep.cpu.brand_string'): (0, 'Apple M1')}))
+        self.assertTrue(other.ok)
+        self.assertIn('baseline configuration', other.detail)
+
+    def test_disk_check_uses_the_nearest_existing_parent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / 'not/yet/created'
+            self.assertTrue(toolchain.disk_check(missing, 1).ok)
+            self.assertFalse(toolchain.disk_check(missing, 1 << 62).ok)
 
 
 if __name__ == '__main__':
