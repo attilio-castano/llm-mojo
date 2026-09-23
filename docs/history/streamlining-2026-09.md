@@ -81,9 +81,10 @@ numerical policy, retained evidence, frozen oracle hashes or `uv.lock`.
 - **Evidence.** Every offline replay, `summarize.py` and `plot` produced the
   same output as at the baseline. `plot --policies`, broken since a path rename
   in #22, reproduces its committed report and figure again.
-- **Speed.** Alternating the old and new generate binaries five times each
-  gave 9.66 and 9.76 ms per decode token (1,089-token prompt, 256 tokens) on a
-  loaded machine, where single runs ranged from 9.1 to 11.0 ms. The
+- **Speed.** The old and new generate binaries alternated five times each on
+  an idle machine on AC power (1,089-token prompt, 256 tokens). Median decode
+  times were 7.954 and 7.960 ms per token, and every run fell between 7.935 and
+  7.988 ms. An earlier run on a loaded machine gave 9.66 and 9.76 ms. The
   route-checked generation studies show the fused decode route ran on every
   Fast decode call.
 - **Full suite.** `uv run --locked llm-mojo validate` passed after setup and again
