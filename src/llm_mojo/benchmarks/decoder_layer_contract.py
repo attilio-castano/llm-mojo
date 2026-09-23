@@ -596,6 +596,10 @@ def policy_cost_report(directory,accepted,build):
     return dict(kind='decoder_policy_cost',accepted=accepted,runs=receipts,rows=rows)
 
 
+# Retained evidence names sources by their path when recorded; #22 later moved
+# the decoder to layers/. Replays must keep the recorded name.
+POLICY_CAMPAIGN_DECODER_SOURCE = 'src/llm_mojo/decoder_layer.mojo'
+
 def replay_policy_campaign(directory):
     """Reconstruct the entire bounded campaign from adjacent retained evidence."""
     import copy
@@ -714,7 +718,7 @@ def replay_policy_campaign(directory):
         or regression['source']['sources']!=final['build']['source']['sources']):
         raise ValueError('final numerical source did not pass the repository regression')
     bridge=json.loads((directory/index['build_bridge']).read_text())
-    native='src/llm_mojo/layers/decoder_layer.mojo'
+    native=POLICY_CAMPAIGN_DECODER_SOURCE
     if (bridge.get('kind')!='decoder_policy_build_bridge'
         or bridge['timing_commit']!=build['repository']['commit']
         or bridge['timing_binary_sha256']!=build['binaries']['decoder_layer']
