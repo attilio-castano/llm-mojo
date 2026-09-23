@@ -95,6 +95,14 @@ uv run --locked --script tests/fixtures/generate.py attention_checkpoint -- --at
 MODULAR_DEBUG=device-sync-mode uv run --locked mojo run -D PRECISION_CHECKPOINT=1 -I src -I build -I tests tests/test_attention_precision.mojo
 ```
 
+The [attention-sublayer study](attention-sublayer.md) adds 17 synthetic cases
+with frozen arrays and a strict FP32 attention accuracy gate. BF16 eager
+comparisons report their numerical differences while keeping finite-output
+and exact cache checks mandatory. The documented explicit compatibility
+command reproduces the retained seed-887 failures. Checkpoint-derived
+first-layer checks are an explicit separate workflow and do not make ordinary
+validation download a model.
+
 See the [study overview](../studies/attention_sublayer/README.md) for current
 results, [numerics](../studies/attention_sublayer/numerics.md) for historical
 compatibility failures and checkpoint provenance, and

@@ -148,77 +148,10 @@ After deliberately editing dependency declarations, update the corresponding
 lock with `uv lock` or `uv lock --script tests/fixtures/generate.py`, then rerun
 validation. Add `--upgrade-package NAME` only when intentionally upgrading.
 
-The [attention-sublayer study](attention-sublayer.md) adds 17 synthetic cases
-with frozen arrays and a strict FP32 attention accuracy gate. BF16 eager
-comparisons report their numerical differences while keeping finite-output
-and exact cache checks mandatory. The documented explicit compatibility
-command reproduces the retained seed-887 failures. Checkpoint-derived
-first-layer checks are an explicit separate workflow and do not make ordinary
-validation download a model.
-
-The [MLP reference contract](mlp-sublayer.md) adds upstream development captures,
-independent FP64 diagnostics, and a finite BF16 SiLU sweep. Validation runs its
-fixture-tooling tests and verifies synthetic frozen evidence. Checkpoint
-reproduction uses an explicit local-asset argument; the ordinary workflow does
-not capture or evaluate the separate holdouts. The Mojo MLP adds
-operation/composition and BF16 boundary tests for all nineteen projection mappings.
-Mappings 0 through 7 cover full and chunked rows; decode-only mappings 8 through
-18 use each fixture's first row and reject multi-row calls.
-Decoder policy mappings 19/20/21 reuse projection weights across 4/8/16 rows; their
-primitive byte-equivalence and composed numerical checks belong to the
-[decoder policy study](../studies/decoder_layer/policies-plan.md). The historical
-standalone MLP measurement registry remains 0 through 18.
-The explicit `tests/fixtures/mlp_acceptance.py` entrypoint uses the same pinned
-script lock through a symlink and opens holdouts only against a clean candidate.
-Normal-mode reuse can be checked with `MODULAR_DEBUG` unset and
-`MLP_CASE=h896_i4864_r17_s1601` when running `tests/test_mlp.mojo`.
-Set `MLP_SPLIT=checkpoint` to run its three existing checkpoint cases. Holdouts
-are explicit with `MLP_SPLIT=holdout` after their initial capture; subsequent
-evaluations of observed holdouts are regression checks, not fresh holdouts.
-The completed optimization campaign also captured its separately declared
-holdouts. Evaluate those existing fixtures with
-`MLP_SPLIT=optimization_holdout MLP_VARIANTS=0,7`; `MLP_VARIANTS` can restrict
-any regression run to an explicit subset of mappings 0 through 18. The completed
-decode campaign's four observed holdouts can be checked with
-`MLP_SPLIT=decode_holdout MLP_VARIANTS=0,12`; variant 12 is a diagnostic candidate,
-not a promoted route.
-
-The [decoder-layer contract](decoder-layer.md) adds the actual pinned upstream
-decoder with the selected FP32 SDPA policy. Ordinary validation runs ten
-reference self-tests and verifies the frozen synthetic development arrays.
-Use `uv run --locked --script tests/fixtures/decoder_reference.py` directly
-to verify them; add `--output` with a new directory to regenerate them.
-An explicit `--checkpoint-assets` directory additionally verifies the three
-checkpoint cases without downloading assets. The reserved decoder inputs have
-not been evaluated and are excluded from this command.
-
-For recorded evaluation, build and launch the numerical candidate through the
-project environment:
-
-```bash
-uv run --locked python -m llm_mojo.validation.mlp build --binary /private/tmp/mlp-numerical-candidate
-uv run --locked python -m llm_mojo.validation.mlp evaluate --binary /private/tmp/mlp-numerical-candidate --output /private/tmp/mlp-numerical-regression --split decode_holdout --variants 0 12 --regression
-```
-
-The build requires clean source and writes an adjacent `.provenance.json`.
-Evaluation launches that exact executable, verifies build/fixture stability,
-checks complete case/mapping/stage/reuse coverage and Metal identity, and retains
-an `evaluation.json`, output log and numerical records in a new output directory.
-It removes inherited `MLP_*` filters and debug synchronization. `--regression`
-labels already observed fixtures and permits a new candidate; without it, the
-binary and commit must also match the candidate frozen in the capture manifest.
-This match alone does not make previously observed fixtures fresh again.
-
-For a new declared holdout capture, pass the receipted binary to
-`tests/fixtures/mlp_acceptance.py --candidate-binary ...`. Capture verifies the
-build before exposure and only generates fixtures; its `complete` status is
-not numerical acceptance. Run the evaluator afterward without `--regression`.
-The former `MLP_CANDIDATE_BINARY` environment shortcut is rejected: naming a
-file cannot establish that it produced the test results. Direct `MLP_SPLIT`
-suite runs remain useful regression checks but do not create execution receipts.
-The `--optimization` acceptance
-generator refuses to overwrite its existing output directory; replaying the
-same declared inputs does not make them independent holdouts again.
+Each numerical contract documents its own fixtures, splits and recorded
+evaluation commands: the [attention sublayer](attention-sublayer.md#implementation-and-reproduction),
+the [MLP](mlp-sublayer.md#reference-results-and-reproduction) and the
+[decoder layer](decoder-layer.md#qualified-reference-package).
 
 Use `--prepare-only` to generate fixtures without running tests. For an individual
 Mojo suite, include `-I src -I build -I tests`. Generators and the
