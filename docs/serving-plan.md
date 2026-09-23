@@ -493,7 +493,7 @@ configuration and trace identity.
 
 | Phase | Delivers | Exact gate | Study question |
 | --- | --- | --- | --- |
-| 1. Batched decode | StepBatch; multi-row configuration-26 decode kernels; one maximum-context block per sequence; a batch axis in the existing model benchmark | S = 1 equals today; batched rows equal solo rows | How do throughput and per-token latency scale for B = 1–32 at contexts 64, 1024 and 3968? |
+| 1. Batched decode | StepBatch; multi-row configuration-26 decode kernels; one maximum-context block per sequence; a batch axis in the existing model benchmark | S = 1 equals today; batched rows equal solo rows | How do throughput and per-token latency scale for B = 1–64 at contexts 64, 1024 and 3968? |
 | 2. Paged KV | block-major pool, block manager, block states, events, paged decode and prefill attention | paged equals contiguous; invariants; logical event replay | What does translation cost at each block size, and does head-major order help? |
 | 3. Engine core | EngineCore, Scheduler, both runners, chunked prefill, preemption, aborts, step records, trace driver, fitted budget, asynchronous stepping | scheduler and allocator invariants in simulation and on Metal; exact token accounting; asynchronous equals synchronous | How do latency percentiles respond to arrival rate across the scheduling arms, and where does the simulator disagree? |
 | 4. Prefix caching | prefix index, eviction, pinning, chat as an engine client | reused blocks keep their bytes and token IDs; only the uncached suffix is computed; existing chat checks pass | How does time to first token depend on shared-prefix length, hit rate and pool size? |
@@ -501,6 +501,7 @@ configuration and trace identity.
 | 6. SSD tier | slab file, index, asynchronous loading, integrity checks | restored bytes equal stored bytes; disk and memory hits agree | At what prefix length does restoring beat recomputing? |
 | 7. Replicas (optional) | several engines behind a KV-aware router in the frontend | routing preserves histories and token accounting | Do independent submission threads raise throughput, and what does KV-aware routing gain over round-robin? |
 
+The [batched decode plan](batched-decode-plan.md) details phase 1.
 `src/llm_mojo/serving/` starts in phase 1 with StepBatch and grows only as each
 phase lands. The Qwen template, stop IDs and card values stay in
 `models/qwen2/`. The `serve` command belongs in `cli/`, and the trace driver
