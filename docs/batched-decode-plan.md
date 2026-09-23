@@ -1,9 +1,12 @@
 # Batched decode plan
 
-Baseline: `a0b01da`, the merged [serving plan](serving-plan.md). This plan
-implements its phase 1: several sequences decoding in one step, with KV storage
-owned outside the model. The work proceeds in three steps, each committed with
-its own gate:
+Baseline: `a144066`, `main` with the [serving plan](serving-plan.md) and the
+[September streamlining](history/streamlining-2026-09.md): one-step setup,
+explicit execution plans and current docs separated from history. The plan was
+first written at `a0b01da`, and its work was rebased onto those changes. It
+implements the serving plan's phase 1: several sequences decoding in one step,
+with KV storage owned outside the model. The work proceeds in three steps, each
+committed with its own gate:
 
 1. **1a, step format and KV pool.** Route today's single-sequence calls
    through the step format and a KV pool, with no arithmetic change.
@@ -15,6 +18,9 @@ Approved on 2026-09-23 for local implementation of 1a: edits, builds, tests,
 validation and incremental commits. Pushing, pull requests, toolchain upgrades
 and numerical-contract changes need a separate decision. 1b and 1c get detailed
 plans before implementation.
+
+Status: 1a is complete; see the [validation record](#validation-record). 1b is
+next.
 
 ## 1a. Step format and KV pool
 
@@ -70,7 +76,7 @@ one sequence with one block; the `ExecutionPlan` still chooses the kernels. The
 model rejects the batch in two cases:
 - the pool geometry differs from the model (its layer count, 2 KV heads,
   64 dims, block size equal to the model capacity);
-- the first position differs from the length of any of the block's 24 layer
+- the first position differs from the length of any of the block's layer
   views.
 
 It then runs the existing layer code on those views. Benchmark rewinds use
@@ -79,7 +85,7 @@ It then runs the existing layer code on those views. Benchmark rewinds use
 ### Gate
 
 - **Exact equality with the baseline.** Build the model and chat drivers from
-  `a0b01da` and from this change. On the pinned checkpoint, run fixed
+  the baseline and from this change. On the pinned checkpoint, run fixed
   histories covering full prefill, chunked prefill with Fast selections,
   one-token decode, and the three-turn chat driver. Require byte-identical
   logits, all 48 KV buffers including untouched poisoned capacity, captured
@@ -141,4 +147,50 @@ with traces before starting phase 2.
 
 ## Validation record
 
-Recorded as each step completes.
+### 1a, 2026-09-24
+
+Validated after rebasing onto `a144066`. Implementation commits `b969c47` (step
+format, pool and tests) and `c1a8776` (model and clients on the execution-plan
+engine). Apple M4 Pro (Mac16,7, 24 GiB), Metal, macOS 26.6.2 (25G83), Xcode 26.6
+(17F113), Mojo 1.0.0 (`ed45d567`) and MAX 26.5.0 from `uv.lock`, which the
+rebase did not change. `uv run --locked llm-mojo setup --offline` verified the
+shared store's checkpoint and prepared model (196 BF16 tensors) and reported the
+worktree ready.
+
+**Exact equality with the baseline.** Executables were built separately from
+`a144066` and from the rebased branch. On identical inputs, every compared
+output is byte-identical:
+
+| Route | Coverage | Compared |
+| --- | --- | --- |
+| Model driver, Fast | 37-token prompt then 8 decodes; 4 × 256-row chunks then 4 decodes; 240 + 16 rows (configuration 21) then 2 decodes; 2048 + 1920 rows then 2 decodes | stdout and 3,075 captured files: hidden states, appended K/V, all 48 caches with poisoned capacity, logits |
+| Model driver, explicit | configurations 3, 2, 26 and 0 over 64, 16, 1 and 1 rows | stdout and 492 captured files |
+| Chat driver | three turns, full-history replay, reset, failure recovery, interrupted turn | non-timing stdout and 298 files of caches and logits |
+| Generation | 27-token prompt, 48 new tokens, Fast | text and every non-timing report event |
+| Model benchmark `verify` | prefixes 64 and 1024: rewind, poisoned outputs, plain and observed steps | stdout and 148 snapshot files each |
+| Chat CLI, piped | two turns, `/reset`, a third turn reaching the reply limit | transcript and all 478 report rows without their timing column |
+
+**Other checks.**
+- The model lifecycle driver passed on Metal in device-sync mode with the
+  execution plans, including the new rejections: a position that disagrees
+  with the pool, a mismatched pool geometry and a two-sequence batch. Each left
+  lengths and counters unchanged.
+- The seven native serving tests passed. The decode-route test passed on pools:
+  the fused decode route and the baseline route still produce identical bytes,
+  and the fused kernels leave the unfused scratch buffers untouched.
+- The model benchmark compiled in its default, batch-support and profile builds.
+- `uv run --locked llm-mojo validate` passed: frozen oracle anchors, 234 Python
+  tests including the documentation link test, all 26 native test files plus
+  the Unicode tokenizer run on Metal, and every benchmark smoke route.
+
+**Timing sanity check, no claim.** Each run generated 128 tokens after a
+1,176-token prompt, with per-step synchronization from the diagnostic report.
+Sixteen runs formed four alternating blocks on an otherwise quiet machine.
+Median decode steps were 8.23 ms for the baseline (runs 8.11–8.32 ms) and
+8.00 ms for the candidate (7.96–8.40 ms); candidate/base block ratios were
+0.974, 0.976, 1.010 and 0.976. Under the repository's decision rule this is
+inconclusive: one block favors the baseline, and the 2.8% difference is below
+the 5% floor. No regression is visible; 1c measures under controlled conditions.
+
+Before the rebase, the same equality gate and suite passed against `a0b01da` on
+2026-09-23; that timing check was inconclusive under heavy concurrent host load.
