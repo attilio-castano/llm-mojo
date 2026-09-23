@@ -52,6 +52,7 @@ stable hardware configuration:
 - published memory bandwidth: 273 GB/s.
 
 The bandwidth figure is an Apple specification, not a measured project result.
+Minimum hardware requirements have not been established.
 See Apple's [MacBook Pro technical specifications](https://support.apple.com/121554).
 
 The software environment observed on 2026-08-20 was:

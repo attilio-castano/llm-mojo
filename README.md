@@ -1,177 +1,85 @@
 # llm-mojo
 
-Run Qwen2.5 locally in a terminal with a native Mojo inference engine on Apple
-Silicon. Then follow the implementation from conversation tokens and persistent
-KV caches down to the GPU kernels that make it fast.
+A small LLM inference engine written in Mojo, built to be read. It runs
+Qwen2.5-0.5B-Instruct as an interactive chat on the GPU of an Apple Silicon Mac.
+Every part, from the token IDs of your message to the GPU kernels, is
+documented, tested against independent references and measured.
 
-The project is an understandable study of LLM inference from first principles.
-The first end-to-end milestone is complete: **Qwen2.5-0.5B-Instruct in BF16,
-Fast inference on Metal, and interactive multi-turn chat**. Code, numerical
-diagnostics and reproducible measurements explain how it works.
-
-On Apple M4 Pro, the default Fast configuration has measured streaming throughput
-of **107–115 tokens/second after the first token** with this BF16 model. See the
-[measurements and promotion checks](studies/model_generation/residual-norm.md).
+On the reference Apple M4 Pro, replies stream at 107–115 tokens per second after
+the first token ([how this was measured](studies/model_generation/residual-norm.md)).
 
 ## Run the chat
 
-Use an Apple Silicon Mac with the [development prerequisites](docs/development.md):
-`uv`, Python 3.12, a C linker, Xcode and the Metal toolchain. `uv` resolves the
-locked Mojo and MAX environment. The measured reference machine is an M4 Pro
-with a 20-core GPU and 24 GB of unified memory; minimum hardware requirements
-have not been established.
-
-Set everything up once, from the repository root:
+You need an Apple Silicon Mac with Xcode and its Metal toolchain, and
+[uv](https://docs.astral.sh/uv/). The [development guide](docs/development.md)
+lists the exact prerequisites. From the repository root:
 
 ```sh
 uv run llm-mojo setup
-```
-
-Setup checks Xcode and the Metal toolchain, fetches the pinned checkpoint, prepares
-the BF16 model tensors and builds the chat executable. The checkpoint download is
-about 1 GB and happens once per Mac: models live in a shared store
-(`~/.cache/llm-mojo`, or `LLM_MOJO_CACHE_DIR`) that every checkout and worktree
-links to, and setup reuses any verified copy it finds instead of downloading.
-Assets are verified against the [pinned model contract](docs/model.md) and remain
-outside Git. `uv run llm-mojo setup --check` reports readiness without changing
-anything.
-
-```sh
 uv run llm-mojo chat
 ```
 
-Chat defaults to this checkout's `build/model-prepared-v1`, a link into the shared
-store. Use `--prepared /path/to/model` for a checkpoint prepared elsewhere.
+`setup` checks the toolchain and prints the fix for anything missing. It
+downloads the pinned model once per Mac, about 1 GB, into a shared store that
+every checkout links to. It verifies every file and builds the chat program.
+`uv run llm-mojo setup --check` reports readiness without changing anything.
 
-Type a message and the reply streams to the terminal. `/reset` clears the conversation while keeping weights loaded;
-`/exit` or Ctrl-D exits. Ctrl-C cancels input or interrupts a reply. See the
-[chat guide](docs/chat.md) for controls, custom system messages and context limits.
+Type a message and the reply streams back. `/reset` starts a new conversation
+and keeps the weights loaded; `/exit` or Ctrl-D quits; Ctrl-C stops a reply or
+clears your input. The [chat guide](docs/chat.md) covers system messages and
+the 4,096-token context limit.
 
-The session keeps all 24 layers' KV caches between turns and processes only the
-uncached suffix. It supports system/user/assistant messages, greedy decoding,
-and up to 4,096 total conversation tokens, including formatting and replies.
-Tokenization, chat state, model execution and streaming are native Mojo; Python
-handles asset preparation, verification and building before handing off execution.
-
-Explore commands, generate from a prompt, or inspect configuration before launch:
+To continue raw text instead of chatting:
 
 ```sh
-uv run llm-mojo --help
-uv run llm-mojo models list
 uv run llm-mojo generate --prompt "The capital of France is" --preset short
-uv run llm-mojo chat --preset short --max-new-tokens 64 --show-config
-uv run llm-mojo bench list
 ```
 
-The [CLI and configuration guide](docs/cli.md) explains presets, precedence,
-reports and benchmark commands. Commands currently require this source checkout.
-Validation and recorded measurements retain `uv run --locked`.
+[Commands and configuration](docs/cli.md) covers everything else, including the
+research modes, benchmarks and validation.
 
-## What makes it fast
+## How it works
 
-The runtime brings together packed QKV projections, integrated attention,
-workload-specific attention and projection kernels, tiled multi-row MLPs, and
-persistent caches. **Fast is the default.** Its shared dispatcher chooses measured
-kernel combinations by incoming row count and total context length on M4 Pro.
-Single-token decode also fuses residual addition with RMSNorm, swaps buffer
-ownership between layers to avoid copies, and selects the next token with GPU
-argmax. These optimizations are measured together in the
-[promoted configuration](studies/model_generation/residual-norm.md).
-Other shapes use the existing optimized baseline. The [runtime guide](docs/generation.md#workload-policy)
-explains the exact selection; Fast does not imply every experimental kernel is
-used or that every workload is fully optimized.
+- **Python prepares, Mojo runs.** Python verifies the model files and then hands
+  over to a native Mojo program. Tokenization, the conversation, the model and
+  streaming all run in Mojo.
+- **Nothing is computed twice.** The model's 24 layers run on the GPU in BF16. A
+  key-value cache keeps every processed token, so a new message computes only its
+  own tokens, and each reply token is one pass through the model.
+- **Speed comes from launching less.** Generating a token is limited mostly by
+  launching GPU work, not by arithmetic or memory bandwidth. The fast route
+  launches fewer, fused kernels per token and computes exactly the same bytes.
 
-Retained Apple M4 Pro / Metal evidence:
+[How a token flows through the engine](docs/walkthrough.md) follows one chat turn
+through the code, with every shape and size.
 
-| Measurement | Observed result | Scope |
-| --- | --- | --- |
-| [Current Fast terminal generation](studies/model_generation/residual-norm.md#results) | **107–115 output tokens/second after the first token** | BF16, batch one; medians of four 128-token replies at each of three prompt lengths (44, 1,027 and 3,839 tokens); includes readback and streaming, excludes loading and first-token latency |
-| [Earlier full-model optimization](studies/model_generation/runtime.md) | 5.6–51.2% lower latency across 11 selected workloads | 1,360 paired samples against our optimized configuration 0; synchronized model forward, excluding loading and greedy readback |
-| [Conversation cache reuse](studies/model_generation/chat.md#performance-observations) | About 24% and 51% less prefill time on two follow-up turns | 120 paired samples against full-history replay; study capacity 512 |
+## What is checked
 
-These measurements have different boundaries and describe the tested workloads.
-A matched performance comparison against Hugging Face remains future work.
+Every optimization has an independent numerical test and a reproducible
+measurement. Some properties must match byte for byte: the pinned weights, the
+conversation's tokens, cache contents, and routes that claim to compute the same
+result. Comparisons with Hugging Face are recorded as diagnostics instead. On the
+retained generation histories, 191 of 192 greedy next tokens matched, and the
+exception was an exact tie
+([numerical diagnosis](studies/model_generation/runtime.md#numerical-diagnosis)).
+The [model contract](docs/model.md#correctness-and-diagnostic-policy) states the
+rules.
 
-## Correctness and numerical diagnosis
+## Where to go next
 
-Pinned assets, causal positions, exact token history, cache preservation and
-submission accounting are required invariants. Independent operation tests retain
-their numerical contracts. Full-model differences against HF or another prompt
-chunk schedule are recorded as diagnostics: tensor errors, output distributions,
-next-token choices and generated trajectories.
-
-On the retained generation histories, **191 of 192 greedy token IDs matched HF**;
-the remaining reference prediction had an exact top-logit tie. This is a bounded
-token-choice observation, not byte-identical logits or a general quality claim.
-The [runtime study](studies/model_generation/runtime.md#numerical-diagnosis) retains
-both agreements and discrepancies. Fast does not promise identical results when
-prompt chunking changes.
-
-## Open research: KV-cache scheduling and determinism
-
-Given the same weights and token sequence, should processing the prompt all at
-once, in chunks, or one token at a time produce identical KV caches and logits?
-The causal computation is mathematically equivalent, but call shapes can change
-kernel selection and floating-point reduction order. Small differences can cross
-BF16 rounding boundaries, propagate through layers and change a greedy prediction.
-The [HF attention investigation](studies/model_generation/backend.md) traces one
-such mechanism in the reference implementation.
-
-For broader context, Thinking Machines Lab's
-[Defeating Nondeterminism in LLM Inference](https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/)
-explains why repeatable kernels can still produce different results when batch
-shapes change, and how batch-invariant execution addresses this. Our related
-question concerns prefill and KV-cache schedules for a single sequence.
-
-Preserving an existing cache byte for byte is already a required invariant.
-Producing identical cache values when building it under different schedules is
-the additional research question. Here, scheduling means how one sequence is
-divided into model calls; multi-request scheduling remains outside current scope.
-
-The [decoder policy study](studies/decoder_layer/policies.md) establishes exact
-schedule agreement for the tested single-layer configurations and measures its
-cost. The [full-model consistency study](studies/model_generation/consistency.md)
-records the remaining native model boundary; full-model schedule invariance has
-not been established.
-
-The follow-up asks which arithmetic and dispatch choices preserve that invariant,
-how remaining differences affect predictions, and how much determinism costs
-relative to Fast. This is a second research track alongside the working chat
-engine, with cache identity, numerical closeness and token agreement reported
-separately.
-
-## Understand the engine
-
-Read from the working application down to the operations, or start with a kernel:
-
-| Layer | Read |
+| To | Read |
 | --- | --- |
-| Terminal and session state | [Chat guide](docs/chat.md) · [cache-reuse and interaction evidence](studies/model_generation/chat.md) |
-| Complete Qwen runtime | [Model contract](docs/model.md) · [ownership and dispatch](docs/generation.md) · [Fast measurements](studies/model_generation/runtime.md) |
-| Decoder composition | [Kernel selection](studies/decoder_layer/selection.md) · [attention](studies/attention_sublayer/README.md) · [MLP](studies/mlp_sublayer/README.md) |
-| GPU operations | [RMSNorm](studies/rms_norm/README.md) · [linear decode](studies/linear_decode/README.md) · [linear prefill](studies/linear_prefill/README.md) · [RoPE](studies/rope/README.md) · [GQA decode](studies/gqa_decode/README.md) · [GQA prefill](studies/gqa_prefill/README.md) |
-| Text processing | [Native tokenizer](docs/tokenizer.md) · [CPU measurements](studies/tokenizer/README.md) |
-
-The [documentation map](docs/README.md) lists every guide and contract; the
-[study index](studies/README.md) links retained evidence and regeneration
-commands. The [project direction](docs/project.md) separates the completed Fast
-milestone from follow-ups: schedule determinism, matched HF benchmarking,
-further optimization driven by measured application costs and a multi-request
-[serving engine](docs/serving-plan.md). Sampling, quantization and additional
-models remain outside the current scope.
-
-## Development
-
-Every optimization needs independent numerical evidence and a reproducible
-benchmark. Keep allocation, memory layout, work ownership and synchronization
-explicit. See [development guidance](docs/development.md),
-[layout notation](docs/layouts.md), the [experimental method](docs/experiments.md)
-and [measurement tools](src/llm_mojo/benchmarks/README.md).
+| Find any guide or contract | [Documentation map](docs/README.md) |
+| Follow a token through the code | [Walkthrough](docs/walkthrough.md) |
+| See every measurement, and why each optimization was kept or not | [Study index](studies/README.md) |
+| Read the goals and open questions, including determinism | [Project direction](docs/project.md) |
+| See the plan for serving many requests at once | [Serving plan](docs/serving-plan.md) |
+| Build, test and measure | [Development](docs/development.md) |
 
 ```text
-src/llm_mojo/             Native inference, chat and development commands
+src/llm_mojo/              Native inference, chat and development commands
 src/llm_mojo/benchmarks/   Measurement, profiling and report generation
-tests/                   Correctness tests and independent oracle generators
-docs/                    Usage, contracts and project direction
-studies/                 Explanations, compact measurements and graphs
+tests/                     Correctness tests and independent oracle generators
+docs/                      Usage, contracts, the walkthrough and project direction
+studies/                   Explanations, compact measurements and graphs
 ```

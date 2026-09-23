@@ -71,6 +71,39 @@ qualification policies and their records remain [historical evidence](../studies
 they were not converted into passing results. The approved
 [Fast plan](history/fast-generation-plan.md) records the move to numerical diagnosis.
 
+## Open research: KV-cache scheduling and determinism
+
+Given the same weights and token sequence, should processing the prompt all at
+once, in chunks, or one token at a time produce identical KV caches and logits?
+The causal computation is mathematically equivalent, but call shapes can change
+kernel selection and floating-point reduction order. Small differences can cross
+BF16 rounding boundaries, propagate through layers and change a greedy prediction.
+The [HF attention investigation](../studies/model_generation/backend.md) traces one
+such mechanism in the reference implementation.
+
+For broader context, Thinking Machines Lab's
+[Defeating Nondeterminism in LLM Inference](https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/)
+explains why repeatable kernels can still produce different results when batch
+shapes change, and how batch-invariant execution addresses this. Our related
+question concerns prefill and KV-cache schedules for a single sequence.
+
+Preserving an existing cache byte for byte is already a required invariant.
+Producing identical cache values when building it under different schedules is
+the additional research question. Here, scheduling means how one sequence is
+divided into model calls; multi-request scheduling remains outside current scope.
+
+The [decoder policy study](../studies/decoder_layer/policies.md) establishes exact
+schedule agreement for the tested single-layer configurations and measures its
+cost. The [full-model consistency study](../studies/model_generation/consistency.md)
+records the remaining native model boundary; full-model schedule invariance has
+not been established.
+
+The follow-up asks which arithmetic and dispatch choices preserve that invariant,
+how remaining differences affect predictions, and how much determinism costs
+relative to Fast. This is a second research track alongside the working chat
+engine, with cache identity, numerical closeness and token agreement reported
+separately.
+
 ## Follow-up direction
 
 The working Fast chat is the baseline for further work. These are separate
