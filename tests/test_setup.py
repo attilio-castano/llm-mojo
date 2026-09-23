@@ -428,6 +428,21 @@ class ProvisionTests(unittest.TestCase):
             self.assertEqual(self.snapshot(self.root), before)
         self.assertEqual(lines[-1], 'Ready: uv run llm-mojo chat')
 
+    def test_check_verifies_kept_local_copies(self):
+        self.write_model(self.checkout / 'build/model-prepared-v1')
+        self.assertEqual(self.provision(self.sources(self.worktree()))['model_link'], 'local')
+        lines = []
+        with self.passing_toolchain():
+            self.assertEqual(assets.setup(self.store, check=True, log=lines.append), 0)
+            (self.checkout / 'build/model-prepared-v1/embedding.bin').write_bytes(b'damaged!')
+            self.assertEqual(assets.setup(self.store, check=True, log=lines.append), 1)
+            self.assertEqual(assets.status(self.store)['links']['model-prepared-v1'], 'local but invalid')
+            config = tokenizer_assets.asset_directory() / 'config.json'
+            config.unlink()
+            config.write_bytes(b'{"hidden_size": 1}')
+            self.assertEqual(assets.status(self.store)['links']['config.json'], 'local but invalid')
+        self.assertEqual(lines[-1], 'Not ready: run uv run llm-mojo setup')
+
     def test_failed_preparation_prerequisites_stop_setup_before_any_change(self):
         failures = {'uv_check': toolchain.Check('uv on PATH', False, 'not found', 'Install uv', 'prepare'),
                     'disk_check': toolchain.Check('Free space for the store', False, '0.1 GB free',

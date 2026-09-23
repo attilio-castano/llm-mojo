@@ -341,8 +341,20 @@ def status(root=None, state=None):
     checkpoint = store_checkpoint(root)
     missing, model_error = state or store_state(root)
     model = 'missing or invalid: ' + model_error if model_error else 'verified'
-    links = {name: store.link_state(asset_directory()/name, checkpoint/name) for name in CHECKPOINT_FILES}
-    links['model-prepared-v1'] = store.link_state(prepared_directory(), store_prepared(root))
+    # A real entry kept in the checkout is what chat reads, so it must still verify.
+    links = {}
+    for name, (size, digest) in CHECKPOINT_FILES.items():
+        path = asset_directory()/name
+        links[name] = store.link_state(path, checkpoint/name)
+        if links[name] == 'local' and not store.verified(path, size, digest):
+            links[name] = 'local but invalid'
+    path = prepared_directory()
+    links['model-prepared-v1'] = store.link_state(path, store_prepared(root))
+    if links['model-prepared-v1'] == 'local':
+        try:
+            verify_pinned_model(path)
+        except (OSError, ValueError, KeyError, TypeError):
+            links['model-prepared-v1'] = 'local but invalid'
     device = toolchain.device()
     return dict(store=str(store_directory(root)),
                 checkpoint='verified' if not missing else 'missing: ' + ', '.join(missing),
