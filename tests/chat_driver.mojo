@@ -3,9 +3,10 @@ from std.sys import argv
 from std.testing import assert_equal, assert_raises
 from max.gpu.host import DeviceContext
 from llm_mojo.models.qwen2.chat import ChatSession, DEFAULT_SYSTEM
-from llm_mojo.models.qwen2.model import select_copy_free, select_residual_norm, select_token_selection, QwenModel, save_bf16, select_configuration
+from llm_mojo.models.qwen2.model import QwenModel, save_bf16
+from llm_mojo.models.qwen2.plan import fast_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
-from llm_mojo.cli.generate_cli import now
+from llm_mojo.runtime.clock import now
 
 
 def caches(model: QwenModel, directory: String) raises:
@@ -20,9 +21,7 @@ def replay_history(mut model: QwenModel, ctx: DeviceContext, ids: List[Int]) rai
         var suffix = List[Int]()
         for i in range(rows):
             suffix.append(ids[model.length+i])
-        model.forward(ctx,suffix,select_configuration("fast",rows,model.length+rows,ctx.name()),"",
-            select_token_selection("fast",rows,ctx.name()),False,
-            select_copy_free("fast",rows,ctx.name()),select_residual_norm("fast",rows,ctx.name()))
+        model.forward(ctx,suffix,fast_plan(rows,model.length+rows,ctx.name()))
     ctx.synchronize()
 
 

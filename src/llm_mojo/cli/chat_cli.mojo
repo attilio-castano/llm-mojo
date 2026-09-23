@@ -6,6 +6,7 @@ from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace, Token
 from llm_mojo.runtime.terminal import block_interrupt, interrupted, read_line
 from llm_mojo.runtime.clock import now
 from llm_mojo.models.qwen2.tokens import is_stop
+from llm_mojo.models.qwen2.plan import MEASURED_DEVICE
 
 
 def main() raises:
@@ -28,7 +29,10 @@ def main() raises:
         system = String(from_utf8=open(args[5],"r").read_bytes())
     var ctx = DeviceContext()
     var session = ChatSession(ctx,args[1],tokenizer,work,system,chunk)
-    print("Ready — Fast on",ctx.name(),"/",ctx.api(),flush=True)
+    if ctx.name() == MEASURED_DEVICE:
+        print("Ready — Fast on",ctx.name(),"/",ctx.api(),flush=True)
+    else:
+        print("Ready — baseline kernels on",ctx.name(),"/",ctx.api(),"(Fast choices were measured on",MEASURED_DEVICE+")",flush=True)
     print("/reset: new conversation · /exit: quit · Ctrl-C: stop reply or clear input",flush=True)
     if observed:
         events += "load\t0\t0\t"+ctx.name()+"/"+ctx.api()+"\t"+String(now()-started)+"\n"

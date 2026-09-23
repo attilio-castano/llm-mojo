@@ -4,12 +4,12 @@ History is authoritative; model.length identifies its already submitted prefix.
 No rendered-text round trip is used for generated assistant tokens.
 """
 from max.gpu.host import DeviceContext
-from llm_mojo.models.qwen2.model import select_projection, QwenModel, select_configuration, select_token_selection, select_copy_free, select_residual_norm
+from llm_mojo.models.qwen2.model import QwenModel
+from llm_mojo.models.qwen2.plan import fast_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
-from llm_mojo.models.qwen2.tokens import is_stop
+from llm_mojo.models.qwen2.tokens import IM_END, is_stop
 
 comptime DEFAULT_SYSTEM = "You are Qwen, created by Alibaba Cloud. You are a helpful assistant."
-comptime IM_END = 151645
 comptime NEWLINE = 198
 
 
@@ -73,7 +73,6 @@ struct ChatHistory(Movable):
 struct ChatSession(Movable):
     var model: QwenModel
     var history: ChatHistory
-    var policy: String
 
     def __init__(out self, ctx: DeviceContext, prepared: String,
                  tokenizer: Tokenizer, mut work: TokenizerWorkspace,
@@ -82,7 +81,6 @@ struct ChatSession(Movable):
         if len(self.history.tokens)+3 >= capacity:
             raise Error("system message exceeds chat capacity")
         self.model = QwenModel(ctx,prepared,capacity,chunk_rows)
-        self.policy = "fast"
 
     def begin(mut self, tokenizer: Tokenizer, mut work: TokenizerWorkspace,
               message: String, maximum: Int) raises:
@@ -97,8 +95,7 @@ struct ChatSession(Movable):
         var ids = List[Int](capacity=rows)
         for i in range(rows):
             ids.append(self.history.tokens[self.model.length+i])
-        var config = select_configuration(self.policy,rows,self.model.length+rows,ctx.name())
-        self.model.forward(ctx,ids,config,"",select_token_selection(self.policy,rows,ctx.name()),False,select_copy_free(self.policy,rows,ctx.name()),select_residual_norm(self.policy,rows,ctx.name()),False,select_projection(self.policy,rows,ctx.name()))
+        self.model.forward(ctx,ids,fast_plan(rows,self.model.length+rows,ctx.name()))
 
     def sample(mut self, ctx: DeviceContext) raises -> Int:
         if not self.history.generating or self.model.length != len(self.history.tokens):

@@ -150,7 +150,7 @@ def generate(prepared, prompt, maximum, chunk_rows=0, policy='fast', report=None
     """
     if not 0 <= maximum <= 4096 or not 0 <= chunk_rows <= 4096:
         raise ValueError('invalid generation or chunk limit')
-    if policy not in ('baseline', 'auto', 'candidate', 'consistent', '0', '2', '3', '20', '21', 'fast'):
+    if policy not in ('fast', 'baseline', 'consistent'):
         raise ValueError('unknown generation configuration policy')
     prompt = Path(prompt).resolve()
     if not prompt.is_file():
@@ -174,7 +174,7 @@ def main(argv=None):
     parser.add_argument('--max-new-tokens', type=int, required=True)
     parser.add_argument('--chunk-rows', type=int, default=0)
     parser.add_argument('--policy', default='fast',
-                        choices=['baseline', 'auto', 'candidate', 'consistent', '0', '2', '3', '20', '21', 'fast'])
+                        choices=['fast', 'baseline', 'consistent'])
     parser.add_argument('--report', type=Path, help='Write native timing, token and cache events as TSV')
     args = parser.parse_args(argv)
     generate(args.prepared, args.prompt, args.max_new_tokens, args.chunk_rows, args.policy, args.report)

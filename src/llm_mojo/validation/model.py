@@ -694,7 +694,7 @@ def main():
     d=sub.add_parser('diagnose');d.add_argument('--binary',required=True,type=Path)
     d.add_argument('--reference',required=True,type=Path);d.add_argument('--output',required=True,type=Path)
     d.add_argument('--prepared',type=Path)
-    d.add_argument('--policy',choices=['fast','auto','baseline'])
+    d.add_argument('--policy',choices=['fast','baseline','consistent'])
     m=sub.add_parser('benchmark');m.add_argument('--binary',required=True,type=Path)
     m.add_argument('--specification',required=True,type=Path);m.add_argument('--output',required=True,type=Path)
     m.add_argument('--prepared',type=Path)

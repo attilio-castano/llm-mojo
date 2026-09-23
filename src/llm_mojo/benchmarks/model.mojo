@@ -10,8 +10,10 @@ from std.memory import bitcast
 from max.gpu.host import DeviceContext, DeviceGraph, DeviceGraphBuilder
 from layout import TileTensor, TensorLayout, row_major
 from std.gpu import global_idx
-from llm_mojo.models.qwen2.model import QwenModel, select_configuration, save_bf16, _observation_clock
+from llm_mojo.models.qwen2.model import QwenModel, save_bf16
+from llm_mojo.models.qwen2.plan import fast_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
+from llm_mojo.runtime.clock import now
 
 
 def rewind(mut model: QwenModel, prefix: Int):
@@ -46,7 +48,7 @@ def poison_outputs(mut model: QwenModel, prefix: Int) raises:
 
 def step[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext, ids: List[Int]) raises -> Int:
     """One single-row Fast decode step: configuration 26, GPU argmax, swap, fused norms."""
-    model.forward[OBSERVE](ctx,ids,26,"",1,False,True,True)
+    model.forward[OBSERVE](ctx,ids,fast_plan(1,model.length+1,ctx.name()))
     return model.greedy[OBSERVE](ctx)
 
 
@@ -131,7 +133,7 @@ def main() raises:
         var chunk = List[Int](capacity=count)
         for i in range(count):
             chunk.append(history[offset+i])
-        model.forward(ctx,chunk,select_configuration("fast",count,offset+count,ctx.name()))
+        model.forward(ctx,chunk,fast_plan(count,offset+count,ctx.name()))
         offset += count
     ctx.synchronize()
     var ids: List[Int] = [history[prefix]]
@@ -187,13 +189,13 @@ def main() raises:
         var observe = comparison == 1 and arm == 1
         for sample in range(20):
             rewind(model,prefix)
-            var start = _observation_clock()
+            var start = now()
             var selected: Int
             if observe:
                 selected = step[True](model,ctx,ids)
             else:
                 selected = step[False](model,ctx,ids)
-            var elapsed = _observation_clock()-start
+            var elapsed = now()-start
             if selected != winner or model.submitted_rows != 24*(prefix+1):
                 raise Error("measurement prediction/accounting changed")
             if sample >= 10:

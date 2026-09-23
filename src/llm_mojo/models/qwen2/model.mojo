@@ -2,23 +2,51 @@
 
 The cross-layer copy or owner swap keeps the decoder alias contract intact. Numerical
 comparisons are diagnostics; storage and lifecycle invariants remain exact.
+Which kernels a call uses is decided by an ExecutionPlan (models/qwen2/plan.mojo).
 """
 from std.memory import bitcast
-from std.ffi import external_call
 from std.gpu import global_idx
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
 from llm_mojo.layers.attention_sublayer import AttentionWeights, AttentionCache, AttentionWorkspace
 from llm_mojo.layers.mlp import MLPWeights, MLPWorkspace
-from llm_mojo.layers.decoder_layer import _decoder_preflight, decoder_mappings, enqueue_decoder_layer_configuration
+from llm_mojo.layers.decoder_layer import (
+    DECODER_FUSED_DECODE, decoder_mappings, enqueue_decoder_layer_configuration,
+    validate_decoder_configuration,
+)
 from llm_mojo.kernels.residual_norm import enqueue_residual_norm
 from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.kernels.linear import enqueue_linear_apple_gpu
-from llm_mojo.kernels.token_selection import enqueue_argmax, enqueue_head_argmax
+from llm_mojo.kernels.token_selection import enqueue_argmax
+from llm_mojo.models.qwen2.plan import ExecutionPlan
+from llm_mojo.runtime.clock import now
+
+comptime HIDDEN = 896
+comptime VOCABULARY = 151936
+comptime LAYERS = 24
+comptime KV_WIDTH = 128
+comptime MAX_CONTEXT = 4096
+# One (score, token, nonfinite) record per 1024-logit argmax group.
+comptime ARGMAX_GROUPS = (VOCABULARY + 1023) // 1024
+
+# Host observation slots, recorded only in OBSERVE specializations.
+comptime MARK_START = 0
+comptime MARK_PREFLIGHT = 1
+comptime MARK_TOKENS = 2
+comptime MARK_EMBEDDING = 3
+comptime MARK_LAYERS = 4
+comptime MARK_HEAD = 5
+comptime MARK_GREEDY = 6
+comptime MARK_MAPPED = 7
+comptime MARK_SELECTED = 8
+comptime MARK_RETURN = 9
 
 
-def _observation_clock() -> UInt64:
-    return external_call["clock_gettime_nsec_np", UInt64](UInt32(8))
+def generation_budget(prompt_length: Int, maximum: Int) raises -> Int:
+    """New tokens a reply may add: the request, capped by the remaining context."""
+    if prompt_length < 1 or prompt_length > MAX_CONTEXT or maximum < 0 or maximum > MAX_CONTEXT:
+        raise Error("invalid prompt or generation limit")
+    return min(maximum,MAX_CONTEXT-prompt_length)
 
 
 def load_bf16(buffer: DeviceBuffer[DType.bfloat16], path: String, source_elements: Int = 0) raises:
@@ -54,9 +82,9 @@ def _embedding[IL: TensorLayout, WL: TensorLayout, OL: TensorLayout](
 ):
     comptime assert ids.flat_rank == 1 and weight.flat_rank == 2 and output.flat_rank == 2
     var i = global_idx.x
-    if i < Int(count) * 896:
-        var row = i // 896
-        output[row,i % 896] = weight[Int(ids[row]),i % 896]
+    if i < Int(count) * HIDDEN:
+        var row = i // HIDDEN
+        output[row,i % HIDDEN] = weight[Int(ids[row]),i % HIDDEN]
 
 
 def _copy_rows[IL: TensorLayout, OL: TensorLayout](
@@ -65,8 +93,8 @@ def _copy_rows[IL: TensorLayout, OL: TensorLayout](
 ):
     comptime assert input.flat_rank == 2 and output.flat_rank == 2
     var i = global_idx.x
-    if i < Int(count)*896:
-        output[i//896,i%896] = input[i//896,i%896]
+    if i < Int(count)*HIDDEN:
+        output[i//HIDDEN,i%HIDDEN] = input[i//HIDDEN,i%HIDDEN]
 
 
 def swap_hidden_buffers(mut left: DeviceBuffer[DType.bfloat16], mut right: DeviceBuffer[DType.bfloat16]):
@@ -76,83 +104,33 @@ def swap_hidden_buffers(mut left: DeviceBuffer[DType.bfloat16], mut right: Devic
     right = previous^
 
 
-def is_projection_policy(policy: String) -> Bool:
-    return policy == "projection-0" or policy == "projection-1" or policy == "projection-2" or policy == "projection-3" or policy == "projection-4" or policy == "projection-5"
+@fieldwise_init
+struct CaptureRequest(Copyable, Movable):
+    """Diagnostic capture: every layer boundary is written under directory."""
+    var directory: String
+    var include_norms: Bool
 
 
-def select_projection(policy: String, rows: Int, device: String) -> Int:
-    if rows == 1 and device == "Apple M4 Pro":
-        if policy == "projection-1": return 1
-        if policy == "projection-2": return 2
-        if policy == "projection-3": return 3
-        if policy == "projection-4": return 4
-        if policy == "projection-5": return 5
-    return 0
+@fieldwise_init
+struct ForwardRoute(ImplicitlyCopyable, Movable):
+    """What the last forward actually enqueued, counted where each dispatch is issued."""
+    var configuration: Int
+    var layers: Int
+    var normalized_inputs: Int
+    var layer_residual_norms: Int
+    var deferred_residual_norms: Int
+    var owner_swaps: Int
+    var hidden_copies: Int
+    var final_rms_norm: Bool
+    var gpu_argmax: Bool
 
-
-def select_copy_free(policy: String, rows: Int, device: String) -> Bool:
-    return (is_projection_policy(policy) or policy == "fast" or policy == "auto" or policy == "buffer-swap" or policy == "swap-argmax" or policy == "all-three") and rows == 1 and device == "Apple M4 Pro"
-
-
-def select_residual_norm(policy: String, rows: Int, device: String) -> Bool:
-    return (is_projection_policy(policy) or policy == "fast" or policy == "auto" or policy == "residual-norm" or policy == "all-three") and rows == 1 and device == "Apple M4 Pro"
-
-
-def candidate_configuration(rows: Int, total: Int) -> Int:
-    """Split8 choices measured in the real 24-layer model on Apple M4 Pro."""
-    if (rows == 16 and (total == 1024 or total == 4096)) or (
-        total == 256 and (rows == 15 or rows == 17)
-    ):
-        return 2
-    if ((rows == 64 or rows == 256) and (total == 1024 or total == 4096)) or (
-        total == 4096 and (rows == 65 or rows == 255)
-    ):
-        return 3
-    return 0
-
-
-def select_configuration(policy: String, rows: Int, total: Int, device: String) raises -> Int:
-    if rows < 1 or total < rows or total > 4096:
-        raise Error("invalid configuration-selection dimensions")
-    if is_projection_policy(policy) or policy == "gpu-argmax" or policy == "fused-head" or policy == "buffer-swap" or policy == "residual-norm" or policy == "swap-argmax" or policy == "all-three":
-        return select_configuration("fast",rows,total,device)
-    if policy == "fusion" or policy == "combined" or policy == "unfused":
-        if rows == 1 and device == "Apple M4 Pro":
-            if policy == "unfused":
-                return 0
-            return 26 if policy == "combined" else 25
-        return select_configuration("fast", rows, total, device)
-    if policy == "baseline":
-        return 0
-    if policy == "auto" or policy == "fast":
-        if device != "Apple M4 Pro":
-            return 0
-        # Exact QKV + activation fusion; paired full-model gate at 64/1024/3968.
-        if rows == 1:
-            return 26
-        # Full-model paired measurements, including baseline self-comparisons.
-        # Every other measured winner is in the shared split8 lookup below.
-        if rows == 16 and total == 256:
-            return 21
-        return candidate_configuration(rows,total)
-    if policy == "consistent" or policy == "20":
-        return 20
-    if policy == "candidate":
-        return candidate_configuration(rows,total) if device == "Apple M4 Pro" else 0
-    if policy == "0" or policy == "2" or policy == "3" or policy == "21":
-        return Int(policy)
-    raise Error("unknown generation configuration policy")
-
-
-def select_token_selection(policy: String, rows: Int, device: String) raises -> Int:
-    if rows < 1:
-        raise Error("invalid selection row count")
-    if rows == 1 and device == "Apple M4 Pro":
-        if is_projection_policy(policy) or policy == "fast" or policy == "auto" or policy == "gpu-argmax" or policy == "swap-argmax" or policy == "all-three":
-            return 1
-        if policy == "fused-head":
-            return 2
-    return 0
+    def describe(self) -> String:
+        return ("configuration=" + String(self.configuration) + " layers=" + String(self.layers)
+                + " normalized_inputs=" + String(self.normalized_inputs)
+                + " residual_norms=" + String(self.layer_residual_norms + self.deferred_residual_norms)
+                + " swaps=" + String(self.owner_swaps) + " copies=" + String(self.hidden_copies)
+                + " final_rms_norm=" + String(Int(self.final_rms_norm))
+                + " gpu_argmax=" + String(Int(self.gpu_argmax)))
 
 
 struct ModelLayer(Movable):
@@ -192,19 +170,20 @@ struct QwenModel(Movable):
     var logits: DeviceBuffer[DType.bfloat16]
     var selection_partials: DeviceBuffer[DType.uint32]
     var selection_result: DeviceBuffer[DType.uint32]
-    var selection: Int
+    var gpu_argmax: Bool
     var tokens: DeviceBuffer[DType.int32]
     var capacity: Int
     var max_rows: Int
     var length: Int
     var valid: Bool
     var submitted_rows: Int
+    var last_route: ForwardRoute
     # Host-only observation storage. Default specializations contain no clocks.
     var observation: List[UInt64]
 
     def __init__(out self, ctx: DeviceContext, layer_count: Int, capacity: Int, max_rows: Int) raises:
-        """Allocate without loading; the path constructor loads the prepared checkpoint."""
-        if (ctx.api() != "metal" or layer_count < 1 or capacity < 1 or capacity > 4096
+        """Allocate without loading; use the path constructor for the prepared checkpoint."""
+        if (ctx.api() != "metal" or layer_count < 1 or capacity < 1 or capacity > MAX_CONTEXT
                 or max_rows < 1 or max_rows > capacity):
             raise Error("Qwen requires Metal and valid layer, row and context capacity")
         self.capacity = capacity
@@ -212,41 +191,42 @@ struct QwenModel(Movable):
         self.length = 0
         self.valid = True
         self.submitted_rows = 0
+        self.last_route = ForwardRoute(-1, 0, 0, 0, 0, 0, 0, False, False)
         self.observation = List[UInt64](capacity=10)
         for _ in range(10):
             self.observation.append(0)
-        self.embedding = ctx.enqueue_create_buffer[DType.bfloat16](151936*896)
-        self.norm = ctx.enqueue_create_buffer[DType.bfloat16](896)
+        self.embedding = ctx.enqueue_create_buffer[DType.bfloat16](VOCABULARY*HIDDEN)
+        self.norm = ctx.enqueue_create_buffer[DType.bfloat16](HIDDEN)
         self.layers = List[ModelLayer](capacity=layer_count)
         for _ in range(layer_count):
             self.layers.append(ModelLayer(ctx,capacity))
         self.attention = AttentionWorkspace(ctx,max_rows,capacity,
             materialized=False,fp32_materialized=False,prefill_splits=8)
         self.mlp = MLPWorkspace(ctx,max_rows)
-        self.input = ctx.enqueue_create_buffer[DType.bfloat16](max_rows*896)
-        self.normalized = ctx.enqueue_create_buffer[DType.bfloat16](896)
-        self.logits = ctx.enqueue_create_buffer[DType.bfloat16](151936)
-        self.selection_partials = ctx.enqueue_create_buffer[DType.uint32](2374*3)
+        self.input = ctx.enqueue_create_buffer[DType.bfloat16](max_rows*HIDDEN)
+        self.normalized = ctx.enqueue_create_buffer[DType.bfloat16](HIDDEN)
+        self.logits = ctx.enqueue_create_buffer[DType.bfloat16](VOCABULARY)
+        self.selection_partials = ctx.enqueue_create_buffer[DType.uint32](ARGMAX_GROUPS*3)
         self.selection_result = ctx.enqueue_create_buffer[DType.uint32](3)
-        self.selection = 0
+        self.gpu_argmax = False
         self.tokens = ctx.enqueue_create_buffer[DType.int32](max_rows)
 
     def __init__(out self, ctx: DeviceContext, path: String, capacity: Int, max_rows: Int) raises:
         """Allocate all 24 layers and load the verified prepared checkpoint at path."""
-        self = Self(ctx,24,capacity,max_rows)
+        self = Self(ctx, LAYERS, capacity, max_rows)
         load_bf16(self.embedding,path+"/embedding.bin")
         load_bf16(self.norm,path+"/final_norm.bin")
-        for i in range(24):
+        for i in range(LAYERS):
             self.layers[i].load(path,i)
         # Preparation stores all 4096 positions; only capacity rows are resident.
-        load_bf16(self.attention.cosine,path+"/cosine.bin",4096*64)
-        load_bf16(self.attention.sine,path+"/sine.bin",4096*64)
+        load_bf16(self.attention.cosine,path+"/cosine.bin",MAX_CONTEXT*64)
+        load_bf16(self.attention.sine,path+"/sine.bin",MAX_CONTEXT*64)
         ctx.synchronize()
 
     @staticmethod
     def allocate(ctx: DeviceContext, layer_count: Int, capacity: Int, max_rows: Int) raises -> QwenModel:
         """Unloaded model storage for tests that supply their own weights."""
-        return QwenModel(ctx,layer_count,capacity,max_rows)
+        return QwenModel(ctx, layer_count, capacity, max_rows)
 
     def reset(mut self, ctx: DeviceContext) raises:
         self.valid = False
@@ -257,175 +237,182 @@ struct QwenModel(Movable):
         self.valid = True
         self.submitted_rows = 0
 
-    def preflight(mut self, ctx: DeviceContext, ids: List[Int], configuration: Int) raises:
+    def preflight(mut self, ctx: DeviceContext, ids: List[Int], plan: ExecutionPlan) raises:
         var rows = len(ids)
         if not self.valid or rows < 1 or rows > self.max_rows or rows > self.capacity-self.length:
             raise Error("invalid Qwen state, row extent or context overflow")
-        if (len(self.embedding) != 151936*896 or len(self.norm) != 896
-            or len(self.input) != self.max_rows*896 or len(self.tokens) != self.max_rows
-            or len(self.normalized) != 896 or len(self.logits) != 151936
-            or len(self.selection_partials) != 2374*3 or len(self.selection_result) != 3
+        plan.validate(rows)
+        if (len(self.embedding) != VOCABULARY*HIDDEN or len(self.norm) != HIDDEN
+            or len(self.input) != self.max_rows*HIDDEN or len(self.tokens) != self.max_rows
+            or len(self.normalized) != HIDDEN or len(self.logits) != VOCABULARY
+            or len(self.selection_partials) != ARGMAX_GROUPS*3 or len(self.selection_result) != 3
             or self.attention.capacity != self.capacity
             or self.attention.max_rows != self.max_rows or self.mlp.max_rows != self.max_rows):
             raise Error("inconsistent model allocation geometry")
         for id in ids:
-            if id < 0 or id >= 151936:
+            if id < 0 or id >= VOCABULARY:
                 raise Error("model token ID out of range")
-        var mappings = decoder_mappings(configuration,rows)
+        var mappings = decoder_mappings(plan.configuration,rows)
         if len(self.layers) < 1:
             raise Error("empty Qwen layer stack")
         for i in range(len(self.layers)):
             if self.layers[i].cache.length != self.length or self.layers[i].cache.capacity != self.capacity:
                 raise Error("inconsistent model cache lengths")
-            _decoder_preflight(ctx,self.layers[i].attention,self.layers[i].cache,self.attention,self.layers[i].mlp,self.mlp,
-                TileTensor(self.input,row_major(rows,896)),True,
+            validate_decoder_configuration(ctx,self.layers[i].attention,self.layers[i].cache,self.attention,
+                self.layers[i].mlp,self.mlp,TileTensor(self.input,row_major(rows,HIDDEN)),
                 Int(mappings[0]),Int(mappings[1]),Int(mappings[2]))
 
-    def forward[OBSERVE: Bool = False](mut self, ctx: DeviceContext, ids: List[Int], configuration: Int = 0, capture: String = "", selection: Int = 0, materialize: Bool = False, copy_free: Bool = False, fuse_residual_norm: Bool = False, capture_norm: Bool = False, decode_variant: Int = 0) raises:
-        """Submit all layers. ID upload synchronizes; layer execution does not.
+    @always_inline
+    def _mark[OBSERVE: Bool](mut self, slot: Int):
+        comptime if OBSERVE:
+            self.observation[slot] = now()
 
-        Native inference API. The host token
-        staging boundary is measured separately from a future enqueue API.
-        Selection 0 materializes logits for CPU greedy; 1 adds GPU argmax;
-        2 fuses projection/local selection and leaves logits untouched unless
-        materialize or capture is requested. greedy reads the matching result.
+    def forward[OBSERVE: Bool = False](mut self, ctx: DeviceContext, ids: List[Int], plan: ExecutionPlan) raises:
+        """Submit all layers under plan. Token upload synchronizes; layer execution does not.
+
+        With plan.gpu_argmax the vocabulary projection is followed by GPU argmax;
+        otherwise greedy scans the materialized logits on the CPU.
         """
-        comptime if OBSERVE:
-            self.observation[0] = _observation_clock()
-        if decode_variant and (decode_variant < 0 or decode_variant > 5 or len(ids) != 1 or configuration != 26 or not fuse_residual_norm or not copy_free or selection != 1):
-            raise Error("projection arrangement requires all-three single-row model")
-        if fuse_residual_norm and (len(ids) != 1 or configuration != 26 or selection == 2):
-            raise Error("residual RMSNorm fusion requires one configuration-26 row and ordinary vocabulary projection")
-        if copy_free and len(ids) != 1:
-            raise Error("buffer swapping is restricted to single-row decode")
-        if selection < 0 or selection > 2:
-            raise Error("unknown token selection mode")
-        self.preflight(ctx,ids,configuration)
-        comptime if OBSERVE:
-            self.observation[1] = _observation_clock()
+        self._forward[OBSERVE, False](ctx, ids, plan, CaptureRequest("", False))
+
+    def forward_captured(mut self, ctx: DeviceContext, ids: List[Int], plan: ExecutionPlan,
+                         request: CaptureRequest) raises:
+        """Diagnostic forward that synchronously writes every boundary under request.directory."""
+        if request.directory.byte_length() == 0:
+            raise Error("capture requires a directory")
+        self._forward[False, True](ctx, ids, plan, request)
+
+    def _forward[OBSERVE: Bool, CAPTURE: Bool](mut self, ctx: DeviceContext, ids: List[Int],
+                                               plan: ExecutionPlan, request: CaptureRequest) raises:
+        self._mark[OBSERVE](MARK_START)
+        self.preflight(ctx,ids,plan)
+        self._mark[OBSERVE](MARK_PREFLIGHT)
         var rows = len(ids)
+        var layer_count = len(self.layers)
+        var fuse_norm = plan.fuse_residual_norm
+        var route = ForwardRoute(plan.configuration, 0, 0, 0, 0, 0, 0, False, False)
+        var capture = request.directory
         try:
             with self.tokens.map_to_host() as mapped:
                 for i in range(rows):
                     mapped.unsafe_ptr()[unsafe_offset=i] = Int32(ids[i])
-            comptime if OBSERVE:
-                self.observation[2] = _observation_clock()
+            self._mark[OBSERVE](MARK_TOKENS)
             var token_view = TileTensor(self.tokens,row_major(rows))
-            var weight_view = TileTensor(self.embedding,row_major(151936,896))
-            var input_view = TileTensor(self.input,row_major(rows,896))
+            var weight_view = TileTensor(self.embedding,row_major(VOCABULARY,HIDDEN))
+            var input_view = TileTensor(self.input,row_major(rows,HIDDEN))
             comptime embedding_kernel = _embedding[type_of(token_view.layout),type_of(weight_view.layout),type_of(input_view.layout)]
             ctx.enqueue_function[embedding_kernel](token_view,weight_view,input_view,Int32(rows),
-                grid_dim=(rows*896+255)//256,block_dim=256)
-            comptime if OBSERVE:
-                self.observation[3] = _observation_clock()
-            if capture.byte_length() > 0:
-                save_bf16(self.input,capture+"/hidden_0.bin",rows*896)
-            var layer_count = len(self.layers)
+                grid_dim=(rows*HIDDEN+255)//256,block_dim=256)
+            self._mark[OBSERVE](MARK_EMBEDDING)
+            comptime if CAPTURE:
+                save_bf16(self.input,capture+"/hidden_0.bin",rows*HIDDEN)
             for i in range(layer_count):
+                var normalized_input = fuse_norm and i > 0
                 _ = enqueue_decoder_layer_configuration(ctx,self.layers[i].attention,
                     self.layers[i].cache,self.attention,self.layers[i].mlp,self.mlp,
-                    TileTensor(self.input,row_major(rows,896)),configuration,fuse_residual_norm,fuse_residual_norm and i > 0,decode_variant)
-                if capture_norm and capture.byte_length() > 0:
-                    save_bf16(self.attention.normalized,capture+"/attention_norm_"+String(i)+".bin",rows*896)
-                    save_bf16(self.mlp.normalized,capture+"/mlp_norm_"+String(i)+".bin",rows*896)
-                    save_bf16(self.attention.output,capture+"/attention_residual_"+String(i)+".bin",rows*896)
-                if fuse_residual_norm:
+                    TileTensor(self.input,row_major(rows,HIDDEN)),plan.configuration,fuse_norm,normalized_input)
+                route.layers += 1
+                if normalized_input:
+                    route.normalized_inputs += 1
+                if fuse_norm:
+                    route.layer_residual_norms += 1
+                comptime if CAPTURE:
+                    if request.include_norms:
+                        save_bf16(self.attention.normalized,capture+"/attention_norm_"+String(i)+".bin",rows*HIDDEN)
+                        save_bf16(self.mlp.normalized,capture+"/mlp_norm_"+String(i)+".bin",rows*HIDDEN)
+                        save_bf16(self.attention.output,capture+"/attention_residual_"+String(i)+".bin",rows*HIDDEN)
+                if fuse_norm:
+                    # The MLP residual feeds the next layer's attention norm, or the final norm.
                     if i+1 < layer_count:
-                        enqueue_residual_norm(ctx,TileTensor(self.attention.output,row_major(1,896)),
-                            TileTensor(self.mlp.down,row_major(1,896)),TileTensor(self.layers[i+1].attention.norm,row_major(896)),
-                            TileTensor(self.mlp.output,row_major(1,896)),TileTensor(self.attention.normalized,row_major(1,896)))
+                        enqueue_residual_norm(ctx,TileTensor(self.attention.output,row_major(1,HIDDEN)),
+                            TileTensor(self.mlp.down,row_major(1,HIDDEN)),
+                            TileTensor(self.layers[i+1].attention.norm,row_major(HIDDEN)),
+                            TileTensor(self.mlp.output,row_major(1,HIDDEN)),
+                            TileTensor(self.attention.normalized,row_major(1,HIDDEN)))
                     else:
-                        enqueue_residual_norm(ctx,TileTensor(self.attention.output,row_major(1,896)),
-                            TileTensor(self.mlp.down,row_major(1,896)),TileTensor(self.norm,row_major(896)),
-                            TileTensor(self.mlp.output,row_major(1,896)),TileTensor(self.normalized,row_major(1,896)))
-                if capture.byte_length() > 0:
-                    save_bf16(self.mlp.output,capture+"/hidden_"+String(i+1)+".bin",rows*896)
-                    if configuration == 25 or configuration == 26:
+                        enqueue_residual_norm(ctx,TileTensor(self.attention.output,row_major(1,HIDDEN)),
+                            TileTensor(self.mlp.down,row_major(1,HIDDEN)),TileTensor(self.norm,row_major(HIDDEN)),
+                            TileTensor(self.mlp.output,row_major(1,HIDDEN)),
+                            TileTensor(self.normalized,row_major(1,HIDDEN)))
+                    route.deferred_residual_norms += 1
+                comptime if CAPTURE:
+                    save_bf16(self.mlp.output,capture+"/hidden_"+String(i+1)+".bin",rows*HIDDEN)
+                    if plan.configuration == DECODER_FUSED_DECODE or plan.configuration == 25:
                         # Fusion intentionally leaves the unpack/rotated scratch untouched.
-                        save_bf16(self.layers[i].cache.key,capture+"/append_key_"+String(i)+".bin",128,(self.layers[i].cache.length-1)*128)
-                        save_bf16(self.layers[i].cache.value,capture+"/append_value_"+String(i)+".bin",128,(self.layers[i].cache.length-1)*128)
+                        var appended = (self.layers[i].cache.length-1)*KV_WIDTH
+                        save_bf16(self.layers[i].cache.key,capture+"/append_key_"+String(i)+".bin",KV_WIDTH,appended)
+                        save_bf16(self.layers[i].cache.value,capture+"/append_value_"+String(i)+".bin",KV_WIDTH,appended)
                     else:
-                        save_bf16(self.attention.rotated_key,capture+"/append_key_"+String(i)+".bin",rows*128)
-                        save_bf16(self.attention.raw_value,capture+"/append_value_"+String(i)+".bin",rows*128)
-                    save_bf16(self.layers[i].cache.key,capture+"/cache_key_"+String(i)+".bin",self.capacity*128)
-                    save_bf16(self.layers[i].cache.value,capture+"/cache_value_"+String(i)+".bin",self.capacity*128)
-                if i+1 < layer_count and copy_free:
-                    swap_hidden_buffers(self.input,self.mlp.output)
-                elif i+1 < layer_count:
-                    ctx.enqueue_function[_copy_rows[type_of(input_view.layout),type_of(input_view.layout)]](TileTensor(self.mlp.output,row_major(rows,896)),
-                        TileTensor(self.input,row_major(rows,896)),Int32(rows),
-                        grid_dim=(rows*896+255)//256,block_dim=256)
-            comptime if OBSERVE:
-                self.observation[4] = _observation_clock()
-            if not fuse_residual_norm:
+                        save_bf16(self.attention.rotated_key,capture+"/append_key_"+String(i)+".bin",rows*KV_WIDTH)
+                        save_bf16(self.attention.raw_value,capture+"/append_value_"+String(i)+".bin",rows*KV_WIDTH)
+                    save_bf16(self.layers[i].cache.key,capture+"/cache_key_"+String(i)+".bin",self.capacity*KV_WIDTH)
+                    save_bf16(self.layers[i].cache.value,capture+"/cache_value_"+String(i)+".bin",self.capacity*KV_WIDTH)
+                if i+1 < layer_count:
+                    if plan.swap_buffers:
+                        swap_hidden_buffers(self.input,self.mlp.output)
+                        route.owner_swaps += 1
+                    else:
+                        ctx.enqueue_function[_copy_rows[type_of(input_view.layout),type_of(input_view.layout)]](
+                            TileTensor(self.mlp.output,row_major(rows,HIDDEN)),
+                            TileTensor(self.input,row_major(rows,HIDDEN)),Int32(rows),
+                            grid_dim=(rows*HIDDEN+255)//256,block_dim=256)
+                        route.hidden_copies += 1
+            self._mark[OBSERVE](MARK_LAYERS)
+            if not fuse_norm:
                 enqueue_rms_norm_apple_gpu(ctx,
-                    TileTensor(self.mlp.output.unsafe_ptr().unsafe_offset((rows-1)*896),row_major(1,896)),
-                    TileTensor(self.norm,row_major(896)),TileTensor(self.normalized,row_major(1,896)))
-            var partials = TileTensor(self.selection_partials,row_major(2374,3))
-            var result = TileTensor(self.selection_result,row_major(1,3))
-            var logits = TileTensor(self.logits,row_major(1,151936))
-            if selection == 2:
-                if materialize or capture.byte_length() > 0:
-                    enqueue_head_argmax[True](ctx,TileTensor(self.normalized,row_major(1,896)),
-                        TileTensor(self.embedding,row_major(151936,896)),logits,partials,result)
-                else:
-                    enqueue_head_argmax[False](ctx,TileTensor(self.normalized,row_major(1,896)),
-                        TileTensor(self.embedding,row_major(151936,896)),logits,partials,result)
-            else:
-                enqueue_linear_apple_gpu(ctx,TileTensor(self.normalized,row_major(1,896)),
-                    TileTensor(self.embedding,row_major(151936,896)),logits,decode_variant)
-                if selection == 1:
-                    enqueue_argmax(ctx,logits,partials,result)
-            self.selection = selection
-            comptime if OBSERVE:
-                self.observation[5] = _observation_clock()
-            if capture.byte_length() > 0:
-                save_bf16(self.normalized,capture+"/final_norm.bin",896)
-                save_bf16(self.logits,capture+"/logits.bin",151936)
+                    TileTensor(self.mlp.output.unsafe_ptr().unsafe_offset((rows-1)*HIDDEN),row_major(1,HIDDEN)),
+                    TileTensor(self.norm,row_major(HIDDEN)),TileTensor(self.normalized,row_major(1,HIDDEN)))
+                route.final_rms_norm = True
+            var logits = TileTensor(self.logits,row_major(1,VOCABULARY))
+            enqueue_linear_apple_gpu(ctx,TileTensor(self.normalized,row_major(1,HIDDEN)),
+                TileTensor(self.embedding,row_major(VOCABULARY,HIDDEN)),logits)
+            if plan.gpu_argmax:
+                enqueue_argmax(ctx,logits,TileTensor(self.selection_partials,row_major(ARGMAX_GROUPS,3)),
+                    TileTensor(self.selection_result,row_major(1,3)))
+                route.gpu_argmax = True
+            self.gpu_argmax = plan.gpu_argmax
+            self._mark[OBSERVE](MARK_HEAD)
+            comptime if CAPTURE:
+                save_bf16(self.normalized,capture+"/final_norm.bin",HIDDEN)
+                save_bf16(self.logits,capture+"/logits.bin",VOCABULARY)
             self.length += rows
             self.submitted_rows += rows*layer_count
+            self.last_route = route
         except error:
             self.valid = False
             raise error
 
     def greedy[OBSERVE: Bool = False](mut self, ctx: DeviceContext) raises -> Int:
         """Read the selected route: lowest ID on ties; reject any nonfinite logit."""
-        comptime if OBSERVE:
-            self.observation[6] = _observation_clock()
+        self._mark[OBSERVE](MARK_GREEDY)
         if not self.valid or self.length == 0:
             raise Error("no valid next-token logits")
         try:
-            if self.selection != 0:
+            if self.gpu_argmax:
                 var selected: Int
                 with self.selection_result.map_to_host() as mapped:
-                    comptime if OBSERVE:
-                        self.observation[7] = _observation_clock()
+                    self._mark[OBSERVE](MARK_MAPPED)
                     if mapped.unsafe_ptr()[unsafe_offset=2] != 0:
                         raise Error("nonfinite model logits")
                     selected = Int(mapped.unsafe_ptr()[unsafe_offset=1])
-                    if selected < 0 or selected >= 151936:
+                    if selected < 0 or selected >= VOCABULARY:
                         raise Error("invalid GPU token result")
-                    comptime if OBSERVE:
-                        self.observation[8] = _observation_clock()
-                comptime if OBSERVE:
-                    self.observation[9] = _observation_clock()
+                    self._mark[OBSERVE](MARK_SELECTED)
+                self._mark[OBSERVE](MARK_RETURN)
                 return selected
             var winner = 0
             var best = Float32(-3.402823466e38)
             with self.logits.map_to_host() as mapped:
-                comptime if OBSERVE:
-                    self.observation[7] = _observation_clock()
-                for i in range(151936):
+                self._mark[OBSERVE](MARK_MAPPED)
+                for i in range(VOCABULARY):
                     var value = mapped.unsafe_ptr()[unsafe_offset=i].cast[DType.float32]()
                     if value != value or value > Float32(3.402823466e38) or value < Float32(-3.402823466e38):
                         raise Error("nonfinite model logits")
                     if value > best:
                         best = value
                         winner = i
-                comptime if OBSERVE:
-                    self.observation[8] = _observation_clock()
-            comptime if OBSERVE:
-                self.observation[9] = _observation_clock()
+                self._mark[OBSERVE](MARK_SELECTED)
+            self._mark[OBSERVE](MARK_RETURN)
             return winner
         except error:
             self.valid = False

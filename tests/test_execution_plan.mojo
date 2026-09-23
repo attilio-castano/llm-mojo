@@ -4,20 +4,19 @@ The measured cells come from the retained runtime study, so a change to the
 lookup cannot silently drift from the evidence that justified it.
 """
 from std.testing import TestSuite, assert_equal, assert_raises
-from llm_mojo.models.qwen2.model import (
-    select_configuration, select_token_selection, select_copy_free, select_residual_norm,
-)
+from llm_mojo.models.qwen2.plan import ExecutionPlan, MEASURED_DEVICE, configured_plan, execution_plan
 
-comptime M4_PRO = "Apple M4 Pro"
+comptime M4_PRO = MEASURED_DEVICE
+
+
+def _fields(plan: ExecutionPlan) -> SIMD[DType.int64, 4]:
+    return SIMD[DType.int64, 4](Int64(plan.configuration), Int64(1 if plan.gpu_argmax else 0),
+                                Int64(1 if plan.swap_buffers else 0), Int64(1 if plan.fuse_residual_norm else 0))
 
 
 def _plan(mode: String, rows: Int, total: Int, device: String) raises -> SIMD[DType.int64, 4]:
     """(configuration, GPU argmax, buffer swap, residual/RMSNorm fusion) for one call."""
-    return SIMD[DType.int64, 4](
-        Int64(select_configuration(mode, rows, total, device)),
-        Int64(select_token_selection(mode, rows, device)),
-        Int64(1 if select_copy_free(mode, rows, device) else 0),
-        Int64(1 if select_residual_norm(mode, rows, device) else 0))
+    return _fields(execution_plan(mode, rows, total, device))
 
 
 def _cells() raises -> List[SIMD[DType.int64, 4]]:
@@ -65,6 +64,27 @@ def test_research_modes_are_fixed_and_dimensions_are_checked() raises:
         _ = _plan("fast", 2, 1, M4_PRO)
     with assert_raises():
         _ = _plan("fast", 1, 4097, M4_PRO)
+
+
+def test_retired_mode_names_and_unmeasured_compositions_are_rejected() raises:
+    for name in ["auto", "all-three", "projection-0", "combined", "gpu-argmax", "candidate", "20", ""]:
+        with assert_raises():
+            _ = execution_plan(name, 1, 64, M4_PRO)
+    # Configuration 26 carries all three decode features on exactly one row; nothing else carries any.
+    ExecutionPlan(26, True, True, True).validate(1)
+    for bad in [ExecutionPlan(26, False, True, True), ExecutionPlan(26, True, False, True),
+                ExecutionPlan(26, True, True, False), ExecutionPlan(0, True, False, False),
+                ExecutionPlan(0, False, True, False), ExecutionPlan(3, False, False, True)]:
+        with assert_raises():
+            bad.validate(1)
+    with assert_raises():
+        ExecutionPlan(26, True, True, True).validate(2)
+    assert_equal(_fields(configured_plan(26, 1, 64)), SIMD[DType.int64, 4](26, 1, 1, 1))
+    assert_equal(_fields(configured_plan(21, 16, 64)), SIMD[DType.int64, 4](21, 0, 0, 0))
+    with assert_raises():
+        _ = configured_plan(26, 2, 64)
+    with assert_raises():
+        _ = configured_plan(999, 1, 1)
 
 
 def main() raises:

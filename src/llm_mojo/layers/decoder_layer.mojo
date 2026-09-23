@@ -14,6 +14,16 @@ from llm_mojo.layers.attention_sublayer import (
 from llm_mojo.kernels.residual_norm import enqueue_residual_norm
 from llm_mojo.layers.mlp import MLPWeights, MLPWorkspace, _validate_mlp, enqueue_mlp_apple_gpu
 
+# Decoder configurations used by the Qwen model. IDs stay numeric because retained
+# evidence records them; docs/generation.md#workload-policy describes each route.
+comptime DECODER_BASELINE = 0  # integrated FP32 attention; 8x16 MMA projections from 16 rows; MLP mapping 7
+comptime DECODER_SPLIT8 = 2  # baseline with split-8 KV prefill attention
+comptime DECODER_SPLIT8_TILED = 3  # split-8 attention with 16x16 QKV/Wo projection tiles
+comptime DECODER_CONSISTENT = 20  # FP32 G32 attention and rowwise projections at every row count
+comptime DECODER_CONSISTENT_MMA = 21  # G32 attention with 8x16 projections and MLP mapping 7 at every row count
+comptime DECODER_CONSISTENT_REUSE4 = 22  # G32 attention; each weight reused across four rowwise reductions
+comptime DECODER_FUSED_DECODE = 26  # one row: fused QKV/RoPE/cache and SiLU/multiply
+
 
 def decoder_mappings(variant: Int, rows: Int) raises -> SIMD[DType.int64, 4]:
     """Explicit study ID -> GQA, projections, MLP, required prefill splits.
@@ -135,6 +145,17 @@ def _decoder_preflight[XL: TensorLayout](
             var z = regions[right]
             if l[0] < z[0] + z[1] and z[0] < l[0] + l[1]:
                 raise Error("decoder writable storage overlaps another live tensor")
+
+
+def validate_decoder_configuration[XL: TensorLayout](
+    ctx: DeviceContext, aw: AttentionWeights, cache: AttentionCache,
+    mut attention: AttentionWorkspace, mw: MLPWeights, mlp: MLPWorkspace,
+    x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
+    gqa_mapping: Int, projection_mapping: Int, mlp_mapping: Int,
+) raises:
+    """Preflight one integrated layer call without enqueueing or changing state."""
+    _decoder_preflight(ctx, aw, cache, attention, mw, mlp, x, True,
+                       gqa_mapping, projection_mapping, mlp_mapping)
 
 
 def enqueue_decoder_layer[XL: TensorLayout](
