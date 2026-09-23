@@ -26,7 +26,10 @@ head merge, residual connections and the MLP introduce separate failure modes.
 
 ## Current measurement contract
 
-The explicit matrix is in `src/llm_mojo/benchmarks/study.py`. Every study uses the same
+Operation and composition studies declare their matrix in
+`src/llm_mojo/benchmarks/study.py`. The model-level studies declare theirs in
+`model_contract.py` and collect it with `model_profile.py`; the tokenizer study
+uses `tokenizer_contract.py`. Every study uses the same
 four-block paired procedure; blocks 2 and 3 reverse workload and arm order.
 Each arm has ten warmups followed by ten samples. We keep all observations,
 including slow ones, and use each block's median rather than treating every
@@ -91,6 +94,13 @@ screen can use a `screen_` filename prefix within the same topic folder. Add a
 compact profile table only when it substantiates a report's explanation.
 Avoid repeated metadata per sample, hash lists of disposable logs, duplicate
 image formats, and a new runner or directory for each parameter choice.
+
+The model-level studies in `studies/model_generation/` keep one lossless archive
+per study (`<name>.json.gz` with a readable manifest) instead. The
+`model_profile.py` replay commands and `summarize.py` rebuild their tables
+without weights or a GPU. The tokenizer study keeps a folder per mode and has
+its own report command; see the
+[benchmark tool](../src/llm_mojo/benchmarks/README.md).
 
 The larger attention topic groups evidence in `data/` and images in `figures/`;
 experiment prefixes still identify comparisons within those directories. Four

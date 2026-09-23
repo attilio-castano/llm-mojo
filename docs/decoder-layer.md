@@ -356,8 +356,10 @@ reference self-tests and verifies the frozen synthetic development arrays.
 Use `uv run --locked --script tests/fixtures/decoder_reference.py` directly
 to verify them; add `--output` with a new directory to regenerate them.
 An explicit `--checkpoint-assets` directory additionally verifies the three
-checkpoint cases without downloading assets. The reserved decoder inputs have
-not been evaluated and are excluded from this command.
+checkpoint cases without downloading assets. The reserved decoder inputs are
+excluded from this command. They were opened once, for the recorded acceptance
+in which all seven cases passed, so they are regression cases now rather than
+fresh holdouts.
 
 ## Implementation history
 
@@ -371,9 +373,13 @@ The completed [configuration selection study](../studies/decoder_layer/selection
 confirms cached-prefill gains up to 52.9% on the declared grid. Full/short
 prefill and decode retain decoder ID 0 under the frozen promotion rule. The
 [plan](../studies/decoder_layer/selection-plan.md) records its scope and gates.
-`enqueue_decoder_layer_configuration(..., variant)` exposes IDs 0, 1, 2, 3,
-4, 8, 12 and 14 by reusing implemented attention and MLP kernels. Its registry
-is explicit; it does not infer a performance winner from shape. The table in
+The study compared decoder IDs 0, 1, 2, 3, 4, 8, 12 and 14, built from
+implemented attention and MLP kernels. `enqueue_decoder_layer_configuration`
+now implements the configurations a route uses: 0, 2 and 3 from this study,
+20–22 from the policy campaign and 26 for single-row decode (the `DECODER_*`
+constants in `layers/decoder_layer.mojo`). IDs 1, 4, 8, 12 and 14 exist through
+`edb610a`. The registry is explicit; it does not infer a performance winner
+from shape. The table in
 the plan defines each ID, including prefix preparation and single-row fallback.
 Split8 configurations require `AttentionWorkspace(..., prefill_splits=8)`;
 preflight rejects missing or undersized partial storage before enqueue.
@@ -413,7 +419,9 @@ requests. The [policy study](../studies/decoder_layer/policies-plan.md) freezes
 these workloads and the bounded optimization/confirmation procedure.
 
 `DecoderCache[False]` owns a Fast cache and `DecoderCache[True]` owns a
-Deterministic cache. Construct either with `(ctx, capacity, reuse_layers)`,
+Deterministic cache. Both live in `layers/decoder_policy.mojo` with this
+single-layer lookup; the model never calls it, and its own choices are in
+`models/qwen2/plan.mojo`. Construct either with `(ctx, capacity, reuse_layers)`,
 where reuse is 1 for the hot case or 24 for the measured ring. That integer is
 a caller-supplied reuse description; creating one cache does not allocate or
 execute 24 model layers. `cache.prefill_splits()` supplies the partial-workspace

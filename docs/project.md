@@ -42,6 +42,11 @@ integration, native generation and workload-specific optimization. Eleven
 measured cells reduce synchronized full-model forward time by 5.6–51.2% against
 our optimized configuration 0 on M4 Pro / Metal. Other shapes retain that
 baseline; the result does not establish a universal best kernel or an HF speedup.
+The [composed decode study](../studies/model_generation/residual-norm.md) then
+promoted the single-row route that every generated token uses: configuration 26
+with GPU argmax, buffer swapping and residual/RMSNorm fusion. It lowers
+complete-token latency by 17.1–24.5% against the previous Fast route and
+streams 107–115 tokens/s after the first token.
 
 The [chat study](../studies/model_generation/chat.md) adds exact template fixtures,
 three-turn cache checks, full-history numerical diagnostics, paired cache-reuse
@@ -81,10 +86,16 @@ research questions, not prerequisites for calling the current milestone complete
 2. **Matched HF comparison.** Numerical comparisons already exist. A performance
    study must name the HF backend/device, precision, identical token workload,
    cache behavior and timing boundary before comparing prefill or decode.
-3. **Further Fast optimization.** Profile complete application phases over
-   representative prompt and context lengths. Use measured bottlenecks to choose
-   the next experiment, including any allocation, copying or synchronization work.
-   Keep current measurements as the baseline and retain new numerical diagnostics.
+3. **Further Fast optimization.** Decode is now limited by host submission.
+   About 98% of each token's launch-submission interval is inside MAX's enqueue
+   runtime, and reusing compiled kernel handles gave no qualifying speedup
+   ([runtime enqueue](../studies/model_generation/runtime-enqueue.md)). The
+   pinned Metal backend cannot record command graphs, so batching launches is
+   unavailable ([batching feasibility](../studies/model_generation/batch-support.md)).
+   What remains is fewer launches per token, or batching below MAX's public API.
+   Prefill is now the largest cost a user sees: the first token of a
+   3,839-token prompt takes about 2.1 s. Keep current measurements as the
+   baseline and retain new numerical diagnostics.
 4. **Serving engine.** Serve many concurrent requests with batched decode, a
    paged KV cache, continuous batching and prefix caching, behind a separate
    frontend process that survives engine failures. The [serving plan](serving-plan.md)

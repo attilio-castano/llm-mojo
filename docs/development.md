@@ -62,9 +62,10 @@ The software environment observed on 2026-08-20 was:
 - `uv` 0.12.5;
 - Mojo 1.0.0 and MAX 26.5.0 as resolved by `uv.lock`.
 
-This snapshot establishes the development environment; it does not prove that
-a Mojo workload executed on the GPU. Every GPU result must report the runtime's
-device and backend identity and must satisfy the project's
+Later recorded runs used macOS 26.6.2; each benchmark record carries its own
+software versions. This snapshot establishes the development environment; it
+does not prove that a Mojo workload executed on the GPU. Every GPU result must
+report the runtime's device and backend identity and must satisfy the project's
 [evidence requirements](project.md#evidence).
 
 Mutable conditions belong in each benchmark record rather than in this machine
@@ -124,15 +125,34 @@ independent oracle generators remain under `tests/`. See the
 [CLI compatibility table](cli.md#validation-and-compatibility) for retained
 study commands and their canonical replacements.
 
-This regenerates every independent oracle into ignored `build/oracle_data/`,
-checks its SHA-256 against the frozen anchors (the original fixtures at
-`a86f4db` and the subsequently added prefill oracle), runs
-Python tooling tests, and runs every Mojo correctness suite on Metal with
-`MODULAR_DEBUG=device-sync-mode`. The frozen tolerances, diagnostic tensors,
-ragged tiles, full and incremental prefill, and all 24 decode cases remain.
-Prefill adds 29 Qwen-shape cases and full-versus-suffix, causal-independence and
-extreme-score regression checks across sixteen routes, including the five resource ablations. Its generated NumPy
-arrays are loaded only by tests; inference and timed paths remain Mojo.
+Validation runs in four stages, stopping at the first failure:
+
+1. **Oracles.** It regenerates every independent oracle into ignored
+   `build/oracle_data/` and checks each against its frozen anchor: the original
+   fixtures at `a86f4db`, the prefill and attention-sublayer manifests, the MLP,
+   decoder and model-calibration self-tests, the tokenizer references (including
+   a Unicode run) and the packed chat fixtures. Tokenizer tables must already be
+   prepared; validation never downloads.
+2. **Python tests.** Setup and the shared store, the CLI and configuration,
+   launch boundaries, evidence replays, numerical tooling and documentation links.
+3. **Mojo suites.** Every `tests/test_*.mojo` runs on Metal with
+   `MODULAR_DEBUG=device-sync-mode`.
+4. **Route smoke.** Every maintained benchmark route runs once, and invalid
+   selectors must be rejected.
+
+| Level | Mojo suites |
+| --- | --- |
+| Kernels | `test_rms_norm`, `test_linear`, `test_rope`, `test_swiglu`, `test_residual_norm`, `test_token_selection`, `test_attention_primitives` |
+| Attention | `test_attention`, `test_attention_decode`, `test_attention_decode_benchmark`, `test_attention_prefill`, `test_attention_precision`, `test_attention_sublayer`, `test_attention_sublayer_operations`, `test_qkv_fusion` |
+| MLP and decoder layer | `test_mlp`, `test_decoder_layer`, `test_decoder_selection`, `test_consistency` |
+| Model and runtime | `test_model`, `test_execution_plan`, `test_decode_route`, `test_chat`, `test_tokenizer`, `test_import` |
+
+The attention suites keep their frozen tolerances, diagnostic tensors, ragged
+tiles, full and incremental prefill, and all 24 decode cases. Prefill adds 29
+Qwen-shape cases and full-versus-suffix, causal-independence and extreme-score
+regression checks across sixteen routes, including the five resource ablations.
+Its generated NumPy arrays are loaded only by tests; inference and timed paths
+remain Mojo.
 Normal-mode stress for the new schedules uses `-D PREFILL_REPEAT=12` on
 `tests/test_attention_prefill.mojo`, with `MODULAR_DEBUG` unset.
 The Torch/Transformers oracles share the isolated script environment in

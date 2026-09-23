@@ -77,8 +77,13 @@ The public API lives in `src/llm_mojo/layers/attention_sublayer.mojo`:
 `enqueue_attention_sublayer_integrated`. The caller owns buffers and chooses
 mappings explicitly. The integrated default uses packed 8×16 QKV/Wo for R≥16
 and rowwise projections below that threshold. GQA mapping 4 selects split8;
-projection mapping 5 selects both 16×16 projections. Their composition is the
-only additional nonzero mapping pair enabled by the latest experiment.
+projection mapping 5 selects both 16×16 projections. Their composition is
+decoder configuration 3. For one Qwen decode row, `fuse_qkv` keeps the packed
+rowwise QKV projection and replaces its unpack, both RoPE launches and the cache
+append with one kernel; decoder configuration 26 uses it. The consistent routes
+pair GQA mapping 5 (FP32 G32 attention at every row count) with projection
+mapping 0, 6 (8×16 MMA at every row count) or 7 (packed QKV reusing each weight
+across four rows).
 
 ```sh
 uv run --locked llm-mojo validate

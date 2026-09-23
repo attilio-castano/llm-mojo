@@ -22,14 +22,16 @@ invariants.
 `QwenModel` owns one BF16 embedding allocation, also used as the tied LM head,
 the final RMSNorm weights, 24 distinct learned decoder weight sets, and 24
 independent persistent KV caches. It owns one attention workspace, one MLP
-workspace, input staging, a final normalized row and next-token logits. Clients
-must preserve this ownership; replacing internal allocations is unsupported.
+workspace, input and token staging, a final normalized row, next-token logits
+and the GPU argmax partial and result buffers. Clients must preserve this
+ownership; replacing internal allocations is unsupported.
 
-The first implementation copies each intermediate decoder output into distinct
-input storage before the next layer. This satisfies the existing decoder's
-input/output nonaliasing rule. There is no host synchronization between layers
-in normal execution. A later measured buffer-rotation experiment may eliminate
-these copies without changing arithmetic; no speedup is claimed now.
+The decoder requires its input and output storage not to alias. Multi-row calls
+copy each intermediate decoder output into the separate input buffer before the
+next layer. Single-row Fast calls instead swap the owners of the input and MLP
+output buffers, which removes 23 copies without changing arithmetic. The last
+layer does not swap, so the final normalization reads the MLP output. There is
+no host synchronization between layers in normal execution.
 
 Every call preflights all layers, token IDs, shapes, allocation extents, row
 capacity, cache lengths and configuration requirements before the first model
@@ -80,12 +82,11 @@ preservation, append storage and inactive capacity across mixed configurations.
 
 ## Prepared checkpoint and reference
 
-Use the pinned assets and hashes from [model.md](model.md). The existing explicit
-download command is:
-
-```sh
-uv run --locked --script tests/fixtures/generate.py attention_checkpoint -- --download --download-only
-```
+Use the pinned assets and hashes from [model.md](model.md). `uv run llm-mojo setup`
+downloads or imports them once per machine into the shared store and prepares
+the model there (see [commands](cli.md#prepare-and-run)); `llm-mojo models
+prepare` is its asset-only part. The fixture scripts read the checkpoint through
+this checkout's `build/checkpoints/` links.
 
 Preparation runs the pinned Torch/Transformers environment, verifies the full
 checkpoint/configuration hashes, rejects incomplete model loading, and writes
@@ -94,16 +95,19 @@ concatenated in source output-row order. Rotary tables come from the pinned
 upstream implementation. Python is used for preparation and reference execution;
 no Python interop runs in the native model or text generator.
 
+Setup runs the preparation script into a staging directory and publishes the
+result only after verification. To prepare a separate copy directly:
+
 ```sh
-uv run --locked --script tests/fixtures/model_reference.py prepare --output build/model-prepared-v1
+uv run --locked --script tests/fixtures/model_reference.py prepare --output /new/directory
 ```
 
-Preparation requires a new output directory. It does not run the historical
+The script requires a new output directory. It does not run the historical
 qualification workflow. For the complete interactive setup, see the
 [README quickstart](../README.md#run-the-chat).
 
 Under the historical qualification workflow, failure prevents dependent comparison.
-The new `model_reference.py diagnose` / `model_validation diagnose` workflow
+The `model_reference.py diagnose` / `validation.model diagnose` workflow
 captures corresponding histories without requiring qualification; it retains
 numerical distances separately from required exact storage checks. The historical
 `model_reference.py qualify` command is expected to reproduce its original
