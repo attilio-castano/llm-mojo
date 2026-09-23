@@ -152,9 +152,10 @@ Read from the working application down to the operations, or start with a kernel
 
 The [study index](studies/README.md) links retained evidence and regeneration
 commands. The [project direction](docs/project.md) separates the completed Fast
-milestone from follow-ups: schedule determinism, matched HF benchmarking and
-further optimization driven by measured application costs. Sampling,
-quantization, batching and additional models remain outside the current scope.
+milestone from follow-ups: schedule determinism, matched HF benchmarking,
+further optimization driven by measured application costs and a multi-request
+[serving engine](docs/serving-plan.md). Sampling, quantization and additional
+models remain outside the current scope.
 
 ## Development
 

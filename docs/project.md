@@ -83,10 +83,15 @@ research questions, not prerequisites for calling the current milestone complete
    representative prompt and context lengths. Use measured bottlenecks to choose
    the next experiment, including any allocation, copying or synchronization work.
    Keep current measurements as the baseline and retain new numerical diagnostics.
+4. **Serving engine.** Serve many concurrent requests with batched decode, a
+   paged KV cache, continuous batching and prefix caching, behind a separate
+   frontend process that survives engine failures. The [serving plan](serving-plan.md)
+   defines its architecture, exact gates and phases. Its batch-invariance
+   requirement extends schedule determinism to batch composition and cache history.
 
-Sampling, quantization, longer contexts, batching, tool-oriented templates and
-additional model families can follow when they answer a concrete need. They are
-not current functionality or commitments for the next milestone.
+Sampling, quantization, longer contexts, tool-oriented templates and additional
+model families can follow when they answer a concrete need. They are not current
+functionality or commitments for the next milestone.
 
 ## Method
 
