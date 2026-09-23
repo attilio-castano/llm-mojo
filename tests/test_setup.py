@@ -475,6 +475,19 @@ class ProvisionTests(unittest.TestCase):
         downloads = sum(size for size, _ in assets.CHECKPOINT_FILES.values())
         self.assertEqual(requested, [downloads + assets.PREPARED_BYTES, 0, assets.PREPARED_BYTES])
 
+    def test_separate_copy_creates_its_parent_and_clones(self):
+        sources = self.sources(self.worktree())
+        self.provision(sources)
+        output = self.root / 'new/parent/model'
+        # Without the parent, cp -c fails and the copy silently becomes a full byte copy.
+        with self.passing_toolchain(), patch.object(assets, 'import_sources', return_value=sources), \
+             patch.object(store.shutil, 'copytree', side_effect=AssertionError('fell back to a full copy')), \
+             redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.assertEqual(assets.prepare(output, root=self.store), output)
+        assets.verify_prepared(output)
+        self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o755)
+        self.assertEqual([p.name for p in output.parent.iterdir()], ['model'])
+
     def test_prepare_refuses_when_preparation_prerequisites_fail(self):
         missing_uv = toolchain.Check('uv on PATH', False, 'not found', 'Install uv', 'prepare')
         with patch.object(toolchain, 'uv_check', return_value=missing_uv), \

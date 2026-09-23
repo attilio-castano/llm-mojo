@@ -421,6 +421,8 @@ def prepare(output=None, *, download=False, root=None):
         verify_prepared(target)
         print('Verified prepared model:', target)
         return target
+    # Stage beside the target so publishing is one rename; cloning needs the parent to exist.
+    target.parent.mkdir(parents=True, exist_ok=True)
     staged = target.with_name(f'.{target.name}.partial')
     store.remove_staged(staged)
     try:
