@@ -21,27 +21,29 @@ locked Mojo and MAX environment. The measured reference machine is an M4 Pro
 with a 20-core GPU and 24 GB of unified memory; minimum hardware requirements
 have not been established.
 
-Prepare the pinned tokenizer and checkpoint once, from the repository root:
+Set everything up once, from the repository root:
 
 ```sh
-uv sync --locked
-uv run llm-mojo models prepare qwen2.5-0.5b-instruct --download
+uv run llm-mojo setup
 ```
 
-The checkpoint download is approximately 988 MB; preparation writes additional
-model tensors locally. Assets are verified against the [pinned model contract](docs/model.md)
-and remain outside Git. Preparation verifies and reuses an existing prepared
-model. Omit `--download` to require local checkpoint assets.
+Setup checks Xcode and the Metal toolchain, fetches the pinned checkpoint, prepares
+the BF16 model tensors and builds the chat executable. The checkpoint download is
+about 1 GB and happens once per Mac: models live in a shared store
+(`~/.cache/llm-mojo`, or `LLM_MOJO_CACHE_DIR`) that every checkout and worktree
+links to, and setup reuses any verified copy it finds instead of downloading.
+Assets are verified against the [pinned model contract](docs/model.md) and remain
+outside Git. `uv run llm-mojo setup --check` reports readiness without changing
+anything.
 
 ```sh
 uv run llm-mojo chat
 ```
 
-Chat defaults to this checkout's `build/model-prepared-v1`. Use
-`--prepared /path/to/model` for a checkpoint prepared elsewhere.
+Chat defaults to this checkout's `build/model-prepared-v1`, a link into the shared
+store. Use `--prepared /path/to/model` for a checkpoint prepared elsewhere.
 
-The first launch compiles the executable. Type a message and the reply streams
-to the terminal. `/reset` clears the conversation while keeping weights loaded;
+Type a message and the reply streams to the terminal. `/reset` clears the conversation while keeping weights loaded;
 `/exit` or Ctrl-D exits. Ctrl-C cancels input or interrupts a reply. See the
 [chat guide](docs/chat.md) for controls, custom system messages and context limits.
 
