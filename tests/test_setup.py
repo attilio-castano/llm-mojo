@@ -221,6 +221,7 @@ class PinTests(unittest.TestCase):
         self.assertEqual(pinned['model.safetensors'], literal('tests/fixtures/model_reference.py', 'WEIGHT_SHA'))
         self.assertEqual(pinned['config.json'], literal('tests/fixtures/model_reference.py', 'CONFIG_SHA'))
         self.assertEqual(pinned['tokenizer.json'], tokenizer_assets.SOURCE_SHA)
+        self.assertEqual(assets.CHECKPOINT_FILES['tokenizer.json'][0], tokenizer_assets.SOURCE_BYTES)
         for name, digest in literal('tests/fixtures/chat_reference.py', 'HASHES').items():
             self.assertEqual(pinned[name], digest)
         documented = dict(reversed(line.split()) for line in

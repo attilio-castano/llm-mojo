@@ -13,14 +13,15 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-import urllib.request
 
 from llm_mojo._repository import repository_root
 from llm_mojo.runtime.artifacts import sha, atomic_write, setup_lock
+from llm_mojo.runtime.store import download as download_verified
 
 MODEL_ID = "qwen2.5-0.5b-instruct"
 REVISION = "7ae557604adf67be50417f59c2c2f167def9a775"
 SOURCE_SHA = "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539"
+SOURCE_BYTES = 7031645
 URL = f'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/resolve/{REVISION}/tokenizer.json'
 FORMAT = 1
 MAGIC = 0x51425431
@@ -42,18 +43,13 @@ def ensure_source(directory, *, download=False):
             )
         return path
     if not download:
-        raise FileNotFoundError(f'{path}; run llm-mojo tokenizer setup first')
+        raise FileNotFoundError(f'{path} is missing; run: uv run llm-mojo setup')
     print(
         "Downloading pinned tokenizer.json (7 MB)...",
         file=sys.stderr,
         flush=True,
     )
-    with urllib.request.urlopen(URL, timeout=60) as response:
-        data = response.read(8_000_001)
-    if hashlib.sha256(data).hexdigest() != SOURCE_SHA:
-        raise ValueError("downloaded tokenizer checksum mismatch")
-    atomic_write(path, data)
-    return path
+    return download_verified(URL, path, SOURCE_BYTES, SOURCE_SHA, read_only=False)
 
 
 def byte_decoder():
@@ -277,7 +273,8 @@ def ensure_binary():
 
 def main(argv=None):
     p = argparse.ArgumentParser(
-        description="Prepare or execute the pure Mojo Qwen tokenizer."
+        prog="llm-mojo tokenizer",
+        description="Prepare or execute the pure Mojo Qwen tokenizer.",
     )
     p.add_argument("operation", choices=["setup", "encode", "decode"])
     p.add_argument(
