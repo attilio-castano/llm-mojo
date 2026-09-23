@@ -12,7 +12,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, LogLocator
 
-from .study import load_run, load_profile
+from .study import load_run, load_profile, run_directories
 
 from .._repository import repository_root
 COLORS = ['#6b7280', '#167d9a', '#c75b39', '#8064a2', '#579059']
@@ -1088,7 +1088,8 @@ def main():
     parser.add_argument('directories', nargs='*', type=Path)
     parser.add_argument('--policies', action='store_true', help='Replay the decoder policy campaign and regenerate its report tables/figure')
     args = parser.parse_args()
-    directories = args.directories or ([repository_root()/'studies/decoder_layer'] if args.policies else sorted((repository_root() / 'studies').glob('*/')))
+    directories = args.directories or ([repository_root()/'studies/decoder_layer'] if args.policies
+                                       else run_directories(repository_root()/'studies'))
     for directory in directories:
         if args.policies:render_decoder_policies(directory)
         else:render(directory)
