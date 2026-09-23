@@ -83,6 +83,17 @@ class DocumentationLinkTests(unittest.TestCase):
             with self.subTest(page=page.name):
                 self.assertIn(HISTORY_BANNER, page.read_text().split('\n\n', 2)[1])
 
+    def test_walkthrough_code_links_name_defined_symbols(self):
+        # [`Name`](file) or [`Type.member`](file): every part is defined in the linked source.
+        text = (ROOT / 'docs/walkthrough.md').read_text()
+        links = re.findall(r'\[`([A-Za-z_][\w.]*)`\]\(([^)#]+\.(?:mojo|py))\)', text)
+        self.assertGreater(len(links), 30)
+        for name, target in links:
+            source = (ROOT / 'docs' / target).resolve().read_text()
+            for part in name.split('.'):
+                with self.subTest(symbol=name, file=target, part=part):
+                    self.assertRegex(source, rf'(?m)^\s*(?:def|struct|class|comptime|fn|trait)\s+{re.escape(part)}\b')
+
     def test_slugs_follow_github_rules(self):
         self.assertEqual(slug('Run the `chat` command'), 'run-the-chat-command')
         self.assertEqual(slug('Correctness and diagnostic policy'), 'correctness-and-diagnostic-policy')

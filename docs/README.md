@@ -15,6 +15,7 @@ Each fact has one home; other pages give a sentence and a link. Start with the
 
 | Page | What it covers |
 | --- | --- |
+| [How a token flows through the engine](walkthrough.md) | One chat turn from the command line to streamed text, with shapes, sizes and where the time goes |
 | [Project direction](project.md) | Goal, what the evidence establishes, determinism and the next research questions |
 | [Layout notation](layouts.md) | How logical values, storage, thread ownership and reduction order are written down |
 | [Serving plan](serving-plan.md) | The proposed multi-request engine: interfaces, KV blocks, gates and phases |
