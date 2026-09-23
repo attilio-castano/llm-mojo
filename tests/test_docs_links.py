@@ -7,8 +7,6 @@ ROOT = Path(__file__).resolve().parents[1]
 IGNORED = {'.git', '.venv', 'build'}
 # Reachability covers the reader-facing trees; other READMEs link into them freely.
 MAPPED = ('docs', 'studies')
-# Pages the documentation map does not reach yet.
-UNMAPPED = {'studies/decoder_layer/policies_results.md'}
 HISTORY_BANNER = '> **Historical record**, kept as written.'
 
 
@@ -76,7 +74,7 @@ class DocumentationLinkTests(unittest.TestCase):
             queue.extend(target for target, _ in links(page) if target.suffix == '.md' and target.exists())
         mapped = {p for p in pages() if p.relative_to(ROOT).parts[0] in MAPPED}
         unreached = {str(p.relative_to(ROOT)) for p in mapped - reached}
-        self.assertEqual(unreached, UNMAPPED)
+        self.assertEqual(unreached, set())
 
     def test_history_pages_are_labelled(self):
         records = [p for p in (ROOT / 'docs/history').glob('*.md') if p.name != 'README.md']

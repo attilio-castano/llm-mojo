@@ -132,7 +132,8 @@ implemented ownership boundaries justify it. Tests live in
 `tests/fixtures/`. Reusable measurement tools belong in
 `src/llm_mojo/benchmarks/`; studies own explanations and compact measured evidence.
 
-Usage and current contracts belong in `docs/`. Completed plans and numerical
+Usage and current contracts belong in `docs/`, listed by the
+[documentation map](README.md). Completed plans and numerical
 investigations remain linked as [history](history/README.md), so they do not
 obscure the current entry point. A new parameter choice usually belongs in an
 existing measurement matrix, not a new experiment hierarchy. Weights, generated

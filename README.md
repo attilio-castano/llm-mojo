@@ -152,7 +152,8 @@ Read from the working application down to the operations, or start with a kernel
 | GPU operations | [RMSNorm](studies/rms_norm/README.md) · [linear decode](studies/linear_decode/README.md) · [linear prefill](studies/linear_prefill/README.md) · [RoPE](studies/rope/README.md) · [GQA decode](studies/gqa_decode/README.md) · [GQA prefill](studies/gqa_prefill/README.md) |
 | Text processing | [Native tokenizer](docs/tokenizer.md) · [CPU measurements](studies/tokenizer/README.md) |
 
-The [study index](studies/README.md) links retained evidence and regeneration
+The [documentation map](docs/README.md) lists every guide and contract; the
+[study index](studies/README.md) links retained evidence and regeneration
 commands. The [project direction](docs/project.md) separates the completed Fast
 milestone from follow-ups: schedule determinism, matched HF benchmarking,
 further optimization driven by measured application costs and a multi-request

@@ -3,7 +3,8 @@
 These pages record plans and investigations that are complete or superseded.
 They are kept as written, apart from link paths, so that the reasoning behind
 the current engine stays inspectable. None of them describes current behavior;
-each entry names the documents that do.
+each entry names the documents that do, and the
+[documentation map](../README.md) lists all current guidance.
 
 | Record | What it was | Outcome | Current guidance |
 | --- | --- | --- | --- |
