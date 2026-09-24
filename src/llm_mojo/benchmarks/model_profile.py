@@ -1,7 +1,8 @@
-"""Collect and replay the bounded full-model token profiling study.
+"""Collect the Fast-route token profile; replay every retained full-model archive.
 
-Build/run/capture require a clean local checkout and verified local assets.
-Replay needs only the retained archive. The fusion experiment keeps an explicit control.
+Build/run/capture require a clean local checkout and verified local assets and
+measure the current Fast route. Completed decode experiments are replay-only:
+their archives, parsers and summaries remain, their collectors do not.
 """
 import argparse
 from collections import Counter, defaultdict
@@ -52,22 +53,8 @@ def assets(prepared):
                 prepared_sha256=sha(prepared/'manifest.json'), tables_sha256=sha(tables))
 
 
-def build(output, prepared, fusion=False, combined=False, selection=False, copy_free=False, composition=False, projection=False):
-    if projection:
-        if fusion or combined or selection or copy_free or composition:
-            raise ValueError("projection study selects its own matrix")
-        return selection_build(output,prepared,projection=True)
-    if composition:
-        if fusion or combined or selection or copy_free:
-            raise ValueError('residual-norm selects its own independent and composed matrix')
-        return selection_build(output,prepared,composition=True)
-    if copy_free and (combined or selection):
-        raise ValueError("copy-free is a separate bounded study")
-    if selection:
-        return selection_build(output,prepared)
-    fusion = fusion or combined or copy_free
-    default_combined = not fusion and contract.FAST_DECODE_CONFIGURATION == 26
-    default_variant = contract.FAST_DECODE_VARIANT if not fusion else 0
+def build(output, prepared):
+    """Fast-route executables: model driver, terminal, and one trace binary per context."""
     ensure_record_location(output)
     output.mkdir(parents=True, exist_ok=False)
     source = source_identity()
@@ -75,24 +62,15 @@ def build(output, prepared, fusion=False, combined=False, selection=False, copy_
         raise ValueError('model profiling build requires clean source')
     identity = assets(prepared)
     binaries = {}
-    for name, entry in [('model', 'benchmarks/model.mojo'), ('terminal', 'chat_cli.mojo')]:
-        command = [environment_tool('mojo'), 'build', '-I', 'src',
-                   *(['-D','MODEL_FUSION_STUDY'] if fusion else []),
-                   *(['-D','MODEL_COPY_FREE_STUDY'] if copy_free else []),
-                   *(['-D',f'MODEL_DEFAULT_VARIANT={default_variant}'] if default_variant else []),
-                   *(['-D','MODEL_COMBINED_STUDY'] if combined else []),
-                   'src/llm_mojo/'+entry, '-o', output/name]
+    for name, entry in [('model', 'benchmarks/model.mojo'), ('terminal', 'cli/chat_cli.mojo')]:
+        command = [environment_tool('mojo'), 'build', '-I', 'src', 'src/llm_mojo/'+entry, '-o', output/name]
         execute(command, output/f'{name}-build.log')
         binaries[name] = dict(sha256=sha(output/name), bytes=(output/name).stat().st_size)
     machine = stable_environment()
-    for prefix, fused in ([(1024,False),(1024,True)] if fusion else [(p,default_combined) for p in contract.PREFIXES]):
-        name = f'profile-{prefix}'+('-fused' if fusion and fused else '')
+    implementation = contract.COMPOSITION_IMPLEMENTATIONS[contract.FAST_DECODE_VARIANT]
+    for prefix in contract.PREFIXES:
+        name = f'profile-{prefix}'
         command = [environment_tool('mojo'), 'build', '-I', 'src',
-                   *(['-D','MODEL_FUSION_STUDY'] if fusion else []),
-                   *(['-D','MODEL_COPY_FREE_STUDY'] if copy_free else []),
-                   *(['-D',f'MODEL_DEFAULT_VARIANT={default_variant}'] if default_variant else []),
-                   *(['-D','MODEL_COMBINED_STUDY'] if combined or default_combined else []),
-                   *(['-D','MODEL_FUSION_PROFILE'] if fused else []),
                    '-D', f'MODEL_PROFILE_PREFIX={prefix}',
                    '-D', 'MODEL_PREPARED='+identity['prepared'],
                    '-D', 'MODEL_TABLES='+identity['tables'],
@@ -100,11 +78,6 @@ def build(output, prepared, fusion=False, combined=False, selection=False, copy_
         execute(command, output/f'{name}-build.log')
         binary = dict(sha256=sha(output/name), bytes=(output/name).stat().st_size)
         binaries[name] = binary
-        implementation = 'qwen_model_combined' if fused and (combined or default_combined) else ('qwen_model_fused' if fused else 'qwen_model_fast')
-        if copy_free:
-            implementation = 'qwen_model_buffer_swap' if fused else 'qwen_model_combined'
-        if default_variant:
-            implementation = contract.COMPOSITION_IMPLEMENTATIONS[default_variant]
         provenance = dict(schema_version=1, operation=contract.OPERATION,
                           implementation=implementation,
                           entrypoint=contract.ENTRYPOINTS[implementation],
@@ -118,7 +91,7 @@ def build(output, prepared, fusion=False, combined=False, selection=False, copy_
     if source_identity() != source or assets(prepared) != identity:
         raise ValueError('source or assets changed during compilation')
     write(output/'build.json', dict(source=source, assets=identity, environment=machine,
-                                    declaration=contract.COPY_FREE_DECLARATION if copy_free else (contract.COMBINED_DECLARATION if combined else (contract.FUSION_DECLARATION if fusion else contract.DECLARATION)), binaries=binaries))
+                                    declaration=contract.DECLARATION, binaries=binaries))
 
 
 def verify_build(directory):
@@ -207,98 +180,33 @@ def validate_swap_checks(checks,extra_norm=False):
         raise ValueError('buffer-swap lifecycle state changed')
 
 
-def verify_swap_snapshots(directory,extra_norm=False):
-    if (directory/'driver.log').read_text().count('SWAP_LIFECYCLE_COMPLETE')!=1:
-        raise ValueError('native buffer-swap lifecycle incomplete')
-    def compare(name,left,right,size):
-        a=left.read_bytes(); b=right.read_bytes()
-        if a!=b or len(a)!=size:
-            raise ValueError('buffer-swap byte parity failed: '+name)
-        return dict(name=name,exact=True,bytes=len(a),sha256=hashlib.sha256(a).hexdigest())
-    layers=[]
-    for name in swap_capture_names(extra_norm):
-        size = 1048576 if name.startswith('cache_') else (256 if name.startswith('append_') else (303872 if name=='logits.bin' else 1792))
-        layers.append(compare(name,directory/'layers-control'/name,directory/'layers-candidate'/name,size))
-    lifecycle=[]
-    for name in swap_lifecycle_names():
-        if name.startswith('step-'):
-            index=name.split('-')[1]
-            left=directory/f'lifecycle-0-{index}.bin';right=directory/f'lifecycle-1-{index}.bin'
-            size=303872
-        else:
-            tensor=name.removeprefix('final-')
-            left=directory/f'lifecycle-final-0-{tensor}.bin';right=directory/f'lifecycle-final-1-{tensor}.bin'
-            size=303872 if tensor=='logits' else 1048576
-        lifecycle.append(compare(name,left,right,size))
-    state=(directory/'lifecycle-0.txt').read_text()
-    if state!=(directory/'lifecycle-1.txt').read_text():
-        raise ValueError('buffer-swap lifecycle tokens/accounting changed')
-    checks=dict(layers=layers,lifecycle=lifecycle,states=[list(map(int,line.split())) for line in state.splitlines()],
-                owners_checked=True,rejection_checked=True)
-    validate_swap_checks(checks,extra_norm)
-    return checks
-
-
 def collect(directory, output):
     ensure_record_location(output)
     receipt = verify_build(directory)
+    if receipt['declaration'] != contract.DECLARATION:
+        raise ValueError('only current Fast-route builds can be collected; completed experiments are replay-only')
     output.mkdir(parents=True, exist_ok=False)
     args = receipt['assets']
-    base = [directory/'model', 'verify', args['prepared'], args['tables']]
     numerical = []
-    selection = receipt['declaration']==contract.SELECTION_DECLARATION
-    copy_free = receipt['declaration']==contract.COPY_FREE_DECLARATION
-    projection = receipt['declaration']==contract.PROJECTION_DECLARATION
-    composition = receipt['declaration']==contract.COMPOSITION_DECLARATION
     for prefix in contract.PREFIXES:
-        for candidate in (list(range(1,6)) if projection else [1,2,3] if composition else ([1,2] if selection else [0])):
-            target = output/(f'verify-{prefix}'+(f'-s{candidate}' if selection or composition or projection else ''))
-            target.mkdir()
-            if (copy_free or composition or projection) and prefix == 64:
-                for name in ('layers-control','layers-candidate'):
-                    (target/name).mkdir()
-            stdout = execute([*base, prefix, 0, candidate, target], target/'driver.log')
-            if 'VERIFY_COMPLETE' not in stdout:
-                raise ValueError('native verification incomplete')
-            check = verify_snapshots(target, prefix)
-            if selection:
-                actual = []
-                for observation in check['observations']:
-                    name = observation['name']
-                    path = target/f'actual-{name}.bin'
-                    got = np.fromfile(path,dtype='<u2')
-                    expected = np.full(151936,0x7FC0,dtype='<u2') if name=='logits' and candidate==2 else np.fromfile(target/f'plain-{name}.bin',dtype='<u2')
-                    if not np.array_equal(got,expected):
-                        raise ValueError('actual selection path changed storage')
-                    actual.append(dict(name=name,exact=True,sha256=sha(path)))
-                check.update(selection=candidate,actual=actual,nonfinite_invalidates=True)
-            if (copy_free or composition) and prefix == 64:
-                check["swap_checks"] = verify_swap_snapshots(target,extra_norm=composition)
-            if projection and prefix == 64:
-                layers=[]
-                for name in swap_capture_names(extra_norm=True):
-                    left=target/'layers-control'/name;right=target/'layers-candidate'/name
-                    size=1048576 if name.startswith('cache_') else 256 if name.startswith('append_') else 303872 if name=='logits.bin' else 1792
-                    if left.read_bytes()!=right.read_bytes() or left.stat().st_size!=size:
-                        raise ValueError('projection layer storage changed: '+name)
-                    layers.append(dict(name=name,exact=True,bytes=size,sha256=sha(left)))
-                check['layers']=layers
-            if composition or projection:
-                check["variant"] = candidate
-            numerical.append(check)
-    combined = receipt['declaration']==contract.COMBINED_DECLARATION
+        target = output/f'verify-{prefix}'
+        target.mkdir()
+        stdout = execute([directory/'model', 'verify', args['prepared'], args['tables'], prefix, 0, 0, target],
+                         target/'driver.log')
+        if 'VERIFY_COMPLETE' not in stdout:
+            raise ValueError('native verification incomplete')
+        numerical.append(verify_snapshots(target, prefix))
     samples, blocks = [], []
     for block in range(4):
         before = conditions()
         reverse = block in (1, 2)
         prefixes = list(reversed(contract.PREFIXES)) if reverse else contract.PREFIXES
         for prefix in prefixes:
-            for comparison in ((list(reversed(range(6))) if reverse else range(6)) if composition or projection else (([3,2,1,0] if reverse else [0,1,2,3]) if selection else (([2,1,0] if reverse else [0,1,2]) if combined else ([1, 0] if reverse else [0, 1])))):
+            for comparison in ([1, 0] if reverse else [0, 1]):
                 stdout = execute([directory/'model', 'bench', args['prepared'], args['tables'],
                                   prefix, int(reverse), comparison, ''],
                                  output/f'p{prefix}-b{block}-c{comparison}.log')
-                samples.extend(parse_samples(stdout, prefix, block, comparison,
-                                             observed=receipt['declaration']==contract.DECLARATION))
+                samples.extend(parse_samples(stdout, prefix, block, comparison))
         blocks.append(dict(block=block, before=before, after=conditions()))
         print(f'Completed timing block {block+1}/4', flush=True)
     if verify_build(directory) != receipt:
@@ -634,71 +542,6 @@ def plot(directory):
     plt.close(fig)
 
 
-def fusion_capture(directory, output):
-    """One control and one candidate capture at the representative context."""
-    from .capture_trace import capture_trace
-    receipt = verify_build(directory)
-    if receipt['declaration'] not in (contract.FUSION_DECLARATION,contract.COMBINED_DECLARATION,contract.COPY_FREE_DECLARATION):
-        raise ValueError('not a fusion build')
-    ensure_record_location(output)
-    output.mkdir(parents=True,exist_ok=False)
-    for fused in (False,True):
-        name = 'profile-1024'+('-fused' if fused else '')
-        target = output/('fused' if fused else 'control')
-        target.mkdir()
-        before = conditions()
-        capture_trace(profile_binary=directory/name,output_trace=target/'raw.trace',
-                      receipt_path=target/'capture.json',time_limit='30s')
-        write(target/'conditions.json',dict(before=before,after=conditions()))
-        (target/'profile.provenance.json').write_bytes((directory/(name+'.provenance.json')).read_bytes())
-        export_trace(target)
-        curated = curate(target,1024,0)
-        write(target/'curated.json',curated)
-        print('Verified fusion capture',name,len(curated['samples']),flush=True)
-    verify_build(directory)
-
-
-def fusion_terminal(directory, output):
-    receipt = verify_build(directory)
-    if receipt['declaration'] not in (contract.FUSION_DECLARATION,contract.COMBINED_DECLARATION,contract.COPY_FREE_DECLARATION):
-        raise ValueError('not a fusion build')
-    ensure_record_location(output)
-    output.mkdir(parents=True,exist_ok=False)
-    sys.path.insert(0,str(repository_root()/'tests'))
-    from chat_terminal import events, validate
-    original = json.loads(gzip.decompress((repository_root()/'studies/model_generation/token-profile.json.gz').read_bytes()))
-    prompts = original['terminal']['prompts']
-    inputs = ('\n/reset\n'.join(p.replace('\n',' ') for p in prompts)+'\n/exit\n').encode()
-    identity = receipt['assets']
-    blocks = []
-    for block in range(4):
-        before = conditions()
-        arms = []
-        outputs = []
-        for fused in ([True,False] if block in (1,2) else [False,True]):
-            report = output/f'b{block}-f{int(fused)}.tsv'
-            command = list(map(str,[directory/'terminal',identity['prepared'],identity['tables'],128,256,
-                                    '',report,(('buffer-swap' if fused else 'combined') if receipt['declaration']==contract.COPY_FREE_DECLARATION else (('combined' if receipt['declaration']==contract.COMBINED_DECLARATION else 'fusion') if fused else 'unfused'))]))
-            result = subprocess.run(command,cwd=repository_root(),env=environment(),input=inputs,
-                                    stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=240)
-            (output/f'b{block}-f{int(fused)}.txt').write_bytes(result.stdout)
-            if result.returncode:
-                raise ValueError('fusion terminal failed')
-            ev = events(report)
-            turns = validate(ev,128)
-            if len(turns)!=3:
-                raise ValueError('missing fusion terminal turns')
-            arms.append(dict(fused=fused,events=ev,turns=turns,output_sha256=hashlib.sha256(result.stdout).hexdigest()))
-            outputs.append(result.stdout)
-        if outputs[0]!=outputs[1] or any(a['generated']!=b['generated'] or a['history']!=b['history']
-                                       for a,b in zip(arms[0]['turns'],arms[1]['turns'])):
-            raise ValueError('fusion changed terminal text, tokens or history')
-        blocks.append(dict(block=block,before=before,after=conditions(),arms=arms,output_exact=True))
-        print('Verified fusion terminal block',block+1,flush=True)
-    verify_build(directory)
-    write(output/'terminal.json',dict(build=receipt,prompts=prompts,blocks=blocks))
-
-
 def fusion_summary(samples):
     result = summarize(samples,observed=False)
     for r in result:
@@ -729,26 +572,6 @@ def combined_ablation(samples):
         result.append(dict(prefix=prefix,qkv_block_ms=[a for a,b in pairs],combined_block_ms=[b for a,b in pairs],
                            ratios=ratios,median_reduction=1-stats.median(ratios),all_faster=all(r<1 for r in ratios)))
     return result
-
-
-def fusion_archive(timings, traces, terminal_path, output, combined=False, copy_free=False):
-    stem = "buffer-swap" if copy_free else ("combined-fusion" if combined else "qkv-fusion")
-    record = dict(kind='qwen-buffer-swap-v1' if copy_free else ('qwen-combined-fusion-v1' if combined else 'qwen-qkv-fusion-v1'),timing=json.loads((timings/'timings.json').read_text()),
-                  terminal=json.loads((terminal_path/'terminal.json').read_text()),
-                  captures=[json.loads((traces/name/'curated.json').read_text()) for name in ('control','fused')])
-    # Keep exact evidence and hashes; omit local asset paths from publication.
-    def scrub(value):
-        if isinstance(value,dict):
-            return {k:('<verified-local-asset>' if k in ('prepared','tables') else scrub(v)) for k,v in value.items()}
-        if isinstance(value,list): return [scrub(v) for v in value]
-        return value
-    raw = json.dumps(scrub(record),separators=(',',':'),allow_nan=False).encode()
-    packed = gzip.compress(raw,mtime=0)
-    output.mkdir(parents=True,exist_ok=True)
-    (output/(stem+'.json.gz')).write_bytes(packed)
-    write(output/(stem+'.json'),dict(kind=record['kind'],sha256=hashlib.sha256(packed).hexdigest(),
-                                      uncompressed_sha256=hashlib.sha256(raw).hexdigest(),bytes=len(packed)))
-    fusion_replay(output,combined,copy_free)
 
 
 def fusion_plot(directory, combined=False, copy_free=False):
@@ -861,109 +684,6 @@ def fusion_replay(directory, combined=False, copy_free=False):
     return record
 
 
-def selection_build(output, prepared, composition=False, projection=False):
-    ensure_record_location(output)
-    output.mkdir(parents=True,exist_ok=False)
-    source = source_identity()
-    if source['repository']['dirty']:
-        raise ValueError('selection study requires clean source')
-    identity = assets(prepared)
-    machine = stable_environment()
-    binaries = {}
-    study_flag='MODEL_PROJECTION_STUDY' if projection else 'MODEL_COMPOSITION_STUDY' if composition else 'MODEL_SELECTION_STUDY'
-    profile_flag='MODEL_PROJECTION_PROFILE' if projection else 'MODEL_COMPOSITION_PROFILE' if composition else 'MODEL_SELECTION_PROFILE'
-    for name, entry, flags in [('model','benchmarks/model.mojo',[study_flag]),
-                               ('terminal','chat_cli.mojo',['MODEL_FUSION_STUDY'])] + [
-        (f'profile-1024-s{s}','benchmarks/model.mojo',[study_flag,f'{profile_flag}={s}',
-          'MODEL_PROFILE_PREFIX=1024','MODEL_PREPARED='+identity['prepared'],'MODEL_TABLES='+identity['tables']]) for s in range(6 if projection else 4 if composition else 3)]:
-        execute([environment_tool('mojo'),'build','-I','src',*[item for flag in flags for item in ['-D',flag]],
-                 'src/llm_mojo/'+entry,'-o',output/name],output/f'{name}-build.log')
-        binary = dict(sha256=sha(output/name),bytes=(output/name).stat().st_size)
-        binaries[name] = binary
-        if name.startswith('profile'):
-            selection = int(name[-1])
-            implementation = 'qwen_model_all_three' if projection else contract.COMPOSITION_IMPLEMENTATIONS[selection] if composition else ['qwen_model_combined','qwen_model_gpu_argmax','qwen_model_fused_head'][selection]
-            provenance = dict(schema_version=1,operation=contract.OPERATION,implementation=implementation,
-                entrypoint=contract.ENTRYPOINTS[implementation],repository=source['repository'],source_sha256=source['sources'],
-                **machine,**contract.specification(1024,*contract.options(implementation)),profile_warmup_iterations=10,
-                profile_iterations=8,profile_post_idle_milliseconds=250,binary=binary,
-                assets={k:v for k,v in identity.items() if k.endswith('_sha256')})
-            if projection: provenance['projection_variant']=selection
-            contract.configuration(provenance)
-            write(output/(name+'.provenance.json'),provenance)
-    if source_identity()!=source or assets(prepared)!=identity:
-        raise ValueError('source or assets changed during selection build')
-    write(output/'build.json',dict(source=source,assets=identity,environment=machine,
-                                  declaration=contract.PROJECTION_DECLARATION if projection else contract.COMPOSITION_DECLARATION if composition else contract.SELECTION_DECLARATION,binaries=binaries))
-
-
-def selection_capture(directory, output):
-    from .capture_trace import capture_trace
-    receipt = verify_build(directory)
-    projection=receipt['declaration']==contract.PROJECTION_DECLARATION
-    composition=receipt['declaration']==contract.COMPOSITION_DECLARATION
-    if not projection and not composition and receipt['declaration'] != contract.SELECTION_DECLARATION:
-        raise ValueError('not a token selection/composition build')
-    ensure_record_location(output)
-    output.mkdir(parents=True,exist_ok=False)
-    for selection in range(6 if projection else 4 if composition else 3):
-        name = f'profile-1024-s{selection}'
-        target = output/f's{selection}'
-        target.mkdir()
-        before = conditions()
-        capture_trace(profile_binary=directory/name,output_trace=target/'raw.trace',
-                      receipt_path=target/'capture.json',time_limit='30s')
-        write(target/'conditions.json',dict(before=before,after=conditions()))
-        (target/'profile.provenance.json').write_bytes((directory/(name+'.provenance.json')).read_bytes())
-        export_trace(target)
-        write(target/'curated.json',curate(target,1024,0))
-        print('Verified selection trace',selection,flush=True)
-    verify_build(directory)
-
-
-def selection_terminal(directory, output):
-    receipt = verify_build(directory)
-    projection=receipt['declaration']==contract.PROJECTION_DECLARATION
-    composition=receipt['declaration']==contract.COMPOSITION_DECLARATION
-    if not projection and not composition and receipt['declaration'] != contract.SELECTION_DECLARATION:
-        raise ValueError('not a token selection/composition build')
-    ensure_record_location(output)
-    output.mkdir(parents=True,exist_ok=False)
-    sys.path.insert(0,str(repository_root()/'tests'))
-    from chat_terminal import events, validate
-    original = json.loads(gzip.decompress((repository_root()/'studies/model_generation/token-profile.json.gz').read_bytes()))
-    prompts = original['terminal']['prompts']
-    inputs = ('\n/reset\n'.join(p.replace('\n',' ') for p in prompts)+'\n/exit\n').encode()
-    identity = receipt['assets']
-    blocks = []
-    for block in range(4):
-        before = conditions()
-        arms = []
-        variants=list(range(6 if projection else 4 if composition else 3))
-        for selection in (list(reversed(variants)) if block in (1,2) else variants):
-            report = output/f'b{block}-s{selection}.tsv'
-            command = list(map(str,[directory/'terminal',identity['prepared'],identity['tables'],128,256,
-                                    '',report,(contract.PROJECTION_ARMS if projection else contract.COMPOSITION_ARMS if composition else ['combined','gpu-argmax','fused-head'])[selection]]))
-            result = subprocess.run(command,cwd=repository_root(),env=environment(),input=inputs,
-                                    stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=240)
-            (output/f'b{block}-s{selection}.txt').write_bytes(result.stdout)
-            if result.returncode:
-                raise ValueError('selection terminal failed')
-            ev = events(report)
-            turns = validate(ev,128)
-            if len(turns)!=3:
-                raise ValueError('missing selection terminal turns')
-            arms.append(dict(selection=selection,events=ev,turns=turns,output_sha256=hashlib.sha256(result.stdout).hexdigest()))
-        if len({a['output_sha256'] for a in arms})!=1 or any(
-            a['generated']!=b['generated'] or a['history']!=b['history']
-            for arm in arms[1:] for a,b in zip(arms[0]['turns'],arm['turns'])):
-            raise ValueError('selection changed terminal text, tokens or history')
-        blocks.append(dict(block=block,before=before,after=conditions(),arms=arms,output_exact=True))
-        print('Verified selection terminal block',block+1,flush=True)
-    verify_build(directory)
-    write(output/'terminal.json',dict(build=receipt,prompts=prompts,blocks=blocks))
-
-
 def selection_summary(samples):
     expected = Counter((p,b,c,a,s) for p in contract.PREFIXES for b in range(4)
                        for c in range(4) for a in range(2) for s in range(10))
@@ -1055,30 +775,6 @@ def projection_summary(samples):
                 confirmation_required=bool(selected),policy=contract.PROJECTION_ARMS[selected])
 
 
-def projection_confirm(directory, screen_directory, output):
-    receipt=verify_build(directory)
-    screen=json.loads((screen_directory/'timings.json').read_text())
-    if receipt['declaration']!=contract.PROJECTION_DECLARATION or screen['build']!=receipt:
-        raise ValueError('projection screen/build mismatch')
-    selected=projection_summary(screen['samples'])['screen_selected']
-    if not selected: raise ValueError('no projection screen qualifier')
-    ensure_record_location(output);output.mkdir(parents=True,exist_ok=False)
-    a=receipt['assets'];samples=[];blocks=[]
-    for block in range(4):
-        before=conditions();reverse=block in (1,2)
-        for prefix in (reversed(contract.PREFIXES) if reverse else contract.PREFIXES):
-            for comparison in ([1,0] if reverse else [0,1]):
-                stdout=execute([directory/'model','bench',a['prepared'],a['tables'],prefix,int(reverse),
-                                selected if comparison else 0,''],output/f'p{prefix}-b{block}-c{comparison}.log')
-                samples.extend(parse_samples(stdout,prefix,block,comparison,observed=False))
-        blocks.append(dict(block=block,before=before,after=conditions()))
-        print('Projection confirmation block',block+1,flush=True)
-    verify_build(directory)
-    summary=fusion_summary(samples)
-    write(output/'confirmation.json',dict(build=receipt,screen_sha256=sha(screen_directory/'timings.json'),
-        selected=selected,blocks=blocks,samples=samples,summary=summary,promote=all(r['promote'] for r in summary)))
-
-
 def projection_plot(directory):
     import matplotlib
     matplotlib.use('Agg')
@@ -1096,32 +792,6 @@ def projection_plot(directory):
     ax.set_xlabel('Previously cached tokens');ax.set_ylabel('Paired complete-token latency ratio; lower is better')
     ax.set_title('Projection arrangements over all-three Fast · M4 Pro / Metal · BF16')
     ax.legend(ncol=3);fig.savefig(directory/'projection-arrangements.png',dpi=170);plt.close(fig)
-
-
-def selection_archive(timings, traces, terminal_path, output, composition=False, projection=False, confirmation=None):
-    stem='projection-arrangements' if projection else 'residual-norm' if composition else 'token-selection'
-    record = dict(kind='qwen-projection-arrangements-v1' if projection else 'qwen-residual-norm-v1' if composition else 'qwen-token-selection-v1',timing=json.loads((timings/'timings.json').read_text()),
-                  terminal=json.loads((terminal_path/'terminal.json').read_text()),
-                  captures=[json.loads((traces/f's{s}/curated.json').read_text()) for s in range(6 if projection else 4 if composition else 3)])
-    if composition or projection:
-        # JSON archive key sorting cannot reproduce the captured file's byte order.
-        for variant, capture in enumerate(record['captures']):
-            capture['provenance_text'] = (traces/f's{variant}/profile.provenance.json').read_text()
-    if projection:
-        record['screen_timing_sha256']=sha(timings/'timings.json')
-        record['confirmation']=json.loads((confirmation/'confirmation.json').read_text()) if confirmation else None
-        if record['confirmation']:
-            for key in ('prepared','tables'): record['confirmation']['build']['assets'].pop(key,None)
-    # Retain hashes/provenance while removing machine-specific model asset paths.
-    for build_record in [record['timing']['build'],record['terminal']['build']]:
-        for key in ('prepared','tables'):
-            build_record['assets'].pop(key,None)
-    output.mkdir(parents=True,exist_ok=True)
-    raw = json.dumps(record,sort_keys=True,separators=(',',':'),allow_nan=False).encode()
-    packed = gzip.compress(raw,mtime=0)
-    (output/(stem+'.json.gz')).write_bytes(packed)
-    write(output/(stem+'.json'),dict(sha256=hashlib.sha256(packed).hexdigest(),uncompressed_sha256=hashlib.sha256(raw).hexdigest()))
-    selection_replay(output,composition,projection)
 
 
 def selection_plot(directory, composition=False):
@@ -1274,33 +944,6 @@ SCHEDULING_DECLARATION = dict(kind='projection-scheduling-v1',variants=[0,1],pre
     trace_repeats=2,trace_warmups=10,trace_samples=8,promotion=False)
 
 
-def scheduling_build(output, prepared):
-    ensure_record_location(output);output.mkdir(parents=True,exist_ok=False)
-    source=source_identity()
-    if source['repository']['dirty']: raise ValueError('scheduling requires clean source')
-    identity=assets(prepared);machine=stable_environment();binaries={}
-    entries=[('model',[])] + [(f'profile-{p}-s{v}',[f'MODEL_PROFILE_PREFIX={p}',
-        f'MODEL_PROJECTION_PROFILE={v}','MODEL_PREPARED='+identity['prepared'],
-        'MODEL_TABLES='+identity['tables']]) for p in contract.PREFIXES for v in (0,1)]
-    for name,flags in entries:
-        execute([environment_tool('mojo'),'build','-I','src','-D','MODEL_PROJECTION_STUDY',
-                 '-D','MODEL_SCHEDULING_STUDY',*[x for f in flags for x in ['-D',f]],
-                 'src/llm_mojo/benchmarks/model.mojo','-o',output/name],output/f'{name}-build.log')
-        binaries[name]=dict(sha256=sha(output/name),bytes=(output/name).stat().st_size)
-        if name!='model':
-            p=int(name.split('-')[1]);v=int(name[-1]);implementation='qwen_model_all_three'
-            provenance=dict(schema_version=1,operation=contract.OPERATION,implementation=implementation,
-                entrypoint=contract.ENTRYPOINTS[implementation],repository=source['repository'],
-                source_sha256=source['sources'],**machine,**contract.specification(p,*contract.options(implementation)),
-                profile_warmup_iterations=10,profile_iterations=8,profile_post_idle_milliseconds=250,
-                binary=binaries[name],projection_variant=v,
-                assets={k:x for k,x in identity.items() if k.endswith('_sha256')})
-            contract.configuration(provenance);write(output/(name+'.provenance.json'),provenance)
-    if source_identity()!=source or assets(prepared)!=identity: raise ValueError('scheduling build changed')
-    write(output/'build.json',dict(source=source,assets=identity,environment=machine,
-                                  declaration=SCHEDULING_DECLARATION,binaries=binaries))
-
-
 def scheduling_parse(stdout, mode, prefix, block, comparison):
     if 'device: Apple M4 Pro\napi: metal\n' not in stdout or stdout.count('SCHEDULING_COMPLETE')!=1:
         raise ValueError('missing scheduling runtime identity/completion')
@@ -1323,31 +966,6 @@ def scheduling_parse(stdout, mode, prefix, block, comparison):
     return rows
 
 
-def scheduling_collect(directory, output):
-    receipt=verify_build(directory)
-    if receipt['declaration']!=SCHEDULING_DECLARATION: raise ValueError('not a scheduling build')
-    ensure_record_location(output);output.mkdir(parents=True,exist_ok=False)
-    a=receipt['assets'];rows=[];blocks=[];numerical=[]
-    workloads=[(p,m,c) for p in contract.PREFIXES for m in SCHEDULING_MODES for c in (0,1)]
-    for block in range(4):
-        before=conditions();reverse=block in (1,2)
-        for p,m,c in (reversed(workloads) if reverse else workloads):
-            target=output/f'p{p}-{m}-b{block}-c{c}'
-            capture=block==0 and c==1
-            if capture: target.mkdir()
-            stdout=execute([directory/'model',m,a['prepared'],a['tables'],p,int(reverse),c,
-                            target if capture else ''],output/(target.name+'.log'))
-            rows.extend(scheduling_parse(stdout,m,p,block,c))
-            if capture:
-                check=verify_snapshots(target,p,64 if m.endswith('advance') else 1)
-                check['mode']=m;numerical.append(check)
-        blocks.append(dict(block=block,before=before,after=conditions()))
-        print('Scheduling timing block',block+1,flush=True)
-    verify_build(directory)
-    summary=scheduling_summary(rows)
-    write(output/'timings.json',dict(build=receipt,samples=rows,blocks=blocks,numerical=numerical,summary=summary))
-
-
 def scheduling_host(stdout):
     rows=[]
     for line in stdout.splitlines():
@@ -1360,41 +978,6 @@ def scheduling_host(stdout):
             rows.append(dict(iteration=iteration,elapsed_ns=elapsed,marks=marks))
     if [x['iteration'] for x in rows]!=list(range(8)): raise ValueError('incomplete scheduling host records')
     return rows
-
-
-def scheduling_capture(directory, output):
-    from .capture_trace import capture_trace
-    receipt=verify_build(directory)
-    if receipt['declaration']!=SCHEDULING_DECLARATION: raise ValueError('not a scheduling build')
-    ensure_record_location(output);output.mkdir(parents=True,exist_ok=False)
-    variants=[(p,v) for p in contract.PREFIXES for v in (0,1)]
-    for repeat in range(2):
-        for p,v in (reversed(variants) if repeat else variants):
-            name=f'profile-{p}-s{v}';target=output/f'p{p}-s{v}-r{repeat}';target.mkdir()
-            before=conditions()
-            def retain_runner(command, **kwargs):
-                result=subprocess.run(command,**kwargs)
-                if '--target-stdout' in command:
-                    (target/'target-output.txt').write_text(result.stdout or '')
-                return result
-            capture_trace(profile_binary=directory/name,output_trace=target/'raw.trace',
-                          receipt_path=target/'capture.json',time_limit='30s',runner=retain_runner)
-            write(target/'conditions.json',dict(before=before,after=conditions()))
-            (target/'profile.provenance.json').write_bytes((directory/(name+'.provenance.json')).read_bytes())
-            export_trace(target);record=curate(target,p,repeat)
-            record['provenance_text']=(target/'profile.provenance.json').read_text()
-            # target output is retained by the capture tool beside its receipt.
-            record['capture_receipt_text']=(target/'capture.json').read_text()
-            receipt_capture=json.loads(record['capture_receipt_text'])
-            record['target_output']=receipt_capture['capture']['target_output']
-            output_path=target/'target-output.txt'
-            if not output_path.exists():
-                raise ValueError('capture target output file missing')
-            record['target_text']=output_path.read_text()
-            record['host']=scheduling_host(record['target_text'])
-            write(target/'curated.json',record)
-            print('Scheduling trace',p,v,repeat,flush=True)
-    verify_build(directory)
 
 
 def scheduling_summary(rows):
@@ -1459,16 +1042,6 @@ def scheduling_timeline(capture):
             submission_span_ns=max(x['submission_start_ns']+x['submission_duration_ns'] for x in rr)-min(x['submission_start_ns'] for x in rr),
             fragmented_commands=sum(x['segments']>1 for x in rr)))
     return result
-
-
-def scheduling_archive(timings, traces, output):
-    record=dict(kind='projection-scheduling-v1',timing=json.loads((timings/'timings.json').read_text()),
-        captures=[json.loads((traces/f'p{p}-s{v}-r{r}'/'curated.json').read_text()) for r in range(2) for p in contract.PREFIXES for v in (0,1)])
-    for key in ('prepared','tables'): record['timing']['build']['assets'].pop(key,None)
-    raw=json.dumps(record,sort_keys=True,separators=(',',':'),allow_nan=False).encode();packed=gzip.compress(raw,mtime=0)
-    output.mkdir(parents=True,exist_ok=True);(output/'projection-scheduling.json.gz').write_bytes(packed)
-    write(output/'projection-scheduling.json',dict(sha256=hashlib.sha256(packed).hexdigest(),uncompressed_sha256=hashlib.sha256(raw).hexdigest()))
-    scheduling_replay(output)
 
 
 def scheduling_replay(directory):
@@ -1575,39 +1148,6 @@ ENQUEUE_DECLARATION = dict(kind='runtime-enqueue-v1', blocks=4, prefixes=[64,102
 PROBE_SOURCE = 'src/llm_mojo/benchmarks/enqueue_probe.c'
 
 
-def enqueue_build(output, prepared):
-    ensure_record_location(output); output.mkdir(parents=True,exist_ok=False)
-    source=source_identity(); probe_sha=sha(repository_root()/PROBE_SOURCE)
-    if source['repository']['dirty']: raise ValueError('enqueue build requires clean source')
-    identity=assets(prepared); machine=stable_environment()
-    if machine['software']['max']!='26.5.0' or machine['software']['mojo']!='1.0.0' or machine['hardware']['chip']!='Apple M4 Pro':
-        raise ValueError('probe ABI is verified only for pinned MAX 26.5.0 on M4 Pro')
-    lib=repository_root()/'.venv/lib/python3.12/site-packages/modular/lib'
-    commands=[['xcrun','clang','-dynamiclib','-O2','-Wall','-Werror',PROBE_SOURCE,
-               '-L',lib,'-lAsyncRTMojoBindings','-Wl,-rpath,'+str(lib),'-o',output/'probe.dylib'],
-              [environment_tool('mojo'),'build','-I','src','-D','MODEL_PROJECTION_STUDY',
-               '-D','MODEL_SCHEDULING_STUDY','-D','MODEL_LAUNCH_PROBE',
-               'src/llm_mojo/benchmarks/model.mojo','-o',output/'model']]
-    for i,cmd in enumerate(commands): execute(cmd,output/f'build-{i}.log')
-    compiler=execute(['xcrun','clang','--version'],output/'clang.log')
-    if source_identity()!=source or sha(repository_root()/PROBE_SOURCE)!=probe_sha or assets(prepared)!=identity:
-        raise ValueError('enqueue build source/assets changed')
-    write(output/'build.json',dict(source=source,assets=identity,environment=machine,
-        declaration=ENQUEUE_DECLARATION,probe_source_sha256=probe_sha,clang=compiler,
-        runtime_sha256=sha(lib/'libAsyncRTMojoBindings.dylib'),
-        commands=[[str(x) for x in c] for c in commands],
-        binaries={n:dict(sha256=sha(output/n),bytes=(output/n).stat().st_size) for n in ('model','probe.dylib')}))
-
-
-def enqueue_verify_build(directory):
-    r=verify_build(directory)
-    if r['declaration']!=ENQUEUE_DECLARATION or r['probe_source_sha256']!=sha(repository_root()/PROBE_SOURCE):
-        raise ValueError('enqueue declaration/probe changed')
-    lib=repository_root()/'.venv/lib/python3.12/site-packages/modular/lib/libAsyncRTMojoBindings.dylib'
-    if sha(lib)!=r['runtime_sha256']: raise ValueError('enqueue runtime changed')
-    return r
-
-
 def enqueue_windows(stdout, kind, **metadata):
     if kind=='model':
         rows=scheduling_parse(stdout,'observed-fixed',metadata['prefix'],metadata['block'],1)
@@ -1656,64 +1196,6 @@ def enqueue_partition(rows, calls, expected):
         if len(group)!=expected: raise ValueError('unexpected enqueue count per window')
         selected.append(group)
     return selected
-
-
-def enqueue_process(directory, command, target, state, kind, **metadata):
-    env=environment()
-    for key in ('MODULAR_DEBUG','DYLD_INSERT_LIBRARIES','LLM_MOJO_ENQUEUE_RECORD'): env.pop(key,None)
-    if state!='plain': env['DYLD_INSERT_LIBRARIES']=str(directory/'probe.dylib')
-    if state=='enabled': env['LLM_MOJO_ENQUEUE_RECORD']=str(target.with_suffix('.tsv'))
-    result=subprocess.run(list(map(str,command)),cwd=repository_root(),env=env,
-        stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=600)
-    target.with_suffix('.log').write_text(result.stdout)
-    if result.returncode: raise RuntimeError(f'enqueue run failed; see {target}.log')
-    rows=enqueue_windows(result.stdout,kind,**metadata)
-    probe=None
-    if state=='enabled':
-        path=target.with_suffix('.tsv');lines=path.read_text().splitlines()
-        label,count,dropped=lines[0].split();calls=[list(map(int,l.split())) for l in lines[1:]]
-        if label!='ENQUEUE_PROBE_V1' or int(dropped)!=0 or int(count)!=len(calls):
-            raise ValueError('incomplete enqueue probe')
-        groups=enqueue_partition(rows,calls,245 if kind=='model' else metadata['batch'])
-        probe=dict(total_calls=len(calls),dropped=0,raw_sha256=sha(path),groups=groups)
-    return dict(kind=kind,state=state,**metadata,stdout=result.stdout,
-        stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest(),probe=probe)
-
-
-def enqueue_collect(directory, output):
-    receipt=enqueue_verify_build(directory)
-    ensure_record_location(output);output.mkdir(parents=True,exist_ok=False)
-    runs=[];blocks=[];numerical=[];a=receipt['assets']
-    workloads=[(p,s) for p in contract.PREFIXES for s in ENQUEUE_DECLARATION['states']]
-    micros=[(s,n,c) for s in ('tiny','down') for n in (1,256) for c in (0,1)]
-    for block in range(4):
-        before=conditions();reverse=block in (1,2)
-        for p,state in (list(reversed(workloads)) if reverse else workloads):
-            target=output/f'model-b{block}-p{p}-{state}';capture=block==0
-            if capture: target.mkdir()
-            runs.append(enqueue_process(directory,[directory/'model','observed-fixed',a['prepared'],a['tables'],
-                p,int(reverse),1,target if capture else ''],target,state,'model',block=block,prefix=p))
-            if capture:
-                check=verify_snapshots(target,p);check['state']=state;numerical.append(check)
-        for shape,batch,comparison in (list(reversed(micros)) if reverse else micros):
-            target=output/f'micro-b{block}-{shape}-n{batch}-c{comparison}'
-            runs.append(enqueue_process(directory,[directory/'model','launch',shape,batch,int(reverse),comparison,'',''],
-                target,'plain','micro',block=block,shape=shape,batch=batch,comparison=comparison))
-        blocks.append(dict(block=block,before=before,after=conditions()))
-        write(output/'checkpoint.json',dict(build=receipt,runs=runs,blocks=blocks,numerical=numerical))
-        print('Runtime enqueue block',block+1,flush=True)
-    for repeat in range(2):
-        before=conditions()
-        for shape in (['down','tiny'] if repeat else ['tiny','down']):
-            target=output/f'queue-r{repeat}-{shape}'
-            runs.append(enqueue_process(directory,[directory/'model','launch',shape,256,repeat,0,'',''],
-                target,'enabled','queue',repeat=repeat,shape=shape,batch=256,comparison=0))
-        blocks.append(dict(repeat=repeat,before=before,after=conditions()))
-    enqueue_verify_build(directory)
-    record=dict(kind=ENQUEUE_DECLARATION['kind'],build=receipt,runs=runs,blocks=blocks,numerical=numerical)
-    record['summary']=enqueue_summary(record)
-    write(output/'timings.json',record)
-    print(json.dumps(record['summary'],indent=2))
 
 
 def enqueue_summary(record):
@@ -1812,16 +1294,6 @@ def enqueue_summary(record):
     return dict(model_samples=len(model),micro_samples=len(micro),queue_samples=len(queue),
         measured_runtime_calls=sum(len(g) for r in runs if r['probe'] for g in r['probe']['groups']),
         attribution=attribution,compiled_handle=cache,queue_pressure=pressure,promote=False)
-
-
-def enqueue_archive(timings, output):
-    record=json.loads((timings/'timings.json').read_text())
-    if enqueue_summary(record)!=record['summary']: raise ValueError('enqueue summary changed')
-    output.mkdir(parents=True,exist_ok=True)
-    raw=json.dumps(record,separators=(',',':'),sort_keys=True).encode();packed=gzip.compress(raw,mtime=0)
-    (output/'runtime-enqueue.json.gz').write_bytes(packed)
-    write(output/'runtime-enqueue.json',dict(sha256=hashlib.sha256(packed).hexdigest(),uncompressed_sha256=hashlib.sha256(raw).hexdigest()))
-    write(output/'runtime-enqueue-summary.json',enqueue_replay(output))
 
 
 def enqueue_replay(directory):
@@ -1924,50 +1396,50 @@ def batch_support_replay(path):
     return dict(status=results[0]['status'],timing_run=False,promote=False)
 
 
+# Collectors for completed decode experiments built arms that are no longer in
+# the engine. Their retained archives still replay; re-collection needs the
+# commit recorded in each archive (collectors exist through edb610a).
+RETIRED = ['enqueue-build', 'enqueue-collect', 'enqueue-archive', 'scheduling-build', 'scheduling-collect',
+           'scheduling-capture', 'scheduling-archive', 'projection-confirm', 'selection-capture',
+           'selection-terminal', 'selection-archive', 'fusion-capture', 'fusion-terminal', 'fusion-archive']
+
+
 def main():
     # Trace capture and the reused terminal lifecycle helper inherit this process.
     os.environ.pop('MODULAR_DEBUG', None)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['batch-support','batch-support-replay','enqueue-plot','enqueue-build','enqueue-collect','enqueue-archive','enqueue-replay','scheduling-plot','scheduling-build','scheduling-collect','scheduling-capture','scheduling-archive','scheduling-replay','projection-confirm','build','collect','capture','terminal','archive','replay','plot','fusion-capture','fusion-terminal','fusion-archive','fusion-replay','fusion-plot','selection-capture','selection-terminal','selection-archive','selection-replay','selection-plot'])
-    parser.add_argument('--projections',action='store_true',help='Study exact-width and thread-block projection arrangements')
-    parser.add_argument('--residual-norm',action='store_true',help='Study independent residual normalization and composition with swap/argmax')
-    parser.add_argument('--copy-free',action='store_true',help='Compare buffer ownership swapping with inter-layer copies')
-    parser.add_argument('--selection',action='store_true',help='Compare CPU, GPU argmax and fused vocabulary head')
-    parser.add_argument('--combined', action='store_true', help='Combine QKV and SiLU/multiply fusion')
-    parser.add_argument('--fusion', action='store_true', help='Build the bounded fusion experiment')
+    parser.add_argument('command', choices=['batch-support','batch-support-replay','enqueue-plot','enqueue-replay',
+                                            'scheduling-plot','scheduling-replay','build','collect','capture',
+                                            'terminal','archive','replay','plot','fusion-replay','fusion-plot',
+                                            'selection-replay','selection-plot',*RETIRED])
+    parser.add_argument('--projections',action='store_true',help='Replay/plot the projection arrangement study')
+    parser.add_argument('--residual-norm',action='store_true',help='Replay/plot the residual normalization study')
+    parser.add_argument('--copy-free',action='store_true',help='Replay/plot the buffer ownership study')
+    parser.add_argument('--selection',action='store_true',help=argparse.SUPPRESS)
+    parser.add_argument('--combined', action='store_true', help='Replay/plot the combined fusion study')
+    parser.add_argument('--fusion', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--build', type=Path)
     parser.add_argument('--prepared', type=Path)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--timings', type=Path)
-    parser.add_argument('--confirmation', type=Path)
     parser.add_argument('--traces', type=Path)
     parser.add_argument('--terminal', type=Path)
     args = parser.parse_args()
+    if args.command in RETIRED or (args.command == 'build' and (args.fusion or args.combined or args.selection
+                                   or args.copy_free or args.residual_norm or args.projections)):
+        parser.error(args.command + ' belongs to a completed experiment; its retained archive replays, and '
+                     're-collection needs the commit recorded in that archive (collectors exist through edb610a)')
     if args.command == 'batch-support': batch_support_collect(args.output.resolve())
     elif args.command == 'batch-support-replay': print(json.dumps(batch_support_replay(args.output),indent=2))
     elif args.command == 'enqueue-plot': enqueue_plot(args.output)
-    elif args.command == 'enqueue-build': enqueue_build(args.output.resolve(),args.prepared)
-    elif args.command == 'enqueue-collect': enqueue_collect(args.build.resolve(),args.output.resolve())
-    elif args.command == 'enqueue-archive': enqueue_archive(args.timings,args.output)
     elif args.command == 'enqueue-replay': print(json.dumps(enqueue_replay(args.output),indent=2))
     elif args.command == 'scheduling-plot': scheduling_plot(args.output)
-    elif args.command == 'scheduling-build': scheduling_build(args.output.resolve(),args.prepared)
-    elif args.command == 'scheduling-collect': scheduling_collect(args.build.resolve(),args.output.resolve())
-    elif args.command == 'scheduling-capture': scheduling_capture(args.build.resolve(),args.output.resolve())
-    elif args.command == 'scheduling-archive': scheduling_archive(args.timings,args.traces,args.output)
     elif args.command == 'scheduling-replay': scheduling_replay(args.output)
-    elif args.command == 'build': build(args.output.resolve(), args.prepared, args.fusion, args.combined, args.selection, args.copy_free, args.residual_norm, args.projections)
-    elif args.command == 'projection-confirm': projection_confirm(args.build.resolve(),args.timings.resolve(),args.output.resolve())
-    elif args.command == 'selection-capture': selection_capture(args.build.resolve(),args.output.resolve())
-    elif args.command == 'selection-terminal': selection_terminal(args.build.resolve(),args.output.resolve())
-    elif args.command == 'selection-archive': selection_archive(args.timings,args.traces,args.terminal,args.output,args.residual_norm,args.projections,args.confirmation)
+    elif args.command == 'build': build(args.output.resolve(), args.prepared)
     elif args.command == 'selection-plot':
         if args.projections: projection_plot(args.output)
         else: selection_plot(args.output,args.residual_norm)
     elif args.command == 'selection-replay': selection_replay(args.output,args.residual_norm,args.projections)
-    elif args.command == 'fusion-capture': fusion_capture(args.build.resolve(),args.output.resolve())
-    elif args.command == 'fusion-terminal': fusion_terminal(args.build.resolve(),args.output.resolve())
-    elif args.command == 'fusion-archive': fusion_archive(args.timings,args.traces,args.terminal,args.output,args.combined,args.copy_free)
     elif args.command == 'fusion-replay': fusion_replay(args.output,args.combined,args.copy_free)
     elif args.command == 'fusion-plot': fusion_plot(args.output,args.combined,args.copy_free)
     elif args.command == 'collect': collect(args.build.resolve(), args.output.resolve())

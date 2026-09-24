@@ -5,16 +5,17 @@ For interactive multi-turn use with persistent KV caches, see [terminal chat](ch
 The completed [Fast implementation revision](fast-generation-plan.md) uses numerical
 comparisons as diagnostics. Required checks cover assets, data flow, cache and
 generation semantics; historical full-model distance ceilings no longer block
-integration. `fast` is the public default, with `auto` as an alias. On Apple M4 Pro
-they select the eleven prefill workload cells described in the
+integration. `fast` is the public default. On Apple M4 Pro it selects the eleven
+prefill workload cells described in the
 [runtime study](../studies/model_generation/runtime.md) and configuration 26 for
 single-row calls, plus residual/RMSNorm fusion, buffer swapping and GPU argmax
 following the [composed study](../studies/model_generation/residual-norm.md).
-Other workloads and devices retain configuration 0.
-Explicit configurations 0/2/3/21 and the historical `consistent` path remain
-available. The full-checkpoint generator, lifecycle checks, numerical diagnostics and
-paired model measurements have executed. Numerical differences are retained
-and explained separately from exact implementation invariants.
+Other workloads and devices retain configuration 0. The `baseline` and
+historical `consistent` routes, and explicit retained configurations for
+diagnostics, remain available. The full-checkpoint generator, lifecycle checks,
+numerical diagnostics and paired model measurements have executed. Numerical
+differences are retained and explained separately from exact implementation
+invariants.
 
 ## Native ownership
 
@@ -44,31 +45,34 @@ mixed-configuration calls and native generation.
 
 ## Workload policy
 
-`select_configuration` is shared by model clients. `fast` (the public default)
-and `auto` use the measured M4 Pro lookup: split8 configuration 2 at
+`ExecutionPlan` in `models/qwen2/plan.mojo` fixes how one model call runs: a
+decoder configuration plus the single-row decode features. Every model client
+builds its plans there. `fast` (the public default) uses the measured M4 Pro
+lookup: split8 configuration 2 at
 16/1024, 16/4096, 15/256 and 17/256; configuration 3, combining split8 and
 larger projections, at 64/1024, 64/4096, 256/1024, 256/4096, 65/4096 and
 255/4096; configuration 21 at 16/256. Pairs denote incoming rows / total
 cached rows. Single-row M4 Pro calls use configuration 26: exact QKV/RoPE/cache
-fusion plus SiLU/multiply fusion. Shared selectors additionally enable residual/RMSNorm
-fusion, inter-layer buffer swapping and separate GPU argmax. The composed route
+fusion plus SiLU/multiply fusion, always together with residual/RMSNorm fusion,
+inter-layer buffer swapping and separate GPU argmax. The composed route
 passed paired whole-token gates at histories 64, 1024 and 3968. Every other shape and device name falls
 back to configuration 0.
 Baseline 0 already includes integrated attention and optimized multi-row MLP
 7, with rowwise MLP projections for decode. Configuration 26 preserves those
 projection and attention reductions and the intermediate BF16 activation rounding.
 
-`baseline` always selects 0. `candidate` retains the prior split8 lookup, and
-explicit IDs 0/2/3/21 remain available for comparison. The historical
-`consistent` / 20 route uses FP32 G32 attention and rowwise projections at all
-row counts; it remains an explicit study mode. The same selected configuration
-applies to all 24 layers for a call.
+`baseline` always selects 0. The historical `consistent` / 20 route uses FP32
+G32 attention and rowwise projections at all row counts; it remains an explicit
+research mode. Diagnostic drivers also accept an explicit retained configuration
+(0, 2, 3, 20, 21, 22 or 26). The same selected configuration applies to all 24
+layers for a call.
 
-Native study policies `unfused`, `fusion` and `combined` select single-row
-configurations 0, 25 and 26 respectively on M4 Pro, retaining Fast's multi-row
-choices. The profiling driver uses these explicit controls so promotion does
-not change what an experiment compares. Default profiling follows current Fast;
-historical trace replay uses the route recorded in each capture's provenance.
+A plan cannot express the unpromoted compositions from the decode studies:
+configuration 26 always carries all three decode features and exactly one row,
+and no other configuration carries any. Those study arms, configuration 25 and
+the `auto`, `candidate`, `unfused`, `fusion`, `combined` and per-arm policies
+exist through `edb610a`. Default profiling follows current Fast; historical
+trace replay uses the route recorded in each capture's provenance.
 
 Scratch includes split8 capacity before execution, so selection allocates
 nothing within the layer loop. The diagnostic suite checks exact cache
@@ -128,14 +132,15 @@ and final Fast dispatch verification. Historical reserved inputs remain unopened
 
 ## Native plain-text generation
 
-The verified development launcher is:
+Run it through the public command:
 
 ```sh
-uv run --locked python -m llm_mojo.models.qwen2.assets --prepared "$MODEL_PREPARED" --prompt "$PROMPT_FILE" --max-new-tokens 16 --policy fast --report build/generation-events.tsv
+uv run --locked llm-mojo generate --mode fast --prompt-file "$PROMPT_FILE" --max-new-tokens 16 --report build/generation-events.tsv
 ```
 
-`MODEL_PREPARED` names the prepared model directory and `PROMPT_FILE` contains
-raw prompt bytes. The launcher verifies the checkpoint identity, manifest,
+`PROMPT_FILE` contains UTF-8 prompt text; `--prepared` selects a prepared model
+directory other than the checkout's default. `--mode baseline` and
+`--mode consistent` run the reference routes. The launcher verifies the checkpoint identity, manifest,
 all 196 tensor extents and hashes, and pinned tokenizer tables before starting
 the native driver. Missing model artifacts fail; tokenizer preparation uses
 local assets without downloads. Keep the prepared files unchanged during
@@ -152,9 +157,14 @@ penalty. A selected final token is in history but need not have been consumed
 into the KV cache. This plain-text driver does not apply a chat template; [terminal chat](chat.md)
 provides native framing and persistent multi-turn state.
 
-The optional TSV report records prompt/generated IDs, selected prefill
-configurations, native initialization, prefill and decode durations, and cache
-accounting. Native durations exclude Python asset verification and compilation.
+The optional TSV report records the mode, prompt/generated IDs, selected prefill
+configurations, one route record per model call, native initialization, prefill
+and decode durations, and cache accounting. A route record is what the model
+enqueued (`ForwardRoute`): the configuration, the fused residual/RMSNorm steps,
+buffer swaps versus copies, whether the final RMSNorm ran separately, and GPU
+argmax. In Fast mode on M4 Pro every decode call must report configuration 26
+with 23 swaps and GPU argmax, so a silent fallback to the baseline route cannot
+pass `validation.model generate`. Native durations exclude Python asset verification and compilation.
 TTFT includes native initialization/tokenization; decode timings end at device
 synchronization. Output remains generated UTF-8 text on stdout.
 
@@ -163,6 +173,20 @@ a public default-Fast smoke with a 1024-token prompt passed. Same-history
 predictions agree with HF on 191 of 192 generated choices; the exception is an
 exact HF top-logit tie. These are bounded development observations, not a
 general model-quality or exact trajectory-equivalence claim.
+
+`decode-parity` checks the Fast decode route against baseline on the real
+24-layer model:
+
+```sh
+uv run --locked python -m llm_mojo.validation.model build --binary build/parity-model
+uv run --locked python -m llm_mojo.validation.model decode-parity --binary build/parity-model --output build/decode-parity.json
+```
+
+Both runs prefill the same 53 fixed tokens with configuration 0 and then decode
+32 fixed tokens one row at a time, so every call sees the same input. Every
+call's hidden states, final norm, logits and K/V must be byte-identical. The
+receipt keeps hashes only. `tests/test_decode_route.mojo` runs the same
+comparison on three synthetic layers in default validation.
 
 ## Historical numerical-policy studies
 

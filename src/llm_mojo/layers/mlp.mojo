@@ -18,11 +18,12 @@ from llm_mojo.kernels.residual import enqueue_residual_apple_gpu
 def mlp_projection_mapping(mapping: Int, stage: Int) -> Int:
     """0 rowwise; 1/2/3 tile gate/up; 4/5/6 tile down; 7 combines finalists.
 
-    Tile IDs 1/2/3 mean 8x16, 16x16, 8x32. No row-count selector.
+    Tile IDs 1/2/3 mean 8x16, 16x16, 8x32. No row-count selector. Mapping 19
+    reuses each rowwise weight across four rows for all three projections.
     Public entrypoints validate the configuration before enqueue.
     """
-    if mapping >= 19:
-        return mapping - 12 if stage == 1 or stage == 2 or stage == 5 else 0
+    if mapping == 19:
+        return 7 if stage == 1 or stage == 2 or stage == 5 else 0
     if mapping >= 8:
         var gate_mapping = mapping if mapping <= 10 else 0
         var down_mapping = mapping if mapping == 11 or mapping == 12 else 0
@@ -51,10 +52,9 @@ def _enqueue_projection[
     weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
     mapping: Int,
-    decode_variant: Int = 0,
 ) raises:
     if mapping == 0:
-        enqueue_linear_apple_gpu(ctx, input, weight, output, decode_variant)
+        enqueue_linear_apple_gpu(ctx, input, weight, output)
     elif mapping == 1:
         enqueue_linear_prefill_mma_8x16_apple_gpu(ctx, input, weight, output)
     elif mapping == 2:
@@ -79,14 +79,10 @@ def _enqueue_projection[
 
     elif mapping == 7:
         enqueue_linear_rowwise_rows_apple_gpu[4](ctx, input, weight, output)
-    elif mapping == 8:
-        enqueue_linear_rowwise_rows_apple_gpu[8](ctx, input, weight, output)
-    elif mapping == 9:
-        enqueue_linear_rowwise_rows_apple_gpu[16](ctx, input, weight, output)
 
 
 def mlp_combines_gate_up(mapping: Int) -> Bool:
-    if mapping >= 19:
+    if mapping == 19:
         return False
     var gate_mapping = 8 + (mapping - 13) // 2 if mapping >= 13 else mapping
     return gate_mapping == 8 or gate_mapping == 10
@@ -188,7 +184,7 @@ def _validate_mlp[
     mapping: Int,
 ) raises:
     comptime assert x.flat_rank == 2
-    if mapping < 0 or mapping > 21:
+    if mapping < 0 or mapping > 19:
         raise Error("unknown MLP projection mapping")
     var r = Int(x.dim[0]())
     if mapping >= 8 and mapping <= 18 and r != 1:
@@ -214,7 +210,6 @@ def _enqueue_mlp_stage[
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     stage: Int,
     mapping: Int,
-    decode_variant: Int = 0,
 ) raises:
     """Internal stage dispatch after preflight. Stage inputs are caller-visible.
     """
@@ -237,7 +232,7 @@ def _enqueue_mlp_stage[
             normal,
             TileTensor(weights.gate, row_major(i, h)),
             gate,
-            mlp_projection_mapping(mapping, stage), decode_variant,
+            mlp_projection_mapping(mapping, stage),
         )
     elif stage == 2:
         _enqueue_projection(
@@ -245,7 +240,7 @@ def _enqueue_mlp_stage[
             normal,
             TileTensor(weights.up, row_major(i, h)),
             up,
-            mlp_projection_mapping(mapping, stage), decode_variant,
+            mlp_projection_mapping(mapping, stage),
         )
     elif stage == 3:
         enqueue_silu_apple_gpu(ctx, gate, activated)
@@ -257,7 +252,7 @@ def _enqueue_mlp_stage[
             gated,
             TileTensor(weights.down, row_major(h, i)),
             down,
-            mlp_projection_mapping(mapping, stage), decode_variant,
+            mlp_projection_mapping(mapping, stage),
         )
     elif stage == 6:
         enqueue_residual_apple_gpu(
@@ -294,7 +289,6 @@ def enqueue_mlp_apple_gpu[
     fuse_activation: Bool = False,
     input_normalized: Bool = False,
     defer_residual: Bool = False,
-    decode_variant: Int = 0,
 ) raises:
     """Six or seven ordered dispatches; no allocation, upload, or synchronization.
 
@@ -314,8 +308,6 @@ def enqueue_mlp_apple_gpu[
     work.normalized or leave work.down ready for the caller's fused residual.
     """
     _validate_mlp(ctx, weights, work, x, mapping)
-    if decode_variant and (decode_variant < 0 or decode_variant > 5 or Int(x.dim[0]()) != 1 or weights.hidden != 896 or weights.intermediate != 4864 or mapping != 0):
-        raise Error("projection arrangement requires Qwen rowwise MLP")
     if fuse_activation and (Int(x.dim[0]()) != 1 or mapping != 0):
         raise Error("fused MLP activation requires one row and mapping zero")
     if (input_normalized or defer_residual) and (Int(x.dim[0]()) != 1 or weights.hidden != 896 or mapping != 0):
@@ -348,4 +340,4 @@ def enqueue_mlp_apple_gpu[
                     ctx, normal, wg, wu, g, u
                 )
         elif stage != 2 or not mlp_combines_gate_up(mapping):
-            _enqueue_mlp_stage(ctx, weights, work, x, stage, mapping, decode_variant)
+            _enqueue_mlp_stage(ctx, weights, work, x, stage, mapping)

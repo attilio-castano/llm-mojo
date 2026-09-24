@@ -323,7 +323,7 @@ def _enqueue_fused_decode_qkv(ctx: DeviceContext, mut work: AttentionWorkspace,
 
 def _enqueue_attention_qkv(
     ctx: DeviceContext, mut weights: AttentionWeights,
-    mut work: AttentionWorkspace, rows: Int, mapping: Int, unpack: Bool = True, decode_variant: Int = 0,
+    mut work: AttentionWorkspace, rows: Int, mapping: Int, unpack: Bool = True,
 ) raises:
     """Projection boundary shared by composition and exact-upstream tests.
 
@@ -333,7 +333,7 @@ def _enqueue_attention_qkv(
     Packed mappings include an explicit layout copy.
     No allocation, synchronization, new arithmetic, or rounding in the copy.
     """
-    if mapping < 0 or mapping > 7:
+    if mapping < 0 or mapping > 5:
         raise Error("unknown QKV projection mapping")
     var h = weights.hidden
     var k = weights.kv_heads * weights.head_dim
@@ -361,19 +361,15 @@ def _enqueue_attention_qkv(
     var weight = TileTensor(weights.qkv, row_major(h + 2 * k, h))
     var bias = TileTensor(weights.bias, row_major(h + 2 * k))
     if mapping == 1:
-        enqueue_linear_apple_gpu(ctx, normal, weight, bias, packed, decode_variant)
+        enqueue_linear_apple_gpu(ctx, normal, weight, bias, packed)
     elif mapping == 2:
         enqueue_linear_prefill_mma_8x16_apple_gpu(ctx, normal, weight, bias, packed)
     elif mapping == 3:
         enqueue_linear_prefill_mma_tile_apple_gpu[16, 16](ctx, normal, weight, bias, packed)
     elif mapping == 4:
         enqueue_linear_prefill_mma_tile_apple_gpu[8, 32](ctx, normal, weight, bias, packed)
-    elif mapping == 5:
+    else:  # 5
         enqueue_linear_rowwise_rows_apple_gpu[4](ctx, normal, weight, bias, packed)
-    elif mapping == 6:
-        enqueue_linear_rowwise_rows_apple_gpu[8](ctx, normal, weight, bias, packed)
-    else:
-        enqueue_linear_rowwise_rows_apple_gpu[16](ctx, normal, weight, bias, packed)
     if not unpack:
         return
     ctx.enqueue_function[_unpack_qkv[type_of(packed.layout), type_of(q.layout), type_of(key.layout)]](
@@ -384,10 +380,10 @@ def _enqueue_attention_qkv(
 
 def _enqueue_attention_wo(
     ctx: DeviceContext, mut weights: AttentionWeights,
-    mut work: AttentionWorkspace, rows: Int, use_mma: Bool, tile: Int = 0, decode_variant: Int = 0,
+    mut work: AttentionWorkspace, rows: Int, use_mma: Bool, tile: Int = 0,
 ) raises:
     """Shared Wo boundary for composition and isolated timing on identical data."""
-    if tile < 0 or tile > 5:
+    if tile < 0 or tile > 3:
         raise Error("unknown Wo tile mapping")
     var h = weights.hidden
     var a = TileTensor(work.attention, row_major(rows, h))
@@ -395,12 +391,8 @@ def _enqueue_attention_wo(
     var o = TileTensor(work.projected, row_major(rows, h))
     if tile == 3:
         enqueue_linear_rowwise_rows_apple_gpu[4](ctx, a, w, o)
-    elif tile == 4:
-        enqueue_linear_rowwise_rows_apple_gpu[8](ctx, a, w, o)
-    elif tile == 5:
-        enqueue_linear_rowwise_rows_apple_gpu[16](ctx, a, w, o)
     elif not use_mma:
-        enqueue_linear_apple_gpu(ctx, a, w, o, decode_variant)
+        enqueue_linear_apple_gpu(ctx, a, w, o)
     elif tile == 0:
         enqueue_linear_prefill_mma_8x16_apple_gpu(ctx, a, w, o)
     elif tile == 1:
@@ -426,9 +418,9 @@ def _validate_attention_sublayer[XL: TensorLayout](
     var t = p + r
     if route < 0 or route > 11:
         raise Error("unknown attention sublayer route")
-    if qkv_mapping < 0 or qkv_mapping > 7:
+    if qkv_mapping < 0 or qkv_mapping > 5:
         raise Error("unknown QKV projection mapping")
-    if wo_tile < 0 or wo_tile > 5:
+    if wo_tile < 0 or wo_tile > 3:
         raise Error("unknown Wo tile mapping")
     var launched_route = route
     if route >= 6 and route <= 10 and r == 1:
@@ -481,7 +473,6 @@ def enqueue_attention_sublayer[
     fuse_qkv: Bool = False,
     input_normalized: Bool = False,
     defer_residual: Bool = False,
-    decode_variant: Int = 0,
 ) raises -> Int:
     """Enqueue one sublayer and advance cache length; return the launched route.
 
@@ -520,8 +511,6 @@ def enqueue_attention_sublayer[
     var p = cache.length
     var t = p + r
 
-    if decode_variant and (decode_variant < 0 or decode_variant > 5 or r != 1 or h != 896 or qkv_mapping != 1 or wo_mma):
-        raise Error("projection arrangement requires Qwen rowwise decode")
     if fuse_qkv and (r != 1 or nq != 14 or nk != 2 or d != 64 or qkv_mapping != 1):
         raise Error("fused QKV requires one Qwen row and packed rowwise projection")
     var normal = TileTensor(work.normalized, row_major(r, h))
@@ -531,7 +520,7 @@ def enqueue_attention_sublayer[
         enqueue_rms_norm_apple_gpu(
             ctx, x, TileTensor(weights.norm, row_major(h)), normal
         )
-    _enqueue_attention_qkv(ctx, weights, work, r, qkv_mapping, not fuse_qkv, decode_variant)
+    _enqueue_attention_qkv(ctx, weights, work, r, qkv_mapping, not fuse_qkv)
     var q = TileTensor(work.query, row_major(r, nq, d))
     if fuse_qkv:
         _enqueue_fused_decode_qkv(ctx, work, cache)
@@ -647,7 +636,7 @@ def enqueue_attention_sublayer[
                 32, 32, MMA=True, SCHEDULE=2
             ](ctx, q, keys, values, a)
     var projected = TileTensor(work.projected, row_major(r, h))
-    _enqueue_attention_wo(ctx, weights, work, r, wo_mma, wo_tile, decode_variant)
+    _enqueue_attention_wo(ctx, weights, work, r, wo_mma, wo_tile)
     if not defer_residual:
         enqueue_residual_apple_gpu(
             ctx, x, projected, TileTensor(work.output, row_major(r, h))
@@ -665,7 +654,6 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     fuse_qkv: Bool = False,
     input_normalized: Bool = False,
     defer_residual: Bool = False,
-    decode_variant: Int = 0,
 ) raises -> Int:
     """Compose the prior Qwen projection and FP32 GQA studies on Metal.
 
@@ -686,7 +674,7 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     Zero keeps both 8x16 projections.
     GQA mapping 5 is the consistency baseline: route 11 and rowwise projections
     for every row count. Projection mapping 6 forces 8x16 MMA at every row
-    count; mappings 7/8/9 pack QKV and reuse rowwise weights across 4/8/16 rows.
+    count; mapping 7 packs QKV and reuses rowwise weights across four rows.
     """
     comptime assert x.flat_rank == 2
     if fuse_qkv and (Int(x.dim[0]()) != 1 or gqa_mapping != 0 or projection_mapping != 0):
@@ -695,7 +683,7 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
         raise Error("deferred residual/norm requires integrated control mappings")
     if gqa_mapping < 0 or gqa_mapping > 5:
         raise Error("unknown integrated GQA mapping")
-    if projection_mapping < 0 or projection_mapping > 9:
+    if projection_mapping < 0 or projection_mapping > 7:
         raise Error("unknown integrated projection mapping")
     if projection_mapping >= 6 and gqa_mapping != 5:
         raise Error("policy projection mappings require consistent attention")
@@ -716,5 +704,5 @@ def enqueue_attention_sublayer_integrated[XL: TensorLayout](
     return enqueue_attention_sublayer(
         ctx, weights, cache, work, x, 6 + gqa_mapping, use_mma, qkv,
         1 if projection_mapping == 5 else (projection_mapping if projection_mapping <= 2 else 0),
-        fuse_qkv, input_normalized, defer_residual, decode_variant,
+        fuse_qkv, input_normalized, defer_residual,
     )

@@ -136,8 +136,10 @@ def test_consistency_mapping_is_independent_of_rows() raises:
         assert_equal(decoder_mappings(20,rows),SIMD[DType.int64,4](5,0,0,1))
         assert_equal(decoder_mappings(21,rows),SIMD[DType.int64,4](5,6,7,1))
         assert_equal(decoder_mappings(22,rows),SIMD[DType.int64,4](5,7,19,1))
-        assert_equal(decoder_mappings(23,rows),SIMD[DType.int64,4](5,8,20,1))
-        assert_equal(decoder_mappings(24,rows),SIMD[DType.int64,4](5,9,21,1))
+        # Eight- and sixteen-row weight reuse (23/24) lost to four rows and were removed.
+        for retired in [23, 24]:
+            with assert_raises():
+                _ = decoder_mappings(retired,rows)
     with assert_raises():
         _ = decoder_mappings(20,0)
 
@@ -148,6 +150,16 @@ def test_consistent_decoder_accuracy_and_schedules() raises:
         if Int(py=spec[3]) == 14 and Int(py=spec[1]) <= 65:
             _case(String(py=spec[0]),Int(py=spec[1]),Int(py=spec[2]),Int(py=spec[3]),
                   Int(py=spec[4]),Int(py=spec[5]),Int(py=spec[6]),20,True)
+    support.result_summary()
+
+
+def test_fast_consistent_mma_configuration_accuracy_and_schedules() raises:
+    # Fast selects configuration 21 at 16 new rows over 256 cached; exercise it here too.
+    var support = decoder_support()
+    for spec in support.cases():
+        if Int(py=spec[3]) == 14 and Int(py=spec[1]) <= 65:
+            _case(String(py=spec[0]),Int(py=spec[1]),Int(py=spec[2]),Int(py=spec[3]),
+                  Int(py=spec[4]),Int(py=spec[5]),Int(py=spec[6]),21,True)
     support.result_summary()
 
 

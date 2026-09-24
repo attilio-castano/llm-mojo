@@ -173,7 +173,10 @@ CPU/GPU, occupancy, register-pressure or measured DRAM claims without counters.
 
 ## Reproduction
 
-With a clean measured checkout, verified prepared model and an external RUN directory:
+Collect with a clean measured checkout, a verified prepared model and an external
+RUN directory. `build --projections`, `selection-capture`, `selection-terminal`,
+`selection-archive` and `projection-confirm` exist through `edb610a`; later
+commits keep the replay and plot commands, which need no GPU or weights:
 
 ```sh
 uv run --locked python -m llm_mojo.benchmarks.model_profile build --projections --prepared "$PREPARED" --output "$RUN/build"

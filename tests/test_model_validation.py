@@ -7,7 +7,7 @@ import numpy as np
 from llm_mojo.validation.model import (bf16, compare, consistency_accuracy,
     verify_consistency_observations, CONSISTENCY_BOUNDARIES,
     numerical_diagnostic, prediction_diagnostic, storage_diagnostic)
-from llm_mojo.validation.model import generation_events, require_empty_prompt_rejection
+from llm_mojo.validation.model import generation_events, require_empty_prompt_rejection, route_record
 
 
 class ModelComparisonTests(unittest.TestCase):
@@ -36,6 +36,38 @@ class ModelComparisonTests(unittest.TestCase):
                         good.replace('151645','10')):
                 p.write_text(bad)
                 with self.assertRaises(ValueError): generation_events(p,32)
+
+    def test_route_records_prove_each_call_ran_its_mode(self):
+        def describe(configuration):
+            return ' '.join(f'{k}={v}' for k,v in route_record(configuration).items())
+        def report(mode,prefill,decode,chunks=((0,3),)):
+            rows=['event\tindex\tvalue\tnanoseconds','mode\t0\t'+mode+'\t0',
+                  *(f'prompt\t{i}\t{42+i}\t0' for i in range(3)),'device\t0\tApple M4 Pro/metal\t0']
+            calls=0
+            for (offset,_),configuration in zip(chunks,prefill):
+                rows+=[f'configuration\t{offset}\t{configuration}\t0',f'route\t{calls}\t{describe(configuration)}\t0']
+                calls+=1
+            rows+=['token\t0\t7\t10','decode\t0\t1\t5',f'route\t{calls}\t{describe(decode)}\t0',
+                   'token\t1\t151645\t20','cache\t0\t4\t0','submitted\t0\t96\t0','finish\t2\tstop\t21']
+            return '\n'.join(rows)+'\n'
+        with tempfile.TemporaryDirectory() as directory:
+            p=Path(directory)/'events.tsv'
+            for mode,prefill,decode in (('fast',[0],26),('baseline',[0],0),('consistent',[20],20)):
+                p.write_text(report(mode,prefill,decode))
+                self.assertEqual(generation_events(p,32,mode)['tokens'],[7,151645])
+            # One-row prefill chunks run the fused route in Fast mode.
+            p.write_text(report('fast',[26,26,26],26,((0,1),(1,1),(2,1))))
+            self.assertEqual(generation_events(p,32,'fast')['tokens'],[7,151645])
+            for mode,text in (('fast',report('fast',[0],0)),        # silent baseline fallback
+                              ('fast',report('fast',[26],26)),      # fused route on three rows
+                              ('baseline',report('baseline',[0],26)),
+                              ('consistent',report('fast',[20],20)),
+                              ('fast',report('fast',[0],26).replace('route\t1\t','route\t2\t'))):
+                p.write_text(text)
+                with self.subTest(mode=mode), self.assertRaises(ValueError): generation_events(p,32,mode)
+            # Retained reports predate mode and route events.
+            p.write_text(report('fast',[0],0))
+            self.assertEqual(generation_events(p,32)['tokens'],[7,151645])
 
     def test_diagnostics_report_distance_without_an_accuracy_gate(self):
         expected=np.array([[1.,2.,3.]],dtype=np.float32)
