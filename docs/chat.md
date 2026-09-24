@@ -15,14 +15,15 @@ With the verified prepared checkpoint already available, start from the reposito
 uv run llm-mojo chat
 ```
 
-The default is `build/model-prepared-v1` under this source checkout, matching the
-setup command. Use `--prepared /path/to/model` to override it; relative overrides
-are resolved from your working directory.
+The default is `build/model-prepared-v1` under this source checkout, which
+`llm-mojo setup` links to the shared model store. Use `--prepared /path/to/model`
+to override it; relative overrides are resolved from your working directory.
 
-The first launch compiles the chat executable. Subsequent launches reuse it when
-source, lockfile and executable hashes match. Each launch verifies weights and
-tokenizer tables locally. Missing assets produce an error; the launcher does not
-download them. Compilation, verification and loading happen once per session.
+Setup builds the chat executable. Launches reuse it when source, lockfile and
+executable hashes match, and rebuild it after a source change. Each launch
+verifies weights and tokenizer tables locally. Missing assets produce an error
+that points to `llm-mojo setup`; the launcher does not download them.
+Compilation, verification and loading happen once per session.
 
 Type one message per line. `/reset` starts a new conversation without reloading
 weights; `/exit` or Ctrl-D at an empty prompt exits. Ctrl-C while typing cancels

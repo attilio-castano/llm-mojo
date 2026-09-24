@@ -32,8 +32,9 @@ universal invariant.
 
 ## Artifact initialization
 
-Run `uv run --locked llm-mojo tokenizer setup` to prepare ahead of time. The
-`encode` and `decode` entrypoints perform the same initialization automatically:
+`uv run llm-mojo setup` prepares the tokenizer along with the model. For the
+tokenizer alone, run `uv run --locked llm-mojo tokenizer setup`. The `encode` and
+`decode` entrypoints perform the same initialization automatically:
 
 ```sh
 uv run --locked llm-mojo tokenizer encode 'Hello world'
@@ -43,8 +44,11 @@ uv run --locked llm-mojo tokenizer decode '9707,1879'
 The asset root is `build/checkpoints/qwen2.5-0.5b-instruct/` followed by immutable
 revision `7ae557604adf67be50417f59c2c2f167def9a775`. The original JSON is 7,031,645
 bytes, with SHA-256 `c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539`.
-`prepared-v1/` holds `tables.bin` and its provenance manifest. Everything in
-`build/` is ignored by Git. `--asset-dir` overrides the source directory;
+`prepared-v1/` holds `tables.bin` and its provenance manifest. After
+`llm-mojo setup`, the pinned JSON and other revision files are links into the
+shared model store, while `prepared-v1/` stays in each checkout because its
+validity is keyed to that checkout's generator sources. Everything in `build/`
+is ignored by Git. `--asset-dir` overrides the source directory;
 `--offline` prohibits model-artifact downloading, but does not alter uv's own
 dependency resolution behavior. A fully prepared environment works offline.
 

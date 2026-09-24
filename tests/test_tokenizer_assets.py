@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from llm_mojo.models.qwen2 import tokenizer_assets as assets
-from llm_mojo.runtime import artifacts
+from llm_mojo.runtime import artifacts, store
 
 
 class TokenizerAssetTests(unittest.TestCase):
@@ -16,10 +16,10 @@ class TokenizerAssetTests(unittest.TestCase):
         payload = b"valid pinned tokenizer"
         with tempfile.TemporaryDirectory() as tmp, patch.object(
             assets, "SOURCE_SHA", hashlib.sha256(payload).hexdigest()
-        ):
+        ), patch.object(assets, "SOURCE_BYTES", len(payload)):
             directory = Path(tmp)
             with patch.object(
-                assets.urllib.request,
+                store.urllib.request,
                 "urlopen",
                 return_value=io.BytesIO(payload),
             ) as download:
@@ -27,7 +27,7 @@ class TokenizerAssetTests(unittest.TestCase):
                 self.assertEqual(path.read_bytes(), payload)
                 download.assert_called_once()
             with patch.object(
-                assets.urllib.request,
+                store.urllib.request,
                 "urlopen",
                 side_effect=AssertionError("unexpected network"),
             ):
@@ -51,7 +51,7 @@ class TokenizerAssetTests(unittest.TestCase):
                 (io.BytesIO(b"wrong"), ValueError),
             ]:
                 with patch.object(
-                    assets.urllib.request, "urlopen", return_value=response
+                    store.urllib.request, "urlopen", return_value=response
                 ):
                     with self.assertRaises(error):
                         assets.ensure_source(directory, download=True)
@@ -62,7 +62,7 @@ class TokenizerAssetTests(unittest.TestCase):
         self,
     ):
         with tempfile.TemporaryDirectory() as tmp, patch.object(
-            assets.urllib.request,
+            store.urllib.request,
             "urlopen",
             side_effect=AssertionError("unexpected network"),
         ):

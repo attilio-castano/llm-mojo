@@ -82,6 +82,12 @@ uv sync --locked
 uv run mojo --version
 ```
 
+Then run `uv run llm-mojo setup`. It performs the toolchain checks above with
+printed remedies, provisions the shared model store and links this checkout to
+it, prepares the tokenizer tables and builds chat and generate; see the
+[CLI guide](cli.md#prepare-and-run). A new worktree runs the same command and
+reuses the store without downloading.
+
 There is no need to activate `.venv`; `uv run` executes commands in the managed
 environment. Each worktree has its own `.venv`; uv reuses its package cache when
 setting up another checkout.
@@ -99,9 +105,10 @@ for setup rather than adding these flags to project commands.
 
 ## Tests
 
-Prepare the tokenizer once with `uv run --locked llm-mojo tokenizer setup`.
-This downloads only the pinned tokenizer artifact when missing, verifies it,
-and prepares tables and the native executable. Subsequent tokenizer calls reuse
+Validation needs the pinned tokenizer tables, which `uv run llm-mojo setup`
+prepares. For the tokenizer alone, `uv run --locked llm-mojo tokenizer setup`
+downloads only the pinned tokenizer artifact when missing, verifies it, and
+prepares tables and the native executable. Subsequent tokenizer calls reuse
 local artifacts. See [the tokenizer contract](tokenizer.md).
 
 Run the complete validation workflow from a clean checkout:

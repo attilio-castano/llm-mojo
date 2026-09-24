@@ -8,18 +8,37 @@ runtime is outside the current packaging contract.
 ## Prepare and run
 
 ```sh
+uv run llm-mojo setup
+uv run llm-mojo setup --check
 uv run llm-mojo models list
-uv run llm-mojo models prepare qwen2.5-0.5b-instruct --download
 uv run llm-mojo chat
 uv run llm-mojo generate --prompt "The capital of France is" --preset short
 uv run llm-mojo generate --prompt-file prompt.txt --max-new-tokens 64
 ```
 
-Preparation downloads missing pinned assets only with `--download`. Without that
-flag it requires local assets. It verifies/reuses an existing prepared model;
-a new destination must not exist. Chat and generation never download assets.
-`models list` verifies local preparation and reports capabilities; it does not
-prepare or compile anything. Checksum verification reads the model weights.
+`setup` checks the toolchain, provisions the shared model store, links this
+checkout to it, prepares the tokenizer tables and builds chat and generate. A
+missing pinned file is imported from a verified copy when one exists (this
+checkout, another Git worktree, or `--import-from PATH`, cloned copy-on-write) and
+downloaded otherwise; `--offline` forbids downloads and `--no-build` skips
+compilation. `--check` changes nothing and exits nonzero until everything is ready.
+If `uv` is missing or the store's volume lacks room for what the store still
+needs, setup and `models prepare` stop before changing anything.
+
+The store lives outside every checkout: `--store`, else `LLM_MOJO_CACHE_DIR`, else
+`$XDG_CACHE_HOME/llm-mojo`, else `~/.cache/llm-mojo`. Files enter it only after
+their pinned size and SHA-256 match, by atomic rename, and are read-only
+afterwards. The prepared model is identified by a pinned digest of its 196 tensor
+hashes. Each checkout keeps its `build/` paths: the seven downloads become
+per-file links and `build/model-prepared-v1` a directory link. Tokenizer tables
+and native binaries stay per checkout because they depend on its sources; a real
+file or directory is never replaced by a link.
+
+`models prepare` is the asset-only part of setup and downloads only with
+`--download`; `--output PATH` writes a separate verified copy. Chat and generation
+never download assets. `models list` reports capabilities and store, link, table,
+binary and device state; it does not prepare or compile anything. Checksum
+verification reads the model weights.
 
 The supported application model is `qwen2.5-0.5b-instruct`, with `--mode fast`,
 BF16 storage, Metal, batch one and 4096-token capacity. These are implementation

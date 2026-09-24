@@ -34,6 +34,22 @@ def show(config):
 
 
 @app.command()
+def setup(offline: Annotated[bool, typer.Option('--offline', help='Never download; use the store or verified local copies.')] = False,
+          check: Annotated[bool, typer.Option('--check', help='Only report readiness; change nothing.')] = False,
+          import_from: Annotated[list[Path] | None, typer.Option(
+              '--import-from', help='A checkout or model directory holding verified assets.')] = None,
+          store: Annotated[Path | None, typer.Option(
+              help='Shared store (default: LLM_MOJO_CACHE_DIR, else ~/.cache/llm-mojo).')] = None,
+          build: Annotated[bool, typer.Option('--build/--no-build', help='Build the chat and generate executables.')] = True):
+    """Check the toolchain, prepare the model once per machine, and build chat."""
+    from llm_mojo.models.qwen2.assets import setup as run_setup
+    status = run_setup(store, offline=offline, check=check, import_from=import_from or (), build=build,
+                       log=typer.echo)
+    if status:
+        raise typer.Exit(status)
+
+
+@app.command()
 def chat(preset: Preset = 'interactive', model: Model = None, mode: Mode = None,
          prepared: Path | None = None, max_new_tokens: int | None = None,
          chunk_rows: int | None = None, system_file: Path | None = None,
@@ -70,22 +86,22 @@ def generate(preset: Preset = 'interactive', model: Model = None, mode: Mode = N
 
 @models.command('list')
 def list_models(prepared: Path | None = None):
-    """List supported capabilities and verified local preparation status."""
-    from llm_mojo.models.qwen2.assets import prepared_directory, verify_prepared, capabilities
-    from llm_mojo.models.qwen2.tokenizer_assets import asset_directory, prepared_valid
-    path = prepared.resolve() if prepared else prepared_directory()
+    """List supported capabilities, shared-store state and verified local preparation status."""
+    from llm_mojo.models.qwen2 import assets
+    report = assets.status()
+    path = prepared.resolve() if prepared else assets.prepared_directory()
     try:
-        verify_prepared(path)
-        status = 'ready' if prepared_valid(asset_directory()) else 'tokenizer preparation required'
+        assets.verify_prepared(path)
+        status = 'ready' if report['tokenizer_tables'] == 'ready' else 'tokenizer preparation required'
     except (OSError, ValueError, KeyError, TypeError) as error:
         status = 'preparation required: ' + str(error)
-    typer.echo(json.dumps(dict(**capabilities(), prepared=str(path), status=status), indent=2))
+    typer.echo(json.dumps(dict(**assets.capabilities(), prepared=str(path), status=status, **report), indent=2))
 
 
 @models.command('prepare')
 def prepare_model(model: Annotated[str, typer.Argument()] = MODEL, output: Path | None = None,
                   download: Annotated[bool, typer.Option(help='Download pinned assets only when missing.')] = False):
-    """Verify/reuse local assets and prepare Qwen; opt in to missing downloads."""
+    """Prepare Qwen in the shared store and link this checkout; opt in to missing downloads."""
     if model != MODEL:
         raise typer.BadParameter('unsupported model: ' + model)
     from llm_mojo.models.qwen2.assets import prepare
