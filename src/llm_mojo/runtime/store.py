@@ -151,10 +151,21 @@ def publish_directory(staged, final):
     return final
 
 
+def aside_path(path, label):
+    """A free sibling name, <name>.<label>-<time>, numbered when that is taken."""
+    path = Path(path)
+    base = f'{path.name}.{label}-{datetime.now():%Y%m%d-%H%M%S}'
+    candidate, number = path.with_name(base), 1
+    while candidate.exists() or candidate.is_symlink():
+        number += 1
+        candidate = path.with_name(f'{base}-{number}')
+    return candidate
+
+
 def set_aside(path):
     """Move an invalid store entry out of the way without deleting anything."""
     path = Path(path)
-    aside = path.with_name(f'{path.name}.invalid-{datetime.now():%Y%m%d-%H%M%S}')
+    aside = aside_path(path, 'invalid')
     os.rename(path, aside)
     print(f'Moved an invalid store entry aside: {aside} (delete it when no longer needed)', file=sys.stderr)
     return aside

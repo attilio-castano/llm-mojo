@@ -151,6 +151,16 @@ class StoreTests(unittest.TestCase):
         store.remove_staged(aside)
         self.assertFalse(aside.exists())
 
+    def test_set_aside_never_reuses_a_name(self):
+        entry, kept = self.root / 'store/entry', []
+        with redirect_stderr(io.StringIO()):
+            for number in range(3):
+                entry.mkdir(parents=True)
+                (entry / 'file').write_text(str(number))
+                kept.append(store.set_aside(entry))
+        self.assertEqual([(path / 'file').read_text() for path in kept], ['0', '1', '2'])
+        self.assertTrue(all(path.name.startswith('entry.invalid-') for path in kept))
+
 
 class ToolchainTests(unittest.TestCase):
     OUTPUTS = {
