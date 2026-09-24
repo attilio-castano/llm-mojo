@@ -413,7 +413,9 @@ class CacheTests(unittest.TestCase):
              patch.object(fixtures, 'worktrees', return_value=[self.root, other]):
             text = fixtures.report(self.root, self.store)
         self.assertIn(f'flat/{self.key()[:12]}  0.00 GB  generated ', text)
-        self.assertIn('linked by this checkout, two; current for this checkout', text)
+        self.assertIn(f'\n  linked by: this checkout, {fixtures.label(other, self.root)}\n'
+                      '  current for: this checkout', text)
+        self.assertEqual(fixtures.label(Path.home() / 'Developer/llm-mojo', self.root), '~/Developer/llm-mojo')
         self.assertIn(subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=self.root, capture_output=True,
                                      text=True).stdout[:7], text)
 

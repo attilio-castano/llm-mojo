@@ -589,7 +589,10 @@ def unless_locked(path):
 
 
 def label(tree, root):
-    return 'this checkout' if Path(tree).resolve() == Path(root).resolve() else Path(tree).name
+    tree = Path(tree)
+    if tree.resolve() == Path(root).resolve():
+        return 'this checkout'
+    return '~/' + tree.relative_to(Path.home()).as_posix() if tree.is_relative_to(Path.home()) else str(tree)
 
 
 def report(root=None, store_dir=None):
@@ -603,9 +606,9 @@ def report(root=None, store_dir=None):
             origin = record.get('generation', {}) if record else {}
             users = ', '.join(label(tree, root) for tree in linked.get((family, key), [])) or 'none'
             current = ', '.join(label(tree, root) for tree in selected.get((family, key), [])) or 'none'
-            lines.append(f"{family}/{key[:12]}  {footprint(path, record) / 1e9:.2f} GB  generated "
-                         f"{origin.get('time', 'at an unknown time')} at {(origin.get('commit') or 'unknown')[:7]}; "
-                         f"linked by {users}; current for {current}")
+            lines += [f"{family}/{key[:12]}  {footprint(path, record) / 1e9:.2f} GB  generated "
+                      f"{origin.get('time', 'at an unknown time')} at {(origin.get('commit') or 'unknown')[:7]}",
+                      f'  linked by: {users}', f'  current for: {current}']
         else:
             lines.append(f'{family}/{name}  {footprint(path) / 1e9:.2f} GB  {kind}')
     return '\n'.join(lines if len(lines) > 1 else [*lines, 'No entries.'])
