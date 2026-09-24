@@ -65,10 +65,11 @@ writing `ids` at positions `past, past + 1, ...` in one block.
 - each logit row is the last row of a sequence;
 - token IDs are within the vocabulary.
 
-In 1a, `QwenModel.forward(ctx, batch, kv, ...)` accepts one sequence with one
-block. It rejects the batch in two cases:
-- the pool geometry differs from the model (24 layers, 2 KV heads, 64 dims,
-  block size equal to the model capacity);
+In 1a, `QwenModel.forward(ctx, batch, kv, plan)` and `forward_captured` accept
+one sequence with one block; the `ExecutionPlan` still chooses the kernels. The
+model rejects the batch in two cases:
+- the pool geometry differs from the model (its layer count, 2 KV heads,
+  64 dims, block size equal to the model capacity);
 - the first position differs from the length of any of the block's 24 layer
   views.
 

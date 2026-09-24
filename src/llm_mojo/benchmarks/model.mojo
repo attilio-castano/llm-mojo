@@ -14,41 +14,42 @@ from llm_mojo.models.qwen2.model import QwenModel, save_bf16
 from llm_mojo.models.qwen2.plan import fast_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
 from llm_mojo.runtime.clock import now
+from llm_mojo.serving.batch import StepBatch
+from llm_mojo.serving.kv_pool import KVPool
 
 
-def rewind(mut model: QwenModel, prefix: Int):
+def rewind(mut model: QwenModel, mut kv: KVPool, prefix: Int) raises:
     # Previous greedy readback completed model computation. Only the logical suffix is rewound.
-    model.length = prefix
     model.submitted_rows = prefix * 24
-    for layer in range(24):
-        model.layers[layer].cache.length = prefix
+    kv.truncate(0, prefix)
 
 
-def snapshot(mut model: QwenModel, path: String) raises:
+def snapshot(mut model: QwenModel, kv: KVPool, path: String) raises:
     save_bf16(model.logits,path+"-logits.bin",151936)
     for layer in range(24):
-        save_bf16(model.layers[layer].cache.key,path+"-k"+String(layer)+".bin",4096*128)
-        save_bf16(model.layers[layer].cache.value,path+"-v"+String(layer)+".bin",4096*128)
+        save_bf16(kv.caches[kv.index(0,layer)].key,path+"-k"+String(layer)+".bin",4096*128)
+        save_bf16(kv.caches[kv.index(0,layer)].value,path+"-v"+String(layer)+".bin",4096*128)
 
 
-def poison_outputs(mut model: QwenModel, prefix: Int) raises:
+def poison_outputs(mut model: QwenModel, mut kv: KVPool, prefix: Int) raises:
     """Untimed verification: stale logits/cache appends must not pass parity."""
     var sentinel = bitcast[DType.bfloat16](UInt16(0x7FC0))
     model.logits.enqueue_fill(sentinel)
     model.mlp.activated.enqueue_fill(sentinel)
     model.mlp.gated.enqueue_fill(sentinel)
     for layer in range(24):
-        with model.layers[layer].cache.key.map_to_host() as mapped:
+        with kv.caches[kv.index(0,layer)].key.map_to_host() as mapped:
             for column in range(128):
                 mapped.unsafe_ptr()[unsafe_offset=prefix*128+column] = sentinel
-        with model.layers[layer].cache.value.map_to_host() as mapped:
+        with kv.caches[kv.index(0,layer)].value.map_to_host() as mapped:
             for column in range(128):
                 mapped.unsafe_ptr()[unsafe_offset=prefix*128+column] = sentinel
 
 
-def step[OBSERVE: Bool](mut model: QwenModel, ctx: DeviceContext, ids: List[Int]) raises -> Int:
+def step[OBSERVE: Bool](mut model: QwenModel, mut kv: KVPool, ctx: DeviceContext, ids: List[Int]) raises -> Int:
     """One single-row Fast decode step: configuration 26, GPU argmax, swap, fused norms."""
-    model.forward[OBSERVE](ctx,ids,fast_plan(1,model.length+1,ctx.name()))
+    var cached = kv.length(0)
+    model.forward[OBSERVE](ctx,StepBatch.sequence(ids,cached,0,kv.block_size),kv,fast_plan(1,cached+1,ctx.name()))
     return model.greedy[OBSERVE](ctx)
 
 
@@ -123,35 +124,36 @@ def main() raises:
     if len(history) < prefix+1:
         raise Error("insufficient frozen token history")
     var model = QwenModel(ctx,args[2],4096,256)
+    var kv = KVPool(ctx,1,4096)
     # Define all inactive storage for exact before/after comparisons.
     for layer in range(24):
-        model.layers[layer].cache.key.enqueue_fill(0)
-        model.layers[layer].cache.value.enqueue_fill(0)
+        kv.caches[kv.index(0,layer)].key.enqueue_fill(0)
+        kv.caches[kv.index(0,layer)].value.enqueue_fill(0)
     var offset = 0
     while offset < prefix:
         var count = min(256,prefix-offset)
         var chunk = List[Int](capacity=count)
         for i in range(count):
             chunk.append(history[offset+i])
-        model.forward(ctx,chunk,fast_plan(count,offset+count,ctx.name()))
+        model.forward(ctx,StepBatch.sequence(chunk,offset,0,4096),kv,fast_plan(count,offset+count,ctx.name()))
         offset += count
     ctx.synchronize()
     var ids: List[Int] = [history[prefix]]
-    var winner = step[False](model,ctx,ids)
+    var winner = step[False](model,kv,ctx,ids)
     print("device:",ctx.name())
     print("api:",ctx.api())
     print("prefix:",prefix,"token:",ids[0],"winner:",winner)
     if mode == "verify":
-        rewind(model,prefix)
-        snapshot(model,args[7]+"/before")
-        poison_outputs(model,prefix)
-        var plain = step[False](model,ctx,ids)
-        snapshot(model,args[7]+"/plain")
-        rewind(model,prefix)
-        poison_outputs(model,prefix)
-        var observed = step[True](model,ctx,ids)
-        snapshot(model,args[7]+"/observed")
-        if plain != observed or model.length != prefix+1 or model.submitted_rows != 24*(prefix+1):
+        rewind(model,kv,prefix)
+        snapshot(model,kv,args[7]+"/before")
+        poison_outputs(model,kv,prefix)
+        var plain = step[False](model,kv,ctx,ids)
+        snapshot(model,kv,args[7]+"/plain")
+        rewind(model,kv,prefix)
+        poison_outputs(model,kv,prefix)
+        var observed = step[True](model,kv,ctx,ids)
+        snapshot(model,kv,args[7]+"/observed")
+        if plain != observed or kv.length(0) != prefix+1 or model.submitted_rows != 24*(prefix+1):
             raise Error("instrumentation changed token or accounting")
         var record = String()
         for i in range(prefix+1):
@@ -162,8 +164,8 @@ def main() raises:
         return
     if mode == "profile":
         for _ in range(10):
-            rewind(model,prefix)
-            if step[False](model,ctx,ids) != winner:
+            rewind(model,kv,prefix)
+            if step[False](model,kv,ctx,ids) != winner:
                 raise Error("unstable profile prediction")
         print("correctness: passed")
         print("profile implementation:","QwenModel.forward+greedy-all-three")
@@ -177,8 +179,8 @@ def main() raises:
         print("post-profile idle milliseconds: 250")
         print("PROFILE_REGION_BEGIN")
         for _ in range(8):
-            rewind(model,prefix)
-            if step[False](model,ctx,ids) != winner:
+            rewind(model,kv,prefix)
+            if step[False](model,kv,ctx,ids) != winner:
                 raise Error("unstable profile prediction")
         print("PROFILE_REGION_END")
         sleep(0.25)
@@ -188,13 +190,13 @@ def main() raises:
         var arm = (first+arm_index)%2
         var observe = comparison == 1 and arm == 1
         for sample in range(20):
-            rewind(model,prefix)
+            rewind(model,kv,prefix)
             var start = now()
             var selected: Int
             if observe:
-                selected = step[True](model,ctx,ids)
+                selected = step[True](model,kv,ctx,ids)
             else:
-                selected = step[False](model,ctx,ids)
+                selected = step[False](model,kv,ctx,ids)
             var elapsed = now()-start
             if selected != winner or model.submitted_rows != 24*(prefix+1):
                 raise Error("measurement prediction/accounting changed")

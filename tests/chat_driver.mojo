@@ -7,21 +7,24 @@ from llm_mojo.models.qwen2.model import QwenModel, save_bf16
 from llm_mojo.models.qwen2.plan import fast_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
 from llm_mojo.runtime.clock import now
+from llm_mojo.serving.batch import StepBatch
+from llm_mojo.serving.kv_pool import KVPool
 
 
-def caches(model: QwenModel, directory: String) raises:
+def caches(kv: KVPool, directory: String) raises:
     for i in range(24):
-        save_bf16(model.layers[i].cache.key,directory+"/key_"+String(i)+".bin",model.capacity*128)
-        save_bf16(model.layers[i].cache.value,directory+"/value_"+String(i)+".bin",model.capacity*128)
+        save_bf16(kv.caches[kv.index(0,i)].key,directory+"/key_"+String(i)+".bin",kv.block_size*128)
+        save_bf16(kv.caches[kv.index(0,i)].value,directory+"/value_"+String(i)+".bin",kv.block_size*128)
 
 
-def replay_history(mut model: QwenModel, ctx: DeviceContext, ids: List[Int]) raises:
-    while model.length < len(ids):
-        var rows = min(model.max_rows,len(ids)-model.length)
+def replay_history(mut model: QwenModel, mut kv: KVPool, ctx: DeviceContext, ids: List[Int]) raises:
+    while kv.length(0) < len(ids):
+        var cached = kv.length(0)
+        var rows = min(model.max_rows,len(ids)-cached)
         var suffix = List[Int]()
         for i in range(rows):
-            suffix.append(ids[model.length+i])
-        model.forward(ctx,suffix,fast_plan(rows,model.length+rows,ctx.name()))
+            suffix.append(ids[cached+i])
+        model.forward(ctx,StepBatch.sequence(suffix,cached,0,kv.block_size),kv,fast_plan(rows,cached+rows,ctx.name()))
     ctx.synchronize()
 
 
@@ -35,28 +38,30 @@ def main() raises:
     print("device",ctx.name(),"backend",ctx.api())
     var session = ChatSession(ctx,args[1],tokenizer,work,String(DEFAULT_SYSTEM),256,512)
     var replay = QwenModel(ctx,args[1],512,256)
+    var replay_kv = KVPool(ctx,1,512)
     for i in range(24):
-        session.model.layers[i].cache.key.enqueue_fill(123)
-        session.model.layers[i].cache.value.enqueue_fill(123)
+        session.kv.caches[session.kv.index(0,i)].key.enqueue_fill(123)
+        session.kv.caches[session.kv.index(0,i)].value.enqueue_fill(123)
     var prompts: List[String] = ["My name is Ada. Reply briefly.","What is my name?", "Scrivi una frase sul caffè. ☕"]
     for turn in range(len(prompts)):
         var directory = args[3]+"/turn"+String(turn)
-        var before = session.model.length
-        caches(session.model,directory+"/before")
+        var before = session.length()
+        caches(session.kv,directory+"/before")
         session.begin(tokenizer,work,prompts[turn],12)
         var prompt_length = len(session.history.tokens)
         var ids_file = open(directory+"/prompt.txt","w")
         for id in session.history.tokens:
             ids_file.write(String(id)+"\n")
         var started = now()
-        while session.model.length < len(session.history.tokens):
+        while session.length() < len(session.history.tokens):
             session.submit_next(ctx)
         ctx.synchronize()
         var cached_ns = now()-started
         save_bf16(session.model.logits,directory+"/cached.bin",151936)
         started = now()
         replay.reset(ctx)
-        replay_history(replay,ctx,session.history.tokens)
+        replay_kv.reset(ctx)
+        replay_history(replay,replay_kv,ctx,session.history.tokens)
         var replay_ns = now()-started
         save_bf16(replay.logits,directory+"/replay.bin",151936)
         print("prefill",turn,"before",before,"prompt",prompt_length,"cached_ns",cached_ns,"replay_ns",replay_ns)
@@ -68,43 +73,42 @@ def main() raises:
                 for sample in range(-3,5):
                     ctx.synchronize()
                     if arm == 0:
-                        session.model.length = before
                         session.model.submitted_rows = before*24
-                        for i in range(24):
-                            session.model.layers[i].cache.length = before
+                        session.kv.truncate(0,before)
                     else:
                         replay.reset(ctx)
+                        replay_kv.reset(ctx)
                     started = now()
                     if arm == 0:
-                        while session.model.length<len(session.history.tokens):
+                        while session.length()<len(session.history.tokens):
                             session.submit_next(ctx)
                         ctx.synchronize()
                     else:
-                        replay_history(replay,ctx,session.history.tokens)
+                        replay_history(replay,replay_kv,ctx,session.history.tokens)
                     var elapsed = now()-started
                     if sample>=0:
                         print("sample",turn,block,arm,sample,elapsed)
         while session.history.generating:
-            if session.model.length<len(session.history.tokens):
+            if session.length()<len(session.history.tokens):
                 session.submit_next(ctx)
             else:
                 _ = session.sample(ctx)
-        assert_equal(session.model.submitted_rows,session.model.length*24)
-        caches(session.model,directory+"/after")
-        print("finish",turn,"cached",session.model.length,"history",len(session.history.tokens),"generated",session.history.generated,"reason",session.history.reason)
-    var old_length = session.model.length
+        assert_equal(session.model.submitted_rows,session.length()*24)
+        caches(session.kv,directory+"/after")
+        print("finish",turn,"cached",session.length(),"history",len(session.history.tokens),"generated",session.history.generated,"reason",session.history.reason)
+    var old_length = session.length()
     var old_history = len(session.history.tokens)
     with assert_raises():
         session.begin(tokenizer,work,"too big",4096)
-    assert_equal(session.model.length,old_length)
+    assert_equal(session.length(),old_length)
     assert_equal(len(session.history.tokens),old_history)
     session.fail()
     with assert_raises():
         session.begin(tokenizer,work,"invalid",1)
     session.reset(ctx)
-    assert_equal(session.model.length,0)
+    assert_equal(session.length(),0)
     session.begin(tokenizer,work,prompts[0],12)
-    while session.model.length<len(session.history.tokens):
+    while session.length()<len(session.history.tokens):
         session.submit_next(ctx)
     save_bf16(session.model.logits,args[3]+"/reset.bin",151936)
     session.reset(ctx)
@@ -112,9 +116,9 @@ def main() raises:
     # Interrupt before any submission: the whole user turn remains pending.
     session.history.finish("interrupted")
     session.begin(tokenizer,work,"Continue.",1)
-    while session.model.length<len(session.history.tokens):
+    while session.length()<len(session.history.tokens):
         session.submit_next(ctx)
     _ = session.sample(ctx)
     assert_equal(session.history.reason,"limit")
-    assert_equal(session.model.submitted_rows,session.model.length*24)
+    assert_equal(session.model.submitted_rows,session.length()*24)
     print("chat lifecycle passed: prefix append reset failure recovery interruption pending closure")

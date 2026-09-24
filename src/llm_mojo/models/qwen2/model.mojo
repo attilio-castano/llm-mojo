@@ -1,6 +1,8 @@
 """Fixed Qwen model ownership. Native execution; prepared files are verified by tooling.
 
-The cross-layer copy or owner swap keeps the decoder alias contract intact. Numerical
+The model owns weights and workspaces. KV storage and sequence lengths belong to the
+caller's KVPool; each forward receives a StepBatch describing the step. The
+cross-layer copy or owner swap keeps the decoder alias contract intact. Numerical
 comparisons are diagnostics; storage and lifecycle invariants remain exact.
 Which kernels a call uses is decided by an ExecutionPlan (models/qwen2/plan.mojo).
 """
@@ -8,7 +10,7 @@ from std.memory import bitcast
 from std.gpu import global_idx
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
-from llm_mojo.layers.attention_sublayer import AttentionWeights, AttentionCache, AttentionWorkspace
+from llm_mojo.layers.attention_sublayer import AttentionWeights, AttentionWorkspace
 from llm_mojo.layers.mlp import MLPWeights, MLPWorkspace
 from llm_mojo.layers.decoder_layer import (
     DECODER_FUSED_DECODE, decoder_mappings, enqueue_decoder_layer_configuration,
@@ -20,6 +22,8 @@ from llm_mojo.kernels.linear import enqueue_linear_apple_gpu
 from llm_mojo.kernels.token_selection import enqueue_argmax
 from llm_mojo.models.qwen2.plan import ExecutionPlan, MAX_CONTEXT
 from llm_mojo.runtime.clock import now
+from llm_mojo.serving.batch import StepBatch
+from llm_mojo.serving.kv_pool import KVPool
 
 comptime HIDDEN = 896
 comptime VOCABULARY = 151936
@@ -135,15 +139,13 @@ struct ForwardRoute(ImplicitlyCopyable, Movable):
 struct ModelLayer(Movable):
     var attention: AttentionWeights
     var mlp: MLPWeights
-    var cache: AttentionCache
 
-    def __init__(out self, ctx: DeviceContext, capacity: Int) raises:
+    def __init__(out self, ctx: DeviceContext) raises:
         self.attention = AttentionWeights(ctx)
         self.mlp = MLPWeights(ctx)
-        self.cache = AttentionCache(ctx,capacity)
 
-    def __init__(out self, ctx: DeviceContext, path: String, index: Int, capacity: Int) raises:
-        self = Self(ctx,capacity)
+    def __init__(out self, ctx: DeviceContext, path: String, index: Int) raises:
+        self = Self(ctx)
         self.load(path,index)
 
     def load(mut self, path: String, index: Int) raises:
@@ -173,7 +175,8 @@ struct QwenModel(Movable):
     var tokens: DeviceBuffer[DType.int32]
     var capacity: Int
     var max_rows: Int
-    var length: Int
+    # A successful forward has produced logits that greedy can read.
+    var ready: Bool
     var valid: Bool
     var submitted_rows: Int
     var last_route: ForwardRoute
@@ -187,7 +190,7 @@ struct QwenModel(Movable):
             raise Error("Qwen requires Metal and valid layer, row and context capacity")
         self.capacity = capacity
         self.max_rows = max_rows
-        self.length = 0
+        self.ready = False
         self.valid = True
         self.submitted_rows = 0
         self.last_route = ForwardRoute(-1, 0, 0, 0, 0, 0, 0, False, False)
@@ -198,7 +201,7 @@ struct QwenModel(Movable):
         self.norm = ctx.enqueue_create_buffer[DType.bfloat16](HIDDEN)
         self.layers = List[ModelLayer](capacity=layer_count)
         for _ in range(layer_count):
-            self.layers.append(ModelLayer(ctx,capacity))
+            self.layers.append(ModelLayer(ctx))
         self.attention = AttentionWorkspace(ctx,max_rows,capacity,
             materialized=False,fp32_materialized=False,prefill_splits=8)
         self.mlp = MLPWorkspace(ctx,max_rows)
@@ -228,19 +231,27 @@ struct QwenModel(Movable):
         return QwenModel(ctx, layer_count, capacity, max_rows)
 
     def reset(mut self, ctx: DeviceContext) raises:
+        """Finish queued work and forget the last logits. Callers reset their KV pools."""
         self.valid = False
         ctx.synchronize()
-        for i in range(len(self.layers)):
-            self.layers[i].cache.length = 0
-        self.length = 0
+        self.ready = False
         self.valid = True
         self.submitted_rows = 0
 
-    def preflight(mut self, ctx: DeviceContext, ids: List[Int], plan: ExecutionPlan) raises:
-        var rows = len(ids)
-        if not self.valid or rows < 1 or rows > self.max_rows or rows > self.capacity-self.length:
+    def preflight(mut self, ctx: DeviceContext, batch: StepBatch, mut kv: KVPool, plan: ExecutionPlan) raises:
+        batch.validate(kv.blocks,kv.block_size,VOCABULARY)
+        # Batched decode arrives in a later step; today a call covers one sequence in one block.
+        if batch.sequences() != 1 or batch.max_blocks != 1:
+            raise Error("Qwen steps one sequence held in one block")
+        var rows = batch.rows()
+        if not self.valid or rows > self.max_rows:
             raise Error("invalid Qwen state, row extent or context overflow")
         plan.validate(rows)
+        if len(self.layers) < 1:
+            raise Error("empty Qwen layer stack")
+        if (kv.layers != len(self.layers) or kv.block_size != self.capacity
+                or kv.kv_heads != self.layers[0].attention.kv_heads or kv.head_dim != self.layers[0].attention.head_dim):
+            raise Error("KV pool geometry does not match the model")
         if (len(self.embedding) != VOCABULARY*HIDDEN or len(self.norm) != HIDDEN
             or len(self.input) != self.max_rows*HIDDEN or len(self.tokens) != self.max_rows
             or len(self.normalized) != HIDDEN or len(self.logits) != VOCABULARY
@@ -248,16 +259,13 @@ struct QwenModel(Movable):
             or self.attention.capacity != self.capacity
             or self.attention.max_rows != self.max_rows or self.mlp.max_rows != self.max_rows):
             raise Error("inconsistent model allocation geometry")
-        for id in ids:
-            if id < 0 or id >= VOCABULARY:
-                raise Error("model token ID out of range")
         var mappings = decoder_mappings(plan.configuration,rows)
-        if len(self.layers) < 1:
-            raise Error("empty Qwen layer stack")
+        var base = kv.index(batch.block_table[0],0)
+        var past = batch.positions[0]
         for i in range(len(self.layers)):
-            if self.layers[i].cache.length != self.length or self.layers[i].cache.capacity != self.capacity:
+            if kv.caches[base+i].length != past or kv.caches[base+i].capacity != self.capacity:
                 raise Error("inconsistent model cache lengths")
-            validate_decoder_configuration(ctx,self.layers[i].attention,self.layers[i].cache,self.attention,
+            validate_decoder_configuration(ctx,self.layers[i].attention,kv.caches[base+i],self.attention,
                 self.layers[i].mlp,self.mlp,TileTensor(self.input,row_major(rows,HIDDEN)),
                 Int(mappings[0]),Int(mappings[1]),Int(mappings[2]))
 
@@ -266,27 +274,31 @@ struct QwenModel(Movable):
         comptime if OBSERVE:
             self.observation[slot] = now()
 
-    def forward[OBSERVE: Bool = False](mut self, ctx: DeviceContext, ids: List[Int], plan: ExecutionPlan) raises:
-        """Submit all layers under plan. Token upload synchronizes; layer execution does not.
+    def forward[OBSERVE: Bool = False](mut self, ctx: DeviceContext, batch: StepBatch, mut kv: KVPool,
+                                       plan: ExecutionPlan) raises:
+        """Submit all layers for one step under plan. Token upload synchronizes; layer execution does not.
 
-        With plan.gpu_argmax the vocabulary projection is followed by GPU argmax;
+        The batch names the sequence's block in `kv`, whose layer views must all
+        hold exactly the rows before the batch's first position. With
+        plan.gpu_argmax the vocabulary projection is followed by GPU argmax;
         otherwise greedy scans the materialized logits on the CPU.
         """
-        self._forward[OBSERVE, False](ctx, ids, plan, CaptureRequest("", False))
+        self._forward[OBSERVE, False](ctx, batch, kv, plan, CaptureRequest("", False))
 
-    def forward_captured(mut self, ctx: DeviceContext, ids: List[Int], plan: ExecutionPlan,
+    def forward_captured(mut self, ctx: DeviceContext, batch: StepBatch, mut kv: KVPool, plan: ExecutionPlan,
                          request: CaptureRequest) raises:
         """Diagnostic forward that synchronously writes every boundary under request.directory."""
         if request.directory.byte_length() == 0:
             raise Error("capture requires a directory")
-        self._forward[False, True](ctx, ids, plan, request)
+        self._forward[False, True](ctx, batch, kv, plan, request)
 
-    def _forward[OBSERVE: Bool, CAPTURE: Bool](mut self, ctx: DeviceContext, ids: List[Int],
+    def _forward[OBSERVE: Bool, CAPTURE: Bool](mut self, ctx: DeviceContext, batch: StepBatch, mut kv: KVPool,
                                                plan: ExecutionPlan, request: CaptureRequest) raises:
         self._mark[OBSERVE](MARK_START)
-        self.preflight(ctx,ids,plan)
+        self.preflight(ctx,batch,kv,plan)
         self._mark[OBSERVE](MARK_PREFLIGHT)
-        var rows = len(ids)
+        var rows = batch.rows()
+        var base = kv.index(batch.block_table[0],0)
         var layer_count = len(self.layers)
         var fuse_norm = plan.fuse_residual_norm
         var route = ForwardRoute(plan.configuration, 0, 0, 0, 0, 0, 0, False, False)
@@ -294,7 +306,7 @@ struct QwenModel(Movable):
         try:
             with self.tokens.map_to_host() as mapped:
                 for i in range(rows):
-                    mapped.unsafe_ptr()[unsafe_offset=i] = Int32(ids[i])
+                    mapped.unsafe_ptr()[unsafe_offset=i] = Int32(batch.token_ids[i])
             self._mark[OBSERVE](MARK_TOKENS)
             var token_view = TileTensor(self.tokens,row_major(rows))
             var weight_view = TileTensor(self.embedding,row_major(VOCABULARY,HIDDEN))
@@ -308,7 +320,7 @@ struct QwenModel(Movable):
             for i in range(layer_count):
                 var normalized_input = fuse_norm and i > 0
                 _ = enqueue_decoder_layer_configuration(ctx,self.layers[i].attention,
-                    self.layers[i].cache,self.attention,self.layers[i].mlp,self.mlp,
+                    kv.caches[base+i],self.attention,self.layers[i].mlp,self.mlp,
                     TileTensor(self.input,row_major(rows,HIDDEN)),plan.configuration,fuse_norm,normalized_input)
                 route.layers += 1
                 if normalized_input:
@@ -338,14 +350,14 @@ struct QwenModel(Movable):
                     save_bf16(self.mlp.output,capture+"/hidden_"+String(i+1)+".bin",rows*HIDDEN)
                     if plan.configuration == DECODER_FUSED_DECODE:
                         # Fusion intentionally leaves the unpack/rotated scratch untouched.
-                        var appended = (self.layers[i].cache.length-1)*KV_WIDTH
-                        save_bf16(self.layers[i].cache.key,capture+"/append_key_"+String(i)+".bin",KV_WIDTH,appended)
-                        save_bf16(self.layers[i].cache.value,capture+"/append_value_"+String(i)+".bin",KV_WIDTH,appended)
+                        var appended = (kv.caches[base+i].length-1)*KV_WIDTH
+                        save_bf16(kv.caches[base+i].key,capture+"/append_key_"+String(i)+".bin",KV_WIDTH,appended)
+                        save_bf16(kv.caches[base+i].value,capture+"/append_value_"+String(i)+".bin",KV_WIDTH,appended)
                     else:
                         save_bf16(self.attention.rotated_key,capture+"/append_key_"+String(i)+".bin",rows*KV_WIDTH)
                         save_bf16(self.attention.raw_value,capture+"/append_value_"+String(i)+".bin",rows*KV_WIDTH)
-                    save_bf16(self.layers[i].cache.key,capture+"/cache_key_"+String(i)+".bin",self.capacity*KV_WIDTH)
-                    save_bf16(self.layers[i].cache.value,capture+"/cache_value_"+String(i)+".bin",self.capacity*KV_WIDTH)
+                    save_bf16(kv.caches[base+i].key,capture+"/cache_key_"+String(i)+".bin",self.capacity*KV_WIDTH)
+                    save_bf16(kv.caches[base+i].value,capture+"/cache_value_"+String(i)+".bin",self.capacity*KV_WIDTH)
                 if i+1 < layer_count:
                     if plan.swap_buffers:
                         swap_hidden_buffers(self.input,self.mlp.output)
@@ -374,7 +386,7 @@ struct QwenModel(Movable):
             comptime if CAPTURE:
                 save_bf16(self.normalized,capture+"/final_norm.bin",HIDDEN)
                 save_bf16(self.logits,capture+"/logits.bin",VOCABULARY)
-            self.length += rows
+            self.ready = True
             self.submitted_rows += rows*layer_count
             self.last_route = route
         except error:
@@ -384,7 +396,7 @@ struct QwenModel(Movable):
     def greedy[OBSERVE: Bool = False](mut self, ctx: DeviceContext) raises -> Int:
         """Read the selected route: lowest ID on ties; reject any nonfinite logit."""
         self._mark[OBSERVE](MARK_GREEDY)
-        if not self.valid or self.length == 0:
+        if not self.valid or not self.ready:
             raise Error("no valid next-token logits")
         try:
             if self.gpu_argmax:

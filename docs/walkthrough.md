@@ -54,6 +54,9 @@ terminal.
 [`QwenModel`](../src/llm_mojo/models/qwen2/model.mojo), which allocates GPU
 buffers and fills them with [`load_bf16`](../src/llm_mojo/models/qwen2/model.mojo),
 one layer at a time through [`ModelLayer.load`](../src/llm_mojo/models/qwen2/model.mojo).
+The session also creates a one-block [`KVPool`](../src/llm_mojo/serving/kv_pool.mojo):
+a single allocation holding every layer's cache, which the model reads and
+appends through per-layer views.
 
 | Tensor | Shape | Size |
 | --- | --- | ---: |
@@ -80,15 +83,18 @@ and turns it into IDs with the native byte-level BPE
 appended to the history. If the message plus the whole reply budget would not
 fit in 4,096 tokens, the turn is rejected before anything changes.
 
-The history is the source of truth. `model.length` counts how many of its tokens
-are already in the KV cache; everything after that still has to be computed.
+The history is the source of truth. `ChatSession.length()`, the length of the
+session's KV pool, counts how many of its tokens are already in the KV cache;
+everything after that still has to be computed.
 
 ## 4. Prefill: computing the new tokens
 
 The chat loop calls [`ChatSession.submit_next`](../src/llm_mojo/models/qwen2/chat.mojo)
 until the whole history is cached. Each call takes up to 256 uncached tokens
-(the chunk size) and runs [`QwenModel.forward`](../src/llm_mojo/models/qwen2/model.mojo)
-with a plan from [`fast_plan`](../src/llm_mojo/models/qwen2/plan.mojo). On Apple
+(the chunk size), describes them as a [`StepBatch`](../src/llm_mojo/serving/batch.mojo)
+(token IDs, positions and the cache rows they write) and runs
+[`QwenModel.forward`](../src/llm_mojo/models/qwen2/model.mojo) with the pool and
+a plan from [`fast_plan`](../src/llm_mojo/models/qwen2/plan.mojo). On Apple
 M4 Pro, a multi-row call uses configuration 2, 3 or 21 for the eleven measured
 row and cache sizes in
 [`fast_prefill_configuration`](../src/llm_mojo/models/qwen2/plan.mojo) and
@@ -97,8 +103,9 @@ configuration 0 otherwise. Other devices always get configuration 0.
 For a call with R new tokens, the model:
 
 1. **Checks everything first.** [`QwenModel.preflight`](../src/llm_mojo/models/qwen2/model.mojo)
-   validates the plan, the IDs, the shapes and the cache capacity before any GPU
-   work, so a bad call cannot leave half-written state.
+   validates the step batch, the plan, the IDs, the shapes, the pool and every
+   layer's cache length before any GPU work, so a bad call cannot leave
+   half-written state.
 2. **Uploads the IDs** and looks up their embedding rows with
    [`_embedding`](../src/llm_mojo/models/qwen2/model.mojo): [R] IDs become [R, 896]
    hidden states.
@@ -132,7 +139,7 @@ For a call with R new tokens, the model:
    logits: one score per vocabulary entry.
 
 All of this is enqueued on one ordered GPU stream; the host does not wait between
-layers. Each layer's cache now holds R more tokens, and `model.length` grows by R.
+layers. Each layer's cache now holds R more tokens, and the pool's length grows by R.
 
 ## 5. Choosing the next token
 

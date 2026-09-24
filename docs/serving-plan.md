@@ -95,8 +95,9 @@ prepares assets and launches native executables.
 | ModelRunner | StepBatch upload, forward, token selection, readback, step timing | policy |
 | QwenModel | weights, workspaces, kernel dispatch | sequence state between steps |
 
-Today `QwenModel` owns 24 caches and one `length`, and `ChatSession` owns one
-history. In this design, the model becomes stateless between steps, the
+`QwenModel` once owned 24 caches and one `length`; phase 1a moved KV storage and
+lengths into a caller-owned `KVPool`, and `ChatSession` still owns one history.
+In this design, the model becomes stateless between steps, the
 KVCacheManager owns all KV storage, each request owns its history, and chat
 becomes an engine client whose turns reuse earlier turns through prefix hits.
 

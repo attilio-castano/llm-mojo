@@ -6,6 +6,8 @@ from max.gpu.host import DeviceContext
 from llm_mojo.models.qwen2.model import QwenModel, generation_budget
 from llm_mojo.models.qwen2.plan import MAX_CONTEXT, execution_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace, TokenizerDecoder
+from llm_mojo.serving.batch import StepBatch
+from llm_mojo.serving.kv_pool import KVPool
 
 
 def main() raises:
@@ -41,6 +43,7 @@ def main() raises:
     var max_rows = min(chunk_rows,prompt_length) if chunk_rows > 0 else prompt_length
     var ctx = DeviceContext()
     var model = QwenModel(ctx,args[1],MAX_CONTEXT,max_rows)
+    var kv = KVPool(ctx,1,MAX_CONTEXT)
     if diagnostics:
         events += "device\t0\t"+ctx.name()+"/"+ctx.api()+"\t0\n"
         events += "load\t0\t0\t"+String(now()-started)+"\n"
@@ -53,7 +56,7 @@ def main() raises:
         for i in range(rows):
             ids.append(history[offset+i])
         var plan = execution_plan(mode,rows,offset+rows,ctx.name())
-        model.forward(ctx,ids,plan)
+        model.forward(ctx,StepBatch.sequence(ids,offset,0,MAX_CONTEXT),kv,plan)
         if diagnostics:
             events += "configuration\t"+String(offset)+"\t"+String(plan.configuration)+"\t0\n"
             events += "route\t"+String(calls)+"\t"+model.last_route.describe()+"\t0\n"
@@ -79,7 +82,8 @@ def main() raises:
         if step+1 < budget:
             var ids: List[Int] = [token]
             var decode_started = now()
-            model.forward(ctx,ids,execution_plan(mode,1,model.length+1,ctx.name()))
+            var cached = kv.length(0)
+            model.forward(ctx,StepBatch.sequence(ids,cached,0,MAX_CONTEXT),kv,execution_plan(mode,1,cached+1,ctx.name()))
             if diagnostics:
                 ctx.synchronize()
                 events += "decode\t"+String(step)+"\t1\t"+String(now()-decode_started)+"\n"
@@ -90,7 +94,7 @@ def main() raises:
     if len(bytes) > 0:
         print(String(from_utf8=bytes),end="",flush=True)
     if diagnostics:
-        events += "cache\t0\t"+String(model.length)+"\t0\n"
+        events += "cache\t0\t"+String(kv.length(0))+"\t0\n"
         events += "submitted\t0\t"+String(model.submitted_rows)+"\t0\n"
         events += "finish\t"+String(len(history)-prompt_length)+"\t"+finish_reason+"\t"+String(now()-started)+"\n"
         var report = open(args[7],"w")

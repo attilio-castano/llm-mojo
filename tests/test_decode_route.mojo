@@ -12,6 +12,8 @@ from std.testing import TestSuite, assert_equal
 from llm_mojo.layers.decoder_layer import DECODER_FUSED_DECODE
 from llm_mojo.models.qwen2.model import CaptureRequest, ForwardRoute, QwenModel
 from llm_mojo.models.qwen2.plan import baseline_plan, configured_plan
+from llm_mojo.serving.batch import StepBatch
+from llm_mojo.serving.kv_pool import KVPool
 from decoder_layer_support import decoder_support, load_decoder, poison_decoder
 
 comptime CASE = "h896_i4864_nq14_nk2_d64_t65_s4001_base"
@@ -41,9 +43,14 @@ def _model(ctx: DeviceContext) raises -> QwenModel:
         load_decoder(model.layers[i].mlp.gate, CASE, "input_gate", 0, 4864 * 896)
         load_decoder(model.layers[i].mlp.up, CASE, "input_up", 0, 4864 * 896)
         load_decoder(model.layers[i].mlp.down, CASE, "input_down", 0, 896 * 4864)
-        model.layers[i].cache.key.enqueue_fill(0)
-        model.layers[i].cache.value.enqueue_fill(0)
     return model^
+
+
+def _pool(ctx: DeviceContext) raises -> KVPool:
+    """One zeroed full-context block; every element belongs to one layer view."""
+    var pool = KVPool(ctx, 1, PREFIX + STEPS, LAYERS)
+    pool.storage.enqueue_fill(0)
+    return pool^
 
 
 def _same(mut left: DeviceBuffer[DType.bfloat16], mut right: DeviceBuffer[DType.bfloat16],
@@ -96,11 +103,14 @@ def test_fast_decode_matches_baseline_and_runs_fused() raises:
     assert_equal(ctx.api(), "metal")
     var fast = _model(ctx)
     var baseline = _model(ctx)
+    var fast_kv = _pool(ctx)
+    var baseline_kv = _pool(ctx)
     var prompt = List[Int]()
     for i in range(PREFIX):
         prompt.append(i)
-    fast.forward(ctx, prompt, baseline_plan(PREFIX, PREFIX))
-    baseline.forward(ctx, prompt, baseline_plan(PREFIX, PREFIX))
+    var prefill = StepBatch.sequence(prompt, 0, 0, PREFIX + STEPS)
+    fast.forward(ctx, prefill, fast_kv, baseline_plan(PREFIX, PREFIX))
+    baseline.forward(ctx, prefill, baseline_kv, baseline_plan(PREFIX, PREFIX))
     assert_equal(fast.greedy(ctx), baseline.greedy(ctx))
     _poison_scratch(fast)
     _poison_scratch(baseline)
@@ -111,16 +121,17 @@ def test_fast_decode_matches_baseline_and_runs_fused() raises:
         # The fused plan is explicit, so this runs on any Apple GPU, not only the measured device.
         var fused = configured_plan(DECODER_FUSED_DECODE, 1, total)
         var plain = baseline_plan(1, total)
+        var batch = StepBatch.sequence(ids, PREFIX + step, 0, PREFIX + STEPS)
         if step + 1 < STEPS:
-            fast.forward(ctx, ids, fused)
-            baseline.forward(ctx, ids, plain)
+            fast.forward(ctx, batch, fast_kv, fused)
+            baseline.forward(ctx, batch, baseline_kv, plain)
         else:
             # The last step also captures every layer boundary, including both norms.
             var os = Python.import_module("os")
             os.makedirs(CAPTURE + "/fast", 0o777, True)
             os.makedirs(CAPTURE + "/baseline", 0o777, True)
-            fast.forward_captured(ctx, ids, fused, CaptureRequest(CAPTURE + "/fast", True))
-            baseline.forward_captured(ctx, ids, plain, CaptureRequest(CAPTURE + "/baseline", True))
+            fast.forward_captured(ctx, batch, fast_kv, fused, CaptureRequest(CAPTURE + "/fast", True))
+            baseline.forward_captured(ctx, batch, baseline_kv, plain, CaptureRequest(CAPTURE + "/baseline", True))
         assert_equal(_route(fast.last_route), SIMD[DType.int64, 8](26, LAYERS, LAYERS - 1, 2 * LAYERS, LAYERS - 1, 0, 0, 1))
         assert_equal(_route(baseline.last_route), SIMD[DType.int64, 8](0, LAYERS, 0, 0, 0, LAYERS - 1, 1, 0))
         assert_equal(fast.greedy(ctx), baseline.greedy(ctx))
@@ -129,9 +140,9 @@ def test_fast_decode_matches_baseline_and_runs_fused() raises:
         _same(fast.mlp.output, baseline.mlp.output, 896, "final hidden state")
         for i in range(LAYERS):
             var name = "layer " + String(i)
-            _same(fast.layers[i].cache.key, baseline.layers[i].cache.key, fast.capacity * 128, name + " keys")
-            _same(fast.layers[i].cache.value, baseline.layers[i].cache.value, fast.capacity * 128, name + " values")
-        assert_equal(fast.length, PREFIX + step + 1)
+            _same(fast_kv.caches[i].key, baseline_kv.caches[i].key, fast.capacity * 128, name + " keys")
+            _same(fast_kv.caches[i].value, baseline_kv.caches[i].value, fast.capacity * 128, name + " values")
+        assert_equal(fast_kv.length(0), PREFIX + step + 1)
         assert_equal(fast.submitted_rows, baseline.submitted_rows)
     var names = List[String]()
     for i in range(LAYERS + 1):
