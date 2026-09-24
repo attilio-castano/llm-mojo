@@ -380,6 +380,29 @@ class CacheTests(unittest.TestCase):
         fixtures.generate_locally(OUTPUT, self.root, lambda *command: calls.append(command))
         self.assertEqual(calls, [('generate', 'nested', '--output', str(self.root / 'build/oracle_data/nested'))])
 
+    def test_detach_swaps_the_link_for_a_writable_copy_until_the_next_validation(self):
+        with patch.dict(fixtures.FAMILIES, {'flat': IN_PLACE}):
+            self.assertIn('is not linked', fixtures.detach('flat', self.root))
+            self.checkout_dir.parent.mkdir(parents=True)
+            self.checkout_dir.symlink_to(self.base / 'pruned')
+            self.assertIn('removed a dangling link', fixtures.detach('flat', self.root))
+            self.assertFalse(self.checkout_dir.is_symlink())
+            self.ensure()
+            entry = self.entry()
+            published = contents(entry.tree)
+            self.assertIn('is now a writable copy', fixtures.detach('flat', self.root))
+            self.assertFalse(self.checkout_dir.is_symlink())
+            (self.checkout_dir / 'case/inner/capture.npy').write_bytes(b'manual')
+            (self.checkout_dir / 'top.npy').write_bytes(b'new')
+            self.assertEqual(contents(entry.tree), published)
+            self.assertIn('already a writable copy', fixtures.detach('flat', self.root))
+            with self.assertRaisesRegex(ValueError, 'unknown fixture family'):
+                fixtures.detach('decoder', self.root)
+        self.assertEqual(self.ensure(), 'hit')
+        self.assertEqual(os.readlink(self.checkout_dir), str(entry.tree))
+        [kept] = self.checkout_dir.parent.glob('flat.local-*')
+        self.assertEqual((kept / 'case/inner/capture.npy').read_bytes(), b'manual')
+
     def test_the_sublayer_anchor_check_catches_a_changed_contract_or_array(self):
         root, directory = self.base / 'anchors', self.base / 'anchors/arrays'
         (root / 'tests/fixtures/attention_sublayer').mkdir(parents=True)
@@ -398,6 +421,69 @@ class CacheTests(unittest.TestCase):
         (directory / '0_output.npy').write_bytes(b'outpuT')
         with self.assertRaisesRegex(RuntimeError, 'sublayer oracle array changed: 0_output.npy'):
             fixtures.check_sublayer_anchors(root, directory)
+
+
+class ValidationWiringTests(unittest.TestCase):
+    def test_validation_takes_each_large_family_from_the_cache_in_the_old_order(self):
+        from llm_mojo.models.qwen2 import tokenizer_assets
+        from llm_mojo.validation import suite
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'tests/fixtures').mkdir(parents=True)
+            (root / 'tests/fixtures/checksums.json').write_text('{"sha256": {}}')
+            for name in ('rms_norm', 'linear', 'rope', 'attention'):
+                (root / 'build/oracle_data' / name).mkdir(parents=True)
+            (root / 'build/oracle_data/attention/prefill_manifest.json').write_text('{"array_sha256": {}}')
+            for cache, regenerate in ((True, False), (True, True), (False, False)):
+                events = []
+                with patch.object(suite, 'repository_root', return_value=root), \
+                     patch.object(suite, 'run', side_effect=lambda *command: events.append(command[-1])), \
+                     patch.object(fixtures, 'inputs', return_value={'inputs': 'identity'}), \
+                     patch.object(fixtures, 'ensure', side_effect=lambda family, root, sources, runner, **options:
+                                  events.append(('ensure', family.name, root, sources, runner is suite.run, options))), \
+                     patch.object(fixtures, 'generate_locally', side_effect=lambda family, root, runner:
+                                  events.append(('local', family.name, root, runner is suite.run))), \
+                     patch.object(tokenizer_assets, 'ensure_prepared'), redirect_stdout(io.StringIO()):
+                    suite.prepare(cache=cache, regenerate=regenerate)
+                large = [event for event in events if isinstance(event, tuple)]
+                if cache:
+                    self.assertEqual(large, [('ensure', name, root, {'inputs': 'identity'}, True,
+                                              {'regenerate': regenerate})
+                                             for name in ('attention_sublayer', 'mlp', 'decoder_layer')])
+                else:
+                    self.assertEqual(large, [('local', name, root, True)
+                                             for name in ('attention_sublayer', 'mlp', 'decoder_layer')])
+                order = [event if isinstance(event, str) else event[1] for event in events]
+                self.assertEqual(order[order.index('attention_sublayer'):order.index('decoder_layer') + 1],
+                                 ['attention_sublayer', '--self-test', 'mlp', '--self-test', '--self-test',
+                                  'decoder_layer'])
+                self.assertNotIn('attention_precision', order)
+
+    def test_suite_flags_choose_the_fixture_source(self):
+        from llm_mojo.validation import suite
+        with patch.object(suite, 'prepare') as prepare:
+            for arguments in (['--prepare-only'], ['--prepare-only', '--regenerate-fixtures'],
+                              ['--prepare-only', '--no-fixture-cache']):
+                suite.main(arguments)
+        self.assertEqual([call.kwargs for call in prepare.call_args_list],
+                         [dict(cache=True, regenerate=False), dict(cache=True, regenerate=True),
+                          dict(cache=False, regenerate=False)])
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            suite.main(['--regenerate-fixtures', '--no-fixture-cache'])
+
+    def test_mlp_check_records_never_write_into_the_linked_family(self):
+        import mlp_support
+        with tempfile.TemporaryDirectory() as directory:
+            linked, records = Path(directory, 'oracle_data/mlp'), Path(directory, 'oracle_records/mlp')
+            linked.mkdir(parents=True)
+            os.chmod(linked, 0o555)
+            environment = {k: v for k, v in os.environ.items() if k not in ('MLP_RECORD_DIR', 'MLP_SPLIT')}
+            with patch.object(mlp_support, 'ROOT', linked), patch.object(mlp_support, 'RECORD_ROOT', records), \
+                 patch.object(mlp_support, 'RECORDS', []), patch.dict(os.environ, environment, clear=True):
+                mlp_support.record(dict(probe='silu_sweep', failed=0))
+            self.assertEqual([path.name for path in records.iterdir()], ['metal_development_probes_checks.json'])
+            self.assertEqual(list(linked.iterdir()), [])
+        self.assertEqual(mlp_support.RECORD_ROOT, REPOSITORY / 'build/oracle_records/mlp')
 
 
 class RecipeTests(unittest.TestCase):

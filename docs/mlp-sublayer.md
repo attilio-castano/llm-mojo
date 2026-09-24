@@ -366,12 +366,16 @@ arrays are ignored under `build/oracle_data/mlp/`.
 
 ```sh
 uv run --locked --script tests/fixtures/generate.py mlp -- --self-test
+uv run llm-mojo fixtures detach mlp
 uv run --locked --script tests/fixtures/generate.py mlp
 uv run --locked llm-mojo validate
 ```
 
-The full workflow regenerates and verifies the synthetic MLP references and runs
-the reference-tooling tests. It never runs a holdout or downloads checkpoint
+Validation links `build/oracle_data/mlp` to a
+[shared read-only copy](development.md#shared-oracle-fixtures) of the synthetic
+references; `fixtures detach mlp` makes it writable for the generator commands
+here. The full workflow verifies the synthetic MLP references and runs the
+reference-tooling tests. It never runs a holdout or downloads checkpoint
 assets. To additionally reproduce checkpoint evidence, provide a local directory
 containing the verified `model.attention-prefix.bin` and companion assets:
 
@@ -381,8 +385,10 @@ uv run --locked --script tests/fixtures/generate.py mlp -- --checkpoint-dir /abs
 
 Without that option, checkpoint status is explicitly pending for the current
 run while synthetic evidence is still verified. The frozen record retains the
-completed checkpoint run. `build/oracle_data/mlp/last_run.json` records the
-command, commit before/after, dirty state, and source hashes for the current run.
+completed checkpoint run. Each run writes `build/oracle_data/mlp/last_run.json`
+with the command, commit before/after, dirty state, and source hashes. When
+validation generates the shared copy, it moves that file into the copy's record,
+`fixtures/mlp/<key>.json` in the store.
 Reference agreement establishes a target for the next milestone; it does not
 establish Mojo MLP or full-model correctness.
 

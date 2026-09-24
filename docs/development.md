@@ -128,12 +128,15 @@ study commands and their canonical replacements.
 
 Validation runs in four stages, stopping at the first failure:
 
-1. **Oracles.** It regenerates every independent oracle into ignored
+1. **Oracles.** It regenerates the small independent oracles into ignored
    `build/oracle_data/` and checks each against its frozen anchor: the original
-   fixtures at `a86f4db`, the prefill and attention-sublayer manifests, the MLP,
-   decoder and model-calibration self-tests, the tokenizer references (including
-   a Unicode run) and the packed chat fixtures. Tokenizer tables must already be
-   prepared; validation never downloads.
+   fixtures at `a86f4db`, the prefill manifest, the MLP, decoder and
+   model-calibration self-tests, the tokenizer references (including a Unicode
+   run) and the packed chat fixtures. The attention-sublayer, MLP and
+   decoder-layer references come from a
+   [shared, verified copy](#shared-oracle-fixtures), generated and checked
+   against their anchors once per generator version. Tokenizer tables must
+   already be prepared; validation never downloads.
 2. **Python tests.** Setup and the shared store, the CLI and configuration,
    launch boundaries, evidence replays, numerical tooling and documentation links.
 3. **Mojo suites.** Every `tests/test_*.mojo` runs on Metal with
@@ -179,6 +182,47 @@ Mojo suite, include `-I src -I build -I tests`. Generators and the
 small checksum record are versioned; large generated arrays and manifests are
 build outputs. A changed checksum requires reviewing the oracle and numerical
 contract, never relaxing tolerances to fit a kernel.
+
+### Shared oracle fixtures
+
+The attention-sublayer, MLP and decoder-layer references hold about 8.4 GB and
+take about ten minutes to generate. They are deterministic and pinned by frozen
+anchors, so validation keeps one read-only copy of each per generator version in
+the shared store, under `fixtures/` in `~/.cache/llm-mojo` or
+`LLM_MOJO_CACHE_DIR`, and links `build/oracle_data/<family>` to it.
+[`fixtures.py`](../src/llm_mojo/validation/fixtures.py) implements it.
+
+- **Key.** SHA-256 of the family's generator commands and the content of every
+  tracked or untracked file the generators read: `tests/fixtures/generate.py`,
+  `tests/fixtures/decoder_reference.py`, their script lock, and the
+  `attention_sublayer/`, `mlp/` and `decoder_layer/` directories under
+  `tests/fixtures/`. Editing any of them, committed or not, selects a new entry.
+  Other edits under `tests/fixtures/` do not.
+- **Hit.** Validation re-hashes every file of the entry against its record,
+  which takes seconds, and links the checkout. It writes nothing to the store.
+  If the entry was generated on another macOS or Python version, validation
+  says so and continues: the entry still matches its frozen anchors.
+- **Miss.** Validation generates the family as before, including its anchor
+  checks, and publishes the tree read-only by rename. Another worktree
+  validating the same key waits, then reuses it. A damaged entry is set aside as
+  `<key>.invalid-<time>` and regenerated. `mlp/last_run.json` names the
+  worktree that ran the generator, so it moves into the entry's record,
+  `fixtures/<family>/<key>.json`.
+- **Checkout copies.** A real `build/oracle_data/<family>` directory gives way
+  to the link only when validation wrote everything in it. Anything else is
+  kept beside it as `<family>.local-<time>`. The Mojo MLP suites record their
+  checks in `build/oracle_records/mlp/`, outside the linked directory.
+
+`uv run --locked llm-mojo validate --regenerate-fixtures` regenerates the three
+families even when cached, and fails unless they match the cached copies byte
+for byte; a differing tree is kept as `<key>.regenerated-<time>` for comparison.
+`--no-fixture-cache` generates them inside the checkout as before and leaves the
+store untouched.
+
+Generator commands run by hand, such as the checkpoint, calibration and holdout
+captures, write into the family directory and fail on the read-only link. Run
+`uv run llm-mojo fixtures detach <family>` first. It replaces the link with a
+writable copy-on-write clone, and the next validation links the family again.
 
 ## Measurements and studies
 

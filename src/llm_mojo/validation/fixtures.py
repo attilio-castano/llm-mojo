@@ -32,6 +32,7 @@ import stat
 import subprocess
 import time
 
+from .._repository import repository_root
 from ..runtime import store, toolchain
 
 FORMAT = 'llm-mojo-fixtures-v1'
@@ -443,3 +444,43 @@ def generate_locally(family, root, runner):
     if checkout.is_symlink():
         checkout.unlink()
     run_steps(family, root, checkout, runner)
+
+
+def family_named(name):
+    if name not in FAMILIES:
+        raise ValueError(f"unknown fixture family {name!r}; choose from {', '.join(FAMILIES)}")
+    return FAMILIES[name]
+
+
+def detach(name, root=None):
+    """Swap build/oracle_data/<name>'s link for a writable copy-on-write clone of its entry.
+
+    For generator commands run by hand, which write into the family directory.
+    The next validate links the family again, keeping any extra files beside it.
+    """
+    family = family_named(name)
+    checkout = checkout_path(root or repository_root(), family)
+    if not checkout.is_symlink():
+        if checkout.exists():
+            return f'{name}: {checkout} is already a writable copy'
+        return f'{name}: {checkout} is not linked; generators create it'
+    target = checkout.resolve()
+    if not target.is_dir():
+        checkout.unlink()
+        return f'{name}: removed a dangling link at {checkout}; generators create the directory'
+    copy = store.aside_path(checkout, 'detaching')
+    try:
+        store.clone(target, copy)
+        for directory, _, files in os.walk(copy):
+            os.chmod(directory, 0o755)
+            for file in files:
+                os.chmod(Path(directory, file), 0o644)
+        checkout.unlink()
+        os.rename(copy, checkout)
+    except BaseException:
+        store.remove_staged(copy)
+        if not checkout.exists() and not checkout.is_symlink():
+            os.symlink(target, checkout)
+        raise
+    return (f'{name}: {checkout} is now a writable copy of {target}. The next validate links it again '
+            'and keeps any files it does not generate beside it.')

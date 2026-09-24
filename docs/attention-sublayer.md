@@ -87,12 +87,17 @@ across four rows).
 
 ```sh
 uv run --locked llm-mojo validate
+uv run llm-mojo fixtures detach attention_sublayer
 uv run --locked --script tests/fixtures/generate.py attention_sublayer
 uv run --locked --script tests/fixtures/generate.py attention_precision
 ```
 
 The shared script lock pins NumPy 1.26.4, Torch 2.4.0 and Transformers 4.43.1.
 Generated arrays, binaries and checkpoint assets remain in ignored `build/`.
+Validation links `build/oracle_data/attention_sublayer` to a
+[shared read-only copy](development.md#shared-oracle-fixtures); `fixtures detach`
+makes it a writable copy for the generator commands above and below, and the
+next validation links it again.
 Checkpoint validation is explicit and reuses verified local assets:
 
 ```sh
