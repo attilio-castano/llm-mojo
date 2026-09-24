@@ -422,6 +422,7 @@ def ensure(family, root, sources, runner, *, store_dir=None, regenerate=False):
     record, problem = verify(entry, key)
     if record is None or regenerate:
         with locked(entry.lock, f'{family.name}: waiting for another validation to finish generating it'):
+            started = time.monotonic()
             record, problem = verify(entry, key)
             if record is None or regenerate:
                 return rebuild(family, root, store_dir, key, entry, sources, runner, record, problem)

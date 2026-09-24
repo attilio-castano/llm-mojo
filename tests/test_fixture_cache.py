@@ -322,6 +322,7 @@ class CacheTests(unittest.TestCase):
         def slow(*command):
             started.set()
             release.wait(10)
+            time.sleep(1.5)
             first(*command)
 
         def run(name, root, runner):
@@ -341,6 +342,8 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(results, {'first': 'generated', 'second': 'hit'})
         self.assertEqual((len(first.calls), self.generator(other).calls), (1, []))
         self.assertIn('waiting for another validation', output.getvalue())
+        # The reported verification time excludes the wait for the lock.
+        self.assertRegex(output.getvalue(), r'verified cached fixtures \w+ \(.*\) in 0\.\d s')
 
     def test_low_disk_changes_nothing(self):
         self.generator(self.root)('generate', 'flat')
