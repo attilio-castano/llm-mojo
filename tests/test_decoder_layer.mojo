@@ -11,7 +11,8 @@ from std.testing import TestSuite, assert_equal, assert_raises
 from std.python import PythonObject
 from llm_mojo.layers.attention_sublayer import AttentionWeights, AttentionCache, AttentionWorkspace, _enqueue_attention_qkv, _enqueue_attention_wo
 from llm_mojo.layers.mlp import MLPWeights, MLPWorkspace, enqueue_mlp_stage_apple_gpu, enqueue_mlp_apple_gpu
-from llm_mojo.layers.decoder_layer import enqueue_decoder_layer, decoder_mappings, decoder_policy_configuration, _enqueue_decoder_layer_policy_storage
+from llm_mojo.layers.decoder_layer import enqueue_decoder_layer, decoder_mappings
+from llm_mojo.layers.decoder_policy import decoder_policy_configuration, _enqueue_decoder_layer_policy_storage
 from decoder_layer_support import decoder_support, load_decoder, check_decoder, poison_decoder, decoder_snapshot, exact_decoder, check_decoder_cache, check_decoder_active, check_decoder_slice
 
 

@@ -166,7 +166,7 @@ def decoder_smoke():
                 cwd=repository_root(),text=True,capture_output=True,env=env,check=True)
             if 'api: metal' not in result.stdout or 'correctness: passed' not in result.stdout or not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE'):
                 raise RuntimeError('decoder benchmark route smoke failed')
-    for r,t,variants in ((1,65,(0,8,12,14)),(15,256,(0,1,2,3,4)),(16,65,(0,1,2,3,4)),(17,65,(0,1,2,3,4))):
+    for r,t,variants in ((1,65,(0,20,21,22)),(15,256,(0,2,3,20,21,22)),(16,65,(0,2,3,20,21,22)),(17,65,(0,2,3,20,21,22))):
         for variant in variants:
             subprocess.run(list(map(str,[target,r,t,24,variant,0,0,4001,'adversarial',1,0])),
                 cwd=repository_root(),capture_output=True,env=env,check=True)
@@ -174,7 +174,8 @@ def decoder_smoke():
     result=subprocess.run(list(map(str,[target,1,256,1,0,0,0,4001,'buffered',1,0])),
         cwd=repository_root(),capture_output=True,text=True,env=env,check=True)
     if 'measurement: whole_decoder_buffered' not in result.stdout:raise RuntimeError('lost diagnostic boundary')
-    for r,t,l,c,seed in ((0,65,1,0,4001),(66,65,1,0,4001),(1,65,2,0,4001),(1,65,1,7,4001),(1,65,1,0,4002)):
+    # Configuration 8 is one of the retired decoder arms and must be rejected.
+    for r,t,l,c,seed in ((0,65,1,0,4001),(66,65,1,0,4001),(1,65,2,0,4001),(1,65,1,7,4001),(1,65,1,0,4002),(1,65,1,8,4001)):
         result=subprocess.run(list(map(str,[target,r,t,l,c,0,0,seed,'bench',1,0])),cwd=repository_root(),capture_output=True,env=env)
         if result.returncode==0:raise RuntimeError('invalid decoder benchmark accepted')
     print('decoder complete workload grid and adversarial rings passed on Metal',flush=True)

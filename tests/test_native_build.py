@@ -42,6 +42,7 @@ class NativeBuildTests(unittest.TestCase):
         sources = build.build_sources('src/llm_mojo/cli/chat_cli.mojo')
         self.assertIn('src/llm_mojo/models/qwen2/model.mojo', sources)
         self.assertIn('src/llm_mojo/kernels/linear.mojo', sources)
+        self.assertIn('src/llm_mojo/models/qwen2/plan.mojo', sources)
         self.assertNotIn('src/llm_mojo/cli/generate_cli.mojo', sources)
         self.assertFalse(any('/benchmarks/' in p for p in sources))
 

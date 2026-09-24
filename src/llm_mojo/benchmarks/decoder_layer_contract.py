@@ -13,6 +13,10 @@ MEASUREMENT_VARIANTS = VARIANTS | {20,21,22,23,24}
 # Numerical harness IDs for the public lookup: Fast/Deterministic, hot/ring24.
 POLICY_EXECUTIONS = {100:(False,1),101:(True,1),102:(False,24),103:(True,24)}
 POLICY_TEST_VARIANTS = MEASUREMENT_VARIANTS | POLICY_EXECUTIONS.keys()
+# Configurations the engine still implements. The registries above stay frozen so
+# retained runs replay; configurations 1, 4, 8, 12, 14, 23 and 24 exist through edb610a.
+RUNNABLE_VARIANTS = frozenset({0,2,3,20,21,22})
+RUNNABLE_POLICY_VARIANTS = RUNNABLE_VARIANTS | POLICY_EXECUTIONS.keys()
 ENTRYPOINTS = {f'decoder_layer_{v}':'enqueue_decoder_layer' for v in MEASUREMENT_VARIANTS}
 NAMES = {0:'integrated control',1:'both 16x16 attention projections',
          2:'split8 attention',3:'split8 + both 16x16 projections',4:'rowwise MLP',
@@ -596,6 +600,10 @@ def policy_cost_report(directory,accepted,build):
     return dict(kind='decoder_policy_cost',accepted=accepted,runs=receipts,rows=rows)
 
 
+# Retained evidence names sources by their path when recorded; #22 later moved
+# the decoder to layers/. Replays must keep the recorded name.
+POLICY_CAMPAIGN_DECODER_SOURCE = 'src/llm_mojo/decoder_layer.mojo'
+
 def replay_policy_campaign(directory):
     """Reconstruct the entire bounded campaign from adjacent retained evidence."""
     import copy
@@ -714,7 +722,7 @@ def replay_policy_campaign(directory):
         or regression['source']['sources']!=final['build']['source']['sources']):
         raise ValueError('final numerical source did not pass the repository regression')
     bridge=json.loads((directory/index['build_bridge']).read_text())
-    native='src/llm_mojo/layers/decoder_layer.mojo'
+    native=POLICY_CAMPAIGN_DECODER_SOURCE
     if (bridge.get('kind')!='decoder_policy_build_bridge'
         or bridge['timing_commit']!=build['repository']['commit']
         or bridge['timing_binary_sha256']!=build['binaries']['decoder_layer']

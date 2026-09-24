@@ -8,14 +8,12 @@ binaries stay per checkout because they depend on the checkout's sources.
 """
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 from pathlib import Path
 import subprocess
-import sys
 
-from llm_mojo._repository import environment_tool, repository_root
+from llm_mojo._repository import repository_root
 from llm_mojo.models.qwen2.tokenizer_assets import (
     MODEL_ID, REVISION, asset_directory, ensure_prepared, prepared_valid)
 from llm_mojo.runtime import store, toolchain
@@ -23,6 +21,9 @@ from llm_mojo.runtime.artifacts import setup_lock
 
 CONTEXT_CAPACITY = 4096
 APPLICATION_MODE = 'fast'
+# Plain-text generation also runs the reference routes: baseline uses configuration 0
+# for every call, and consistent is the deterministic research route. Chat is Fast only.
+GENERATION_MODES = ('fast', 'baseline', 'consistent')
 CHECKPOINT_SHA = 'fdf756fa7fcbe7404d5c60e26bff1a0c8b8aa1f72ced49e7dd0210fe288fb7fe'
 MODEL_URL = f'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/resolve/{REVISION}/'
 # Pinned revision files: name -> (bytes, SHA-256). Kept in sync with docs/model.md
@@ -46,7 +47,7 @@ BINARIES = {'chat': 'src/llm_mojo/cli/chat_cli.mojo', 'generate': 'src/llm_mojo/
 def capabilities():
     """The implemented application contract, also enforced by native Qwen."""
     return dict(model=MODEL_ID, revision=REVISION, checkpoint_sha256=CHECKPOINT_SHA,
-                mode=APPLICATION_MODE, backend='metal', dtype='BF16', batch=1,
+                mode=APPLICATION_MODE, generation_modes=list(GENERATION_MODES), backend='metal', dtype='BF16', batch=1,
                 context_capacity=CONTEXT_CAPACITY, decoding='greedy',
                 chat='plain system/user/assistant')
 
@@ -140,44 +141,6 @@ def verify_pinned_model(directory):
     if prepared_tensors_sha256(manifest) != PREPARED_TENSORS_SHA256:
         raise ValueError(f'prepared tensors differ from the pinned model: {directory}')
     return directory, manifest
-
-
-def generate(prepared, prompt, maximum, chunk_rows=0, policy='fast', report=None):
-    """Verify inputs before launching the native generation driver.
-
-    Prepared artifacts must remain unchanged during the launch and execution.
-    Python performs initialization only; the child owns native inference.
-    """
-    if not 0 <= maximum <= 4096 or not 0 <= chunk_rows <= 4096:
-        raise ValueError('invalid generation or chunk limit')
-    if policy not in ('baseline', 'auto', 'candidate', 'consistent', '0', '2', '3', '20', '21', 'fast'):
-        raise ValueError('unknown generation configuration policy')
-    prompt = Path(prompt).resolve()
-    if not prompt.is_file():
-        raise FileNotFoundError(prompt)
-    directory, _ = verify_prepared(Path(prepared).resolve())
-    tables = ensure_prepared(download=False)
-    root = repository_root()
-    subprocess.run([
-        environment_tool('mojo'), 'run', '-I', 'src',
-        str(root / 'src/llm_mojo/cli/generate_cli.mojo'), str(directory), str(tables),
-        str(prompt), str(maximum), str(chunk_rows), policy,
-        *([str(Path(report).resolve())] if report is not None else []),
-    ], cwd=root, check=True)
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(
-        description='Verify artifacts and run native BF16 Qwen plain-text greedy generation on Metal.')
-    parser.add_argument('--prepared', type=Path, required=True)
-    parser.add_argument('--prompt', type=Path, required=True)
-    parser.add_argument('--max-new-tokens', type=int, required=True)
-    parser.add_argument('--chunk-rows', type=int, default=0)
-    parser.add_argument('--policy', default='fast',
-                        choices=['baseline', 'auto', 'candidate', 'consistent', '0', '2', '3', '20', '21', 'fast'])
-    parser.add_argument('--report', type=Path, help='Write native timing, token and cache events as TSV')
-    args = parser.parse_args(argv)
-    generate(args.prepared, args.prompt, args.max_new_tokens, args.chunk_rows, args.policy, args.report)
 
 
 def import_sources(import_from=()):
@@ -437,7 +400,3 @@ def prepare(output=None, *, download=False, root=None):
         store.remove_staged(staged)
     print('Prepared model:', target)
     return target
-
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
