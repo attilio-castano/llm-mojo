@@ -12,7 +12,7 @@ llm-mojo chat ──► Python checks the assets ──► exec the native chat
                                                       │
           text ◄── bytes ◄── next token ◄── logits ◄──┘
                                   │
-                                  └─► decode: one token through 24 layers, repeat
+                                  └─► decode: that token through 24 layers, repeat
 ```
 
 ## Words used here
@@ -22,7 +22,7 @@ llm-mojo chat ──► Python checks the assets ──► exec the native chat
 | Token | An integer ID for a piece of text. The vocabulary has 151,936 IDs. |
 | Hidden state | The 896 numbers that represent one token between layers; one *row*. |
 | Prefill | Computing all new prompt tokens in one or a few model calls. |
-| Decode | Computing one new token per model call, using everything cached. |
+| Decode | A model call that processes one token, the one just chosen, to score the next; everything earlier comes from the cache. |
 | KV cache | Each layer's keys and values for every token seen so far, so earlier tokens are never recomputed. |
 | BF16 | A 16-bit floating-point format: the range of FP32 with 8 bits of precision. Weights, activations and caches are stored in it. |
 | Kernel, command | A GPU function, and one launch of it. |
@@ -138,19 +138,27 @@ layers. Each layer's cache now holds R more tokens, and `model.length` grows by 
 
 [`ChatSession.sample`](../src/llm_mojo/models/qwen2/chat.mojo) calls
 [`QwenModel.greedy`](../src/llm_mojo/models/qwen2/model.mojo), which waits for the
-GPU and takes the highest-scoring ID. Ties go to the lowest ID, and any
-non-finite score is an error rather than a guess.
+GPU and takes the highest-scoring ID from the last model call's scores. Ties go
+to the lowest ID, and any non-finite score is an error rather than a guess. How
+it reads the scores follows that call's plan. After a multi-row call, as at the
+end of most prefills, it scans all 151,936 scores on the host. After a one-row
+call on M4 Pro, the GPU has already picked the winner (section 6).
 [`ChatHistory.accept`](../src/llm_mojo/models/qwen2/chat.mojo) appends the token.
 A stop token ([`is_stop`](../src/llm_mojo/models/qwen2/tokens.mojo): IDs 151643 and
 151645) or the reply limit ends the turn.
 
 ## 6. Decode: one token at a time
 
-The new token is in the history but not in the cache, so the loop calls
-`submit_next` again, now with one row. For one row on M4 Pro, `fast_plan` returns
-configuration 26, which fuses two pairs of steps, together with its three decode
-features: residual/RMSNorm fusion, buffer swapping and GPU argmax. This is the
-route every generated token takes:
+The chosen token is in the history but not in the cache, so the loop calls
+`submit_next` again, now with one row. That call processes the token just chosen
+and produces the scores for the next one. A reply of n tokens therefore takes
+n − 1 decode calls. Its first token is chosen from the prefill's scores, and its
+last one, a stop token or the token that reaches the limit, is chosen but only
+processed by the next turn's prefill.
+
+For one row on M4 Pro, `fast_plan` returns configuration 26, which fuses two pairs
+of steps, together with its three decode features: residual/RMSNorm fusion,
+buffer swapping and GPU argmax. Every decode call takes this route:
 
 - **Fused kernels.** One kernel unpacks the QKV projection, applies RoPE and
   appends to the cache ([`_enqueue_fused_decode_qkv`](../src/llm_mojo/layers/attention_sublayer.mojo)),
@@ -180,9 +188,9 @@ token into bytes and holds back an incomplete UTF-8 character until the rest
 arrives, so the terminal only ever prints whole characters. At the end of a turn,
 [`ChatHistory.finish`](../src/llm_mojo/models/qwen2/chat.mojo) makes sure the
 history ends with `<|im_end|>` and a newline, exactly as Qwen's template
-expects. Your next message prefills only what is not cached yet, the end
-markers and the new message: the cache already holds the rest of the
-conversation.
+expects. Your next message prefills only what is not cached yet: the reply's
+last token and end markers, then the new message. The cache already holds the
+rest of the conversation.
 
 `/reset` ([`ChatSession.reset`](../src/llm_mojo/models/qwen2/chat.mojo)) waits for
 the GPU, marks every cache empty and restores the system prompt. The weights stay
@@ -190,7 +198,7 @@ loaded.
 
 ## 8. Where the time goes
 
-A calculation, not a measurement: each decode token reads every weight once,
+A calculation, not a measurement: each decode call reads every weight once,
 715.8 MB of layers plus the 272.3 MB head, about 988 MB. At the 273 GB/s Apple
 publishes for this chip's memory, reading it takes at least 3.6 ms. The KV cache
 adds 12,288 bytes per cached token, about 50 MB at 4,096 tokens.
@@ -198,8 +206,8 @@ adds 12,288 bytes per cached token, about 50 MB at 4,096 tokens.
 Measured on the reference M4 Pro:
 
 - The Fast route streams 107–115 tokens per second after the first token, about
-  9 ms per token ([composed decode study](../studies/model_generation/residual-norm.md)).
-- A decode token issues 245 compute commands. Submitting them takes about 7 ms,
+  9 ms for each decode call ([composed decode study](../studies/model_generation/residual-norm.md)).
+- A decode call issues 245 compute commands. Submitting them takes about 7 ms,
   and about 98% of that time is inside MAX's enqueue runtime, measured with call
   recording enabled ([runtime enqueue study](../studies/model_generation/runtime-enqueue.md)).
 

@@ -45,7 +45,7 @@ research modes, benchmarks and validation.
   streaming all run in Mojo.
 - **Nothing is computed twice.** The model's 24 layers run on the GPU in BF16. A
   key-value cache keeps every processed token, so a new message computes only its
-  own tokens, and each reply token is one pass through the model.
+  own tokens, and each reply token after the first costs one model pass.
 - **Speed comes from launching less.** Generating a token is limited mostly by
   launching GPU work, not by arithmetic or memory bandwidth. The fast route
   launches fewer, fused kernels per token and computes exactly the same bytes.
