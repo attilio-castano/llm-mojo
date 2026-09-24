@@ -17,7 +17,7 @@ the store. A miss generates under the lock, refuses inputs that changed during
 the run, and publishes by rename.
 """
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import errno
@@ -28,6 +28,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import stat
 import subprocess
 import time
@@ -484,3 +485,160 @@ def detach(name, root=None):
         raise
     return (f'{name}: {checkout} is now a writable copy of {target}. The next validate links it again '
             'and keeps any files it does not generate beside it.')
+
+
+KEY = re.compile(r'[0-9a-f]{64}')
+ASIDE = re.compile(r'\.(invalid|regenerated)-\d{8}-\d{6}(-\d+)?$')
+STAGED = re.compile(r'fixtures-(?P<family>\w+)-(?P<key>[0-9a-f]{64})\.')
+
+
+def worktrees(root):
+    """This repository's worktrees that still exist, this checkout first."""
+    found = [Path(root)]
+    try:
+        listing = subprocess.run(['git', 'worktree', 'list', '--porcelain'], cwd=root, capture_output=True,
+                                 text=True, check=True, timeout=60).stdout
+    except (OSError, subprocess.SubprocessError):
+        return found
+    for line in listing.splitlines():
+        path = Path(line[len('worktree '):]) if line.startswith('worktree ') else None
+        if path is not None and path.is_dir() and path.resolve() != Path(root).resolve():
+            found.append(path)
+    return found
+
+
+def usage(root, store_dir):
+    """(family, key) -> worktrees linking that entry, and -> worktrees whose current inputs select it."""
+    linked, selected = {}, {}
+    base = (Path(store_dir) / 'fixtures').resolve()
+    for tree in worktrees(root):
+        for link in (tree / 'build/oracle_data').glob('*'):
+            if link.is_symlink():
+                target = link.parent / os.readlink(link)
+                if target.parent.resolve() == base / link.name:
+                    linked.setdefault((link.name, target.name), []).append(tree)
+        try:
+            sources = inputs(tree)
+        except RuntimeError:
+            continue
+        for family in FAMILIES.values():
+            selected.setdefault((family.name, identity(family, sources)), []).append(tree)
+    return linked, selected
+
+
+def survey(store_dir):
+    """(family, name, path, kind, key) for everything the cache keeps in the store.
+
+    Kinds: entry, set aside, orphaned record, orphaned lock and staging. Files the
+    cache did not create are never listed, so nothing here can remove them.
+    """
+    base = Path(store_dir) / 'fixtures'
+    for directory in sorted(base.iterdir()) if base.is_dir() else []:
+        if directory.is_symlink() or not directory.is_dir():
+            continue
+        names = {path.name for path in directory.iterdir()}
+        for path in sorted(directory.iterdir()):
+            name = path.name
+            if ASIDE.search(name):
+                yield directory.name, name, path, 'set aside', None
+            elif KEY.fullmatch(name):
+                yield directory.name, name, path, 'entry', name
+            elif name.endswith('.json') and KEY.fullmatch(name[:-5]) and name[:-5] not in names:
+                yield directory.name, name, path, 'orphaned record', name[:-5]
+            elif (name.startswith('.') and name.endswith('.lock') and KEY.fullmatch(name[1:-5])
+                  and name[1:-5] not in names and name[1:-5] + '.json' not in names):
+                yield directory.name, name, path, 'orphaned lock', name[1:-5]
+    staging = Path(store_dir) / '.staging'
+    for path in sorted(staging.iterdir()) if staging.is_dir() else []:
+        match = STAGED.match(path.name)
+        if match:
+            yield match['family'], path.name, path, 'staging', match['key']
+
+
+def footprint(path, record=None):
+    if record is not None:
+        return sum(file['bytes'] for file in record['files'].values())
+    if path.is_dir() and not path.is_symlink():
+        return sum(size or 0 for size in scan(path).values())
+    return path.lstat().st_size
+
+
+def stored_record(path):
+    try:
+        record = json.loads(path.with_name(path.name + '.json').read_text())
+        return record if record.get('format') == FORMAT and record.get('key') == path.name else None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+@contextmanager
+def unless_locked(path):
+    """Yield True while holding path's lock without waiting, or False when another process holds it."""
+    try:
+        stream = path.open('r')
+    except FileNotFoundError:
+        yield True
+        return
+    with stream:
+        try:
+            fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            yield False
+            return
+        yield True
+
+
+def label(tree, root):
+    return 'this checkout' if Path(tree).resolve() == Path(root).resolve() else Path(tree).name
+
+
+def report(root=None, store_dir=None):
+    """Each cached entry with its size, origin and the worktrees that link or select it."""
+    store_dir, root = store.store_root(store_dir), Path(root or repository_root())
+    linked, selected = usage(root, store_dir)
+    lines = [f"Shared oracle fixtures in {Path(store_dir) / 'fixtures'}"]
+    for family, name, path, kind, key in survey(store_dir):
+        if kind == 'entry':
+            record = stored_record(path)
+            origin = record.get('generation', {}) if record else {}
+            users = ', '.join(label(tree, root) for tree in linked.get((family, key), [])) or 'none'
+            current = ', '.join(label(tree, root) for tree in selected.get((family, key), [])) or 'none'
+            lines.append(f"{family}/{key[:12]}  {footprint(path, record) / 1e9:.2f} GB  generated "
+                         f"{origin.get('time', 'at an unknown time')} at {(origin.get('commit') or 'unknown')[:7]}; "
+                         f"linked by {users}; current for {current}")
+        else:
+            lines.append(f'{family}/{name}  {footprint(path) / 1e9:.2f} GB  {kind}')
+    return '\n'.join(lines if len(lines) > 1 else [*lines, 'No entries.'])
+
+
+def prune(yes=False, root=None, store_dir=None):
+    """Remove set-aside and stale items and entries no worktree links or selects; list them unless yes.
+
+    Entries being generated or repaired are skipped. The worktrees considered
+    are this repository's; run it when no validation is using the store.
+    """
+    store_dir, root = store.store_root(store_dir), Path(root or repository_root())
+    linked, selected = usage(root, store_dir)
+    lines, total, count = [], 0, 0
+    for family, name, path, kind, key in survey(store_dir):
+        if kind == 'entry' and ((family, key) in linked or (family, key) in selected):
+            continue
+        lock = Path(store_dir) / 'fixtures' / family / f'.{key}.lock' if key else None
+        with unless_locked(lock) if lock else nullcontext(True) as free:
+            if not free:
+                lines.append(f'Skipped {family}/{name}: a validation is generating it.')
+                continue
+            size = footprint(path, stored_record(path) if kind == 'entry' else None)
+            total, count = total + size, count + 1
+            reason = 'no worktree links or selects it' if kind == 'entry' else kind
+            lines.append(f"{'Removed' if yes else 'Would remove'} {family}/{name}  {size / 1e9:.2f} GB  ({reason})")
+            if yes:
+                store.remove_staged(path)
+                if kind == 'entry':
+                    path.with_name(name + '.json').unlink(missing_ok=True)
+                if kind in ('entry', 'orphaned record', 'orphaned lock'):
+                    lock.unlink(missing_ok=True)
+    if not count:
+        return '\n'.join([*lines, 'Nothing to prune.'])
+    summary_line = f"{'Removed' if yes else 'Would remove'} {count} item{'s' * (count != 1)}, {total / 1e9:.2f} GB."
+    return '\n'.join([*lines, summary_line] + ([] if yes else ['Run again with --yes to remove them.']))

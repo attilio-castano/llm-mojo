@@ -187,6 +187,20 @@ def validate(prepare_only: bool = False,
           *(['--no-fixture-cache'] if no_fixture_cache else [])])
 
 
+@fixture_cache.command('list')
+def list_fixtures():
+    """Show each cached entry, its size and the worktrees that link or select it."""
+    from llm_mojo.validation.fixtures import report
+    typer.echo(report())
+
+
+@fixture_cache.command('prune')
+def prune_fixtures(yes: Annotated[bool, typer.Option('--yes', help='Remove them; otherwise only list them.')] = False):
+    """List set-aside, stale and unused entries, and remove them with --yes."""
+    from llm_mojo.validation.fixtures import prune
+    typer.echo(prune(yes=yes))
+
+
 @fixture_cache.command('detach')
 def detach_fixtures(family: Annotated[str, typer.Argument(help='attention_sublayer, mlp or decoder_layer')]):
     """Replace this checkout's link with a writable copy, for generator commands run by hand."""

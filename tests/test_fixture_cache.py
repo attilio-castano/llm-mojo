@@ -1,6 +1,7 @@
 """The shared fixture cache with stand-in generators: no Torch, Metal or network."""
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
 import errno
+import fcntl
 import hashlib
 import io
 import json
@@ -402,6 +403,68 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(os.readlink(self.checkout_dir), str(entry.tree))
         [kept] = self.checkout_dir.parent.glob('flat.local-*')
         self.assertEqual((kept / 'case/inner/capture.npy').read_bytes(), b'manual')
+
+    def test_list_names_entries_and_the_worktrees_that_link_or_select_them(self):
+        other = self.checkout('two')
+        self.ensure()
+        self.ensure(other)
+        (other / 'gen/generate.py').write_text('print("moved on")\n')
+        with patch.dict(fixtures.FAMILIES, {'flat': IN_PLACE}, clear=True), \
+             patch.object(fixtures, 'worktrees', return_value=[self.root, other]):
+            text = fixtures.report(self.root, self.store)
+        self.assertIn(f'flat/{self.key()[:12]}  0.00 GB  generated ', text)
+        self.assertIn('linked by this checkout, two; current for this checkout', text)
+        self.assertIn(subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=self.root, capture_output=True,
+                                     text=True).stdout[:7], text)
+
+    def test_prune_lists_by_default_and_keeps_linked_selected_and_locked_entries(self):
+        # one links and selects its entry, two only selects its entry, five only links
+        # its entry, four's entry is busy, and three's is unused.
+        roots = {name: self.checkout(name) for name in ('two', 'three', 'four', 'five')}
+        keys = {'one': self.key()}
+        self.ensure()
+        for name, root in roots.items():
+            (root / 'gen/generate.py').write_text(f'print("{name}")\n')
+            self.ensure(root)
+            keys[name] = self.key(root)
+            if name != 'five':
+                (root / 'build/oracle_data/flat').unlink()
+        for name in ('three', 'four', 'five'):
+            (roots[name] / 'gen/generate.py').write_text(f'print("{name} moved on")\n')
+        entry = self.entry()
+        writable(entry.tree)
+        os.chmod(entry.tree / 'top.npy', 0o644)
+        (entry.tree / 'top.npy').write_bytes(b'toq')
+        self.ensure()
+        staged = self.store / '.staging' / f"fixtures-flat-{keys['one']}.1.abc"
+        staged.mkdir()
+        (staged / 'partial.npy').write_bytes(b'x' * 10)
+        (entry.tree.parent / 'notes.txt').write_text('not the cache\'s')
+        (entry.tree.parent / f".{'f' * 64}.lock").touch()
+        busy = fixtures.entry_paths(self.store, IN_PLACE, keys['four'])
+        with patch.dict(fixtures.FAMILIES, {'flat': IN_PLACE}, clear=True), \
+             patch.object(fixtures, 'worktrees', return_value=[self.root, *roots.values()]), \
+             busy.lock.open('r') as holder:
+            fcntl.flock(holder, fcntl.LOCK_EX)
+            before = contents(self.store)
+            listing = fixtures.prune(root=self.root, store_dir=self.store)
+            self.assertEqual(contents(self.store), before)
+            removed = fixtures.prune(yes=True, root=self.root, store_dir=self.store)
+        for text, verb in ((listing, 'Would remove'), (removed, 'Removed')):
+            self.assertIn(f"{verb} flat/{keys['three']}  ", text)
+            self.assertIn(f"{verb} flat/.{'f' * 64}.lock", text)
+            self.assertIn(f'{verb} flat/{staged.name}', text)
+            self.assertEqual(text.count('(set aside)'), 2)
+            self.assertIn(f"Skipped flat/{keys['four']}: a validation is generating it.", text)
+            for kept in ('one', 'two', 'five'):
+                self.assertNotIn(f'flat/{keys[kept]}  ', text)
+        self.assertIn('Would remove 5 items', listing)
+        self.assertIn('Run again with --yes', listing)
+        self.assertEqual({path.name for path in entry.tree.parent.iterdir()},
+                         {name for kept in ('one', 'two', 'four', 'five')
+                          for name in (keys[kept], f'{keys[kept]}.json', f'.{keys[kept]}.lock')} | {'notes.txt'})
+        self.assertEqual(list((self.store / '.staging').iterdir()), [])
+        self.assertIsNone(fixtures.verify(entry, keys['one'])[1])
 
     def test_the_sublayer_anchor_check_catches_a_changed_contract_or_array(self):
         root, directory = self.base / 'anchors', self.base / 'anchors/arrays'

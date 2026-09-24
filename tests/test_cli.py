@@ -135,6 +135,16 @@ class ConfigurationTests(unittest.TestCase):
         detach.assert_called_once_with('mlp')
         self.assertIsInstance(CliRunner().invoke(app, ['fixtures', 'detach', 'decoder']).exception, ValueError)
 
+    def test_fixture_list_and_prune_report_and_pass_the_confirmation(self):
+        with patch('llm_mojo.validation.fixtures.report', return_value='Shared oracle fixtures in /s'):
+            result = CliRunner().invoke(app, ['fixtures', 'list'])
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn('Shared oracle fixtures in /s', result.output)
+        with patch('llm_mojo.validation.fixtures.prune', return_value='Nothing to prune.') as prune:
+            for arguments in (['fixtures', 'prune'], ['fixtures', 'prune', '--yes']):
+                self.assertEqual(CliRunner().invoke(app, arguments).exit_code, 0)
+        self.assertEqual([call.kwargs for call in prune.call_args_list], [{'yes': False}, {'yes': True}])
+
 
 class GenerationTests(unittest.TestCase):
     def test_prompt_file_snapshot_and_report_configuration(self):

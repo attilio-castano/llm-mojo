@@ -97,6 +97,8 @@ uv run --locked llm-mojo bench run --preset core \
   --build-dir /private/tmp/my-study-binaries --output /private/tmp/my-study-run
 uv run --locked llm-mojo validate
 uv run --locked llm-mojo validate --regenerate-fixtures
+uv run llm-mojo fixtures list
+uv run llm-mojo fixtures prune
 uv run llm-mojo fixtures detach mlp
 ```
 
@@ -115,8 +117,10 @@ rewritten by configuration resolution.
 `validate` links the large attention-sublayer, MLP and decoder-layer oracles to
 a shared, verified copy. `--regenerate-fixtures` regenerates them and requires a
 byte-for-byte match with that copy; `--no-fixture-cache` generates them in the
-checkout instead. `fixtures detach FAMILY` swaps a link for a writable copy
-before a generator command run by hand. See
+checkout instead. `fixtures list` shows the cached entries and the worktrees
+using them. `fixtures prune` lists entries nothing uses, and `--yes` removes
+them. `fixtures detach FAMILY` swaps a link for a writable copy before a
+generator command run by hand. See
 [shared oracle fixtures](development.md#shared-oracle-fixtures).
 
 `bench tokenizer` exposes the existing tokenizer workflows. `tokenizer` exposes

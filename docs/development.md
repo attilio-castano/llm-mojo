@@ -219,6 +219,13 @@ for byte; a differing tree is kept as `<key>.regenerated-<time>` for comparison.
 `--no-fixture-cache` generates them inside the checkout as before and leaves the
 store untouched.
 
+`uv run llm-mojo fixtures list` shows each entry, its size and the worktrees
+that link it or whose inputs currently select it. Entries accumulate as the
+generators change. `uv run llm-mojo fixtures prune` lists the set-aside trees,
+interrupted staging and entries that no worktree of this repository links or
+selects; `--yes` removes them. It skips an entry that a validation is generating.
+Run it when no validation is using the store.
+
 Generator commands run by hand, such as the checkpoint, calibration and holdout
 captures, write into the family directory and fail on the read-only link. Run
 `uv run llm-mojo fixtures detach <family>` first. It replaces the link with a
