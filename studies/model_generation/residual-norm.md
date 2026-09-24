@@ -193,7 +193,10 @@ are bounded acceptance rules, not statistical confidence intervals.
 ## Reproduction
 
 Rebuild the measured commit in a clean checkout with the pinned prepared assets.
-Set `PREPARED` to the verified model directory and keep `RUN` outside Git:
+Set `PREPARED` to the verified model directory and keep `RUN` outside Git.
+`build --residual-norm`, `selection-capture`, `selection-terminal` and
+`selection-archive` exist through `edb610a`; later commits keep the replay and
+plot commands, which need no GPU or weights:
 
 ```sh
 uv run --locked python -m llm_mojo.benchmarks.model_profile build --residual-norm --prepared "$PREPARED" --output "$RUN/build"

@@ -9,7 +9,7 @@ from .._repository import environment_tool, repository_root
 from .environment import (conditions_snapshot, ensure_record_location,
                          repository_state, require_ac, require_nominal_thermal_state,
                          stable_environment, utc_now)
-from .study import (STUDIES, BLOCKS, REPETITIONS, WARMUP, sha, write_json,
+from .study import (STUDIES, REPLAY_ONLY, BLOCKS, REPETITIONS, WARMUP, sha, write_json,
                    encode_samples, parse_output, summarize, workloads, comparisons, load_run,
                    select_parallelism_finalists, select_projection_tile, select_mlp_decode, mlp_decode_finalists)
 from .attention_sublayer_contract import fixture_identity
@@ -64,7 +64,10 @@ def checked_conditions():
     return conditions
 
 
-def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=None, tile_kernel_screen=None, mlp_decode_screen=None, decoder_screen=None, policy_confirmation=None, resolved_configuration=None):
+def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=None, tile_kernel_screen=None, mlp_decode_screen=None, policy_confirmation=None, resolved_configuration=None):
+    retired = [name for name in study_names if name in REPLAY_ONLY]
+    if retired:
+        raise ValueError('replay-only studies (their decoder configurations exist through edb610a): ' + ', '.join(retired))
     ensure_record_location(output)
     provenance = json.loads((build_dir / 'build.json').read_text())
     repo, sources = repository_state(), source_hashes()
@@ -98,12 +101,6 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
         if spec['operation'] == 'decoder_layer' and decoder_fixture_identity() != provenance.get('decoder_fixtures'):
             raise RuntimeError('decoder benchmark inputs changed')
         selection = policy_selection
-        if spec.get('requires_selection'):
-            from .decoder_layer_contract import screen_decision, confirmation_spec
-            if decoder_screen is None:raise ValueError('decoder confirmation requires frozen screen selection')
-            selection=json.loads((decoder_screen/'selection.json').read_text())
-            if selection!=screen_decision(decoder_screen,provenance):raise ValueError('decoder screen selection changed')
-            spec=confirmation_spec(name.split('_')[2],selection)
         if name == 'mlp_decode_final':
             if mlp_decode_screen is None:
                 raise ValueError('decode confirmation requires both completed screens')
@@ -225,19 +222,19 @@ def run(build_dir, output, study_names, *, parallelism_screen=None, tile_screen=
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('command', choices=['build', 'run', 'select-decoder', 'confirm-decoder', 'build-tokenizer', 'run-tokenizer', 'report-tokenizer'])
+    p.add_argument('command', choices=['build', 'run', 'build-tokenizer', 'run-tokenizer', 'report-tokenizer'])
     p.add_argument('--build-dir', type=Path, required=True)
     p.add_argument('--output', type=Path)
     p.add_argument('--parallelism-screen', type=Path)
     p.add_argument('--tile-screen', type=Path)
     p.add_argument('--tile-kernel-screen', type=Path)
     p.add_argument('--mlp-decode-screen', type=Path)
-    p.add_argument('--decoder-screen', type=Path)
     p.add_argument('--policy-confirmation', type=Path)
-    from .decoder_layer_contract import MEASUREMENT_VARIANTS
-    cost_names=[f'decoder_policies_cost_{v}_{mode}' for v in sorted(MEASUREMENT_VARIANTS) for mode in ('hot','ring')]
+    from .decoder_layer_contract import MEASUREMENT_VARIANTS, RUNNABLE_VARIANTS
+    cost_names=[f'decoder_policies_cost_{v}_{mode}' for v in sorted(MEASUREMENT_VARIANTS & RUNNABLE_VARIANTS) for mode in ('hot','ring')]
     p.add_argument('--studies', nargs='+', choices=[*STUDIES,*cost_names],
                    default=[name for name in STUDIES if not name.endswith('_screen') and not STUDIES[name].get('opt_in')
+                            and name not in REPLAY_ONLY
                             and name not in ('attention_sublayer_wo','attention_sublayer_decode','attention_sublayer_prefill',
                                              'attention_sublayer_projections','attention_sublayer_integrated',
                                              'attention_sublayer_parallelism')])
@@ -255,20 +252,6 @@ def main(argv=None):
             tokenizer_contract.plot(args.output.resolve())
     elif args.command == 'build':
         build(args.build_dir.resolve())
-    elif args.command == 'select-decoder':
-        from .decoder_layer_contract import screen_decision
-        if args.decoder_screen is None:p.error('select-decoder requires --decoder-screen')
-        path=args.decoder_screen.resolve()/'selection.json';ensure_record_location(path)
-        if path.exists():raise ValueError('refusing to overwrite frozen decoder selection')
-        write_json(path,screen_decision(args.decoder_screen.resolve(),json.loads((args.build_dir/'build.json').read_text())))
-    elif args.command == 'confirm-decoder':
-        from .decoder_layer_contract import screen_decision,confirmed_selection
-        if args.decoder_screen is None or args.output is None:p.error('confirm-decoder requires --decoder-screen and --output confirmation directory')
-        decision=json.loads((args.decoder_screen/'selection.json').read_text())
-        if decision!=screen_decision(args.decoder_screen,json.loads((args.build_dir/'build.json').read_text())):raise ValueError('frozen selection changed')
-        path=args.output.resolve()/'selection-confirmed.json';ensure_record_location(path)
-        if path.exists():raise ValueError('refusing to overwrite confirmed selection')
-        write_json(path,confirmed_selection(decision,args.output.resolve()))
     elif args.output is None:
         p.error('run requires --output')
     else:
@@ -277,7 +260,6 @@ def main(argv=None):
             tile_screen=args.tile_screen.resolve() if args.tile_screen else None,
             tile_kernel_screen=args.tile_kernel_screen.resolve() if args.tile_kernel_screen else None,
             mlp_decode_screen=args.mlp_decode_screen.resolve() if args.mlp_decode_screen else None,
-            decoder_screen=args.decoder_screen.resolve() if args.decoder_screen else None,
             policy_confirmation=args.policy_confirmation.resolve() if args.policy_confirmation else None)
 
 

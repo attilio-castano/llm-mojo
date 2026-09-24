@@ -1,22 +1,21 @@
 """A resident Mojo Qwen terminal chat; Python is only the verifying launcher."""
-from llm_mojo.models.qwen2.model import is_projection_policy
-from std.sys import argv, is_defined
+from std.sys import argv
 from max.gpu.host import DeviceContext
 from llm_mojo.models.qwen2.chat import ChatSession, DEFAULT_SYSTEM
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace, TokenizerDecoder
 from llm_mojo.runtime.terminal import block_interrupt, interrupted, read_line
 from llm_mojo.runtime.clock import now
 from llm_mojo.models.qwen2.tokens import is_stop
+from llm_mojo.models.qwen2.plan import MAX_CONTEXT, MEASURED_DEVICE
 
 
 def main() raises:
     var args = argv()
-    comptime STUDY = is_defined["MODEL_FUSION_STUDY"]()
-    if len(args) != (8 if STUDY else 7):
+    if len(args) != 7:
         raise Error("chat prepared tokenizer maximum chunk-rows system-file report-file (empty = defaults)")
     var maximum = Int(args[3])
     var chunk = Int(args[4])
-    if maximum < 1 or maximum > 4096 or chunk < 1 or chunk > 4096:
+    if maximum < 1 or maximum > MAX_CONTEXT or chunk < 1 or chunk > MAX_CONTEXT:
         raise Error("invalid chat limits")
     var started = now()
     var observed = args[6].byte_length()>0
@@ -30,11 +29,10 @@ def main() raises:
         system = String(from_utf8=open(args[5],"r").read_bytes())
     var ctx = DeviceContext()
     var session = ChatSession(ctx,args[1],tokenizer,work,system,chunk)
-    comptime if STUDY:
-        if not is_projection_policy(args[7]) and args[7] != "fast" and args[7] != "fusion" and args[7] != "combined" and args[7] != "unfused" and args[7] != "gpu-argmax" and args[7] != "fused-head" and args[7] != "buffer-swap" and args[7] != "residual-norm" and args[7] != "swap-argmax" and args[7] != "all-three":
-            raise Error("unknown native study arm")
-        session.policy = String(args[7])
-    print("Ready — Fast on",ctx.name(),"/",ctx.api(),flush=True)
+    if ctx.name() == MEASURED_DEVICE:
+        print("Ready — Fast on",ctx.name(),"/",ctx.api(),flush=True)
+    else:
+        print("Ready — baseline kernels on",ctx.name(),"/",ctx.api(),"(Fast choices were measured on",MEASURED_DEVICE+")",flush=True)
     print("/reset: new conversation · /exit: quit · Ctrl-C: stop reply or clear input",flush=True)
     if observed:
         events += "load\t0\t0\t"+ctx.name()+"/"+ctx.api()+"\t"+String(now()-started)+"\n"

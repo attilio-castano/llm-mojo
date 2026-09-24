@@ -175,7 +175,9 @@ uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_pr
 
 To repeat execution, use a clean checkout of the measured source, verified local
 prepared assets and fresh output directories. The following reuses the existing
-fusion harness; `--copy-free` fixes the new control and candidate:
+fusion harness; `--copy-free` fixes the new control and candidate. These
+collection commands exist through `edb610a`; later commits keep the replay and
+plot commands, which need no GPU or weights:
 
 ```sh
 uv run --locked python -m llm_mojo.benchmarks.model_profile build --copy-free --prepared /absolute/path/to/model-prepared-v1 --output /tmp/qwen-buffer-swap-build

@@ -716,3 +716,14 @@ STUDIES['decoder_selection_calibration']={**STUDIES['decoder_layer'],
 STUDIES['decoder_selection_buffered']={**STUDIES['decoder_selection_calibration'],
     'layers':[1],'mode':'buffered','measurement':'whole_decoder_buffered',
     'timing':'Diagnostic only: 16 ordered hot decoder calls and one synchronization, divided by 16. Fixed suffix overwrite; setup excluded. Cannot promote raw hot performance.'}
+
+
+def _decoder_ids(spec):
+    return {spec['control']} | set(spec['candidates']) | {c['candidate'] for c in spec.get('comparisons', [])}
+
+
+# Decoder studies whose arms include configurations the engine no longer has. Their
+# retained runs replay from the specification frozen in each run.json; re-running
+# them needs the commit recorded in that run (the configurations exist through edb610a).
+REPLAY_ONLY = frozenset(name for name, spec in STUDIES.items() if spec.get('operation') == decoder.OPERATION
+                        and not _decoder_ids(spec) <= decoder.RUNNABLE_POLICY_VARIANTS)

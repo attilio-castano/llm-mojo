@@ -85,8 +85,8 @@ def cases():
 
 
 def selection_variants():
-    from llm_mojo.benchmarks.decoder_layer_contract import VARIANTS, POLICY_TEST_VARIANTS
-    allowed=POLICY_TEST_VARIANTS if POLICY_STUDY else VARIANTS
+    from llm_mojo.benchmarks.decoder_layer_contract import VARIANTS, POLICY_TEST_VARIANTS, RUNNABLE_POLICY_VARIANTS
+    allowed=(POLICY_TEST_VARIANTS if POLICY_STUDY else VARIANTS) & RUNNABLE_POLICY_VARIANTS
     selected=sorted(allowed)
     if os.environ.get('DECODER_VARIANTS'):
         selected=[int(v) for v in os.environ['DECODER_VARIANTS'].split(',')]

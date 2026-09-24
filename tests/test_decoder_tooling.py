@@ -13,6 +13,15 @@ from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
 class DecoderToolingTests(unittest.TestCase):
+    def test_policy_replay_names_the_recorded_decoder_source(self):
+        # A full replay takes minutes; this pins the path it reads from the records.
+        from llm_mojo._repository import repository_root
+        directory=repository_root()/'studies/decoder_layer'
+        bridge=json.loads((directory/'policies_build_bridge.json').read_text())
+        self.assertEqual(bridge['changed_native_sources'],[contract.POLICY_CAMPAIGN_DECODER_SOURCE])
+        run=json.loads((directory/'decoder_policies_confirmation_det_hot_run.json').read_text())
+        self.assertIn(contract.POLICY_CAMPAIGN_DECODER_SOURCE,run['build']['sources'])
+
     def test_compact_holdout_manifest_preserves_original_fixture_identity(self):
         import gzip
         from llm_mojo._repository import repository_root

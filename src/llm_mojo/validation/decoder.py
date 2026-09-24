@@ -419,7 +419,7 @@ def evaluate_policies(binary,fixtures,output,variants,invariant_variants,split='
     if not candidate.get('selection'):
         raise ValueError('policy evaluation requires the configuration suite')
     if (not variants or len(set(variants))!=len(variants)
-        or not set(variants)<=selection_contract.POLICY_TEST_VARIANTS
+        or not set(variants)<=selection_contract.POLICY_TEST_VARIANTS & selection_contract.RUNNABLE_POLICY_VARIANTS
         or not set(invariant_variants)<=set(variants)):
         raise ValueError('invalid policy evaluation family')
     if comparison_family and (len(comparison_family)<2 or len(set(comparison_family))!=len(comparison_family)
@@ -481,6 +481,8 @@ def evaluate(binary,fixtures,output):
     binary,fixtures,output=map(lambda p:Path(p).resolve(),(binary,fixtures,output))
     ensure_record_location(output);candidate=verify_build(binary)
     manifest,hashes=holdout_manifest(fixtures)
+    if manifest['kind']=='decoder_selection_holdout':
+        raise ValueError('decoder selection evaluation is retired: its configurations exist through edb610a')
     selection=bool(candidate.get('selection'))
     if selection!=(manifest['kind']=='decoder_selection_holdout'):raise ValueError('wrong reserved candidate kind')
     if manifest['candidate']['binary_sha256']!=candidate['binary_sha256'] or manifest['candidate']['commit']!=candidate['source']['repository']['commit']:

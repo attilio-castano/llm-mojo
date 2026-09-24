@@ -3,37 +3,34 @@ from std.sys import argv
 from llm_mojo.runtime.clock import now
 from llm_mojo.models.qwen2.tokens import is_stop
 from max.gpu.host import DeviceContext
-from llm_mojo.models.qwen2.model import select_projection, QwenModel, select_configuration, select_token_selection, select_copy_free, select_residual_norm
+from llm_mojo.models.qwen2.model import QwenModel, generation_budget
+from llm_mojo.models.qwen2.plan import MAX_CONTEXT, execution_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace, TokenizerDecoder
-
-
-def generation_budget(prompt_length: Int, maximum: Int) raises -> Int:
-    if prompt_length < 1 or prompt_length > 4096 or maximum < 0 or maximum > 4096:
-        raise Error("invalid prompt or generation limit")
-    return min(maximum,4096-prompt_length)
 
 
 def main() raises:
     var started = now()
     var args = argv()
     if len(args) != 7 and len(args) != 8:
-        raise Error("generate prepared-model tokenizer-tables prompt-file max-new-tokens chunk-rows policy")
+        raise Error("generate prepared-model tokenizer-tables prompt-file max-new-tokens chunk-rows mode [report]")
     var diagnostics = len(args) == 8
     var maximum = Int(args[4])
     var chunk_rows = Int(args[5])
-    if maximum < 0 or maximum > 4096 or chunk_rows < 0 or chunk_rows > 4096:
+    var mode = String(args[6])
+    if maximum < 0 or maximum > MAX_CONTEXT or chunk_rows < 0 or chunk_rows > MAX_CONTEXT:
         raise Error("invalid generation or chunk limit")
-    _ = select_configuration(args[6],1,1,"")
+    _ = execution_plan(mode,1,1,"")
     var tokenizer = Tokenizer(args[2])
     var workspace = TokenizerWorkspace()
     var text = open(args[3],"r").read_bytes()
     var history = tokenizer.encode_bytes(text,workspace)
     var prompt_length = len(history)
-    if prompt_length < 1 or prompt_length > 4096:
+    if prompt_length < 1 or prompt_length > MAX_CONTEXT:
         raise Error("prompt must encode to 1..4096 tokens")
     var budget = generation_budget(prompt_length,maximum)
     var events = String("event\tindex\tvalue\tnanoseconds\n")
     if diagnostics:
+        events += "mode\t0\t"+mode+"\t0\n"
         for i in range(prompt_length):
             events += "prompt\t"+String(i)+"\t"+String(history[i])+"\t0\n"
     if budget == 0:
@@ -43,21 +40,24 @@ def main() raises:
         return
     var max_rows = min(chunk_rows,prompt_length) if chunk_rows > 0 else prompt_length
     var ctx = DeviceContext()
-    var model = QwenModel(ctx,args[1],4096,max_rows)
+    var model = QwenModel(ctx,args[1],MAX_CONTEXT,max_rows)
     if diagnostics:
         events += "device\t0\t"+ctx.name()+"/"+ctx.api()+"\t0\n"
         events += "load\t0\t0\t"+String(now()-started)+"\n"
     var prefill_started = now()
+    var calls = 0
     var offset = 0
     while offset < prompt_length:
         var rows = min(max_rows,prompt_length-offset)
         var ids = List[Int](capacity=rows)
         for i in range(rows):
             ids.append(history[offset+i])
-        var configuration = select_configuration(args[6],rows,offset+rows,ctx.name())
-        model.forward(ctx,ids,configuration,"",select_token_selection(args[6],rows,ctx.name()),False,select_copy_free(args[6],rows,ctx.name()),select_residual_norm(args[6],rows,ctx.name()),False,select_projection(args[6],rows,ctx.name()))
+        var plan = execution_plan(mode,rows,offset+rows,ctx.name())
+        model.forward(ctx,ids,plan)
         if diagnostics:
-            events += "configuration\t"+String(offset)+"\t"+String(configuration)+"\t0\n"
+            events += "configuration\t"+String(offset)+"\t"+String(plan.configuration)+"\t0\n"
+            events += "route\t"+String(calls)+"\t"+model.last_route.describe()+"\t0\n"
+        calls += 1
         offset += rows
     if diagnostics:
         ctx.synchronize()
@@ -79,10 +79,12 @@ def main() raises:
         if step+1 < budget:
             var ids: List[Int] = [token]
             var decode_started = now()
-            model.forward(ctx,ids,select_configuration(args[6],1,model.length+1,ctx.name()),"",select_token_selection(args[6],1,ctx.name()),False,select_copy_free(args[6],1,ctx.name()),select_residual_norm(args[6],1,ctx.name()),False,select_projection(args[6],1,ctx.name()))
+            model.forward(ctx,ids,execution_plan(mode,1,model.length+1,ctx.name()))
             if diagnostics:
                 ctx.synchronize()
                 events += "decode\t"+String(step)+"\t1\t"+String(now()-decode_started)+"\n"
+                events += "route\t"+String(calls)+"\t"+model.last_route.describe()+"\t0\n"
+            calls += 1
     var bytes = List[UInt8]()
     decoder.finish(bytes)
     if len(bytes) > 0:

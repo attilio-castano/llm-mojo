@@ -7,8 +7,10 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+from llm_mojo.configuration import resolve_run
 from llm_mojo.models.qwen2 import assets
 from llm_mojo.models.qwen2.assets import CHECKPOINT_SHA, REVISION, tensor_shapes, validate_manifest
+from llm_mojo.runtime import launch
 
 
 class ModelAssetTests(unittest.TestCase):
@@ -39,6 +41,7 @@ class ModelAssetTests(unittest.TestCase):
 
 
 class GenerationLauncherTests(unittest.TestCase):
+    """The public generate launcher verifies real model bytes before native launch."""
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
@@ -65,8 +68,8 @@ class GenerationLauncherTests(unittest.TestCase):
         (self.prepared / 'manifest.json').write_text(json.dumps(self.manifest))
 
     def launch(self):
-        assets.main(['--prepared', str(self.prepared), '--prompt', str(self.prompt),
-                     '--max-new-tokens', '8', '--chunk-rows', '16', '--policy', 'consistent'])
+        launch.launch_generate(resolve_run('generate', prepared=self.prepared, prompt_file=self.prompt,
+                                           max_new_tokens=8, chunk_rows=16, mode='consistent'))
 
     def test_default_directory_uses_documented_output_and_verifies_bytes(self):
         expected = self.root / 'build/model-prepared-v1'
@@ -82,16 +85,17 @@ class GenerationLauncherTests(unittest.TestCase):
 
     def test_verified_inputs_reach_native_driver_as_separate_arguments(self):
         tables = self.root / 'tokenizer tables.bin'
-        with patch.object(assets, 'ensure_prepared', return_value=tables) as tokenizer, \
-                patch.object(assets, 'environment_tool', return_value='/locked/bin/mojo'), \
-                patch.object(assets.subprocess, 'run') as run:
+        binary = self.root / 'native generate'
+        with patch.object(launch, 'ensure_prepared', return_value=tables) as tokenizer, \
+                patch.object(launch, 'ensure_binary', return_value=binary) as build, \
+                patch.object(launch.subprocess, 'run') as run:
             self.launch()
         tokenizer.assert_called_once_with(download=False)
-        root = assets.repository_root()
-        run.assert_called_once_with([
-            '/locked/bin/mojo', 'run', '-I', 'src', str(root / 'src/llm_mojo/cli/generate_cli.mojo'),
-            str(self.prepared.resolve()), str(tables), str(self.prompt.resolve()), '8', '16', 'consistent',
-        ], cwd=root, check=True)
+        build.assert_called_once_with('generate', 'src/llm_mojo/cli/generate_cli.mojo')
+        command = run.call_args.args[0]
+        self.assertEqual(command[:3], [str(binary), str(self.prepared.resolve()), str(tables)])
+        self.assertEqual(command[4:], ['8', '16', 'consistent'])
+        self.assertEqual(run.call_args.kwargs, dict(check=True))
 
     def test_corrupt_swapped_missing_and_wrong_checkpoint_fail_before_launch(self):
         for damage in ('corrupt', 'swap', 'missing', 'identity', 'manifest'):
@@ -109,18 +113,22 @@ class GenerationLauncherTests(unittest.TestCase):
                     (self.prepared / 'manifest.json').write_text(json.dumps(bad))
                 else:
                     (self.prepared / 'manifest.json').unlink()
-                with patch.object(assets, 'ensure_prepared') as tokenizer, \
-                        patch.object(assets.subprocess, 'run') as run:
+                with patch.object(launch, 'ensure_prepared') as tokenizer, \
+                        patch.object(launch, 'ensure_binary') as build, \
+                        patch.object(launch.subprocess, 'run') as run:
                     with self.assertRaises((ValueError, FileNotFoundError)):
                         self.launch()
                     tokenizer.assert_not_called()
+                    build.assert_not_called()
                     run.assert_not_called()
 
     def test_tokenizer_verification_failure_prevents_native_launch(self):
-        with patch.object(assets, 'ensure_prepared', side_effect=ValueError('damaged tokenizer')), \
-                patch.object(assets.subprocess, 'run') as run:
+        with patch.object(launch, 'ensure_prepared', side_effect=ValueError('damaged tokenizer')), \
+                patch.object(launch, 'ensure_binary') as build, \
+                patch.object(launch.subprocess, 'run') as run:
             with self.assertRaisesRegex(ValueError, 'damaged tokenizer'):
                 self.launch()
+            build.assert_not_called()
             run.assert_not_called()
 
 
