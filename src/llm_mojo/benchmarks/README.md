@@ -20,7 +20,11 @@ uv run --locked llm-mojo-bench run --build-dir /private/tmp/mojo-study-build --o
 
 Both destinations must be new directories outside the checkout. Use
 `--studies gqa_decode` (or any combination of the maintained study names) for a
-bounded subset. The matrix and named implementations are in `study.py`.
+bounded subset. The recommended `llm-mojo bench build` and `llm-mojo bench run`
+take the same directories and select studies with `--preset` or repeated
+`--study NAME` (see [commands](../../../docs/cli.md#studies-and-validation)). Their
+default `core` preset runs only `rms_norm` and `linear_decode`; this legacy form
+runs every maintained study that is not a screen or opt-in. The matrix and named implementations are in `study.py`.
 The runner requires AC power, Low Power Mode off, no reported thermal warning,
 a clean matching source commit, unchanged hardware/software, and the exact
 built binary. Runtime output must identify an Apple device with the Metal API.

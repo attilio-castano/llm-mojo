@@ -1,8 +1,11 @@
 # Completed Fast full-model implementation plan
 
-The [runtime study](../studies/model_generation/runtime.md) retains the completed
-results. The subsequent [terminal chat study](../studies/model_generation/chat.md)
-adds persistent multi-turn interaction. See [project direction](project.md) for
+> **Historical record**, kept as written. The [history index](README.md) says what it
+> led to and where current guidance lives.
+
+The [runtime study](../../studies/model_generation/runtime.md) retains the completed
+results. The subsequent [terminal chat study](../../studies/model_generation/chat.md)
+adds persistent multi-turn interaction. See [project direction](../project.md) for
 follow-ups. The approved plan and earlier failed qualification below are retained
 as execution history.
 
@@ -40,7 +43,7 @@ while its configuration-2 comparison is inconclusive. The other cells use
 choices on M4 Pro, with baseline 0 elsewhere. Final automatic-dispatch capture,
 two mixed-configuration histories and the public default-Fast launcher passed.
 The retained replay verifies 72,114 numerical observations, 24,816 exact cache
-checks and all 1,360 timing samples. See the [completed runtime study](../studies/model_generation/runtime.md)
+checks and all 1,360 timing samples. See the [completed runtime study](../../studies/model_generation/runtime.md)
 for results, validation scope and reproduction commands.
 
 The primary and actual-generation-history diagnostic runs passed all 16,992
@@ -58,7 +61,7 @@ required a 21.875% hidden budget. Prediction checks passed, with all three
 changed greedy choices occurring at exact reference ties. A bounded diagnosis
 reproduced all 75 metrics on the exposed worst case and inspected 169 affine
 operations on identical operands. See the
-[retained result](../studies/model_generation/fast-reference.md).
+[retained result](../../studies/model_generation/fast-reference.md).
 
 At that historical checkpoint, the original stop gate left confirmation, native
 Fast acceptance, integration promotion and model timings unexecuted. The active

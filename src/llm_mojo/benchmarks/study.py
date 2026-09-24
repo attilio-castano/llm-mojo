@@ -366,6 +366,14 @@ def evidence_directory(directory):
     return directory / 'data' if (directory / 'data').is_dir() else directory
 
 
+def run_directories(root):
+    """Study folders holding a paired-benchmark run.json: what plot renders by default.
+
+    Archive-based studies (model_generation, tokenizer) have their own replay commands.
+    """
+    return sorted(d for d in Path(root).glob('*/') if (evidence_directory(d) / 'run.json').is_file())
+
+
 def load_numerical_record(path):
     """Read a historical record, checking both compressed and original bytes."""
     record = json.loads(path.read_text())

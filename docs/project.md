@@ -42,6 +42,11 @@ integration, native generation and workload-specific optimization. Eleven
 measured cells reduce synchronized full-model forward time by 5.6–51.2% against
 our optimized configuration 0 on M4 Pro / Metal. Other shapes retain that
 baseline; the result does not establish a universal best kernel or an HF speedup.
+The [composed decode study](../studies/model_generation/residual-norm.md) then
+promoted the single-row route that every generated token uses: configuration 26
+with GPU argmax, buffer swapping and residual/RMSNorm fusion. It lowers
+complete-token latency by 17.1–24.5% against the previous Fast route and
+streams 107–115 tokens/s after the first token.
 
 The [chat study](../studies/model_generation/chat.md) adds exact template fixtures,
 three-turn cache checks, full-history numerical diagnostics, paired cache-reuse
@@ -62,9 +67,42 @@ Evidence is specific to its claim:
 Greedy selection has a fixed tie rule, but changing prompt chunk sizes can change
 floating-point reductions and predictions. Schedule-invariant full-model execution
 is not part of the completed Fast contract. The earlier failed full-model
-qualification policies and their records remain [historical evidence](../studies/model_generation/README.md);
+qualification policies and their records remain [historical evidence](../studies/model_generation/README.md#numerical-history);
 they were not converted into passing results. The approved
-[Fast plan](fast-generation-plan.md) records the move to numerical diagnosis.
+[Fast plan](history/fast-generation-plan.md) records the move to numerical diagnosis.
+
+## Open research: KV-cache scheduling and determinism
+
+Given the same weights and token sequence, should processing the prompt all at
+once, in chunks, or one token at a time produce identical KV caches and logits?
+The causal computation is mathematically equivalent, but call shapes can change
+kernel selection and floating-point reduction order. Small differences can cross
+BF16 rounding boundaries, propagate through layers and change a greedy prediction.
+The [HF attention investigation](../studies/model_generation/backend.md) traces one
+such mechanism in the reference implementation.
+
+For broader context, Thinking Machines Lab's
+[Defeating Nondeterminism in LLM Inference](https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/)
+explains why repeatable kernels can still produce different results when batch
+shapes change, and how batch-invariant execution addresses this. Our related
+question concerns prefill and KV-cache schedules for a single sequence.
+
+Preserving an existing cache byte for byte is already a required invariant.
+Producing identical cache values when building it under different schedules is
+the additional research question. Here, scheduling means how one sequence is
+divided into model calls; multi-request scheduling remains outside current scope.
+
+The [decoder policy study](../studies/decoder_layer/policies.md) establishes exact
+schedule agreement for the tested single-layer configurations and measures its
+cost. The [full-model consistency study](../studies/model_generation/consistency.md)
+records the remaining native model boundary; full-model schedule invariance has
+not been established.
+
+The follow-up asks which arithmetic and dispatch choices preserve that invariant,
+how remaining differences affect predictions, and how much determinism costs
+relative to Fast. This is a second research track alongside the working chat
+engine, with cache identity, numerical closeness and token agreement reported
+separately.
 
 ## Follow-up direction
 
@@ -81,10 +119,16 @@ research questions, not prerequisites for calling the current milestone complete
 2. **Matched HF comparison.** Numerical comparisons already exist. A performance
    study must name the HF backend/device, precision, identical token workload,
    cache behavior and timing boundary before comparing prefill or decode.
-3. **Further Fast optimization.** Profile complete application phases over
-   representative prompt and context lengths. Use measured bottlenecks to choose
-   the next experiment, including any allocation, copying or synchronization work.
-   Keep current measurements as the baseline and retain new numerical diagnostics.
+3. **Further Fast optimization.** Decode is now limited by host submission.
+   About 98% of each token's launch-submission interval is inside MAX's enqueue
+   runtime, and reusing compiled kernel handles gave no qualifying speedup
+   ([runtime enqueue](../studies/model_generation/runtime-enqueue.md)). The
+   pinned Metal backend cannot record command graphs, so batching launches is
+   unavailable ([batching feasibility](../studies/model_generation/batch-support.md)).
+   What remains is fewer launches per token, or batching below MAX's public API.
+   Prefill is now the largest cost a user sees: the first token of a
+   3,839-token prompt takes about 2.1 s. Keep current measurements as the
+   baseline and retain new numerical diagnostics.
 4. **Serving engine.** Serve many concurrent requests with batched decode, a
    paged KV cache, continuous batching and prefix caching, behind a separate
    frontend process that survives engine failures. The [serving plan](serving-plan.md)
@@ -121,11 +165,12 @@ implemented ownership boundaries justify it. Tests live in
 `tests/fixtures/`. Reusable measurement tools belong in
 `src/llm_mojo/benchmarks/`; studies own explanations and compact measured evidence.
 
-Usage and current contracts belong in `docs/`. Completed plans and numerical
-investigations remain linked as history, so they do not obscure the current
-entry point. A new parameter choice usually belongs in an existing measurement
-matrix, not a new experiment hierarchy. Weights, generated oracle arrays,
-binaries and full traces remain outside Git.
+Usage and current contracts belong in `docs/`, listed by the
+[documentation map](README.md). Completed plans and numerical
+investigations remain linked as [history](history/README.md), so they do not
+obscure the current entry point. A new parameter choice usually belongs in an
+existing measurement matrix, not a new experiment hierarchy. Weights, generated
+oracle arrays, binaries and full traces remain outside Git.
 
 ## Success
 

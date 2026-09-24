@@ -92,15 +92,16 @@ configuration; native completion events establish whether execution completed.
 ```sh
 uv run llm-mojo bench list
 uv run llm-mojo bench run --preset core --show-config
-uv run --locked llm-mojo bench build --build-dir build/my-study-binaries
+uv run --locked llm-mojo bench build --build-dir /private/tmp/my-study-binaries
 uv run --locked llm-mojo bench run --preset core \
-  --build-dir build/my-study-binaries --output build/my-study-run
+  --build-dir /private/tmp/my-study-binaries --output /private/tmp/my-study-run
 uv run --locked llm-mojo validate
 ```
 
-The `core` preset selects `rms_norm` and `linear_decode`; `attention` selects
-`gqa_decode` and `gqa_prefill`. Repeated `--study NAME` options replace the preset's
-selection. They select complete existing grids, not arbitrary shapes or kernel
+Build and run directories must be new and outside the checkout; recorded runs
+refuse paths inside it. The `core` preset selects `rms_norm` and `linear_decode`;
+`attention` selects `gqa_decode` and `gqa_prefill`. Repeated `--study NAME`
+options replace the preset's selection. They select complete existing grids, not arbitrary shapes or kernel
 combinations. Run options expose the existing screen/confirmation inputs. The
 study registry still owns workload dimensions, candidate ordering, paired blocks,
 calibration and acceptance gates. Build/run still require the same clean commit,

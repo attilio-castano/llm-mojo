@@ -1,5 +1,8 @@
 # Exact-width projection and thread-block arrangements
 
+> **Status update, 2026-09-23.** The `projection-0` through `projection-5` study
+> policies exist through `edb610a`; Fast is unchanged by this study.
+
 ## Decision
 
 **Do not promote.** None of the five candidates qualifies in the frozen full-token

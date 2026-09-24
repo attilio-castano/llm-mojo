@@ -2,7 +2,7 @@
 
 For interactive multi-turn use with persistent KV caches, see [terminal chat](chat.md).
 
-The completed [Fast implementation revision](fast-generation-plan.md) uses numerical
+The completed [Fast implementation revision](history/fast-generation-plan.md) uses numerical
 comparisons as diagnostics. Required checks cover assets, data flow, cache and
 generation semantics; historical full-model distance ceilings no longer block
 integration. `fast` is the public default. On Apple M4 Pro it selects the eleven
@@ -22,14 +22,16 @@ invariants.
 `QwenModel` owns one BF16 embedding allocation, also used as the tied LM head,
 the final RMSNorm weights, 24 distinct learned decoder weight sets, and 24
 independent persistent KV caches. It owns one attention workspace, one MLP
-workspace, input staging, a final normalized row and next-token logits. Clients
-must preserve this ownership; replacing internal allocations is unsupported.
+workspace, input and token staging, a final normalized row, next-token logits
+and the GPU argmax partial and result buffers. Clients must preserve this
+ownership; replacing internal allocations is unsupported.
 
-The first implementation copies each intermediate decoder output into distinct
-input storage before the next layer. This satisfies the existing decoder's
-input/output nonaliasing rule. There is no host synchronization between layers
-in normal execution. A later measured buffer-rotation experiment may eliminate
-these copies without changing arithmetic; no speedup is claimed now.
+The decoder requires its input and output storage not to alias. Multi-row calls
+copy each intermediate decoder output into the separate input buffer before the
+next layer. Single-row Fast calls instead swap the owners of the input and MLP
+output buffers, which removes 23 copies without changing arithmetic. The last
+layer does not swap, so the final normalization reads the MLP output. There is
+no host synchronization between layers in normal execution.
 
 Every call preflights all layers, token IDs, shapes, allocation extents, row
 capacity, cache lengths and configuration requirements before the first model
@@ -80,12 +82,11 @@ preservation, append storage and inactive capacity across mixed configurations.
 
 ## Prepared checkpoint and reference
 
-Use the pinned assets and hashes from [model.md](model.md). The existing explicit
-download command is:
-
-```sh
-uv run --locked --script tests/fixtures/generate.py attention_checkpoint -- --download --download-only
-```
+Use the pinned assets and hashes from [model.md](model.md). `uv run llm-mojo setup`
+downloads or imports them once per machine into the shared store and prepares
+the model there (see [commands](cli.md#prepare-and-run)); `llm-mojo models
+prepare` is its asset-only part. The fixture scripts read the checkpoint through
+this checkout's `build/checkpoints/` links.
 
 Preparation runs the pinned Torch/Transformers environment, verifies the full
 checkpoint/configuration hashes, rejects incomplete model loading, and writes
@@ -94,16 +95,19 @@ concatenated in source output-row order. Rotary tables come from the pinned
 upstream implementation. Python is used for preparation and reference execution;
 no Python interop runs in the native model or text generator.
 
+Setup runs the preparation script into a staging directory and publishes the
+result only after verification. To prepare a separate copy directly:
+
 ```sh
-uv run --locked --script tests/fixtures/model_reference.py prepare --output build/model-prepared-v1
+uv run --locked --script tests/fixtures/model_reference.py prepare --output /new/directory
 ```
 
-Preparation requires a new output directory. It does not run the historical
+The script requires a new output directory. It does not run the historical
 qualification workflow. For the complete interactive setup, see the
 [README quickstart](../README.md#run-the-chat).
 
 Under the historical qualification workflow, failure prevents dependent comparison.
-The new `model_reference.py diagnose` / `model_validation diagnose` workflow
+The `model_reference.py diagnose` / `validation.model diagnose` workflow
 captures corresponding histories without requiring qualification; it retains
 numerical distances separately from required exact storage checks. The historical
 `model_reference.py qualify` command is expected to reproduce its original
@@ -188,54 +192,8 @@ call's hidden states, final norm, logits and K/V must be byte-identical. The
 receipt keeps hashes only. `tests/test_decode_route.mojo` runs the same
 comparison on three synthetic layers in default validation.
 
-## Historical numerical-policy studies
+## History
 
-Before the diagnostic policy, the [Fast completion effort](fast-generation-plan.md) stopped during
-reference-only qualification: the declared intermediate-error ceilings failed
-before independent confirmation or native Fast acceptance. The
-[Fast reference study](../studies/model_generation/fast-reference.md) retains
-the complete calibration, diagnosis and stop decision. The earlier native
-configuration-20 accuracy failure below remains separate historical evidence.
-
-**Historical consistency candidate: promotion paused at native full-model accuracy.**
-The authorized [consistency revision](../studies/model_generation/consistency.md)
-passes 71,250 exact canonical HF comparisons through 4096 tokens and native
-primitive/layer schedule tests. Its first full-model input fails seven frozen
-accuracy gates. All 336 identical-operand operation checks pass; ten projection
-elements differ by one BF16 step. Full-model schedule and generation acceptance
-remain pending, and configuration 20 is not automatically selected.
-
-The native model and generation call graphs compile. The
-embedding/copy and BF16 binary-I/O tests pass on Apple M4 Pro / Metal. The
-upstream observation code passes a tiny synthetic 24-layer self-test; that is
-not qualification of the pinned checkpoint. The full checkpoint and all 196
-prepared tensors have since passed hash/extent verification. Reference-only
-calibration completed, but independent confirmation failed 8 of 2,025 checks.
-The [retained study](../studies/model_generation/README.md) records the frozen
-budgets and diagnosis. That original confirmation remains failed; the approved
-consistency revision and native failure are recorded separately.
-
-The authorized [reference-only follow-up](../studies/model_generation/rounding.md)
-traced the discrepancy to FP32 attention differences crossing BF16 rounding
-boundaries and propagating through the model. It reproduced the normalization
-gate violation while observing identical argmax in 66 comparisons and matching
-bounded greedy sequences on three declared prompts. These results motivate
-separating corresponding-mode comparisons from cross-schedule diagnostics;
-they do not establish Mojo model acceptance or change the frozen thresholds.
-
-The deeper [HF/PyTorch study](../studies/model_generation/backend.md) locates the
-first difference in QK matrix multiplication. Normalizing SDPA query shape and
-causal-prefix layout yields 36,225 byte-equal full/cached comparisons at five
-declared lengths, while deterministic mode alone leaves the original differences
-unchanged. The approved consistency revision now qualifies this canonical
-route while preserving the original failed policy and evidence.
-
-The approved scope and stop gates are in [generation-plan.md](generation-plan.md).
-The declaration is [model_contract.json](../tests/fixtures/model_contract.json).
-The numerical thresholds are initial reference-only qualification criteria;
-they failed, and a bounded reference-only calibration also failed independent
-confirmation. Both declarations and results remain intact. The new
-[consistency declaration](../tests/fixtures/model_consistency.json) independently
-requires exact schedule agreement and adopts the unchanged frozen budgets as
-cross-engine hypotheses. The first native accuracy failure is under that new
-declaration, not acceptance under the historical failed qualification.
+The numerical-policy studies that preceded the diagnostic policy, from the
+stopped Fast qualification to the consistency candidate and the HF/PyTorch
+backend study, are recorded in [history](history/numerical-policy-studies.md).

@@ -1,5 +1,10 @@
 # QKV fusion: faster measurements, promotion gate not cleared
 
+> **Status update, 2026-09-23.** Configuration 25 was superseded by configuration 26
+> from the [combined fusion study](combined-fusion.md), part of the composed route
+> in the [residual/RMSNorm study](residual-norm.md). Configuration 25 exists through
+> `edb610a`.
+
 This is the original QKV-only result. The subsequent
 [combined QKV and activation fusion study](combined-fusion.md) cleared its
 declared gates and promoted configuration 26. The original measurements and

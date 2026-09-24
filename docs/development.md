@@ -52,6 +52,7 @@ stable hardware configuration:
 - published memory bandwidth: 273 GB/s.
 
 The bandwidth figure is an Apple specification, not a measured project result.
+Minimum hardware requirements have not been established.
 See Apple's [MacBook Pro technical specifications](https://support.apple.com/121554).
 
 The software environment observed on 2026-08-20 was:
@@ -62,9 +63,10 @@ The software environment observed on 2026-08-20 was:
 - `uv` 0.12.5;
 - Mojo 1.0.0 and MAX 26.5.0 as resolved by `uv.lock`.
 
-This snapshot establishes the development environment; it does not prove that
-a Mojo workload executed on the GPU. Every GPU result must report the runtime's
-device and backend identity and must satisfy the project's
+Later recorded runs used macOS 26.6.2; each benchmark record carries its own
+software versions. This snapshot establishes the development environment; it
+does not prove that a Mojo workload executed on the GPU. Every GPU result must
+report the runtime's device and backend identity and must satisfy the project's
 [evidence requirements](project.md#evidence).
 
 Mutable conditions belong in each benchmark record rather than in this machine
@@ -124,15 +126,34 @@ independent oracle generators remain under `tests/`. See the
 [CLI compatibility table](cli.md#validation-and-compatibility) for retained
 study commands and their canonical replacements.
 
-This regenerates every independent oracle into ignored `build/oracle_data/`,
-checks its SHA-256 against the frozen anchors (the original fixtures at
-`a86f4db` and the subsequently added prefill oracle), runs
-Python tooling tests, and runs every Mojo correctness suite on Metal with
-`MODULAR_DEBUG=device-sync-mode`. The frozen tolerances, diagnostic tensors,
-ragged tiles, full and incremental prefill, and all 24 decode cases remain.
-Prefill adds 29 Qwen-shape cases and full-versus-suffix, causal-independence and
-extreme-score regression checks across sixteen routes, including the five resource ablations. Its generated NumPy
-arrays are loaded only by tests; inference and timed paths remain Mojo.
+Validation runs in four stages, stopping at the first failure:
+
+1. **Oracles.** It regenerates every independent oracle into ignored
+   `build/oracle_data/` and checks each against its frozen anchor: the original
+   fixtures at `a86f4db`, the prefill and attention-sublayer manifests, the MLP,
+   decoder and model-calibration self-tests, the tokenizer references (including
+   a Unicode run) and the packed chat fixtures. Tokenizer tables must already be
+   prepared; validation never downloads.
+2. **Python tests.** Setup and the shared store, the CLI and configuration,
+   launch boundaries, evidence replays, numerical tooling and documentation links.
+3. **Mojo suites.** Every `tests/test_*.mojo` runs on Metal with
+   `MODULAR_DEBUG=device-sync-mode`.
+4. **Route smoke.** Every maintained benchmark route runs once, and invalid
+   selectors must be rejected.
+
+| Level | Mojo suites |
+| --- | --- |
+| Kernels | `test_rms_norm`, `test_linear`, `test_rope`, `test_swiglu`, `test_residual_norm`, `test_token_selection`, `test_attention_primitives` |
+| Attention | `test_attention`, `test_attention_decode`, `test_attention_decode_benchmark`, `test_attention_prefill`, `test_attention_precision`, `test_attention_sublayer`, `test_attention_sublayer_operations`, `test_qkv_fusion` |
+| MLP and decoder layer | `test_mlp`, `test_decoder_layer`, `test_decoder_selection`, `test_consistency` |
+| Model and runtime | `test_model`, `test_execution_plan`, `test_decode_route`, `test_chat`, `test_tokenizer`, `test_import` |
+
+The attention suites keep their frozen tolerances, diagnostic tensors, ragged
+tiles, full and incremental prefill, and all 24 decode cases. Prefill adds 29
+Qwen-shape cases and full-versus-suffix, causal-independence and extreme-score
+regression checks across sixteen routes, including the five resource ablations.
+Its generated NumPy arrays are loaded only by tests; inference and timed paths
+remain Mojo.
 Normal-mode stress for the new schedules uses `-D PREFILL_REPEAT=12` on
 `tests/test_attention_prefill.mojo`, with `MODULAR_DEBUG` unset.
 The Torch/Transformers oracles share the isolated script environment in
@@ -148,77 +169,10 @@ After deliberately editing dependency declarations, update the corresponding
 lock with `uv lock` or `uv lock --script tests/fixtures/generate.py`, then rerun
 validation. Add `--upgrade-package NAME` only when intentionally upgrading.
 
-The [attention-sublayer study](attention-sublayer.md) adds 17 synthetic cases
-with frozen arrays and a strict FP32 attention accuracy gate. BF16 eager
-comparisons report their numerical differences while keeping finite-output
-and exact cache checks mandatory. The documented explicit compatibility
-command reproduces the retained seed-887 failures. Checkpoint-derived
-first-layer checks are an explicit separate workflow and do not make ordinary
-validation download a model.
-
-The [MLP reference contract](mlp-sublayer.md) adds upstream development captures,
-independent FP64 diagnostics, and a finite BF16 SiLU sweep. Validation runs its
-fixture-tooling tests and verifies synthetic frozen evidence. Checkpoint
-reproduction uses an explicit local-asset argument; the ordinary workflow does
-not capture or evaluate the separate holdouts. The Mojo MLP adds
-operation/composition and BF16 boundary tests for all nineteen projection mappings.
-Mappings 0 through 7 cover full and chunked rows; decode-only mappings 8 through
-18 use each fixture's first row and reject multi-row calls.
-Decoder policy mappings 19/20/21 reuse projection weights across 4/8/16 rows; their
-primitive byte-equivalence and composed numerical checks belong to the
-[decoder policy study](../studies/decoder_layer/policies-plan.md). The historical
-standalone MLP measurement registry remains 0 through 18.
-The explicit `tests/fixtures/mlp_acceptance.py` entrypoint uses the same pinned
-script lock through a symlink and opens holdouts only against a clean candidate.
-Normal-mode reuse can be checked with `MODULAR_DEBUG` unset and
-`MLP_CASE=h896_i4864_r17_s1601` when running `tests/test_mlp.mojo`.
-Set `MLP_SPLIT=checkpoint` to run its three existing checkpoint cases. Holdouts
-are explicit with `MLP_SPLIT=holdout` after their initial capture; subsequent
-evaluations of observed holdouts are regression checks, not fresh holdouts.
-The completed optimization campaign also captured its separately declared
-holdouts. Evaluate those existing fixtures with
-`MLP_SPLIT=optimization_holdout MLP_VARIANTS=0,7`; `MLP_VARIANTS` can restrict
-any regression run to an explicit subset of mappings 0 through 18. The completed
-decode campaign's four observed holdouts can be checked with
-`MLP_SPLIT=decode_holdout MLP_VARIANTS=0,12`; variant 12 is a diagnostic candidate,
-not a promoted route.
-
-The [decoder-layer contract](decoder-layer.md) adds the actual pinned upstream
-decoder with the selected FP32 SDPA policy. Ordinary validation runs ten
-reference self-tests and verifies the frozen synthetic development arrays.
-Use `uv run --locked --script tests/fixtures/decoder_reference.py` directly
-to verify them; add `--output` with a new directory to regenerate them.
-An explicit `--checkpoint-assets` directory additionally verifies the three
-checkpoint cases without downloading assets. The reserved decoder inputs have
-not been evaluated and are excluded from this command.
-
-For recorded evaluation, build and launch the numerical candidate through the
-project environment:
-
-```bash
-uv run --locked python -m llm_mojo.validation.mlp build --binary /private/tmp/mlp-numerical-candidate
-uv run --locked python -m llm_mojo.validation.mlp evaluate --binary /private/tmp/mlp-numerical-candidate --output /private/tmp/mlp-numerical-regression --split decode_holdout --variants 0 12 --regression
-```
-
-The build requires clean source and writes an adjacent `.provenance.json`.
-Evaluation launches that exact executable, verifies build/fixture stability,
-checks complete case/mapping/stage/reuse coverage and Metal identity, and retains
-an `evaluation.json`, output log and numerical records in a new output directory.
-It removes inherited `MLP_*` filters and debug synchronization. `--regression`
-labels already observed fixtures and permits a new candidate; without it, the
-binary and commit must also match the candidate frozen in the capture manifest.
-This match alone does not make previously observed fixtures fresh again.
-
-For a new declared holdout capture, pass the receipted binary to
-`tests/fixtures/mlp_acceptance.py --candidate-binary ...`. Capture verifies the
-build before exposure and only generates fixtures; its `complete` status is
-not numerical acceptance. Run the evaluator afterward without `--regression`.
-The former `MLP_CANDIDATE_BINARY` environment shortcut is rejected: naming a
-file cannot establish that it produced the test results. Direct `MLP_SPLIT`
-suite runs remain useful regression checks but do not create execution receipts.
-The `--optimization` acceptance
-generator refuses to overwrite its existing output directory; replaying the
-same declared inputs does not make them independent holdouts again.
+Each numerical contract documents its own fixtures, splits and recorded
+evaluation commands: the [attention sublayer](attention-sublayer.md#implementation-and-reproduction),
+the [MLP](mlp-sublayer.md#reference-results-and-reproduction) and the
+[decoder layer](decoder-layer.md#qualified-reference-package).
 
 Use `--prepare-only` to generate fixtures without running tests. For an individual
 Mojo suite, include `-I src -I build -I tests`. Generators and the

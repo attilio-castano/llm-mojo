@@ -1,5 +1,9 @@
 # Where a complete Qwen token spends its time
 
+> **Status update, 2026-09-23.** This profile measures the route before the decode
+> fusions. The composed route promoted by the [residual/RMSNorm
+> study](residual-norm.md) streams 107–115 tokens/s.
+
 The current Fast BF16 runtime takes about **17 ms per controlled decode step**
 on this M4 Pro. Twelve longer terminal replies measured **54.9–59.5 output
 tokens/s**. The strongest next experiment is to reduce repeated kernel

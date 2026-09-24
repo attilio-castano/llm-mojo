@@ -104,6 +104,9 @@ baseline.
 
 <!-- policies-cost:end -->
 
+`plot --policies` regenerates this table, also written alone to
+[policies_results.md](policies_results.md), and the figure above.
+
 R is query rows in this call; T is total KV rows after append, with future
 positions still causally masked. Times are microseconds per layer call.
 A ratio above one means Deterministic took

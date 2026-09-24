@@ -1,5 +1,9 @@
 # GPU token selection
 
+> **Status update, 2026-09-23.** The separate GPU argmax was later promoted as part
+> of the composed route in the [residual/RMSNorm study](residual-norm.md). The fused
+> head and its study policy exist through `edb610a`.
+
 The fused vocabulary head is numerically correct but slower. Separate GPU
 argmax is promising, with 4.47–7.03% median paired latency reductions and
 93–95 tokens/s streaming medians, but it misses the frozen promotion gate at

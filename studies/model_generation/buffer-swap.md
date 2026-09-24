@@ -1,5 +1,9 @@
 # Swapping hidden-buffer ownership
 
+> **Status update, 2026-09-23.** Swapping was later promoted as part of the composed
+> route in the [residual/RMSNorm study](residual-norm.md). The `buffer-swap` study
+> policy exists through `edb610a`.
+
 **Decision: retain the candidate; Fast/auto remain unchanged.** The candidate
 preserves exact outputs and removes all 23 inter-layer copies. Median paired
 latency reductions are 5.97%, 5.34% and 8.26%, but only the longest context
