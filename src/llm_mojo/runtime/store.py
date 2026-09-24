@@ -130,11 +130,18 @@ def publish_file(staged, final):
 
 
 def publish_directory(staged, final):
-    """Publish a complete directory read-only; an existing final entry must be set aside first."""
+    """Publish a complete directory tree read-only; an existing final entry must be set aside first.
+
+    Files become 0444 and directories 0555 at every depth.
+    """
     staged, final = Path(staged), Path(final)
-    for child in staged.iterdir():
-        if child.is_file() and not child.is_symlink():
-            os.chmod(child, 0o444)
+    for directory, subdirectories, files in os.walk(staged, topdown=False):
+        for name in files:
+            if not Path(directory, name).is_symlink():
+                os.chmod(Path(directory, name), 0o444)
+        for name in subdirectories:
+            if not Path(directory, name).is_symlink():
+                os.chmod(Path(directory, name), 0o555)
     # Moving a directory to a new parent rewrites its '..' entry, which needs write
     # permission; a clone of another store's read-only directory would lack it.
     os.chmod(staged, 0o755)
@@ -154,10 +161,11 @@ def set_aside(path):
 
 
 def remove_staged(path):
-    """Delete a staging entry, including one already marked read-only."""
+    """Delete a staging entry, including a tree already marked read-only at any depth."""
     path = Path(path)
     if path.is_dir() and not path.is_symlink():
-        os.chmod(path, 0o755)
+        for directory, _, _ in os.walk(path):
+            os.chmod(directory, 0o755)
         shutil.rmtree(path)
     else:
         path.unlink(missing_ok=True)
