@@ -168,6 +168,35 @@ with traces before starting phase 2.
 
 ## Validation record
 
+### Package boundaries before 1b, 2026-09-25
+
+Three commits prepare 1b under the
+[dependency direction](cli.md#dependency-direction):
+- `f10668d` sizes every pool from `QwenModel.kv_geometry()` instead of Qwen
+  defaults inside `serving/`;
+- `0cf5671` records the direction and adds its import test;
+- `548f2ca` plans 1b's kernels with comptime model dimensions.
+
+Same machine and toolchain as below.
+
+- **Exact equality.** `f10668d` changes no arithmetic. The baseline
+  executables were the 1a candidates, whose 79 Mojo sources match `ce05db5`
+  byte for byte under the same `uv.lock`. Against them, `f10668d` produced
+  byte-identical outputs on the 1a equality gate recorded below: 4,170 files
+  per side.
+- **Lifecycle.** The model lifecycle study passed on Metal from a clean
+  `548f2ca`, and again in device-sync mode. It now also rejects a pool whose
+  KV heads differ from the model's, leaving every length unchanged.
+- **Suite.** `uv run --locked llm-mojo validate` passed on `f10668d`'s tree
+  with the boundary test present:
+  - frozen oracle anchors, with the three large families verified from the
+    shared store;
+  - 268 Python tests, including the four boundary tests;
+  - all 26 native test files plus the Unicode tokenizer run on Metal;
+  - every benchmark smoke route.
+
+  The Python tests passed again with the documentation changes.
+
 ### 1a on `3b23c65`, 2026-09-25
 
 The branch's commits rebased onto `3b23c65` without conflicts; the
