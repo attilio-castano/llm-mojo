@@ -17,11 +17,11 @@ committed with its own gate:
 
 Approved on 2026-09-23 for local implementation of 1a: edits, builds, tests,
 validation and incremental commits. Pushing, pull requests, toolchain upgrades
-and numerical-contract changes need a separate decision. 1b and 1c get detailed
-plans before implementation.
+and numerical-contract changes need a separate decision. 1b's detailed plan
+below awaits approval; 1c gets one before its implementation.
 
 Status: 1a is complete; see the [validation record](#validation-record). 1b is
-next.
+planned and awaits approval.
 
 ## 1a. Step format and KV pool
 
@@ -99,54 +99,166 @@ It then runs the existing layer code on those views. Benchmark rewinds use
 - **Sanity check, not a performance claim.** Alternating baseline and candidate
   generation runs show decode step time unchanged within run-to-run noise.
 
-## 1b. Batched decode (outline)
+## 1b. Batched decode
 
-A step carries S one-token sequences, each owning one full-context block of a
-pool with S blocks. Projections, including the vocabulary head, use the
-multi-row rowwise kernel for all S rows. These kernels gain multi-sequence
-forms:
+Designed on 2026-09-25 from `e27ec90`.
 
-- fused QKV unpack, RoPE and KV append, indexed by positions and write slots;
-- decode attention on the unsplit 32-simdgroup route, with a sequence index,
-  per-sequence lengths and block bases;
-- residual RMSNorm fusion, keeping each row's reduction;
-- GPU argmax, with a winner and nonfinite flag per row;
-- SiLU/multiply, as a multi-row fused kernel or an unfused path with identical
-  rounding.
+A step decodes one token for each of S sequences. Each sequence owns one
+full-context block of an S-block pool, as in 1a. 1b delivers:
+- one launch per kernel for all S sequences, so every step issues the same 245
+  launches whatever S is;
+- each sequence's logits, selected token and appended K/V bytes equal to
+  decoding it alone;
+- unchanged bytes at S = 1.
 
-Buffer swapping between layers stays valid, because it exchanges buffer
-owners rather than rows.
+Batched prefill, several blocks per sequence and scheduling belong to phases 2
+and 3. The baseline and consistent research routes stay single-sequence.
 
-**Shapes.** The multi-sequence kernels take the model's dimensions (query and
-KV heads, head size, hidden width) as comptime parameters, which `QwenModel`
-supplies, so they name no model; see the
-[dependency direction](cli.md#dependency-direction). A comptime parameter is a
-compile-time constant like the literal it replaces, and the gate below compares
-each batched row with the existing single-row kernels, so any difference would
-fail it. Those single-row kernels keep their Qwen checks as the reference until
-a second model needs them.
+### Today's step and its batched form
 
-The gate: for S in {2, 3, 8, 16, 32} with mixed context lengths and
-nonuniform data, each batched row's logits and appended KV bytes equal the same
-sequence decoded alone at the same position. Guard rows around each block stay
-untouched, and invalid batches are rejected without changing state.
+Configuration 26 issues 245 launches per token: the embedding, 11 launches in
+layer 0 and 10 in each later layer, the vocabulary projection and two argmax
+passes. Every launch has a batched form that keeps each row's arithmetic:
 
-**Test data.** Each batched row's reference is the same sequence decoded alone
-on the existing single-row route, so 1b adds no oracle family. Native tests
-build small models from the verified decoder fixtures, as the decode-route test
-does, and run without the checkpoint; model-level checks use the prepared
-checkpoint. Validation links those fixtures read-only from the
+| Launch | Today | Batched |
+| --- | --- | --- |
+| Embedding | `_embedding`, one thread per element | unchanged, S rows |
+| Input RMSNorm, layer 0 | `_rms_norm_apple_gpu_simdgroup_kernel`, one threadgroup per row | unchanged, S rows |
+| QKV with bias, Wo, gate, up, down and vocabulary projections | `_linear_rowwise_apple_gpu_kernel`, one SIMD group per output | `_linear_rowwise_rows_apple_gpu_kernel`, with each row's lane-strided FP32 sum, `warp.sum`, bias and single rounding |
+| Unpack, RoPE and K/V append | `_fused_decode_qkv`, position as a scalar argument | a sequence index; position and block from the step buffer; still elementwise |
+| Decode attention | `_decode_kernel[32, 1, 1]`, one threadgroup per query head | a sequence mode with each sequence's Q row, K/V base and length; keys still go to SIMD groups by position mod 32 and merge in a fixed order |
+| Residual and RMSNorm, twice per layer | `_residual_norm`, one row | one threadgroup per row |
+| SiLU × up | `_silu_multiply`, elementwise | S × 4,864 elements |
+| Argmax | `_argmax` over 149 groups, then `_finish` | a row index in both passes, one record per sequence |
+
+Buffer swapping between layers stays valid, because it exchanges buffer owners
+rather than rows. The greedy readback maps all S records at once.
+
+### Decisions
+
+- **One kernel source for every S.** Configuration 26 runs the batched
+  composition at S = 1 too, so a batched row and a solo row execute the same
+  compiled kernels and differ only in the data they address. Projections are
+  the one exception: the rows kernel hands one-row calls to the one-row kernel,
+  and `tests/test_consistency.mojo` shows the two agree bit for bit. The
+  attention kernel is shared with research routes 4 and 11, which already use
+  its grid axes (`block_idx.y` is the split and `block_idx.z` a query row of one
+  sequence), so it gains a comptime sequence mode; those routes keep their
+  instantiation.
+- **A fixed composition.** Multi-row calls through today's layer dispatch
+  switch to MMA projections at 16 rows, prefill attention above one row and MLP
+  mapping 7, each a different reduction order. `enqueue_decode_batch_layer` in
+  `layers/decoder_layer.mojo` therefore composes the ten launches directly.
+  Configuration 26 moves to it at every S, and the single-row fusion branches
+  it used in the generic layer code retire: fused QKV, fused activation and the
+  deferred residuals and norms. `forward_captured` covers the composition, so
+  the capture-based gates keep working.
+- **Comptime model dimensions.** New and generalized kernels take the query and
+  KV heads, head size and hidden width as comptime parameters that `QwenModel`
+  supplies, so they name no model; see the
+  [dependency direction](cli.md#dependency-direction).
+- **One upload per step.** Positions reach today's kernels as the scalar
+  `cache.length`. A batched step needs them on the GPU, so one int32 step
+  buffer holds the S token IDs, positions and block IDs, written through a
+  single host mapping like today's token upload. The layer index stays a scalar
+  argument, so one upload serves all 24 layers. Kernels compute K/V element
+  addresses in 64 bits from the pool layout:
+  `((block · L + layer) · 2 + kv) · BS · 128 + position · 128 + column`.
+- **Row tile.** The rows kernel reads each weight once per tile of 4, 8 or 16
+  rows, which changes weight traffic but not arithmetic. 1b uses 4, the only
+  tile in use today; 1c measures the others.
+- **Model state.** `QwenModel` gains `max_sequences`, at most `max_rows`, which
+  sizes the per-sequence buffers: logits `[max_sequences, 151936]`, the final
+  norm, argmax partials `[max_sequences, 149, 3]` and results
+  `[max_sequences, 3]`. `ExecutionPlan.validate` takes the
+  sequence count: configuration 26 needs one row per sequence, and every other
+  configuration needs one sequence. `fast_plan` selects configuration 26 for a
+  decode-only batch on the measured device and rejects batches elsewhere.
+  `greedy_tokens` returns one token per sequence, and `greedy` stays for one. A
+  nonfinite row invalidates the model, as a nonfinite logit does today;
+  per-request handling is a phase 3 question.
+- **Preflight.** A batched step requires every sequence to decode one token,
+  S ≤ `max_sequences`, one block per sequence with the model's block size, and
+  each block's 24 layer lengths equal to its sequence's position.
+  `StepBatch.validate` already rejects two sequences writing one block. A
+  rejection happens before the upload and changes nothing.
+- **Route record.** `ForwardRoute` records S and counts launches where they are
+  enqueued. A per-sequence loop would multiply those counts, so the route test
+  proves that launches do not depend on S.
+
+### Gate
+
+- **Kernels, without the checkpoint.** Each generalized kernel at
+  S ∈ {1, 2, 3, 8, 16, 32}, with mixed positions (1, 31, 32, 33 and 4,096 keys
+  included) and scattered, unsorted blocks, equals the same kernel run once per
+  sequence, and unwritten pool rows keep their poison. The rows kernel equals
+  one-row launches at the Qwen widths 1,152 with bias, 896, 4,864 and 151,936,
+  with tiles 4, 8 and 16. Today's test covers only 19 outputs, and the
+  vocabulary head has never run through this kernel.
+- **S = 1 unchanged.** The 1a equality gate against the previous head (4,170
+  files) and the decode-route test's byte comparison of Fast with the baseline.
+- **Batched equals solo, without the checkpoint.** On three fixture layers, for
+  S ∈ {2, 3, 8, 16, 32}, sequences with different prefixes decode 12 steps
+  together and alone. Logits, final norms, the K/V bytes of every block with
+  unwritten rows poisoned, lengths and submitted rows agree, and the route's
+  launch counts equal their S = 1 values.
+- **Batched equals solo, with the checkpoint.** A model-driver mode decodes
+  eight real conversations of different lengths together for 16 steps; tokens
+  and logits match their solo runs.
+- **Rejections.** A mixed batch, S above `max_sequences`, a non-Fast plan with
+  S > 1, a position that disagrees with its block, and a block size other than
+  the model's are each rejected with state unchanged.
+- **Suite and timing.** `uv run --locked llm-mojo validate` passes. At S = 1,
+  alternating baseline and candidate runs show decode step time unchanged
+  within run-to-run noise; this is a sanity check, not a claim.
+
+**Test data.** Each batched row's reference is the same sequence decoded alone,
+so 1b adds no oracle family. Native tests build small models from the verified
+decoder fixtures, as the decode-route test does, and run without the
+checkpoint; model-level checks use the prepared checkpoint. Validation links
+those fixtures read-only from the
 [shared store](development.md#shared-oracle-fixtures). Tests write captures
 under `build/test_*` and records under `build/oracle_records/`, never into
 `build/oracle_data/`. Leaving the generators' inputs untouched keeps validation's
 oracle stage to seconds, so every 1b step can run the full suite; a new family
 would need its own generator, anchors and store entry.
 
+### Steps
+
+Each step is one commit with its own gate:
+
+1. Rows-kernel tests at the Qwen widths, with no production change.
+2. Sequence-aware `_residual_norm`, argmax and `_fused_decode_qkv`, and the
+   attention sequence mode, each with kernel tests.
+3. `enqueue_decode_batch_layer` and the step buffer. Configuration 26 moves to
+   them at S = 1, its generic-layer branches retire, and the S = 1 gate runs.
+4. Batched steps: `max_sequences`, the plan and preflight rules,
+   `greedy_tokens` and route counts, with the fixture gate and rejections.
+5. The checkpoint driver mode, the suite and the validation record.
+
+### Risks
+
+- **Contraction.** Metal may contract `a · b + c` into a fused multiply-add
+  differently in each compiled kernel; this once changed RoPE bits. Running one
+  kernel source at every S removes the risk between batched and solo rows.
+  Projections, the one pair of different kernels, multiply BF16 values whose
+  products are exact in FP32, so contraction cannot change their sums outside
+  subnormal and overflow cases. Between old and new kernels, the S = 1 gate
+  catches any difference, and explicit `fma` control fixes it, as it did for
+  RoPE.
+- **Weight traffic.** With tile 4, S = 16 reads the weights four times per
+  step and S = 64 sixteen times; see the 1c hypothesis.
+- **Pool size.** 64 full-context blocks form one 3 GiB buffer, and the largest
+  Metal buffer is an open question in the serving plan.
+- **Host bookkeeping.** Each step makes 24·S length updates on the host; 1c's
+  host breakdown shows what they cost.
+
 ## 1c. Batch-size study (outline)
 
-Extend the existing model benchmark with a batch axis: B in
-{1, 2, 4, 8, 16, 32, 64} at contexts 64, 1024 and 3968, plus one mixed-length
-batch. A 64-block pool of full-context blocks is 3 GiB. Time complete steps,
+Extend the existing model benchmark with a batch axis, B in
+{1, 2, 4, 8, 16, 32, 64}, and a projection row-tile axis, 4, 8 and 16, at
+contexts 64, 1024 and 3968, plus one mixed-length batch. A 64-block pool of
+full-context blocks is 3 GiB. Time complete steps,
 from upload through per-sequence readback, with the existing four-block paired
 procedure. Report:
 
@@ -165,6 +277,18 @@ as much as B prompt rows, B = 16 gives roughly 5–7× today's throughput and
 B = 64 gives 12–16×. Those rows used other kernels and attended to a single
 sequence, so this is only a prior. If B = 16 gives less than 3×, investigate
 with traces before starting phase 2.
+
+**Refinement from the 1b analysis, still before measurement.** The prior
+assumes each weight is read about once per step. The rows kernel reads it once
+per row tile, and at history 1024 projections take 6.3 ms of a one-row step's
+7.4 ms of active GPU time
+([projection arrangements](../studies/model_generation/projection-arrangements.md)).
+With tile 4, a step of B rows would then spend about ⌈B/4⌉ × 6.3 ms on
+projections. That puts B = 4 near 4× today's throughput and both B = 16 and
+B = 64 near 5×, unless tiles 8 and 16 keep their time per pass. In multi-row
+prefill cells, tile 8 was 11–16% slower than tile 4 and tile 16 was 37–61%
+slower ([decoder policies](../studies/decoder_layer/policies.md)); those cells
+do not predict decode-shaped batches.
 
 ## Validation record
 
