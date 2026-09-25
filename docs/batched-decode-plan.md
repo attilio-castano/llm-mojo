@@ -21,8 +21,8 @@ and numerical-contract changes need a separate decision. 1b was approved on
 2026-09-25 on the same terms; 1c gets a detailed plan before its
 implementation.
 
-Status: 1a is complete; see the [validation record](#validation-record). 1b is
-in progress.
+Status: 1a and 1b are complete; see the [validation record](#validation-record).
+1c is next and gets a detailed plan before implementation.
 
 ## 1a. Step format and KV pool
 
@@ -292,6 +292,65 @@ slower ([decoder policies](../studies/decoder_layer/policies.md)); those cells
 do not predict decode-shaped batches.
 
 ## Validation record
+
+### 1b on `f3abcd2`, 2026-09-25
+
+Five commits implement 1b, each with its gate:
+
+| Commit | Change |
+| --- | --- |
+| `c397c61` | tests the rows kernel at every decode width |
+| `de069cc` | sequence-aware residual RMSNorm, argmax, fused QKV and decode attention |
+| `0b73841` | Fast decode runs through the batched composition, still one sequence per step |
+| `ca2b9fc` | a configuration 26 step decodes several sequences |
+| `f3abcd2` | checks batched decode on the real model |
+
+Same machine and toolchain as below.
+
+- **Kernels.** `tests/test_decode_batch.mojo` checks, bit for bit and with
+  guard rows and unwritten pool rows poisoned:
+  - the rows kernel against one-row launches at the widths 1,152 with bias,
+    896, 4,864 and 151,936, for 2 to 64 rows with tiles 4, 8 and 16;
+  - residual RMSNorm and argmax against single-row launches, where a NaN flags
+    only its row;
+  - fused QKV/RoPE/append against the unfused path, and batched attention
+    against route 4, for 1 to 32 sequences with 1 to 4,096 keys in scattered
+    blocks.
+- **S = 1 unchanged.** Executables built from `0b73841` and from the pre-1b
+  head `ce05db5` produced byte-identical outputs on the 1a equality gate: 4,170
+  files per side. The decode-route test finds the composition byte-identical to
+  the baseline route and counts 35 launches for its three layers, which is 245
+  for 24.
+- **Batched equals solo, fixture.** For S ∈ {2, 3, 8, 16, 32}, 12 steps on
+  three fixture layers agree with each sequence decoded alone in tokens, all
+  logits, final norms, cache lengths, submitted rows and every pool byte. The
+  launch count does not depend on S. Invalid batches change nothing: a prefill
+  chunk beside a decode, too many sequences, a research plan with several
+  sequences, a disagreeing position, another block size and a batched capture.
+- **Batched equals solo, checkpoint.** `validation.model batch` ran from a clean
+  `f3abcd2`. Eight conversations of 11 to 3,301 prompt tokens decoded 16 steps
+  with every token, all 151,936 logits per row and every K/V byte of both pools
+  identical, at 245 launches per batched step. The lifecycle study passed from
+  the same build, in normal and device-sync mode.
+- **Suite.** `uv run --locked llm-mojo validate` passed on `0b73841` and on
+  `f3abcd2`:
+  - frozen oracle anchors, with the three large families from the shared store;
+  - 267 Python tests;
+  - all 26 native test files plus the Unicode tokenizer run on Metal;
+  - every benchmark smoke route.
+
+**Deviations from the plan.** Decode attention got its own kernel with route
+4's arithmetic rather than a mode of the shared kernel; routes 4 and 11 keep
+theirs. `tests/test_qkv_fusion.mojo` retired with the single-row fused kernel,
+and its checks moved to the batched kernel's test.
+
+**Timing sanity check at S = 1, no claim.** On AC power, 16 runs of 128 tokens
+after a 1,176-token prompt formed four alternating blocks, comparing the pre-1b
+generate binary with `f3abcd2`'s. Median decode steps were 8.020 ms for the
+baseline (runs 7.990–8.236 ms) and 8.081 ms for 1b (8.005–8.295 ms). 1b/baseline
+block ratios were 0.999, 1.007, 1.001 and 1.020. The 0.8% difference is below the
+5% floor and one block favors 1b, so the check is inconclusive: no regression is
+visible. 1c measures batched throughput.
 
 ### Package boundaries before 1b, 2026-09-25
 
