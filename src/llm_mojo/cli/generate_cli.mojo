@@ -43,7 +43,7 @@ def main() raises:
     var max_rows = min(chunk_rows,prompt_length) if chunk_rows > 0 else prompt_length
     var ctx = DeviceContext()
     var model = QwenModel(ctx,args[1],MAX_CONTEXT,max_rows)
-    var kv = KVPool(ctx,1,MAX_CONTEXT)
+    var kv = KVPool(ctx,1,MAX_CONTEXT,model.kv_geometry())
     if diagnostics:
         events += "device\t0\t"+ctx.name()+"/"+ctx.api()+"\t0\n"
         events += "load\t0\t0\t"+String(now()-started)+"\n"

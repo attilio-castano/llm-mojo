@@ -38,7 +38,7 @@ def main() raises:
     print("device",ctx.name(),"backend",ctx.api())
     var session = ChatSession(ctx,args[1],tokenizer,work,String(DEFAULT_SYSTEM),256,512)
     var replay = QwenModel(ctx,args[1],512,256)
-    var replay_kv = KVPool(ctx,1,512)
+    var replay_kv = KVPool(ctx,1,512,replay.kv_geometry())
     for i in range(24):
         session.kv.caches[session.kv.index(0,i)].key.enqueue_fill(123)
         session.kv.caches[session.kv.index(0,i)].value.enqueue_fill(123)

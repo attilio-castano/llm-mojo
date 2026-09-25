@@ -124,7 +124,7 @@ def main() raises:
     if len(history) < prefix+1:
         raise Error("insufficient frozen token history")
     var model = QwenModel(ctx,args[2],4096,256)
-    var kv = KVPool(ctx,1,4096)
+    var kv = KVPool(ctx,1,4096,model.kv_geometry())
     # Define all inactive storage for exact before/after comparisons.
     for layer in range(24):
         kv.caches[kv.index(0,layer)].key.enqueue_fill(0)

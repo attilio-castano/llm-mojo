@@ -54,7 +54,8 @@ terminal.
 [`QwenModel`](../src/llm_mojo/models/qwen2/model.mojo), which allocates GPU
 buffers and fills them with [`load_bf16`](../src/llm_mojo/models/qwen2/model.mojo),
 one layer at a time through [`ModelLayer.load`](../src/llm_mojo/models/qwen2/model.mojo).
-The session also creates a one-block [`KVPool`](../src/llm_mojo/serving/kv_pool.mojo):
+The session also creates a one-block [`KVPool`](../src/llm_mojo/serving/kv_pool.mojo),
+sized by [`QwenModel.kv_geometry`](../src/llm_mojo/models/qwen2/model.mojo):
 a single allocation holding every layer's cache, which the model reads and
 appends through per-layer views.
 

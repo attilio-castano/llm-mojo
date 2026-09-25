@@ -46,9 +46,9 @@ def _model(ctx: DeviceContext) raises -> QwenModel:
     return model^
 
 
-def _pool(ctx: DeviceContext) raises -> KVPool:
-    """One zeroed full-context block; every element belongs to one layer view."""
-    var pool = KVPool(ctx, 1, PREFIX + STEPS, LAYERS)
+def _pool(ctx: DeviceContext, model: QwenModel) raises -> KVPool:
+    """One zeroed full-context block for model; every element belongs to one layer view."""
+    var pool = KVPool(ctx, 1, PREFIX + STEPS, model.kv_geometry())
     pool.storage.enqueue_fill(0)
     return pool^
 
@@ -103,8 +103,8 @@ def test_fast_decode_matches_baseline_and_runs_fused() raises:
     assert_equal(ctx.api(), "metal")
     var fast = _model(ctx)
     var baseline = _model(ctx)
-    var fast_kv = _pool(ctx)
-    var baseline_kv = _pool(ctx)
+    var fast_kv = _pool(ctx, fast)
+    var baseline_kv = _pool(ctx, baseline)
     var prompt = List[Int]()
     for i in range(PREFIX):
         prompt.append(i)

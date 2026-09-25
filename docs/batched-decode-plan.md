@@ -30,8 +30,8 @@ next.
 | Owner | After 1a |
 | --- | --- |
 | `serving/batch.mojo` | `StepBatch`: one step's tokens, positions, sequence offsets, KV lengths, block table, write slots and logit rows |
-| `serving/kv_pool.mojo` | `KVPool`: one BF16 allocation for all KV storage, cache views per block and layer, and their logical lengths |
-| `QwenModel` | weights, workspaces, logits and selection buffers, validity and submission counters; no KV storage or sequence length |
+| `serving/kv_pool.mojo` | `KVPool`: one BF16 allocation for all KV storage, cache views per block and layer, and their logical lengths; sized by a `KVGeometry` the model supplies |
+| `QwenModel` | weights, workspaces, logits and selection buffers, validity and submission counters, and `kv_geometry()`; no KV storage or sequence length |
 | `ChatSession`, CLIs, drivers | a one-block pool for their single sequence |
 
 ### Pool layout

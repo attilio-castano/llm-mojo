@@ -7,7 +7,7 @@ from llm_mojo.models.qwen2.model import CaptureRequest, LAYERS, QwenModel, VOCAB
 from llm_mojo.models.qwen2.plan import MAX_CONTEXT, baseline_plan, configured_plan, execution_plan
 from llm_mojo.runtime.clock import now
 from llm_mojo.serving.batch import StepBatch
-from llm_mojo.serving.kv_pool import KVPool
+from llm_mojo.serving.kv_pool import KVGeometry, KVPool
 from model_operation_support import capture_operations
 
 
@@ -15,7 +15,7 @@ def lifecycle(path: String) raises:
     var ctx = DeviceContext()
     print("model device",ctx.name(),"backend",ctx.api())
     var model = QwenModel(ctx,path,4,3)
-    var kv = KVPool(ctx,1,4)
+    var kv = KVPool(ctx,1,4,model.kv_geometry())
     var ids: List[Int] = [42,17,91]
     with assert_raises():
         _ = model.greedy(ctx)
@@ -46,11 +46,15 @@ def lifecycle(path: String) raises:
             model.forward(ctx,StepBatch.sequence([1],3,0,4),kv,one)
         kv.caches[kv.index(0,LAYERS-1)].length = 3
         # The pool must match the model's geometry, and one call covers one sequence.
-        var mismatched = KVPool(ctx,1,8)
+        var mismatched = KVPool(ctx,1,8,model.kv_geometry())
         with assert_raises():
             model.forward(ctx,StepBatch.sequence([1],0,0,8),mismatched,baseline_plan(1,1))
         assert_equal(mismatched.length(0),0)
-        var pair = KVPool(ctx,2,4)
+        var narrow = KVPool(ctx,1,4,KVGeometry(LAYERS,1,64))
+        with assert_raises():
+            model.forward(ctx,StepBatch.sequence([1],0,0,4),narrow,baseline_plan(1,1))
+        assert_equal(narrow.length(0),0)
+        var pair = KVPool(ctx,2,4,model.kv_geometry())
         with assert_raises():
             model.forward(ctx,StepBatch([5,6],[0,0],[0,1,2],2,[1,1],1,[0,1],[0,4],[0,1]),pair,baseline_plan(2,2))
         assert_equal(pair.length(0),0)
@@ -106,7 +110,7 @@ def benchmark(path: String, plan: String, warmups: Int, samples: Int) raises:
     var ctx = DeviceContext()
     print("model device",ctx.name(),"backend",ctx.api())
     var model = QwenModel(ctx,path,MAX_CONTEXT,MAX_CONTEXT)
-    var kv = KVPool(ctx,1,MAX_CONTEXT)
+    var kv = KVPool(ctx,1,MAX_CONTEXT,model.kv_geometry())
     var active_prefix = -1
     for line in open(plan,"r").read().splitlines():
         var spec = integers(String(line))
@@ -180,7 +184,7 @@ def main() raises:
     print("model device",ctx.name(),"backend",ctx.api())
     var capacity = min(MAX_CONTEXT,len(ids)+3)
     var model = QwenModel(ctx,args[1],capacity,maximum)
-    var kv = KVPool(ctx,1,capacity)
+    var kv = KVPool(ctx,1,capacity,model.kv_geometry())
     # Exact untouched-cache checks use a finite recognizable poison pattern.
     for i in range(LAYERS):
         kv.caches[kv.index(0,i)].key.enqueue_fill(123)

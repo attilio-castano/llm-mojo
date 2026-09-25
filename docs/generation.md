@@ -29,6 +29,8 @@ is unsupported.
 KV storage belongs to the caller's `KVPool` (`serving/kv_pool.mojo`): one
 block-major BF16 allocation with persistent K and V views for each block and
 layer, laid out as the [serving plan](serving-plan.md#pool-layout) describes.
+The caller sizes it from `QwenModel.kv_geometry()` (layers, KV heads and head
+size), so the pool assumes no model.
 Each call receives a `StepBatch` (`serving/batch.mojo`) naming the tokens, their
 positions and the block they write, alongside its `ExecutionPlan`. Currently one
 call covers one sequence held in a single block of the full context; see the

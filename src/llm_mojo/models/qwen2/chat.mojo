@@ -85,7 +85,7 @@ struct ChatSession(Movable):
         if len(self.history.tokens)+3 >= capacity:
             raise Error("system message exceeds chat capacity")
         self.model = QwenModel(ctx,prepared,capacity,chunk_rows)
-        self.kv = KVPool(ctx,1,capacity)
+        self.kv = KVPool(ctx,1,capacity,self.model.kv_geometry())
 
     def length(self) raises -> Int:
         """Conversation tokens whose KV writes have been submitted."""

@@ -23,7 +23,7 @@ from llm_mojo.kernels.token_selection import enqueue_argmax
 from llm_mojo.models.qwen2.plan import ExecutionPlan, MAX_CONTEXT
 from llm_mojo.runtime.clock import now
 from llm_mojo.serving.batch import StepBatch
-from llm_mojo.serving.kv_pool import KVPool
+from llm_mojo.serving.kv_pool import KVGeometry, KVPool
 
 comptime HIDDEN = 896
 comptime VOCABULARY = 151936
@@ -230,6 +230,10 @@ struct QwenModel(Movable):
         """Unloaded model storage for tests that supply their own weights."""
         return QwenModel(ctx, layer_count, capacity, max_rows)
 
+    def kv_geometry(self) -> KVGeometry:
+        """What each token stores in every layer; pools serving this model use it."""
+        return KVGeometry(len(self.layers), self.layers[0].attention.kv_heads, self.layers[0].attention.head_dim)
+
     def reset(mut self, ctx: DeviceContext) raises:
         """Finish queued work and forget the last logits. Callers reset their KV pools."""
         self.valid = False
@@ -249,8 +253,7 @@ struct QwenModel(Movable):
         plan.validate(rows)
         if len(self.layers) < 1:
             raise Error("empty Qwen layer stack")
-        if (kv.layers != len(self.layers) or kv.block_size != self.capacity
-                or kv.kv_heads != self.layers[0].attention.kv_heads or kv.head_dim != self.layers[0].attention.head_dim):
+        if kv.geometry != self.kv_geometry() or kv.block_size != self.capacity:
             raise Error("KV pool geometry does not match the model")
         if (len(self.embedding) != VOCABULARY*HIDDEN or len(self.norm) != HIDDEN
             or len(self.input) != self.max_rows*HIDDEN or len(self.tokens) != self.max_rows

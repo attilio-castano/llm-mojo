@@ -5,7 +5,7 @@ from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceContext
 from llm_mojo.layers.attention_sublayer import AttentionCache
 from llm_mojo.serving.batch import StepBatch
-from llm_mojo.serving.kv_pool import KVPool
+from llm_mojo.serving.kv_pool import KVGeometry, KVPool
 
 comptime VOCABULARY = 151936
 
@@ -133,7 +133,8 @@ def _mark[L: TensorLayout](view: TileTensor[DType.bfloat16, L, MutAnyOrigin]):
 def test_pool_views_follow_block_major_layout() raises:
     var ctx = DeviceContext()
     assert_equal(ctx.api(), "metal")
-    var pool = KVPool(ctx, 2, 4, 3, 2, 2)
+    var pool = KVPool(ctx, 2, 4, KVGeometry(3, 2, 2))
+    assert_true(pool.geometry == KVGeometry(3, 2, 2))
     assert_equal(len(pool.storage), 2 * 3 * 2 * 16)
     assert_equal(len(pool.caches), 6)
     for block in range(2):
@@ -166,7 +167,7 @@ def test_pool_views_follow_block_major_layout() raises:
 
 def test_pool_lengths_truncate_and_reset() raises:
     var ctx = DeviceContext()
-    var pool = KVPool(ctx, 2, 4, 3, 2, 2)
+    var pool = KVPool(ctx, 2, 4, KVGeometry(3, 2, 2))
     for layer in range(3):
         pool.caches[pool.index(1, layer)].length = 3
     assert_equal(pool.length(1), 3)
@@ -191,11 +192,21 @@ def test_pool_lengths_truncate_and_reset() raises:
 
 def test_pool_rejects_invalid_geometry_and_views() raises:
     var ctx = DeviceContext()
+    var unit = KVGeometry(1, 1, 1)
     with assert_raises():
-        _ = KVPool(ctx, 0, 4)
+        _ = KVPool(ctx, 0, 4, unit)
     with assert_raises():
-        _ = KVPool(ctx, 1, 4097)
-    var pool = KVPool(ctx, 1, 2, 2, 1, 2)
+        _ = KVPool(ctx, 1, 0, unit)
+    with assert_raises():
+        _ = KVPool(ctx, 1, 4097, unit)
+    with assert_raises():
+        _ = KVPool(ctx, 1, 4, KVGeometry(0, 1, 1))
+    with assert_raises():
+        _ = KVPool(ctx, 1, 4, KVGeometry(1, 0, 1))
+    with assert_raises():
+        _ = KVPool(ctx, 1, 4, KVGeometry(1, 1, 0))
+    assert_true(KVGeometry(2, 1, 2) != KVGeometry(2, 2, 1))
+    var pool = KVPool(ctx, 1, 2, KVGeometry(2, 1, 2))
     with assert_raises():
         _ = pool.index(1, 0)
     with assert_raises():
