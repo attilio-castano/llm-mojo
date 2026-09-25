@@ -1,9 +1,10 @@
 # Batched decode plan
 
-Baseline: `a144066`, `main` with the [serving plan](serving-plan.md) and the
-[September streamlining](history/streamlining-2026-09.md): one-step setup,
-explicit execution plans and current docs separated from history. The plan was
-first written at `a0b01da`, and its work was rebased onto those changes. It
+Baseline: `3b23c65`, `main` with the [serving plan](serving-plan.md), the
+[September streamlining](history/streamlining-2026-09.md) (one-step setup,
+explicit execution plans, current docs separated from history) and
+[shared oracle fixtures](history/shared-fixtures-2026-09.md). The plan was first
+written at `a0b01da`, and its work was rebased onto those changes. It
 implements the serving plan's phase 1: several sequences decoding in one step,
 with KV storage owned outside the model. The work proceeds in three steps, each
 committed with its own gate:
@@ -121,6 +122,17 @@ nonuniform data, each batched row's logits and appended KV bytes equal the same
 sequence decoded alone at the same position. Guard rows around each block stay
 untouched, and invalid batches are rejected without changing state.
 
+**Test data.** Each batched row's reference is the same sequence decoded alone
+on the existing single-row route, so 1b adds no oracle family. Native tests
+build small models from the verified decoder fixtures, as the decode-route test
+does, and run without the checkpoint; model-level checks use the prepared
+checkpoint. Validation links those fixtures read-only from the
+[shared store](development.md#shared-oracle-fixtures). Tests write captures
+under `build/test_*` and records under `build/oracle_records/`, never into
+`build/oracle_data/`. Leaving the generators' inputs untouched keeps validation's
+oracle stage to seconds, so every 1b step can run the full suite; a new family
+would need its own generator, anchors and store entry.
+
 ## 1c. Batch-size study (outline)
 
 Extend the existing model benchmark with a batch axis: B in
@@ -147,7 +159,25 @@ with traces before starting phase 2.
 
 ## Validation record
 
-### 1a, 2026-09-24
+### 1a on `3b23c65`, 2026-09-25
+
+The branch's commits rebased onto `3b23c65` without conflicts; the
+implementation commits `b969c47` and `c1a8776` recorded below became `65d183c`
+and `6036300`. That base commit changed validation tooling, the shared store and
+documentation but no Mojo source, and the branch's Mojo sources are
+byte-identical to the tree gated below, so its equality results stand for this
+baseline. `uv run --locked llm-mojo validate` passed again:
+
+- all oracles match the frozen anchors, with the attention-sublayer, MLP and
+  decoder-layer families verified from the shared store in 1.0, 0.8 and 2.9 s
+  instead of regenerated;
+- 264 Python tests;
+- all 26 native test files plus the Unicode tokenizer run on Metal;
+- every benchmark smoke route.
+
+This worktree's 7.9 GB of local fixture copies gave way to links.
+
+### 1a on `a144066`, 2026-09-24
 
 Validated after rebasing onto `a144066`. Implementation commits `b969c47` (step
 format, pool and tests) and `c1a8776` (model and clients on the execution-plan
