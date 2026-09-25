@@ -34,7 +34,7 @@ llm-mojo chat ──► Python checks the assets ──► exec the native chat
 
 [`chat`](../src/llm_mojo/cli/app.py) resolves the options with
 [`resolve_run`](../src/llm_mojo/configuration.py), then
-[`launch_chat`](../src/llm_mojo/runtime/launch.py) prepares the launch:
+[`launch_chat`](../src/llm_mojo/cli/launch.py) prepares the launch:
 
 - [`verify_prepared`](../src/llm_mojo/models/qwen2/assets.py) checks the size and
   SHA-256 of all 196 prepared tensors against their manifest;

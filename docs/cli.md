@@ -165,11 +165,11 @@ historical source identity requires checking out the recorded commit.
 
 | Package | Responsibility |
 | --- | --- |
-| `cli/` | Typer commands and native executable entry points |
+| `cli/` | Typer commands, launch preparation and native executable entry points |
 | `configuration.py` | Typed composition, literal overrides and validation |
 | `models/qwen2/` | Pinned asset preparation, tokenizer, Qwen model and chat semantics |
 | `serving/` | Engine step format and KV storage: `StepBatch`, and `KVPool` sized by the model's `KVGeometry` |
-| `runtime/` | Native builds, launch preparation, terminal and clock services |
+| `runtime/` | Native builds, terminal and clock services |
 | `layers/` | Decoder, attention and MLP composition |
 | `kernels/` | Reusable numerical operations |
 | `validation/` | Numerical acceptance, source receipts and repository validation |
@@ -209,10 +209,8 @@ runtime/                                              services for every row; im
   per model and device.
 
 [`tests/test_package_boundaries.py`](../tests/test_package_boundaries.py)
-enforces the direction and requires every package to have a row. Its
-allowlist holds the one existing exception: `runtime/launch.py`, the CLI's
-launch preparation, imports Qwen's asset checks and the configuration. An entry
-that no longer occurs fails the test, so the list only shrinks.
+enforces the direction without exceptions and requires every package to have a
+row.
 
 To add a model, implement and validate its assets, tokenizer/template behavior,
 model composition and native capabilities in `models/<family>/` first,

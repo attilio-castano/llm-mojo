@@ -22,11 +22,6 @@ BELOW = {
     'layers': {'kernels'},
     'kernels': set(),
 }
-# Existing exceptions, each removed when fixed; an entry that no longer occurs fails.
-EXCEPTIONS = {
-    ('runtime/launch.py', 'models.qwen2'): 'CLI launch preparation kept in runtime/ checks Qwen assets',
-    ('runtime/launch.py', 'configuration'): 'the same launch preparation records the resolved configuration',
-}
 
 
 def owner(path):
@@ -115,13 +110,7 @@ class PackageBoundaryTests(unittest.TestCase):
         found = list(edges())
         for suffix in ('.py', '.mojo'):
             self.assertGreater(sum(source.endswith(suffix) for source, *_ in found), 20)
-        unexpected = [f'{source}:{line} imports llm_mojo.{imported}'
-                      for source, line, imported in violations() if (source, imported) not in EXCEPTIONS]
-        self.assertEqual(unexpected, [])
-
-    def test_listed_exceptions_still_occur(self):
-        current = {(source, imported) for source, _, imported in violations()}
-        self.assertEqual({key for key in EXCEPTIONS if key not in current}, set())
+        self.assertEqual([f'{source}:{line} imports llm_mojo.{imported}' for source, line, imported in violations()], [])
 
     def test_rules(self):
         self.assertTrue(allowed('cli', None, 'models.qwen2'))

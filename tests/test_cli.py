@@ -9,7 +9,7 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 from llm_mojo.cli.app import app
 from llm_mojo.configuration import resolve_run, resolve_bench
-from llm_mojo.runtime import launch
+from llm_mojo.cli import launch
 
 
 class ConfigurationTests(unittest.TestCase):

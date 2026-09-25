@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from llm_mojo.runtime import launch as chat
+from llm_mojo.cli import launch as chat
 from llm_mojo.models.qwen2 import assets as model_assets
 
 

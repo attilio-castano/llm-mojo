@@ -64,7 +64,7 @@ def chat(preset: Preset = 'interactive', model: Model = None, mode: Mode = None,
     if show_config:
         show(cfg)
         return
-    from llm_mojo.runtime.launch import launch_chat
+    from llm_mojo.cli.launch import launch_chat
     launch_chat(cfg)
 
 
@@ -83,7 +83,7 @@ def generate(preset: Preset = 'interactive', model: Model = None, mode: Mode = N
         return
     if prompt is None and prompt_file is None:
         raise typer.BadParameter('provide --prompt or --prompt-file')
-    from llm_mojo.runtime.launch import launch_generate
+    from llm_mojo.cli.launch import launch_generate
     launch_generate(cfg)
 
 

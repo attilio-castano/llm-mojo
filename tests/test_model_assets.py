@@ -10,7 +10,7 @@ from unittest.mock import patch
 from llm_mojo.configuration import resolve_run
 from llm_mojo.models.qwen2 import assets
 from llm_mojo.models.qwen2.assets import CHECKPOINT_SHA, REVISION, tensor_shapes, validate_manifest
-from llm_mojo.runtime import launch
+from llm_mojo.cli import launch
 
 
 class ModelAssetTests(unittest.TestCase):
