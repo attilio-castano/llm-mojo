@@ -209,6 +209,19 @@ call's hidden states, final norm, logits and K/V must be byte-identical. The
 receipt keeps hashes only. `tests/test_decode_route.mojo` runs the same
 comparison on three synthetic layers in default validation.
 
+`batch` checks batched decode on the real model. Eight conversations of 11 to
+3,301 prompt tokens are prefilled into their own blocks, then decode 16 steps
+together, eight sequences per step, and again one at a time. Every token, logit
+and K/V byte must agree:
+
+```sh
+uv run --locked python -m llm_mojo.validation.model build --binary build/batch-model
+uv run --locked python -m llm_mojo.validation.model batch --binary build/batch-model --output build/batch.json
+```
+
+`tests/test_decode_batch.mojo` runs the same comparison for 2 to 32 sequences on
+three fixture layers in default validation.
+
 ## History
 
 The numerical-policy studies that preceded the diagnostic policy, from the

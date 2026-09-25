@@ -4,7 +4,8 @@ from std.memory import bitcast
 from std.testing import assert_equal, assert_raises
 from max.gpu.host import DeviceContext
 from llm_mojo.models.qwen2.model import CaptureRequest, LAYERS, QwenModel, VOCABULARY
-from llm_mojo.models.qwen2.plan import MAX_CONTEXT, baseline_plan, configured_plan, execution_plan
+from llm_mojo.models.qwen2.plan import MAX_CONTEXT, baseline_plan, configured_plan, execution_plan, fast_plan
+from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
 from llm_mojo.runtime.clock import now
 from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.kv_pool import KVGeometry, KVPool
@@ -144,6 +145,108 @@ def benchmark(path: String, plan: String, warmups: Int, samples: Int) raises:
                 print("sample",spec[3],spec[4],prefix,rows,config,sample,elapsed)
 
 
+comptime BATCH_SEQUENCES = 8
+
+
+def _prefill_fast(ctx: DeviceContext, mut model: QwenModel, mut kv: KVPool, ids: List[Int], block: Int) raises -> Int:
+    """Chunked Fast prefill of one conversation into its block; returns its first greedy token."""
+    var offset = 0
+    while offset < len(ids):
+        var count = min(256,len(ids)-offset)
+        var chunk = List[Int](capacity=count)
+        for i in range(count):
+            chunk.append(ids[offset+i])
+        model.forward(ctx,StepBatch.sequence(chunk,offset,block,MAX_CONTEXT),kv,fast_plan(count,offset+count,ctx.name()))
+        offset += count
+    return model.greedy(ctx)
+
+
+def batch(path: String, tables: String, steps: Int) raises:
+    """Eight conversations of different lengths decode together and alone; tokens, logits and K/V must agree."""
+    var ctx = DeviceContext()
+    print("model device",ctx.name(),"backend",ctx.api())
+    var tokenizer = Tokenizer(tables)
+    var work = TokenizerWorkspace()
+    var sentences: List[String] = [
+        "A train travels sixty kilometers in forty-five minutes. ",
+        "Write a short poem about the sea at dawn. ",
+        "Explain how a hash table resolves collisions. ",
+        "Il caffè del mattino profuma di cioccolato. ",
+        "List three differences between rivers and canals. ",
+        "The committee postponed the vote until next spring. ",
+        "Describe how photosynthesis stores energy in sugar. ",
+        "Summarize the rules of chess in plain words. ",
+    ]
+    var repeats: List[Int] = [1, 3, 8, 20, 50, 100, 200, 300]
+    var model = QwenModel(ctx,path,MAX_CONTEXT,256,BATCH_SEQUENCES)
+    var batched = KVPool(ctx,BATCH_SEQUENCES,MAX_CONTEXT,model.kv_geometry())
+    var solo = KVPool(ctx,BATCH_SEQUENCES,MAX_CONTEXT,model.kv_geometry())
+    batched.storage.enqueue_fill(123)
+    solo.storage.enqueue_fill(123)
+    var lengths = List[Int]()
+    var next = List[Int]()
+    var longest = 0
+    for s in range(BATCH_SEQUENCES):
+        var text = String()
+        for _ in range(repeats[s]):
+            text += sentences[s]
+        var ids = tokenizer.encode(text,work)
+        if len(ids)+steps > MAX_CONTEXT:
+            raise Error("conversation exceeds the context")
+        var first = _prefill_fast(ctx,model,batched,ids,s)
+        if _prefill_fast(ctx,model,solo,ids,s) != first:
+            raise Error("prefill differs between pools")
+        lengths.append(len(ids))
+        next.append(first)
+        longest = max(longest,len(ids))
+    var logits = List[UInt16](capacity=BATCH_SEQUENCES*VOCABULARY)
+    for step in range(steps):
+        var positions = List[Int]()
+        var starts = List[Int]()
+        var seq_lens = List[Int]()
+        var blocks = List[Int]()
+        var slots = List[Int]()
+        var rows = List[Int]()
+        for s in range(BATCH_SEQUENCES):
+            var position = lengths[s]+step
+            positions.append(position)
+            starts.append(s)
+            seq_lens.append(position+1)
+            blocks.append(s)
+            slots.append(s*MAX_CONTEXT+position)
+            rows.append(s)
+        starts.append(BATCH_SEQUENCES)
+        var step_batch = StepBatch(next.copy(),positions^,starts^,BATCH_SEQUENCES,seq_lens^,1,blocks^,slots^,rows^)
+        model.forward(ctx,step_batch,batched,fast_plan(BATCH_SEQUENCES,longest+step+1,ctx.name(),BATCH_SEQUENCES))
+        if model.last_route.decode_launches != 245 or model.last_route.sequences != BATCH_SEQUENCES:
+            raise Error("batched step did not take the decode composition")
+        var tokens = model.greedy_tokens(ctx)
+        logits.clear()
+        with model.logits.map_to_host() as mapped:
+            for i in range(BATCH_SEQUENCES*VOCABULARY):
+                logits.append(bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=i]))
+        for s in range(BATCH_SEQUENCES):
+            var position = lengths[s]+step
+            model.forward(ctx,StepBatch.sequence([next[s]],position,s,MAX_CONTEXT),solo,fast_plan(1,position+1,ctx.name()))
+            if model.greedy(ctx) != tokens[s]:
+                raise Error("sequence "+String(s)+" token differs at step "+String(step))
+            with model.logits.map_to_host() as mapped:
+                for i in range(VOCABULARY):
+                    if bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=i]) != logits[s*VOCABULARY+i]:
+                        raise Error("sequence "+String(s)+" logits differ at step "+String(step))
+        next = tokens^
+    # Every block, with the rows no sequence wrote still holding their fill.
+    with batched.storage.map_to_host() as a:
+        with solo.storage.map_to_host() as b:
+            for i in range(len(batched.storage)):
+                if bitcast[DType.uint16](a.unsafe_ptr()[unsafe_offset=i]) != bitcast[DType.uint16](b.unsafe_ptr()[unsafe_offset=i]):
+                    raise Error("pools differ at element "+String(i))
+    var sizes = String()
+    for s in range(BATCH_SEQUENCES):
+        sizes += " "+String(lengths[s])
+    print("batch passed: sequences",BATCH_SEQUENCES,"steps",steps,"prompt tokens"+sizes)
+
+
 def integers(text: String) raises -> List[Int]:
     var values = List[Int]()
     for item in text.split(","):
@@ -158,6 +261,9 @@ def main() raises:
         return
     if len(args) == 6 and args[1] == "--bench":
         benchmark(args[2],args[3],Int(args[4]),Int(args[5]))
+        return
+    if len(args) == 5 and args[1] == "--batch":
+        batch(args[2],args[3],Int(args[4]))
         return
     if len(args) == 5 and args[1] == "--operations":
         var ctx = DeviceContext()

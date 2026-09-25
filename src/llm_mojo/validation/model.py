@@ -722,6 +722,22 @@ def lifecycle_study(binary, output, prepared=None):
         prepared_manifest_sha256=sha(prepared/'manifest.json'),stdout=result.stdout))
 
 
+def batch_study(binary, output, prepared=None, steps=16):
+    """Eight real conversations decode together and alone on the checkpoint; tokens, logits and K/V agree."""
+    from llm_mojo.models.qwen2.tokenizer_assets import ensure_prepared
+    binary=Path(binary).resolve()
+    receipt=verify_build(binary)
+    prepared,_=verify_prepared(prepared)
+    tables=ensure_prepared(download=False)
+    result=subprocess.run([str(binary),'--batch',str(prepared),str(tables),str(steps)],cwd=repository_root(),
+        env=environment(),capture_output=True,text=True,check=True)
+    if ('model device Apple M4 Pro backend metal' not in result.stdout or
+            'batch passed:' not in result.stdout): raise ValueError('missing batched decode completion')
+    verify_build(binary)
+    write(output,dict(kind='model-runtime-batch-v1',build=receipt,steps=steps,
+        prepared_manifest_sha256=sha(prepared/'manifest.json'),tokenizer_sha256=sha(tables),stdout=result.stdout))
+
+
 def decode_parity(binary, output, prepared=None, prefix=53, steps=32):
     """Teacher-forced 24-layer decode: the Fast single-row route against baseline, byte for byte.
 
@@ -790,6 +806,9 @@ def main():
     p.add_argument('--steps',type=int,default=32)
     l=sub.add_parser('lifecycle');l.add_argument('--binary',required=True,type=Path)
     l.add_argument('--output',required=True,type=Path);l.add_argument('--prepared',type=Path)
+    t=sub.add_parser('batch');t.add_argument('--binary',required=True,type=Path)
+    t.add_argument('--output',required=True,type=Path);t.add_argument('--prepared',type=Path)
+    t.add_argument('--steps',type=int,default=16)
     d=sub.add_parser('diagnose');d.add_argument('--binary',required=True,type=Path)
     d.add_argument('--reference',required=True,type=Path);d.add_argument('--output',required=True,type=Path)
     d.add_argument('--prepared',type=Path)
@@ -812,6 +831,7 @@ def main():
     elif args.command=='build':build(args.binary,args.generation)
     elif args.command=='generate':generation_study(args.binary,args.output,args.prepared,args.policy)
     elif args.command=='lifecycle':lifecycle_study(args.binary,args.output,args.prepared)
+    elif args.command=='batch':batch_study(args.binary,args.output,args.prepared,args.steps)
     elif args.command=='decode-parity':decode_parity(args.binary,args.output,args.prepared,steps=args.steps)
     elif args.command=='diagnose':diagnose(args.binary,args.reference,args.output,args.prepared,args.policy)
     elif args.command=='benchmark':benchmark(args.binary,args.specification,args.output,args.prepared)
