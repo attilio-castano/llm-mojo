@@ -117,6 +117,15 @@ forms:
 Buffer swapping between layers stays valid, because it exchanges buffer
 owners rather than rows.
 
+**Shapes.** The multi-sequence kernels take the model's dimensions (query and
+KV heads, head size, hidden width) as comptime parameters, which `QwenModel`
+supplies, so they name no model; see the
+[dependency direction](cli.md#dependency-direction). A comptime parameter is a
+compile-time constant like the literal it replaces, and the gate below compares
+each batched row with the existing single-row kernels, so any difference would
+fail it. Those single-row kernels keep their Qwen checks as the reference until
+a second model needs them.
+
 The gate: for S in {2, 3, 8, 16, 32} with mixed context lengths and
 nonuniform data, each batched row's logits and appended KV bytes equal the same
 sequence decoded alone at the same position. Guard rows around each block stay
