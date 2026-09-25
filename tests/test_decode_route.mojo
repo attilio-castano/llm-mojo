@@ -134,6 +134,11 @@ def test_fast_decode_matches_baseline_and_runs_fused() raises:
             baseline.forward_captured(ctx, batch, baseline_kv, plain, CaptureRequest(CAPTURE + "/baseline", True))
         assert_equal(_route(fast.last_route), SIMD[DType.int64, 8](26, LAYERS, LAYERS - 1, 2 * LAYERS, LAYERS - 1, 0, 0, 1))
         assert_equal(_route(baseline.last_route), SIMD[DType.int64, 8](0, LAYERS, 0, 0, 0, LAYERS - 1, 1, 0))
+        # The decode composition: the embedding, ten launches in layer 0 and nine in each later
+        # layer, one deferred residual norm per layer, the head and two argmax passes.
+        assert_equal(fast.last_route.sequences, 1)
+        assert_equal(fast.last_route.decode_launches, 1 + 10 + 9 * (LAYERS - 1) + LAYERS + 3)
+        assert_equal(baseline.last_route.decode_launches, 0)
         assert_equal(fast.greedy(ctx), baseline.greedy(ctx))
         _same(fast.logits, baseline.logits, 151936, "logits")
         _same(fast.normalized, baseline.normalized, 896, "final norm")
@@ -154,7 +159,7 @@ def test_fast_decode_matches_baseline_and_runs_fused() raises:
     names.append("final_norm.bin")
     names.append("logits.bin")
     _same_files(names)
-    # Fused QKV/RoPE/cache and SiLU/multiply never write the unfused scratch.
+    # The fused QKV/RoPE/append and SiLU/multiply of the composition never write the unfused scratch.
     assert_equal(_sentinels(fast.attention.raw_query), len(fast.attention.raw_query))
     assert_equal(_sentinels(fast.attention.raw_key), len(fast.attention.raw_key))
     assert_equal(_sentinels(fast.attention.raw_value), len(fast.attention.raw_value))

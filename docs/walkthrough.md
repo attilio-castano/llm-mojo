@@ -110,9 +110,10 @@ For a call with R new tokens, the model:
 2. **Uploads the IDs** and looks up their embedding rows with
    [`_embedding`](../src/llm_mojo/models/qwen2/model.mojo): [R] IDs become [R, 896]
    hidden states.
-3. **Runs 24 decoder layers**, each through
-   [`enqueue_decoder_layer_configuration`](../src/llm_mojo/layers/decoder_layer.mojo).
-   Every layer does the same two steps with its own weights:
+3. **Runs 24 decoder layers.** A prompt goes through
+   [`enqueue_decoder_layer_configuration`](../src/llm_mojo/layers/decoder_layer.mojo);
+   a decode call takes the composition in section 6. Every layer does the same
+   two steps with its own weights:
 
    | Attention ([`enqueue_attention_sublayer_integrated`](../src/llm_mojo/layers/attention_sublayer.mojo)) | Shape |
    | --- | --- |
@@ -164,12 +165,14 @@ n − 1 decode calls. Its first token is chosen from the prefill's scores, and i
 last one, a stop token or the token that reaches the limit, is chosen but only
 processed by the next turn's prefill.
 
-For one row on M4 Pro, `fast_plan` returns configuration 26, which fuses two pairs
-of steps, together with its three decode features: residual/RMSNorm fusion,
-buffer swapping and GPU argmax. Every decode call takes this route:
+For one row on M4 Pro, `fast_plan` returns configuration 26. Each layer then runs
+[`enqueue_decode_batch_layer`](../src/llm_mojo/layers/decoder_layer.mojo), a fixed
+sequence of ten kernels that takes one row per sequence and fuses two pairs of
+steps, with three decode features: residual/RMSNorm fusion, buffer swapping and
+GPU argmax. Every decode call takes this route:
 
 - **Fused kernels.** One kernel unpacks the QKV projection, applies RoPE and
-  appends to the cache ([`_enqueue_fused_decode_qkv`](../src/llm_mojo/layers/attention_sublayer.mojo)),
+  appends to the cache ([`enqueue_fused_decode_qkv_batch`](../src/llm_mojo/layers/attention_sublayer.mojo)),
   and one kernel computes SiLU(gate) × up.
 - **Residual and RMSNorm together.** [`enqueue_residual_norm`](../src/llm_mojo/kernels/residual_norm.mojo)
   adds each residual and computes the RMSNorm that follows it in one kernel:

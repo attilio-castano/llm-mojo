@@ -14,28 +14,36 @@ from llm_mojo.layers.decoder_layer import (
 
 comptime MEASURED_DEVICE = "Apple M4 Pro"
 comptime MAX_CONTEXT = 4096
+# Rows that share each weight load in the decode composition's projections. The
+# tile changes weight traffic, not arithmetic; 1c measures the alternatives.
+comptime DECODE_ROW_TILE = 4
 
 
 @fieldwise_init
 struct ExecutionPlan(ImplicitlyCopyable, Movable):
-    """One call's decoder configuration and single-row decode features.
+    """One call's decoder configuration and decode features.
 
-    Configuration 26 always carries all three features and exactly one row;
-    no other configuration carries any. The unpromoted compositions measured in
-    the decode studies are not expressible.
+    Configuration 26 always carries all three features and one row per
+    sequence; no other configuration carries any or steps more than one
+    sequence. The unpromoted compositions measured in the decode studies are not
+    expressible.
     """
     var configuration: Int
     var gpu_argmax: Bool
     var swap_buffers: Bool
     var fuse_residual_norm: Bool
 
-    def validate(self, rows: Int) raises:
+    def validate(self, rows: Int, sequences: Int = 1) raises:
         var fused = self.configuration == DECODER_FUSED_DECODE
         var features = self.gpu_argmax or self.swap_buffers or self.fuse_residual_norm
-        if fused and not (rows == 1 and self.gpu_argmax and self.swap_buffers and self.fuse_residual_norm):
-            raise Error("configuration 26 requires one row with GPU argmax, buffer swap and residual/RMSNorm fusion")
-        if not fused and features:
+        if fused:
+            if not (rows == sequences and self.gpu_argmax and self.swap_buffers and self.fuse_residual_norm):
+                raise Error("configuration 26 requires one row per sequence with GPU argmax, buffer swap and residual/RMSNorm fusion")
+            return
+        if features:
             raise Error("decode features are measured only together with configuration 26")
+        if sequences != 1:
+            raise Error("only configuration 26 steps several sequences")
         _ = decoder_mappings(self.configuration, rows)
 
 

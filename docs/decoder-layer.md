@@ -375,9 +375,10 @@ prefill and decode retain decoder ID 0 under the frozen promotion rule. The
 [plan](../studies/decoder_layer/selection-plan.md) records its scope and gates.
 The study compared decoder IDs 0, 1, 2, 3, 4, 8, 12 and 14, built from
 implemented attention and MLP kernels. `enqueue_decoder_layer_configuration`
-now implements the configurations a route uses: 0, 2 and 3 from this study,
-20–22 from the policy campaign and 26 for single-row decode (the `DECODER_*`
-constants in `layers/decoder_layer.mojo`). IDs 1, 4, 8, 12 and 14 exist through
+now implements the configurations a route uses: 0, 2 and 3 from this study and
+20–22 from the policy campaign. Configuration 26, the decode composition, runs
+through `enqueue_decode_batch_layer` instead (the `DECODER_*` constants in
+`layers/decoder_layer.mojo`). IDs 1, 4, 8, 12 and 14 exist through
 `edb610a`. The registry is explicit; it does not infer a performance winner
 from shape. The table in
 the plan defines each ID, including prefix preparation and single-row fallback.

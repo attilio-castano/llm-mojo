@@ -67,9 +67,10 @@ lookup: split8 configuration 2 at
 16/1024, 16/4096, 15/256 and 17/256; configuration 3, combining split8 and
 larger projections, at 64/1024, 64/4096, 256/1024, 256/4096, 65/4096 and
 255/4096; configuration 21 at 16/256. Pairs denote incoming rows / total
-cached rows. Single-row M4 Pro calls use configuration 26: exact QKV/RoPE/cache
-fusion plus SiLU/multiply fusion, always together with residual/RMSNorm fusion,
-inter-layer buffer swapping and separate GPU argmax. The composed route
+cached rows. Single-row M4 Pro calls use configuration 26, the decode
+composition in `layers/decoder_layer.mojo` (`enqueue_decode_batch_layer`): exact
+QKV/RoPE/cache fusion plus SiLU/multiply fusion, always together with
+residual/RMSNorm fusion, inter-layer buffer swapping and separate GPU argmax. The composed route
 passed paired whole-token gates at histories 64, 1024 and 3968. Every other shape and device name falls
 back to configuration 0.
 Baseline 0 already includes integrated attention and optimized multi-row MLP
@@ -83,8 +84,8 @@ research mode. Diagnostic drivers also accept an explicit retained configuration
 layers for a call.
 
 A plan cannot express the unpromoted compositions from the decode studies:
-configuration 26 always carries all three decode features and exactly one row,
-and no other configuration carries any. Those study arms, configuration 25 and
+configuration 26 always carries all three decode features and one row per
+sequence, and no other configuration carries any. Those study arms, configuration 25 and
 the `auto`, `candidate`, `unfused`, `fusion`, `combined` and per-arm policies
 exist through `edb610a`. Default profiling follows current Fast; historical
 trace replay uses the route recorded in each capture's provenance.
