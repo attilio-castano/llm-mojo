@@ -21,9 +21,9 @@ invariants.
 
 `QwenModel` owns one BF16 embedding allocation, also used as the tied LM head,
 the final RMSNorm weights and 24 distinct learned decoder weight sets. It owns
-one attention workspace, one MLP workspace, input and token staging, a final
-normalized row, next-token logits and the GPU argmax partial and result
-buffers. Clients must preserve this ownership; replacing internal allocations
+one attention workspace, one MLP workspace, input staging, one step upload
+(token IDs, then each sequence's position and block), and per sequence a final
+normalized row, next-token logits and GPU argmax partial and result buffers. Clients must preserve this ownership; replacing internal allocations
 is unsupported.
 
 KV storage belongs to the caller's `KVPool` (`serving/kv_pool.mojo`): one
@@ -32,13 +32,16 @@ layer, laid out as the [serving plan](serving-plan.md#pool-layout) describes.
 The caller sizes it from `QwenModel.kv_geometry()` (layers, KV heads and head
 size), so the pool assumes no model.
 Each call receives a `StepBatch` (`serving/batch.mojo`) naming the tokens, their
-positions and the block they write, alongside its `ExecutionPlan`. Currently one
-call covers one sequence held in a single block of the full context; see the
-[batched decode plan](batched-decode-plan.md).
+positions and the blocks they write, alongside its `ExecutionPlan`. Every
+sequence is held in a single block of the full context. A configuration 26 call
+decodes up to `max_sequences` sequences at once, one token each, with the same
+launches as one sequence; `greedy_tokens` returns one token per sequence, and
+each sequence's logits, token and appended K/V equal decoding it alone. Every
+other call covers one sequence. See the [batched decode plan](batched-decode-plan.md).
 
 The decoder requires its input and output storage not to alias. Multi-row calls
 copy each intermediate decoder output into the separate input buffer before the
-next layer. Single-row Fast calls instead swap the owners of the input and MLP
+next layer. Fast decode calls instead swap the owners of the input and MLP
 output buffers, which removes 23 copies without changing arithmetic. The last
 layer does not swap, so the final normalization reads the MLP output. There is
 no host synchronization between layers in normal execution.
@@ -46,7 +49,7 @@ no host synchronization between layers in normal execution.
 Every call validates the step batch (offsets, contiguous positions, write slots,
 block IDs, token IDs and logit rows) and preflights all layers, shapes,
 allocation extents, pool geometry, row capacity, every layer's cache length and
-configuration requirements before the first model dispatch. The host token
+configuration requirements before the first model dispatch. The host step
 upload synchronizes. Layer work then uses one ordered Metal stream. Cache
 lengths count submitted tokens; greedy readback waits for completion.
 Submission/readback failure invalidates the model. Reset marks the model invalid

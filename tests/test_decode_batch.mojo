@@ -5,12 +5,15 @@ one sequence at a time, with guard rows and unwritten pool rows poisoned:
 - the rows kernel against one-row launches at every decode projection width;
 - residual RMSNorm and argmax against single-row launches;
 - fused QKV/RoPE/append against the unfused path for each sequence;
-- decode attention against route 4 on each sequence's own cache view.
+- decode attention against route 4 on each sequence's own cache view;
+- whole batched decode steps against each sequence decoded alone, on three
+  layers of the verified decoder fixture, with invalid batches rejected before
+  any state changes.
 """
 from layout import TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
-from std.testing import TestSuite, assert_equal, assert_true
+from std.testing import TestSuite, assert_equal, assert_raises, assert_true
 from llm_mojo.kernels.attention_decode import (
     enqueue_grouped_query_attention_decode_apple_gpu,
     enqueue_grouped_query_attention_decode_sequences_apple_gpu,
@@ -20,13 +23,25 @@ from llm_mojo.kernels.residual_norm import enqueue_residual_norm
 from llm_mojo.kernels.rope import enqueue_rope_apple_gpu
 from llm_mojo.kernels.token_selection import enqueue_argmax
 from llm_mojo.layers.attention_sublayer import AttentionWorkspace, _append, _unpack_qkv, enqueue_fused_decode_qkv_batch
+from llm_mojo.layers.decoder_layer import DECODER_FUSED_DECODE
+from llm_mojo.models.qwen2.model import CaptureRequest, QwenModel
+from llm_mojo.models.qwen2.plan import baseline_plan, configured_plan
+from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.kv_pool import KVGeometry, KVPool
+from decoder_layer_support import decoder_support, load_decoder
 
 comptime POISON = UInt16(0x7FC1)
 # Pool for the sequence kernels: scattered blocks of the full context, in layer 1 of 2.
 comptime BLOCKS = 33
 comptime BLOCK_SIZE = 4096
 comptime LAYER = 1
+# Whole steps: three layers of the verified decoder fixture, whose 65 positions bound the context.
+comptime CASE = "h896_i4864_nq14_nk2_d64_t65_s4001_base"
+comptime FIXTURE_LAYERS = 3
+comptime CONTEXT = 65
+comptime MAX_PREFIX = 40
+comptime DECODE_STEPS = 12
+comptime VOCABULARY = 151936
 
 
 def _fill(mut buffer: DeviceBuffer[DType.bfloat16], seed: Int, low: Int = 119, span: Int = 16) raises:
@@ -272,6 +287,181 @@ def test_decode_attention_sequences_equal_route_4() raises:
                 TileTensor(split,row_major(14,1,66)))
         _same(solo,batch,"attention, sequences "+String(sequences))
     assert_true(_length(9) == BLOCK_SIZE)
+
+
+def _fixture_model(ctx: DeviceContext, max_sequences: Int) raises -> QwenModel:
+    var model = QwenModel.allocate(ctx, FIXTURE_LAYERS, CONTEXT, MAX_PREFIX, max_sequences)
+    model.embedding.enqueue_fill(0)
+    model.attention.cosine.enqueue_fill(0)
+    model.attention.sine.enqueue_fill(0)
+    # Token i embeds fixture row i, for the 65 IDs the tests use.
+    load_decoder(model.embedding, CASE, "input_X", 0, CONTEXT * 896)
+    load_decoder(model.norm, CASE, "input_post_norm", 0, 896)
+    load_decoder(model.attention.cosine, CASE, "full_cosine", 0, CONTEXT * 64)
+    load_decoder(model.attention.sine, CASE, "full_sine", 0, CONTEXT * 64)
+    for i in range(FIXTURE_LAYERS):
+        load_decoder(model.layers[i].attention.norm, CASE, "input_input_norm", 0, 896)
+        load_decoder(model.layers[i].attention.qkv, CASE, "input_qkv", 0, 1152 * 896)
+        load_decoder(model.layers[i].attention.bias, CASE, "input_bias", 0, 1152)
+        load_decoder(model.layers[i].attention.output, CASE, "input_wo", 0, 896 * 896)
+        load_decoder(model.layers[i].mlp.norm, CASE, "input_post_norm", 0, 896)
+        load_decoder(model.layers[i].mlp.gate, CASE, "input_gate", 0, 4864 * 896)
+        load_decoder(model.layers[i].mlp.up, CASE, "input_up", 0, 4864 * 896)
+        load_decoder(model.layers[i].mlp.down, CASE, "input_down", 0, 896 * 4864)
+    return model^
+
+
+def _token(s: Int, position: Int) -> Int:
+    return (position + 13 * s) % CONTEXT
+
+
+def _prefix(s: Int) -> Int:
+    return 1 + (s * 7) % MAX_PREFIX
+
+
+def _prefill(ctx: DeviceContext, mut model: QwenModel, mut pool: KVPool, s: Int, length: Int) raises:
+    var ids = List[Int]()
+    for p in range(length):
+        ids.append(_token(s, p))
+    model.forward(ctx, StepBatch.sequence(ids, 0, _block(s), CONTEXT), pool, baseline_plan(length, length))
+
+
+def _decode(sequences: Int, step: Int, lengths: List[Int]) raises -> StepBatch:
+    """One decode token for each sequence, at the end of its block."""
+    var ids = List[Int]()
+    var positions = List[Int]()
+    var starts = List[Int]()
+    var seq_lens = List[Int]()
+    var blocks = List[Int]()
+    var slots = List[Int]()
+    var rows = List[Int]()
+    for s in range(sequences):
+        var p = lengths[s] + step
+        ids.append(_token(s, p))
+        positions.append(p)
+        starts.append(s)
+        seq_lens.append(p + 1)
+        blocks.append(_block(s))
+        slots.append(_block(s) * CONTEXT + p)
+        rows.append(s)
+    starts.append(sequences)
+    return StepBatch(ids^, positions^, starts^, sequences, seq_lens^, 1, blocks^, slots^, rows^)
+
+
+def _same_rows(mut batched: DeviceBuffer[DType.bfloat16], start: Int, mut solo: DeviceBuffer[DType.bfloat16],
+               count: Int, label: String) raises:
+    with batched.map_to_host() as a:
+        with solo.map_to_host() as b:
+            for i in range(count):
+                if (bitcast[DType.uint16](a.unsafe_ptr()[unsafe_offset=start+i])
+                        != bitcast[DType.uint16](b.unsafe_ptr()[unsafe_offset=i])):
+                    raise Error(label + " differs at element " + String(i))
+
+
+def _steps_equal_solo(ctx: DeviceContext, sequences: Int) raises:
+    var batched = _fixture_model(ctx, sequences)
+    var solo = _fixture_model(ctx, 1)
+    var batched_pool = KVPool(ctx, BLOCKS, CONTEXT, batched.kv_geometry())
+    var solo_pool = KVPool(ctx, BLOCKS, CONTEXT, solo.kv_geometry())
+    _poison(batched_pool.storage)
+    _poison(solo_pool.storage)
+    var lengths = List[Int]()
+    var longest = 0
+    for s in range(sequences):
+        lengths.append(_prefix(s))
+        longest = max(longest, _prefix(s))
+        _prefill(ctx, batched, batched_pool, s, _prefix(s))
+        _prefill(ctx, solo, solo_pool, s, _prefix(s))
+    for step in range(DECODE_STEPS):
+        batched.forward(ctx, _decode(sequences, step, lengths), batched_pool,
+                        configured_plan(DECODER_FUSED_DECODE, sequences, longest + step + 1, sequences))
+        var tokens = batched.greedy_tokens(ctx)
+        assert_equal(len(tokens), sequences)
+        assert_equal(batched.last_route.sequences, sequences)
+        # Launches do not depend on the number of sequences.
+        assert_equal(batched.last_route.decode_launches, 1 + 10 + 9 * (FIXTURE_LAYERS - 1) + FIXTURE_LAYERS + 3)
+        for s in range(sequences):
+            var p = lengths[s] + step
+            solo.forward(ctx, StepBatch.sequence([_token(s, p)], p, _block(s), CONTEXT), solo_pool,
+                         configured_plan(DECODER_FUSED_DECODE, 1, p + 1))
+            var label = "sequences " + String(sequences) + " step " + String(step) + " sequence " + String(s)
+            assert_equal(tokens[s], solo.greedy(ctx))
+            _same_rows(batched.logits, s * VOCABULARY, solo.logits, VOCABULARY, label + " logits")
+            _same_rows(batched.normalized, s * 896, solo.normalized, 896, label + " final norm")
+            assert_equal(batched_pool.length(_block(s)), p + 1)
+            assert_equal(solo_pool.length(_block(s)), p + 1)
+        # Every block, with the rows no sequence wrote still poisoned.
+        _same(solo_pool.storage, batched_pool.storage, "pool, sequences " + String(sequences))
+        assert_equal(batched.submitted_rows, solo.submitted_rows)
+
+
+def test_batched_steps_equal_each_sequence_decoded_alone() raises:
+    var support = decoder_support()
+    support.verify_case(CASE)
+    var ctx = DeviceContext()
+    for sequences in [2, 3, 8, 16, 32]:
+        _steps_equal_solo(ctx, sequences)
+
+
+def _unchanged(model: QwenModel, pool: KVPool, submitted: Int) raises:
+    assert_equal(model.valid, True)
+    assert_equal(model.submitted_rows, submitted)
+    for b in range(pool.blocks):
+        assert_equal(pool.length(b), 5 + b if b < 3 else 0)
+
+
+def test_invalid_batched_steps_change_nothing() raises:
+    var support = decoder_support()
+    support.verify_case(CASE)
+    var ctx = DeviceContext()
+    var model = _fixture_model(ctx, 4)
+    var pool = KVPool(ctx, 8, CONTEXT, model.kv_geometry())
+    for s in range(3):
+        var ids = List[Int]()
+        for p in range(5 + s):
+            ids.append(_token(s, p))
+        model.forward(ctx, StepBatch.sequence(ids, 0, s, CONTEXT), pool, baseline_plan(5 + s, 5 + s))
+    var submitted = model.submitted_rows
+    var fused = configured_plan(DECODER_FUSED_DECODE, 2, 8, 2)
+    # A prefill chunk beside a decode.
+    with assert_raises():
+        model.forward(ctx, StepBatch([1, 2, 3], [5, 6, 6], [0, 2, 3], 0, [7, 7], 1, [0, 1], [5, 71, 136], [1, 2]),
+                      pool, fused)
+    _unchanged(model, pool, submitted)
+    # More sequences than the model holds.
+    with assert_raises():
+        model.forward(ctx, StepBatch([1, 2, 3, 4, 5], [5, 6, 7, 0, 0], [0, 1, 2, 3, 4, 5], 5, [6, 7, 8, 1, 1], 1,
+                                     [0, 1, 2, 3, 4], [5, 71, 137, 195, 260], [0, 1, 2, 3, 4]),
+                      pool, configured_plan(DECODER_FUSED_DECODE, 5, 8, 5))
+    _unchanged(model, pool, submitted)
+    var pair = StepBatch([1, 2], [5, 6], [0, 1, 2], 2, [6, 7], 1, [0, 1], [5, 71], [0, 1])
+    # Only configuration 26 steps several sequences.
+    with assert_raises():
+        model.forward(ctx, pair, pool, baseline_plan(2, 7))
+    _unchanged(model, pool, submitted)
+    # A position that disagrees with its block.
+    with assert_raises():
+        model.forward(ctx, StepBatch([1, 2], [5, 7], [0, 1, 2], 2, [6, 8], 1, [0, 1], [5, 72], [0, 1]), pool, fused)
+    _unchanged(model, pool, submitted)
+    # A pool whose block size is not the model's.
+    var other = KVPool(ctx, 8, CONTEXT - 1, model.kv_geometry())
+    with assert_raises():
+        model.forward(ctx, StepBatch([1, 2], [0, 0], [0, 1, 2], 2, [1, 1], 1, [0, 1], [0, 64], [0, 1]), other, fused)
+    assert_equal(other.length(0), 0)
+    _unchanged(model, pool, submitted)
+    # Captures cover one sequence.
+    with assert_raises():
+        model.forward_captured(ctx, pair, pool, fused, CaptureRequest("build/test_decode_batch", False))
+    _unchanged(model, pool, submitted)
+    # A valid step selects one token per sequence; the single-sequence reader refuses it.
+    model.forward(ctx, pair, pool, fused)
+    with assert_raises():
+        _ = model.greedy(ctx)
+    assert_equal(model.valid, True)
+    assert_equal(len(model.greedy_tokens(ctx)), 2)
+    assert_equal(pool.length(0), 6)
+    assert_equal(pool.length(1), 7)
+    assert_equal(model.submitted_rows, submitted + 2 * FIXTURE_LAYERS)
 
 
 def main() raises:

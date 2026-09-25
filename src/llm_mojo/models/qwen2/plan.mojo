@@ -65,7 +65,20 @@ def fast_prefill_configuration(rows: Int, total: Int) -> Int:
     return DECODER_BASELINE
 
 
-def fast_plan(rows: Int, total: Int, device: String) raises -> ExecutionPlan:
+def _check_batch(rows: Int, total: Int, sequences: Int) raises:
+    if rows != sequences or total < 1 or total > MAX_CONTEXT:
+        raise Error("a batched decode step has one row per sequence and at most "
+                    + String(MAX_CONTEXT) + " tokens in its longest sequence")
+
+
+def fast_plan(rows: Int, total: Int, device: String, sequences: Int = 1) raises -> ExecutionPlan:
+    """The measured lookup. A decode step of several sequences, one row each, takes
+    configuration 26 on the measured device; total is then its longest sequence."""
+    if sequences > 1:
+        _check_batch(rows, total, sequences)
+        if device != MEASURED_DEVICE:
+            raise Error("batched decode runs only on the measured device")
+        return ExecutionPlan(DECODER_FUSED_DECODE, True, True, True)
     _check(rows, total)
     if device != MEASURED_DEVICE:
         return ExecutionPlan(DECODER_BASELINE, False, False, False)
@@ -85,12 +98,15 @@ def consistent_plan(rows: Int, total: Int) raises -> ExecutionPlan:
     return ExecutionPlan(DECODER_CONSISTENT, False, False, False)
 
 
-def configured_plan(configuration: Int, rows: Int, total: Int) raises -> ExecutionPlan:
+def configured_plan(configuration: Int, rows: Int, total: Int, sequences: Int = 1) raises -> ExecutionPlan:
     """An explicit retained configuration for diagnostics; 26 carries its decode features."""
-    _check(rows, total)
+    if sequences > 1:
+        _check_batch(rows, total, sequences)
+    else:
+        _check(rows, total)
     var fused = configuration == DECODER_FUSED_DECODE
     var plan = ExecutionPlan(configuration, fused, fused, fused)
-    plan.validate(rows)
+    plan.validate(rows, sequences)
     return plan^
 
 

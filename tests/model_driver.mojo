@@ -45,7 +45,7 @@ def lifecycle(path: String) raises:
         with assert_raises():
             model.forward(ctx,StepBatch.sequence([1],3,0,4),kv,one)
         kv.caches[kv.index(0,LAYERS-1)].length = 3
-        # The pool must match the model's geometry, and one call covers one sequence.
+        # The pool must match the model's geometry; only configuration 26 steps several sequences.
         var mismatched = KVPool(ctx,1,8,model.kv_geometry())
         with assert_raises():
             model.forward(ctx,StepBatch.sequence([1],0,0,8),mismatched,baseline_plan(1,1))

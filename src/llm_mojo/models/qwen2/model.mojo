@@ -263,9 +263,9 @@ struct QwenModel(Movable):
         batch.validate(kv.blocks,kv.block_size,VOCABULARY)
         var rows = batch.rows()
         var sequences = batch.sequences()
-        # Batched decode arrives in a later step; today a call covers one sequence in one block.
-        if sequences != 1 or batch.max_blocks != 1:
-            raise Error("Qwen steps one sequence held in one block")
+        # Every sequence is held in one block; only configuration 26 steps several (plan.validate).
+        if batch.max_blocks != 1:
+            raise Error("Qwen steps sequences held in one block each")
         if not self.valid or rows > self.max_rows or sequences > self.max_sequences:
             raise Error("invalid Qwen state, row extent or context overflow")
         plan.validate(rows, sequences)
@@ -325,6 +325,8 @@ struct QwenModel(Movable):
         """Diagnostic forward that synchronously writes every boundary under request.directory."""
         if request.directory.byte_length() == 0:
             raise Error("capture requires a directory")
+        if batch.sequences() != 1:
+            raise Error("capture covers one sequence")
         self._forward[False, True](ctx, batch, kv, plan, request)
 
     def _forward[OBSERVE: Bool, CAPTURE: Bool](mut self, ctx: DeviceContext, batch: StepBatch, mut kv: KVPool,
@@ -483,11 +485,40 @@ struct QwenModel(Movable):
             save_bf16(self.logits,capture+"/logits.bin",VOCABULARY)
         return route
 
+    def greedy_tokens(mut self, ctx: DeviceContext) raises -> List[Int]:
+        """One greedy token per sequence of the last forward, in batch order.
+
+        Lowest ID on ties. A nonfinite logit in any row invalidates the model, as
+        it does for a single sequence, and no token is returned.
+        """
+        if not self.valid or not self.ready:
+            raise Error("no valid next-token logits")
+        var sequences = self.last_route.sequences
+        var tokens = List[Int](capacity=sequences)
+        if not self.gpu_argmax:
+            tokens.append(self.greedy(ctx))
+            return tokens^
+        try:
+            with self.selection_result.map_to_host() as mapped:
+                for s in range(sequences):
+                    if mapped.unsafe_ptr()[unsafe_offset=s*3+2] != 0:
+                        raise Error("nonfinite model logits in sequence " + String(s))
+                    var selected = Int(mapped.unsafe_ptr()[unsafe_offset=s*3+1])
+                    if selected < 0 or selected >= VOCABULARY:
+                        raise Error("invalid GPU token result")
+                    tokens.append(selected)
+        except error:
+            self.valid = False
+            raise error
+        return tokens^
+
     def greedy[OBSERVE: Bool = False](mut self, ctx: DeviceContext) raises -> Int:
         """Read the selected route: lowest ID on ties; reject any nonfinite logit."""
         self._mark[OBSERVE](MARK_GREEDY)
         if not self.valid or not self.ready:
             raise Error("no valid next-token logits")
+        if self.last_route.sequences != 1:
+            raise Error("a step of several sequences selects with greedy_tokens")
         try:
             if self.gpu_argmax:
                 var selected: Int
