@@ -17,11 +17,12 @@ committed with its own gate:
 
 Approved on 2026-09-23 for local implementation of 1a: edits, builds, tests,
 validation and incremental commits. Pushing, pull requests, toolchain upgrades
-and numerical-contract changes need a separate decision. 1b's detailed plan
-below awaits approval; 1c gets one before its implementation.
+and numerical-contract changes need a separate decision. 1b was approved on
+2026-09-25 on the same terms; 1c gets a detailed plan before its
+implementation.
 
 Status: 1a is complete; see the [validation record](#validation-record). 1b is
-planned and awaits approval.
+in progress.
 
 ## 1a. Step format and KV pool
 
