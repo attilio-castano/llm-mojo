@@ -369,7 +369,9 @@ Checked after every step in debug builds and in every scheduler simulation:
 A block key is `SHA-256(parent_key, block_token_ids, cache_salt)`, so a key
 commits to the complete prefix and tenant. Each Registered block also stores
 its token IDs, which are compared on every hit: the hash is an index, not
-proof. On admission, the manager finds the longest chain of Registered blocks.
+proof. In memory, one engine build writes every block, so the key needs no engine
+identity; persisted blocks do (see the SSD tier below). On admission, the
+manager finds the longest chain of Registered blocks.
 At least the final prompt token must be computed, because its logits are
 needed. When the whole prompt hits, the final block is recomputed into a
 private block, so shared blocks are never written.
@@ -384,11 +386,28 @@ prefix. `cache_salt` isolates tenants when a server has more than one.
 
 ### SSD tier
 
-Registered blocks leaving memory can be written to a slab file with one block
-per fixed-size region, plus an index of key, token IDs and a checksum of the
-block bytes. An index entry is written only after its block data. A request
-whose prefix is on disk enters `LOADING_KV`. The load is asynchronous, and the
-scheduler keeps running other requests. A checksum mismatch is a miss.
+Registered blocks leaving memory persist in the shared store, under the
+conventions it already applies to
+[shared oracle fixtures](development.md#shared-oracle-fixtures):
+
+- **Key.** A persisted block's key adds everything that determines its bytes:
+  the model revision, the pool layout version and the engine's numerical
+  identity. Under Fast, KV bytes depend on the kernels and chunk schedule that
+  wrote them, as a fixture depends on its generator, so a kernel change starts
+  a new namespace instead of mixing blocks.
+- **Publication.** A block is written to staging and published read-only by one
+  rename, so a reader sees a complete block or none. One file per block, named
+  by its key, lets the filesystem serve as the index. Engines sharing the tier
+  (phase 7) publish each key once under a per-key lock.
+- **Verification.** Each entry records its token IDs and the SHA-256 of its
+  bytes, and every load compares both. A mismatch is a miss; the entry is set
+  aside, never trusted or silently deleted.
+- **Capacity.** Least recently loaded entries are evicted within a byte budget.
+  Namespaces that no current engine identity selects are listed and pruned on
+  request, like `fixtures prune`.
+
+A request whose prefix is on disk enters `LOADING_KV`. The load is asynchronous,
+and the scheduler keeps running other requests.
 
 A 4,096-token prefix is 48 MiB: an estimated 10–20 ms of sequential SSD reads.
 The [token profile](../studies/model_generation/token-profile.md) measured about
@@ -499,7 +518,7 @@ configuration and trace identity.
 | 3. Engine core | EngineCore, Scheduler, both runners, chunked prefill, preemption, aborts, step records, trace driver, fitted budget, asynchronous stepping | scheduler and allocator invariants in simulation and on Metal; exact token accounting; asynchronous equals synchronous | How do latency percentiles respond to arrival rate across the scheduling arms, and where does the simulator disagree? |
 | 4. Prefix caching | prefix index, eviction, pinning, chat as an engine client | reused blocks keep their bytes and token IDs; only the uncached suffix is computed; existing chat checks pass | How does time to first token depend on shared-prefix length, hit rate and pool size? |
 | 5. Frontend and API | frontend process, token protocol, model card, HTTP/SSE, supervisor, replay, backpressure, HTTP load generator | replay loses and duplicates nothing and preserves delivered tokens | What do the edge and recovery cost end to end? |
-| 6. SSD tier | slab file, index, asynchronous loading, integrity checks | restored bytes equal stored bytes; disk and memory hits agree | At what prefix length does restoring beat recomputing? |
+| 6. SSD tier | store entries keyed by engine identity, publication by rename, asynchronous loading, verification, eviction | restored bytes equal stored bytes; disk and memory hits agree; a changed engine identity never hits older entries | At what prefix length does restoring beat recomputing? |
 | 7. Replicas (optional) | several engines behind a KV-aware router in the frontend | routing preserves histories and token accounting | Do independent submission threads raise throughput, and what does KV-aware routing gain over round-robin? |
 
 The [batched decode plan](batched-decode-plan.md) details phase 1.
@@ -541,6 +560,7 @@ before:
 | Engine simulation | [Dynamo mocker](https://docs.nvidia.com/dynamo/v1.3.0/user-guides/dynosim/mocker) | SimulatedRunner |
 | Per-iteration metrics | [Dynamo forward-pass metrics](https://github.com/ai-dynamo/dynamo/blob/v1.5.0/docs/fern/pages/developer-guide/knowledge-base/concepts/observability/forward-pass-metrics-rfc.md) | step records |
 | KV-aware routing | [Dynamo KV router](https://docs.nvidia.com/dynamo/v1.3.0/components/router/routing-concepts) | phase 7 |
+| Content-addressed, verified store | [shared oracle fixtures](development.md#shared-oracle-fixtures) (#28) | SSD tier conventions |
 
 ## Not adopted
 
