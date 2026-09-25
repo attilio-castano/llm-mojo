@@ -197,7 +197,9 @@ the shared store, under `fixtures/` in `~/.cache/llm-mojo` or
   `tests/fixtures/decoder_reference.py`, their script lock, and the
   `attention_sublayer/`, `mlp/` and `decoder_layer/` directories under
   `tests/fixtures/`. Editing any of them, committed or not, selects a new entry.
-  Other edits under `tests/fixtures/` do not.
+  Other edits under `tests/fixtures/` do not. If any of them changes while
+  validation runs, validation fails at the end: its oracles belong to the
+  earlier inputs.
 - **Hit.** Validation re-hashes every file of the entry against its record,
   which takes seconds, and links the checkout. It writes nothing to the store.
   If the entry was generated on another macOS or Python version, validation

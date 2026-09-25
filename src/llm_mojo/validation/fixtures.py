@@ -14,7 +14,8 @@ and build/oracle_data/<family> is a link to it. The key hashes the steps and
 every file git lists under SCOPE, so an edit to a generator or an anchor selects
 a new entry. A hit re-hashes every file against its record and never writes to
 the store. A miss generates under the lock, refuses inputs that changed during
-the run, and publishes by rename.
+the run, and publishes by rename. Validation fails at the end if the inputs no
+longer match the snapshot its oracles were resolved for.
 """
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
@@ -116,6 +117,27 @@ def inputs(root):
         else:
             found[name] = 'deleted'
     return found
+
+
+def changed_inputs(root, sources):
+    """Generator inputs that differ now from a snapshot taken by inputs()."""
+    now = inputs(root)
+    return sorted(name for name in sources.keys() | now.keys() if sources.get(name) != now.get(name))
+
+
+def listing(names):
+    return ', '.join(names[:5]) + (f' and {len(names) - 5} more' if len(names) > 5 else '')
+
+
+def confirm_unchanged(root, sources):
+    """Fail when the generator inputs changed after a run resolved its oracles for them.
+
+    A pass must describe the checkout as it stands, so validation checks this last.
+    """
+    edited = changed_inputs(root, sources)
+    if edited:
+        raise RuntimeError(f'Fixture generator inputs changed during validation: {listing(edited)}. '
+                           'This run used oracles for the earlier inputs; run validate again.')
 
 
 def identity(family, sources):
@@ -286,9 +308,10 @@ def generate(family, root, store_dir, key, sources, runner):
     previous = stash(checkout) if family.in_place else None
     try:
         run_steps(family, root, output, runner)
-        if inputs(root) != sources:
-            raise RuntimeError(f'Fixture generator inputs changed while generating {family.name}; '
-                               'nothing was published. Run validate again.')
+        edited = changed_inputs(root, sources)
+        if edited:
+            raise RuntimeError(f'Fixture generator inputs changed while generating {family.name}: '
+                               f'{listing(edited)}. Nothing was published; run validate again.')
         run_files = {}
         for name in family.provenance:
             run_files[name] = json.loads((output / name).read_text())

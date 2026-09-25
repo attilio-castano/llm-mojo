@@ -57,6 +57,7 @@ def prepare(cache=True, regenerate=False):
     run("uv", "run", "--locked", "--script", "tests/fixtures/tokenizer_reference.py", "--unicode")
     run(sys.executable, "tests/fixtures/chat_reference.py", "--pack")
     print("All oracles match the frozen anchors.", flush=True)
+    return sources
 
 
 def main(argv=None):
@@ -68,7 +69,7 @@ def main(argv=None):
     fixture_source.add_argument("--no-fixture-cache", action="store_true",
                                 help="generate the large oracles in this checkout instead of the shared store")
     args = parser.parse_args(argv)
-    prepare(cache=not args.no_fixture_cache, regenerate=args.regenerate_fixtures)
+    sources = prepare(cache=not args.no_fixture_cache, regenerate=args.regenerate_fixtures)
     if not args.prepare_only:
         run(sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py")
         for test in sorted((repository_root() / "tests").glob("test_*.mojo")):
@@ -79,6 +80,9 @@ def main(argv=None):
                     "build/oracle_data/tokenizer/unicode.bin")
 
         run(sys.executable, "-m", "llm_mojo.benchmarks.smoke")
+    # A pass describes the checkout as it stands only if the oracles still match its inputs.
+    if sources is not None:
+        large_fixtures.confirm_unchanged(repository_root(), sources)
 
 
 if __name__ == "__main__":

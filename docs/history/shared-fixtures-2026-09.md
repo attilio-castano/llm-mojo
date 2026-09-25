@@ -29,7 +29,9 @@ frozen oracle hashes, the generator scripts or `uv.lock`.
   run that generated it. Validation links `build/oracle_data/<family>` to it.
 - The key hashes the generator commands and every tracked or untracked file the
   three generators read, so other edits under `tests/fixtures/` regenerate
-  nothing.
+  nothing. Validation compares those inputs with its snapshot once more after
+  the last test and fails if they changed, so a pass always describes the
+  checkout as it stands. The old suite never checked this.
 - A hit re-hashes every file and writes nothing to the store. A miss generates
   the family as before, under a per-key lock, and publishes it by rename; another
   worktree validating the same key waits and reuses it. A failed or interrupted

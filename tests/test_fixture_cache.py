@@ -252,11 +252,24 @@ class CacheTests(unittest.TestCase):
     def test_inputs_edited_during_generation_are_refused(self):
         self.generator(self.root).during = lambda: (self.root / 'gen/generate.py').write_text('edited\n')
         key = self.key()
-        with self.assertRaisesRegex(RuntimeError, 'inputs changed while generating flat'):
+        with self.assertRaisesRegex(RuntimeError, 'inputs changed while generating flat: gen/generate.py. '
+                                                  'Nothing was published'):
             self.ensure()
         entry = fixtures.entry_paths(self.store, IN_PLACE, key)
         self.assertFalse(entry.tree.exists() or entry.record.exists())
         self.assertFalse(self.checkout_dir.exists() or self.checkout_dir.is_symlink())
+
+    def test_a_run_fails_when_generator_inputs_change_before_it_finishes(self):
+        sources = fixtures.inputs(self.root)
+        (self.root / 'outside.txt').write_text('not a generator input')
+        (self.root / 'gen/__pycache__').mkdir()
+        (self.root / 'gen/__pycache__/generate.cpython-312.pyc').write_bytes(b'bytecode')
+        fixtures.confirm_unchanged(self.root, sources)
+        (self.root / 'gen/sub/anchor.json').write_text('{"sha256": {"edited": 1}}\n')
+        (self.root / 'gen/new.py').write_text('')
+        with self.assertRaisesRegex(RuntimeError, r'changed during validation: gen/new\.py, gen/sub/anchor\.json\. '
+                                                  'This run used oracles for the earlier inputs'):
+            fixtures.confirm_unchanged(self.root, sources)
 
     def test_real_directories_are_removed_only_when_regenerable(self):
         self.ensure()
@@ -512,7 +525,8 @@ class ValidationWiringTests(unittest.TestCase):
                      patch.object(fixtures, 'generate_locally', side_effect=lambda family, root, runner:
                                   events.append(('local', family.name, root, runner is suite.run))), \
                      patch.object(tokenizer_assets, 'ensure_prepared'), redirect_stdout(io.StringIO()):
-                    suite.prepare(cache=cache, regenerate=regenerate)
+                    sources = suite.prepare(cache=cache, regenerate=regenerate)
+                self.assertEqual(sources, {'inputs': 'identity'} if cache else None)
                 large = [event for event in events if isinstance(event, tuple)]
                 if cache:
                     self.assertEqual(large, [('ensure', name, root, {'inputs': 'identity'}, True,
@@ -529,7 +543,7 @@ class ValidationWiringTests(unittest.TestCase):
 
     def test_suite_flags_choose_the_fixture_source(self):
         from llm_mojo.validation import suite
-        with patch.object(suite, 'prepare') as prepare:
+        with patch.object(suite, 'prepare', return_value=None) as prepare:
             for arguments in (['--prepare-only'], ['--prepare-only', '--regenerate-fixtures'],
                               ['--prepare-only', '--no-fixture-cache']):
                 suite.main(arguments)
@@ -538,6 +552,25 @@ class ValidationWiringTests(unittest.TestCase):
                           dict(cache=False, regenerate=False)])
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             suite.main(['--regenerate-fixtures', '--no-fixture-cache'])
+
+    def test_validation_fails_last_when_generator_inputs_changed_during_the_run(self):
+        from llm_mojo.validation import suite
+        snapshot = {'tests/fixtures/generate.py': 'sha256 same', 'tests/fixtures/mlp/reference.py': 'sha256 old'}
+        edited = {**snapshot, 'tests/fixtures/mlp/reference.py': 'sha256 new'}
+        for arguments in ([], ['--prepare-only']):
+            with self.subTest(arguments=arguments), patch.object(suite, 'prepare', return_value=snapshot), \
+                 patch.object(suite, 'run') as run, patch.object(fixtures, 'inputs', return_value=edited):
+                with self.assertRaisesRegex(RuntimeError, r'during validation: tests/fixtures/mlp/reference\.py\.'):
+                    suite.main(arguments)
+                # The whole run happened first: the check covers edits made during the tests.
+                self.assertEqual(run.called, not arguments)
+        with patch.object(suite, 'prepare', return_value=snapshot), patch.object(suite, 'run'), \
+             patch.object(fixtures, 'inputs', return_value=dict(snapshot)):
+            suite.main([])
+        with patch.object(suite, 'prepare', return_value=None), patch.object(suite, 'run'), \
+             patch.object(fixtures, 'inputs') as inputs:
+            suite.main(['--no-fixture-cache'])
+        inputs.assert_not_called()
 
     def test_mlp_check_records_never_write_into_the_linked_family(self):
         import mlp_support
