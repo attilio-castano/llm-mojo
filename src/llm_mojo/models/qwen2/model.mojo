@@ -338,13 +338,13 @@ struct QwenModel(Movable):
                 if fuse_norm:
                     # The MLP residual feeds the next layer's attention norm, or the final norm.
                     if i+1 < layer_count:
-                        enqueue_residual_norm(ctx,TileTensor(self.attention.output,row_major(1,HIDDEN)),
+                        enqueue_residual_norm[HIDDEN](ctx,TileTensor(self.attention.output,row_major(1,HIDDEN)),
                             TileTensor(self.mlp.down,row_major(1,HIDDEN)),
                             TileTensor(self.layers[i+1].attention.norm,row_major(HIDDEN)),
                             TileTensor(self.mlp.output,row_major(1,HIDDEN)),
                             TileTensor(self.attention.normalized,row_major(1,HIDDEN)))
                     else:
-                        enqueue_residual_norm(ctx,TileTensor(self.attention.output,row_major(1,HIDDEN)),
+                        enqueue_residual_norm[HIDDEN](ctx,TileTensor(self.attention.output,row_major(1,HIDDEN)),
                             TileTensor(self.mlp.down,row_major(1,HIDDEN)),TileTensor(self.norm,row_major(HIDDEN)),
                             TileTensor(self.mlp.output,row_major(1,HIDDEN)),
                             TileTensor(self.normalized,row_major(1,HIDDEN)))

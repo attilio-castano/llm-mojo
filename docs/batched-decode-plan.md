@@ -127,7 +127,7 @@ passes. Every launch has a batched form that keeps each row's arithmetic:
 | Input RMSNorm, layer 0 | `_rms_norm_apple_gpu_simdgroup_kernel`, one threadgroup per row | unchanged, S rows |
 | QKV with bias, Wo, gate, up, down and vocabulary projections | `_linear_rowwise_apple_gpu_kernel`, one SIMD group per output | `_linear_rowwise_rows_apple_gpu_kernel`, with each row's lane-strided FP32 sum, `warp.sum`, bias and single rounding |
 | Unpack, RoPE and K/V append | `_fused_decode_qkv`, position as a scalar argument | a sequence index; position and block from the step buffer; still elementwise |
-| Decode attention | `_decode_kernel[32, 1, 1]`, one threadgroup per query head | a sequence mode with each sequence's Q row, K/V base and length; keys still go to SIMD groups by position mod 32 and merge in a fixed order |
+| Decode attention | `_decode_kernel[32, 1, 1]`, one threadgroup per query head | `_decode_sequences_kernel`, route 4's arithmetic with each sequence's Q row, K/V base and length; keys still go to SIMD groups by position mod 32 and merge in a fixed order |
 | Residual and RMSNorm, twice per layer | `_residual_norm`, one row | one threadgroup per row |
 | SiLU × up | `_silu_multiply`, elementwise | S × 4,864 elements |
 | Argmax | `_argmax` over 149 groups, then `_finish` | a row index in both passes, one record per sequence |
@@ -144,8 +144,8 @@ rather than rows. The greedy readback maps all S records at once.
   and `tests/test_consistency.mojo` shows the two agree bit for bit. The
   attention kernel is shared with research routes 4 and 11, which already use
   its grid axes (`block_idx.y` is the split and `block_idx.z` a query row of one
-  sequence), so it gains a comptime sequence mode; those routes keep their
-  instantiation.
+  sequence), so the batched step gets its own kernel with route 4's arithmetic,
+  tested against route 4 bit for bit; those routes keep their kernel.
 - **A fixed composition.** Multi-row calls through today's layer dispatch
   switch to MMA projections at 16 rows, prefill attention above one row and MLP
   mapping 7, each a different reduction order. `enqueue_decode_batch_layer` in
@@ -229,8 +229,8 @@ would need its own generator, anchors and store entry.
 Each step is one commit with its own gate:
 
 1. Rows-kernel tests at the Qwen widths, with no production change.
-2. Sequence-aware `_residual_norm`, argmax and `_fused_decode_qkv`, and the
-   attention sequence mode, each with kernel tests.
+2. Row-indexed `_residual_norm` and argmax, and batched forms of
+   `_fused_decode_qkv` and route 4 attention, each with kernel tests.
 3. `enqueue_decode_batch_layer` and the step buffer. Configuration 26 moves to
    them at S = 1, its generic-layer branches retire, and the S = 1 gate runs.
 4. Batched steps: `max_sequences`, the plan and preflight rules,

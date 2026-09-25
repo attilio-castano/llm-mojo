@@ -6,7 +6,7 @@ one context/stream through completion. Rotary tables are explicit model inputs.
 """
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import global_idx
+from std.gpu import block_idx, global_idx
 from std.math import ceildiv
 from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.kernels.linear import (
@@ -339,6 +339,98 @@ def _enqueue_fused_decode_qkv(ctx: DeviceContext, mut work: AttentionWorkspace,
     ctx.enqueue_function[_fused_decode_qkv[type_of(packed.layout), type_of(table.layout),
                                          type_of(query.layout), type_of(key.layout)]](
         packed, table, sine, query, key, value, Int32(cache.length), grid_dim=4, block_dim=128)
+
+
+def _fused_decode_qkv_batch[
+    QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int,
+    PL: TensorLayout, TL: TensorLayout, QL: TensorLayout, CL: TensorLayout, SL: TensorLayout,
+](
+    packed: TileTensor[DType.bfloat16, PL, MutAnyOrigin],
+    cosine: TileTensor[DType.bfloat16, TL, MutAnyOrigin],
+    sine: TileTensor[DType.bfloat16, TL, MutAnyOrigin],
+    query: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    pool: TileTensor[DType.bfloat16, CL, MutAnyOrigin],
+    positions: TileTensor[DType.int32, SL, MutAnyOrigin],
+    blocks: TileTensor[DType.int32, SL, MutAnyOrigin],
+    layer: Int32, layers: Int32, block_size: Int32,
+):
+    """The single-row fused decode for sequence block_idx.y of a batch.
+
+    Sequence s reads packed row s and rotates at positions[s]. K and V go to that
+    slot of block blocks[s] in `layer`, with the pool viewed as [rows, kv width]
+    rows of Pool[block, layer, kv, slot]. Thread roles, products and roundings
+    match _fused_decode_qkv.
+    """
+    comptime assert is_apple_gpu()
+    comptime assert HEAD_DIM % 2 == 0
+    comptime assert packed.flat_rank == 2 and cosine.flat_rank == 2 and sine.flat_rank == 2
+    comptime assert query.flat_rank == 3 and pool.flat_rank == 2
+    comptime assert positions.flat_rank == 1 and blocks.flat_rank == 1
+    comptime HALF = HEAD_DIM // 2
+    comptime WIDTH = KV_HEADS * HEAD_DIM
+    comptime QUERY_WIDTH = QUERY_HEADS * HEAD_DIM
+    var i = global_idx.x
+    var s = block_idx.y
+    var p = Int(positions[s])
+    var key_row = (Int(blocks[s]) * Int(layers) + Int(layer)) * 2 * Int(block_size) + p
+    var value_row = key_row + Int(block_size)
+    if i < (QUERY_HEADS + KV_HEADS) * HALF:
+        var head = i // HALF
+        var pair = i % HALF
+        var first_column = head * HEAD_DIM + pair
+        var first = rebind[Scalar[DType.bfloat16]](packed[s, first_column])
+        var second = rebind[Scalar[DType.bfloat16]](packed[s, first_column + HALF])
+        var c0 = rebind[Scalar[DType.bfloat16]](cosine[p, pair])
+        var c1 = rebind[Scalar[DType.bfloat16]](cosine[p, pair + HALF])
+        var s0 = rebind[Scalar[DType.bfloat16]](sine[p, pair])
+        var s1 = rebind[Scalar[DType.bfloat16]](sine[p, pair + HALF])
+        var ac: Scalar[DType.bfloat16] = first.fma[FastMathFlag.NONE](c0, 0)
+        var bs: Scalar[DType.bfloat16] = second.fma[FastMathFlag.NONE](s0, 0)
+        var bc: Scalar[DType.bfloat16] = second.fma[FastMathFlag.NONE](c1, 0)
+        var ass: Scalar[DType.bfloat16] = first.fma[FastMathFlag.NONE](s1, 0)
+        var low: Scalar[DType.bfloat16] = ac - bs
+        var high: Scalar[DType.bfloat16] = bc + ass
+        if head < QUERY_HEADS:
+            query[s, head, pair] = rebind[query.ElementType](low)
+            query[s, head, pair + HALF] = rebind[query.ElementType](high)
+        else:
+            var column = (head - QUERY_HEADS) * HEAD_DIM + pair
+            pool[key_row, column] = rebind[pool.ElementType](low)
+            pool[key_row, column + HALF] = rebind[pool.ElementType](high)
+    if i < WIDTH:
+        pool[value_row, i] = rebind[pool.ElementType](packed[s, QUERY_WIDTH + WIDTH + i])
+
+
+def enqueue_fused_decode_qkv_batch[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, SL: TensorLayout](
+    ctx: DeviceContext, mut work: AttentionWorkspace, mut storage: DeviceBuffer[DType.bfloat16],
+    positions: TileTensor[DType.int32, SL, MutAnyOrigin],
+    blocks: TileTensor[DType.int32, SL, MutAnyOrigin],
+    layer: Int, layers: Int, block_size: Int,
+) raises:
+    """Unpack, rotate and append S decode rows: work.packed [S, qkv] to work.query and the pool.
+
+    The caller has checked every position against the block size and the rotary
+    tables, and every block against the pool, before dispatch.
+    """
+    comptime WIDTH = KV_HEADS * HEAD_DIM
+    comptime THREADS = (QUERY_HEADS + KV_HEADS) * (HEAD_DIM // 2)
+    comptime assert positions.flat_rank == 1 and blocks.flat_rank == 1
+    var sequences = Int(positions.dim[0]())
+    if (sequences < 1 or sequences > work.max_rows or Int(blocks.dim[0]()) != sequences
+            or work.query_heads != QUERY_HEADS or work.kv_heads != KV_HEADS or work.head_dim != HEAD_DIM
+            or block_size < 1 or block_size > work.capacity or layers < 1 or layer < 0 or layer >= layers
+            or len(storage) % (2 * layers * block_size * WIDTH) != 0):
+        raise Error("invalid batched fused decode geometry")
+    var packed = TileTensor(work.packed, row_major(sequences, QUERY_HEADS * HEAD_DIM + 2 * WIDTH))
+    var cosine = TileTensor(work.cosine, row_major(work.capacity, HEAD_DIM))
+    var sine = TileTensor(work.sine, row_major(work.capacity, HEAD_DIM))
+    var query = TileTensor(work.query, row_major(sequences, QUERY_HEADS, HEAD_DIM))
+    var pool = TileTensor(storage, row_major(len(storage) // WIDTH, WIDTH))
+    comptime kernel = _fused_decode_qkv_batch[QUERY_HEADS, KV_HEADS, HEAD_DIM, type_of(packed.layout),
+        type_of(cosine.layout), type_of(query.layout), type_of(pool.layout), SL]
+    ctx.enqueue_function[kernel](packed, cosine, sine, query, pool, positions, blocks,
+        Int32(layer), Int32(layers), Int32(block_size),
+        grid_dim=(ceildiv(THREADS, 128), sequences), block_dim=128)
 
 
 def _enqueue_attention_qkv(

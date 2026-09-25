@@ -3,6 +3,8 @@
 Callers own nonoverlapping logits, partial and result storage and retain it
 through device completion. Each record is (ordered score, lowest token ID,
 any-nonfinite flag). No interpretation of the ID is valid when the flag is set.
+Each logit row is selected independently: one group of partial records and one
+result record per row, with the same group partition whatever the row count.
 Tensor indexing respects the supplied layouts. The fused vocabulary-projection
 variant measured in studies/model_generation/token-selection.md was not promoted.
 """
@@ -28,7 +30,7 @@ def bf16_rank(bits: UInt16) -> UInt32:
 @always_inline
 def _group_winner[OL: TensorLayout](
     output: TileTensor[DType.uint32, OL, MutAnyOrigin],
-    rank: UInt32, token: UInt32, invalid: UInt32,
+    rank: UInt32, token: UInt32, invalid: UInt32, record: Int,
 ):
     comptime assert output.flat_rank == 2
     var top = warp.max(rank)
@@ -52,9 +54,9 @@ def _group_winner[OL: TensorLayout](
             if r > best or (r == best and t < winner):
                 best = r
                 winner = t
-        output[block_idx.x,0] = best
-        output[block_idx.x,1] = winner
-        output[block_idx.x,2] = any_bad
+        output[record,0] = best
+        output[record,1] = winner
+        output[record,2] = any_bad
 
 
 def _argmax[IL: TensorLayout, OL: TensorLayout](
@@ -63,19 +65,20 @@ def _argmax[IL: TensorLayout, OL: TensorLayout](
 ):
     comptime assert is_apple_gpu() and WARP_SIZE == 32
     comptime assert logits.flat_rank == 2
+    var row = block_idx.y
     var best: UInt32 = 0
     var winner = UInt32(0xFFFFFFFF)
     var bad: UInt32 = 0
     for j in range(8):
         var i = block_idx.x*1024 + thread_idx.x + j*128
         if i < Int(count):
-            var bits = bitcast[DType.uint16](rebind[Scalar[DType.bfloat16]](logits[0,i]))
+            var bits = bitcast[DType.uint16](rebind[Scalar[DType.bfloat16]](logits[row,i]))
             bad |= UInt32((bits & 0x7F80) == 0x7F80)
             var rank = bf16_rank(bits)
             if rank > best or (rank == best and UInt32(i) < winner):
                 best = rank
                 winner = UInt32(i)
-    _group_winner(partials,best,winner,bad)
+    _group_winner(partials,best,winner,bad,row*((Int(count)+1023)//1024)+block_idx.x)
 
 
 def _finish[IL: TensorLayout, OL: TensorLayout](
@@ -84,19 +87,21 @@ def _finish[IL: TensorLayout, OL: TensorLayout](
 ):
     comptime assert is_apple_gpu() and WARP_SIZE == 32
     comptime assert partials.flat_rank == 2
+    var row = block_idx.x
+    var first = row*Int(count)
     var best: UInt32 = 0
     var winner = UInt32(0xFFFFFFFF)
     var bad: UInt32 = 0
     var i = thread_idx.x
     while i < Int(count):
-        var rank = rebind[UInt32](partials[i,0])
-        var token = rebind[UInt32](partials[i,1])
-        bad |= rebind[UInt32](partials[i,2])
+        var rank = rebind[UInt32](partials[first+i,0])
+        var token = rebind[UInt32](partials[first+i,1])
+        bad |= rebind[UInt32](partials[first+i,2])
         if rank > best or (rank == best and token < winner):
             best = rank
             winner = token
         i += 128
-    _group_winner(result,best,winner,bad)
+    _group_winner(result,best,winner,bad,row)
 
 
 def _validate[LL: TensorLayout, PL: TensorLayout, RL: TensorLayout](
@@ -105,9 +110,11 @@ def _validate[LL: TensorLayout, PL: TensorLayout, RL: TensorLayout](
     result: TileTensor[DType.uint32, RL, MutAnyOrigin], groups: Int,
 ) raises:
     comptime assert logits.flat_rank == 2 and partials.flat_rank == 2 and result.flat_rank == 2
-    if ctx.api() != "metal" or Int(logits.dim[0]()) != 1 or Int(logits.dim[1]()) < 1:
-        raise Error("token selection requires Metal and one positive logit row")
-    if Int(partials.dim[0]()) < groups or Int(partials.dim[1]()) != 3 or Int(result.dim[0]()) != 1 or Int(result.dim[1]()) != 3:
+    var rows = Int(logits.dim[0]())
+    if ctx.api() != "metal" or rows < 1 or Int(logits.dim[1]()) < 1:
+        raise Error("token selection requires Metal and positive logit rows")
+    if (Int(partials.dim[0]()) < rows*groups or Int(partials.dim[1]()) != 3
+            or Int(result.dim[0]()) != rows or Int(result.dim[1]()) != 3):
         raise Error("invalid token selection scratch geometry")
 
 
@@ -116,10 +123,11 @@ def enqueue_argmax[LL: TensorLayout, PL: TensorLayout, RL: TensorLayout](
     partials: TileTensor[DType.uint32, PL, MutAnyOrigin],
     result: TileTensor[DType.uint32, RL, MutAnyOrigin],
 ) raises:
+    var rows = Int(logits.dim[0]())
     var count = Int(logits.dim[1]())
     var groups = (count+1023)//1024
     _validate(ctx,logits,partials,result,groups)
     comptime first = _argmax[LL,PL]
     comptime last = _finish[PL,RL]
-    ctx.enqueue_function[first](logits,partials,Int32(count),grid_dim=groups,block_dim=128)
-    ctx.enqueue_function[last](partials,result,Int32(groups),grid_dim=1,block_dim=128)
+    ctx.enqueue_function[first](logits,partials,Int32(count),grid_dim=(groups,rows),block_dim=128)
+    ctx.enqueue_function[last](partials,result,Int32(groups),grid_dim=rows,block_dim=128)

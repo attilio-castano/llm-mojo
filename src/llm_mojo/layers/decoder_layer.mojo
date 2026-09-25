@@ -195,7 +195,7 @@ def enqueue_decoder_layer[XL: TensorLayout](
     else:
         actual_route = enqueue_attention_sublayer(ctx, aw, cache, attention, x, 3)
     if fuse_residual_norm:
-        enqueue_residual_norm(ctx,x,TileTensor(attention.projected,row_major(1,896)),
+        enqueue_residual_norm[896](ctx,x,TileTensor(attention.projected,row_major(1,896)),
             TileTensor(mw.norm,row_major(896)),TileTensor(attention.output,row_major(1,896)),
             TileTensor(mlp.normalized,row_major(1,896)))
     enqueue_mlp_apple_gpu(ctx, mw, mlp,
