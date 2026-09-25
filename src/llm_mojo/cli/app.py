@@ -13,8 +13,10 @@ app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False,
                   help='Run and study native Mojo inference on Apple Silicon.')
 models = typer.Typer(no_args_is_help=True, help='Supported models and explicit asset preparation.')
 bench = typer.Typer(no_args_is_help=True, help='Existing paired studies and their evidence gates.')
+fixture_cache = typer.Typer(no_args_is_help=True, help='The shared, read-only oracle fixtures that validate links.')
 app.add_typer(models, name='models')
 app.add_typer(bench, name='bench')
+app.add_typer(fixture_cache, name='fixtures')
 
 Preset = Annotated[str, typer.Option(help='Workload preset: interactive, short, whole-prompt.')]
 Model = Annotated[str | None, typer.Option(help='Supported model identifier; Qwen is the default.')]
@@ -171,10 +173,39 @@ def tokenizer(ctx: typer.Context):
 
 
 @app.command()
-def validate(prepare_only: bool = False):
+def validate(prepare_only: bool = False,
+             regenerate_fixtures: Annotated[bool, typer.Option(
+                 '--regenerate-fixtures', help='Regenerate the cached large oracles; require a byte-for-byte match.')] = False,
+             no_fixture_cache: Annotated[bool, typer.Option(
+                 '--no-fixture-cache', help='Generate the large oracles in this checkout, not the shared store.')] = False):
     """Run the repository's frozen-oracle, Python, Mojo and smoke validation."""
+    if regenerate_fixtures and no_fixture_cache:
+        raise typer.BadParameter('--regenerate-fixtures compares against the shared store; drop --no-fixture-cache')
     from llm_mojo.validation.suite import main
-    main(['--prepare-only'] if prepare_only else [])
+    main([*(['--prepare-only'] if prepare_only else []),
+          *(['--regenerate-fixtures'] if regenerate_fixtures else []),
+          *(['--no-fixture-cache'] if no_fixture_cache else [])])
+
+
+@fixture_cache.command('list')
+def list_fixtures():
+    """Show each cached entry, its size and the worktrees that link or select it."""
+    from llm_mojo.validation.fixtures import report
+    typer.echo(report())
+
+
+@fixture_cache.command('prune')
+def prune_fixtures(yes: Annotated[bool, typer.Option('--yes', help='Remove them; otherwise only list them.')] = False):
+    """List set-aside, stale and unused entries, and remove them with --yes."""
+    from llm_mojo.validation.fixtures import prune
+    typer.echo(prune(yes=yes))
+
+
+@fixture_cache.command('detach')
+def detach_fixtures(family: Annotated[str, typer.Argument(help='attention_sublayer, mlp or decoder_layer')]):
+    """Replace this checkout's link with a writable copy, for generator commands run by hand."""
+    from llm_mojo.validation.fixtures import detach
+    typer.echo(detach(family))
 
 
 def main():

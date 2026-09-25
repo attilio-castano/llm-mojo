@@ -134,6 +134,33 @@ class StoreTests(unittest.TestCase):
         store.remove_staged(aside)
         self.assertFalse(aside.exists())
 
+    def test_nested_trees_are_read_only_at_every_depth_and_removable(self):
+        staged = store.staging_path(self.root / 'store', 'fixtures')
+        (staged / 'case/inner').mkdir(parents=True)
+        (staged / 'top.bin').write_bytes(b'a')
+        (staged / 'case/inner/deep.npy').write_bytes(b'b')
+        final = store.publish_directory(staged, self.root / 'store/fixtures/family/key')
+        modes = {path.relative_to(final).as_posix(): stat.S_IMODE(path.stat().st_mode)
+                 for path in [final, *final.rglob('*')]}
+        self.assertEqual(modes, {'.': 0o555, 'top.bin': 0o444, 'case': 0o555,
+                                 'case/inner': 0o555, 'case/inner/deep.npy': 0o444})
+        with self.assertRaises(PermissionError):
+            (final / 'case/inner/new.npy').write_bytes(b'c')
+        with redirect_stderr(io.StringIO()):
+            aside = store.set_aside(final)
+        store.remove_staged(aside)
+        self.assertFalse(aside.exists())
+
+    def test_set_aside_never_reuses_a_name(self):
+        entry, kept = self.root / 'store/entry', []
+        with redirect_stderr(io.StringIO()):
+            for number in range(3):
+                entry.mkdir(parents=True)
+                (entry / 'file').write_text(str(number))
+                kept.append(store.set_aside(entry))
+        self.assertEqual([(path / 'file').read_text() for path in kept], ['0', '1', '2'])
+        self.assertTrue(all(path.name.startswith('entry.invalid-') for path in kept))
+
 
 class ToolchainTests(unittest.TestCase):
     OUTPUTS = {

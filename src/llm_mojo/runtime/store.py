@@ -130,11 +130,18 @@ def publish_file(staged, final):
 
 
 def publish_directory(staged, final):
-    """Publish a complete directory read-only; an existing final entry must be set aside first."""
+    """Publish a complete directory tree read-only; an existing final entry must be set aside first.
+
+    Files become 0444 and directories 0555 at every depth.
+    """
     staged, final = Path(staged), Path(final)
-    for child in staged.iterdir():
-        if child.is_file() and not child.is_symlink():
-            os.chmod(child, 0o444)
+    for directory, subdirectories, files in os.walk(staged, topdown=False):
+        for name in files:
+            if not Path(directory, name).is_symlink():
+                os.chmod(Path(directory, name), 0o444)
+        for name in subdirectories:
+            if not Path(directory, name).is_symlink():
+                os.chmod(Path(directory, name), 0o555)
     # Moving a directory to a new parent rewrites its '..' entry, which needs write
     # permission; a clone of another store's read-only directory would lack it.
     os.chmod(staged, 0o755)
@@ -144,20 +151,32 @@ def publish_directory(staged, final):
     return final
 
 
+def aside_path(path, label):
+    """A free sibling name, <name>.<label>-<time>, numbered when that is taken."""
+    path = Path(path)
+    base = f'{path.name}.{label}-{datetime.now():%Y%m%d-%H%M%S}'
+    candidate, number = path.with_name(base), 1
+    while candidate.exists() or candidate.is_symlink():
+        number += 1
+        candidate = path.with_name(f'{base}-{number}')
+    return candidate
+
+
 def set_aside(path):
     """Move an invalid store entry out of the way without deleting anything."""
     path = Path(path)
-    aside = path.with_name(f'{path.name}.invalid-{datetime.now():%Y%m%d-%H%M%S}')
+    aside = aside_path(path, 'invalid')
     os.rename(path, aside)
     print(f'Moved an invalid store entry aside: {aside} (delete it when no longer needed)', file=sys.stderr)
     return aside
 
 
 def remove_staged(path):
-    """Delete a staging entry, including one already marked read-only."""
+    """Delete a staging entry, including a tree already marked read-only at any depth."""
     path = Path(path)
     if path.is_dir() and not path.is_symlink():
-        os.chmod(path, 0o755)
+        for directory, _, _ in os.walk(path):
+            os.chmod(directory, 0o755)
         shutil.rmtree(path)
     else:
         path.unlink(missing_ok=True)

@@ -11,6 +11,8 @@ from numerics import bf16_bits, from_bits, differences, round_bf16
 from contract import BUDGETS
 
 ROOT = Path(__file__).resolve().parents[1] / 'build/oracle_data/mlp'
+# Check records stay out of the fixture directory, which validate links read-only.
+RECORD_ROOT = ROOT.parents[1] / 'oracle_records/mlp'
 
 
 def read(path):
@@ -163,11 +165,12 @@ def record(value):
         return
     RECORDS.append(value)
     group = 'probes' if 'probe' in value else 'mlp'
-    path = ROOT / ('metal_' + os.environ.get('MLP_SPLIT', 'development') + '_' + group + '_checks.json')
+    path = RECORD_ROOT / ('metal_' + os.environ.get('MLP_SPLIT', 'development') + '_' + group + '_checks.json')
     if 'probe' not in value:
         path = path.with_name(path.stem+f'_v{MAPPING}'+path.suffix)
     selected = [r for r in RECORDS if ('probe' in r) == ('probe' in value)
                 and ('probe' in r or r.get('mapping') == MAPPING)]
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(selected, indent=2, allow_nan=False) + '\n')
 
 

@@ -114,6 +114,38 @@ class ConfigurationTests(unittest.TestCase):
         prepare.assert_called_once_with(None, download=False)
 
 
+    def test_validate_passes_fixture_options_and_rejects_conflicts(self):
+        with patch('llm_mojo.validation.suite.main') as main:
+            for arguments, expected in ((['validate'], []),
+                                        (['validate', '--prepare-only', '--regenerate-fixtures'],
+                                         ['--prepare-only', '--regenerate-fixtures']),
+                                        (['validate', '--no-fixture-cache'], ['--no-fixture-cache'])):
+                result = CliRunner().invoke(app, arguments)
+                self.assertEqual(result.exit_code, 0, result.output)
+                self.assertEqual(main.call_args.args, (expected,))
+            result = CliRunner().invoke(app, ['validate', '--regenerate-fixtures', '--no-fixture-cache'])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertEqual(main.call_count, 3)
+
+    def test_fixture_detach_reports_its_result(self):
+        with patch('llm_mojo.validation.fixtures.detach', return_value='mlp: now a writable copy') as detach:
+            result = CliRunner().invoke(app, ['fixtures', 'detach', 'mlp'])
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn('mlp: now a writable copy', result.output)
+        detach.assert_called_once_with('mlp')
+        self.assertIsInstance(CliRunner().invoke(app, ['fixtures', 'detach', 'decoder']).exception, ValueError)
+
+    def test_fixture_list_and_prune_report_and_pass_the_confirmation(self):
+        with patch('llm_mojo.validation.fixtures.report', return_value='Shared oracle fixtures in /s'):
+            result = CliRunner().invoke(app, ['fixtures', 'list'])
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn('Shared oracle fixtures in /s', result.output)
+        with patch('llm_mojo.validation.fixtures.prune', return_value='Nothing to prune.') as prune:
+            for arguments in (['fixtures', 'prune'], ['fixtures', 'prune', '--yes']):
+                self.assertEqual(CliRunner().invoke(app, arguments).exit_code, 0)
+        self.assertEqual([call.kwargs for call in prune.call_args_list], [{'yes': False}, {'yes': True}])
+
+
 class GenerationTests(unittest.TestCase):
     def test_prompt_file_snapshot_and_report_configuration(self):
         with tempfile.TemporaryDirectory() as directory:
