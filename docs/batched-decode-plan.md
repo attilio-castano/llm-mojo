@@ -24,7 +24,8 @@ and numerical-contract changes need a separate decision. 1b was approved on
 2026-09-26 as path 1 of 1c's decision and approved the same day.
 
 Status: 1a, 1b and 1c are complete; see the [validation record](#validation-record).
-1c's throughput hypothesis failed. 1d is in progress.
+1c's throughput hypothesis failed. 1d's screen and confirmation selected and
+confirmed arrangement 5; making it the batched default is the last step.
 
 ## 1a. Step format and KV pool
 
@@ -527,6 +528,53 @@ projections (path 2), a different arrangement per batch size, and merging gate
 and up into one launch.
 
 ## Validation record
+
+### 1d on `f47fb8b`, 2026-09-26
+
+Three commits built 1d, and a fourth adds its evidence:
+
+| Commit | Change |
+| --- | --- |
+| `6bfd837` | arrangements 3–6 and the kernel exactness tests |
+| `2259144` | the arrangement parameter through `forward`, the decode composition and the head |
+| `f47fb8b` | the projection declaration, the benchmark's arms, `batch-size-confirm` and the pipeline tests |
+
+The fourth commit adds the archive, the
+[study](../studies/model_generation/batch-projections.md) and this record.
+
+- **Before collection.** `uv run --locked llm-mojo validate` passed on a clean
+  `f47fb8b`: oracle anchors with the shared fixtures, 274 Python tests, the
+  native suites on Metal with the new exactness tests, and every benchmark
+  smoke. A functional run of the projection batch mode at 64 cached tokens
+  passed its token and launch checks; its timings were not used.
+- **Screen.** Four blocks from 13:02 to 13:21 produced 8,800 samples. Every sample
+  reproduced its reference tokens with 245 launches. AC power, normal power mode
+  and no thermal or performance warning were recorded before and after every
+  block. Every calibration deviation stayed within 5%.
+- **Traces.** Ten captures, of arrangements 0, 3, 4, 5 and 6 with two repeats
+  each, at B = 64 and 1,024 cached tokens, cover 19,920 measured commands. All
+  passed the coverage check on the first attempt.
+- **Decision.** All four candidates qualified. The frozen rule selected
+  arrangement 5, with a worst median ratio of 0.561 from B = 4; 6, 4 and 3
+  followed at 0.565, 0.609 and 0.832.
+- **Confirmation.** A fresh four-block run from 13:25 to 13:34 produced 3,520
+  samples. Arrangement 5 was a gain in every workload from B = 2, with median
+  ratios of 0.351–0.692, all within 0.009 of the screen's.
+- **Replay.** `batch-size-replay --study projections` reapplies the frozen rule
+  and regenerates the summary without a GPU. The retained-archive test rejects
+  twelve kinds of damage.
+
+**Outcome.** At 64 sequences, arrangement 5 takes a step from 210.0 to 73.7 ms at
+64 cached tokens, from 227.6 to 90.8 ms at 1,024 and from 292.2 to 155.5 ms at
+3,968. That is 868, 705 and 412 tokens/s, 7.0, 5.7 and 3.8 times one sequence.
+Traced projection time at B = 64 fell from 206.6 to 69.1 ms. Against the
+recorded hypothesis:
+- column blocking saved more than predicted, 45–63% of a step from B = 16;
+- early loads saved about what they saved at one row;
+- the composition beat the predicted 110–150 ms;
+- column-block order never beat arrangement 5, so that prediction failed.
+
+**Deviations from the plan.** None beyond the functional run above.
 
 ### 1c on `7b3b131`, 2026-09-26
 

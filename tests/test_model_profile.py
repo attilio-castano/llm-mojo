@@ -213,6 +213,45 @@ class ModelProfileTests(unittest.TestCase):
                     else:
                         with self.assertRaises((ValueError, RuntimeError)): batch_replay(directory)
 
+    def test_retained_batch_projections_integrity(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import projection_replay
+        source = repository_root()/'studies/model_generation'
+        original = json.loads(gzip.decompress((source/'batch-projections.json.gz').read_bytes()))
+        retained = json.loads((source/'batch-projections-summary.json').read_text())
+        self.assertEqual((retained['decision']['selected'], retained['confirmed']), (5, True))
+        for damage in (None, 'sample', 'confirmation-sample', 'block', 'capture', 'dispatch', 'provenance',
+                       'conditions', 'confirmation-conditions', 'trace-conditions', 'no-confirmation',
+                       'other-arrangement', 'argument'):
+            record = copy.deepcopy(original)
+            if damage == 'sample': record['timing']['samples'].pop()
+            elif damage == 'confirmation-sample': record['confirmation']['samples'].pop()
+            elif damage == 'block': record['timing']['blocks'].pop()
+            elif damage == 'capture': record['captures'].pop()
+            elif damage == 'dispatch': record['captures'][2]['samples'].pop()
+            elif damage == 'provenance': record['captures'][2]['provenance']['binary']['sha256'] = '0'*64
+            elif damage == 'conditions': record['timing']['blocks'][3]['after']['power_mode_raw'] = '1'
+            elif damage == 'confirmation-conditions': record['confirmation']['blocks'][0]['before']['power_mode_raw'] = '1'
+            elif damage == 'trace-conditions': record['captures'][0]['conditions']['before']['battery']['power_source'] = 'Battery Power'
+            elif damage == 'no-confirmation': record['confirmation'] = None
+            elif damage == 'other-arrangement': record['confirmation']['argument'] = 'confirm:6'
+            elif damage == 'argument': record['timing']['argument'] = 'size'
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                raw = json.dumps(record).encode()
+                packed = gzip.compress(raw, mtime=0)
+                (directory/'batch-projections.json.gz').write_bytes(packed)
+                (directory/'batch-projections.json').write_text(json.dumps(dict(kind=record['kind'],
+                    sha256=hashlib.sha256(packed).hexdigest(), uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with self.subTest(damage=damage), redirect_stdout(StringIO()):
+                    if damage is None:
+                        projection_replay(directory)
+                        self.assertEqual(json.loads((directory/'batch-projections-summary.json').read_text()), retained)
+                    else:
+                        with self.assertRaises((ValueError, RuntimeError)): projection_replay(directory)
+
     def test_batch_support_distinguishes_backend_failure_from_bad_results(self):
         from llm_mojo.benchmarks.model_profile import batch_support_parse
         base='device: Apple M4 Pro\napi: metal\nBATCH_EAGER_PASS 15\n'
