@@ -309,16 +309,18 @@ struct QwenModel(Movable):
         comptime if OBSERVE:
             self.observation[slot] = now()
 
-    def forward[OBSERVE: Bool = False](mut self, ctx: DeviceContext, batch: StepBatch, mut kv: KVPool,
-                                       plan: ExecutionPlan) raises:
+    def forward[OBSERVE: Bool = False, ROW_TILE: Int = DECODE_ROW_TILE](
+            mut self, ctx: DeviceContext, batch: StepBatch, mut kv: KVPool, plan: ExecutionPlan) raises:
         """Submit all layers for one step under plan. The step upload synchronizes; layer execution does not.
 
         The batch names each sequence's block in `kv`, whose layer views must all
         hold exactly the rows before that sequence's first position. With
         plan.gpu_argmax the vocabulary projection is followed by GPU argmax;
-        otherwise greedy scans the materialized logits on the CPU.
+        otherwise greedy scans the materialized logits on the CPU. ROW_TILE is
+        how many rows share each weight load in the decode composition's
+        projections; it changes weight traffic, not results.
         """
-        self._forward[OBSERVE, False](ctx, batch, kv, plan, CaptureRequest("", False))
+        self._forward[OBSERVE, False, ROW_TILE](ctx, batch, kv, plan, CaptureRequest("", False))
 
     def forward_captured(mut self, ctx: DeviceContext, batch: StepBatch, mut kv: KVPool, plan: ExecutionPlan,
                          request: CaptureRequest) raises:
@@ -327,17 +329,18 @@ struct QwenModel(Movable):
             raise Error("capture requires a directory")
         if batch.sequences() != 1:
             raise Error("capture covers one sequence")
-        self._forward[False, True](ctx, batch, kv, plan, request)
+        self._forward[False, True, DECODE_ROW_TILE](ctx, batch, kv, plan, request)
 
-    def _forward[OBSERVE: Bool, CAPTURE: Bool](mut self, ctx: DeviceContext, batch: StepBatch, mut kv: KVPool,
-                                               plan: ExecutionPlan, request: CaptureRequest) raises:
+    def _forward[OBSERVE: Bool, CAPTURE: Bool, ROW_TILE: Int](mut self, ctx: DeviceContext, batch: StepBatch,
+                                                              mut kv: KVPool, plan: ExecutionPlan,
+                                                              request: CaptureRequest) raises:
         self._mark[OBSERVE](MARK_START)
         self.preflight(ctx,batch,kv,plan)
         self._mark[OBSERVE](MARK_PREFLIGHT)
         try:
             var route: ForwardRoute
             if plan.configuration == DECODER_FUSED_DECODE:
-                route = self._decode_step[OBSERVE, CAPTURE](ctx, batch, kv, plan, request)
+                route = self._decode_step[OBSERVE, CAPTURE, ROW_TILE](ctx, batch, kv, plan, request)
             else:
                 route = self._layer_step[OBSERVE, CAPTURE](ctx, batch, kv, plan, request)
             self.ready = True
@@ -355,8 +358,9 @@ struct QwenModel(Movable):
         ctx.enqueue_function[embedding_kernel](token_view,weight_view,input_view,Int32(rows),
             grid_dim=(rows*HIDDEN+255)//256,block_dim=256)
 
-    def _decode_step[OBSERVE: Bool, CAPTURE: Bool](mut self, ctx: DeviceContext, batch: StepBatch, mut kv: KVPool,
-                                                   plan: ExecutionPlan, request: CaptureRequest) raises -> ForwardRoute:
+    def _decode_step[OBSERVE: Bool, CAPTURE: Bool, ROW_TILE: Int](mut self, ctx: DeviceContext, batch: StepBatch,
+                                                                  mut kv: KVPool, plan: ExecutionPlan,
+                                                                  request: CaptureRequest) raises -> ForwardRoute:
         """Configuration 26: one row per sequence through the decode composition, GPU argmax per row."""
         var sequences = batch.sequences()
         var layer_count = len(self.layers)
@@ -378,7 +382,7 @@ struct QwenModel(Movable):
             save_bf16(self.input,capture+"/hidden_0.bin",sequences*HIDDEN)
         for i in range(layer_count):
             var normalized_input = i > 0
-            route.decode_launches += enqueue_decode_batch_layer[QUERY_HEADS,KV_HEADS,HEAD_DIM,DECODE_ROW_TILE](ctx,
+            route.decode_launches += enqueue_decode_batch_layer[QUERY_HEADS,KV_HEADS,HEAD_DIM,ROW_TILE](ctx,
                 self.layers[i].attention,self.attention,self.layers[i].mlp,self.mlp,self.input,kv.storage,
                 positions,blocks,i,layer_count,kv.block_size,normalized_input)
             for s in range(sequences):
@@ -420,7 +424,7 @@ struct QwenModel(Movable):
                 route.owner_swaps += 1
         self._mark[OBSERVE](MARK_LAYERS)
         var logits = TileTensor(self.logits,row_major(sequences,VOCABULARY))
-        enqueue_linear_rowwise_rows_apple_gpu[DECODE_ROW_TILE](ctx,TileTensor(self.normalized,row_major(sequences,HIDDEN)),
+        enqueue_linear_rowwise_rows_apple_gpu[ROW_TILE](ctx,TileTensor(self.normalized,row_major(sequences,HIDDEN)),
             TileTensor(self.embedding,row_major(VOCABULARY,HIDDEN)),logits)
         enqueue_argmax(ctx,logits,TileTensor(self.selection_partials,row_major(sequences*ARGMAX_GROUPS,3)),
             TileTensor(self.selection_result,row_major(sequences,3)))
@@ -485,21 +489,24 @@ struct QwenModel(Movable):
             save_bf16(self.logits,capture+"/logits.bin",VOCABULARY)
         return route
 
-    def greedy_tokens(mut self, ctx: DeviceContext) raises -> List[Int]:
+    def greedy_tokens[OBSERVE: Bool = False](mut self, ctx: DeviceContext) raises -> List[Int]:
         """One greedy token per sequence of the last forward, in batch order.
 
         Lowest ID on ties. A nonfinite logit in any row invalidates the model, as
-        it does for a single sequence, and no token is returned.
+        it does for a single sequence, and no token is returned. OBSERVE records
+        the same host marks as greedy.
         """
+        self._mark[OBSERVE](MARK_GREEDY)
         if not self.valid or not self.ready:
             raise Error("no valid next-token logits")
         var sequences = self.last_route.sequences
         var tokens = List[Int](capacity=sequences)
         if not self.gpu_argmax:
-            tokens.append(self.greedy(ctx))
+            tokens.append(self.greedy[OBSERVE](ctx))
             return tokens^
         try:
             with self.selection_result.map_to_host() as mapped:
+                self._mark[OBSERVE](MARK_MAPPED)
                 for s in range(sequences):
                     if mapped.unsafe_ptr()[unsafe_offset=s*3+2] != 0:
                         raise Error("nonfinite model logits in sequence " + String(s))
@@ -507,9 +514,11 @@ struct QwenModel(Movable):
                     if selected < 0 or selected >= VOCABULARY:
                         raise Error("invalid GPU token result")
                     tokens.append(selected)
+                self._mark[OBSERVE](MARK_SELECTED)
         except error:
             self.valid = False
             raise error
+        self._mark[OBSERVE](MARK_RETURN)
         return tokens^
 
     def greedy[OBSERVE: Bool = False](mut self, ctx: DeviceContext) raises -> Int:

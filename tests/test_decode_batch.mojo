@@ -403,6 +403,50 @@ def test_batched_steps_equal_each_sequence_decoded_alone() raises:
         _steps_equal_solo(ctx, sequences)
 
 
+def _tile_step[TILE: Int](ctx: DeviceContext, mut model: QwenModel, mut pool: KVPool, sequences: Int,
+                          lengths: List[Int], longest: Int) raises -> List[Int]:
+    for s in range(sequences):
+        pool.truncate(_block(s), lengths[s])
+    model.forward[False, TILE](ctx, _decode(sequences, 0, lengths), pool,
+                               configured_plan(DECODER_FUSED_DECODE, sequences, longest + 1, sequences))
+    assert_equal(model.last_route.decode_launches, 1 + 10 + 9 * (FIXTURE_LAYERS - 1) + FIXTURE_LAYERS + 3)
+    return model.greedy_tokens[True](ctx)
+
+
+def test_row_tiles_give_identical_batched_steps() raises:
+    """The row tile changes weight reuse only: tiles 8 and 16 reproduce tile 4's bytes."""
+    var support = decoder_support()
+    support.verify_case(CASE)
+    var ctx = DeviceContext()
+    var sequences = 16
+    var model = _fixture_model(ctx, sequences)
+    var pool = KVPool(ctx, BLOCKS, CONTEXT, model.kv_geometry())
+    _poison(pool.storage)
+    var lengths = List[Int]()
+    var longest = 0
+    for s in range(sequences):
+        lengths.append(_prefix(s))
+        longest = max(longest, _prefix(s))
+        _prefill(ctx, model, pool, s, _prefix(s))
+    var expected = _tile_step[4](ctx, model, pool, sequences, lengths, longest)
+    var logits = ctx.enqueue_create_buffer[DType.bfloat16](len(model.logits))
+    var storage = ctx.enqueue_create_buffer[DType.bfloat16](len(pool.storage))
+    ctx.enqueue_copy(dst_buf=logits, src_buf=model.logits)
+    ctx.enqueue_copy(dst_buf=storage, src_buf=pool.storage)
+    var eight = _tile_step[8](ctx, model, pool, sequences, lengths, longest)
+    _same(logits, model.logits, "tile 8 logits")
+    _same(storage, pool.storage, "tile 8 pool")
+    var sixteen = _tile_step[16](ctx, model, pool, sequences, lengths, longest)
+    _same(logits, model.logits, "tile 16 logits")
+    _same(storage, pool.storage, "tile 16 pool")
+    for s in range(sequences):
+        assert_equal(eight[s], expected[s])
+        assert_equal(sixteen[s], expected[s])
+    # Observed selection records every host mark in order.
+    for i in range(1, 10):
+        assert_true(model.observation[i] >= model.observation[i - 1] or i == 6)
+
+
 def _unchanged(model: QwenModel, pool: KVPool, submitted: Int) raises:
     assert_equal(model.valid, True)
     assert_equal(model.submitted_rows, submitted)
