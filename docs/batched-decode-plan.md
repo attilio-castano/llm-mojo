@@ -6,7 +6,7 @@ explicit execution plans, current docs separated from history) and
 [shared oracle fixtures](history/shared-fixtures-2026-09.md). The plan was first
 written at `a0b01da`, and its work was rebased onto those changes. It
 implements the serving plan's phase 1: several sequences decoding in one step,
-with KV storage owned outside the model. The work proceeds in three steps, each
+with KV storage owned outside the model. The work proceeds in four steps, each
 committed with its own gate:
 
 1. **1a, step format and KV pool.** Route today's single-sequence calls
@@ -14,15 +14,17 @@ committed with its own gate:
 2. **1b, batched decode.** Add multi-sequence forms of the single-row decode
    kernels.
 3. **1c, batch-size study.** Measure throughput and latency against batch size.
+4. **1d, exact batched projections.** Cut the per-row work of multi-row
+   projections without changing any row's arithmetic.
 
 Approved on 2026-09-23 for local implementation of 1a: edits, builds, tests,
 validation and incremental commits. Pushing, pull requests, toolchain upgrades
 and numerical-contract changes need a separate decision. 1b was approved on
-2026-09-25 and 1c on 2026-09-26, on the same terms.
+2026-09-25 and 1c on 2026-09-26, on the same terms. 1d was chosen on
+2026-09-26 as path 1 of 1c's decision; its plan awaits approval.
 
 Status: 1a, 1b and 1c are complete; see the [validation record](#validation-record).
-1c's throughput hypothesis failed, and its record lists the decision needed
-before phase 2.
+1c's throughput hypothesis failed. 1d is planned.
 
 ## 1a. Step format and KV pool
 
@@ -365,6 +367,164 @@ B = 64 near 5×, unless tiles 8 and 16 keep their time per pass. In multi-row
 prefill cells, tile 8 was 11–16% slower than tile 4 and tile 16 was 37–61%
 slower ([decoder policies](../studies/decoder_layer/policies.md)); those cells
 do not predict decode-shaped batches.
+
+## 1d. Exact batched projections
+
+Planned on 2026-09-26 from `dfa9a56` as path 1 of the decision recorded under
+1c in the [validation record](#validation-record). It awaits approval on the
+terms of 1a–1c. No output element's arithmetic changes, so this is not a
+numerical-contract change.
+
+**Question.** How much of the batched projections' per-row work can be removed
+without changing any row's arithmetic, and how much batched throughput does
+that recover?
+
+### What costs time today
+
+1c's traces at 1,024 cached tokens put 90% of a B = 64 step's GPU time in the
+121 projections. A one-row pass over them takes 6.4 ms, and a tile-4 pass over
+four rows 13.1–14.2 ms. The tile-4 kernel gives one SIMD group four rows and one
+output column. For each weight element a lane loads, it then does, for every
+row: an input load, a conversion to FP32, a row guard and a multiply-add. Only
+the weight load and its conversion are shared by the four rows. Tiles 8 and 16,
+which share each weight read among more rows, were slower. The work to remove
+is therefore the per-row load, conversion and guard, not the weight read.
+
+### The exact contract
+
+For output (r, c), lane l of a SIMD group accumulates in FP32, in increasing
+order, the products x[r, f] · w[c, f] for every f ≡ l (mod 32). `warp.sum`
+combines the 32 lane sums, the bias is added in FP32 and the result is rounded
+to BF16. Every arrangement below keeps that computation for every output
+element. What may change is how many output elements one SIMD group computes,
+which SIMD groups share a threadgroup, when loads are issued and whether rows
+beyond the batch are guarded inside the loop. One row still goes to the one-row
+kernel, so single-sequence decode does not change.
+
+### Levers
+
+- **Column blocking.** One SIMD group computes four output columns for its four
+  rows. Each input value is loaded and converted once for four weights, and
+  each lane step has 16 independent multiply-adds instead of four.
+- **Fixed widths with early loads.** The reduction width is a compile-time 896
+  or 4,864, both multiples of 128. Each lane issues four iterations' loads before
+  their four sequential updates. At one row this cut projection time by 22–23%
+  with identical bytes
+  ([projection arrangements](../studies/model_generation/projection-arrangements.md)).
+- **No guard in the loop.** Rows past the batch load the last valid row, and
+  their sums are never stored. Every projection width (1,152, 896, 4,864 and
+  151,936 outputs) is a multiple of four, so no column guard is needed.
+- **Column-block order.** Consecutive SIMD groups take the row tiles of one
+  column block. From B = 16, the four SIMD groups of a threadgroup then read the
+  same weight rows at nearly the same time, so the cache can serve reads that
+  tile 4 repeats in every pass.
+
+### Arrangements
+
+`forward` takes a compile-time projection arrangement in place of the row tile,
+and the decode composition and vocabulary head pass it to one rows kernel. IDs
+0–2 keep 1c's tiles 4, 8 and 16, so 1c's builds stay reproducible.
+
+| ID | Rows × columns | Width and loads | Order | Isolates |
+| ---: | --- | --- | --- | --- |
+| 0 | 4 × 1 | runtime, one iteration | row tiles outer | today's tile 4, the control |
+| 3 | 4 × 1 | fixed, four iterations | row tiles outer | early loads |
+| 4 | 4 × 4 | runtime, one iteration | row tiles outer | column blocking |
+| 5 | 4 × 4 | fixed, four iterations | row tiles outer | both |
+| 6 | 4 × 4 | fixed, four iterations | column blocks outer | both, plus shared weight reads |
+
+Arrangements 3–6 keep the row guard out of the loop. Each adds one lever to a
+neighbour, so each lever's effect can be read from adjacent arms.
+
+### Exactness gates
+
+- **Kernel.** `tests/test_decode_batch.mojo` compares every arrangement with
+  one-row launches, bit for bit, at the five decode shapes. Those are 1,152
+  outputs with bias, 896 and 4,864 outputs from 896 inputs, 896 from 4,864, and
+  151,936 from 896. It covers 2, 3, 5, 8, 13, 16, 31, 33 and 64 rows, poisoned
+  guard rows and BF16 edge values: signed zeros, subnormals and values next to
+  rounding boundaries. Unsupported widths are rejected before any launch.
+- **Composition.** On the fixture layers, every arrangement's batched steps
+  for S ∈ {2, 3, 8, 16, 32} reproduce arrangement 0's logits, final norms and
+  every pool byte, with 245 launches per step.
+- **Checkpoint.** `validation.model batch` runs with the selected arrangement:
+  eight conversations, batched equal to solo in every token, logit and K/V byte.
+- **One row.** Single-sequence decode is untouched, and the S = 1 route tests
+  and decode parity run unchanged.
+
+### Measurement
+
+The batch-size matrix is reused under a new declaration. 1c's declaration
+stays frozen, so its archive keeps replaying, and the batch-size commands take
+the declaration's name.
+
+- **Workloads.** 1c's 22: B from 1 to 64 at 64, 1,024 and 3,968 cached
+  tokens, plus the mixed batch of 32. At B = 1 every arrangement runs the
+  one-row kernel, so those comparisons measure identical code.
+- **Comparisons.** Arrangement 0 against itself for calibration, and 3, 4, 5
+  and 6 against 0, in the four-block paired procedure with ten warmups and ten
+  samples per arm. That is 8,800 samples, about 30 minutes.
+- **Traces.** Metal System Traces at B = 64 and 1,024 cached tokens for
+  arrangements 0, 3, 4, 5 and 6, two repeats each, give each projection's
+  active time. Attempts that fail the coverage check are replaced with the
+  same binary and recorded, as in 1c.
+- **Reported.** Step latency, tokens per second and paired ratios for every
+  workload and arrangement, per-projection active time and the cost of a
+  projection pass. The study `studies/model_generation/batch-projections.md`
+  reports them from one lossless archive, replayed without a GPU.
+
+### Decision
+
+- **Per workload.** Each candidate is a gain, a regression or inconclusive
+  under the method's rule, with the calibration noise floor.
+- **Qualifying.** No regression in any workload with B ≥ 2, and a gain in
+  every workload with B ≥ 4.
+- **Selecting.** Among qualifiers, the lowest worst-case median ratio over
+  workloads with B ≥ 4, then the lowest mean ratio, then the lower ID.
+- **Confirming.** A fresh four-block run compares the selected arrangement with
+  arrangement 0 over the same 22 workloads, with its own calibration and the same
+  qualifying rule. If it fails, no other candidate is tried.
+- **Promoting.** If confirmed, the selected arrangement becomes the default for
+  batched decode. Otherwise tile 4 stays, and the study records why.
+
+**Hypothesis, recorded before measurement.** If per-row work sets the cost,
+column blocking (4) should save 25–50% of the projection time, about 20–45% of
+a step at B ≥ 16. Early loads (3) should save about the 22% they saved at one
+row. Together (5), they would take the B = 64 step at 1,024 cached tokens from
+234 ms to about 110–150 ms, 1.5–2× today's 273 tokens/s. At that speed, sixteen
+tile-4 passes request about 16 GB of weights per step. Column-block order (6)
+should therefore beat 5 from B = 16 and match it at B ≤ 4. If 4 shortens steps
+at B ≥ 16 by less than 10%, input work is not the main per-row cost. In that
+case, stop adding arrangements and measure with GPU counters instead.
+
+### Steps
+
+Each step is one commit with its gate:
+
+1. The rows kernel with arrangements 3–6, and the kernel exactness tests.
+2. The arrangement parameter through `forward`, the decode composition and the
+   head, with the composition test.
+3. The declaration, the benchmark's arms and the pipeline, with census,
+   decision, selection and replay tests. `llm-mojo validate` passes before
+   collection.
+4. Screen, traces, selection and confirmation on the reference machine; the
+   archive, the study and its record.
+5. If confirmed, the new default, the checkpoint gate and the full suite.
+
+### Risks
+
+- **Registers.** Four-by-four blocking with four-deep loads holds about 48 FP32
+  values per lane. Lower occupancy may cancel part of the savings; arrangement 4
+  against 5 shows whether it does.
+- **Contraction.** A new loop shape could change whether the compiler fuses a
+  multiply and an add. The kernel tests catch any difference. An inexact
+  arrangement is fixed before the freeze or dropped, with the reason recorded.
+- **Conditions.** Background load and trace attribution are handled as in 1c.
+  Conditions are recorded, and the paired design absorbs slow drift.
+
+**Out of scope.** The one-row kernel, split reductions and matrix-multiply
+projections (path 2), a different arrangement per batch size, and merging gate
+and up into one launch.
 
 ## Validation record
 
