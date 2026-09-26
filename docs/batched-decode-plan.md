@@ -23,9 +23,9 @@ and numerical-contract changes need a separate decision. 1b was approved on
 2026-09-25 and 1c on 2026-09-26, on the same terms. 1d was chosen on
 2026-09-26 as path 1 of 1c's decision and approved the same day.
 
-Status: 1a, 1b and 1c are complete; see the [validation record](#validation-record).
-1c's throughput hypothesis failed. 1d's screen and confirmation selected and
-confirmed arrangement 5; making it the batched default is the last step.
+Status: 1a, 1b, 1c and 1d are complete; see the [validation record](#validation-record).
+1c's throughput hypothesis failed with tile 4. 1d's exact arrangement 5, now
+the batched default, cuts batched step time by 31–65%.
 
 ## 1a. Step format and KV pool
 
@@ -531,16 +531,15 @@ and up into one launch.
 
 ### 1d on `f47fb8b`, 2026-09-26
 
-Three commits built 1d, and a fourth adds its evidence:
+Five commits implement 1d, each with its gate:
 
 | Commit | Change |
 | --- | --- |
 | `6bfd837` | arrangements 3–6 and the kernel exactness tests |
 | `2259144` | the arrangement parameter through `forward`, the decode composition and the head |
 | `f47fb8b` | the projection declaration, the benchmark's arms, `batch-size-confirm` and the pipeline tests |
-
-The fourth commit adds the archive, the
-[study](../studies/model_generation/batch-projections.md) and this record.
+| `6cc28c1` | the archive, the [study](../studies/model_generation/batch-projections.md) and this record |
+| `5925268` | arrangement 5 as the batched default, with the docs and study indexes |
 
 - **Before collection.** `uv run --locked llm-mojo validate` passed on a clean
   `f47fb8b`: oracle anchors with the shared fixtures, 274 Python tests, the
@@ -563,6 +562,13 @@ The fourth commit adds the archive, the
 - **Replay.** `batch-size-replay --study projections` reapplies the frozen rule
   and regenerates the summary without a GPU. The retained-archive test rejects
   twelve kinds of damage.
+- **Promotion.** `validation.model batch` ran from a clean `5925268`, where
+  `DECODE_PROJECTION` is 5. Eight conversations of 11 to 3,301 prompt tokens
+  decoded 16 steps batched and alone, and every token, logit and K/V byte was
+  identical. Single-sequence decode still runs the one-row kernel.
+- **Suite.** `uv run --locked llm-mojo validate` passed on `5925268`: oracle
+  anchors with the shared fixtures, 275 Python tests, the native suites on
+  Metal and every benchmark smoke.
 
 **Outcome.** At 64 sequences, arrangement 5 takes a step from 210.0 to 73.7 ms at
 64 cached tokens, from 227.6 to 90.8 ms at 1,024 and from 292.2 to 155.5 ms at
