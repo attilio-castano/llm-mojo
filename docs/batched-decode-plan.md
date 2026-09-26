@@ -6,7 +6,7 @@ explicit execution plans, current docs separated from history) and
 [shared oracle fixtures](history/shared-fixtures-2026-09.md). The plan was first
 written at `a0b01da`, and its work was rebased onto those changes. It
 implements the serving plan's phase 1: several sequences decoding in one step,
-with KV storage owned outside the model. The work proceeds in four steps, each
+with KV storage owned outside the model. The work proceeds in five steps, each
 committed with its own gate:
 
 1. **1a, step format and KV pool.** Route today's single-sequence calls
@@ -16,16 +16,19 @@ committed with its own gate:
 3. **1c, batch-size study.** Measure throughput and latency against batch size.
 4. **1d, exact batched projections.** Cut the per-row work of multi-row
    projections without changing any row's arithmetic.
+5. **1e, reordered batched projections.** Measure what a different summation
+   order buys once batched rows still equal solo rows.
 
 Approved on 2026-09-23 for local implementation of 1a: edits, builds, tests,
 validation and incremental commits. Pushing, pull requests, toolchain upgrades
 and numerical-contract changes need a separate decision. 1b was approved on
 2026-09-25 and 1c on 2026-09-26, on the same terms. 1d was chosen on
-2026-09-26 as path 1 of 1c's decision and approved the same day.
+2026-09-26 as path 1 of 1c's decision and approved the same day. 1e's plan
+awaits approval.
 
 Status: 1a, 1b, 1c and 1d are complete; see the [validation record](#validation-record).
 1c's throughput hypothesis failed with tile 4. 1d's exact arrangement 5, now
-the batched default, cuts batched step time by 31–65%.
+the batched default, cuts batched step time by 31–65%. 1e is planned.
 
 ## 1a. Step format and KV pool
 
@@ -526,6 +529,155 @@ Each step is one commit with its gate:
 **Out of scope.** The one-row kernel, split reductions and matrix-multiply
 projections (path 2), a different arrangement per batch size, and merging gate
 and up into one launch.
+
+## 1e. Reordered batched projections
+
+Planned on 2026-09-26 from `07ed15f`. It awaits approval on the terms of 1a–1d.
+Arrangements 8–10 change the summation order of decode projections, which is a
+numerical-contract change. Approving this plan approves building and measuring
+them, not adopting one: adopting a reordered arrangement waits for your decision
+on the study's evidence.
+
+**Question.** With batched rows still equal to solo rows, how much faster can
+decode projections be if each output's summation order may change, and how
+does the change move Fast's numbers?
+
+### What limits arrangement 5
+
+At 64 sequences and 1,024 cached tokens, arrangement 5's projections take
+69.1 ms of 90.3 ms of active GPU time
+([batched projections](../studies/model_generation/batch-projections.md)).
+Each four-row pass reads every weight, so 64 sequences take 16 passes and
+request about 16 GB of weights per step. Across the five projection shapes those
+requests arrive at 196–253 GB/s, close to the chip's nominal 273 GB/s memory
+bandwidth. That suggests, without proving, that the passes stream weights from
+memory. Column-block order, which let SIMD groups share reads through the cache,
+did not help. The next lever is to use each loaded weight for more rows. In
+today's order every lane holds one accumulator per row and column it serves, so
+more rows cost registers. Tiles that change the order, above all the GPU's
+matrix units, reuse a weight across many rows cheaply.
+
+### Batch invariance under a new order
+
+An arrangement keeps batched rows equal to solo rows when three conditions hold:
+- it computes each output from that row's inputs alone;
+- its summation order does not depend on how many rows there are;
+- one row runs the same order.
+
+Arrangement 5 meets them with the one-row kernel's order. A new order needs its
+own one-row path: the same kernel with one row, padding its tile if necessary,
+or a one-row kernel that sums in exactly the same order. Single-sequence decode
+then adopts the new order too, which is what makes this a contract change.
+
+### Arrangements
+
+| ID | Rows × columns per SIMD group | Summation order | Rows per weight read | One row |
+| ---: | --- | --- | ---: | --- |
+| 5 | 4 × 4 | today's: each lane sums every 32nd product, then `warp.sum` | 4 | the one-row kernel (control) |
+| 7 | 8 × 4 | today's | 8 | the one-row kernel |
+| 8 | 4 × 4 | each lane sums four adjacent products in every 128, then `warp.sum` | 4 | a one-row kernel with the same order |
+| 9 | 8 × 32 | matrix units: 8×8 fragments along K in steps of 8, FP32 accumulators | 8 | the same kernel, padded to 8 rows |
+| 10 | 16 × 16 | matrix units, as 9 | 16 | the same kernel, padded to 16 rows |
+
+Arrangement 7 is the exact frontier: if it matches the reordered arrangements,
+no contract change is needed. Arrangement 8 keeps 5's passes, so it isolates the
+cost of load instructions. Arrangements 9 and 10 run the existing matrix-unit
+tiles `_linear_mma_tile` at 8×32 and 16×16, which have no shared storage,
+barriers or K splitting. Fast's configuration 3 already uses the 16×16 tile for
+prefill's QKV and output projections. Arrangements 7 and 8 keep 5's fixed widths
+and early loads.
+
+### Numerical gates and diagnostics
+
+- **Batch invariance, exact.** For every arrangement, batched rows equal its own
+  one-row results bit for bit at the five decode shapes. This holds for 1 to 64
+  rows, with poisoned guard rows and edge values. Whole batched steps equal each
+  sequence decoded alone under the same arrangement, with 245 launches.
+- **Accuracy bound, a gate.** Each arrangement's error is measured in BF16 ulps
+  against an FP64 sum of the same BF16 operands, rounded to BF16. This covers
+  the five shapes with random and edge values. A reordered arrangement
+  qualifies only if its worst error does not exceed arrangement 5's on the same
+  cases; the report gives both distributions.
+- **Teacher-forced comparison, a diagnostic.** Decode parity's schedule, 53
+  prefix tokens and 32 fixed decode tokens, runs each reordered arrangement
+  against arrangement 5 on the real model. It records per-call distances in
+  hidden states, logits and K/V, and token agreement.
+- **HF comparison, a diagnostic with a stop rule.** The runtime study's HF
+  workflow runs for arrangement 5 and the selected arrangement in one session,
+  on its decode cases and generation histories. The study stops before any
+  adoption and investigates if either holds:
+  - the selected arrangement agrees with HF on more than one fewer same-history
+    choice than 5;
+  - its largest KL divergence more than doubles.
+- **Fusion exactness.** Decode parity and the route test keep checking the
+  decode composition's fusions byte for byte against the baseline route. They
+  pin arrangement 5, whose projections equal the baseline's.
+
+### Measurement and decision
+
+The batch-size matrix runs under a new declaration, with arrangement 5 as the
+control.
+- **Workloads.** The same 22. B = 1 now matters: it is single-sequence decode,
+  and arrangements 8, 9 and 10 change it.
+- **Comparisons.** 5 against itself, and 7, 8, 9 and 10 against 5: 8,800
+  samples. Traces capture B = 64 at 1,024 cached tokens for all five
+  arrangements, two repeats each.
+- **Qualifying.** Both exactness gates and the accuracy bound; no regression in
+  any workload, B = 1 included; a gain in every workload with B ≥ 16.
+- **Selecting.** The lowest worst-case median ratio over workloads with
+  B ≥ 16, then the lowest mean, then the lower ID.
+- **Confirming.** A fresh four-block run of the selected arrangement against 5
+  with the same rule, then the two model-level diagnostics.
+- **Adopting.** If 7 is selected, it becomes the default on 1d's terms. If a
+  reordered arrangement is selected, the study goes to you first. On your
+  approval it becomes the default, the model contract documents its order, and
+  tests that pin Fast decode bytes move to it. Otherwise arrangement 5 stays.
+
+**Hypothesis, recorded before measurement.** If weight passes set the cost at
+large B:
+- Arrangements that halve them, 7 and 9, should cut projection time at B = 64 by
+  30–45%, and 10, which quarters them, by 40–60%.
+- Arrangement 8 keeps the passes, so it should gain less than 10% from B = 16,
+  though it may gain more at B ≤ 4.
+- Arrangement 7 may lose part of its gain to registers.
+- Padding one row to a tile of 8 or 16 may slow single-sequence decode with 9
+  and 10. The [linear prefill study](../studies/linear_prefill/README.md) found
+  every tiled mapping slower than row-wise at one row when weights stream from
+  memory.
+- All reordered arrangements should stay within one BF16 ulp of the FP64 sum.
+
+If none of 7, 9 and 10 shortens the B = 64 step by 10%, weight passes are not
+the limit, and the next step is GPU counters, not more arrangements.
+
+### Steps
+
+Each step is one commit with its gate:
+
+1. Arrangements 7–10, with the batch-invariance and accuracy tests.
+2. The arrangements through `forward`, and the composition test. Decode parity
+   and the route test pin arrangement 5, and a build define selects the decode
+   arrangement for validation builds.
+3. The declaration, the benchmark's arms and the pipeline, with their tests.
+   `llm-mojo validate` passes before collection.
+4. Screen, traces, selection, confirmation and the model-level diagnostics on
+   the reference machine; the archive, the study and its record.
+5. Adoption as above, with the checkpoint gate and the full suite.
+
+### Risks
+
+- **One row.** Arrangements 9 and 10 may qualify at every B except 1, and the
+  rule then rejects them. A tile that keeps single-sequence decode fast would be
+  a separate study.
+- **Matrix-unit order.** The hardware's accumulation inside a fragment is not
+  documented. Batch invariance rests on the tests, not on reasoning about the
+  hardware.
+- **Registers.** Arrangement 7 holds 32 accumulators per lane before its early
+  loads.
+- **Reference cost.** The HF reference runs on CPU with pinned Torch. It is slow,
+  but it runs once per compared arrangement.
+
+**Out of scope.** Attention, prefill kernels, split reductions, a different
+arrangement per batch size, and lower-precision accumulation.
 
 ## Validation record
 
