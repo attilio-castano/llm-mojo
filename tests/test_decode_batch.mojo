@@ -2,7 +2,8 @@
 
 Each batched kernel is compared bit for bit with the same work done one row or
 one sequence at a time, with guard rows and unwritten pool rows poisoned:
-- the rows kernel against one-row launches at every decode projection width;
+- every decode projection arrangement against one-row launches at every decode
+  projection width, with signed zeros and subnormals among the values;
 - residual RMSNorm and argmax against single-row launches;
 - fused QKV/RoPE/append against the unfused path for each sequence;
 - decode attention against route 4 on each sequence's own cache view;
@@ -18,7 +19,7 @@ from llm_mojo.kernels.attention_decode import (
     enqueue_grouped_query_attention_decode_apple_gpu,
     enqueue_grouped_query_attention_decode_sequences_apple_gpu,
 )
-from llm_mojo.kernels.linear import enqueue_linear_apple_gpu, enqueue_linear_rowwise_rows_apple_gpu
+from llm_mojo.kernels.linear import DECODE_ARRANGEMENTS, enqueue_linear_apple_gpu, enqueue_linear_decode_rows_apple_gpu
 from llm_mojo.kernels.residual_norm import enqueue_residual_norm
 from llm_mojo.kernels.rope import enqueue_rope_apple_gpu
 from llm_mojo.kernels.token_selection import enqueue_argmax
@@ -87,9 +88,17 @@ def _same(mut expected: DeviceBuffer[DType.bfloat16], mut actual: DeviceBuffer[D
                     raise Error(label + " differs at element " + String(i))
 
 
-def _tile[TILE: Int, HAS_BIAS: Bool](ctx: DeviceContext, mut x: DeviceBuffer[DType.bfloat16],
-                                     mut w: DeviceBuffer[DType.bfloat16], mut b: DeviceBuffer[DType.bfloat16],
-                                     mut solo: DeviceBuffer[DType.bfloat16], rows: Int, n: Int, k: Int) raises:
+def _edges(mut buffer: DeviceBuffer[DType.bfloat16], seed: Int) raises:
+    """Every fifth value becomes a signed zero, a subnormal or a neighbour of one."""
+    var edges: List[UInt16] = [0x0000, 0x8000, 0x0001, 0x8001, 0x007F, 0x807F, 0x0080, 0x3F80, 0x3F81, 0xBF7F]
+    with buffer.map_to_host() as mapped:
+        for i in range(seed % 5, len(buffer), 5):
+            mapped.unsafe_ptr()[unsafe_offset=i] = bitcast[DType.bfloat16](edges[(i // 5) % len(edges)])
+
+
+def _arranged[ARRANGEMENT: Int, HAS_BIAS: Bool](ctx: DeviceContext, mut x: DeviceBuffer[DType.bfloat16],
+                                                mut w: DeviceBuffer[DType.bfloat16], mut b: DeviceBuffer[DType.bfloat16],
+                                                mut solo: DeviceBuffer[DType.bfloat16], rows: Int, n: Int, k: Int) raises:
     # One guard row on each side stays poisoned.
     var batch = ctx.enqueue_create_buffer[DType.bfloat16]((rows+2)*n)
     batch.enqueue_fill(-123)
@@ -97,21 +106,24 @@ def _tile[TILE: Int, HAS_BIAS: Bool](ctx: DeviceContext, mut x: DeviceBuffer[DTy
     var weight = TileTensor(w,row_major(n,k))
     var output = TileTensor(batch.unsafe_ptr().unsafe_offset(n),row_major(rows,n))
     comptime if HAS_BIAS:
-        enqueue_linear_rowwise_rows_apple_gpu[TILE](ctx,input,weight,TileTensor(b,row_major(n)),output)
+        enqueue_linear_decode_rows_apple_gpu[ARRANGEMENT](ctx,input,weight,TileTensor(b,row_major(n)),output)
     else:
-        enqueue_linear_rowwise_rows_apple_gpu[TILE](ctx,input,weight,output)
-    _same(solo,batch,"tile "+String(TILE)+" rows "+String(rows)+" outputs "+String(n)+" inputs "+String(k))
+        enqueue_linear_decode_rows_apple_gpu[ARRANGEMENT](ctx,input,weight,output)
+    _same(solo,batch,"arrangement "+String(ARRANGEMENT)+" rows "+String(rows)+" outputs "+String(n)+" inputs "+String(k))
 
 
-def _widths[HAS_BIAS: Bool](ctx: DeviceContext, n: Int, k: Int) raises:
+def _widths[HAS_BIAS: Bool, FIRST: Int = 0, LAST: Int = DECODE_ARRANGEMENTS](ctx: DeviceContext, n: Int, k: Int) raises:
     var w = ctx.enqueue_create_buffer[DType.bfloat16](n*k)
     var b = ctx.enqueue_create_buffer[DType.bfloat16](n)
     _fill(w,n)
     _fill(b,k)
-    for rows in [2, 3, 8, 16, 32, 64]:
+    _edges(w,n)
+    _edges(b,k)
+    for rows in [1, 2, 3, 5, 8, 13, 16, 31, 33, 64]:
         var x = ctx.enqueue_create_buffer[DType.bfloat16](rows*k)
         var solo = ctx.enqueue_create_buffer[DType.bfloat16]((rows+2)*n)
         _fill(x,rows)
+        _edges(x,rows)
         solo.enqueue_fill(-123)
         var weight = TileTensor(w,row_major(n,k))
         for row in range(rows):
@@ -121,12 +133,11 @@ def _widths[HAS_BIAS: Bool](ctx: DeviceContext, n: Int, k: Int) raises:
                 enqueue_linear_apple_gpu(ctx,input,weight,TileTensor(b,row_major(n)),output)
             else:
                 enqueue_linear_apple_gpu(ctx,input,weight,output)
-        _tile[4,HAS_BIAS](ctx,x,w,b,solo,rows,n,k)
-        _tile[8,HAS_BIAS](ctx,x,w,b,solo,rows,n,k)
-        _tile[16,HAS_BIAS](ctx,x,w,b,solo,rows,n,k)
+        comptime for arrangement in range(FIRST, LAST):
+            _arranged[arrangement,HAS_BIAS](ctx,x,w,b,solo,rows,n,k)
 
 
-def test_rows_kernel_equals_one_row_launches_at_decode_widths() raises:
+def test_decode_arrangements_equal_one_row_launches_at_decode_widths() raises:
     var ctx = DeviceContext()
     assert_equal(ctx.api(),"metal")
     _widths[True](ctx,1152,896)
@@ -134,6 +145,34 @@ def test_rows_kernel_equals_one_row_launches_at_decode_widths() raises:
     _widths[False](ctx,4864,896)
     _widths[False](ctx,896,4864)
     _widths[False](ctx,151936,896)
+
+
+def test_decode_arrangements_check_shapes_before_launch() raises:
+    """Other widths use the runtime loop or one column; unsupported shapes change nothing."""
+    var ctx = DeviceContext()
+    _widths[False, 4, 5](ctx,1152,512)
+    _widths[False, 3, 4](ctx,1150,896)
+    var x = ctx.enqueue_create_buffer[DType.bfloat16](2*512)
+    var w = ctx.enqueue_create_buffer[DType.bfloat16](1150*512)
+    var y = ctx.enqueue_create_buffer[DType.bfloat16](2*1150)
+    _fill(x,1)
+    _fill(w,2)
+    y.enqueue_fill(-123)
+    var input = TileTensor(x,row_major(2,512))
+    var weight = TileTensor(w,row_major(1150,512))
+    var output = TileTensor(y,row_major(2,1150))
+    # Arrangement 3 fixes the width; 4-6 compute four columns at a time.
+    with assert_raises():
+        enqueue_linear_decode_rows_apple_gpu[3](ctx,input,weight,output)
+    with assert_raises():
+        enqueue_linear_decode_rows_apple_gpu[4](ctx,input,weight,output)
+    with assert_raises():
+        enqueue_linear_decode_rows_apple_gpu[5](ctx,input,weight,output)
+    with assert_raises():
+        enqueue_linear_decode_rows_apple_gpu[6](ctx,input,weight,output)
+    with y.map_to_host() as mapped:
+        for i in range(len(y)):
+            assert_equal(mapped.unsafe_ptr()[unsafe_offset=i].cast[DType.float32](), Float32(-123))
 
 
 def test_residual_norm_rows_equal_single_rows() raises:

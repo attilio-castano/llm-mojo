@@ -269,6 +269,176 @@ def enqueue_linear_rowwise_rows_apple_gpu[
         context,input,weight,bias,output)
 
 
+# Batched decode projection arrangements. 0-2 are the row tiles 4, 8 and 16.
+# 3-6 give each SIMD group four rows and keep the row guard out of the loop:
+# 3 fixes the width and loads four iterations early, 4 computes four columns,
+# 5 does both, and 6 also orders the grid by column block.
+comptime DECODE_ARRANGEMENTS = 7
+comptime DECODE_ROWS = 4
+
+
+def _linear_decode_rows_apple_gpu_kernel[
+    COLUMNS: Int, WIDTH: Int, COLUMN_ORDER: Bool, IL: TensorLayout, WL: TensorLayout,
+    BL: TensorLayout, OL: TensorLayout, HAS_BIAS: Bool,
+](
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    bias: TileTensor[DType.bfloat16, BL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+    rows: Int32, inputs: Int32, outputs: Int32,
+):
+    """One SIMD group computes four rows by COLUMNS outputs, each as one row would.
+
+    Every output keeps the one-row kernel's lane-strided FP32 accumulation,
+    warp.sum, FP32 bias and BF16 rounding; only its SIMD group, load timing and
+    grid position change. Rows past the batch load the last row and are never
+    stored. WIDTH 896 or 4864 fixes the reduction width and issues four
+    iterations' loads before their sequential updates; 0 keeps the runtime loop.
+    COLUMN_ORDER places the row tiles of one column block in consecutive SIMD
+    groups, so a threadgroup's groups read the same weight rows together.
+    """
+    comptime assert is_apple_gpu()
+    comptime assert input.flat_rank == 2 and weight.flat_rank == 2
+    comptime assert bias.flat_rank == 1 and output.flat_rank == 2
+    comptime assert COLUMNS == 1 or COLUMNS == 4
+    comptime assert WIDTH == 0 or WIDTH == 896 or WIDTH == 4864
+    comptime ROWS = DECODE_ROWS
+    var r = Int(rows)
+    var tiles = ceildiv(r, ROWS)
+    var blocks = Int(outputs) // COLUMNS
+    var lane = lane_id()
+    var product = block_idx.x * LINEAR_APPLE_GPU_SIMD_GROUPS + thread_idx.x // WARP_SIZE
+    if product < tiles * blocks:
+        var tile = product // blocks
+        var block = product % blocks
+        comptime if COLUMN_ORDER:
+            tile = product % tiles
+            block = product // tiles
+        var row = tile * ROWS
+        var column = block * COLUMNS
+        var source = SIMD[DType.int64, ROWS](0)
+        comptime for j in range(ROWS):
+            source[j] = Int64(min(row + j, r - 1))
+        var sums = SIMD[DType.float32, ROWS * COLUMNS](0)
+        comptime if WIDTH:
+            for base in range(0, WIDTH, 4 * WARP_SIZE):
+                var x = SIMD[DType.float32, 4 * ROWS](0)
+                var w = SIMD[DType.float32, 4 * COLUMNS](0)
+                comptime for i in range(4):
+                    var feature = base + lane + i * WARP_SIZE
+                    comptime for j in range(ROWS):
+                        x[i * ROWS + j] = rebind[Scalar[DType.bfloat16]](
+                            input[Int(source[j]), feature]).cast[DType.float32]()
+                    comptime for c in range(COLUMNS):
+                        w[i * COLUMNS + c] = rebind[Scalar[DType.bfloat16]](
+                            weight[column + c, feature]).cast[DType.float32]()
+                comptime for i in range(4):
+                    comptime for j in range(ROWS):
+                        comptime for c in range(COLUMNS):
+                            sums[j * COLUMNS + c] += x[i * ROWS + j] * w[i * COLUMNS + c]
+        else:
+            var feature = lane
+            while feature < Int(inputs):
+                var x = SIMD[DType.float32, ROWS](0)
+                comptime for j in range(ROWS):
+                    x[j] = rebind[Scalar[DType.bfloat16]](input[Int(source[j]), feature]).cast[DType.float32]()
+                comptime for c in range(COLUMNS):
+                    var w = rebind[Scalar[DType.bfloat16]](weight[column + c, feature]).cast[DType.float32]()
+                    comptime for j in range(ROWS):
+                        sums[j * COLUMNS + c] += x[j] * w
+                feature += WARP_SIZE
+        comptime for j in range(ROWS):
+            if row + j < r:
+                comptime for c in range(COLUMNS):
+                    var total = warp.sum(sums[j * COLUMNS + c])
+                    if lane == 0:
+                        var b: Scalar[DType.bfloat16] = 0
+                        comptime if HAS_BIAS:
+                            b = rebind[Scalar[DType.bfloat16]](bias[column + c])
+                        output[row + j, column + c] = rebind[output.ElementType](
+                            (total + b.cast[DType.float32]()).cast[DType.bfloat16]())
+
+
+def enqueue_linear_decode_rows_apple_gpu[
+    ARRANGEMENT: Int, IL: TensorLayout, WL: TensorLayout, BL: TensorLayout,
+    OL: TensorLayout, HAS_BIAS: Bool = True,
+](
+    context: DeviceContext,
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    bias: TileTensor[DType.bfloat16, BL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+) raises:
+    """Enqueue a batched decode projection in one arrangement.
+
+    Every arrangement computes each output exactly as the one-row kernel does,
+    and a single row always runs the one-row kernel.
+    """
+    comptime assert ARRANGEMENT >= 0 and ARRANGEMENT < DECODE_ARRANGEMENTS
+    comptime if ARRANGEMENT < 3:
+        enqueue_linear_rowwise_rows_apple_gpu[4 << ARRANGEMENT,IL,WL,BL,OL,HAS_BIAS](
+            context,input,weight,bias,output)
+    else:
+        comptime COLUMNS = 1 if ARRANGEMENT == 3 else 4
+        comptime FIXED = ARRANGEMENT != 4
+        comptime COLUMN_ORDER = ARRANGEMENT == 6
+        var rows = Int(input.dim[0]())
+        if rows == 1:
+            enqueue_linear_apple_gpu[IL,WL,BL,OL,HAS_BIAS](context,input,weight,bias,output)
+            return
+        _validate_linear[IL,WL,BL,OL,HAS_BIAS](input,weight,bias,output)
+        if context.api() != "metal":
+            raise Error("Apple GPU linear projection requires the Metal device API")
+        var inputs = Int(input.dim[1]())
+        var outputs = Int(weight.dim[0]())
+        if outputs % COLUMNS != 0:
+            raise Error("decode projection arrangement needs a multiple of four outputs")
+        comptime if FIXED:
+            if inputs == 896:
+                _enqueue_decode_rows[COLUMNS,896,COLUMN_ORDER,IL,WL,BL,OL,HAS_BIAS](
+                    context,input,weight,bias,output)
+            elif inputs == 4864:
+                _enqueue_decode_rows[COLUMNS,4864,COLUMN_ORDER,IL,WL,BL,OL,HAS_BIAS](
+                    context,input,weight,bias,output)
+            else:
+                raise Error("fixed-width decode projection needs 896 or 4864 inputs")
+        else:
+            _enqueue_decode_rows[COLUMNS,0,COLUMN_ORDER,IL,WL,BL,OL,HAS_BIAS](
+                context,input,weight,bias,output)
+
+
+def _enqueue_decode_rows[
+    COLUMNS: Int, WIDTH: Int, COLUMN_ORDER: Bool, IL: TensorLayout, WL: TensorLayout,
+    BL: TensorLayout, OL: TensorLayout, HAS_BIAS: Bool,
+](
+    context: DeviceContext,
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    bias: TileTensor[DType.bfloat16, BL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+) raises:
+    var rows = Int(input.dim[0]())
+    var outputs = Int(weight.dim[0]())
+    comptime kernel = _linear_decode_rows_apple_gpu_kernel[COLUMNS,WIDTH,COLUMN_ORDER,IL,WL,BL,OL,HAS_BIAS]
+    context.enqueue_function[kernel](input,weight,bias,output,
+        Int32(rows),Int32(input.dim[1]()),Int32(outputs),
+        grid_dim=ceildiv(ceildiv(rows,DECODE_ROWS)*(outputs//COLUMNS),LINEAR_APPLE_GPU_SIMD_GROUPS),
+        block_dim=LINEAR_APPLE_GPU_BLOCK_SIZE)
+
+
+def enqueue_linear_decode_rows_apple_gpu[
+    ARRANGEMENT: Int, IL: TensorLayout, WL: TensorLayout, OL: TensorLayout,
+](
+    context: DeviceContext,
+    input: TileTensor[DType.bfloat16, IL, MutAnyOrigin],
+    weight: TileTensor[DType.bfloat16, WL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
+) raises:
+    var bias = TileTensor(weight.ptr,row_major(1))
+    enqueue_linear_decode_rows_apple_gpu[ARRANGEMENT,IL,WL,type_of(bias.layout),OL,False](
+        context,input,weight,bias,output)
+
+
 def _linear_prefill_direct_apple_gpu_kernel[
     InputLayout: TensorLayout,
     WeightLayout: TensorLayout,

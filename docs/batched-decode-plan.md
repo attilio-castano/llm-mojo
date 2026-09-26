@@ -21,10 +21,10 @@ Approved on 2026-09-23 for local implementation of 1a: edits, builds, tests,
 validation and incremental commits. Pushing, pull requests, toolchain upgrades
 and numerical-contract changes need a separate decision. 1b was approved on
 2026-09-25 and 1c on 2026-09-26, on the same terms. 1d was chosen on
-2026-09-26 as path 1 of 1c's decision; its plan awaits approval.
+2026-09-26 as path 1 of 1c's decision and approved the same day.
 
 Status: 1a, 1b and 1c are complete; see the [validation record](#validation-record).
-1c's throughput hypothesis failed. 1d is planned.
+1c's throughput hypothesis failed. 1d is in progress.
 
 ## 1a. Step format and KV pool
 
@@ -371,8 +371,8 @@ do not predict decode-shaped batches.
 ## 1d. Exact batched projections
 
 Planned on 2026-09-26 from `dfa9a56` as path 1 of the decision recorded under
-1c in the [validation record](#validation-record). It awaits approval on the
-terms of 1a–1c. No output element's arithmetic changes, so this is not a
+1c in the [validation record](#validation-record), and approved the same day
+on the terms of 1a–1c. No output element's arithmetic changes, so this is not a
 numerical-contract change.
 
 **Question.** How much of the batched projections' per-row work can be removed
