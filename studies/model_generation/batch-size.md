@@ -11,9 +11,10 @@ before phase 2. The prior recorded before measurement was 5–7×.
 The traces place 90% of a B = 64 step's GPU time in the projections. A tile-4
 projection pass shares each weight load across four rows, yet it costs 2.1–2.2
 times a one-row pass, so each row keeps about half of its one-row projection
-cost. Tiles 8 and 16 read each weight half and a quarter as often. They were
-still slower than tile 4 in every multi-row workload, so weight traffic is not
-what limits the batched projections; their per-row work is. Fast keeps tile 4.
+cost. Tiles 8 and 16 were slower than tile 4 in every multi-row workload, even
+from B = 16, where they make half and a quarter as many passes over the
+weights. Weight traffic is therefore not what limits the batched projections;
+their per-row work is. Fast keeps tile 4.
 
 This is phase 1c of the [batched decode plan](../../docs/batched-decode-plan.md#1c-batch-size-study),
 collected on 2026-09-26 from `7b3b131`. All 7,040 timing samples are retained.
@@ -62,8 +63,8 @@ four block medians with tile 4.
 | 64 | 211.24 | 303.0 | 234.05 | 273.4 | 297.25 | 215.3 |
 
 From B = 8 to 64, step time grows by 3.21, 3.57 and 4.58 ms per sequence at the
-three contexts. Throughput is bounded by the inverse of that slope, and B = 64
-is already within 3% of it. Relative to B = 1, B = 64 gives 3.2×, 2.3× and 2.2×.
+three contexts. At that linear cost, throughput approaches the inverse of the
+slope, and B = 64 is already within 3% of it. Relative to B = 1, B = 64 gives 3.2×, 2.3× and 2.2×.
 
 Those ratios inherit an unstable denominator. One-sequence samples fall into
 two groups, about 8.0–8.2 ms and 10–12 ms, sometimes within one arm. The slower
@@ -160,8 +161,9 @@ weight element it loads, each row in the tile loads its own BF16 input, converts
 both operands to FP32 and accumulates. The accumulation keeps the one-row
 kernel's lane-strided order, so batched rows stay bit-identical to one-row
 launches. Sharing the weight load removes one load per row and weight element;
-the rest of each row's work remains. Tiles 8 and 16 remove more weight loads and
-are slower, so that remaining per-row work, not weight traffic, sets the cost.
+the rest of each row's work remains. From B = 16, tiles 8 and 16 make half and
+a quarter as many weight passes and are still slower, so that remaining per-row
+work, not weight traffic, sets the cost.
 Naming the exhausted hardware resource, whether issue slots, registers or
 latency, would need GPU counters, which these traces did not collect.
 

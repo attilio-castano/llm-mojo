@@ -370,15 +370,13 @@ do not predict decode-shaped batches.
 
 ### 1c on `7b3b131`, 2026-09-26
 
-Two commits built the study and a third adds its evidence:
+Three commits implement 1c, each with its gate:
 
 | Commit | Change |
 | --- | --- |
 | `f18b08f` | the row tile as a `forward` parameter and `greedy_tokens` marks, with a test that tiles 8 and 16 reproduce tile 4's batched steps |
 | `7b3b131` | the benchmark mode, contract and pipeline, with parser, census and summary tests |
-
-The third commit adds the archive, the
-[study](../studies/model_generation/batch-size.md) and this record.
+| `f1f89fb` | the archive, the [study](../studies/model_generation/batch-size.md) and this record |
 
 - **Before collection.** `uv run --locked llm-mojo validate` passed on a clean
   `7b3b131`: oracle anchors with the shared fixtures, 270 Python tests, the
@@ -397,6 +395,9 @@ The third commit adds the archive, the
   without a GPU. It now also checks every block's and trace's recorded power
   conditions, and that each rejected attempt used the frozen binary. The
   retained-archive test rejects eight kinds of damage.
+- **After the evidence.** `uv run --locked llm-mojo validate` passed on
+  `f1f89fb`: oracle anchors with the shared fixtures, 271 Python tests, the
+  native suites on Metal and every benchmark smoke.
 
 **Outcome.** The recorded hypothesis failed. B = 16 gave 2.9×, 2.2× and 2.2×
 B = 1 at 64, 1,024 and 3,968 cached tokens, and B = 64 gave 3.2×, 2.3× and
