@@ -1,8 +1,9 @@
 """Collect the Fast-route token profile and batch-size study; replay every retained full-model archive.
 
 Build/run/capture require a clean local checkout and verified local assets and
-measure the current Fast route. The batch-size study (batch-size-* commands)
-times decode steps of 1 to 64 sequences with three projection row tiles.
+measure the current Fast route. The batch-size commands time decode steps of 1
+to 64 sequences: --study size (1c) pairs three projection row tiles, and
+--study projections (1d) screens and confirms batched projection arrangements.
 Completed decode experiments are replay-only: their archives, parsers and
 summaries remain, their collectors do not.
 """
@@ -1405,10 +1406,48 @@ BATCH_STEM = 'batch-size'
 BATCH_KIND = 'qwen-batch-size-v1'
 HOST_PHASES = ['preflight','step upload','embedding enqueue','decoder stack enqueue','head enqueue',
                'forward return','readback wait','host selection','unmap']
+PROJECTION_BATCH_STEM = 'batch-projections'
+PROJECTION_BATCH_KIND = 'qwen-batch-projections-v1'
 
 
-def batch_build(output, prepared):
-    """Batch-size executables: the model driver and one trace binary per declared trace workload."""
+def batch_study(name):
+    """1c's row tiles ('size') or 1d's projection arrangements ('projections').
+
+    Each trace is (context, sequences, arrangement, binary name, provenance arm).
+    """
+    if name == 'size':
+        traces = [(c, b, contract.BATCH_TILE_ARRANGEMENTS[t], f'batch-profile-{c}-{b}-{t}', dict(row_tile=t))
+                  for c, b, t in contract.BATCH_TRACES]
+        return dict(stem=BATCH_STEM, kind=BATCH_KIND, declaration=contract.BATCH_DECLARATION,
+                    argument='size', traces=traces)
+    if name == 'projections':
+        traces = [(c, b, a, f'batch-profile-{c}-{b}-a{a}', dict(arrangement=a))
+                  for c, b, a in contract.BATCH_PROJECTION_TRACES]
+        return dict(stem=PROJECTION_BATCH_STEM, kind=PROJECTION_BATCH_KIND,
+                    declaration=contract.BATCH_PROJECTION_DECLARATION, argument='projections', traces=traces)
+    raise ValueError('unknown batch study')
+
+
+def batch_comparisons(argument):
+    """(comparisons, observed comparison) run by the batch mode for one study argument."""
+    if argument == 'size':
+        return 4, 3
+    if argument == 'projections':
+        return 1+len(contract.BATCH_PROJECTION_ARRANGEMENTS), None
+    if argument.startswith('confirm:') and argument[8:].isdigit() and int(argument[8:]) in contract.BATCH_PROJECTION_ARRANGEMENTS:
+        return 2, None
+    raise ValueError('unknown batch study argument')
+
+
+def batch_trace_specification(context, sequences, arm):
+    if 'arrangement' in arm:
+        return contract.batch_projection_specification(context, sequences, arm['arrangement'])
+    return contract.batch_specification(context, sequences, arm['row_tile'])
+
+
+def batch_build(output, prepared, study='size'):
+    """Batch executables: the model driver and one trace binary per trace workload of the study."""
+    spec = batch_study(study)
     ensure_record_location(output)
     output.mkdir(parents=True, exist_ok=False)
     source = source_identity()
@@ -1419,11 +1458,13 @@ def batch_build(output, prepared):
     execute(command, output/'model-build.log')
     binaries = dict(model=dict(sha256=sha(output/'model'), bytes=(output/'model').stat().st_size))
     machine = stable_environment()
-    for context, sequences, tile in contract.BATCH_TRACES:
-        name = f'batch-profile-{context}-{sequences}-{tile}'
+    for context, sequences, arrangement, name, arm in spec['traces']:
+        specification = batch_trace_specification(context, sequences, arm)
         command = [environment_tool('mojo'), 'build', '-I', 'src',
                    '-D', f'MODEL_BATCH_PROFILE={context}', '-D', f'MODEL_BATCH_SEQUENCES={sequences}',
-                   '-D', f'MODEL_BATCH_TILE={tile}', '-D', 'MODEL_PREPARED='+identity['prepared'],
+                   '-D', f'MODEL_BATCH_ARRANGEMENT={arrangement}',
+                   '-D', 'MODEL_BATCH_WORKLOAD='+specification['profile_workload'],
+                   '-D', 'MODEL_PREPARED='+identity['prepared'],
                    '-D', 'MODEL_TABLES='+identity['tables'], 'src/llm_mojo/benchmarks/model.mojo', '-o', output/name]
         execute(command, output/f'{name}-build.log')
         binary = dict(sha256=sha(output/name), bytes=(output/name).stat().st_size)
@@ -1432,7 +1473,7 @@ def batch_build(output, prepared):
                           implementation=contract.BATCH_IMPLEMENTATION,
                           entrypoint=contract.ENTRYPOINTS[contract.BATCH_IMPLEMENTATION],
                           repository=source['repository'], source_sha256=source['sources'],
-                          **machine, **contract.batch_specification(context, sequences, tile), row_tile=tile,
+                          **machine, **specification, **arm,
                           profile_warmup_iterations=10, profile_iterations=8,
                           profile_post_idle_milliseconds=250, binary=binary,
                           assets={k:v for k,v in identity.items() if k.endswith('_sha256')})
@@ -1441,17 +1482,22 @@ def batch_build(output, prepared):
     if source_identity() != source or assets(prepared) != identity:
         raise ValueError('source or assets changed during compilation')
     write(output/'build.json', dict(source=source, assets=identity, environment=machine,
-                                    declaration=contract.BATCH_DECLARATION, binaries=binaries))
+                                    declaration=spec['declaration'], binaries=binaries))
 
 
 def batch_sizes(context):
     return list(contract.BATCH_SIZES) if context else [contract.BATCH_MIXED]
 
 
-def parse_batch_samples(stdout, context, block):
-    """BATCH <sequences> <comparison> <arm> <sample> <elapsed>[ ten marks] records from one context process."""
+def parse_batch_samples(stdout, context, block, comparisons=4, observed=3, argument=None):
+    """BATCH <sequences> <comparison> <arm> <sample> <elapsed>[ ten marks] records from one context process.
+
+    Only the observed comparison's second arm carries host marks; 1d observes none.
+    """
     if 'device: Apple M4 Pro\napi: metal\n' not in stdout or stdout.count('BATCH_COMPLETE') != 1:
         raise ValueError('missing measured device or completion')
+    if argument is not None and f'\nstudy: {argument}\n' not in stdout:
+        raise ValueError('batch process ran another study')
     records = []
     for line in stdout.splitlines():
         if not line.startswith('BATCH '):
@@ -1460,23 +1506,27 @@ def parse_batch_samples(stdout, context, block):
         if len(values) not in (5, 15):
             raise ValueError('invalid batch timing record')
         sequences, comparison, arm, sample, elapsed, *marks = values
-        if elapsed <= 0 or bool(marks) != (comparison == 3 and arm == 1):
+        if elapsed <= 0 or bool(marks) != (comparison == observed and arm == 1):
             raise ValueError('incorrect observation arm')
         if marks and (marks != sorted(marks) or marks[0] < 0 or marks[-1] > elapsed):
             raise ValueError('invalid host timing sequence')
         records.append(dict(context=context, sequences=sequences, block=block, comparison=comparison,
                             arm=arm, sample=sample, elapsed_ns=elapsed, marks=marks))
-    expected = Counter((b, c, a, s) for b in batch_sizes(context) for c in range(4) for a in range(2) for s in range(10))
+    expected = Counter((b, c, a, s) for b in batch_sizes(context) for c in range(comparisons)
+                       for a in range(2) for s in range(10))
     if Counter((r['sequences'], r['comparison'], r['arm'], r['sample']) for r in records) != expected:
         raise ValueError('incomplete batch timing census')
     return records
 
 
-def batch_collect(directory, output):
+def batch_collect(directory, output, study='size', argument=None):
+    spec = batch_study(study)
+    argument = argument or spec['argument']
+    comparisons, observed = batch_comparisons(argument)
     ensure_record_location(output)
     receipt = verify_build(directory)
-    if receipt['declaration'] != contract.BATCH_DECLARATION:
-        raise ValueError('batch-size collection requires a batch-size build')
+    if receipt['declaration'] != spec['declaration']:
+        raise ValueError(f'{study} collection requires a {study} build')
     output.mkdir(parents=True, exist_ok=False)
     args = receipt['assets']
     contexts = list(contract.BATCH_CONTEXTS) + [0]
@@ -1485,26 +1535,38 @@ def batch_collect(directory, output):
         before = conditions()
         reverse = block in (1, 2)
         for context in (list(reversed(contexts)) if reverse else contexts):
-            stdout = execute([directory/'model', 'batch', args['prepared'], args['tables'], context, int(reverse)],
-                             output/f'c{context}-b{block}.log')
-            samples.extend(parse_batch_samples(stdout, context, block))
+            stdout = execute([directory/'model', 'batch', args['prepared'], args['tables'], context, int(reverse),
+                              argument], output/f'c{context}-b{block}.log')
+            samples.extend(parse_batch_samples(stdout, context, block, comparisons, observed, argument))
         blocks.append(dict(block=block, before=before, after=conditions()))
-        print(f'Completed batch-size block {block+1}/4', flush=True)
+        print(f'Completed {argument} block {block+1}/4', flush=True)
     if verify_build(directory) != receipt:
         raise ValueError('build changed during collection')
-    write(output/'timings.json', dict(build=receipt, blocks=blocks, samples=samples))
+    write(output/'timings.json', dict(build=receipt, argument=argument, blocks=blocks, samples=samples))
 
 
-def batch_capture(directory, output):
+def batch_confirm(directory, screen, output):
+    """1d's confirmation: a fresh four-block run of the screen's selected arrangement against arrangement 0."""
+    timing = json.loads((screen/'timings.json').read_text())
+    if timing.get('argument') != 'projections' or timing['build'] != verify_build(directory):
+        raise ValueError('confirmation requires the projection screen of this build')
+    decision = projection_decision(projection_summarize(timing['samples'], contract.BATCH_PROJECTION_ARRANGEMENTS))
+    if decision['selected'] is None:
+        raise ValueError('no arrangement qualified, so there is nothing to confirm')
+    print(f"Confirming arrangement {decision['selected']}", flush=True)
+    batch_collect(directory, output, 'projections', f"confirm:{decision['selected']}")
+
+
+def batch_capture(directory, output, study='size'):
+    spec = batch_study(study)
     ensure_record_location(output)
     from .capture_trace import capture_trace
     receipt = verify_build(directory)
-    if receipt['declaration'] != contract.BATCH_DECLARATION:
-        raise ValueError('batch-size capture requires a batch-size build')
+    if receipt['declaration'] != spec['declaration']:
+        raise ValueError(f'{study} capture requires a {study} build')
     output.mkdir(parents=True, exist_ok=False)
     for repeat in range(2):
-        for context, sequences, tile in (contract.BATCH_TRACES if repeat == 0 else reversed(contract.BATCH_TRACES)):
-            name = f'batch-profile-{context}-{sequences}-{tile}'
+        for context, sequences, arrangement, name, arm in (spec['traces'] if repeat == 0 else reversed(spec['traces'])):
             target = output/f'{name}-r{repeat}'
             target.mkdir()
             before = conditions()
@@ -1568,19 +1630,83 @@ def batch_summarize(samples):
     return result
 
 
-def batch_archive(timings, traces, output):
+def projection_summarize(samples, arrangements):
+    """Per workload: arrangement 0's step and calibration, then each candidate's paired ratios and outcome.
+
+    Comparison 0 pairs arrangement 0 with itself; comparison i pairs it with arrangements[i-1].
+    """
+    count = 1+len(arrangements)
+    expected = Counter((c, b, block, comparison, arm, sample) for c, b in contract.batch_workloads()
+                       for block in range(4) for comparison in range(count) for arm in range(2) for sample in range(10))
+    keys = ('context','sequences','block','comparison','arm','sample')
+    if Counter(tuple(r[k] for k in keys) for r in samples) != expected:
+        raise ValueError('incomplete projection timing census')
+    if any(r['elapsed_ns'] <= 0 or r['marks'] for r in samples):
+        raise ValueError('invalid projection timing sample')
+    groups = defaultdict(list)
+    for r in samples:
+        groups[r['context'], r['sequences'], r['block'], r['comparison'], r['arm']].append(r['elapsed_ns'])
+    result = []
+    for context, sequences in contract.batch_workloads():
+        medians = {(b, c, a): stats.median(groups[context, sequences, b, c, a])
+                   for b in range(4) for c in range(count) for a in range(2)}
+        control = [medians[b, 0, 0]/1e6 for b in range(4)]
+        step_ms = stats.median(control)
+        calibration = [medians[b, 0, 1]/medians[b, 0, 0] for b in range(4)]
+        noise = max(.05, max(abs(r-1) for r in calibration))
+        candidates = {}
+        for comparison, arrangement in enumerate(arrangements, 1):
+            ratios = [medians[b, comparison, 1]/medians[b, comparison, 0] for b in range(4)]
+            candidate = stats.median(medians[b, comparison, 1] for b in range(4))/1e6
+            candidates[str(arrangement)] = dict(step_ms=candidate, tokens_per_second=sequences*1000/candidate,
+                                                block_ratios=ratios, median_ratio=stats.median(ratios),
+                                                outcome=_outcome(ratios, noise))
+        result.append(dict(context=context, sequences=sequences, step_ms=step_ms, step_block_ms=control,
+                           tokens_per_second=sequences*1000/step_ms, calibration_ratios=calibration,
+                           noise_floor=noise, arrangements=candidates))
+    return result
+
+
+def projection_decision(summary):
+    """1d's frozen rule: qualify every arrangement, then select at most one.
+
+    Qualifying needs no regression from B = 2 and a gain in every workload from
+    B = 4; the lowest worst-case median ratio from B = 4 wins, then the lowest
+    mean ratio, then the lower ID.
+    """
+    qualified = []
+    for arrangement in sorted(int(a) for a in summary[0]['arrangements']):
+        cells = [(r['sequences'], r['arrangements'][str(arrangement)]) for r in summary]
+        if (all(x['outcome'] != 'slower' for b, x in cells if b >= 2)
+                and all(x['outcome'] == 'faster' for b, x in cells if b >= 4)):
+            ratios = [x['median_ratio'] for b, x in cells if b >= 4]
+            qualified.append((max(ratios), stats.mean(ratios), arrangement))
+    qualified.sort()
+    return dict(qualified=[dict(arrangement=a, worst_median_ratio=w, mean_median_ratio=m) for w, m, a in qualified],
+                selected=qualified[0][2] if qualified else None)
+
+
+def batch_archive(timings, traces, output, study='size', confirmation=None):
+    spec = batch_study(study)
     timing = json.loads((timings/'timings.json').read_text())
-    batch_summarize(timing['samples'])
+    record = dict(kind=spec['kind'], timing=timing)
+    if study == 'size':
+        batch_summarize(timing['samples'])
+    else:
+        decision = projection_decision(projection_summarize(timing['samples'], contract.BATCH_PROJECTION_ARRANGEMENTS))
+        if (decision['selected'] is None) != (confirmation is None):
+            raise ValueError('the projection archive holds a confirmation exactly when an arrangement is selected')
+        record['confirmation'] = json.loads((confirmation/'timings.json').read_text()) if confirmation else None
     captures = []
-    for context, sequences, tile in contract.BATCH_TRACES:
+    for context, sequences, arrangement, name, arm in spec['traces']:
         for repeat in range(2):
-            target = traces/f'batch-profile-{context}-{sequences}-{tile}-r{repeat}'
+            target = traces/f'{name}-r{repeat}'
             if not (target/'submissions.xml').exists():
                 export_trace(target)
             capture = curate(target, context, repeat)
-            capture.update(sequences=sequences, row_tile=tile)
+            capture.update(sequences=sequences, **arm)
             captures.append(capture)
-    record = dict(kind=BATCH_KIND, timing=timing, captures=captures,
+    record.update(captures=captures,
                   analysis_source_sha256={str(p.relative_to(repository_root())):sha(p) for p in
                     [Path(__file__).resolve(), Path(__file__).with_name('analyze_trace.py').resolve(),
                      Path(__file__).with_name('model_contract.py').resolve()]},
@@ -1594,22 +1720,24 @@ def batch_archive(timings, traces, output):
     raw = json.dumps(scrub(record), separators=(',', ':'), allow_nan=False).encode()
     packed = gzip.compress(raw, mtime=0)
     output.mkdir(parents=True, exist_ok=True)
-    (output/(BATCH_STEM+'.json.gz')).write_bytes(packed)
-    write(output/(BATCH_STEM+'.json'), dict(kind=BATCH_KIND, sha256=hashlib.sha256(packed).hexdigest(),
-                                           uncompressed_sha256=hashlib.sha256(raw).hexdigest(), bytes=len(packed)))
-    batch_replay(output)
+    (output/(spec['stem']+'.json.gz')).write_bytes(packed)
+    write(output/(spec['stem']+'.json'), dict(kind=spec['kind'], sha256=hashlib.sha256(packed).hexdigest(),
+                                             uncompressed_sha256=hashlib.sha256(raw).hexdigest(), bytes=len(packed)))
+    (batch_replay if study == 'size' else projection_replay)(output)
 
 
 def batch_capture_totals(capture, build_record):
     """Validate one retained trace against the frozen build; per-step GPU totals."""
     provenance = capture['provenance']
     contract.configuration(provenance)
-    name = f"batch-profile-{capture['prefix']}-{capture['sequences']}-{capture['row_tile']}"
+    arm = 'arrangement' if 'arrangement' in capture else 'row_tile'
+    suffix = f"a{capture['arrangement']}" if arm == 'arrangement' else str(capture['row_tile'])
+    name = f"batch-profile-{capture['prefix']}-{capture['sequences']}-{suffix}"
     if (provenance['repository'] != build_record['source']['repository']
             or provenance['source_sha256'] != build_record['source']['sources']
             or provenance['assets'] != {k:v for k,v in build_record['assets'].items() if k.endswith('_sha256')}
             or provenance['binary'] != build_record['binaries'][name]
-            or (provenance['profile_rows'], provenance['row_tile']) != (capture['sequences'], capture['row_tile'])):
+            or (provenance['profile_rows'], provenance.get(arm)) != (capture['sequences'], capture[arm])):
         raise ValueError('trace differs from frozen batch-size build')
     canonical = (json.dumps(provenance, indent=2, allow_nan=False)+'\n').encode()
     if hashlib.sha256(canonical).hexdigest() != capture['analysis']['capture_identity']['provenance']['sha256']:
@@ -1677,6 +1805,66 @@ def batch_replay(directory):
     for r in summary:
         print(f"context {r['context']:4d} sequences {r['sequences']:2d}: {r['step_ms']:8.2f} ms/step, "
               f"{r['tokens_per_second']:7.1f} tokens/s, tile 8 {r['tiles']['8']['outcome']}, tile 16 {r['tiles']['16']['outcome']}")
+    return record
+
+
+def projection_replay(directory):
+    """Verify 1d's archive and regenerate its summary: screen, decision, confirmation and traces."""
+    manifest = json.loads((directory/(PROJECTION_BATCH_STEM+'.json')).read_text())
+    packed = (directory/(PROJECTION_BATCH_STEM+'.json.gz')).read_bytes()
+    raw = gzip.decompress(packed)
+    if (hashlib.sha256(packed).hexdigest() != manifest['sha256']
+            or hashlib.sha256(raw).hexdigest() != manifest['uncompressed_sha256']):
+        raise ValueError('projection archive hash mismatch')
+    record = json.loads(raw)
+    if record['kind'] != PROJECTION_BATCH_KIND or manifest['kind'] != PROJECTION_BATCH_KIND:
+        raise ValueError('not a projection archive')
+    screen = record['timing']
+    build_record = screen['build']
+    if build_record['declaration'] != contract.BATCH_PROJECTION_DECLARATION or screen.get('argument') != 'projections':
+        raise ValueError('projection declaration changed')
+    summary = projection_summarize(screen['samples'], contract.BATCH_PROJECTION_ARRANGEMENTS)
+    decision = projection_decision(summary)
+    timings, confirmation, confirmed = [screen], None, None
+    if decision['selected'] is None:
+        if record['confirmation'] is not None:
+            raise ValueError('confirmation without a selected arrangement')
+    else:
+        run = record['confirmation']
+        if run is None or run['build'] != build_record or run.get('argument') != f"confirm:{decision['selected']}":
+            raise ValueError('missing or mismatched confirmation of the selected arrangement')
+        confirmation = projection_summarize(run['samples'], (decision['selected'],))
+        confirmed = projection_decision(confirmation)['selected'] == decision['selected']
+        timings.append(run)
+    if any([b['block'] for b in timing['blocks']] != list(range(4)) for timing in timings):
+        raise ValueError('incomplete projection block conditions')
+    expected = Counter((c, b, a, r) for c, b, a in contract.BATCH_PROJECTION_TRACES for r in range(2))
+    if Counter((c['prefix'], c['sequences'], c['arrangement'], c['repeat']) for c in record['captures']) != expected:
+        raise ValueError('incomplete projection trace census')
+    for block in [*[b for timing in timings for b in timing['blocks']], *[c['conditions'] for c in record['captures']]]:
+        for side in ('before', 'after'):
+            require_ac(block[side])
+            require_nominal_thermal_state(block[side])
+            if block[side]['power_mode_raw'] != '0':
+                raise ValueError('projection power mode changed')
+    for rejected in record['rejected_captures']:
+        workload = (rejected['prefix'], rejected['sequences'], rejected['arrangement'])
+        binary = rejected['receipt']['profile']['binary']
+        if (workload not in contract.BATCH_PROJECTION_TRACES or rejected['status'] != 'rejected by analysis'
+                or {k: binary[k] for k in ('sha256', 'bytes')} != build_record['binaries']['batch-profile-%d-%d-a%d' % workload]):
+            raise ValueError('rejected capture is not an attempt of the frozen projection build')
+    gpu = []
+    for capture in record['captures']:
+        for stage, value in batch_capture_totals(capture, build_record).items():
+            gpu.append(dict(context=capture['prefix'], sequences=capture['sequences'], arrangement=capture['arrangement'],
+                            repeat=capture['repeat'], stage=stage, median_ms=value))
+    write(directory/(PROJECTION_BATCH_STEM+'-summary.json'),
+          dict(timing=summary, decision=decision, confirmation=confirmation, confirmed=confirmed, gpu=gpu))
+    for r in summary:
+        print(f"context {r['context']:4d} sequences {r['sequences']:2d}: {r['step_ms']:8.2f} ms/step; "
+              + ', '.join(f"{a}: {x['median_ratio']:.3f} {x['outcome']}" for a, x in r['arrangements'].items()))
+    print('qualified:', [q['arrangement'] for q in decision['qualified']], 'selected:', decision['selected'],
+          'confirmed:', confirmed)
     return record
 
 
@@ -1758,6 +1946,89 @@ def batch_plot(directory):
     plt.close(fig)
 
 
+def projection_plot(directory):
+    """Regenerate 1d's figures exclusively from the checked archive."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    projection_replay(directory)
+    summary = json.loads((directory/(PROJECTION_BATCH_STEM+'-summary.json')).read_text())
+    timing = summary['timing']
+    plt.rcParams.update({'font.family':'DejaVu Sans','font.size':10,'axes.spines.top':False,
+                         'axes.spines.right':False,'figure.facecolor':'white','axes.facecolor':'white'})
+    colors = {'3':'#e8a044', '4':'#27a89b', '5':'#244b69', '6':'#b86f85'}
+    names = {'3':'3: early loads', '4':'4: four columns', '5':'5: both', '6':'6: both, column-block order'}
+    sizes = list(contract.BATCH_SIZES)
+    fig, axes = plt.subplots(1, 4, figsize=(14,4.4), constrained_layout=True, sharey=True,
+                             gridspec_kw=dict(width_ratios=[3,3,3,1.5]))
+    for ax, context in zip(axes, contract.BATCH_CONTEXTS):
+        rows = [r for r in timing if r['context'] == context]
+        for arrangement, color in colors.items():
+            cells = [r['arrangements'][arrangement] for r in rows]
+            middle = [x['median_ratio'] for x in cells]
+            errors = [[m-min(x['block_ratios']) for m, x in zip(middle, cells)],
+                      [max(x['block_ratios'])-m for m, x in zip(middle, cells)]]
+            ax.errorbar(sizes, middle, yerr=errors, marker='o', color=color, capsize=2, linewidth=1.2,
+                        label=names[arrangement])
+        ax.plot(sizes, [1-r['noise_floor'] for r in rows], color='#abb9c7', linestyle=':', label='gain threshold')
+        ax.axhline(1, color='black', linestyle='--', linewidth=.8)
+        ax.set_xscale('log', base=2)
+        ax.set_xticks(sizes, [str(b) for b in sizes])
+        ax.set_xlabel('Sequences decoding in one step')
+        ax.set_title(f'{context:,} cached tokens')
+    mixed = next(r for r in timing if r['context'] == 0)
+    for i, (arrangement, color) in enumerate(colors.items()):
+        cell = mixed['arrangements'][arrangement]
+        m = cell['median_ratio']
+        axes[3].bar(i, m, color=color, width=.7)
+        axes[3].errorbar(i, m, yerr=[[m-min(cell['block_ratios'])], [max(cell['block_ratios'])-m]], color='black', capsize=2)
+    axes[3].axhline(1, color='black', linestyle='--', linewidth=.8)
+    axes[3].axhline(1-mixed['noise_floor'], color='#abb9c7', linestyle=':')
+    axes[3].set_xticks(range(len(colors)), list(colors))
+    axes[3].set_xlabel('Arrangement')
+    axes[3].set_title('Mixed batch of 32')
+    axes[0].set_ylabel('Step time relative to arrangement 0 (tile 4)')
+    axes[0].legend(fontsize=7, loc='lower left')
+    fig.suptitle('Exact batched projection arrangements against tile 4 · median of four paired block ratios; '
+                 'whiskers show their range', fontsize=11)
+    fig.savefig(directory/(PROJECTION_BATCH_STEM+'-ratios.png'), dpi=170)
+    plt.close(fig)
+    fig, axes = plt.subplots(1, 2, figsize=(11,4.6), constrained_layout=True)
+    rows = [r for r in timing if r['context'] == 1024]
+    axes[0].plot(sizes, [r['tokens_per_second'] for r in rows], marker='o', color='black', label='0: tile 4')
+    for arrangement, color in colors.items():
+        axes[0].plot(sizes, [r['arrangements'][arrangement]['tokens_per_second'] for r in rows], marker='o',
+                     color=color, label=names[arrangement])
+    axes[0].set_xscale('log', base=2)
+    axes[0].set_xticks(sizes, [str(b) for b in sizes])
+    axes[0].set_xlabel('Sequences decoding in one step')
+    axes[0].set_ylabel('Tokens per second, all sequences')
+    axes[0].set_title('Aggregate throughput at 1,024 cached tokens')
+    axes[0].legend(fontsize=7, loc='upper left')
+    groups = [('QKV and output projections', {'packed QKV projection','output projection'}, '#8fb3cf'),
+              ('Gate and up projections', {'gate projection','up projection'}, '#244b69'),
+              ('Down projection', {'down projection'}, '#4f7fa3'),
+              ('Vocabulary projection', {'vocabulary projection'}, '#e8a044'),
+              ('Attention', {'FP32 GQA'}, '#27a89b')]
+    everything = {r['stage'] for r in summary['gpu']} - {'GPU active total','GPU enclosing span','Metal submission intervals'}
+    groups.append(('Other GPU operations', everything-set().union(*(s for _, s, _ in groups)), '#abb9c7'))
+    arms = [0, *contract.BATCH_PROJECTION_ARRANGEMENTS]
+    bottoms = [0.]*len(arms)
+    for name, stage_set, color in groups:
+        values = [stats.mean(sum(r['median_ms'] for r in summary['gpu'] if (r['arrangement'], r['repeat']) == (a, repeat)
+                                 and r['stage'] in stage_set) for repeat in range(2)) for a in arms]
+        axes[1].bar(range(len(arms)), values, bottom=bottoms, color=color, width=.6, label=name)
+        bottoms = [x+y for x, y in zip(bottoms, values)]
+    axes[1].set_xticks(range(len(arms)), [str(a) for a in arms])
+    axes[1].set_xlabel('Arrangement')
+    axes[1].set_ylabel('Milliseconds of active GPU time per step')
+    axes[1].set_title('Separate traces: 64 sequences at 1,024 cached tokens')
+    axes[1].legend(fontsize=7)
+    fig.suptitle('Where the batched projections recover time', fontsize=12)
+    fig.savefig(directory/(PROJECTION_BATCH_STEM+'-breakdown.png'), dpi=170)
+    plt.close(fig)
+
+
 RETIRED = ['enqueue-build', 'enqueue-collect', 'enqueue-archive', 'scheduling-build', 'scheduling-collect',
            'scheduling-capture', 'scheduling-archive', 'projection-confirm', 'selection-capture',
            'selection-terminal', 'selection-archive', 'fusion-capture', 'fusion-terminal', 'fusion-archive']
@@ -1771,9 +2042,14 @@ def main():
                                             'scheduling-plot','scheduling-replay','build','collect','capture',
                                             'terminal','archive','replay','plot','fusion-replay','fusion-plot',
                                             'selection-replay','selection-plot','batch-size-build','batch-size-collect',
-                                            'batch-size-capture','batch-size-archive','batch-size-replay','batch-size-plot',
+                                            'batch-size-confirm','batch-size-capture','batch-size-archive',
+                                            'batch-size-replay','batch-size-plot',
                                             *RETIRED])
     parser.add_argument('--projections',action='store_true',help='Replay/plot the projection arrangement study')
+    parser.add_argument('--study', choices=['size','projections'], default='size',
+                        help='batch-size-* study: 1c row tiles (size) or 1d projection arrangements (projections)')
+    parser.add_argument('--screen', type=Path, help='1d screen timings for batch-size-confirm')
+    parser.add_argument('--confirmation', type=Path, help='1d confirmation timings for batch-size-archive')
     parser.add_argument('--residual-norm',action='store_true',help='Replay/plot the residual normalization study')
     parser.add_argument('--copy-free',action='store_true',help='Replay/plot the buffer ownership study')
     parser.add_argument('--selection',action='store_true',help=argparse.SUPPRESS)
@@ -1797,12 +2073,14 @@ def main():
     elif args.command == 'scheduling-plot': scheduling_plot(args.output)
     elif args.command == 'scheduling-replay': scheduling_replay(args.output)
     elif args.command == 'build': build(args.output.resolve(), args.prepared)
-    elif args.command == 'batch-size-build': batch_build(args.output.resolve(), args.prepared)
-    elif args.command == 'batch-size-collect': batch_collect(args.build.resolve(), args.output.resolve())
-    elif args.command == 'batch-size-capture': batch_capture(args.build.resolve(), args.output.resolve())
-    elif args.command == 'batch-size-archive': batch_archive(args.timings, args.traces, args.output)
-    elif args.command == 'batch-size-replay': batch_replay(args.output)
-    elif args.command == 'batch-size-plot': batch_plot(args.output)
+    elif args.command == 'batch-size-build': batch_build(args.output.resolve(), args.prepared, args.study)
+    elif args.command == 'batch-size-collect': batch_collect(args.build.resolve(), args.output.resolve(), args.study)
+    elif args.command == 'batch-size-confirm': batch_confirm(args.build.resolve(), args.screen.resolve(), args.output.resolve())
+    elif args.command == 'batch-size-capture': batch_capture(args.build.resolve(), args.output.resolve(), args.study)
+    elif args.command == 'batch-size-archive':
+        batch_archive(args.timings, args.traces, args.output, args.study, args.confirmation)
+    elif args.command == 'batch-size-replay': (projection_replay if args.study == 'projections' else batch_replay)(args.output)
+    elif args.command == 'batch-size-plot': (projection_plot if args.study == 'projections' else batch_plot)(args.output)
     elif args.command == 'selection-plot':
         if args.projections: projection_plot(args.output)
         else: selection_plot(args.output,args.residual_norm)

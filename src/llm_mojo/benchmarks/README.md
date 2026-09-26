@@ -487,3 +487,20 @@ uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-archive -
 uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --output studies/model_generation
 uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_profile batch-size-plot --output studies/model_generation
 ```
+
+The [exact batched projections](../../../docs/batched-decode-plan.md#1d-exact-batched-projections)
+(1d) reuse the matrix with `--study projections`. The screen pairs arrangements
+3–6 against arrangement 0 (tile 4), and traces capture 64 sequences at 1,024
+cached tokens for each arrangement. `batch-size-confirm` applies the frozen rule
+to the screen and runs the independent confirmation of the selected arrangement.
+It refuses when none qualifies, and the archive then holds no confirmation:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-build --study projections --prepared /absolute/prepared-v1 --output /private/tmp/batch-projections-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-collect --study projections --build /private/tmp/batch-projections-build --output /private/tmp/batch-projections-screen
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-confirm --build /private/tmp/batch-projections-build --screen /private/tmp/batch-projections-screen --output /private/tmp/batch-projections-confirmation
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-capture --study projections --build /private/tmp/batch-projections-build --output /private/tmp/batch-projections-traces
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-archive --study projections --timings /private/tmp/batch-projections-screen --traces /private/tmp/batch-projections-traces --confirmation /private/tmp/batch-projections-confirmation --output studies/model_generation
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --study projections --output studies/model_generation
+uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_profile batch-size-plot --study projections --output studies/model_generation
+```

@@ -1,8 +1,9 @@
 """Real Qwen decode on the Fast route: fixed history, normal stream, optional host observations.
 
 The token-profile modes (bench, verify, profile) time one sequence. The batch
-mode and the MODEL_BATCH_PROFILE build time decode steps of B sequences for the
-batch-size study (docs/batched-decode-plan.md#1c-batch-size-study).
+mode and the MODEL_BATCH_PROFILE build time decode steps of B sequences: the
+batch-size study (1c) pairs row tiles, and the projection study (1d) pairs
+batched projection arrangements (docs/batched-decode-plan.md).
 Completed decode experiments (fusion, selection, buffer swap, composition,
 projection arrangement, scheduling and launch probes) are replay-only; their
 collectors exist through commit edb610a. See studies/model_generation/README.md.
@@ -13,6 +14,7 @@ from std.memory import bitcast
 from max.gpu.host import DeviceContext, DeviceGraph, DeviceGraphBuilder
 from layout import TileTensor, TensorLayout, row_major
 from std.gpu import global_idx
+from llm_mojo.kernels.linear import DECODE_ARRANGEMENTS
 from llm_mojo.models.qwen2.model import QwenModel, save_bf16
 from llm_mojo.models.qwen2.plan import fast_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
@@ -134,6 +136,34 @@ def batch_step[OBSERVE: Bool, ARRANGEMENT: Int](mut model: QwenModel, mut kv: KV
     return model.greedy_tokens[OBSERVE](ctx)
 
 
+def batch_arms(study: String) raises -> List[Int]:
+    """Each comparison's candidate arrangement against arrangement 0; -1 is arrangement 0 with host marks.
+
+    size: 1c's tiles 4, 8 and 16 and the observed arm. projections: 1d's screen of
+    arrangements 3-6. confirm:A: 1d's confirmation of the selected arrangement A.
+    """
+    if study == "size":
+        return [0, 1, 2, -1]
+    if study == "projections":
+        return [0, 3, 4, 5, 6]
+    var parts = study.split(":")
+    if len(parts) == 2 and String(parts[0]) == "confirm":
+        var arrangement = Int(String(parts[1]))
+        if arrangement >= 3 and arrangement < DECODE_ARRANGEMENTS:
+            return [0, arrangement]
+    raise Error("unknown batch study")
+
+
+def batch_arm(arrangement: Int, mut model: QwenModel, mut kv: KVPool, ctx: DeviceContext,
+              tokens: List[Int], contexts: List[Int], sequences: Int) raises -> List[Int]:
+    if arrangement == -1:
+        return batch_step[True, 0](model,kv,ctx,tokens,contexts,sequences)
+    comptime for a in range(DECODE_ARRANGEMENTS):
+        if arrangement == a:
+            return batch_step[False, a](model,kv,ctx,tokens,contexts,sequences)
+    raise Error("unknown projection arrangement")
+
+
 def batch_check(model: QwenModel, selected: List[Int], expected: List[Int], sequences: Int) raises:
     if (len(selected) != sequences or model.submitted_rows != 24*sequences
             or model.last_route.decode_launches != 245 or model.last_route.sequences != sequences):
@@ -143,11 +173,12 @@ def batch_check(model: QwenModel, selected: List[Int], expected: List[Int], sequ
             raise Error("batched step changed a sequence's token")
 
 
-def batch_bench(prepared: String, tables: String, context: Int, first: Int) raises:
-    """Paired arms per batch size: tile 4 against itself, tile 8, tile 16 and observed tile 4.
+def batch_bench(prepared: String, tables: String, context: Int, first: Int, study: String) raises:
+    """Paired arms per batch size: arrangement 0 against itself, then each of the study's candidates.
 
     Tiles 4, 8 and 16 are projection arrangements 0, 1 and 2.
     """
+    var arms = batch_arms(study)
     var ctx = DeviceContext()
     if ctx.api() != "metal" or ctx.name() != "Apple M4 Pro":
         raise Error("study requires Apple M4 Pro / Metal")
@@ -170,6 +201,7 @@ def batch_bench(prepared: String, tables: String, context: Int, first: Int) rais
     print("device:",ctx.name())
     print("api:",ctx.api())
     print("context:",context,"pool blocks:",BATCH_POOL)
+    print("study:",study)
     var records = String()
     for index in range(len(sizes)):
         var sequences = sizes[len(sizes)-1-index] if first == 1 else sizes[index]
@@ -177,28 +209,21 @@ def batch_bench(prepared: String, tables: String, context: Int, first: Int) rais
         var expected = batch_step[False, 0](model,kv,ctx,tokens,contexts,sequences)
         batch_check(model,expected,expected,sequences)
         print("sequences:",sequences,"first token:",expected[0],"last token:",expected[sequences-1])
-        for position in range(4):
-            var comparison = 3-position if first == 1 else position
+        for position in range(len(arms)):
+            var comparison = len(arms)-1-position if first == 1 else position
             for arm_index in range(2):
                 var arm = (first+arm_index)%2
                 for sample in range(20):
                     batch_rewind(model,kv,contexts,sequences)
                     var start = now()
-                    var selected: List[Int]
-                    if arm == 0 or comparison == 0:
-                        selected = batch_step[False, 0](model,kv,ctx,tokens,contexts,sequences)
-                    elif comparison == 1:
-                        selected = batch_step[False, 1](model,kv,ctx,tokens,contexts,sequences)
-                    elif comparison == 2:
-                        selected = batch_step[False, 2](model,kv,ctx,tokens,contexts,sequences)
-                    else:
-                        selected = batch_step[True, 0](model,kv,ctx,tokens,contexts,sequences)
+                    var arrangement = arms[comparison] if arm == 1 else 0
+                    var selected = batch_arm(arrangement,model,kv,ctx,tokens,contexts,sequences)
                     var elapsed = now()-start
                     batch_check(model,selected,expected,sequences)
                     if sample >= 10:
                         records += ("BATCH "+String(sequences)+" "+String(comparison)+" "+String(arm)+" "
                                     +String(sample-10)+" "+String(elapsed))
-                        if comparison == 3 and arm == 1:
+                        if arrangement == -1:
                             for i in range(10):
                                 records += " "+String(model.observation[i]-start)
                         records += "\n"
@@ -206,9 +231,9 @@ def batch_bench(prepared: String, tables: String, context: Int, first: Int) rais
     print("BATCH_COMPLETE")
 
 
-def batch_profile[TILE: Int](prepared: String, tables: String, context: Int, sequences: Int) raises:
+def batch_profile[ARRANGEMENT: Int](prepared: String, tables: String, context: Int, sequences: Int,
+                                    workload: String) raises:
     """Trace target: ten warmups and eight plain batched steps inside the profile region."""
-    comptime ARRANGEMENT = 0 if TILE == 4 else (1 if TILE == 8 else 2)
     var ctx = DeviceContext()
     if ctx.api() != "metal" or ctx.name() != "Apple M4 Pro":
         raise Error("study requires Apple M4 Pro / Metal")
@@ -232,7 +257,7 @@ def batch_profile[TILE: Int](prepared: String, tables: String, context: Int, seq
     print("rows:",sequences)
     print("hidden: 896")
     print("key value rows:",context+1)
-    print("profile workload:","model-p"+String(context)+"-b"+String(sequences)+"-t"+String(TILE))
+    print("profile workload:",workload)
     print("profile dispatches per iteration:",245)
     print("warmup iterations: 10")
     print("profile iterations: 8")
@@ -287,17 +312,17 @@ def main() raises:
         batch_support()
         return
     comptime if is_defined["MODEL_BATCH_PROFILE"]():
-        batch_profile[get_defined_int["MODEL_BATCH_TILE"]()](String(get_defined_string["MODEL_PREPARED"]()),
+        batch_profile[get_defined_int["MODEL_BATCH_ARRANGEMENT"]()](String(get_defined_string["MODEL_PREPARED"]()),
             String(get_defined_string["MODEL_TABLES"]()),get_defined_int["MODEL_BATCH_PROFILE"](),
-            get_defined_int["MODEL_BATCH_SEQUENCES"]())
+            get_defined_int["MODEL_BATCH_SEQUENCES"](),String(get_defined_string["MODEL_BATCH_WORKLOAD"]()))
         return
     var cli = argv()
-    if len(cli) == 6 and String(cli[1]) == "batch":
+    if len(cli) == 7 and String(cli[1]) == "batch":
         var context = Int(String(cli[4]))
         var first = Int(String(cli[5]))
         if (context != 0 and context != 64 and context != 1024 and context != 3968) or first < 0 or first > 1:
             raise Error("invalid batch-size workload")
-        batch_bench(String(cli[2]),String(cli[3]),context,first)
+        batch_bench(String(cli[2]),String(cli[3]),context,first,String(cli[6]))
         return
     var args = List[String]()
     comptime if is_defined["MODEL_PROFILE_PREFIX"]():

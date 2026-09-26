@@ -203,14 +203,50 @@ def batch_specification(context, sequences, tile):
                 dispatches_per_iteration=len(stages(*options(BATCH_IMPLEMENTATION))))
 
 
+# 1d, exact batched projections: arrangements 3-6 against arrangement 0 (tile 4) in the batch-size matrix.
+BATCH_TILE_ARRANGEMENTS = {4: 0, 8: 1, 16: 2}
+BATCH_PROJECTION_ARRANGEMENTS = (3, 4, 5, 6)
+BATCH_PROJECTION_TRACES = tuple((1024, 64, a) for a in (0,) + BATCH_PROJECTION_ARRANGEMENTS)
+BATCH_PROJECTION_DECLARATION = dict(
+    {k: v for k, v in BATCH_DECLARATION.items() if k != 'row_tiles'},
+    policy='fast; configuration 26 decode composition for B sequences, one token each; batched projections in one arrangement',
+    arrangements={'0': 'tile 4: four rows and one column per SIMD group, runtime width, row guard in the loop',
+                  '3': 'four rows and one column, fixed width 896 or 4864 with four iterations of early loads, no guard in the loop',
+                  '4': 'four rows and four columns, runtime width, no guard in the loop',
+                  '5': 'four rows and four columns, fixed width with early loads, no guard in the loop',
+                  '6': 'arrangement 5 with the row tiles of one column block in consecutive SIMD groups'},
+    arithmetic='every output keeps the one-row kernel lane-strided FP32 sum, warp.sum, FP32 bias and BF16 rounding',
+    comparisons=[['arrangement-0', 'arrangement-0']] + [['arrangement-0', f'arrangement-{a}'] for a in BATCH_PROJECTION_ARRANGEMENTS],
+    trace_workloads=[list(t) for t in BATCH_PROJECTION_TRACES],
+    decision='Per workload and arrangement: gain if all four block ratios are below one and the median reduction exceeds '
+             'max(5%, largest absolute calibration deviation); regression by the symmetric rule; otherwise inconclusive.',
+    qualification='no regression in any workload with B >= 2 and a gain in every workload with B >= 4',
+    selection='lowest worst-case median ratio over workloads with B >= 4, then lowest mean ratio, then lower ID',
+    confirmation='a fresh four-block run of the selected arrangement against arrangement 0 over the same workloads, '
+                 'with its own calibration and the same qualifying rule; no other candidate if it fails')
+
+
+def batch_projection_specification(context, sequences, arrangement):
+    if (context, sequences, arrangement) not in BATCH_PROJECTION_TRACES:
+        raise ValueError('undeclared projection trace workload')
+    return dict(profile_rows=sequences, hidden_size=896, key_value_rows=context+1,
+                profile_workload=f'model-p{context}-b{sequences}-a{arrangement}',
+                dispatches_per_iteration=len(stages(*options(BATCH_IMPLEMENTATION))))
+
+
 def batch_configuration(data):
+    """A batch trace names 1c's row tile or 1d's arrangement, never both."""
     if data.get('entrypoint') != ENTRYPOINTS[BATCH_IMPLEMENTATION]:
         raise ValueError('Qwen batch profile entrypoint changed')
-    fields = (data.get('key_value_rows'), data.get('profile_rows'), data.get('row_tile'))
+    if ('row_tile' in data) == ('arrangement' in data):
+        raise ValueError('a Qwen batch trace names a row tile or an arrangement')
+    arm = 'arrangement' if 'arrangement' in data else 'row_tile'
+    fields = (data.get('key_value_rows'), data.get('profile_rows'), data.get(arm))
     if any(type(value) is not int for value in fields):
         raise ValueError('invalid Qwen batch trace geometry')
-    expected = batch_specification(fields[0]-1, fields[1], fields[2])
-    expected['row_tile'] = fields[2]
+    specify = batch_projection_specification if arm == 'arrangement' else batch_specification
+    expected = specify(fields[0]-1, fields[1], fields[2])
+    expected[arm] = fields[2]
     if any(type(data.get(k)) is not type(v) or data.get(k) != v for k, v in expected.items()):
         raise ValueError('Qwen batch trace geometry changed')
     if data.get('profile_iterations') != 8 or data.get('profile_warmup_iterations') != 10:

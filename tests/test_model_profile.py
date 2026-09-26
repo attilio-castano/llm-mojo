@@ -11,11 +11,11 @@ from llm_mojo.benchmarks.model_profile import parse_samples, summarize
 from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
-def _batch_stdout(context, drop=None, marked=(3, 1), unsorted=False):
+def _batch_stdout(context, drop=None, marked=(3, 1), unsorted=False, comparisons=4, study=None):
     from llm_mojo.benchmarks.model_profile import batch_sizes
-    lines = ['device: Apple M4 Pro', 'api: metal']
+    lines = ['device: Apple M4 Pro', 'api: metal'] + ([f'study: {study}'] if study else [])
     for sequences in batch_sizes(context):
-        for comparison in range(4):
+        for comparison in range(comparisons):
             for arm in range(2):
                 for sample in range(10):
                     if (sequences, comparison, arm, sample) == drop:
@@ -91,6 +91,93 @@ class ModelProfileTests(unittest.TestCase):
                 self.assertIsNone(row['throughput_vs_one'])
         with self.assertRaises(ValueError):
             batch_summarize(samples[1:])
+
+    def test_projection_contract_declares_arrangements_and_trace_geometry(self):
+        from llm_mojo.benchmarks.model_profile import batch_comparisons, batch_study
+        declaration = contract.BATCH_PROJECTION_DECLARATION
+        self.assertEqual(json.loads(json.dumps(declaration)), declaration)
+        self.assertNotIn('row_tiles', declaration)
+        self.assertEqual(len(declaration['comparisons']), 5)
+        self.assertEqual([int(a) for a in declaration['arrangements']], [0, 3, 4, 5, 6])
+        self.assertEqual(batch_study('projections')['traces'][0][3:], ('batch-profile-1024-64-a0', dict(arrangement=0)))
+        self.assertEqual(batch_study('size')['traces'][1][2:4], (0, 'batch-profile-1024-16-4'))
+        for context, sequences, arrangement in contract.BATCH_PROJECTION_TRACES:
+            spec = contract.batch_projection_specification(context, sequences, arrangement)
+            self.assertEqual(spec['profile_workload'], f'model-p1024-b64-a{arrangement}')
+            data = dict(implementation=contract.BATCH_IMPLEMENTATION, arrangement=arrangement,
+                        entrypoint=contract.ENTRYPOINTS[contract.BATCH_IMPLEMENTATION],
+                        profile_iterations=8, profile_warmup_iterations=10, **spec)
+            self.assertEqual(contract.configuration(data), dict(spec, arrangement=arrangement))
+            for change in (dict(arrangement=1), dict(profile_rows=16), dict(row_tile=4)):
+                with self.subTest(change=change), self.assertRaises(ValueError):
+                    contract.configuration(dict(data, **change))
+        self.assertEqual(batch_comparisons('size'), (4, 3))
+        self.assertEqual(batch_comparisons('projections'), (5, None))
+        self.assertEqual(batch_comparisons('confirm:6'), (2, None))
+        for invalid in ('confirm:1', 'confirm:', 'confirm:x', 'tiles'):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                batch_comparisons(invalid)
+
+    def test_projection_samples_carry_no_marks_and_name_their_study(self):
+        from llm_mojo.benchmarks.model_profile import parse_batch_samples
+        stdout = _batch_stdout(64, marked=None, comparisons=5, study='projections')
+        self.assertEqual(len(parse_batch_samples(stdout, 64, 1, 5, None, 'projections')), 7*5*2*10)
+        confirm = _batch_stdout(0, marked=None, comparisons=2, study='confirm:5')
+        self.assertEqual(len(parse_batch_samples(confirm, 0, 0, 2, None, 'confirm:5')), 2*2*10)
+        for invalid, arguments in ((_batch_stdout(64, marked=(4, 1), comparisons=5, study='projections'), (5, None, 'projections')),
+                                   (stdout, (5, None, 'confirm:5')), (stdout, (4, 3, 'projections')),
+                                   (_batch_stdout(64, marked=None, comparisons=5), (5, None, 'projections'))):
+            with self.subTest(), self.assertRaises(ValueError):
+                parse_batch_samples(invalid, 64, 0, *arguments)
+
+    def test_projection_decision_qualifies_then_selects_one_arrangement(self):
+        from llm_mojo.benchmarks.model_profile import projection_decision, projection_summarize
+        def samples(ratio, arrangements=contract.BATCH_PROJECTION_ARRANGEMENTS):
+            rows = []
+            for context, sequences in contract.batch_workloads():
+                for block in range(4):
+                    for comparison in range(1+len(arrangements)):
+                        for arm in range(2):
+                            scale = ratio(context, sequences, arrangements[comparison-1]) if arm and comparison else 1
+                            for sample in range(10):
+                                rows.append(dict(context=context, sequences=sequences, block=block, comparison=comparison,
+                                                 arm=arm, sample=sample, elapsed_ns=int(1_000_000*sequences*scale)+sample,
+                                                 marks=[]))
+            return rows
+        # 4 regresses at B = 2 and 5 is inconclusive in one cell, so only 3 and 6 can qualify.
+        def rule(three, six, six_at_eight=None):
+            def ratio(context, sequences, arrangement):
+                if arrangement == 4:
+                    return 1.2 if sequences == 2 else .8
+                if arrangement == 5:
+                    return .97 if (context, sequences) == (64, 4) else .7
+                if arrangement == 6 and sequences == 8 and six_at_eight:
+                    return six_at_eight
+                return three if arrangement == 3 else six
+            return ratio
+        def decide(ratio):
+            return projection_decision(projection_summarize(samples(ratio), contract.BATCH_PROJECTION_ARRANGEMENTS))
+        summary = projection_summarize(samples(rule(.9, .85)), contract.BATCH_PROJECTION_ARRANGEMENTS)
+        self.assertEqual(len(summary), 22)
+        cell = next(r for r in summary if (r['context'], r['sequences']) == (1024, 16))
+        self.assertEqual({a: x['outcome'] for a, x in cell['arrangements'].items()},
+                         {'3': 'faster', '4': 'faster', '5': 'faster', '6': 'faster'})
+        decision = projection_decision(summary)
+        self.assertEqual([q['arrangement'] for q in decision['qualified']], [6, 3])
+        self.assertEqual(decision['selected'], 6)
+        # Equal worst ratios fall to the mean, then to the lower ID.
+        self.assertEqual(decide(rule(.85, .85, six_at_eight=.8))['selected'], 6)
+        self.assertEqual(decide(rule(.85, .85))['selected'], 3)
+        ratio = rule(.9, .85)
+        confirmation = projection_summarize(samples(ratio, (5,)), (5,))
+        self.assertIsNone(projection_decision(confirmation)['selected'])
+        self.assertEqual(projection_decision(projection_summarize(samples(lambda c, b, a: .9, (5,)), (5,)))['selected'], 5)
+        broken = samples(ratio)
+        with self.assertRaises(ValueError):
+            projection_summarize(broken[1:], contract.BATCH_PROJECTION_ARRANGEMENTS)
+        broken[0]['marks'] = [1]
+        with self.assertRaises(ValueError):
+            projection_summarize(broken, contract.BATCH_PROJECTION_ARRANGEMENTS)
 
     def test_retained_batch_size_integrity(self):
         from contextlib import redirect_stdout
