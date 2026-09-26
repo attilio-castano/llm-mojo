@@ -23,12 +23,13 @@ Approved on 2026-09-23 for local implementation of 1a: edits, builds, tests,
 validation and incremental commits. Pushing, pull requests, toolchain upgrades
 and numerical-contract changes need a separate decision. 1b was approved on
 2026-09-25 and 1c on 2026-09-26, on the same terms. 1d was chosen on
-2026-09-26 as path 1 of 1c's decision and approved the same day. 1e's plan
-awaits approval.
+2026-09-26 as path 1 of 1c's decision and approved the same day. 1e was
+approved the same day; adopting a reordered arrangement still needs a separate
+decision.
 
 Status: 1a, 1b, 1c and 1d are complete; see the [validation record](#validation-record).
 1c's throughput hypothesis failed with tile 4. 1d's exact arrangement 5, now
-the batched default, cuts batched step time by 31–65%. 1e is planned.
+the batched default, cuts batched step time by 31–65%. 1e is in progress.
 
 ## 1a. Step format and KV pool
 
@@ -532,11 +533,11 @@ and up into one launch.
 
 ## 1e. Reordered batched projections
 
-Planned on 2026-09-26 from `07ed15f`. It awaits approval on the terms of 1a–1d.
-Arrangements 8–10 change the summation order of decode projections, which is a
-numerical-contract change. Approving this plan approves building and measuring
-them, not adopting one: adopting a reordered arrangement waits for your decision
-on the study's evidence.
+Planned on 2026-09-26 from `07ed15f` and approved the same day on the terms of
+1a–1d. Arrangements 8–10 change the summation order of decode projections, which
+is a numerical-contract change. The approval covers building and measuring them,
+not adopting one: adopting a reordered arrangement waits for your decision on
+the study's evidence.
 
 **Question.** With batched rows still equal to solo rows, how much faster can
 decode projections be if each output's summation order may change, and how

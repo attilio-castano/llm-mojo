@@ -3,7 +3,10 @@
 Each batched kernel is compared bit for bit with the same work done one row or
 one sequence at a time, with guard rows and unwritten pool rows poisoned:
 - every decode projection arrangement against one-row launches at every decode
-  projection width, with signed zeros and subnormals among the values;
+  projection width, with signed zeros and subnormals among the values: the
+  one-row kernel for the exact arrangements, and the arrangement's own one-row
+  launches for the reordered ones, which must also stay within the worst-case
+  FP32 summation error of an FP64 reference;
 - residual RMSNorm and argmax against single-row launches;
 - fused QKV/RoPE/append against the unfused path for each sequence;
 - decode attention against route 4 on each sequence's own cache view;
@@ -19,14 +22,16 @@ from llm_mojo.kernels.attention_decode import (
     enqueue_grouped_query_attention_decode_apple_gpu,
     enqueue_grouped_query_attention_decode_sequences_apple_gpu,
 )
-from llm_mojo.kernels.linear import DECODE_ARRANGEMENTS, enqueue_linear_apple_gpu, enqueue_linear_decode_rows_apple_gpu
+from llm_mojo.kernels.linear import (
+    DECODE_ARRANGEMENTS, decode_arrangement_reordered, enqueue_linear_apple_gpu, enqueue_linear_decode_rows_apple_gpu,
+)
 from llm_mojo.kernels.residual_norm import enqueue_residual_norm
 from llm_mojo.kernels.rope import enqueue_rope_apple_gpu
 from llm_mojo.kernels.token_selection import enqueue_argmax
 from llm_mojo.layers.attention_sublayer import AttentionWorkspace, _append, _unpack_qkv, enqueue_fused_decode_qkv_batch
 from llm_mojo.layers.decoder_layer import DECODER_FUSED_DECODE
 from llm_mojo.models.qwen2.model import CaptureRequest, QwenModel
-from llm_mojo.models.qwen2.plan import baseline_plan, configured_plan
+from llm_mojo.models.qwen2.plan import DECODE_PROJECTION, baseline_plan, configured_plan
 from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.kv_pool import KVGeometry, KVPool
 from decoder_layer_support import decoder_support, load_decoder
@@ -96,20 +101,82 @@ def _edges(mut buffer: DeviceBuffer[DType.bfloat16], seed: Int) raises:
             mapped.unsafe_ptr()[unsafe_offset=i] = bitcast[DType.bfloat16](edges[(i // 5) % len(edges)])
 
 
-def _arranged[ARRANGEMENT: Int, HAS_BIAS: Bool](ctx: DeviceContext, mut x: DeviceBuffer[DType.bfloat16],
-                                                mut w: DeviceBuffer[DType.bfloat16], mut b: DeviceBuffer[DType.bfloat16],
-                                                mut solo: DeviceBuffer[DType.bfloat16], rows: Int, n: Int, k: Int) raises:
-    # One guard row on each side stays poisoned.
-    var batch = ctx.enqueue_create_buffer[DType.bfloat16]((rows+2)*n)
-    batch.enqueue_fill(-123)
-    var input = TileTensor(x,row_major(rows,k))
+def _launch[ARRANGEMENT: Int, HAS_BIAS: Bool](ctx: DeviceContext, mut x: DeviceBuffer[DType.bfloat16],
+                                              mut w: DeviceBuffer[DType.bfloat16], mut b: DeviceBuffer[DType.bfloat16],
+                                              mut y: DeviceBuffer[DType.bfloat16], first: Int, rows: Int, n: Int,
+                                              k: Int) raises:
+    """Rows first..first+rows of x into rows first+1.. of y, which keeps a guard row on each side."""
+    var input = TileTensor(x.unsafe_ptr().unsafe_offset(first*k),row_major(rows,k))
     var weight = TileTensor(w,row_major(n,k))
-    var output = TileTensor(batch.unsafe_ptr().unsafe_offset(n),row_major(rows,n))
+    var output = TileTensor(y.unsafe_ptr().unsafe_offset((first+1)*n),row_major(rows,n))
     comptime if HAS_BIAS:
         enqueue_linear_decode_rows_apple_gpu[ARRANGEMENT](ctx,input,weight,TileTensor(b,row_major(n)),output)
     else:
         enqueue_linear_decode_rows_apple_gpu[ARRANGEMENT](ctx,input,weight,output)
-    _same(solo,batch,"arrangement "+String(ARRANGEMENT)+" rows "+String(rows)+" outputs "+String(n)+" inputs "+String(k))
+
+
+def _reference(mut x: DeviceBuffer[DType.bfloat16], mut w: DeviceBuffer[DType.bfloat16],
+               mut b: DeviceBuffer[DType.bfloat16], rows: Int, n: Int, k: Int, has_bias: Bool) raises -> List[Float64]:
+    """For each output, its FP64 sum and the sum of its terms' magnitudes."""
+    var result = List[Float64](capacity=2*rows*n)
+    with x.map_to_host() as xs:
+        with w.map_to_host() as ws:
+            with b.map_to_host() as bs:
+                for r in range(rows):
+                    for c in range(n):
+                        var total: Float64 = 0
+                        var magnitude: Float64 = 0
+                        for f in range(k):
+                            var term = (xs.unsafe_ptr()[unsafe_offset=r*k+f].cast[DType.float64]()
+                                        * ws.unsafe_ptr()[unsafe_offset=c*k+f].cast[DType.float64]())
+                            total += term
+                            magnitude += abs(term)
+                        if has_bias:
+                            var bias = bs.unsafe_ptr()[unsafe_offset=c].cast[DType.float64]()
+                            total += bias
+                            magnitude += abs(bias)
+                        result.append(total)
+                        result.append(magnitude)
+    return result^
+
+
+def _within_bound(mut y: DeviceBuffer[DType.bfloat16], reference: List[Float64], rows: Int, n: Int, k: Int,
+                  label: String) raises:
+    """Any correct FP32 summation order lies within (k+1)u times the terms' magnitudes, then one BF16 rounding."""
+    with y.map_to_host() as ys:
+        for i in range(rows*n):
+            var got = ys.unsafe_ptr()[unsafe_offset=n+i].cast[DType.float64]()
+            var total = reference[2*i]
+            var bound = 2.0 * Float64(k+1) * 5.960464477539063e-08 * reference[2*i+1] + 0.00390625 * abs(total)
+            if abs(got-total) > bound + 1e-30:
+                raise Error(label + " exceeds the summation bound at output " + String(i))
+
+
+def _arranged[ARRANGEMENT: Int, HAS_BIAS: Bool](ctx: DeviceContext, mut x: DeviceBuffer[DType.bfloat16],
+                                                mut w: DeviceBuffer[DType.bfloat16], mut b: DeviceBuffer[DType.bfloat16],
+                                                mut solo: DeviceBuffer[DType.bfloat16], rows: Int, n: Int, k: Int,
+                                                reference: List[Float64]) raises:
+    """Batched rows equal one-row results: the one-row kernel's, or a reordered arrangement's own."""
+    var label = "arrangement "+String(ARRANGEMENT)+" rows "+String(rows)+" outputs "+String(n)+" inputs "+String(k)
+    var batch = ctx.enqueue_create_buffer[DType.bfloat16]((rows+2)*n)
+    batch.enqueue_fill(-123)
+    _launch[ARRANGEMENT,HAS_BIAS](ctx,x,w,b,batch,0,rows,n,k)
+    comptime if decode_arrangement_reordered(ARRANGEMENT):
+        var own = ctx.enqueue_create_buffer[DType.bfloat16]((rows+2)*n)
+        own.enqueue_fill(-123)
+        for row in range(rows):
+            var input = TileTensor(x.unsafe_ptr().unsafe_offset(row*k),row_major(1,k))
+            var weight = TileTensor(w,row_major(n,k))
+            var output = TileTensor(own.unsafe_ptr().unsafe_offset((row+1)*n),row_major(1,n))
+            comptime if HAS_BIAS:
+                enqueue_linear_decode_rows_apple_gpu[ARRANGEMENT](ctx,input,weight,TileTensor(b,row_major(n)),output)
+            else:
+                enqueue_linear_decode_rows_apple_gpu[ARRANGEMENT](ctx,input,weight,output)
+        _same(own,batch,label)
+    else:
+        _same(solo,batch,label)
+    if len(reference):
+        _within_bound(batch,reference,rows,n,k,label)
 
 
 def _widths[HAS_BIAS: Bool, FIRST: Int = 0, LAST: Int = DECODE_ARRANGEMENTS](ctx: DeviceContext, n: Int, k: Int) raises:
@@ -133,8 +200,10 @@ def _widths[HAS_BIAS: Bool, FIRST: Int = 0, LAST: Int = DECODE_ARRANGEMENTS](ctx
                 enqueue_linear_apple_gpu(ctx,input,weight,TileTensor(b,row_major(n)),output)
             else:
                 enqueue_linear_apple_gpu(ctx,input,weight,output)
+        # Three rows also check every arrangement against the FP64 summation bound.
+        var reference = _reference(x,w,b,rows,n,k,HAS_BIAS) if rows == 3 else List[Float64]()
         comptime for arrangement in range(FIRST, LAST):
-            _arranged[arrangement,HAS_BIAS](ctx,x,w,b,solo,rows,n,k)
+            _arranged[arrangement,HAS_BIAS](ctx,x,w,b,solo,rows,n,k,reference)
 
 
 def test_decode_arrangements_equal_one_row_launches_at_decode_widths() raises:
@@ -152,6 +221,7 @@ def test_decode_arrangements_check_shapes_before_launch() raises:
     var ctx = DeviceContext()
     _widths[False, 4, 5](ctx,1152,512)
     _widths[False, 3, 4](ctx,1150,896)
+    _widths[True, 9, 11](ctx,1150,520)
     var x = ctx.enqueue_create_buffer[DType.bfloat16](2*512)
     var w = ctx.enqueue_create_buffer[DType.bfloat16](1150*512)
     var y = ctx.enqueue_create_buffer[DType.bfloat16](2*1150)
@@ -161,15 +231,10 @@ def test_decode_arrangements_check_shapes_before_launch() raises:
     var input = TileTensor(x,row_major(2,512))
     var weight = TileTensor(w,row_major(1150,512))
     var output = TileTensor(y,row_major(2,1150))
-    # Arrangement 3 fixes the width; 4-6 compute four columns at a time.
-    with assert_raises():
-        enqueue_linear_decode_rows_apple_gpu[3](ctx,input,weight,output)
-    with assert_raises():
-        enqueue_linear_decode_rows_apple_gpu[4](ctx,input,weight,output)
-    with assert_raises():
-        enqueue_linear_decode_rows_apple_gpu[5](ctx,input,weight,output)
-    with assert_raises():
-        enqueue_linear_decode_rows_apple_gpu[6](ctx,input,weight,output)
+    # Arrangements 3, 5-8 fix the width; 4-8 compute four columns at a time.
+    comptime for arrangement in range(3, 9):
+        with assert_raises():
+            enqueue_linear_decode_rows_apple_gpu[arrangement](ctx,input,weight,output)
     with y.map_to_host() as mapped:
         for i in range(len(y)):
             assert_equal(mapped.unsafe_ptr()[unsafe_offset=i].cast[DType.float32](), Float32(-123))
@@ -397,7 +462,8 @@ def _same_rows(mut batched: DeviceBuffer[DType.bfloat16], start: Int, mut solo: 
                     raise Error(label + " differs at element " + String(i))
 
 
-def _steps_equal_solo(ctx: DeviceContext, sequences: Int) raises:
+def _steps_equal_solo[ARRANGEMENT: Int = DECODE_PROJECTION](ctx: DeviceContext, sequences: Int,
+                                                          steps: Int = DECODE_STEPS) raises:
     var batched = _fixture_model(ctx, sequences)
     var solo = _fixture_model(ctx, 1)
     var batched_pool = KVPool(ctx, BLOCKS, CONTEXT, batched.kv_geometry())
@@ -411,9 +477,10 @@ def _steps_equal_solo(ctx: DeviceContext, sequences: Int) raises:
         longest = max(longest, _prefix(s))
         _prefill(ctx, batched, batched_pool, s, _prefix(s))
         _prefill(ctx, solo, solo_pool, s, _prefix(s))
-    for step in range(DECODE_STEPS):
-        batched.forward(ctx, _decode(sequences, step, lengths), batched_pool,
-                        configured_plan(DECODER_FUSED_DECODE, sequences, longest + step + 1, sequences))
+    for step in range(steps):
+        batched.forward[False, ARRANGEMENT](ctx, _decode(sequences, step, lengths), batched_pool,
+                                            configured_plan(DECODER_FUSED_DECODE, sequences, longest + step + 1,
+                                                            sequences))
         var tokens = batched.greedy_tokens(ctx)
         assert_equal(len(tokens), sequences)
         assert_equal(batched.last_route.sequences, sequences)
@@ -421,8 +488,8 @@ def _steps_equal_solo(ctx: DeviceContext, sequences: Int) raises:
         assert_equal(batched.last_route.decode_launches, 1 + 10 + 9 * (FIXTURE_LAYERS - 1) + FIXTURE_LAYERS + 3)
         for s in range(sequences):
             var p = lengths[s] + step
-            solo.forward(ctx, StepBatch.sequence([_token(s, p)], p, _block(s), CONTEXT), solo_pool,
-                         configured_plan(DECODER_FUSED_DECODE, 1, p + 1))
+            solo.forward[False, ARRANGEMENT](ctx, StepBatch.sequence([_token(s, p)], p, _block(s), CONTEXT), solo_pool,
+                                             configured_plan(DECODER_FUSED_DECODE, 1, p + 1))
             var label = "sequences " + String(sequences) + " step " + String(step) + " sequence " + String(s)
             assert_equal(tokens[s], solo.greedy(ctx))
             _same_rows(batched.logits, s * VOCABULARY, solo.logits, VOCABULARY, label + " logits")
@@ -440,6 +507,16 @@ def test_batched_steps_equal_each_sequence_decoded_alone() raises:
     var ctx = DeviceContext()
     for sequences in [2, 3, 8, 16, 32]:
         _steps_equal_solo(ctx, sequences)
+
+
+def test_reordered_steps_equal_each_sequence_decoded_alone() raises:
+    """A reordered arrangement also decodes one sequence in its own order, so batched still equals solo."""
+    var support = decoder_support()
+    support.verify_case(CASE)
+    var ctx = DeviceContext()
+    comptime for arrangement in range(8, DECODE_ARRANGEMENTS):
+        for sequences in [3, 16]:
+            _steps_equal_solo[arrangement](ctx, sequences, 4)
 
 
 def _arranged_step[ARRANGEMENT: Int](ctx: DeviceContext, mut model: QwenModel, mut pool: KVPool, sequences: Int,
@@ -466,7 +543,7 @@ def _same_arrangement[ARRANGEMENT: Int](ctx: DeviceContext, mut model: QwenModel
 
 
 def test_arrangements_give_identical_batched_steps() raises:
-    """Arrangements change how rows share weight loads only: each reproduces arrangement 0's bytes."""
+    """Exact arrangements change how rows share work only: each reproduces arrangement 0's bytes."""
     var support = decoder_support()
     support.verify_case(CASE)
     var ctx = DeviceContext()
@@ -489,8 +566,9 @@ def test_arrangements_give_identical_batched_steps() raises:
         ctx.enqueue_copy(dst_buf=norms, src_buf=model.normalized)
         ctx.enqueue_copy(dst_buf=storage, src_buf=pool.storage)
         comptime for arrangement in range(1, DECODE_ARRANGEMENTS):
-            _same_arrangement[arrangement](ctx, model, pool, sequences, lengths, longest, expected,
-                                           logits, norms, storage)
+            comptime if not decode_arrangement_reordered(arrangement):
+                _same_arrangement[arrangement](ctx, model, pool, sequences, lengths, longest, expected,
+                                               logits, norms, storage)
     # Observed selection records every host mark in order.
     for i in range(1, 10):
         assert_true(model.observation[i] >= model.observation[i - 1] or i == 6)
