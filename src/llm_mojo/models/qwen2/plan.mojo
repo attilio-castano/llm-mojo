@@ -14,10 +14,12 @@ from llm_mojo.layers.decoder_layer import (
 
 comptime MEASURED_DEVICE = "Apple M4 Pro"
 comptime MAX_CONTEXT = 4096
-# The decode composition's batched projection arrangement (kernels/linear.mojo);
-# 0 is row tile 4. Arrangements change how rows share weight loads, not
-# arithmetic: 1c measured the row tiles and 1d the other arrangements.
-comptime DECODE_PROJECTION = 0
+# The decode composition's batched projection arrangement (kernels/linear.mojo).
+# 5 gives each SIMD group four rows by four columns with fixed widths and early
+# loads; 1d selected and confirmed it against row tile 4 (arrangement 0).
+# Arrangements change how rows share work, not arithmetic, and one row always
+# runs the one-row kernel.
+comptime DECODE_PROJECTION = 5
 
 
 @fieldwise_init

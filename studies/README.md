@@ -12,6 +12,7 @@ and [layouts](../docs/layouts.md) define the values, storage and ownership.
 | --- | --- |
 | [Residual/RMSNorm alone and composed](model_generation/residual-norm.md) | Promoted all-three Fast route: 17.1–24.5% lower latency, 107–115 tokens/s; exact independent and composed checks |
 | [Combined QKV and activation fusion](model_generation/combined-fusion.md) | Promoted M4 Pro single-token Fast route: 16.9–19.4% lower latency, 86–90 tokens/s streaming medians, exact outputs and cache storage |
+| [Exact batched projections](model_generation/batch-projections.md) | Promoted batched decode projections: four columns per SIMD group cut batched step time by 31–65% with bit-identical outputs; 705 tokens/s for 64 sequences at 1,024 cached tokens |
 | [Native terminal chat](model_generation/chat.md) | Multi-turn cache reuse, exact history and terminal lifecycle, with paired prefill and actual interaction timings |
 | [Fast full-model runtime](model_generation/runtime.md) | All 24 layers, native generation, numerical diagnostics and 11 measured dispatch choices |
 
@@ -30,7 +31,7 @@ blocked.
 
 | Study | What it establishes |
 | --- | --- |
-| [Batched decode against batch size](model_generation/batch-size.md) | Decoding up to 64 sequences per step levels off at 2.2–3.2× one sequence's throughput; the multi-row projections' per-row work, not weight traffic, sets the cost |
+| [Batched decode against batch size](model_generation/batch-size.md) | With tile 4, decoding up to 64 sequences per step levels off at 2.2–3.2× one sequence's throughput; the multi-row projections' per-row work, not weight traffic, sets the cost |
 | [Inter-layer buffer swapping](model_generation/buffer-swap.md) | Exact outputs with 23 fewer compute commands; 5.3–8.3% median paired reductions and 90–94 tokens/s streaming, but the full promotion gate fails |
 | [GPU token selection](model_generation/token-selection.md) | Standalone argmax gains 4.5–7% but misses the full promotion gate; the tested fused head is slower; exact outputs and complete retained evidence |
 | [QKV fusion experiment](model_generation/qkv-fusion.md) | Exact candidate with 12–15% measured token-latency reductions; kept experimental because short-context calibration prevented promotion |

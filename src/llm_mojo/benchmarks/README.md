@@ -488,7 +488,7 @@ uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --
 uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_profile batch-size-plot --output studies/model_generation
 ```
 
-The [exact batched projections](../../../docs/batched-decode-plan.md#1d-exact-batched-projections)
+The [exact batched projections](../../../studies/model_generation/batch-projections.md)
 (1d) reuse the matrix with `--study projections`. The screen pairs arrangements
 3–6 against arrangement 0 (tile 4), and traces capture 64 sequences at 1,024
 cached tokens for each arrangement. `batch-size-confirm` applies the frozen rule

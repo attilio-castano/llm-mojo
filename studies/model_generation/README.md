@@ -26,12 +26,13 @@ reproduction commands.
 | [Terminal chat](chat.md) | Current | Session state, exact token history, persistent caches, controls and measured cache reuse |
 | [Residual/RMSNorm alone and composed](residual-norm.md) | Promoted | Today's single-row decode route: configuration 26 with GPU argmax, buffer swapping and residual/RMSNorm fusion; 17.1–24.5% lower latency and 107–115 tokens/s |
 | [Combined QKV and activation fusion](combined-fusion.md) | Promoted | Configuration 26, the decode configuration: 16.9–19.4% lower latency with exact outputs and cache storage |
+| [Exact batched projections](batch-projections.md) | Promoted | Arrangement 5, four rows by four columns per SIMD group: 31–65% shorter batched steps with bit-identical outputs, 705 tokens/s for 64 sequences at 1,024 cached tokens |
 
 ## Decode experiments
 
 | Study | Status | What it establishes |
 | --- | --- | --- |
-| [Batched decode against batch size](batch-size.md) | Diagnostic | Throughput levels off at 2.2–3.2× one sequence by B = 64; per-row work in the multi-row projections sets the cost, and tiles 8 and 16 are slower than tile 4 |
+| [Batched decode against batch size](batch-size.md) | Diagnostic | With tile 4, throughput levels off at 2.2–3.2× one sequence by B = 64; per-row work in the multi-row projections sets the cost, and tiles 8 and 16 are slower than tile 4 |
 | [Inter-layer buffer swapping](buffer-swap.md) | Not promoted alone | 23 fewer compute copies with exact outputs; 5.3–8.3% median paired reductions missed the standalone gate |
 | [GPU token selection](token-selection.md) | Not promoted alone | A separate GPU argmax gains 4.5–7% but missed its standalone gate; the fused vocabulary head was slower |
 | [QKV fusion](qkv-fusion.md) | Superseded | Configuration 25: exact, with 12–15% lower token latency, but short-context calibration prevented promotion; configuration 26 replaced it |

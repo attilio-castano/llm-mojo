@@ -19,7 +19,7 @@ Each fact has one home; other pages give a sentence and a link. Start with the
 | [Project direction](project.md) | Goal, what the evidence establishes, determinism and the next research questions |
 | [Layout notation](layouts.md) | How logical values, storage, thread ownership and reduction order are written down |
 | [Serving plan](serving-plan.md) | The proposed multi-request engine: interfaces, KV blocks, gates and phases |
-| [Batched decode plan](batched-decode-plan.md) | Phase 1 of the serving plan: the step format and KV pool, batched decode kernels and the batch-size study |
+| [Batched decode plan](batched-decode-plan.md) | Phase 1 of the serving plan: the step format and KV pool, batched decode kernels, the batch-size study and exact batched projections |
 
 ## Contracts
 

@@ -1,5 +1,10 @@
 # Why batched decode throughput levels off
 
+> **Status update, 2026-09-26.** Batched decode now uses projection arrangement 5,
+> which the [exact batched projections](batch-projections.md) study selected and
+> confirmed: 31–65% shorter batched steps with bit-identical outputs. The numbers
+> below describe tile 4, the route before it.
+
 Decoding B sequences in one configuration-26 step raises aggregate throughput
 from 94–120 tokens/s at B = 1 to 215–303 tokens/s at B = 64, depending on
 context, and then levels off. Each added sequence costs **3.2 ms** of step time
@@ -64,7 +69,8 @@ four block medians with tile 4.
 
 From B = 8 to 64, step time grows by 3.21, 3.57 and 4.58 ms per sequence at the
 three contexts. At that linear cost, throughput approaches the inverse of the
-slope, and B = 64 is already within 3% of it. Relative to B = 1, B = 64 gives 3.2×, 2.3× and 2.2×.
+slope, and B = 64 is already within 3% of it. Relative to B = 1, B = 64 gives
+3.2×, 2.3× and 2.2×.
 
 Those ratios inherit an unstable denominator. One-sequence samples fall into
 two groups, about 8.0–8.2 ms and 10–12 ms, sometimes within one arm. The slower
