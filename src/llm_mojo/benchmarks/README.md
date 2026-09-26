@@ -504,3 +504,23 @@ uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-archive -
 uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --study projections --output studies/model_generation
 uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_profile batch-size-plot --study projections --output studies/model_generation
 ```
+
+The [reordered batched projections](../../../docs/batched-decode-plan.md#1e-reordered-batched-projections)
+(1e) reuse the matrix with `--study reordered`, which screens arrangements 7–10
+against arrangement 5. Collection first records an accuracy census: every
+arrangement's error against FP64 sums at the five decode projection shapes.
+The frozen rule reads that census as well as the timings. If the confirmed
+arrangement changes the summation order, `batch-size-diagnose` runs the
+teacher-forced and HF comparisons against arrangement 5; the archive then needs
+`--diagnostics`:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-build --study reordered --prepared /absolute/prepared-v1 --output /private/tmp/batch-reordered-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-collect --study reordered --build /private/tmp/batch-reordered-build --output /private/tmp/batch-reordered-screen
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-confirm --study reordered --build /private/tmp/batch-reordered-build --screen /private/tmp/batch-reordered-screen --output /private/tmp/batch-reordered-confirmation
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-capture --study reordered --build /private/tmp/batch-reordered-build --output /private/tmp/batch-reordered-traces
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-diagnose --screen /private/tmp/batch-reordered-screen --confirmation /private/tmp/batch-reordered-confirmation --prepared /absolute/prepared-v1 --output /private/tmp/batch-reordered-diagnostics
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-archive --study reordered --timings /private/tmp/batch-reordered-screen --traces /private/tmp/batch-reordered-traces --confirmation /private/tmp/batch-reordered-confirmation --diagnostics /private/tmp/batch-reordered-diagnostics --output studies/model_generation
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --study reordered --output studies/model_generation
+uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_profile batch-size-plot --study reordered --output studies/model_generation
+```

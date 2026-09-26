@@ -226,8 +226,39 @@ BATCH_PROJECTION_DECLARATION = dict(
                  'with its own calibration and the same qualifying rule; no other candidate if it fails')
 
 
+# 1e, reordered batched projections: arrangements 7-10 against arrangement 5, the batched default.
+BATCH_REORDERED_CONTROL = 5
+BATCH_REORDERED_ARRANGEMENTS = (7, 8, 9, 10)
+BATCH_REORDERED_TRACES = tuple((1024, 64, a) for a in (BATCH_REORDERED_CONTROL,) + BATCH_REORDERED_ARRANGEMENTS)
+BATCH_ACCURACY_SHAPES = ((8, 1152, 896), (8, 896, 896), (8, 4864, 896), (8, 896, 4864), (2, 151936, 896))
+BATCH_REORDERED_DECLARATION = dict(
+    {k: v for k, v in BATCH_PROJECTION_DECLARATION.items() if k not in ('arrangements', 'comparisons', 'trace_workloads')},
+    policy='fast; configuration 26 decode composition; batched and single-row projections in one arrangement',
+    arrangements={'5': 'the batched default: four rows and four columns, fixed width, early loads, today\'s order',
+                  '7': 'arrangement 5 with eight rows per SIMD group, today\'s order',
+                  '8': 'four rows and four columns; each lane sums four adjacent products in every 128, then warp.sum; '
+                       'one row runs the same order',
+                  '9': 'matrix-unit 8x32 tiles: 8x8 fragments along K in steps of 8, FP32 accumulators, for any row count',
+                  '10': 'matrix-unit 16x16 tiles, as 9'},
+    arithmetic='5 and 7 keep the one-row kernel order; 8-10 change it, and a single row follows the same order',
+    comparisons=[['arrangement-5', 'arrangement-5']] + [['arrangement-5', f'arrangement-{a}'] for a in BATCH_REORDERED_ARRANGEMENTS],
+    trace_workloads=[list(t) for t in BATCH_REORDERED_TRACES],
+    accuracy=dict(shapes=[list(s) for s in BATCH_ACCURACY_SHAPES], reference='FP64 sum of the same BF16 operands',
+                  unit='absolute error in BF16 units in the last place at the FP64 sum',
+                  values='the kernel tests: mixed signs and exponents, every fifth a signed zero, subnormal or neighbour of one',
+                  gate='a reordered arrangement\'s worst error per shape does not exceed arrangement 5\'s'),
+    qualification='the accuracy gate; no regression in any workload; a gain in every workload with B >= 16',
+    selection='lowest worst-case median ratio over workloads with B >= 16, then lowest mean ratio, then lower ID',
+    confirmation='a fresh four-block run of the selected arrangement against arrangement 5 over the same workloads, '
+                 'with its own calibration and the same qualifying rule; then the model-level diagnostics',
+    diagnostics='teacher-forced decode comparison against arrangement 5; HF same-history comparison of 5 and the '
+                'selected arrangement; stop if the selected agrees with HF on more than one fewer decode choice or '
+                'its largest KL divergence more than doubles',
+    adoption='an exact selection becomes the default on 1d\'s terms; a reordered one waits for a separate decision')
+
+
 def batch_projection_specification(context, sequences, arrangement):
-    if (context, sequences, arrangement) not in BATCH_PROJECTION_TRACES:
+    if (context, sequences, arrangement) not in BATCH_PROJECTION_TRACES + BATCH_REORDERED_TRACES:
         raise ValueError('undeclared projection trace workload')
     return dict(profile_rows=sequences, hidden_size=896, key_value_rows=context+1,
                 profile_workload=f'model-p{context}-b{sequences}-a{arrangement}',

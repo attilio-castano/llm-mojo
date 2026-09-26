@@ -405,7 +405,7 @@ def numerical_diagnostic(actual, expected):
         zero_reference_nonzero_rows=int(np.sum((norm==0)&(error!=0))),exact=actual.tobytes()==expected.tobytes())
 
 
-def runtime_specification(output, generations=None, mixed_only=False):
+def runtime_specification(output, generations=None, mixed_only=False, decode_only=False):
     declaration=json.loads((repository_root()/'tests/fixtures/model_runtime.json').read_text())
     cases=[]
     if generations is not None:
@@ -435,6 +435,11 @@ def runtime_specification(output, generations=None, mixed_only=False):
         schedule=[1]*length if length<=17 else [length-17,16,1]
         cases.append(dict(name=f'length-{length}',ids=ids(length),schedule=schedule,
             configurations=[0]*len(schedule),full_configurations=[0]))
+    if decode_only:
+        # Only the length cases, whose calls are single decode rows or end with one.
+        declaration['prompts']=[]
+        write(output,dict(declaration=declaration,cases=cases,measurements=[]))
+        return
     for w in declaration['measurements']:
         prefix=w['total']-w['rows']
         for candidate in w['candidates']:
@@ -890,6 +895,7 @@ def main():
     s=sub.add_parser('specification');s.add_argument('--output',required=True,type=Path)
     s.add_argument('--generations',type=Path)
     s.add_argument('--mixed-only',action='store_true')
+    s.add_argument('--decode-cases',action='store_true',help='only the length cases, which end in single decode rows')
     b=sub.add_parser('build');b.add_argument('--binary',required=True,type=Path)
     b.add_argument('--generation',action='store_true')
     b.add_argument('--decode-projection',type=int,help='decode projection arrangement (default: the source default)')
@@ -925,7 +931,7 @@ def main():
     o.add_argument('--reference',required=True,type=Path);o.add_argument('--output',required=True,type=Path)
     o.add_argument('--prepared',type=Path)
     args=parser.parse_args()
-    if args.command=='specification':runtime_specification(args.output,args.generations,args.mixed_only)
+    if args.command=='specification':runtime_specification(args.output,args.generations,args.mixed_only,args.decode_cases)
     elif args.command=='build':build(args.binary,args.generation,args.decode_projection)
     elif args.command=='generate':generation_study(args.binary,args.output,args.prepared,args.policy)
     elif args.command=='lifecycle':lifecycle_study(args.binary,args.output,args.prepared)

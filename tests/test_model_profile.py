@@ -179,6 +179,74 @@ class ModelProfileTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             projection_summarize(broken, contract.BATCH_PROJECTION_ARRANGEMENTS)
 
+    def test_reordered_contract_accuracy_and_tokens(self):
+        from llm_mojo.benchmarks.model_profile import (accuracy_gate, batch_comparisons, batch_study, parse_accuracy,
+                                                       parse_batch_tokens)
+        declaration = contract.BATCH_REORDERED_DECLARATION
+        self.assertEqual(json.loads(json.dumps(declaration)), declaration)
+        self.assertEqual([int(a) for a in declaration['arrangements']], [5, 7, 8, 9, 10])
+        self.assertEqual(batch_study('reordered')['traces'][-1][3:], ('batch-profile-1024-64-a10', dict(arrangement=10)))
+        spec = contract.batch_projection_specification(1024, 64, 9)
+        data = dict(implementation=contract.BATCH_IMPLEMENTATION, arrangement=9, profile_iterations=8,
+                    entrypoint=contract.ENTRYPOINTS[contract.BATCH_IMPLEMENTATION], profile_warmup_iterations=10, **spec)
+        self.assertEqual(contract.configuration(data), dict(spec, arrangement=9))
+        self.assertEqual(batch_comparisons('reordered'), (5, None))
+        self.assertEqual(batch_comparisons('reordered-confirm:9'), (2, None))
+        for invalid in ('reordered-confirm:5', 'reordered-confirm:3', 'confirm:9'):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                batch_comparisons(invalid)
+        def census(worst):
+            lines = ['device: Apple M4 Pro', 'api: metal']
+            for rows, n, k in contract.BATCH_ACCURACY_SHAPES:
+                for a in (5, 7, 8, 9, 10):
+                    lines.append(f'ACCURACY {a} {rows} {n} {k} {rows*n} 3 1 0 {worst(a, n)}')
+            return '\n'.join(lines + ['ACCURACY_COMPLETE']) + '\n'
+        records = parse_accuracy(census(lambda a, n: 2.5 if a >= 9 and n == 151936 else 1.25))
+        self.assertEqual(len(records), 25)
+        self.assertEqual(accuracy_gate(records), {7: True, 8: True, 9: False, 10: False})
+        for bad in (census(lambda a, n: 1).replace('ACCURACY 10 2', 'ACCURACY 11 2'),
+                    census(lambda a, n: 1).replace(' 3 1 0 ', ' 1 3 0 '),
+                    census(lambda a, n: 1).replace('ACCURACY_COMPLETE\n', '')):
+            with self.subTest(), self.assertRaises(ValueError):
+                parse_accuracy(bad)
+        tokens = parse_batch_tokens('tokens: 16 5 0\ntokens: 16 9 2\nBATCH 16 0 0 0 5\n', 1024, 3)
+        self.assertEqual([(t['arrangement'], t['differing']) for t in tokens], [(5, 0), (9, 2)])
+        with self.assertRaises(ValueError):
+            parse_batch_tokens('tokens: 16 9 17\n', 1024, 3)
+
+    def test_reordered_decision_needs_accuracy_one_row_and_large_batches(self):
+        from llm_mojo.benchmarks.model_profile import diagnostic_stop, hf_summary, projection_decision, projection_summarize
+        arrangements = contract.BATCH_REORDERED_ARRANGEMENTS
+        def samples(ratio):
+            rows = []
+            for context, sequences in contract.batch_workloads():
+                for block in range(4):
+                    for comparison in range(1+len(arrangements)):
+                        for arm in range(2):
+                            scale = ratio(sequences, arrangements[comparison-1]) if arm and comparison else 1
+                            for sample in range(10):
+                                rows.append(dict(context=context, sequences=sequences, block=block, comparison=comparison,
+                                                 arm=arm, sample=sample, elapsed_ns=int(1_000_000*sequences*scale)+sample,
+                                                 marks=[]))
+            return rows
+        # 7 gains from B = 16 only; 8 gains everywhere; 9 is fastest but fails accuracy; 10 is slower at one row.
+        table = {7: lambda b: .9 if b >= 16 else 1, 8: lambda b: .8, 9: lambda b: .5, 10: lambda b: 1.2 if b == 1 else .6}
+        summary = projection_summarize(samples(lambda b, a: table[a](b)), arrangements)
+        eligible = {7: True, 8: True, 9: False, 10: True}
+        decision = projection_decision(summary, 1, 16, eligible)
+        self.assertEqual([q['arrangement'] for q in decision['qualified']], [8, 7])
+        self.assertEqual(decision['selected'], 8)
+        self.assertEqual(projection_decision(summary, 1, 16, {**eligible, 8: False})['selected'], 7)
+        choices = [dict(case='c', call=i, token=1, reference_token=1 if i < 9 else 2, kl_nats=0.01*(i+1),
+                        total_variation=0.1, reference_margin=1.0) for i in range(10)]
+        exact = hf_summary(choices)
+        self.assertEqual((exact['decode_choices'], exact['agree'], exact['max_kl_nats']), (10, 9, 0.1))
+        for candidate, stop in ((choices, False), ([dict(c, token=3) if c['call'] == 0 else c for c in choices], False),
+                                ([dict(c, token=3) if c['call'] < 2 else c for c in choices], True),
+                                ([dict(c, kl_nats=0.25) if c['call'] == 3 else c for c in choices], True)):
+            with self.subTest(stop=stop):
+                self.assertEqual(diagnostic_stop(dict(selected=8, hf={'5': exact, '8': hf_summary(candidate)})), stop)
+
     def test_retained_batch_size_integrity(self):
         from contextlib import redirect_stdout
         from io import StringIO

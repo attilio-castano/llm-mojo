@@ -2,8 +2,10 @@
 
 The token-profile modes (bench, verify, profile) time one sequence. The batch
 mode and the MODEL_BATCH_PROFILE build time decode steps of B sequences: the
-batch-size study (1c) pairs row tiles, and the projection study (1d) pairs
-batched projection arrangements (docs/batched-decode-plan.md).
+batch-size study (1c) pairs row tiles, the projection study (1d) pairs exact
+batched projection arrangements, and the reordered study (1e) pairs arrangements
+with other summation orders, whose accuracy the accuracy mode records
+(docs/batched-decode-plan.md).
 Completed decode experiments (fusion, selection, buffer swap, composition,
 projection arrangement, scheduling and launch probes) are replay-only; their
 collectors exist through commit edb610a. See studies/model_generation/README.md.
@@ -11,10 +13,10 @@ collectors exist through commit edb610a. See studies/model_generation/README.md.
 from std.sys import argv, is_defined, get_defined_int, get_defined_string
 from std.time import sleep
 from std.memory import bitcast
-from max.gpu.host import DeviceContext, DeviceGraph, DeviceGraphBuilder
+from max.gpu.host import DeviceBuffer, DeviceContext, DeviceGraph, DeviceGraphBuilder
 from layout import TileTensor, TensorLayout, row_major
 from std.gpu import global_idx
-from llm_mojo.kernels.linear import DECODE_ARRANGEMENTS
+from llm_mojo.kernels.linear import DECODE_ARRANGEMENTS, enqueue_linear_decode_rows_apple_gpu
 from llm_mojo.models.qwen2.model import QwenModel, save_bf16
 from llm_mojo.models.qwen2.plan import fast_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
@@ -137,20 +139,26 @@ def batch_step[OBSERVE: Bool, ARRANGEMENT: Int](mut model: QwenModel, mut kv: KV
 
 
 def batch_arms(study: String) raises -> List[Int]:
-    """Each comparison's candidate arrangement against arrangement 0; -1 is arrangement 0 with host marks.
+    """The control arrangement, then each comparison's candidate; -1 is the control with host marks.
 
-    size: 1c's tiles 4, 8 and 16 and the observed arm. projections: 1d's screen of
-    arrangements 3-6. confirm:A: 1d's confirmation of the selected arrangement A.
+    Comparison 0 pairs the control with itself. size: 1c's tiles 4, 8 and 16 and
+    the observed arm. projections: 1d's screen of arrangements 3-6 against 0.
+    confirm:A: 1d's confirmation of A. reordered: 1e's screen of 7-10 against 5.
+    reordered-confirm:A: 1e's confirmation of A.
     """
     if study == "size":
         return [0, 1, 2, -1]
     if study == "projections":
         return [0, 3, 4, 5, 6]
+    if study == "reordered":
+        return [5, 7, 8, 9, 10]
     var parts = study.split(":")
-    if len(parts) == 2 and String(parts[0]) == "confirm":
+    if len(parts) == 2:
         var arrangement = Int(String(parts[1]))
-        if arrangement >= 3 and arrangement < DECODE_ARRANGEMENTS:
+        if String(parts[0]) == "confirm" and arrangement >= 3 and arrangement <= 6:
             return [0, arrangement]
+        if String(parts[0]) == "reordered-confirm" and arrangement >= 7 and arrangement < DECODE_ARRANGEMENTS:
+            return [5, arrangement]
     raise Error("unknown batch study")
 
 
@@ -174,7 +182,7 @@ def batch_check(model: QwenModel, selected: List[Int], expected: List[Int], sequ
 
 
 def batch_bench(prepared: String, tables: String, context: Int, first: Int, study: String) raises:
-    """Paired arms per batch size: arrangement 0 against itself, then each of the study's candidates.
+    """Paired arms per batch size: the control against itself, then each of the study's candidates.
 
     Tiles 4, 8 and 16 are projection arrangements 0, 1 and 2.
     """
@@ -205,10 +213,23 @@ def batch_bench(prepared: String, tables: String, context: Int, first: Int, stud
     var records = String()
     for index in range(len(sizes)):
         var sequences = sizes[len(sizes)-1-index] if first == 1 else sizes[index]
-        batch_rewind(model,kv,contexts,sequences)
-        var expected = batch_step[False, 0](model,kv,ctx,tokens,contexts,sequences)
-        batch_check(model,expected,expected,sequences)
-        print("sequences:",sequences,"first token:",expected[0],"last token:",expected[sequences-1])
+        # Each comparison's arrangement records its own untimed tokens. Exact arrangements
+        # must select the control's; a reordered one may differ, and the count is reported.
+        var expected = List[List[Int]]()
+        for position in range(len(arms)):
+            batch_rewind(model,kv,contexts,sequences)
+            var reference = batch_arm(arms[position] if arms[position] != -1 else arms[0],model,kv,ctx,
+                                      tokens,contexts,sequences)
+            batch_check(model,reference,reference,sequences)
+            var differing = 0
+            for s in range(sequences):
+                if reference[s] != expected[0][s] if position else False:
+                    differing += 1
+            if differing and arms[position] < 8:
+                raise Error("an exact arrangement changed a sequence's token")
+            print("tokens:",sequences,arms[position],differing)
+            expected.append(reference^)
+        print("sequences:",sequences,"first token:",expected[0][0],"last token:",expected[0][sequences-1])
         for position in range(len(arms)):
             var comparison = len(arms)-1-position if first == 1 else position
             for arm_index in range(2):
@@ -216,10 +237,10 @@ def batch_bench(prepared: String, tables: String, context: Int, first: Int, stud
                 for sample in range(20):
                     batch_rewind(model,kv,contexts,sequences)
                     var start = now()
-                    var arrangement = arms[comparison] if arm == 1 else 0
+                    var arrangement = arms[comparison] if arm == 1 else arms[0]
                     var selected = batch_arm(arrangement,model,kv,ctx,tokens,contexts,sequences)
                     var elapsed = now()-start
-                    batch_check(model,selected,expected,sequences)
+                    batch_check(model,selected,expected[comparison if arm == 1 else 0],sequences)
                     if sample >= 10:
                         records += ("BATCH "+String(sequences)+" "+String(comparison)+" "+String(arm)+" "
                                     +String(sample-10)+" "+String(elapsed))
@@ -229,6 +250,85 @@ def batch_bench(prepared: String, tables: String, context: Int, first: Int, stud
                         records += "\n"
     print(records,end="")
     print("BATCH_COMPLETE")
+
+
+def _accuracy_values(mut buffer: DeviceBuffer[DType.bfloat16], seed: Int) raises:
+    """The kernel tests' values: mixed signs and exponents, with every fifth a signed zero,
+    a subnormal or a neighbour of one."""
+    var edges: List[UInt16] = [0x0000, 0x8000, 0x0001, 0x8001, 0x007F, 0x807F, 0x0080, 0x3F80, 0x3F81, 0xBF7F]
+    with buffer.map_to_host() as mapped:
+        for i in range(len(buffer)):
+            var raw = UInt32((i*1664525+seed*1013904223) & 0xffffffff)
+            var bits = UInt16((raw >> 16) & 0x807f) | UInt16((119+Int((raw >> 7)%UInt32(16))) << 7)
+            if i % 5 == seed % 5:
+                bits = edges[(i // 5) % len(edges)]
+            mapped.unsafe_ptr()[unsafe_offset=i] = bitcast[DType.bfloat16](bits)
+
+
+def _bf16_ulp(value: Float64) -> Float64:
+    """One BF16 unit in the last place at value, with the smallest normal's below it."""
+    var exponent = max(Int((bitcast[DType.uint64](value) >> 52) & 0x7FF) - 1023, -126)
+    return bitcast[DType.float64](UInt64(exponent - 7 + 1023) << 52)
+
+
+def _accuracy_shape[HAS_BIAS: Bool](ctx: DeviceContext, rows: Int, n: Int, k: Int) raises:
+    """Each screened arrangement's errors against the FP64 sum of the same BF16 operands, in BF16 ulps."""
+    var x = ctx.enqueue_create_buffer[DType.bfloat16](rows*k)
+    var w = ctx.enqueue_create_buffer[DType.bfloat16](n*k)
+    var b = ctx.enqueue_create_buffer[DType.bfloat16](n)
+    var y = ctx.enqueue_create_buffer[DType.bfloat16](rows*n)
+    _accuracy_values(x,rows)
+    _accuracy_values(w,n)
+    _accuracy_values(b,k)
+    var exact = List[Float64](capacity=rows*n)
+    with x.map_to_host() as xs:
+        with w.map_to_host() as ws:
+            with b.map_to_host() as bs:
+                for r in range(rows):
+                    for c in range(n):
+                        var total: Float64 = 0
+                        for f in range(k):
+                            total += (xs.unsafe_ptr()[unsafe_offset=r*k+f].cast[DType.float64]()
+                                      * ws.unsafe_ptr()[unsafe_offset=c*k+f].cast[DType.float64]())
+                        comptime if HAS_BIAS:
+                            total += bs.unsafe_ptr()[unsafe_offset=c].cast[DType.float64]()
+                        exact.append(total)
+    var input = TileTensor(x,row_major(rows,k))
+    var weight = TileTensor(w,row_major(n,k))
+    var output = TileTensor(y,row_major(rows,n))
+    comptime for arrangement in [5, 7, 8, 9, 10]:
+        y.enqueue_fill(0)
+        comptime if HAS_BIAS:
+            enqueue_linear_decode_rows_apple_gpu[arrangement](ctx,input,weight,TileTensor(b,row_major(n)),output)
+        else:
+            enqueue_linear_decode_rows_apple_gpu[arrangement](ctx,input,weight,output)
+        var above_half = 0
+        var above_one = 0
+        var above_two = 0
+        var worst: Float64 = 0
+        with y.map_to_host() as ys:
+            for i in range(rows*n):
+                var error = abs(ys.unsafe_ptr()[unsafe_offset=i].cast[DType.float64]() - exact[i]) / _bf16_ulp(exact[i])
+                worst = max(worst, error)
+                above_half += 1 if error > 0.5 else 0
+                above_one += 1 if error > 1 else 0
+                above_two += 1 if error > 2 else 0
+        print("ACCURACY",arrangement,rows,n,k,rows*n,above_half,above_one,above_two,worst)
+
+
+def accuracy_census() raises:
+    """1e's accuracy evidence: the five decode projection shapes with the kernel tests' values."""
+    var ctx = DeviceContext()
+    if ctx.api() != "metal" or ctx.name() != "Apple M4 Pro":
+        raise Error("study requires Apple M4 Pro / Metal")
+    print("device:",ctx.name())
+    print("api:",ctx.api())
+    _accuracy_shape[True](ctx,8,1152,896)
+    _accuracy_shape[False](ctx,8,896,896)
+    _accuracy_shape[False](ctx,8,4864,896)
+    _accuracy_shape[False](ctx,8,896,4864)
+    _accuracy_shape[False](ctx,2,151936,896)
+    print("ACCURACY_COMPLETE")
 
 
 def batch_profile[ARRANGEMENT: Int](prepared: String, tables: String, context: Int, sequences: Int,
@@ -317,6 +417,9 @@ def main() raises:
             get_defined_int["MODEL_BATCH_SEQUENCES"](),String(get_defined_string["MODEL_BATCH_WORKLOAD"]()))
         return
     var cli = argv()
+    if len(cli) == 2 and String(cli[1]) == "accuracy":
+        accuracy_census()
+        return
     if len(cli) == 7 and String(cli[1]) == "batch":
         var context = Int(String(cli[4]))
         var first = Int(String(cli[5]))
