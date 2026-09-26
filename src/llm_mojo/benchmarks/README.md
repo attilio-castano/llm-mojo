@@ -473,7 +473,7 @@ Qwen. This gate does not upgrade or modify installed MAX dependencies.
 
 ### Batch-size study
 
-The [batch-size study](../../../docs/batched-decode-plan.md#1c-batch-size-study)
+The [batch-size study](../../../studies/model_generation/batch-size.md)
 times decode steps of 1 to 64 sequences at three contexts and one mixed batch.
 Within the four-block procedure it pairs tile 8, tile 16 and an observed arm
 against tile 4, and it traces three batch sizes at 1,024 cached tokens. From a

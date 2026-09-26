@@ -38,6 +38,9 @@ decodes up to `max_sequences` sequences at once, one token each, with the same
 launches as one sequence; `greedy_tokens` returns one token per sequence, and
 each sequence's logits, token and appended K/V equal decoding it alone. Every
 other call covers one sequence. See the [batched decode plan](batched-decode-plan.md).
+On M4 Pro, 64 sequences per step give 2.2–3.2 times one sequence's throughput,
+depending on context; the [batch-size study](../studies/model_generation/batch-size.md)
+explains why it levels off.
 
 The decoder requires its input and output storage not to alias. Multi-row calls
 copy each intermediate decoder output into the separate input buffer before the

@@ -20,8 +20,9 @@ validation and incremental commits. Pushing, pull requests, toolchain upgrades
 and numerical-contract changes need a separate decision. 1b was approved on
 2026-09-25 and 1c on 2026-09-26, on the same terms.
 
-Status: 1a and 1b are complete; see the [validation record](#validation-record).
-1c is in progress.
+Status: 1a, 1b and 1c are complete; see the [validation record](#validation-record).
+1c's throughput hypothesis failed, and its record lists the decision needed
+before phase 2.
 
 ## 1a. Step format and KV pool
 
@@ -366,6 +367,73 @@ slower ([decoder policies](../studies/decoder_layer/policies.md)); those cells
 do not predict decode-shaped batches.
 
 ## Validation record
+
+### 1c on `7b3b131`, 2026-09-26
+
+Two commits built the study and a third adds its evidence:
+
+| Commit | Change |
+| --- | --- |
+| `f18b08f` | the row tile as a `forward` parameter and `greedy_tokens` marks, with a test that tiles 8 and 16 reproduce tile 4's batched steps |
+| `7b3b131` | the benchmark mode, contract and pipeline, with parser, census and summary tests |
+
+The third commit adds the archive, the
+[study](../studies/model_generation/batch-size.md) and this record.
+
+- **Before collection.** `uv run --locked llm-mojo validate` passed on a clean
+  `7b3b131`: oracle anchors with the shared fixtures, 270 Python tests, the
+  native suites on Metal and every benchmark smoke.
+- **Timing.** Four blocks from 09:36 to 09:57 produced 7,040 samples. Every
+  sample reproduced its reference tokens with 245 launches. AC power, normal
+  power mode and no thermal or performance warning were recorded before and
+  after every block.
+- **Traces.** Six accepted Metal System Traces at 1,024 cached tokens, for
+  B = 1, 16 and 64 with two repeats each, cover 11,952 measured commands. B = 16
+  needed two attempts for repeat 0 and four for repeat 1. The four rejected
+  attempts each lost one or two commands' Compute intervals: the trace labelled
+  them as WindowServer or the wallpaper extension. Each was replaced with the
+  same binary, and the archive keeps the rejected receipts and evidence.
+- **Replay.** `batch-size-replay` regenerates the summary from the archive
+  without a GPU. It now also checks every block's and trace's recorded power
+  conditions, and that each rejected attempt used the frozen binary. The
+  retained-archive test rejects eight kinds of damage.
+
+**Outcome.** The recorded hypothesis failed. B = 16 gave 2.9×, 2.2× and 2.2×
+B = 1 at 64, 1,024 and 3,968 cached tokens, and B = 64 gave 3.2×, 2.3× and
+2.2×. Each added sequence costs 3.2–4.6 ms of step time. The refinement failed
+too: a tile-4 projection pass costs 13.1–14.2 ms, not the one-row 6.4 ms. Tiles
+8 and 16 were slower than tile 4 in all 19 multi-row workloads, so Fast keeps
+tile 4. Because B = 16 gave less than 3×, traces were examined before phase 2.
+Projections take 90% of a B = 64 step's GPU time, and their per-row work, not
+weight traffic, sets that cost.
+
+**Deviations from the plan.**
+- Trace replacements, as above.
+- A Docker Desktop virtual machine started one minute into the third block and
+  ran through the rest of the collection and every trace. For multi-row
+  workloads, the last two blocks' medians were within −5% to +6% of the first
+  two.
+- The replay checks and one figure subtitle changed after collection. The
+  archive was then rebuilt from the same raw timings and traces with the
+  committed analysis code.
+
+**Decision needed before phase 2.** Batched decode is exact and gives 2.2–3.2×
+one sequence's throughput at B = 64. Raising that depends on the multi-row
+projection kernel. There are three paths:
+
+1. **Exact kernel work.** Keep each row's lane-strided FP32 order and cut the
+   per-row work, for example by letting one SIMD group compute several output
+   columns so that each input load and conversion serves several weights.
+   Batched rows stay bit-identical to today's one-row decode, so the numerical
+   contract is unchanged.
+2. **A matrix-multiply projection.** SIMD-group matrix operations share weights
+   across rows with little per-row work but change the K reduction order.
+   Using the same kernel for one row keeps batched rows equal to solo rows but
+   changes Fast's arithmetic. That numerical-contract change needs approval and
+   the diagnostic comparisons.
+3. **Phase 2 first.** Paged KV does not depend on the projection kernel, and its
+   study question, the cost of block translation, can be answered at today's
+   throughput.
 
 ### 1b on `f3abcd2`, 2026-09-25
 

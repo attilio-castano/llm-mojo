@@ -1655,6 +1655,19 @@ def batch_replay(directory):
     expected = Counter((c, b, t, r) for c, b, t in contract.BATCH_TRACES for r in range(2))
     if Counter((c['prefix'], c['sequences'], c['row_tile'], c['repeat']) for c in record['captures']) != expected:
         raise ValueError('incomplete batch-size trace census')
+    for block in [*record['timing']['blocks'], *[c['conditions'] for c in record['captures']]]:
+        for side in ('before', 'after'):
+            require_ac(block[side])
+            require_nominal_thermal_state(block[side])
+            if block[side]['power_mode_raw'] != '0':
+                raise ValueError('batch-size power mode changed')
+    # A rejected attempt must be a trace of a declared workload with the frozen binary.
+    for rejected in record['rejected_captures']:
+        workload = (rejected['prefix'], rejected['sequences'], rejected['row_tile'])
+        binary = rejected['receipt']['profile']['binary']
+        if (workload not in contract.BATCH_TRACES or rejected['status'] != 'rejected by analysis'
+                or {k: binary[k] for k in ('sha256', 'bytes')} != build_record['binaries']['batch-profile-%d-%d-%d' % workload]):
+            raise ValueError('rejected capture is not an attempt of the frozen batch-size build')
     gpu = []
     for capture in record['captures']:
         for stage, value in batch_capture_totals(capture, build_record).items():
@@ -1720,7 +1733,7 @@ def batch_plot(directory):
     axes[0].set_xticks(range(len(rows)), [str(r['sequences']) for r in rows])
     axes[0].set_xlabel('Sequences decoding in one step')
     axes[0].set_ylabel('Milliseconds, median observed step')
-    axes[0].set_title('Host intervals at 1,024 cached tokens\nenqueue waits once the GPU queue is full')
+    axes[0].set_title('Host intervals at 1,024 cached tokens\nenqueue lengthens while the GPU works')
     axes[0].legend(fontsize=8, loc='upper left')
     groups = [('Decoder projections', {'packed QKV projection','output projection','gate projection','up projection','down projection'}, '#244b69'),
               ('Attention', {'FP32 GQA'}, '#27a89b'),

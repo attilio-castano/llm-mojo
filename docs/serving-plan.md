@@ -521,7 +521,9 @@ configuration and trace identity.
 | 6. SSD tier | store entries keyed by engine identity, publication by rename, asynchronous loading, verification, eviction | restored bytes equal stored bytes; disk and memory hits agree; a changed engine identity never hits older entries | At what prefix length does restoring beat recomputing? |
 | 7. Replicas (optional) | several engines behind a KV-aware router in the frontend | routing preserves histories and token accounting | Do independent submission threads raise throughput, and what does KV-aware routing gain over round-robin? |
 
-The [batched decode plan](batched-decode-plan.md) details phase 1.
+The [batched decode plan](batched-decode-plan.md) details phase 1, and its
+[batch-size study](../studies/model_generation/batch-size.md) answers phase 1's
+study question.
 `src/llm_mojo/serving/` starts in phase 1 with StepBatch and grows only as each
 phase lands. The Qwen template, stop IDs and card values stay in
 `models/qwen2/`. The `serve` command belongs in `cli/`, and the trace driver

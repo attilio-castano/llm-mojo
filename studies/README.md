@@ -30,6 +30,7 @@ blocked.
 
 | Study | What it establishes |
 | --- | --- |
+| [Batched decode against batch size](model_generation/batch-size.md) | Decoding up to 64 sequences per step levels off at 2.2–3.2× one sequence's throughput; the multi-row projections' per-row work, not weight traffic, sets the cost |
 | [Inter-layer buffer swapping](model_generation/buffer-swap.md) | Exact outputs with 23 fewer compute commands; 5.3–8.3% median paired reductions and 90–94 tokens/s streaming, but the full promotion gate fails |
 | [GPU token selection](model_generation/token-selection.md) | Standalone argmax gains 4.5–7% but misses the full promotion gate; the tested fused head is slower; exact outputs and complete retained evidence |
 | [QKV fusion experiment](model_generation/qkv-fusion.md) | Exact candidate with 12–15% measured token-latency reductions; kept experimental because short-context calibration prevented promotion |
