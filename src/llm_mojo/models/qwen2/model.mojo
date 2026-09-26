@@ -322,14 +322,15 @@ struct QwenModel(Movable):
         """
         self._forward[OBSERVE, False, PROJECTION](ctx, batch, kv, plan, CaptureRequest("", False))
 
-    def forward_captured(mut self, ctx: DeviceContext, batch: StepBatch, mut kv: KVPool, plan: ExecutionPlan,
-                         request: CaptureRequest) raises:
+    def forward_captured[PROJECTION: Int = DECODE_PROJECTION](mut self, ctx: DeviceContext, batch: StepBatch,
+                                                              mut kv: KVPool, plan: ExecutionPlan,
+                                                              request: CaptureRequest) raises:
         """Diagnostic forward that synchronously writes every boundary under request.directory."""
         if request.directory.byte_length() == 0:
             raise Error("capture requires a directory")
         if batch.sequences() != 1:
             raise Error("capture covers one sequence")
-        self._forward[False, True, DECODE_PROJECTION](ctx, batch, kv, plan, request)
+        self._forward[False, True, PROJECTION](ctx, batch, kv, plan, request)
 
     def _forward[OBSERVE: Bool, CAPTURE: Bool, PROJECTION: Int](mut self, ctx: DeviceContext, batch: StepBatch,
                                                               mut kv: KVPool, plan: ExecutionPlan,

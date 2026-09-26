@@ -7,6 +7,7 @@ fusion (studies/model_generation/residual-norm.md). Unmeasured shapes and every
 other device use the baseline configuration. `baseline` and `consistent` are
 fixed research routes kept for comparison; see docs/generation.md.
 """
+from std.sys import get_defined_int
 from llm_mojo.layers.decoder_layer import (
     DECODER_BASELINE, DECODER_SPLIT8, DECODER_SPLIT8_TILED, DECODER_CONSISTENT,
     DECODER_CONSISTENT_MMA, DECODER_FUSED_DECODE, decoder_mappings,
@@ -17,9 +18,10 @@ comptime MAX_CONTEXT = 4096
 # The decode composition's batched projection arrangement (kernels/linear.mojo).
 # 5 gives each SIMD group four rows by four columns with fixed widths and early
 # loads; 1d selected and confirmed it against row tile 4 (arrangement 0).
-# Arrangements change how rows share work, not arithmetic, and one row always
-# runs the one-row kernel.
-comptime DECODE_PROJECTION = 5
+# Arrangements 0-7 change how rows share work, not arithmetic, and one row runs
+# the one-row kernel. Validation builds may select another arrangement with
+# -D DECODE_PROJECTION=N to compare arithmetic (1e).
+comptime DECODE_PROJECTION = get_defined_int["DECODE_PROJECTION", default=5]()
 
 
 @fieldwise_init

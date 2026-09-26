@@ -214,7 +214,19 @@ Both runs prefill the same 53 fixed tokens with configuration 0 and then decode
 32 fixed tokens one row at a time, so every call sees the same input. Every
 call's hidden states, final norm, logits and K/V must be byte-identical. The
 receipt keeps hashes only. `tests/test_decode_route.mojo` runs the same
-comparison on three synthetic layers in default validation.
+comparison on three synthetic layers in default validation. Both require an
+exact projection arrangement (0–7), whose projections equal the baseline's.
+
+`build --decode-projection N` compiles the driver with another decode
+arrangement, and the driver prints the one it runs. `decode-comparison` runs
+decode parity's schedule on an exact build and a reordered build (arrangements
+8–10). It records each call's logit, final norm, layer output and K/V
+differences, and whether the selected tokens agree:
+
+```sh
+uv run --locked python -m llm_mojo.validation.model build --decode-projection 9 --binary build/reordered-model
+uv run --locked python -m llm_mojo.validation.model decode-comparison --reference-binary build/parity-model --binary build/reordered-model --output build/decode-comparison.json
+```
 
 `batch` checks batched decode on the real model. Eight conversations of 11 to
 3,301 prompt tokens are prefilled into their own blocks, then decode 16 steps

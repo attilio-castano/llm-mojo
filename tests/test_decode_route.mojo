@@ -1,9 +1,10 @@
 """The production single-row route runs end to end, exactly, without model weights.
 
 Three layers at Qwen dimensions use the verified decoder fixture weights, so the
-first, middle and last layer positions all occur. Fast decode must produce the
-same bytes as the baseline route, and its fused kernels must leave the scratch
-buffers of the unfused path untouched: a silent fallback would overwrite them.
+first, middle and last layer positions all occur. Fast decode with an exact
+projection arrangement must produce the same bytes as the baseline route, and
+its fused kernels must leave the scratch buffers of the unfused path untouched:
+a silent fallback would overwrite them.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
@@ -22,6 +23,8 @@ comptime PREFIX = 53
 comptime STEPS = 12
 comptime SENTINEL = UInt16(0x42F6)
 comptime CAPTURE = "build/test_decode_route"
+# The fusions are checked against the baseline with an exact projection arrangement.
+comptime EXACT = 5
 
 
 def _model(ctx: DeviceContext) raises -> QwenModel:
@@ -123,14 +126,14 @@ def test_fast_decode_matches_baseline_and_runs_fused() raises:
         var plain = baseline_plan(1, total)
         var batch = StepBatch.sequence(ids, PREFIX + step, 0, PREFIX + STEPS)
         if step + 1 < STEPS:
-            fast.forward(ctx, batch, fast_kv, fused)
+            fast.forward[False, EXACT](ctx, batch, fast_kv, fused)
             baseline.forward(ctx, batch, baseline_kv, plain)
         else:
             # The last step also captures every layer boundary, including both norms.
             var os = Python.import_module("os")
             os.makedirs(CAPTURE + "/fast", 0o777, True)
             os.makedirs(CAPTURE + "/baseline", 0o777, True)
-            fast.forward_captured(ctx, batch, fast_kv, fused, CaptureRequest(CAPTURE + "/fast", True))
+            fast.forward_captured[EXACT](ctx, batch, fast_kv, fused, CaptureRequest(CAPTURE + "/fast", True))
             baseline.forward_captured(ctx, batch, baseline_kv, plain, CaptureRequest(CAPTURE + "/baseline", True))
         assert_equal(_route(fast.last_route), SIMD[DType.int64, 8](26, LAYERS, LAYERS - 1, 2 * LAYERS, LAYERS - 1, 0, 0, 1))
         assert_equal(_route(baseline.last_route), SIMD[DType.int64, 8](0, LAYERS, 0, 0, 0, LAYERS - 1, 1, 0))

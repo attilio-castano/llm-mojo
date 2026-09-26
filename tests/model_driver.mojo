@@ -4,7 +4,7 @@ from std.memory import bitcast
 from std.testing import assert_equal, assert_raises
 from max.gpu.host import DeviceContext
 from llm_mojo.models.qwen2.model import CaptureRequest, LAYERS, QwenModel, VOCABULARY
-from llm_mojo.models.qwen2.plan import MAX_CONTEXT, baseline_plan, configured_plan, execution_plan, fast_plan
+from llm_mojo.models.qwen2.plan import DECODE_PROJECTION, MAX_CONTEXT, baseline_plan, configured_plan, execution_plan, fast_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
 from llm_mojo.runtime.clock import now
 from llm_mojo.serving.batch import StepBatch
@@ -165,6 +165,7 @@ def batch(path: String, tables: String, steps: Int) raises:
     """Eight conversations of different lengths decode together and alone; tokens, logits and K/V must agree."""
     var ctx = DeviceContext()
     print("model device",ctx.name(),"backend",ctx.api())
+    print("decode projection",DECODE_PROJECTION)
     var tokenizer = Tokenizer(tables)
     var work = TokenizerWorkspace()
     var sentences: List[String] = [
@@ -288,6 +289,7 @@ def main() raises:
         raise Error("schedule does not cover token IDs")
     var ctx = DeviceContext()
     print("model device",ctx.name(),"backend",ctx.api())
+    print("decode projection",DECODE_PROJECTION)
     var capacity = min(MAX_CONTEXT,len(ids)+3)
     var model = QwenModel(ctx,args[1],capacity,maximum)
     var kv = KVPool(ctx,1,capacity,model.kv_geometry())
