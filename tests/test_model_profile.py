@@ -11,7 +11,87 @@ from llm_mojo.benchmarks.model_profile import parse_samples, summarize
 from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
+def _batch_stdout(context, drop=None, marked=(3, 1), unsorted=False):
+    from llm_mojo.benchmarks.model_profile import batch_sizes
+    lines = ['device: Apple M4 Pro', 'api: metal']
+    for sequences in batch_sizes(context):
+        for comparison in range(4):
+            for arm in range(2):
+                for sample in range(10):
+                    if (sequences, comparison, arm, sample) == drop:
+                        continue
+                    elapsed = 1000*sequences + 100*comparison + 10*arm + sample + 500
+                    record = f'BATCH {sequences} {comparison} {arm} {sample} {elapsed}'
+                    if (comparison, arm) == marked:
+                        marks = [10*i for i in range(10)]
+                        if unsorted:
+                            marks[3], marks[4] = marks[4], marks[3]
+                        record += ' ' + ' '.join(map(str, marks))
+                    lines.append(record)
+    return '\n'.join(lines + ['BATCH_COMPLETE']) + '\n'
+
+
 class ModelProfileTests(unittest.TestCase):
+    def test_batch_contract_declares_its_matrix_and_trace_geometry(self):
+        batch = contract.BATCH_IMPLEMENTATION
+        self.assertEqual(contract.options(batch), contract.options('qwen_model_all_three'))
+        self.assertEqual(len(contract.command_stages(*contract.options(batch))), 249)
+        self.assertEqual(len(contract.batch_workloads()), 22)
+        mixed = contract.mixed_contexts()
+        self.assertEqual((len(mixed), mixed[0], mixed[-1]), (32, 64, 3968))
+        for context, sequences, tile in contract.BATCH_TRACES:
+            spec = contract.batch_specification(context, sequences, tile)
+            self.assertEqual((spec['profile_rows'], spec['key_value_rows'], spec['dispatches_per_iteration']),
+                             (sequences, context+1, 245))
+            data = dict(implementation=batch, entrypoint=contract.ENTRYPOINTS[batch], row_tile=tile,
+                        profile_iterations=8, profile_warmup_iterations=10, **spec)
+            self.assertEqual(contract.configuration(data), dict(spec, row_tile=tile))
+            for key, value in (('profile_rows', sequences+1), ('row_tile', 8), ('profile_iterations', 7)):
+                with self.subTest(key=key), self.assertRaises(ValueError):
+                    contract.configuration(dict(data, **{key: value}))
+        with self.assertRaises(ValueError):
+            contract.batch_specification(1024, 8, 4)
+
+    def test_batch_samples_require_complete_census_and_observed_arm(self):
+        from llm_mojo.benchmarks.model_profile import parse_batch_samples
+        for context in (64, 0):
+            records = parse_batch_samples(_batch_stdout(context), context, 2)
+            self.assertEqual(len(records), (7 if context else 1)*4*2*10)
+            self.assertTrue(all(bool(r['marks']) == ((r['comparison'], r['arm']) == (3, 1)) for r in records))
+        for invalid in (_batch_stdout(64, drop=(16, 2, 1, 4)), _batch_stdout(64, marked=(2, 1)),
+                        _batch_stdout(64, unsorted=True), _batch_stdout(64).replace('api: metal', 'api: cpu'),
+                        _batch_stdout(64).replace('BATCH_COMPLETE\n', '')):
+            with self.subTest(), self.assertRaises(ValueError):
+                parse_batch_samples(invalid, 64, 0)
+
+    def test_batch_summary_applies_the_decision_rule_per_tile(self):
+        from llm_mojo.benchmarks.model_profile import batch_summarize, HOST_PHASES
+        samples = []
+        for context, sequences in contract.batch_workloads():
+            for block in range(4):
+                for comparison in range(4):
+                    for arm in range(2):
+                        for sample in range(10):
+                            base = 1_000_000*(sequences+1)
+                            scale = {1: .8, 2: 1.2}.get(comparison, 1) if arm else 1
+                            elapsed = int(base*scale) + sample
+                            marks = [elapsed*i//10 for i in range(10)] if (comparison, arm) == (3, 1) else []
+                            samples.append(dict(context=context, sequences=sequences, block=block, comparison=comparison,
+                                                arm=arm, sample=sample, elapsed_ns=elapsed, marks=marks))
+        summary = batch_summarize(samples)
+        self.assertEqual(len(summary), 22)
+        for row in summary:
+            self.assertEqual((row['tiles']['8']['outcome'], row['tiles']['16']['outcome']), ('faster', 'slower'))
+            self.assertAlmostEqual(row['tokens_per_second'], row['sequences']*1000/row['step_ms'])
+            self.assertEqual(set(row['host_phase_ms']), set(HOST_PHASES))
+            if row['context']:
+                self.assertAlmostEqual(row['throughput_vs_one'], row['tokens_per_second']/next(
+                    r['tokens_per_second'] for r in summary if (r['context'], r['sequences']) == (row['context'], 1)))
+            else:
+                self.assertIsNone(row['throughput_vs_one'])
+        with self.assertRaises(ValueError):
+            batch_summarize(samples[1:])
+
     def test_batch_support_distinguishes_backend_failure_from_bad_results(self):
         from llm_mojo.benchmarks.model_profile import batch_support_parse
         base='device: Apple M4 Pro\napi: metal\nBATCH_EAGER_PASS 15\n'

@@ -1,8 +1,10 @@
-"""Collect the Fast-route token profile; replay every retained full-model archive.
+"""Collect the Fast-route token profile and batch-size study; replay every retained full-model archive.
 
 Build/run/capture require a clean local checkout and verified local assets and
-measure the current Fast route. Completed decode experiments are replay-only:
-their archives, parsers and summaries remain, their collectors do not.
+measure the current Fast route. The batch-size study (batch-size-* commands)
+times decode steps of 1 to 64 sequences with three projection row tiles.
+Completed decode experiments are replay-only: their archives, parsers and
+summaries remain, their collectors do not.
 """
 import argparse
 from collections import Counter, defaultdict
@@ -1399,6 +1401,350 @@ def batch_support_replay(path):
 # Collectors for completed decode experiments built arms that are no longer in
 # the engine. Their retained archives still replay; re-collection needs the
 # commit recorded in each archive (collectors exist through edb610a).
+BATCH_STEM = 'batch-size'
+BATCH_KIND = 'qwen-batch-size-v1'
+HOST_PHASES = ['preflight','step upload','embedding enqueue','decoder stack enqueue','head enqueue',
+               'forward return','readback wait','host selection','unmap']
+
+
+def batch_build(output, prepared):
+    """Batch-size executables: the model driver and one trace binary per declared trace workload."""
+    ensure_record_location(output)
+    output.mkdir(parents=True, exist_ok=False)
+    source = source_identity()
+    if source['repository']['dirty']:
+        raise ValueError('model profiling build requires clean source')
+    identity = assets(prepared)
+    command = [environment_tool('mojo'), 'build', '-I', 'src', 'src/llm_mojo/benchmarks/model.mojo', '-o', output/'model']
+    execute(command, output/'model-build.log')
+    binaries = dict(model=dict(sha256=sha(output/'model'), bytes=(output/'model').stat().st_size))
+    machine = stable_environment()
+    for context, sequences, tile in contract.BATCH_TRACES:
+        name = f'batch-profile-{context}-{sequences}-{tile}'
+        command = [environment_tool('mojo'), 'build', '-I', 'src',
+                   '-D', f'MODEL_BATCH_PROFILE={context}', '-D', f'MODEL_BATCH_SEQUENCES={sequences}',
+                   '-D', f'MODEL_BATCH_TILE={tile}', '-D', 'MODEL_PREPARED='+identity['prepared'],
+                   '-D', 'MODEL_TABLES='+identity['tables'], 'src/llm_mojo/benchmarks/model.mojo', '-o', output/name]
+        execute(command, output/f'{name}-build.log')
+        binary = dict(sha256=sha(output/name), bytes=(output/name).stat().st_size)
+        binaries[name] = binary
+        provenance = dict(schema_version=1, operation=contract.OPERATION,
+                          implementation=contract.BATCH_IMPLEMENTATION,
+                          entrypoint=contract.ENTRYPOINTS[contract.BATCH_IMPLEMENTATION],
+                          repository=source['repository'], source_sha256=source['sources'],
+                          **machine, **contract.batch_specification(context, sequences, tile), row_tile=tile,
+                          profile_warmup_iterations=10, profile_iterations=8,
+                          profile_post_idle_milliseconds=250, binary=binary,
+                          assets={k:v for k,v in identity.items() if k.endswith('_sha256')})
+        contract.configuration(provenance)
+        write(output/(name+'.provenance.json'), provenance)
+    if source_identity() != source or assets(prepared) != identity:
+        raise ValueError('source or assets changed during compilation')
+    write(output/'build.json', dict(source=source, assets=identity, environment=machine,
+                                    declaration=contract.BATCH_DECLARATION, binaries=binaries))
+
+
+def batch_sizes(context):
+    return list(contract.BATCH_SIZES) if context else [contract.BATCH_MIXED]
+
+
+def parse_batch_samples(stdout, context, block):
+    """BATCH <sequences> <comparison> <arm> <sample> <elapsed>[ ten marks] records from one context process."""
+    if 'device: Apple M4 Pro\napi: metal\n' not in stdout or stdout.count('BATCH_COMPLETE') != 1:
+        raise ValueError('missing measured device or completion')
+    records = []
+    for line in stdout.splitlines():
+        if not line.startswith('BATCH '):
+            continue
+        values = list(map(int, line.split()[1:]))
+        if len(values) not in (5, 15):
+            raise ValueError('invalid batch timing record')
+        sequences, comparison, arm, sample, elapsed, *marks = values
+        if elapsed <= 0 or bool(marks) != (comparison == 3 and arm == 1):
+            raise ValueError('incorrect observation arm')
+        if marks and (marks != sorted(marks) or marks[0] < 0 or marks[-1] > elapsed):
+            raise ValueError('invalid host timing sequence')
+        records.append(dict(context=context, sequences=sequences, block=block, comparison=comparison,
+                            arm=arm, sample=sample, elapsed_ns=elapsed, marks=marks))
+    expected = Counter((b, c, a, s) for b in batch_sizes(context) for c in range(4) for a in range(2) for s in range(10))
+    if Counter((r['sequences'], r['comparison'], r['arm'], r['sample']) for r in records) != expected:
+        raise ValueError('incomplete batch timing census')
+    return records
+
+
+def batch_collect(directory, output):
+    ensure_record_location(output)
+    receipt = verify_build(directory)
+    if receipt['declaration'] != contract.BATCH_DECLARATION:
+        raise ValueError('batch-size collection requires a batch-size build')
+    output.mkdir(parents=True, exist_ok=False)
+    args = receipt['assets']
+    contexts = list(contract.BATCH_CONTEXTS) + [0]
+    samples, blocks = [], []
+    for block in range(4):
+        before = conditions()
+        reverse = block in (1, 2)
+        for context in (list(reversed(contexts)) if reverse else contexts):
+            stdout = execute([directory/'model', 'batch', args['prepared'], args['tables'], context, int(reverse)],
+                             output/f'c{context}-b{block}.log')
+            samples.extend(parse_batch_samples(stdout, context, block))
+        blocks.append(dict(block=block, before=before, after=conditions()))
+        print(f'Completed batch-size block {block+1}/4', flush=True)
+    if verify_build(directory) != receipt:
+        raise ValueError('build changed during collection')
+    write(output/'timings.json', dict(build=receipt, blocks=blocks, samples=samples))
+
+
+def batch_capture(directory, output):
+    ensure_record_location(output)
+    from .capture_trace import capture_trace
+    receipt = verify_build(directory)
+    if receipt['declaration'] != contract.BATCH_DECLARATION:
+        raise ValueError('batch-size capture requires a batch-size build')
+    output.mkdir(parents=True, exist_ok=False)
+    for repeat in range(2):
+        for context, sequences, tile in (contract.BATCH_TRACES if repeat == 0 else reversed(contract.BATCH_TRACES)):
+            name = f'batch-profile-{context}-{sequences}-{tile}'
+            target = output/f'{name}-r{repeat}'
+            target.mkdir()
+            before = conditions()
+            capture_trace(profile_binary=directory/name, output_trace=target/'raw.trace',
+                          receipt_path=target/'capture.json', time_limit='30s')
+            write(target/'conditions.json', dict(before=before, after=conditions()))
+            (target/'profile.provenance.json').write_bytes((directory/(name+'.provenance.json')).read_bytes())
+            print(f'Captured {name}, repeat {repeat+1}/2', flush=True)
+    if verify_build(directory) != receipt:
+        raise ValueError('build changed during profiling')
+
+
+def _outcome(ratios, noise):
+    middle = stats.median(ratios)
+    if all(r < 1 for r in ratios) and 1-middle > noise:
+        return 'faster'
+    if all(r > 1 for r in ratios) and middle-1 > noise:
+        return 'slower'
+    return 'inconclusive'
+
+
+def batch_summarize(samples):
+    expected = Counter((c, b, block, comparison, arm, sample) for c, b in contract.batch_workloads()
+                       for block in range(4) for comparison in range(4) for arm in range(2) for sample in range(10))
+    keys = ('context','sequences','block','comparison','arm','sample')
+    if Counter(tuple(r[k] for k in keys) for r in samples) != expected:
+        raise ValueError('incomplete batch-size timing census')
+    for row in samples:
+        marks = row['marks']
+        if (row['elapsed_ns'] <= 0 or bool(marks) != (row['comparison'] == 3 and row['arm'] == 1)
+                or (marks and (len(marks) != 10 or marks != sorted(marks) or marks[0] < 0 or marks[-1] > row['elapsed_ns']))):
+            raise ValueError('invalid retained host observation')
+    groups = defaultdict(list)
+    for r in samples:
+        groups[r['context'], r['sequences'], r['block'], r['comparison'], r['arm']].append(r)
+    result = []
+    for context, sequences in contract.batch_workloads():
+        medians = {(b, c, a): stats.median(r['elapsed_ns'] for r in groups[context, sequences, b, c, a])
+                   for b in range(4) for c in range(4) for a in range(2)}
+        control = [medians[b, 0, 0]/1e6 for b in range(4)]
+        step_ms = stats.median(control)
+        calibration = [medians[b, 0, 1]/medians[b, 0, 0] for b in range(4)]
+        noise = max(.05, max(abs(r-1) for r in calibration))
+        tiles = {}
+        for comparison, tile in ((1, 8), (2, 16)):
+            ratios = [medians[b, comparison, 1]/medians[b, comparison, 0] for b in range(4)]
+            tiles[str(tile)] = dict(step_ms=stats.median(medians[b, comparison, 1] for b in range(4))/1e6,
+                                    block_ratios=ratios, median_ratio=stats.median(ratios), outcome=_outcome(ratios, noise))
+        phases = defaultdict(list)
+        for block in range(4):
+            records = groups[context, sequences, block, 3, 1]
+            for i, label in enumerate(HOST_PHASES):
+                phases[label].append(stats.median(r['marks'][i+1]-r['marks'][i] for r in records)/1e6)
+        result.append(dict(context=context, sequences=sequences, step_ms=step_ms, step_block_ms=control,
+                           tokens_per_second=sequences*1000/step_ms, calibration_ratios=calibration, noise_floor=noise,
+                           tiles=tiles, observation_ratios=[medians[b, 3, 1]/medians[b, 3, 0] for b in range(4)],
+                           host_phase_ms={k: stats.median(v) for k, v in phases.items()}))
+    single = {r['context']: r['tokens_per_second'] for r in result if r['sequences'] == 1}
+    for r in result:
+        r['throughput_vs_one'] = r['tokens_per_second']/single[r['context']] if r['context'] in single else None
+    return result
+
+
+def batch_archive(timings, traces, output):
+    timing = json.loads((timings/'timings.json').read_text())
+    batch_summarize(timing['samples'])
+    captures = []
+    for context, sequences, tile in contract.BATCH_TRACES:
+        for repeat in range(2):
+            target = traces/f'batch-profile-{context}-{sequences}-{tile}-r{repeat}'
+            if not (target/'submissions.xml').exists():
+                export_trace(target)
+            capture = curate(target, context, repeat)
+            capture.update(sequences=sequences, row_tile=tile)
+            captures.append(capture)
+    record = dict(kind=BATCH_KIND, timing=timing, captures=captures,
+                  analysis_source_sha256={str(p.relative_to(repository_root())):sha(p) for p in
+                    [Path(__file__).resolve(), Path(__file__).with_name('analyze_trace.py').resolve(),
+                     Path(__file__).with_name('model_contract.py').resolve()]},
+                  rejected_captures=json.loads((traces/'rejections.json').read_text()) if (traces/'rejections.json').exists() else [])
+    def scrub(value):
+        if isinstance(value, dict):
+            return {k: ('<verified-local-asset>' if k in ('prepared','tables') else scrub(v)) for k,v in value.items()}
+        if isinstance(value, list):
+            return [scrub(v) for v in value]
+        return value
+    raw = json.dumps(scrub(record), separators=(',', ':'), allow_nan=False).encode()
+    packed = gzip.compress(raw, mtime=0)
+    output.mkdir(parents=True, exist_ok=True)
+    (output/(BATCH_STEM+'.json.gz')).write_bytes(packed)
+    write(output/(BATCH_STEM+'.json'), dict(kind=BATCH_KIND, sha256=hashlib.sha256(packed).hexdigest(),
+                                           uncompressed_sha256=hashlib.sha256(raw).hexdigest(), bytes=len(packed)))
+    batch_replay(output)
+
+
+def batch_capture_totals(capture, build_record):
+    """Validate one retained trace against the frozen build; per-step GPU totals."""
+    provenance = capture['provenance']
+    contract.configuration(provenance)
+    name = f"batch-profile-{capture['prefix']}-{capture['sequences']}-{capture['row_tile']}"
+    if (provenance['repository'] != build_record['source']['repository']
+            or provenance['source_sha256'] != build_record['source']['sources']
+            or provenance['assets'] != {k:v for k,v in build_record['assets'].items() if k.endswith('_sha256')}
+            or provenance['binary'] != build_record['binaries'][name]
+            or (provenance['profile_rows'], provenance['row_tile']) != (capture['sequences'], capture['row_tile'])):
+        raise ValueError('trace differs from frozen batch-size build')
+    canonical = (json.dumps(provenance, indent=2, allow_nan=False)+'\n').encode()
+    if hashlib.sha256(canonical).hexdigest() != capture['analysis']['capture_identity']['provenance']['sha256']:
+        raise ValueError('retained provenance differs from captured build receipt')
+    rows = capture['samples']
+    stages = contract.command_stages(*contract.options(provenance['implementation']))
+    if Counter((r['iteration'],r['dispatch']) for r in rows) != Counter((i,d) for i in range(8) for d in range(len(stages))):
+        raise ValueError('incomplete captured dispatch census')
+    for row in rows:
+        segments = row['active_intervals']
+        if ((row['layer'],row['stage'],row['kind']) != stages[row['dispatch']] or row['duration_ns'] <= 0
+                or len(segments) != row['segments'] or sum(d for _,d in segments) != row['duration_ns']
+                or segments[0][0] != row['start_ns'] or sum(segments[-1]) != row['end_ns']
+                or any(d <= 0 for _,d in segments) or any(a+d > b for (a,d),(b,_) in zip(segments,segments[1:]))):
+            raise ValueError('invalid dispatch timing, stage or active fragments')
+    totals = defaultdict(list)
+    for iteration in range(8):
+        step = [r for r in rows if r['iteration'] == iteration]
+        for stage in sorted({r['stage'] for r in step}):
+            totals[stage].append(sum(r['duration_ns'] for r in step if r['stage'] == stage)/1e6)
+        totals['GPU active total'].append(sum(r['duration_ns'] for r in step)/1e6)
+        totals['GPU enclosing span'].append((max(r['end_ns'] for r in step)-min(r['start_ns'] for r in step))/1e6)
+        totals['Metal submission intervals'].append(sum(r['submission_duration_ns'] for r in step)/1e6)
+    return {stage: stats.median(values) for stage, values in totals.items()}
+
+
+def batch_replay(directory):
+    manifest = json.loads((directory/(BATCH_STEM+'.json')).read_text())
+    packed = (directory/(BATCH_STEM+'.json.gz')).read_bytes()
+    raw = gzip.decompress(packed)
+    if (hashlib.sha256(packed).hexdigest() != manifest['sha256']
+            or hashlib.sha256(raw).hexdigest() != manifest['uncompressed_sha256']):
+        raise ValueError('batch-size archive hash mismatch')
+    record = json.loads(raw)
+    if record['kind'] != BATCH_KIND or manifest['kind'] != BATCH_KIND:
+        raise ValueError('not a batch-size archive')
+    summary = batch_summarize(record['timing']['samples'])
+    build_record = record['timing']['build']
+    if build_record['declaration'] != contract.BATCH_DECLARATION:
+        raise ValueError('batch-size declaration changed')
+    if [b['block'] for b in record['timing']['blocks']] != list(range(4)):
+        raise ValueError('incomplete batch-size block conditions')
+    expected = Counter((c, b, t, r) for c, b, t in contract.BATCH_TRACES for r in range(2))
+    if Counter((c['prefix'], c['sequences'], c['row_tile'], c['repeat']) for c in record['captures']) != expected:
+        raise ValueError('incomplete batch-size trace census')
+    gpu = []
+    for capture in record['captures']:
+        for stage, value in batch_capture_totals(capture, build_record).items():
+            gpu.append(dict(context=capture['prefix'], sequences=capture['sequences'], row_tile=capture['row_tile'],
+                            repeat=capture['repeat'], stage=stage, median_ms=value))
+    write(directory/(BATCH_STEM+'-summary.json'), dict(timing=summary, gpu=gpu))
+    for r in summary:
+        print(f"context {r['context']:4d} sequences {r['sequences']:2d}: {r['step_ms']:8.2f} ms/step, "
+              f"{r['tokens_per_second']:7.1f} tokens/s, tile 8 {r['tiles']['8']['outcome']}, tile 16 {r['tiles']['16']['outcome']}")
+    return record
+
+
+def batch_plot(directory):
+    """Regenerate the batch-size figures exclusively from the checked archive."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    batch_replay(directory)
+    summary = json.loads((directory/(BATCH_STEM+'-summary.json')).read_text())
+    timing = summary['timing']
+    plt.rcParams.update({'font.family':'DejaVu Sans','font.size':10,'axes.spines.top':False,
+                         'axes.spines.right':False,'figure.facecolor':'white','axes.facecolor':'white'})
+    colors = {64:'#27a89b', 1024:'#244b69', 3968:'#e8a044', 0:'#b86f85'}
+    sizes = list(contract.BATCH_SIZES)
+    fig, axes = plt.subplots(1, 2, figsize=(11,4.6), constrained_layout=True)
+    for context in contract.BATCH_CONTEXTS:
+        rows = [r for r in timing if r['context'] == context]
+        axes[0].plot(sizes, [r['tokens_per_second'] for r in rows], marker='o', color=colors[context],
+                     label=f'{context} cached tokens')
+        for tile, style in (('8','--'), ('16',':')):
+            axes[0].plot(sizes, [r['sequences']*1000/r['tiles'][tile]['step_ms'] for r in rows],
+                         linestyle=style, color=colors[context], linewidth=1)
+        middle = [r['step_ms'] for r in rows]
+        errors = [[m-min(r['step_block_ms']) for m,r in zip(middle,rows)], [max(r['step_block_ms'])-m for m,r in zip(middle,rows)]]
+        axes[1].errorbar(sizes, middle, yerr=errors, marker='o', color=colors[context], capsize=3,
+                         label=f'{context} cached tokens')
+    mixed = next(r for r in timing if r['context'] == 0)
+    for ax, value in ((axes[0], mixed['tokens_per_second']), (axes[1], mixed['step_ms'])):
+        ax.plot([mixed['sequences']], [value], marker='D', color=colors[0], linestyle='none', label='mixed, 64 to 3968')
+    for ax in axes:
+        ax.set_xscale('log', base=2)
+        ax.set_xticks(sizes, [str(b) for b in sizes])
+        ax.set_xlabel('Sequences decoding in one step')
+    axes[0].set_ylabel('Tokens per second, all sequences')
+    axes[0].set_title('Aggregate throughput\nsolid: tile 4; dashed: tile 8; dotted: tile 16')
+    axes[0].legend(fontsize=8)
+    axes[1].set_yscale('log', base=2)
+    axes[1].set_ylabel("Milliseconds per step, each sequence's token latency")
+    axes[1].set_title('Step latency with tile 4\nmedian of four block medians; whiskers show range')
+    fig.suptitle('Batched decode · Qwen2.5-0.5B · BF16 · M4 Pro / Metal', fontsize=12)
+    fig.savefig(directory/(BATCH_STEM+'-throughput.png'), dpi=170)
+    plt.close(fig)
+    fig, axes = plt.subplots(1, 2, figsize=(11,4.6), constrained_layout=True)
+    rows = [r for r in timing if r['context'] == 1024]
+    parts = [('Host enqueue', ['preflight','step upload','embedding enqueue','decoder stack enqueue','head enqueue'], '#244b69'),
+             ('Readback wait', ['readback wait'], '#e8a044'),
+             ('Other host', ['forward return','host selection','unmap'], '#abb9c7')]
+    bottoms = [0.]*len(rows)
+    for name, labels, color in parts:
+        values = [sum(r['host_phase_ms'][label] for label in labels) for r in rows]
+        axes[0].bar(range(len(rows)), values, bottom=bottoms, color=color, width=.6, label=name)
+        bottoms = [a+b for a,b in zip(bottoms, values)]
+    axes[0].set_xticks(range(len(rows)), [str(r['sequences']) for r in rows])
+    axes[0].set_xlabel('Sequences decoding in one step')
+    axes[0].set_ylabel('Milliseconds, median observed step')
+    axes[0].set_title('Host intervals at 1,024 cached tokens\nenqueue waits once the GPU queue is full')
+    axes[0].legend(fontsize=8, loc='upper left')
+    groups = [('Decoder projections', {'packed QKV projection','output projection','gate projection','up projection','down projection'}, '#244b69'),
+              ('Attention', {'FP32 GQA'}, '#27a89b'),
+              ('Vocabulary projection', {'vocabulary projection'}, '#e8a044')]
+    traced = [(c, b) for c, b, _ in contract.BATCH_TRACES]
+    used = set().union(*(stages for _, stages, _ in groups))
+    everything = {r['stage'] for r in summary['gpu']} - {'GPU active total','GPU enclosing span','Metal submission intervals'}
+    groups.append(('Other GPU operations', everything-used, '#abb9c7'))
+    bottoms = [0.]*len(traced)
+    for name, stage_set, color in groups:
+        values = [stats.mean(sum(r['median_ms'] for r in summary['gpu'] if (r['context'], r['sequences'], r['repeat']) == (c, b, repeat)
+                                 and r['stage'] in stage_set) for repeat in range(2)) for c, b in traced]
+        axes[1].bar(range(len(traced)), values, bottom=bottoms, color=color, width=.6, label=name)
+        bottoms = [a+b for a,b in zip(bottoms, values)]
+    axes[1].set_xticks(range(len(traced)), [str(b) for _, b in traced])
+    axes[1].set_xlabel('Sequences decoding in one step')
+    axes[1].set_ylabel('Milliseconds of active GPU time per step')
+    axes[1].set_title('Separate traces at 1,024 cached tokens, tile 4\nactive GPU time by stage')
+    axes[1].legend(fontsize=8, loc='upper left')
+    fig.suptitle('Where a batched step spends its time', fontsize=12)
+    fig.savefig(directory/(BATCH_STEM+'-breakdown.png'), dpi=170)
+    plt.close(fig)
+
+
 RETIRED = ['enqueue-build', 'enqueue-collect', 'enqueue-archive', 'scheduling-build', 'scheduling-collect',
            'scheduling-capture', 'scheduling-archive', 'projection-confirm', 'selection-capture',
            'selection-terminal', 'selection-archive', 'fusion-capture', 'fusion-terminal', 'fusion-archive']
@@ -1411,7 +1757,9 @@ def main():
     parser.add_argument('command', choices=['batch-support','batch-support-replay','enqueue-plot','enqueue-replay',
                                             'scheduling-plot','scheduling-replay','build','collect','capture',
                                             'terminal','archive','replay','plot','fusion-replay','fusion-plot',
-                                            'selection-replay','selection-plot',*RETIRED])
+                                            'selection-replay','selection-plot','batch-size-build','batch-size-collect',
+                                            'batch-size-capture','batch-size-archive','batch-size-replay','batch-size-plot',
+                                            *RETIRED])
     parser.add_argument('--projections',action='store_true',help='Replay/plot the projection arrangement study')
     parser.add_argument('--residual-norm',action='store_true',help='Replay/plot the residual normalization study')
     parser.add_argument('--copy-free',action='store_true',help='Replay/plot the buffer ownership study')
@@ -1436,6 +1784,12 @@ def main():
     elif args.command == 'scheduling-plot': scheduling_plot(args.output)
     elif args.command == 'scheduling-replay': scheduling_replay(args.output)
     elif args.command == 'build': build(args.output.resolve(), args.prepared)
+    elif args.command == 'batch-size-build': batch_build(args.output.resolve(), args.prepared)
+    elif args.command == 'batch-size-collect': batch_collect(args.build.resolve(), args.output.resolve())
+    elif args.command == 'batch-size-capture': batch_capture(args.build.resolve(), args.output.resolve())
+    elif args.command == 'batch-size-archive': batch_archive(args.timings, args.traces, args.output)
+    elif args.command == 'batch-size-replay': batch_replay(args.output)
+    elif args.command == 'batch-size-plot': batch_plot(args.output)
     elif args.command == 'selection-plot':
         if args.projections: projection_plot(args.output)
         else: selection_plot(args.output,args.residual_norm)

@@ -470,3 +470,20 @@ The receipt distinguishes successful graph replay, the specific unsupported
 builder error, and unexpected correctness/runtime failures. Graph support alone
 would still require verifying actual command-buffer grouping before measuring
 Qwen. This gate does not upgrade or modify installed MAX dependencies.
+
+### Batch-size study
+
+The [batch-size study](../../../docs/batched-decode-plan.md#1c-batch-size-study)
+times decode steps of 1 to 64 sequences at three contexts and one mixed batch.
+Within the four-block procedure it pairs tile 8, tile 16 and an observed arm
+against tile 4, and it traces three batch sizes at 1,024 cached tokens. From a
+clean checkout on M4 Pro:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-build --prepared /absolute/prepared-v1 --output /private/tmp/batch-size-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-collect --build /private/tmp/batch-size-build --output /private/tmp/batch-size-timings
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-capture --build /private/tmp/batch-size-build --output /private/tmp/batch-size-traces
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-archive --timings /private/tmp/batch-size-timings --traces /private/tmp/batch-size-traces --output studies/model_generation
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --output studies/model_generation
+uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_profile batch-size-plot --output studies/model_generation
+```

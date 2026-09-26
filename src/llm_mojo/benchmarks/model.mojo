@@ -1,5 +1,8 @@
 """Real Qwen decode on the Fast route: fixed history, normal stream, optional host observations.
 
+The token-profile modes (bench, verify, profile) time one sequence. The batch
+mode and the MODEL_BATCH_PROFILE build time decode steps of B sequences for the
+batch-size study (docs/batched-decode-plan.md#1c-batch-size-study).
 Completed decode experiments (fusion, selection, buffer swap, composition,
 projection arrangement, scheduling and launch probes) are replay-only; their
 collectors exist through commit edb610a. See studies/model_generation/README.md.
@@ -53,6 +56,191 @@ def step[OBSERVE: Bool](mut model: QwenModel, mut kv: KVPool, ctx: DeviceContext
     return model.greedy[OBSERVE](ctx)
 
 
+comptime BATCH_POOL = 64
+comptime BATCH_MIXED = 32
+
+
+def frozen_history(tables: String) raises -> List[Int]:
+    var tokenizer = Tokenizer(tables)
+    var work = TokenizerWorkspace()
+    var text = String()
+    for _ in range(200):
+        text += "A train travels sixty kilometers in forty-five minutes. Explain how to calculate its average speed, keeping track of distance, time, and units. The passengers compare their calculations and check each step.\n"
+    return tokenizer.encode(text,work)
+
+
+def batch_contexts(context: Int) -> List[Int]:
+    """Cached tokens per sequence: the declared context, or 64 to 3968 spread evenly (context 0)."""
+    var result = List[Int](capacity=BATCH_POOL)
+    for s in range(BATCH_POOL):
+        if context == 0:
+            result.append(64 + (min(s,BATCH_MIXED-1)*(3968-64))//(BATCH_MIXED-1))
+        else:
+            result.append(context)
+    return result^
+
+
+def batch_setup(ctx: DeviceContext, mut model: QwenModel, mut kv: KVPool, history: List[Int], longest: Int) raises:
+    """Prefill the frozen history into block 0 with Fast chunks, then copy block 0 to every block."""
+    kv.storage.enqueue_fill(0)
+    var offset = 0
+    while offset < longest:
+        var count = min(256,longest-offset)
+        var chunk = List[Int](capacity=count)
+        for i in range(count):
+            chunk.append(history[offset+i])
+        model.forward(ctx,StepBatch.sequence(chunk,offset,0,kv.block_size),kv,fast_plan(count,offset+count,ctx.name()))
+        offset += count
+    ctx.synchronize()
+    var block = len(kv.storage)//kv.blocks
+    var first = kv.storage.create_sub_buffer[DType.bfloat16](0,block)
+    for b in range(1,kv.blocks):
+        var target = kv.storage.create_sub_buffer[DType.bfloat16](b*block,block)
+        ctx.enqueue_copy(dst_buf=target,src_buf=first)
+    ctx.synchronize()
+
+
+def batch_rewind(mut model: QwenModel, mut kv: KVPool, contexts: List[Int], sequences: Int) raises:
+    # Earlier readback completed every step. Only logical lengths are rewound.
+    model.submitted_rows = 0
+    for s in range(sequences):
+        for layer in range(kv.geometry.layers):
+            kv.caches[kv.index(s,layer)].length = contexts[s]
+
+
+def batch_step[OBSERVE: Bool, TILE: Int](mut model: QwenModel, mut kv: KVPool, ctx: DeviceContext,
+                                         tokens: List[Int], contexts: List[Int], sequences: Int) raises -> List[Int]:
+    """One decode token for each of the first `sequences` blocks, then one token per sequence."""
+    var ids = List[Int](capacity=sequences)
+    var positions = List[Int](capacity=sequences)
+    var starts = List[Int](capacity=sequences+1)
+    var seq_lens = List[Int](capacity=sequences)
+    var blocks = List[Int](capacity=sequences)
+    var slots = List[Int](capacity=sequences)
+    var rows = List[Int](capacity=sequences)
+    var longest = 0
+    for s in range(sequences):
+        ids.append(tokens[s])
+        positions.append(contexts[s])
+        starts.append(s)
+        seq_lens.append(contexts[s]+1)
+        blocks.append(s)
+        slots.append(s*kv.block_size+contexts[s])
+        rows.append(s)
+        longest = max(longest,contexts[s]+1)
+    starts.append(sequences)
+    var batch = StepBatch(ids^,positions^,starts^,sequences,seq_lens^,1,blocks^,slots^,rows^)
+    model.forward[OBSERVE, TILE](ctx,batch,kv,fast_plan(sequences,longest,ctx.name(),sequences))
+    return model.greedy_tokens[OBSERVE](ctx)
+
+
+def batch_check(model: QwenModel, selected: List[Int], expected: List[Int], sequences: Int) raises:
+    if (len(selected) != sequences or model.submitted_rows != 24*sequences
+            or model.last_route.decode_launches != 245 or model.last_route.sequences != sequences):
+        raise Error("batched step changed its route or accounting")
+    for s in range(sequences):
+        if selected[s] != expected[s]:
+            raise Error("batched step changed a sequence's token")
+
+
+def batch_bench(prepared: String, tables: String, context: Int, first: Int) raises:
+    """Paired arms per batch size: tile 4 against itself, tile 8, tile 16 and observed tile 4."""
+    var ctx = DeviceContext()
+    if ctx.api() != "metal" or ctx.name() != "Apple M4 Pro":
+        raise Error("study requires Apple M4 Pro / Metal")
+    var history = frozen_history(tables)
+    var contexts = batch_contexts(context)
+    var sizes: List[Int] = [1, 2, 4, 8, 16, 32, 64]
+    if context == 0:
+        sizes = [BATCH_MIXED]
+    var longest = 0
+    for c in contexts:
+        longest = max(longest,c)
+    if len(history) < longest+BATCH_POOL+1:
+        raise Error("insufficient frozen token history")
+    var tokens = List[Int](capacity=BATCH_POOL)
+    for s in range(BATCH_POOL):
+        tokens.append(history[contexts[s]+s])
+    var model = QwenModel(ctx,prepared,4096,256,BATCH_POOL)
+    var kv = KVPool(ctx,BATCH_POOL,4096,model.kv_geometry())
+    batch_setup(ctx,model,kv,history,longest)
+    print("device:",ctx.name())
+    print("api:",ctx.api())
+    print("context:",context,"pool blocks:",BATCH_POOL)
+    var records = String()
+    for index in range(len(sizes)):
+        var sequences = sizes[len(sizes)-1-index] if first == 1 else sizes[index]
+        batch_rewind(model,kv,contexts,sequences)
+        var expected = batch_step[False, 4](model,kv,ctx,tokens,contexts,sequences)
+        batch_check(model,expected,expected,sequences)
+        print("sequences:",sequences,"first token:",expected[0],"last token:",expected[sequences-1])
+        for position in range(4):
+            var comparison = 3-position if first == 1 else position
+            for arm_index in range(2):
+                var arm = (first+arm_index)%2
+                for sample in range(20):
+                    batch_rewind(model,kv,contexts,sequences)
+                    var start = now()
+                    var selected: List[Int]
+                    if arm == 0 or comparison == 0:
+                        selected = batch_step[False, 4](model,kv,ctx,tokens,contexts,sequences)
+                    elif comparison == 1:
+                        selected = batch_step[False, 8](model,kv,ctx,tokens,contexts,sequences)
+                    elif comparison == 2:
+                        selected = batch_step[False, 16](model,kv,ctx,tokens,contexts,sequences)
+                    else:
+                        selected = batch_step[True, 4](model,kv,ctx,tokens,contexts,sequences)
+                    var elapsed = now()-start
+                    batch_check(model,selected,expected,sequences)
+                    if sample >= 10:
+                        records += ("BATCH "+String(sequences)+" "+String(comparison)+" "+String(arm)+" "
+                                    +String(sample-10)+" "+String(elapsed))
+                        if comparison == 3 and arm == 1:
+                            for i in range(10):
+                                records += " "+String(model.observation[i]-start)
+                        records += "\n"
+    print(records,end="")
+    print("BATCH_COMPLETE")
+
+
+def batch_profile[TILE: Int](prepared: String, tables: String, context: Int, sequences: Int) raises:
+    """Trace target: ten warmups and eight plain batched steps inside the profile region."""
+    var ctx = DeviceContext()
+    if ctx.api() != "metal" or ctx.name() != "Apple M4 Pro":
+        raise Error("study requires Apple M4 Pro / Metal")
+    var history = frozen_history(tables)
+    var contexts = batch_contexts(context)
+    var tokens = List[Int](capacity=BATCH_POOL)
+    for s in range(BATCH_POOL):
+        tokens.append(history[contexts[s]+s])
+    var model = QwenModel(ctx,prepared,4096,256,BATCH_POOL)
+    var kv = KVPool(ctx,BATCH_POOL,4096,model.kv_geometry())
+    batch_setup(ctx,model,kv,history,context)
+    batch_rewind(model,kv,contexts,sequences)
+    var expected = batch_step[False, TILE](model,kv,ctx,tokens,contexts,sequences)
+    for _ in range(10):
+        batch_rewind(model,kv,contexts,sequences)
+        batch_check(model,batch_step[False, TILE](model,kv,ctx,tokens,contexts,sequences),expected,sequences)
+    print("device:",ctx.name())
+    print("api:",ctx.api())
+    print("correctness: passed")
+    print("profile implementation:","QwenModel.forward+greedy_tokens")
+    print("rows:",sequences)
+    print("hidden: 896")
+    print("key value rows:",context+1)
+    print("profile workload:","model-p"+String(context)+"-b"+String(sequences)+"-t"+String(TILE))
+    print("profile dispatches per iteration:",245)
+    print("warmup iterations: 10")
+    print("profile iterations: 8")
+    print("post-profile idle milliseconds: 250")
+    print("PROFILE_REGION_BEGIN")
+    for _ in range(8):
+        batch_rewind(model,kv,contexts,sequences)
+        batch_check(model,batch_step[False, TILE](model,kv,ctx,tokens,contexts,sequences),expected,sequences)
+    print("PROFILE_REGION_END")
+    sleep(0.25)
+
+
 def _batch_advance[LT: TensorLayout](x: TileTensor[DType.int32, LT, MutAnyOrigin]):
     comptime assert x.flat_rank == 1
     if global_idx.x == 0:
@@ -94,6 +282,19 @@ def main() raises:
     comptime if is_defined["MODEL_BATCH_SUPPORT"]():
         batch_support()
         return
+    comptime if is_defined["MODEL_BATCH_PROFILE"]():
+        batch_profile[get_defined_int["MODEL_BATCH_TILE"]()](String(get_defined_string["MODEL_PREPARED"]()),
+            String(get_defined_string["MODEL_TABLES"]()),get_defined_int["MODEL_BATCH_PROFILE"](),
+            get_defined_int["MODEL_BATCH_SEQUENCES"]())
+        return
+    var cli = argv()
+    if len(cli) == 6 and String(cli[1]) == "batch":
+        var context = Int(String(cli[4]))
+        var first = Int(String(cli[5]))
+        if (context != 0 and context != 64 and context != 1024 and context != 3968) or first < 0 or first > 1:
+            raise Error("invalid batch-size workload")
+        batch_bench(String(cli[2]),String(cli[3]),context,first)
+        return
     var args = List[String]()
     comptime if is_defined["MODEL_PROFILE_PREFIX"]():
         args = ["model","profile",String(get_defined_string["MODEL_PREPARED"]()),
@@ -115,12 +316,7 @@ def main() raises:
     var ctx = DeviceContext()
     if ctx.api() != "metal" or ctx.name() != "Apple M4 Pro":
         raise Error("study requires Apple M4 Pro / Metal")
-    var tokenizer = Tokenizer(args[3])
-    var work = TokenizerWorkspace()
-    var text = String()
-    for _ in range(200):
-        text += "A train travels sixty kilometers in forty-five minutes. Explain how to calculate its average speed, keeping track of distance, time, and units. The passengers compare their calculations and check each step.\n"
-    var history = tokenizer.encode(text,work)
+    var history = frozen_history(args[3])
     if len(history) < prefix+1:
         raise Error("insufficient frozen token history")
     var model = QwenModel(ctx,args[2],4096,256)

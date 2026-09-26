@@ -10,6 +10,10 @@ ENTRYPOINTS.update(qwen_model_gpu_argmax='QwenModel.forward+greedy-gpu-argmax', 
 ENTRYPOINTS['qwen_model_buffer_swap'] = 'QwenModel.forward+greedy-buffer-swap'
 ENTRYPOINTS.update(qwen_model_residual_norm='QwenModel.forward+greedy-residual-norm', qwen_model_swap_argmax='QwenModel.forward+greedy-swap-argmax', qwen_model_all_three='QwenModel.forward+greedy-all-three')
 SELECTIONS = {'qwen_model_gpu_argmax':1, 'qwen_model_fused_head':2, 'qwen_model_swap_argmax':1, 'qwen_model_all_three':1}
+# The batch-size study: the all-three decode composition for B sequences in one step.
+BATCH_IMPLEMENTATION = 'qwen_model_batch'
+ENTRYPOINTS[BATCH_IMPLEMENTATION] = 'QwenModel.forward+greedy_tokens'
+SELECTIONS[BATCH_IMPLEMENTATION] = 1
 TARGET_FIELDS = ('profile_workload', 'dispatches_per_iteration', 'key_value_rows')
 PREFIXES = (64, 1024, 3968)
 DECLARATION = dict(model='Qwen2.5-0.5B-Instruct', policy='fast', batch=1,
@@ -84,13 +88,15 @@ def specification(prefix, fused=False, combined=False, selection=0, copy_free=Fa
 
 def options(implementation):
     return (implementation=='qwen_model_fused',
-            implementation in ('qwen_model_combined','qwen_model_residual_norm','qwen_model_swap_argmax','qwen_model_all_three'),
+            implementation in ('qwen_model_combined','qwen_model_residual_norm','qwen_model_swap_argmax','qwen_model_all_three',BATCH_IMPLEMENTATION),
             SELECTIONS.get(implementation,0),
-            implementation in ('qwen_model_buffer_swap','qwen_model_swap_argmax','qwen_model_all_three'),
-            implementation in ('qwen_model_residual_norm','qwen_model_all_three'))
+            implementation in ('qwen_model_buffer_swap','qwen_model_swap_argmax','qwen_model_all_three',BATCH_IMPLEMENTATION),
+            implementation in ('qwen_model_residual_norm','qwen_model_all_three',BATCH_IMPLEMENTATION))
 
 
 def configuration(data):
+    if data.get('implementation') == BATCH_IMPLEMENTATION:
+        return batch_configuration(data)
     if (data.get('implementation') not in ENTRYPOINTS
             or data.get('entrypoint') != ENTRYPOINTS[data['implementation']]):
         raise ValueError('Qwen profile implementation changed')
@@ -157,3 +163,56 @@ PROJECTION_DECLARATION = dict(COMPOSITION_DECLARATION,
     candidate='one output per SIMD group; runtime or fixed 896/4864 width with four-iteration prefetch; 64/128/256 threads',
     extra_correctness='15 full logits/cache comparisons and 195 extra tensors per candidate at prefix64',
     choice='qualify at all contexts; lowest worst-context median ratio, then mean, then ID; separate confirmation required')
+
+
+BATCH_CONTEXTS = (64, 1024, 3968)
+BATCH_SIZES = (1, 2, 4, 8, 16, 32, 64)
+BATCH_MIXED = 32
+BATCH_TILES = (4, 8, 16)
+BATCH_COMPARISONS = [['tile-4','tile-4'], ['tile-4','tile-8'], ['tile-4','tile-16'], ['tile-4','tile-4 observed']]
+BATCH_TRACES = ((1024, 1, 4), (1024, 16, 4), (1024, 64, 4))
+
+
+def mixed_contexts():
+    """The mixed workload (context 0): 32 sequences whose contexts spread evenly from 64 to 3968."""
+    return [64 + s*(3968-64)//(BATCH_MIXED-1) for s in range(BATCH_MIXED)]
+
+
+def batch_workloads():
+    """(context, sequences) cells, context 0 being the mixed batch."""
+    return [(c, b) for c in BATCH_CONTEXTS for b in BATCH_SIZES] + [(0, BATCH_MIXED)]
+
+
+BATCH_DECLARATION = dict(DECLARATION, policy='fast; configuration 26 decode composition for B sequences, one token each',
+    batch=list(BATCH_SIZES), prefixes=list(BATCH_CONTEXTS),
+    mixed=dict(sequences=BATCH_MIXED, contexts=mixed_contexts()), row_tiles=list(BATCH_TILES),
+    comparisons=BATCH_COMPARISONS,
+    cache_layout='block-major pool of 64 full-context blocks in one 3 GiB allocation; block 0 prefilled with the frozen history and copied to every block',
+    timing_boundary='step batch and plan construction through greedy_tokens readback of every sequence; logical rewind and recording excluded',
+    trace_repeats=2, trace_workloads=[list(t) for t in BATCH_TRACES],
+    trace_boundary='normal forward+greedy_tokens for B sequences; fixed logical contexts; no layer synchronizations',
+    decision='Per workload and tile: gain if all four block ratios are below one and the median reduction exceeds '
+             'max(5%, largest absolute calibration deviation); regression by the symmetric rule; otherwise inconclusive.')
+
+
+def batch_specification(context, sequences, tile):
+    if (context, sequences, tile) not in BATCH_TRACES:
+        raise ValueError('undeclared batch trace workload')
+    return dict(profile_rows=sequences, hidden_size=896, key_value_rows=context+1,
+                profile_workload=f'model-p{context}-b{sequences}-t{tile}',
+                dispatches_per_iteration=len(stages(*options(BATCH_IMPLEMENTATION))))
+
+
+def batch_configuration(data):
+    if data.get('entrypoint') != ENTRYPOINTS[BATCH_IMPLEMENTATION]:
+        raise ValueError('Qwen batch profile entrypoint changed')
+    fields = (data.get('key_value_rows'), data.get('profile_rows'), data.get('row_tile'))
+    if any(type(value) is not int for value in fields):
+        raise ValueError('invalid Qwen batch trace geometry')
+    expected = batch_specification(fields[0]-1, fields[1], fields[2])
+    expected['row_tile'] = fields[2]
+    if any(type(data.get(k)) is not type(v) or data.get(k) != v for k, v in expected.items()):
+        raise ValueError('Qwen batch trace geometry changed')
+    if data.get('profile_iterations') != 8 or data.get('profile_warmup_iterations') != 10:
+        raise ValueError('Qwen trace capture budget changed')
+    return expected
