@@ -18,11 +18,10 @@ committed with its own gate:
 Approved on 2026-09-23 for local implementation of 1a: edits, builds, tests,
 validation and incremental commits. Pushing, pull requests, toolchain upgrades
 and numerical-contract changes need a separate decision. 1b was approved on
-2026-09-25 on the same terms; 1c gets a detailed plan before its
-implementation.
+2026-09-25 and 1c on 2026-09-26, on the same terms.
 
 Status: 1a and 1b are complete; see the [validation record](#validation-record).
-1c is next and gets a detailed plan before implementation.
+1c is in progress.
 
 ## 1a. Step format and KV pool
 
@@ -254,21 +253,96 @@ Each step is one commit with its own gate:
 - **Host bookkeeping.** Each step makes 24·S length updates on the host; 1c's
   host breakdown shows what they cost.
 
-## 1c. Batch-size study (outline)
+## 1c. Batch-size study
 
-Extend the existing model benchmark with a batch axis, B in
-{1, 2, 4, 8, 16, 32, 64}, and a projection row-tile axis, 4, 8 and 16, at
-contexts 64, 1024 and 3968, plus one mixed-length batch. A 64-block pool of
-full-context blocks is 3 GiB. Time complete steps,
-from upload through per-sequence readback, with the existing four-block paired
-procedure. Report:
+Designed on 2026-09-26 from `68e0fa3` and approved the same day on the terms
+of 1a and 1b.
 
-- step latency;
-- aggregate tokens per second;
-- per-sequence token latency;
-- a host step breakdown.
+**Question.** How do step latency, aggregate throughput and each sequence's
+token latency scale with the number of sequences decoding together, at short,
+medium and long context, and how much does the projection row tile change that?
 
-Capture traces for a subset to separate submission from GPU execution.
+### Matrix
+
+- **Workloads.** B ∈ {1, 2, 4, 8, 16, 32, 64} at contexts 64, 1024 and 3968,
+  plus one mixed batch of 32 sequences whose contexts spread evenly from 64 to
+  3968.
+- **Comparisons.** Each workload runs four pairs of arms against tile 4 in one
+  process:
+  - tile 4 against itself, for calibration;
+  - tile 8 against tile 4;
+  - tile 16 against tile 4;
+  - tile 4 with host marks against tile 4 without, for observation.
+- **Procedure.** The four-block paired procedure of the
+  [experimental method](experiments.md): ten warmups and ten samples per arm,
+  with blocks 2 and 3 reversing the order of contexts, batch sizes,
+  comparisons and arms. One process per block and context runs all of that
+  context's batch sizes.
+- **Timed interval.** From building the step batch and plan through
+  `greedy_tokens` readback, as the token-profile study times one sequence.
+  Rewinding each block to its context is outside the interval.
+
+### Setup
+
+`QwenModel(ctx, prepared, 4096, 256, 64)` serves a pool of 64 full-context
+blocks: one 3 GiB allocation, which a probe on 2026-09-26 allocated and copied
+between blocks. The frozen history is prefilled once into block 0 with Fast
+chunks and copied into every other block, whose lengths are then set to their
+sequences' contexts. Sequence b decodes the history token after its context,
+offset by b, so rows differ. An untimed tile-4 step records every sequence's
+token. Every sample must reproduce those tokens with 245 launches for B
+sequences; the tile cannot change a token, because tiles are bit-identical.
+
+### Changes
+
+- **Model.** `forward` takes the row tile as a comptime parameter, defaulting
+  to the plan's `DECODE_ROW_TILE`, so one binary holds tiles 4, 8 and 16.
+  `greedy_tokens` records host marks under `OBSERVE`, as `greedy` does.
+- **Benchmark.** `benchmarks/model.mojo` gains a `batch` mode for timing and a
+  `-D MODEL_BATCH_PROFILE` build for traces; the token-profile modes are
+  unchanged.
+- **Contract.** `model_contract.py` declares the matrix (`BATCH_DECLARATION`)
+  and the trace geometry of the implementation `qwen_model_batch`. Its command
+  sequence is the current route's 249 commands per step at every B, so the
+  existing capture and analysis tools apply unchanged.
+- **Pipeline.** `model_profile.py` gains `batch-size-build`, `-collect`,
+  `-capture`, `-archive`, `-replay` and `-plot` beside the token-profile
+  commands, which keep replaying their own archive.
+- **Traces.** Metal System Traces at context 1024 for B ∈ {1, 16, 64} with
+  tile 4, two repeats each, give active GPU time, the enclosing GPU span and
+  Metal submission intervals per step.
+- **Evidence.** `studies/model_generation/batch-size.md` explains the results
+  from one lossless archive, `batch-size.json.gz` with its manifest, a derived
+  `batch-size-summary.json` and figures that `batch-size-plot` rebuilds without
+  a GPU.
+
+### Reported quantities
+
+For each workload, as the median over blocks of block medians:
+- step latency, which is also each sequence's token latency;
+- aggregate tokens per second, B divided by step latency, and its ratio to
+  B = 1 at the same context;
+- tile 8 and tile 16 against tile 4 under the method's decision rule, with the
+  calibration noise floor;
+- host intervals from the observation arm: preflight, step upload, embedding,
+  decoder-stack and head enqueue, the readback wait and selection.
+
+A tile that meets the gain rule is evidence for changing Fast's tile; adopting
+it is a separate decision.
+
+### Gate and steps
+
+Collection starts from a clean commit whose suite passes. Before and after each
+block, AC power, Low Power Mode off and a nominal thermal state are required and
+recorded. No run is discarded or repeated for a preferred outcome. Each step is
+one commit:
+
+1. The row-tile parameter and `greedy_tokens` marks, with a test that tiles 8
+   and 16 reproduce tile 4's bytes for batched steps.
+2. The benchmark mode, contract and pipeline, with parser, census and replay
+   tests.
+3. Collection and traces on the reference machine; the archive, the study and
+   its record.
 
 **Hypothesis, recorded before measurement.** In the
 [runtime study](../studies/model_generation/runtime-measurements.csv), 16-row
