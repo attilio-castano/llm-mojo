@@ -108,8 +108,8 @@ def batch_rewind(mut model: QwenModel, mut kv: KVPool, contexts: List[Int], sequ
             kv.caches[kv.index(s,layer)].length = contexts[s]
 
 
-def batch_step[OBSERVE: Bool, TILE: Int](mut model: QwenModel, mut kv: KVPool, ctx: DeviceContext,
-                                         tokens: List[Int], contexts: List[Int], sequences: Int) raises -> List[Int]:
+def batch_step[OBSERVE: Bool, ARRANGEMENT: Int](mut model: QwenModel, mut kv: KVPool, ctx: DeviceContext,
+                                                tokens: List[Int], contexts: List[Int], sequences: Int) raises -> List[Int]:
     """One decode token for each of the first `sequences` blocks, then one token per sequence."""
     var ids = List[Int](capacity=sequences)
     var positions = List[Int](capacity=sequences)
@@ -130,7 +130,7 @@ def batch_step[OBSERVE: Bool, TILE: Int](mut model: QwenModel, mut kv: KVPool, c
         longest = max(longest,contexts[s]+1)
     starts.append(sequences)
     var batch = StepBatch(ids^,positions^,starts^,sequences,seq_lens^,1,blocks^,slots^,rows^)
-    model.forward[OBSERVE, TILE](ctx,batch,kv,fast_plan(sequences,longest,ctx.name(),sequences))
+    model.forward[OBSERVE, ARRANGEMENT](ctx,batch,kv,fast_plan(sequences,longest,ctx.name(),sequences))
     return model.greedy_tokens[OBSERVE](ctx)
 
 
@@ -144,7 +144,10 @@ def batch_check(model: QwenModel, selected: List[Int], expected: List[Int], sequ
 
 
 def batch_bench(prepared: String, tables: String, context: Int, first: Int) raises:
-    """Paired arms per batch size: tile 4 against itself, tile 8, tile 16 and observed tile 4."""
+    """Paired arms per batch size: tile 4 against itself, tile 8, tile 16 and observed tile 4.
+
+    Tiles 4, 8 and 16 are projection arrangements 0, 1 and 2.
+    """
     var ctx = DeviceContext()
     if ctx.api() != "metal" or ctx.name() != "Apple M4 Pro":
         raise Error("study requires Apple M4 Pro / Metal")
@@ -171,7 +174,7 @@ def batch_bench(prepared: String, tables: String, context: Int, first: Int) rais
     for index in range(len(sizes)):
         var sequences = sizes[len(sizes)-1-index] if first == 1 else sizes[index]
         batch_rewind(model,kv,contexts,sequences)
-        var expected = batch_step[False, 4](model,kv,ctx,tokens,contexts,sequences)
+        var expected = batch_step[False, 0](model,kv,ctx,tokens,contexts,sequences)
         batch_check(model,expected,expected,sequences)
         print("sequences:",sequences,"first token:",expected[0],"last token:",expected[sequences-1])
         for position in range(4):
@@ -183,13 +186,13 @@ def batch_bench(prepared: String, tables: String, context: Int, first: Int) rais
                     var start = now()
                     var selected: List[Int]
                     if arm == 0 or comparison == 0:
-                        selected = batch_step[False, 4](model,kv,ctx,tokens,contexts,sequences)
+                        selected = batch_step[False, 0](model,kv,ctx,tokens,contexts,sequences)
                     elif comparison == 1:
-                        selected = batch_step[False, 8](model,kv,ctx,tokens,contexts,sequences)
+                        selected = batch_step[False, 1](model,kv,ctx,tokens,contexts,sequences)
                     elif comparison == 2:
-                        selected = batch_step[False, 16](model,kv,ctx,tokens,contexts,sequences)
+                        selected = batch_step[False, 2](model,kv,ctx,tokens,contexts,sequences)
                     else:
-                        selected = batch_step[True, 4](model,kv,ctx,tokens,contexts,sequences)
+                        selected = batch_step[True, 0](model,kv,ctx,tokens,contexts,sequences)
                     var elapsed = now()-start
                     batch_check(model,selected,expected,sequences)
                     if sample >= 10:
@@ -205,6 +208,7 @@ def batch_bench(prepared: String, tables: String, context: Int, first: Int) rais
 
 def batch_profile[TILE: Int](prepared: String, tables: String, context: Int, sequences: Int) raises:
     """Trace target: ten warmups and eight plain batched steps inside the profile region."""
+    comptime ARRANGEMENT = 0 if TILE == 4 else (1 if TILE == 8 else 2)
     var ctx = DeviceContext()
     if ctx.api() != "metal" or ctx.name() != "Apple M4 Pro":
         raise Error("study requires Apple M4 Pro / Metal")
@@ -217,10 +221,10 @@ def batch_profile[TILE: Int](prepared: String, tables: String, context: Int, seq
     var kv = KVPool(ctx,BATCH_POOL,4096,model.kv_geometry())
     batch_setup(ctx,model,kv,history,context)
     batch_rewind(model,kv,contexts,sequences)
-    var expected = batch_step[False, TILE](model,kv,ctx,tokens,contexts,sequences)
+    var expected = batch_step[False, ARRANGEMENT](model,kv,ctx,tokens,contexts,sequences)
     for _ in range(10):
         batch_rewind(model,kv,contexts,sequences)
-        batch_check(model,batch_step[False, TILE](model,kv,ctx,tokens,contexts,sequences),expected,sequences)
+        batch_check(model,batch_step[False, ARRANGEMENT](model,kv,ctx,tokens,contexts,sequences),expected,sequences)
     print("device:",ctx.name())
     print("api:",ctx.api())
     print("correctness: passed")
@@ -236,7 +240,7 @@ def batch_profile[TILE: Int](prepared: String, tables: String, context: Int, seq
     print("PROFILE_REGION_BEGIN")
     for _ in range(8):
         batch_rewind(model,kv,contexts,sequences)
-        batch_check(model,batch_step[False, TILE](model,kv,ctx,tokens,contexts,sequences),expected,sequences)
+        batch_check(model,batch_step[False, ARRANGEMENT](model,kv,ctx,tokens,contexts,sequences),expected,sequences)
     print("PROFILE_REGION_END")
     sleep(0.25)
 

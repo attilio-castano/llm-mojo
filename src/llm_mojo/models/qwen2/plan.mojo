@@ -14,9 +14,10 @@ from llm_mojo.layers.decoder_layer import (
 
 comptime MEASURED_DEVICE = "Apple M4 Pro"
 comptime MAX_CONTEXT = 4096
-# Rows that share each weight load in the decode composition's projections. The
-# tile changes weight traffic, not arithmetic; 1c measures the alternatives.
-comptime DECODE_ROW_TILE = 4
+# The decode composition's batched projection arrangement (kernels/linear.mojo);
+# 0 is row tile 4. Arrangements change how rows share weight loads, not
+# arithmetic: 1c measured the row tiles and 1d the other arrangements.
+comptime DECODE_PROJECTION = 0
 
 
 @fieldwise_init

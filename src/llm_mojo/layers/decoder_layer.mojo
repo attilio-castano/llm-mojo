@@ -14,7 +14,7 @@ from llm_mojo.layers.attention_sublayer import (
     enqueue_attention_sublayer_integrated, enqueue_fused_decode_qkv_batch,
 )
 from llm_mojo.kernels.attention_decode import enqueue_grouped_query_attention_decode_sequences_apple_gpu
-from llm_mojo.kernels.linear import enqueue_linear_rowwise_rows_apple_gpu
+from llm_mojo.kernels.linear import enqueue_linear_decode_rows_apple_gpu
 from llm_mojo.kernels.residual_norm import enqueue_residual_norm
 from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.kernels.swiglu import enqueue_silu_multiply_apple_gpu
@@ -267,7 +267,7 @@ def validate_decode_batch_layer[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, 
                                                              positions, blocks, layer, layers, block_size)
 
 
-def enqueue_decode_batch_layer[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, ROW_TILE: Int, SL: TensorLayout](
+def enqueue_decode_batch_layer[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, PROJECTION: Int, SL: TensorLayout](
     ctx: DeviceContext, mut aw: AttentionWeights, mut attention: AttentionWorkspace,
     mut mw: MLPWeights, mut mlp: MLPWorkspace, mut x: DeviceBuffer[DType.bfloat16],
     mut storage: DeviceBuffer[DType.bfloat16],
@@ -283,7 +283,7 @@ def enqueue_decode_batch_layer[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, R
     each sequence's block, decode attention, Wo, the residual with the MLP norm,
     gate, up, SiLU times up, and down. attention.output then holds the attention
     residual and mlp.down the MLP branch; the caller adds them with the next
-    layer's or the final norm. Projections reuse each weight across ROW_TILE rows.
+    layer's or the final norm. PROJECTION is the projections' batched arrangement.
     The caller checks positions and blocks against the pool and advances each
     sequence's cache length.
     """
@@ -299,7 +299,7 @@ def enqueue_decode_batch_layer[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, R
     if not input_normalized:
         enqueue_rms_norm_apple_gpu(ctx, TileTensor(x, row_major(s, HIDDEN)), TileTensor(aw.norm, row_major(HIDDEN)), normal)
         launches += 1
-    enqueue_linear_rowwise_rows_apple_gpu[ROW_TILE](ctx, normal, TileTensor(aw.qkv, row_major(PACKED, HIDDEN)),
+    enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, normal, TileTensor(aw.qkv, row_major(PACKED, HIDDEN)),
         TileTensor(aw.bias, row_major(PACKED)), TileTensor(attention.packed, row_major(s, PACKED)))
     enqueue_fused_decode_qkv_batch[QUERY_HEADS, KV_HEADS, HEAD_DIM](ctx, attention, storage, positions, blocks,
                                                                    layer, layers, block_size)
@@ -308,18 +308,18 @@ def enqueue_decode_batch_layer[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, R
         TileTensor(storage, row_major(len(storage) // WIDTH, KV_HEADS, HEAD_DIM)),
         TileTensor(attention.attention, row_major(s, QUERY_HEADS, HEAD_DIM)),
         positions, blocks, layer, layers, block_size)
-    enqueue_linear_rowwise_rows_apple_gpu[ROW_TILE](ctx, TileTensor(attention.attention, row_major(s, HIDDEN)),
+    enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, TileTensor(attention.attention, row_major(s, HIDDEN)),
         TileTensor(aw.output, row_major(HIDDEN, HIDDEN)), TileTensor(attention.projected, row_major(s, HIDDEN)))
     enqueue_residual_norm[HIDDEN](ctx, TileTensor(x, row_major(s, HIDDEN)),
         TileTensor(attention.projected, row_major(s, HIDDEN)), TileTensor(mw.norm, row_major(HIDDEN)),
         TileTensor(attention.output, row_major(s, HIDDEN)), TileTensor(mlp.normalized, row_major(s, HIDDEN)))
     var mlp_normal = TileTensor(mlp.normalized, row_major(s, HIDDEN))
-    enqueue_linear_rowwise_rows_apple_gpu[ROW_TILE](ctx, mlp_normal, TileTensor(mw.gate, row_major(i, HIDDEN)),
+    enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, mlp_normal, TileTensor(mw.gate, row_major(i, HIDDEN)),
         TileTensor(mlp.gate, row_major(s, i)))
-    enqueue_linear_rowwise_rows_apple_gpu[ROW_TILE](ctx, mlp_normal, TileTensor(mw.up, row_major(i, HIDDEN)),
+    enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, mlp_normal, TileTensor(mw.up, row_major(i, HIDDEN)),
         TileTensor(mlp.up, row_major(s, i)))
     enqueue_silu_multiply_apple_gpu(ctx, TileTensor(mlp.gate, row_major(s, i)), TileTensor(mlp.up, row_major(s, i)),
         TileTensor(mlp.gated, row_major(s, i)))
-    enqueue_linear_rowwise_rows_apple_gpu[ROW_TILE](ctx, TileTensor(mlp.gated, row_major(s, i)),
+    enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, TileTensor(mlp.gated, row_major(s, i)),
         TileTensor(mw.down, row_major(HIDDEN, i)), TileTensor(mlp.down, row_major(s, HIDDEN)))
     return launches
