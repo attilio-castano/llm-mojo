@@ -505,7 +505,7 @@ uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --
 uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_profile batch-size-plot --study projections --output studies/model_generation
 ```
 
-The [reordered batched projections](../../../docs/batched-decode-plan.md#1e-reordered-batched-projections)
+The [reordered batched projections](../../../studies/model_generation/batch-reordered.md)
 (1e) reuse the matrix with `--study reordered`, which screens arrangements 7–10
 against arrangement 5. Collection first records an accuracy census: every
 arrangement's error against FP64 sums at the five decode projection shapes.

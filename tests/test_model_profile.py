@@ -320,6 +320,59 @@ class ModelProfileTests(unittest.TestCase):
                     else:
                         with self.assertRaises((ValueError, RuntimeError)): projection_replay(directory)
 
+    def test_retained_batch_reordered_integrity(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import reordered_replay
+        source = repository_root()/'studies/model_generation'
+        original = json.loads(gzip.decompress((source/'batch-reordered.json.gz').read_bytes()))
+        retained = json.loads((source/'batch-reordered-summary.json').read_text())
+        self.assertEqual((retained['decision']['selected'], retained['confirmed'], retained['diagnostics']['stop']),
+                         (8, True, False))
+        self.assertEqual(sorted(r['status'] for r in original['rejected_captures']),
+                         ['failed during capture', 'rejected by analysis'])
+        for damage in (None, 'sample', 'confirmation-sample', 'block', 'capture', 'dispatch', 'provenance',
+                       'conditions', 'confirmation-conditions', 'trace-conditions', 'no-confirmation',
+                       'other-arrangement', 'argument', 'accuracy', 'accuracy-worse', 'token', 'exact-token',
+                       'no-diagnostics', 'stop', 'hf', 'set-aside-binary', 'failed-receipt'):
+            record = copy.deepcopy(original)
+            failed = next(r for r in record['rejected_captures'] if r['status'] == 'failed during capture')
+            if damage == 'sample': record['timing']['samples'].pop()
+            elif damage == 'confirmation-sample': record['confirmation']['samples'].pop()
+            elif damage == 'block': record['timing']['blocks'].pop()
+            elif damage == 'capture': record['captures'].pop()
+            elif damage == 'dispatch': record['captures'][2]['samples'].pop()
+            elif damage == 'provenance': record['captures'][2]['provenance']['binary']['sha256'] = '0'*64
+            elif damage == 'conditions': record['timing']['blocks'][3]['after']['power_mode_raw'] = '1'
+            elif damage == 'confirmation-conditions': record['confirmation']['blocks'][0]['before']['power_mode_raw'] = '1'
+            elif damage == 'trace-conditions': record['captures'][0]['conditions']['before']['battery']['power_source'] = 'Battery Power'
+            elif damage == 'no-confirmation': record['confirmation'] = None
+            elif damage == 'other-arrangement': record['confirmation']['argument'] = 'reordered-confirm:7'
+            elif damage == 'argument': record['timing']['argument'] = 'projections'
+            elif damage == 'accuracy': record['timing']['accuracy'].pop()
+            elif damage == 'accuracy-worse': next(r for r in record['timing']['accuracy'] if r['arrangement'] == 8)['worst_ulps'] += 1
+            elif damage == 'token': record['timing']['token_differences'].pop()
+            elif damage == 'exact-token': next(r for r in record['timing']['token_differences'] if r['arrangement'] == 7)['differing'] = 1
+            elif damage == 'no-diagnostics': record['diagnostics'] = None
+            elif damage == 'stop': record['diagnostics']['stop'] = True
+            elif damage == 'hf': record['diagnostics']['hf']['8']['agree'] -= 1
+            elif damage == 'set-aside-binary': record['rejected_captures'][0]['receipt']['profile']['binary']['sha256'] = '0'*64
+            elif damage == 'failed-receipt': failed['receipt']['capture']['status'] = 'complete'
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                raw = json.dumps(record).encode()
+                packed = gzip.compress(raw, mtime=0)
+                (directory/'batch-reordered.json.gz').write_bytes(packed)
+                (directory/'batch-reordered.json').write_text(json.dumps(dict(kind=record['kind'],
+                    sha256=hashlib.sha256(packed).hexdigest(), uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with self.subTest(damage=damage), redirect_stdout(StringIO()):
+                    if damage is None:
+                        reordered_replay(directory)
+                        self.assertEqual(json.loads((directory/'batch-reordered-summary.json').read_text()), retained)
+                    else:
+                        with self.assertRaises((ValueError, RuntimeError)): reordered_replay(directory)
+
     def test_batch_support_distinguishes_backend_failure_from_bad_results(self):
         from llm_mojo.benchmarks.model_profile import batch_support_parse
         base='device: Apple M4 Pro\napi: metal\nBATCH_EAGER_PASS 15\n'

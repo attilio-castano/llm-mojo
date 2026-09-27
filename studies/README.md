@@ -26,11 +26,12 @@ follow-up, supported by the existing decoder policy and full-model studies.
 ## Decode experiments
 
 The [model study index](model_generation/README.md) gives each study's status:
-promoted, promoted only as part of the composed route, superseded, diagnostic or
-blocked.
+promoted, promoted only as part of the composed route, awaiting a decision,
+superseded, diagnostic or blocked.
 
 | Study | What it establishes |
 | --- | --- |
+| [Reordered batched projections](model_generation/batch-reordered.md) | Summing four adjacent products per lane cuts batched steps by a further 17–36% from B = 16, with arrangement 5's worst-case accuracy and HF agreement; adopting it changes Fast's arithmetic and awaits a decision |
 | [Batched decode against batch size](model_generation/batch-size.md) | With tile 4, decoding up to 64 sequences per step levels off at 2.2–3.2× one sequence's throughput; the multi-row projections' per-row work, not weight traffic, sets the cost |
 | [Inter-layer buffer swapping](model_generation/buffer-swap.md) | Exact outputs with 23 fewer compute commands; 5.3–8.3% median paired reductions and 90–94 tokens/s streaming, but the full promotion gate fails |
 | [GPU token selection](model_generation/token-selection.md) | Standalone argmax gains 4.5–7% but misses the full promotion gate; the tested fused head is slower; exact outputs and complete retained evidence |

@@ -29,7 +29,11 @@ decision.
 
 Status: 1a, 1b, 1c and 1d are complete; see the [validation record](#validation-record).
 1c's throughput hypothesis failed with tile 4. 1d's exact arrangement 5, now
-the batched default, cuts batched step time by 31–65%. 1e is in progress.
+the batched default, cuts batched step time by 31–65%. 1e's evidence is
+recorded: arrangement 8, which sums four adjacent products per lane, cut
+batched steps by a further 17–36% from B = 16, with arrangement 5's worst-case
+accuracy and HF agreement. Adopting it changes Fast's arithmetic and waits for
+your decision.
 
 ## 1a. Step format and KV pool
 
@@ -681,6 +685,109 @@ Each step is one commit with its gate:
 arrangement per batch size, and lower-precision accumulation.
 
 ## Validation record
+
+### 1e on `3185eea`, 2026-09-26 and 27
+
+These commits implement 1e's first four steps, each with its gate:
+
+| Commit | Change |
+| --- | --- |
+| `91a9908` | arrangements 7–10 with the batch-invariance and accuracy tests |
+| `5c85f52` | the arrangement through `forward` and validation builds: the `DECODE_PROJECTION` define, `decode-comparison`, and decode parity pinned to exact arrangements |
+| `3185eea` | the declaration, the benchmark's arms, the accuracy census, `batch-size-diagnose` and the pipeline tests |
+| `9d5a24f` | the HF references run with `uv` from PATH and a three-hour limit |
+| `02eecff` | the reordered replay accepts an attempt that failed during capture |
+| this commit | the archive, the [study](../studies/model_generation/batch-reordered.md) and this record |
+
+- **Before collection.** `uv run --locked llm-mojo validate` passed on a clean
+  `3185eea`: oracle anchors with the shared fixtures, 278 Python tests, the
+  native suites on Metal with the new batch-invariance tests, and every
+  benchmark smoke. Functional runs of the reordered batch mode and of the
+  decode comparison passed their checks; their timings were not used.
+- **Accuracy census.** Recorded before the screen's first block. Arrangements
+  5, 7 and 8 share the same worst error in every shape; 9 and 10 exceed it in
+  all five, so they could not qualify.
+- **Screen.** Four blocks from 18:32 to 18:43 on 2026-09-26 produced 8,800
+  samples. Every sample reproduced its arm's reference tokens with 245
+  launches, and no exact arm changed a token. AC power, normal power mode and
+  no thermal or performance warning were recorded before and after every
+  block. The machine was quiet, with load averages of 1.5–2.5 around the screen.
+- **Traces.** Ten accepted captures of 64 sequences at 1,024 cached tokens
+  cover 19,920 measured commands. Two attempts were set aside and replaced with
+  the same binaries:
+  - Arrangement 5's repeat 0, captured at 18:43, failed the coverage check.
+    The Compute interval in one measured command's slot was labelled as the
+    Codex service's, and that command's ID sat on a Vertex interval 11.7 ms
+    before the preceding command ended. Its replacement, at 09:58 the next
+    day, passed.
+  - Arrangement 9's repeat 0 ran its binary to completion at 18:45. Then
+    xctrace stopped responding at "Stopping recording..." and saved no trace,
+    holding its "Instruments is recording" sleep assertion. It was found and
+    stopped at 09:21 the next morning: it ignored SIGINT, and SIGTERM ended it
+    with exit code 1. `capture_trace` wrote an invalid receipt naming the
+    failure. Its replacement, at 09:23, passed.
+
+  The other six captures ran from 09:23 to 09:26. `verify_build` compares the
+  whole source identity, branch name included, and by the arrangement 5
+  replacement the branch had moved to `02eecff`. For that capture the branch
+  was renamed, recreated at `3185eea` in this worktree's clean checkout, and
+  restored afterwards.
+- **Decision.** The frozen rule qualified only arrangement 8 and selected it,
+  with a worst median ratio of 0.822 from B = 16 and a mean of 0.727.
+  Arrangement 7 was slower at B = 2 and 4; 9 and 10 failed the accuracy gate
+  and were slower from B = 1 to 8.
+- **Confirmation.** A fresh four-block run from 09:26 to 09:31 on 2026-09-27
+  produced 3,520 samples. Arrangement 8 was a gain in every workload from
+  B = 8, with median ratios of 0.636–0.827 from B = 16, and slower in none. The
+  machine was in use: one-minute load averages of 2.6–6.3, with file syncing at
+  up to 113% of a core. Calibration deviations reached 31% at B ≤ 4; from
+  B = 8 the control's steps stayed within 2.6% of the screen's.
+- **Diagnostics.** `batch-size-diagnose` ran from `9d5a24f` between 09:40 and
+  09:50. Arrangement 8 selected the same token as 5 in 31 of 32 teacher-forced
+  calls. It agreed with HF on 242 of 244 same-history choices, as 5 did, and
+  its largest KL divergence was 0.00774 nats against 0.00708. The stop rule
+  did not trigger. A first run at 09:33 built all four binaries and wrote the
+  decode comparison, then stopped at the HF reference, whose command looked for
+  `uv` inside the environment. The rerun from `9d5a24f` reproduced the binaries
+  byte for byte and every numerical field of the comparison.
+- **Replay.** `batch-size-replay --study reordered` reapplies the accuracy
+  gate, the frozen rule and the stop rule, and regenerates the summary without
+  a GPU. The retained-archive test rejects twenty-one kinds of damage.
+- **Suite.** The Python suite passed with the evidence: 279 tests, including
+  the documentation links. No Mojo source changed after `3185eea`, whose full
+  suite passed before collection.
+
+**Outcome.** In the confirmation, arrangement 8 cut the batched step by 17–36%
+from B = 16. On the quiet screen, at 64 sequences, it took a step from 74.4 to
+47.0 ms at 64 cached tokens, from 91.3 to 64.1 ms at 1,024 and from 159.3 to
+132.7 ms at 3,968. That is 1,362, 998 and 482 tokens/s. Traced projection time
+at B = 64 fell from 71.4 to 43.3 ms. Against the recorded hypothesis:
+- arrangement 8 gained far more than the predicted 10%: load instructions, not
+  weight passes, set most of the per-layer projections' cost;
+- the matrix-unit tiles cut projection time by 47% and 54%, as fewer passes
+  predicted, but slowed one sequence 1.7–2.4× and failed the accuracy gate;
+- arrangement 7 gained 6–12% at B = 64, well short of 30–45%;
+- no arrangement stayed within one ulp in the vocabulary shape, where 5 and 8
+  reach 1.21 ulps.
+
+**Deviations from the plan.**
+- The two set-aside capture attempts, and the branch procedure for the
+  arrangement 5 replacement, as above.
+- The confirmation and eight of the ten traces ran while the machine was in use.
+- Two pipeline fixes after collection, both committed before the archive was
+  built: the HF reference's `uv` and time limit (`9d5a24f`), and the replay's
+  acceptance of an attempt that failed during capture (`02eecff`).
+- The draft pull request's push, at 18:45:46 on 2026-09-26, came 38 seconds
+  into the arrangement 9 capture that failed. Captures took 23–32 seconds, so
+  the failure most likely began before the push.
+
+**Decision needed before adoption.** Arrangement 8 met every gate. Adopting it
+makes it the decode arrangement for batched and single-sequence Fast decode,
+which changes Fast's outputs in their last bits. Decode parity and the route
+test then move from arrangement 5 to 8, and the model contract documents the
+new order. Keeping arrangement 5 leaves Fast's arithmetic unchanged. The
+[study](../studies/model_generation/batch-reordered.md#decision-needed) sets
+out both.
 
 ### 1d on `f47fb8b`, 2026-09-26
 
