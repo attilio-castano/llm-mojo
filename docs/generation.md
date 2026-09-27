@@ -38,13 +38,20 @@ decodes up to `max_sequences` sequences at once, one token each, with the same
 launches as one sequence; `greedy_tokens` returns one token per sequence, and
 each sequence's logits, token and appended K/V equal decoding it alone. Every
 other call covers one sequence. See the [batched decode plan](batched-decode-plan.md).
-Batched projections use arrangement 5, which gives each SIMD group four rows and
-four output columns without changing any row's arithmetic. On M4 Pro, 64
-sequences per step give 3.8–7.0 times one sequence's throughput, depending on
-context. The [batch-size study](../studies/model_generation/batch-size.md)
-explains why tile 4 levelled off, and the
+Decode projections use arrangement 8, for one sequence and for many: each SIMD
+group computes four rows and four output columns, and each lane sums four
+adjacent products in every 128 inputs. That order differs from the baseline
+route's one-row kernel, so Fast decode's results can differ from configuration
+0's in their last bits, while each batched row still equals decoding that
+sequence alone ([decode projection order](model.md#decode-projection-order)).
+On M4 Pro, 64 sequences per step give 3.8–10.7 times one sequence's
+throughput, depending on context. The
+[batch-size study](../studies/model_generation/batch-size.md) explains why tile
+4 levelled off, the
 [batched projection study](../studies/model_generation/batch-projections.md)
-measures the arrangement that replaced it.
+measures arrangement 5, which replaced it, and the
+[reordered projection study](../studies/model_generation/batch-reordered.md)
+measures arrangement 8, which replaced arrangement 5.
 
 The decoder requires its input and output storage not to alias. Multi-row calls
 copy each intermediate decoder output into the separate input buffer before the
@@ -84,8 +91,9 @@ residual/RMSNorm fusion, inter-layer buffer swapping and separate GPU argmax. Th
 passed paired whole-token gates at histories 64, 1024 and 3968. Every other shape and device name falls
 back to configuration 0.
 Baseline 0 already includes integrated attention and optimized multi-row MLP
-7, with rowwise MLP projections for decode. Configuration 26 preserves those
-projection and attention reductions and the intermediate BF16 activation rounding.
+7, with rowwise MLP projections for decode. Configuration 26 preserves the
+attention reductions and the intermediate BF16 activation rounding; its
+projections sum in arrangement 8's order.
 
 `baseline` always selects 0. The historical `consistent` / 20 route uses FP32
 G32 attention and rowwise projections at all row counts; it remains an explicit
@@ -202,11 +210,13 @@ predictions agree with HF on 191 of 192 generated choices; the exception is an
 exact HF top-logit tie. These are bounded development observations, not a
 general model-quality or exact trajectory-equivalence claim.
 
-`decode-parity` checks the Fast decode route against baseline on the real
-24-layer model:
+`decode-parity` checks the Fast decode composition against baseline on the
+real 24-layer model. It needs an exact projection arrangement (0–7), whose
+projections equal the baseline's, so that only the fusions could differ. The
+default, arrangement 8, is reordered, so the parity build selects arrangement 5:
 
 ```sh
-uv run --locked python -m llm_mojo.validation.model build --binary build/parity-model
+uv run --locked python -m llm_mojo.validation.model build --decode-projection 5 --binary build/parity-model
 uv run --locked python -m llm_mojo.validation.model decode-parity --binary build/parity-model --output build/decode-parity.json
 ```
 
@@ -214,18 +224,21 @@ Both runs prefill the same 53 fixed tokens with configuration 0 and then decode
 32 fixed tokens one row at a time, so every call sees the same input. Every
 call's hidden states, final norm, logits and K/V must be byte-identical. The
 receipt keeps hashes only. `tests/test_decode_route.mojo` runs the same
-comparison on three synthetic layers in default validation. Both require an
-exact projection arrangement (0–7), whose projections equal the baseline's.
+comparison on three synthetic layers in default validation with arrangement 5,
+and checks that the default arrangement takes the same route with the same
+launches and leaves the unfused scratch untouched.
 
 `build --decode-projection N` compiles the driver with another decode
-arrangement, and the driver prints the one it runs. `decode-comparison` runs
-decode parity's schedule on an exact build and a reordered build (arrangements
-8–10). It records each call's logit, final norm, layer output and K/V
-differences, and whether the selected tokens agree:
+arrangement; without it, the build uses the source default, arrangement 8. The
+receipt records the arrangement, and the driver prints the one it runs.
+`decode-comparison` runs decode parity's schedule on an exact build and a
+reordered build (arrangements 8–10), such as the default. It records each
+call's logit, final norm, layer output and K/V differences, and whether the
+selected tokens agree:
 
 ```sh
-uv run --locked python -m llm_mojo.validation.model build --decode-projection 9 --binary build/reordered-model
-uv run --locked python -m llm_mojo.validation.model decode-comparison --reference-binary build/parity-model --binary build/reordered-model --output build/decode-comparison.json
+uv run --locked python -m llm_mojo.validation.model build --binary build/default-model
+uv run --locked python -m llm_mojo.validation.model decode-comparison --reference-binary build/parity-model --binary build/default-model --output build/decode-comparison.json
 ```
 
 `batch` checks batched decode on the real model. Eight conversations of 11 to

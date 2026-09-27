@@ -168,6 +168,37 @@ without an implicit zero-bias allocation.
 Tensor and execution mappings use the project's
 [layout language](layouts.md#affine-linear-projection-v0).
 
+### Decode projection order
+
+Fast decode (configuration 26) computes every projection of a decode step with
+the decode projection kernel in arrangement 8 (`kernels/linear.mojo`), for one
+sequence and for many: QKV with its bias, the attention output, gate, up, down
+and the vocabulary head. Each output is still one FP32 dot product of BF16
+operands, with the BF16 bias promoted and added in FP32 and one cast to BF16;
+bias-free projections omit the bias. The products associate in a fixed order
+that differs from the reference loop above. Lane `l` of a 32-lane SIMD group
+accumulates four adjacent products in every block of 128 inputs, and
+`warp.sum` combines the 32 partials:
+
+```text
+partial[l] = 0.0f32
+for i in 0 .. input_features / 128:
+    for j in 0 .. 4:
+        k = 128 * i + 4 * l + j
+        partial[l] += f32(X[row, k]) * f32(W[output_feature, k])
+Y[row, output_feature] = bf16(warp_sum(partial) + f32(B[output_feature]))
+```
+
+The order depends neither on the number of rows nor on a row's place among
+them, so each batched row equals decoding that sequence alone. Every decode
+input width, 896 and 4,864, is a multiple of 128. The baseline route and the
+exact arrangements 0–7 keep the one-row kernel's order, in which lane `l`
+accumulates `k = l + 32 * i` ([layouts](layouts.md#affine-linear-projection-v0)).
+The two orders' results can differ in the last bits. At the five decode
+shapes, arrangement 8's worst error against an FP64 sum of the same operands
+equals the one-row kernel's
+([reordered projections](../studies/model_generation/batch-reordered.md#accuracy)).
+
 ### RoPE arithmetic
 
 V0 applies rotary position embeddings to query and key heads after their
@@ -278,7 +309,8 @@ The upstream fixtures and numerical budgets are frozen. The materialized Mojo
 baseline, tiled prefill projections, and bounded decode experiments have passed
 their numerical checks and are documented in the [MLP study](../studies/mlp_sublayer/README.md).
 The standalone MLP defaults to rowwise mapping 0. The Fast model uses tiled
-mapping 7 for multi-row calls and mapping 0's projections for decode. Its
+mapping 7 for multi-row calls and the
+[decode projection order](#decode-projection-order) for decode. Its
 single-row M4 Pro route now fuses SiLU and multiply while retaining the exact
 intermediate BF16 rounding; see the
 [combined fusion study](../studies/model_generation/combined-fusion.md).

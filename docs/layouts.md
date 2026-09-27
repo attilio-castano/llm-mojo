@@ -121,8 +121,14 @@ multiplication:
 | Output | Lane zero adds bias, casts once to BF16, and writes `Y` |
 | Dispatch | `ceil(R * N / 4)` one-dimensional threadgroups |
 
-For Qwen decode, `R = 1` and `K = 896`, so every lane owns exactly 28
-input-weight products. The mapping remains numerically valid for any positive
+For Qwen decode with this mapping, `R = 1` and `K = 896`, so every lane owns
+exactly 28 input-weight products. The baseline route still decodes this way.
+Fast decode instead uses the decode projection kernel's arrangement 8: a SIMD
+group owns four rows by four output features, and lane `l` owns
+`k = 128 * i + 4 * l + j` for `j < 4`, loading four adjacent inputs and weights
+at once. Each lane still owns 28 products at `K = 896`, summed in another order
+([decode projection order](model.md#decode-projection-order)).
+The mapping remains numerically valid for any positive
 `R`, including prefill, but it deliberately does not reuse weight tiles across
 token rows. A later tiled prefill kernel may sit behind the same operation
 boundary after a synchronized benchmark establishes its useful row-count

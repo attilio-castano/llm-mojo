@@ -15,13 +15,16 @@ from llm_mojo.layers.decoder_layer import (
 
 comptime MEASURED_DEVICE = "Apple M4 Pro"
 comptime MAX_CONTEXT = 4096
-# The decode composition's batched projection arrangement (kernels/linear.mojo).
-# 5 gives each SIMD group four rows by four columns with fixed widths and early
-# loads; 1d selected and confirmed it against row tile 4 (arrangement 0).
-# Arrangements 0-7 change how rows share work, not arithmetic, and one row runs
-# the one-row kernel. Validation builds may select another arrangement with
-# -D DECODE_PROJECTION=N to compare arithmetic (1e).
-comptime DECODE_PROJECTION = get_defined_int["DECODE_PROJECTION", default=5]()
+# The decode composition's projection arrangement (kernels/linear.mojo), for one
+# sequence and for many. 8 gives each SIMD group four rows by four columns with
+# fixed widths, and each lane sums four adjacent products in every 128 inputs;
+# 1e selected and confirmed it against arrangement 5, and it was adopted on
+# 2026-09-27. Its one-row path sums in the same order, so batched rows equal
+# solo rows, but the order differs from the one-row kernel's (docs/model.md,
+# decode projection order). Exact arrangements 0-7 keep the one-row kernel's
+# arithmetic; decode parity and the route test use 5. Validation builds may
+# select another arrangement with -D DECODE_PROJECTION=N.
+comptime DECODE_PROJECTION = get_defined_int["DECODE_PROJECTION", default=8]()
 
 
 @fieldwise_init

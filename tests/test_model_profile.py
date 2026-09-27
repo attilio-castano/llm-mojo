@@ -3,6 +3,7 @@ import json
 import gzip
 import hashlib
 import copy
+import statistics
 import subprocess
 import tempfile
 from pathlib import Path
@@ -372,6 +373,37 @@ class ModelProfileTests(unittest.TestCase):
                         self.assertEqual(json.loads((directory/'batch-reordered-summary.json').read_text()), retained)
                     else:
                         with self.assertRaises((ValueError, RuntimeError)): reordered_replay(directory)
+
+    def test_retained_single_sequence_check(self):
+        """1e's adoption gate: Fast decode of one sequence in arrangement 8 against 5, from the raw steps."""
+        from llm_mojo._repository import repository_root
+        record = json.loads((repository_root()/'studies/model_generation/batch-reordered-single-sequence.json').read_text())
+        def summary(record):
+            runs = record['runs']
+            if ([r['run'] for r in runs] != list(range(1, 17))
+                    or [[r['arrangement'] for r in runs if r['block'] == b] for b in range(1, 5)] != [[5, 8, 8, 5], [8, 5, 5, 8]]*2):
+                raise ValueError('the runs are not four alternating blocks')
+            if any(len(r['decode_step_ns']) != record['prompt']['max_new_tokens']-1
+                   or r['median_ms'] != statistics.median(r['decode_step_ns'])/1e6 for r in runs):
+                raise ValueError('a run lost a decode step or misstates its median')
+            ratios = [statistics.mean(r['median_ms'] for r in runs if r['block'] == b and r['arrangement'] == 8)
+                      / statistics.mean(r['median_ms'] for r in runs if r['block'] == b and r['arrangement'] == 5)
+                      for b in range(1, 5)]
+            median = statistics.median(ratios)
+            verdict = ('regression' if all(r > 1 for r in ratios) and median > 1.05 else
+                       'consistent slowdown below the floor' if all(r > 1 for r in ratios) else 'no regression')
+            return ratios, median, verdict
+        self.assertEqual(summary(record), (record['block_ratios'], record['median_block_ratio'], record['verdict']))
+        self.assertEqual(record['verdict'], 'no regression')
+        self.assertTrue(all(r < 1 for r in record['block_ratios']) and record['texts_identical'])
+        self.assertEqual({a: (b['decode_projection'], b['dirty']) for a, b in record['binaries'].items()},
+                         {'5': (5, False), '8': (8, False)})
+        self.assertNotEqual(record['binaries']['5']['sha256'], record['binaries']['8']['sha256'])
+        for damage in ('step', 'order'):
+            damaged = copy.deepcopy(record)
+            if damage == 'step': damaged['runs'][1]['decode_step_ns'].pop()
+            else: damaged['runs'][0]['arrangement'] = 8
+            with self.subTest(damage=damage), self.assertRaises(ValueError): summary(damaged)
 
     def test_batch_support_distinguishes_backend_failure_from_bad_results(self):
         from llm_mojo.benchmarks.model_profile import batch_support_parse

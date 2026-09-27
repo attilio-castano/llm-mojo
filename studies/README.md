@@ -12,7 +12,7 @@ and [layouts](../docs/layouts.md) define the values, storage and ownership.
 | --- | --- |
 | [Residual/RMSNorm alone and composed](model_generation/residual-norm.md) | Promoted all-three Fast route: 17.1–24.5% lower latency, 107–115 tokens/s; exact independent and composed checks |
 | [Combined QKV and activation fusion](model_generation/combined-fusion.md) | Promoted M4 Pro single-token Fast route: 16.9–19.4% lower latency, 86–90 tokens/s streaming medians, exact outputs and cache storage |
-| [Exact batched projections](model_generation/batch-projections.md) | Promoted batched decode projections: four columns per SIMD group cut batched step time by 31–65% with bit-identical outputs; 705 tokens/s for 64 sequences at 1,024 cached tokens |
+| [Reordered batched projections](model_generation/batch-reordered.md) | Promoted decode projections: four adjacent products per lane cut batched steps by 17–36% from B = 16 and single-sequence steps by about 10%, with arrangement 5's worst-case accuracy and HF agreement; 998 tokens/s for 64 sequences at 1,024 cached tokens |
 | [Native terminal chat](model_generation/chat.md) | Multi-turn cache reuse, exact history and terminal lifecycle, with paired prefill and actual interaction timings |
 | [Fast full-model runtime](model_generation/runtime.md) | All 24 layers, native generation, numerical diagnostics and 11 measured dispatch choices |
 
@@ -26,12 +26,12 @@ follow-up, supported by the existing decoder policy and full-model studies.
 ## Decode experiments
 
 The [model study index](model_generation/README.md) gives each study's status:
-promoted, promoted only as part of the composed route, awaiting a decision,
-superseded, diagnostic or blocked.
+promoted, promoted only as part of the composed route, superseded, diagnostic or
+blocked.
 
 | Study | What it establishes |
 | --- | --- |
-| [Reordered batched projections](model_generation/batch-reordered.md) | Summing four adjacent products per lane cuts batched steps by a further 17–36% from B = 16, with arrangement 5's worst-case accuracy and HF agreement; adopting it changes Fast's arithmetic and awaits a decision |
+| [Exact batched projections](model_generation/batch-projections.md) | Four columns per SIMD group cut batched step time by 31–65% with bit-identical outputs; the reordered projections replaced it |
 | [Batched decode against batch size](model_generation/batch-size.md) | With tile 4, decoding up to 64 sequences per step levels off at 2.2–3.2× one sequence's throughput; the multi-row projections' per-row work, not weight traffic, sets the cost |
 | [Inter-layer buffer swapping](model_generation/buffer-swap.md) | Exact outputs with 23 fewer compute commands; 5.3–8.3% median paired reductions and 90–94 tokens/s streaming, but the full promotion gate fails |
 | [GPU token selection](model_generation/token-selection.md) | Standalone argmax gains 4.5–7% but misses the full promotion gate; the tested fused head is slower; exact outputs and complete retained evidence |

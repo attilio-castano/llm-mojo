@@ -185,10 +185,14 @@ GPU argmax. Every decode call takes this route:
   the group winners), with the same rule: highest BF16 score, lowest ID on ties,
   non-finite rejected. The host reads three numbers instead of 151,936 scores.
 
-These change how work is launched, not the arithmetic: the fused route produces
-the same bytes as configuration 0. `tests/test_decode_route.mojo` checks this in
-default validation, and `validation.model decode-parity` checks it on the real
-model. The model records what it enqueued in a
+These change how work is launched, not the arithmetic: with an exact projection
+arrangement, the fused route produces the same bytes as configuration 0.
+`tests/test_decode_route.mojo` checks this in default validation, and
+`validation.model decode-parity` checks it on the real model. Fast decode itself
+runs its projections in arrangement 8, which loads four adjacent values per lane
+and sums them in another order than configuration 0's one-row kernel, so its
+results can differ from the baseline's in the last bits
+([decode projection order](model.md#decode-projection-order)). The model records what it enqueued in a
 [`ForwardRoute`](../src/llm_mojo/models/qwen2/model.mojo); generate reports print
 it and validation rejects a Fast decode that did not take this route.
 

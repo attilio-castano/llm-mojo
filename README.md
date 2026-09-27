@@ -48,7 +48,9 @@ research modes, benchmarks and validation.
   own tokens, and each reply token after the first costs one model pass.
 - **Speed comes from launching less.** Generating a token is limited mostly by
   launching GPU work, not by arithmetic or memory bandwidth. The fast route
-  launches fewer, fused kernels per token and computes exactly the same bytes.
+  launches fewer, fused kernels per token. Its fusions compute exactly the same
+  bytes; its decode projections sum in a faster order, so their results can
+  differ from the baseline route's in the last bits.
 
 [How a token flows through the engine](docs/walkthrough.md) follows one chat turn
 through the code, with every shape and size.

@@ -317,8 +317,10 @@ struct QwenModel(Movable):
         hold exactly the rows before that sequence's first position. With
         plan.gpu_argmax the vocabulary projection is followed by GPU argmax;
         otherwise greedy scans the materialized logits on the CPU. PROJECTION is
-        the decode composition's batched projection arrangement; it changes how
-        rows share weight loads, not results.
+        the decode composition's projection arrangement for every row. Exact
+        arrangements change how rows share weight loads, not results; reordered
+        ones (kernels/linear.mojo) also change each sum's order, the same for
+        one row as for many.
         """
         self._forward[OBSERVE, False, PROJECTION](ctx, batch, kv, plan, CaptureRequest("", False))
 

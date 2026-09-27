@@ -79,8 +79,9 @@ mappings explicitly. The integrated default uses packed 8×16 QKV/Wo for R≥16
 and rowwise projections below that threshold. GQA mapping 4 selects split8;
 projection mapping 5 selects both 16×16 projections. Their composition is
 decoder configuration 3. Decoder configuration 26 does not use this API: its
-decode composition keeps the packed rowwise QKV projection and replaces its
-unpack, both RoPE launches and the cache append with one kernel,
+decode composition computes the packed QKV projection with the decode projection
+kernel ([decode projection order](model.md#decode-projection-order)) and replaces
+its unpack, both RoPE launches and the cache append with one kernel,
 `enqueue_fused_decode_qkv_batch`, one sequence per grid row. The consistent routes
 pair GQA mapping 5 (FP32 G32 attention at every row count) with projection
 mapping 0, 6 (8×16 MMA at every row count) or 7 (packed QKV reusing each weight

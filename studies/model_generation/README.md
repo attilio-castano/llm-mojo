@@ -11,8 +11,6 @@ reproduction commands.
 
 - **Current**: describes the runtime as it runs today.
 - **Promoted**: its candidate is part of Fast.
-- **Awaiting decision**: its candidate passed every gate, but adopting it
-  changes the numerical contract, which needs a separate decision.
 - **Not promoted alone**: exact, but it missed its own gate; it was later
   promoted as part of a composition.
 - **Superseded**: a later study replaced the result.
@@ -28,13 +26,13 @@ reproduction commands.
 | [Terminal chat](chat.md) | Current | Session state, exact token history, persistent caches, controls and measured cache reuse |
 | [Residual/RMSNorm alone and composed](residual-norm.md) | Promoted | Today's single-row decode route: configuration 26 with GPU argmax, buffer swapping and residual/RMSNorm fusion; 17.1–24.5% lower latency and 107–115 tokens/s |
 | [Combined QKV and activation fusion](combined-fusion.md) | Promoted | Configuration 26, the decode configuration: 16.9–19.4% lower latency with exact outputs and cache storage |
-| [Exact batched projections](batch-projections.md) | Promoted | Arrangement 5, four rows by four columns per SIMD group: 31–65% shorter batched steps with bit-identical outputs, 705 tokens/s for 64 sequences at 1,024 cached tokens |
+| [Reordered batched projections](batch-reordered.md) | Promoted | Arrangement 8, four adjacent products per lane: 17–36% shorter batched steps than arrangement 5 from B = 16, about 10% shorter single-sequence steps and 998 tokens/s for 64 sequences at 1,024 cached tokens, with 5's worst-case accuracy and HF agreement; it changes Fast's summation order |
 
 ## Decode experiments
 
 | Study | Status | What it establishes |
 | --- | --- | --- |
-| [Reordered batched projections](batch-reordered.md) | Awaiting decision | Arrangement 8, four adjacent products per lane: 17–36% shorter batched steps than arrangement 5 from B = 16 and 998 tokens/s for 64 sequences at 1,024 cached tokens, with 5's worst-case accuracy and HF agreement; it changes Fast's summation order |
+| [Exact batched projections](batch-projections.md) | Superseded | Arrangement 5, four rows by four columns per SIMD group: 31–65% shorter batched steps with bit-identical outputs, 705 tokens/s for 64 sequences at 1,024 cached tokens; arrangement 8 replaced it |
 | [Batched decode against batch size](batch-size.md) | Diagnostic | With tile 4, throughput levels off at 2.2–3.2× one sequence by B = 64; per-row work in the multi-row projections sets the cost, and tiles 8 and 16 are slower than tile 4 |
 | [Inter-layer buffer swapping](buffer-swap.md) | Not promoted alone | 23 fewer compute copies with exact outputs; 5.3–8.3% median paired reductions missed the standalone gate |
 | [GPU token selection](token-selection.md) | Not promoted alone | A separate GPU argmax gains 4.5–7% but missed its standalone gate; the fused vocabulary head was slower |

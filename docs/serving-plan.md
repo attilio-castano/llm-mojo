@@ -429,7 +429,11 @@ Restored bytes equal stored bytes, so a disk hit is as exact as a memory hit.
   batched-versus-solo check below stays valid.
 - Decode projections use the existing multi-row rowwise kernel
   (`_linear_rowwise_rows_apple_gpu_kernel`), which keeps the one-row kernel's
-  lane-strided FP32 accumulation and `warp.sum` order. The other
+  lane-strided FP32 accumulation and `warp.sum` order. Phase 1 later replaced
+  it: decode now uses the decode projection kernel's arrangement 8 for one
+  sequence and for many, whose order differs from the one-row kernel's but not
+  between batched and solo rows
+  ([decode projection order](model.md#decode-projection-order)). The other
   configuration-26 decode kernels need multi-row forms with unchanged per-row
   reductions: SiLU/multiply fusion, residual RMSNorm fusion and GPU argmax.
 
@@ -453,7 +457,7 @@ ownership rather than arithmetic:
 
 - S = 1 through StepBatch equals today's forward: logits and all KV bytes.
 - A decode-only batch equals decoding each sequence alone with the
-  rowwise-order kernels above. Wrong positions, wrong blocks and
+  same kernels. Wrong positions, wrong blocks and
   cross-sequence writes break this equality even when outputs look plausible.
 - Paged attention equals contiguous attention on identical inputs; paging
   changes addresses, not arithmetic.
@@ -522,8 +526,9 @@ configuration and trace identity.
 | 7. Replicas (optional) | several engines behind a KV-aware router in the frontend | routing preserves histories and token accounting | Do independent submission threads raise throughput, and what does KV-aware routing gain over round-robin? |
 
 The [batched decode plan](batched-decode-plan.md) details phase 1. Its
-[batch-size](../studies/model_generation/batch-size.md) and
-[batched projection](../studies/model_generation/batch-projections.md) studies
+[batch-size](../studies/model_generation/batch-size.md),
+[batched projection](../studies/model_generation/batch-projections.md) and
+[reordered projection](../studies/model_generation/batch-reordered.md) studies
 answer phase 1's study question.
 `src/llm_mojo/serving/` starts in phase 1 with StepBatch and grows only as each
 phase lands. The Qwen template, stop IDs and card values stay in

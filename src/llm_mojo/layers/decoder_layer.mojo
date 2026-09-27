@@ -3,7 +3,8 @@
 Both existing sublayers retain their arithmetic. The attention output is the
 MLP input; there is no intervening allocation, copy, or synchronization.
 The decode composition (configuration 26) runs one layer for S one-token
-sequences with a fixed sequence of kernels whose rows keep their arithmetic.
+sequences with a fixed sequence of kernels whose per-row arithmetic does not
+depend on S.
 """
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext

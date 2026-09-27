@@ -13,8 +13,10 @@ tokens took 64.1 ms instead of 91.3 ms: **998 tokens/s instead of 701**. Its
 worst error against an FP64 sum equals arrangement 5's in all five decode
 shapes, and on the model it agrees with HF on 242 of 244 same-history choices,
 as arrangement 5 does. The frozen rule selected it as the only qualifying
-arrangement. Adopting it is a numerical-contract change that waits for a
-separate decision; arrangement 5 remains the default.
+arrangement. A single-sequence check then found it about 10% faster at one
+sequence, and on 2026-09-27 it became the decode arrangement for one sequence
+and for many. That changes Fast's arithmetic, as the [decision](#decision)
+records.
 
 The other candidates show where the remaining time is. The matrix-unit tiles 9
 and 10 read each weight for eight and sixteen rows. At 64 sequences they were
@@ -288,22 +290,36 @@ These results hold for one machine and model, BF16, and the
 one-block-per-sequence pool. Arrangement 8 is exact against its own one-row
 path, not against arrangement 5. The accuracy census uses random and edge
 values, not the model's weights. At B ≤ 4 the short steps limit the paired
-comparisons to differences of roughly 10–20%, so a smaller single-sequence
-difference cannot be excluded in either direction. Traces cover 64 sequences
+comparisons to differences of roughly 10–20%; the single-sequence check in the
+[decision](#decision) resolves one sequence more finely, at one context and one
+prompt. Traces cover 64 sequences
 at 1,024 cached tokens only, and no cache, register or occupancy claim is made.
 
-## Decision needed
+## Decision
 
-Arrangement 8 met every gate the plan set. Adopting it:
-- makes it the decode arrangement for batched and single-sequence Fast decode,
+Arrangement 8 met every gate the plan set. Before adopting it, a
+single-sequence check compared the Fast generator built in arrangements 5 and
+8. Sixteen runs each generated 128 tokens after a 1,176-token prompt, in four
+blocks ordered 5 8 8 5 and 8 5 5 8. The rule was fixed before measuring. If
+arrangement 8 was slower in all four blocks by a median of more than 5%,
+adoption would stop; if it was slower in all four by less, the decision would
+be asked again. Arrangement 8's median decode step was 7.87 ms against
+8.70 ms. The four block ratios were 0.893–0.915, every run of arrangement 8
+was faster than every run of 5, and both generated the same text. The
+[record](batch-reordered-single-sequence.json) keeps all 2,032 decode steps.
+
+On 2026-09-27 arrangement 8 became the default. Adopting it:
+- made it the decode arrangement for batched and single-sequence Fast decode,
   `DECODE_PROJECTION = 8`;
-- changes Fast's outputs in their last bits. Against arrangement 5, 31 of 32
+- changed Fast's outputs in their last bits. Against arrangement 5, 31 of 32
   teacher-forced tokens and five of six free generations stayed the same;
-- moves the tests that pin Fast decode bytes, decode parity and the route test,
-  from arrangement 5 to 8. The model contract then documents the new order.
-
-Keeping arrangement 5 leaves Fast's arithmetic unchanged and gives up 17–36% of
-the batched step from B = 16.
+- kept the byte comparisons of decode parity and the route test on exact
+  arrangement 5, because the baseline route has no arrangement 8 order. There
+  they check that the fusions change no bytes. The route test also checks
+  that the default takes the fused route with the same launches, and
+  `decode-comparison` measures the default against arrangement 5 on the real
+  model. The [model contract](../../docs/model.md#decode-projection-order)
+  documents the new order.
 
 ## Evidence and reproduction
 
@@ -320,6 +336,10 @@ It retains:
 - the teacher-forced comparison's per-call distances and all 488 HF choice
   records.
 
+The single-sequence check's [record](batch-reordered-single-sequence.json)
+keeps each run's 127 decode steps, both binaries' hashes and provenance, the
+prompt's hash and the recorded conditions.
+
 `batch-size-replay --study reordered` verifies the archive, reapplies the
 accuracy gate, the frozen rule and the stop rule, and regenerates
 [batch-reordered-summary.json](batch-reordered-summary.json).
@@ -334,5 +354,6 @@ uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_pr
 `tests/test_model_profile.py` replays the retained archive. It rejects rehashed
 copies that lose a sample, block, trace, measured command, accuracy or token
 record, change a binary, fail the recorded power conditions, drop or alter the
-diagnostics, or carry a confirmation of another arrangement. Collecting new
+diagnostics, or carry a confirmation of another arrangement. It also recomputes
+the single-sequence check's verdict from its raw steps. Collecting new
 evidence uses the [measurement tools](../../src/llm_mojo/benchmarks/README.md#batch-size-study).

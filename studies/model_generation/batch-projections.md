@@ -1,5 +1,11 @@
 # Batched projections that share each input across four columns
 
+> **Status update, 2026-09-27.** Decode now uses projection arrangement 8, which
+> the [reordered batched projections](batch-reordered.md) study selected and
+> confirmed: 17–36% shorter batched steps than arrangement 5 from B = 16 and
+> about 10% shorter single-sequence steps, in a different summation order. The
+> numbers below describe arrangement 5, the route before it.
+
 Arrangement 5 gives each SIMD group four rows and four output columns. It fixes
 the reduction width, loads four iterations early and keeps the row guard out of
 its loop. Every output is still computed exactly as the one-row kernel computes

@@ -24,16 +24,16 @@ validation and incremental commits. Pushing, pull requests, toolchain upgrades
 and numerical-contract changes need a separate decision. 1b was approved on
 2026-09-25 and 1c on 2026-09-26, on the same terms. 1d was chosen on
 2026-09-26 as path 1 of 1c's decision and approved the same day. 1e was
-approved the same day; adopting a reordered arrangement still needs a separate
-decision.
+approved the same day, and adopting its reordered arrangement 8 was approved on
+2026-09-27 after a single-sequence check.
 
-Status: 1a, 1b, 1c and 1d are complete; see the [validation record](#validation-record).
-1c's throughput hypothesis failed with tile 4. 1d's exact arrangement 5, now
-the batched default, cuts batched step time by 31–65%. 1e's evidence is
-recorded: arrangement 8, which sums four adjacent products per lane, cut
-batched steps by a further 17–36% from B = 16, with arrangement 5's worst-case
-accuracy and HF agreement. Adopting it changes Fast's arithmetic and waits for
-your decision.
+Status: 1a–1e are complete; see the [validation record](#validation-record).
+1c's throughput hypothesis failed with tile 4. 1d's exact arrangement 5 cut
+batched step time by 31–65%. 1e's arrangement 8, which sums four adjacent
+products per lane, cut batched steps by a further 17–36% from B = 16 and
+single-sequence steps by about 10%, with arrangement 5's worst-case accuracy
+and HF agreement. It is now the decode arrangement, which changes Fast's
+arithmetic in the last bits.
 
 ## 1a. Step format and KV pool
 
@@ -781,13 +781,11 @@ at B = 64 fell from 71.4 to 43.3 ms. Against the recorded hypothesis:
   into the arrangement 9 capture that failed. Captures took 23–32 seconds, so
   the failure most likely began before the push.
 
-**Decision needed before adoption.** Arrangement 8 met every gate. Adopting it
-makes it the decode arrangement for batched and single-sequence Fast decode,
-which changes Fast's outputs in their last bits. Decode parity and the route
-test then move from arrangement 5 to 8, and the model contract documents the
-new order. Keeping arrangement 5 leaves Fast's arithmetic unchanged. The
-[study](../studies/model_generation/batch-reordered.md#decision-needed) sets
-out both.
+**Decision.** Arrangement 8 met every gate. On 2026-09-27 you chose to adopt
+it after a single-sequence check, and to keep decode parity and the route
+test's byte comparisons on exact arrangement 5, since the baseline route has
+no arrangement 8 order. The [study](../studies/model_generation/batch-reordered.md#decision)
+records the check.
 
 ### 1d on `f47fb8b`, 2026-09-26
 
