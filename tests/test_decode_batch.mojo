@@ -509,11 +509,16 @@ def test_batched_steps_equal_each_sequence_decoded_alone() raises:
         _steps_equal_solo(ctx, sequences)
 
 
-def test_reordered_steps_equal_each_sequence_decoded_alone() raises:
-    """A reordered arrangement also decodes one sequence in its own order, so batched still equals solo."""
+def test_exact_and_reordered_steps_equal_each_sequence_decoded_alone() raises:
+    """A reordered arrangement also decodes one sequence in its own order, so batched still equals solo.
+
+    Exact arrangement 5, which decode parity pins, is checked here too, whichever arrangement is the default.
+    """
     var support = decoder_support()
     support.verify_case(CASE)
     var ctx = DeviceContext()
+    for sequences in [3, 16]:
+        _steps_equal_solo[5](ctx, sequences, 4)
     comptime for arrangement in range(8, DECODE_ARRANGEMENTS):
         for sequences in [3, 16]:
             _steps_equal_solo[arrangement](ctx, sequences, 4)

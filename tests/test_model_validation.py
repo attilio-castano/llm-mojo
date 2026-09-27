@@ -8,7 +8,8 @@ from llm_mojo.validation.model import (bf16, compare, consistency_accuracy,
     verify_consistency_observations, CONSISTENCY_BOUNDARIES,
     numerical_diagnostic, prediction_diagnostic, storage_diagnostic)
 from llm_mojo.validation.model import generation_events, require_empty_prompt_rejection, route_record
-from llm_mojo.validation.model import decode_projection, reordered
+from llm_mojo.validation.model import decode_projection, reordered, source_decode_projection
+from llm_mojo.benchmarks.model_contract import BATCH_REORDERED_ARRANGEMENTS, BATCH_REORDERED_CONTROL
 
 
 class ModelComparisonTests(unittest.TestCase):
@@ -27,6 +28,17 @@ class ModelComparisonTests(unittest.TestCase):
         self.assertFalse(any(reordered(a) for a in range(8)))
         for bad in ('model device Apple M4 Pro backend metal\n', stdout+'decode projection 5\n'):
             with self.assertRaises(ValueError): decode_projection(bad)
+
+    def test_build_receipt_names_the_source_default_arrangement(self):
+        self.assertIn(source_decode_projection(), (BATCH_REORDERED_CONTROL,)+BATCH_REORDERED_ARRANGEMENTS)
+        declaration='comptime DECODE_PROJECTION = get_defined_int["DECODE_PROJECTION", default=8]()\n'
+        with tempfile.TemporaryDirectory() as temporary:
+            plan=Path(temporary)/'plan.mojo'
+            plan.write_text(declaration)
+            self.assertEqual(source_decode_projection(plan),8)
+            for bad in ('comptime DECODE_PROJECTION = 5\n', declaration*2):
+                plan.write_text(bad)
+                with self.assertRaises(ValueError): source_decode_projection(plan)
 
     def test_generation_event_contract_rejects_truncation_and_bad_cache_accounting(self):
         good=('event\tindex\tvalue\tnanoseconds\n'

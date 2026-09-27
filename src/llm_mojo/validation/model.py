@@ -4,6 +4,7 @@ from collections import Counter
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 
 import numpy as np
@@ -43,8 +44,18 @@ def build(binary, generation=False, projection=None):
     subprocess.run(command,cwd=repository_root(),env=environment(),check=True)
     if source_identity()!=source:
         raise ValueError('source changed during model compilation')
+    # The arrangement the build decodes with: the define, or the source default it compiled.
     write(receipt,dict(kind='model-development-build',source=source,command=command,binary_sha256=sha(binary),
-                       decode_projection=projection))
+                       decode_projection=int(projection) if projection is not None else source_decode_projection()))
+
+
+def source_decode_projection(plan=None):
+    """The decode projection arrangement a build without -D DECODE_PROJECTION uses (models/qwen2/plan.mojo)."""
+    plan=Path(plan) if plan is not None else repository_root()/'src/llm_mojo/models/qwen2/plan.mojo'
+    found=re.findall(r'get_defined_int\["DECODE_PROJECTION", default=(\d+)\]',plan.read_text())
+    if len(found)!=1:
+        raise ValueError('the plan does not declare exactly one decode projection default')
+    return int(found[0])
 
 
 def verify_build(binary):
@@ -797,7 +808,8 @@ def decode_parity(binary, output, prepared=None, prefix=53, steps=32):
             if 'model device Apple M4 Pro backend metal' not in result.stdout:
                 raise ValueError('decode parity requires the measured Apple M4 Pro on Metal')
             if reordered(decode_projection(result.stdout)):
-                raise ValueError('decode parity needs an exact projection arrangement; use decode-comparison')
+                raise ValueError('decode parity needs an exact projection arrangement: build the model with '
+                                 '--decode-projection 5, or compare a reordered one with decode-comparison')
             calls=[line.split() for line in result.stdout.splitlines() if line.startswith('call ')]
             files={str(p.relative_to(root)):sha(p) for p in sorted(root.rglob('*')) if p.is_file()}
             runs[mode]=dict(calls=[' '.join(c[:-2]) for c in calls],projection=decode_projection(result.stdout),

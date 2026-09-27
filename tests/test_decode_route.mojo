@@ -1,18 +1,21 @@
-"""The production single-row route runs end to end, exactly, without model weights.
+"""The production single-row route runs end to end without model weights.
 
 Three layers at Qwen dimensions use the verified decoder fixture weights, so the
-first, middle and last layer positions all occur. Fast decode with an exact
-projection arrangement must produce the same bytes as the baseline route, and
+first, middle and last layer positions all occur. In every projection
+arrangement, Fast decode must take the fused route with the same launches, and
 its fused kernels must leave the scratch buffers of the unfused path untouched:
-a silent fallback would overwrite them.
+a silent fallback would overwrite them. With an exact arrangement it must also
+produce the same bytes as the baseline route. A reordered arrangement sums its
+projections in another order; decode-comparison measures that on the real model.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
 from std.python import Python
 from std.testing import TestSuite, assert_equal
+from llm_mojo.kernels.linear import decode_arrangement_reordered
 from llm_mojo.layers.decoder_layer import DECODER_FUSED_DECODE
 from llm_mojo.models.qwen2.model import CaptureRequest, ForwardRoute, QwenModel
-from llm_mojo.models.qwen2.plan import baseline_plan, configured_plan
+from llm_mojo.models.qwen2.plan import DECODE_PROJECTION, baseline_plan, configured_plan
 from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.kv_pool import KVPool
 from decoder_layer_support import decoder_support, load_decoder, poison_decoder
@@ -99,11 +102,13 @@ def _poison_scratch(mut model: QwenModel) raises:
     poison_decoder(model.mlp.activated, 0)
 
 
-def test_fast_decode_matches_baseline_and_runs_fused() raises:
+def _decode_route[PROJECTION: Int]() raises:
+    """Fast decode in arrangement PROJECTION beside the baseline route, on identical teacher-forced inputs."""
     var support = decoder_support()
     support.verify_case(CASE)
     var ctx = DeviceContext()
     assert_equal(ctx.api(), "metal")
+    var exact = not decode_arrangement_reordered(PROJECTION)
     var fast = _model(ctx)
     var baseline = _model(ctx)
     var fast_kv = _pool(ctx, fast)
@@ -125,16 +130,16 @@ def test_fast_decode_matches_baseline_and_runs_fused() raises:
         var fused = configured_plan(DECODER_FUSED_DECODE, 1, total)
         var plain = baseline_plan(1, total)
         var batch = StepBatch.sequence(ids, PREFIX + step, 0, PREFIX + STEPS)
-        if step + 1 < STEPS:
-            fast.forward[False, EXACT](ctx, batch, fast_kv, fused)
-            baseline.forward(ctx, batch, baseline_kv, plain)
-        else:
+        if exact and step + 1 == STEPS:
             # The last step also captures every layer boundary, including both norms.
             var os = Python.import_module("os")
             os.makedirs(CAPTURE + "/fast", 0o777, True)
             os.makedirs(CAPTURE + "/baseline", 0o777, True)
-            fast.forward_captured[EXACT](ctx, batch, fast_kv, fused, CaptureRequest(CAPTURE + "/fast", True))
+            fast.forward_captured[PROJECTION](ctx, batch, fast_kv, fused, CaptureRequest(CAPTURE + "/fast", True))
             baseline.forward_captured(ctx, batch, baseline_kv, plain, CaptureRequest(CAPTURE + "/baseline", True))
+        else:
+            fast.forward[False, PROJECTION](ctx, batch, fast_kv, fused)
+            baseline.forward(ctx, batch, baseline_kv, plain)
         assert_equal(_route(fast.last_route), SIMD[DType.int64, 8](26, LAYERS, LAYERS - 1, 2 * LAYERS, LAYERS - 1, 0, 0, 1))
         assert_equal(_route(baseline.last_route), SIMD[DType.int64, 8](0, LAYERS, 0, 0, 0, LAYERS - 1, 1, 0))
         # The decode composition: the embedding, ten launches in layer 0 and nine in each later
@@ -142,26 +147,28 @@ def test_fast_decode_matches_baseline_and_runs_fused() raises:
         assert_equal(fast.last_route.sequences, 1)
         assert_equal(fast.last_route.decode_launches, 1 + 10 + 9 * (LAYERS - 1) + LAYERS + 3)
         assert_equal(baseline.last_route.decode_launches, 0)
-        assert_equal(fast.greedy(ctx), baseline.greedy(ctx))
-        _same(fast.logits, baseline.logits, 151936, "logits")
-        _same(fast.normalized, baseline.normalized, 896, "final norm")
-        _same(fast.mlp.output, baseline.mlp.output, 896, "final hidden state")
-        for i in range(LAYERS):
-            var name = "layer " + String(i)
-            _same(fast_kv.caches[i].key, baseline_kv.caches[i].key, fast.capacity * 128, name + " keys")
-            _same(fast_kv.caches[i].value, baseline_kv.caches[i].value, fast.capacity * 128, name + " values")
         assert_equal(fast_kv.length(0), PREFIX + step + 1)
         assert_equal(fast.submitted_rows, baseline.submitted_rows)
-    var names = List[String]()
-    for i in range(LAYERS + 1):
-        names.append("hidden_" + String(i) + ".bin")
-    for i in range(LAYERS):
-        for stage in ["attention_norm", "mlp_norm", "attention_residual", "append_key", "append_value",
-                      "cache_key", "cache_value"]:
-            names.append(String(stage) + "_" + String(i) + ".bin")
-    names.append("final_norm.bin")
-    names.append("logits.bin")
-    _same_files(names)
+        if exact:
+            assert_equal(fast.greedy(ctx), baseline.greedy(ctx))
+            _same(fast.logits, baseline.logits, 151936, "logits")
+            _same(fast.normalized, baseline.normalized, 896, "final norm")
+            _same(fast.mlp.output, baseline.mlp.output, 896, "final hidden state")
+            for i in range(LAYERS):
+                var name = "layer " + String(i)
+                _same(fast_kv.caches[i].key, baseline_kv.caches[i].key, fast.capacity * 128, name + " keys")
+                _same(fast_kv.caches[i].value, baseline_kv.caches[i].value, fast.capacity * 128, name + " values")
+    if exact:
+        var names = List[String]()
+        for i in range(LAYERS + 1):
+            names.append("hidden_" + String(i) + ".bin")
+        for i in range(LAYERS):
+            for stage in ["attention_norm", "mlp_norm", "attention_residual", "append_key", "append_value",
+                          "cache_key", "cache_value"]:
+                names.append(String(stage) + "_" + String(i) + ".bin")
+        names.append("final_norm.bin")
+        names.append("logits.bin")
+        _same_files(names)
     # The fused QKV/RoPE/append and SiLU/multiply of the composition never write the unfused scratch.
     assert_equal(_sentinels(fast.attention.raw_query), len(fast.attention.raw_query))
     assert_equal(_sentinels(fast.attention.raw_key), len(fast.attention.raw_key))
@@ -174,6 +181,15 @@ def test_fast_decode_matches_baseline_and_runs_fused() raises:
     assert_equal(_sentinels(baseline.attention.raw_value) < len(baseline.attention.raw_value), True)
     assert_equal(_sentinels(baseline.attention.rotated_key) < len(baseline.attention.rotated_key), True)
     assert_equal(_sentinels(baseline.mlp.activated) < len(baseline.mlp.activated), True)
+
+
+def test_exact_fast_decode_matches_baseline_and_runs_fused() raises:
+    _decode_route[EXACT]()
+
+
+def test_default_fast_decode_runs_fused() raises:
+    """The production arrangement; a reordered one differs from the baseline in bytes, not in route."""
+    _decode_route[DECODE_PROJECTION]()
 
 
 def main() raises:
