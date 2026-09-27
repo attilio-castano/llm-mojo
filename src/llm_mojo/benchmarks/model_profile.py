@@ -2095,7 +2095,10 @@ def reordered_replay(directory):
     for rejected in record['rejected_captures']:
         workload = (rejected['prefix'], rejected['sequences'], rejected['arrangement'])
         binary = rejected['receipt']['profile']['binary']
-        if (workload not in contract.BATCH_REORDERED_TRACES or rejected['status'] != 'rejected by analysis'
+        capture = rejected['receipt']['capture']
+        # An attempt is set aside by the coverage analysis, or because xctrace failed and its receipt says so.
+        failed = rejected['status'] == 'failed during capture' and capture['status'] == 'invalid' and bool(capture['failures'])
+        if (workload not in contract.BATCH_REORDERED_TRACES or (rejected['status'] != 'rejected by analysis' and not failed)
                 or {k: binary[k] for k in ('sha256', 'bytes')} != build_record['binaries']['batch-profile-%d-%d-a%d' % workload]):
             raise ValueError('rejected capture is not an attempt of the frozen reordered build')
     gpu = []
