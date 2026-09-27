@@ -32,9 +32,9 @@ from .environment import stable_environment, conditions_snapshot, require_ac, re
 from . import model_contract as contract
 
 
-def execute(command, log):
+def execute(command, log, timeout=600):
     result = subprocess.run(list(map(str, command)), cwd=repository_root(), env=environment(),
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=600)
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=timeout)
     log.write_text(result.stdout)
     if result.returncode:
         raise RuntimeError(f'command failed ({result.returncode}); see {log}')
@@ -2002,8 +2002,10 @@ def reordered_diagnostics(screen, confirmation, output, prepared=None):
     validation.decode_comparison(output/f'model-{control}', output/f'model-{selected}', output/'decode-comparison.json',
                                  prepared)
     def reference(specification, target):
-        execute([environment_tool('uv'), 'run', '--locked', '--script', 'tests/fixtures/model_reference.py', 'diagnose',
-                 '--specification', specification, '--output', target], output/f'{target.name}.log')
+        # uv is not installed into the environment; the reference runs as its own locked script, as in assets.py.
+        # It runs on CPU and can take longer than the default limit.
+        execute(['uv', 'run', '--locked', '--script', 'tests/fixtures/model_reference.py', 'diagnose',
+                 '--specification', specification, '--output', target], output/f'{target.name}.log', timeout=3*3600)
     validation.runtime_specification(output/'decode-specification.json', decode_only=True)
     reference(output/'decode-specification.json', output/'decode-reference')
     hf = {}
