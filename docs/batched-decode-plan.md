@@ -686,6 +686,49 @@ arrangement per batch size, and lower-precision accumulation.
 
 ## Validation record
 
+### 1e adoption on `39fecba`, 2026-09-27
+
+Two commits adopt arrangement 8, whose evidence `ff007a5` recorded:
+
+| Commit | Change |
+| --- | --- |
+| `d5e38e1` | decode parity and the route test's byte checks stay on exact arrangement 5; the route test also checks the default arrangement's route, launches and untouched scratch; the whole-step batched-equals-solo test also covers 5; build receipts record the effective arrangement |
+| `39fecba` | `DECODE_PROJECTION = 8`, the model contract's decode projection order, the docs and study statuses, and the single-sequence check's record |
+
+- **Single-sequence check.** Before adoption, under a rule fixed before
+  measuring, the Fast generator ran in arrangements 5 and 8 from clean
+  `9d5a24f` builds. Sixteen runs each generated 128 tokens after a 1,176-token
+  prompt, in four blocks ordered 5 8 8 5 and 8 5 5 8, from 12:16 to 12:17.
+  Arrangement 8's median decode step was 7.87 ms against 8.70 ms, with block
+  ratios of 0.893–0.915, and both generated the same text. AC power, normal
+  power mode and no thermal or performance warning were recorded before and
+  after; one-minute load averages were 2.9–3.4. The
+  [record](../studies/model_generation/batch-reordered-single-sequence.json)
+  keeps every decode step.
+- **Tests under 8 before the switch.** `tests/test_decode_route.mojo` and
+  `tests/test_decode_batch.mojo` passed on `d5e38e1` with the source default and
+  with `-D DECODE_PROJECTION=8`.
+- **Checkpoint gate.** `validation.model batch` ran from a clean `39fecba`,
+  whose default build reported arrangement 8 and whose receipt records it.
+  Eight conversations of 11 to 3,301 prompt tokens decoded 16 steps batched and
+  alone, and every token, logit and K/V byte was identical.
+- **Decode parity.** A build with `--decode-projection 5` matched the baseline
+  in all 32 teacher-forced calls and 4,059 captured files, so the fusions
+  change no bytes on the full model.
+- **Decode comparison.** The default build against that exact build agreed in
+  31 of 32 tokens, with logit relative RMS up to 0.054, as in the 1e
+  diagnostics.
+- **Suite.** `uv run --locked llm-mojo validate` passed on `39fecba`: oracle
+  anchors with the shared fixtures, 281 Python tests, all 27 native test files
+  plus the Unicode tokenizer run on Metal, and every benchmark smoke.
+
+**Deviations from the plan.** The plan moved decode parity and the route test
+to the adopted arrangement. Neither can move: both compare the fused route
+with the baseline route, whose one-row projections have no arrangement 8
+order. By your choice, their byte checks stay on arrangement 5, where they
+isolate the fusions, and the route test adds the default arrangement's route
+checks. The single-sequence check was added before adoption at your request.
+
 ### 1e on `3185eea`, 2026-09-26 and 27
 
 These commits implement 1e's first four steps, each with its gate:
@@ -785,7 +828,7 @@ at B = 64 fell from 71.4 to 43.3 ms. Against the recorded hypothesis:
 it after a single-sequence check, and to keep decode parity and the route
 test's byte comparisons on exact arrangement 5, since the baseline route has
 no arrangement 8 order. The [study](../studies/model_generation/batch-reordered.md#decision)
-records the check.
+records the check, and the adoption record above records the gates.
 
 ### 1d on `f47fb8b`, 2026-09-26
 
