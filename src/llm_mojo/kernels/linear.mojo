@@ -444,7 +444,16 @@ def enqueue_linear_decode_rows_apple_gpu[
             raise Error("decode projection arrangement needs a multiple of four outputs")
         if FIXED and inputs != 896 and inputs != 4864:
             raise Error("fixed-width decode projection needs 896 or 4864 inputs")
+        comptime if WIDE or RAW:
+            # These address input and weight rows by raw offset, row * inputs + k.
+            if (Int(input.layout.stride[0]().product()) != inputs or Int(input.layout.stride[1]().product()) != 1
+                    or Int(weight.layout.stride[0]().product()) != inputs
+                    or Int(weight.layout.stride[1]().product()) != 1):
+                raise Error("raw-offset decode projection needs contiguous input and weight rows")
         comptime if WIDE:
+            # Each lane's vector load starts a multiple of four elements into a row.
+            if Int(input.ptr) % 8 != 0 or Int(weight.ptr) % 8 != 0:
+                raise Error("vector decode projection needs 8-byte aligned input and weight")
             if rows == 1:
                 _enqueue_decode_widths[1,COLUMNS,FIXED,WIDE,RAW,COLUMN_ORDER,IL,WL,BL,OL,HAS_BIAS](
                     context,input,weight,bias,output)

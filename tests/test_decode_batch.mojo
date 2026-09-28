@@ -242,6 +242,38 @@ def test_decode_arrangements_check_shapes_before_launch() raises:
             assert_equal(mapped.unsafe_ptr()[unsafe_offset=i].cast[DType.float32](), Float32(-123))
 
 
+def test_raw_offset_arrangements_need_contiguous_aligned_rows() raises:
+    """Arrangements 8 and 11 address input and weight rows by raw offset; 8 loads four values at once."""
+    var ctx = DeviceContext()
+    var x = ctx.enqueue_create_buffer[DType.bfloat16](4*1792+1)
+    var w = ctx.enqueue_create_buffer[DType.bfloat16](8*1792)
+    var y = ctx.enqueue_create_buffer[DType.bfloat16](4*8)
+    var exact = ctx.enqueue_create_buffer[DType.bfloat16](4*8)
+    _fill(x,1)
+    _fill(w,2)
+    y.enqueue_fill(-123)
+    var input = TileTensor(x,row_major(4,896))
+    var weight = TileTensor(w,row_major(8,896))
+    var output = TileTensor(y,row_major(4,8))
+    # Rows of 896 values, 1,792 apart; and a contiguous input one element into its buffer.
+    var padded_input = TileTensor(x,row_major(4,1792)).tile[4,896](0,0)
+    var padded_weight = TileTensor(w,row_major(8,1792)).tile[8,896](0,0)
+    var shifted = TileTensor(x.unsafe_ptr().unsafe_offset(1),row_major(4,896))
+    with assert_raises(): enqueue_linear_decode_rows_apple_gpu[8](ctx,padded_input,weight,output)
+    with assert_raises(): enqueue_linear_decode_rows_apple_gpu[8](ctx,input,padded_weight,output)
+    with assert_raises(): enqueue_linear_decode_rows_apple_gpu[11](ctx,padded_input,weight,output)
+    with assert_raises(): enqueue_linear_decode_rows_apple_gpu[11](ctx,input,padded_weight,output)
+    with assert_raises(): enqueue_linear_decode_rows_apple_gpu[8](ctx,shifted,weight,output)
+    with y.map_to_host() as mapped:
+        for i in range(len(y)):
+            assert_equal(mapped.unsafe_ptr()[unsafe_offset=i].cast[DType.float32](), Float32(-123))
+    # Scalar loads need no more than the element's alignment: 11 accepts the shifted input and equals 5,
+    # which indexes through its layout and equals the one-row kernel.
+    enqueue_linear_decode_rows_apple_gpu[11](ctx,shifted,weight,output)
+    enqueue_linear_decode_rows_apple_gpu[5](ctx,shifted,weight,TileTensor(exact,row_major(4,8)))
+    _same(exact,y,"arrangement 11 on a shifted input")
+
+
 def test_residual_norm_rows_equal_single_rows() raises:
     var ctx = DeviceContext()
     var weight = ctx.enqueue_create_buffer[DType.bfloat16](896)

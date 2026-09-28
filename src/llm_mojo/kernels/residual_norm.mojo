@@ -89,7 +89,9 @@ def enqueue_residual_norm[HIDDEN: Int, XL: TensorLayout, BL: TensorLayout, WL: T
     if (Int(x.layout.stride[0]().product()) != HIDDEN or Int(x.layout.stride[1]().product()) != 1
         or Int(branch.layout.stride[0]().product()) != HIDDEN or Int(branch.layout.stride[1]().product()) != 1
         or Int(residual.layout.stride[0]().product()) != HIDDEN or Int(residual.layout.stride[1]().product()) != 1
-        or Int(normal.layout.stride[1]().product()) != 1 or Int(weight.layout.stride[0]().product()) != 1):
+        or Int(normal.layout.stride[0]().product()) != HIDDEN or Int(normal.layout.stride[1]().product()) != 1
+        or Int(weight.layout.stride[0]().product()) != 1):
+        # The overlap check below spans rows * HIDDEN elements of every [rows, hidden] view.
         raise Error("residual RMSNorm requires contiguous rows")
     var pointers = InlineArray[Int, 5](uninitialized=True)
     pointers[0] = Int(residual.ptr)
