@@ -12,7 +12,7 @@ myself:
   synchronization written out instead of hidden behind a framework.
 - **High-performance GPU kernels.** Why one kernel is faster than another comes
   down to tensor shapes, memory traffic, which thread owns which work, and when
-  the GPU has to wait. Each kernel here is explained in those terms.
+  the GPU has to wait. The studies explain each optimization in those terms.
 - **System design.** A chat for one person is only the start. Serving many
   requests at once raises the questions production engines are built around:
   which requests share a GPU step, who owns the cache memory, and what happens
@@ -26,21 +26,20 @@ pay off stay in the record alongside the ones that did, with the reason.
 
 ## Where things stand
 
-- **Chat works.** On the reference Apple M4 Pro, replies stream at 107–115
-  tokens per second after the first token
+- **Chat works.** One conversation runs on the GPU, with the weights and cache
+  kept loaded between turns. On the reference Apple M4 Pro, replies stream at
+  107–115 tokens per second after the first token
   ([how this was measured](studies/model_generation/residual-norm.md)).
-- **Serving has started.** The engine can decode many sequences in one step.
-  Each batched row is bit-identical to decoding it alone, and 64 sequences give
-  2.2–3.2× the throughput of one
-  ([batched decode](docs/batched-decode-plan.md)). A paged KV cache, continuous
+- **Serving has started.** The engine can decode many sequences in one step,
+  and each row is bit-identical to decoding that sequence alone
+  ([generation guide](docs/generation.md)). A paged KV cache, continuous
   batching and an HTTP frontend are [planned](docs/serving-plan.md).
-- **The laptop's limit is launching work.** Almost all of a token's time goes to
-  submitting about 245 GPU launches, not to arithmetic or memory bandwidth.
-  Prefill is now the largest cost a user sees: the first token of a
-  3,839-token prompt takes about 2.1 s.
-- **Open question: determinism.** Should processing a prompt all at once, in
-  chunks or one token at a time produce identical caches and logits? The
-  [project direction](docs/project.md) tracks this and the other open questions.
+- **Open questions.** For one conversation, submitting GPU work limits speed
+  more than arithmetic does. Long prompts are slow to start. And whether building
+  the same cache in different chunk sizes can give identical results is not yet
+  established for the full model. The [project direction](docs/project.md)
+  tracks each question, and the [study index](studies/README.md) holds every
+  measurement.
 
 ## Run the chat
 
@@ -80,8 +79,9 @@ research modes, benchmarks and validation.
 - **Nothing is computed twice.** The model's 24 layers run on the GPU in BF16. A
   key-value cache keeps every processed token, so a new message computes only its
   own tokens, and each reply token after the first costs one model pass.
-- **Speed comes from launching less.** Because launches dominate, the fast route
-  launches fewer, fused kernels per token. Its fusions compute exactly the same
+- **Speed comes from launching less.** For one conversation, generating a token
+  is limited mostly by launching GPU work, not by arithmetic or memory
+  bandwidth. The fast route launches fewer, fused kernels per token. Its fusions compute exactly the same
   bytes; its decode projections sum in a faster order, so their results can
   differ from the baseline route's in the last bits.
 
