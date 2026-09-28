@@ -1,9 +1,16 @@
 # Batched decode plan
 
-Baseline: `3b23c65`, `main` with the [serving plan](serving-plan.md), the
-[September streamlining](history/streamlining-2026-09.md) (one-step setup,
+> **Historical record**, kept as written. The [history index](README.md) says what it
+> led to and where current guidance lives. The work landed on `main` as one squash
+> commit, `132dc08` (#29). The commits it names are on #29's branch, which
+> `git fetch origin pull/29/head` retrieves
+> ([evidence commits](../experiments.md#evidence-commits)), except two from before
+> a rebase that the 1a record explains.
+
+Baseline: `3b23c65`, `main` with the [serving plan](../serving-plan.md), the
+[September streamlining](streamlining-2026-09.md) (one-step setup,
 explicit execution plans, current docs separated from history) and
-[shared oracle fixtures](history/shared-fixtures-2026-09.md). The plan was first
+[shared oracle fixtures](shared-fixtures-2026-09.md). The plan was first
 written at `a0b01da`, and its work was rebased onto those changes. It
 implements the serving plan's phase 1: several sequences decoding in one step,
 with KV storage owned outside the model. The work proceeds in five steps, each
@@ -169,7 +176,7 @@ rather than rows. The greedy readback maps all S records at once.
 - **Comptime model dimensions.** New and generalized kernels take the query and
   KV heads, head size and hidden width as comptime parameters that `QwenModel`
   supplies, so they name no model; see the
-  [dependency direction](cli.md#dependency-direction).
+  [dependency direction](../cli.md#dependency-direction).
 - **One upload per step.** Positions reach today's kernels as the scalar
   `cache.length`. A batched step needs them on the GPU, so one int32 step
   buffer holds the S token IDs, positions and block IDs, written through a
@@ -230,7 +237,7 @@ so 1b adds no oracle family. Native tests build small models from the verified
 decoder fixtures, as the decode-route test does, and run without the
 checkpoint; model-level checks use the prepared checkpoint. Validation links
 those fixtures read-only from the
-[shared store](development.md#shared-oracle-fixtures). Tests write captures
+[shared store](../development.md#shared-oracle-fixtures). Tests write captures
 under `build/test_*` and records under `build/oracle_records/`, never into
 `build/oracle_data/`. Leaving the generators' inputs untouched keeps validation's
 oracle stage to seconds, so every 1b step can run the full suite; a new family
@@ -287,7 +294,7 @@ medium and long context, and how much does the projection row tile change that?
   - tile 16 against tile 4;
   - tile 4 with host marks against tile 4 without, for observation.
 - **Procedure.** The four-block paired procedure of the
-  [experimental method](experiments.md): ten warmups and ten samples per arm,
+  [experimental method](../experiments.md): ten warmups and ten samples per arm,
   with blocks 2 and 3 reversing the order of contexts, batch sizes,
   comparisons and arms. One process per block and context runs all of that
   context's batch sizes.
@@ -358,7 +365,7 @@ one commit:
    its record.
 
 **Hypothesis, recorded before measurement.** In the
-[runtime study](../studies/model_generation/runtime-measurements.csv), 16-row
+[runtime study](../../studies/model_generation/runtime-measurements.csv), 16-row
 forward calls took about 21–29 ms and 64-row calls about 36–49 ms at contexts
 1024–4096. Today's one-row step takes about 8–9 ms. If B decode rows cost about
 as much as B prompt rows, B = 16 gives roughly 5–7× today's throughput and
@@ -370,12 +377,12 @@ with traces before starting phase 2.
 assumes each weight is read about once per step. The rows kernel reads it once
 per row tile, and at history 1024 projections take 6.3 ms of a one-row step's
 7.4 ms of active GPU time
-([projection arrangements](../studies/model_generation/projection-arrangements.md)).
+([projection arrangements](../../studies/model_generation/projection-arrangements.md)).
 With tile 4, a step of B rows would then spend about ⌈B/4⌉ × 6.3 ms on
 projections. That puts B = 4 near 4× today's throughput and both B = 16 and
 B = 64 near 5×, unless tiles 8 and 16 keep their time per pass. In multi-row
 prefill cells, tile 8 was 11–16% slower than tile 4 and tile 16 was 37–61%
-slower ([decoder policies](../studies/decoder_layer/policies.md)); those cells
+slower ([decoder policies](../../studies/decoder_layer/policies.md)); those cells
 do not predict decode-shaped batches.
 
 ## 1d. Exact batched projections
@@ -420,7 +427,7 @@ kernel, so single-sequence decode does not change.
   or 4,864, both multiples of 128. Each lane issues four iterations' loads before
   their four sequential updates. At one row this cut projection time by 22–23%
   with identical bytes
-  ([projection arrangements](../studies/model_generation/projection-arrangements.md)).
+  ([projection arrangements](../../studies/model_generation/projection-arrangements.md)).
 - **No guard in the loop.** Rows past the batch load the last valid row, and
   their sums are never stored. Every projection width (1,152, 896, 4,864 and
   151,936 outputs) is a multiple of four, so no column guard is needed.
@@ -552,7 +559,7 @@ does the change move Fast's numbers?
 
 At 64 sequences and 1,024 cached tokens, arrangement 5's projections take
 69.1 ms of 90.3 ms of active GPU time
-([batched projections](../studies/model_generation/batch-projections.md)).
+([batched projections](../../studies/model_generation/batch-projections.md)).
 Each four-row pass reads every weight, so 64 sequences take 16 passes and
 request about 16 GB of weights per step. Across the five projection shapes those
 requests arrive at 196–253 GB/s, close to the chip's nominal 273 GB/s memory
@@ -647,7 +654,7 @@ large B:
   though it may gain more at B ≤ 4.
 - Arrangement 7 may lose part of its gain to registers.
 - Padding one row to a tile of 8 or 16 may slow single-sequence decode with 9
-  and 10. The [linear prefill study](../studies/linear_prefill/README.md) found
+  and 10. The [linear prefill study](../../studies/linear_prefill/README.md) found
   every tiled mapping slower than row-wise at one row when weights stream from
   memory.
 - All reordered arrangements should stay within one BF16 ulp of the FP64 sum.
@@ -788,7 +795,7 @@ Two commits adopt arrangement 8, whose evidence `ff007a5` recorded:
   ratios of 0.893–0.915, and both generated the same text. AC power, normal
   power mode and no thermal or performance warning were recorded before and
   after; one-minute load averages were 2.9–3.4. The
-  [record](../studies/model_generation/batch-reordered-single-sequence.json)
+  [record](../../studies/model_generation/batch-reordered-single-sequence.json)
   keeps every decode step.
 - **Tests under 8 before the switch.** `tests/test_decode_route.mojo` and
   `tests/test_decode_batch.mojo` passed on `d5e38e1` with the source default and
@@ -825,7 +832,7 @@ These commits implement 1e's first four steps, each with its gate:
 | `3185eea` | the declaration, the benchmark's arms, the accuracy census, `batch-size-diagnose` and the pipeline tests |
 | `9d5a24f` | the HF references run with `uv` from PATH and a three-hour limit |
 | `02eecff` | the reordered replay accepts an attempt that failed during capture |
-| this commit | the archive, the [study](../studies/model_generation/batch-reordered.md) and this record |
+| this commit | the archive, the [study](../../studies/model_generation/batch-reordered.md) and this record |
 
 - **Before collection.** `uv run --locked llm-mojo validate` passed on a clean
   `3185eea`: oracle anchors with the shared fixtures, 278 Python tests, the
@@ -912,7 +919,7 @@ at B = 64 fell from 71.4 to 43.3 ms. Against the recorded hypothesis:
 **Decision.** Arrangement 8 met every gate. On 2026-09-27 you chose to adopt
 it after a single-sequence check, and to keep decode parity and the route
 test's byte comparisons on exact arrangement 5, since the baseline route has
-no arrangement 8 order. The [study](../studies/model_generation/batch-reordered.md#decision)
+no arrangement 8 order. The [study](../../studies/model_generation/batch-reordered.md#decision)
 records the check, and the adoption record above records the gates.
 
 ### 1d on `f47fb8b`, 2026-09-26
@@ -924,7 +931,7 @@ Five commits implement 1d, each with its gate:
 | `6bfd837` | arrangements 3–6 and the kernel exactness tests |
 | `2259144` | the arrangement parameter through `forward`, the decode composition and the head |
 | `f47fb8b` | the projection declaration, the benchmark's arms, `batch-size-confirm` and the pipeline tests |
-| `6cc28c1` | the archive, the [study](../studies/model_generation/batch-projections.md) and this record |
+| `6cc28c1` | the archive, the [study](../../studies/model_generation/batch-projections.md) and this record |
 | `5925268` | arrangement 5 as the batched default, with the docs and study indexes |
 
 - **Before collection.** `uv run --locked llm-mojo validate` passed on a clean
@@ -976,7 +983,7 @@ Three commits implement 1c, each with its gate:
 | --- | --- |
 | `f18b08f` | the row tile as a `forward` parameter and `greedy_tokens` marks, with a test that tiles 8 and 16 reproduce tile 4's batched steps |
 | `7b3b131` | the benchmark mode, contract and pipeline, with parser, census and summary tests |
-| `f1f89fb` | the archive, the [study](../studies/model_generation/batch-size.md) and this record |
+| `f1f89fb` | the archive, the [study](../../studies/model_generation/batch-size.md) and this record |
 
 - **Before collection.** `uv run --locked llm-mojo validate` passed on a clean
   `7b3b131`: oracle anchors with the shared fixtures, 270 Python tests, the
@@ -1098,7 +1105,7 @@ visible. 1c measures batched throughput.
 ### Package boundaries before 1b, 2026-09-25
 
 Three commits prepare 1b under the
-[dependency direction](cli.md#dependency-direction):
+[dependency direction](../cli.md#dependency-direction):
 - `f10668d` sizes every pool from `QwenModel.kv_geometry()` instead of Qwen
   defaults inside `serving/`;
 - `0cf5671` records the direction and adds its import test;

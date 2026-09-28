@@ -6,7 +6,7 @@ batch-size study (1c) pairs row tiles, the projection study (1d) pairs exact
 batched projection arrangements, the reordered study (1e) pairs arrangements
 with other summation orders, whose accuracy the accuracy mode records, and the
 addressing check (1f) pairs raw-pointer and vector loads with arrangement 5
-(docs/batched-decode-plan.md).
+(docs/history/batched-decode-plan.md).
 Completed decode experiments (fusion, selection, buffer swap, composition,
 projection arrangement, scheduling and launch probes) are replay-only; their
 collectors exist through commit edb610a. See studies/model_generation/README.md.

@@ -525,7 +525,7 @@ uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --
 uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_profile batch-size-plot --study reordered --output studies/model_generation
 ```
 
-The [addressing check](../../../docs/batched-decode-plan.md#1f-addressing-check)
+The [addressing check](../../../docs/history/batched-decode-plan.md#1f-addressing-check)
 (1f) reuses the matrix with `--study addressing`. It pairs arrangement 5 with
 arrangement 11, which is 5 with raw-pointer loads, and with arrangement 8, and
 selects nothing:

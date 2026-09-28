@@ -24,10 +24,10 @@ block, meant to share weight reads through the cache, made no workload faster
 than arrangement 5. Per-row input work, not weight traffic, was the cost, as
 [1c](batch-size.md) concluded.
 
-This is 1d of the [batched decode plan](../../docs/batched-decode-plan.md#1d-exact-batched-projections),
-collected on 2026-09-26 from `f47fb8b`. All 8,800 screen samples, 3,520
-confirmation samples and ten traces are retained. No sample, block or trace was
-discarded or repeated.
+This is 1d of the [batched decode plan](../../docs/history/batched-decode-plan.md#1d-exact-batched-projections),
+collected on 2026-09-26 from `f47fb8b`, a commit of #29. All 8,800 screen
+samples, 3,520 confirmation samples and ten traces are retained. No sample,
+block or trace was discarded or repeated.
 
 ## Setup
 

@@ -37,7 +37,7 @@ sequence is held in a single block of the full context. A configuration 26 call
 decodes up to `max_sequences` sequences at once, one token each, with the same
 launches as one sequence; `greedy_tokens` returns one token per sequence, and
 each sequence's logits, token and appended K/V equal decoding it alone. Every
-other call covers one sequence. See the [batched decode plan](batched-decode-plan.md).
+other call covers one sequence. See the [batched decode plan](history/batched-decode-plan.md).
 Decode projections use arrangement 8, for one sequence and for many: each SIMD
 group computes four rows and four output columns, and each lane sums four
 adjacent products in every 128 inputs. That order differs from the baseline

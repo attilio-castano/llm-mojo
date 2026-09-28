@@ -46,7 +46,10 @@ The [composed decode study](../studies/model_generation/residual-norm.md) then
 promoted the single-row route that every generated token uses: configuration 26
 with GPU argmax, buffer swapping and residual/RMSNorm fusion. It lowers
 complete-token latency by 17.1–24.5% against the previous Fast route and
-streams 107–115 tokens/s after the first token.
+streams 107–115 tokens/s after the first token. Serving phase 1 later changed
+the order in which decode projections sum, which shortened a single-sequence
+decode step by about 10% in a generation check and changes Fast's results in
+their last bits ([decode projection order](model.md#decode-projection-order)).
 
 The [chat study](../studies/model_generation/chat.md) adds exact template fixtures,
 three-turn cache checks, full-history numerical diagnostics, paired cache-reuse
@@ -134,6 +137,11 @@ research questions, not prerequisites for calling the current milestone complete
    frontend process that survives engine failures. The [serving plan](serving-plan.md)
    defines its architecture, exact gates and phases. It serves with Fast and
    records numerical differences from batching, cache reuse and replay as diagnostics.
+   Phase 1 is complete: one step decodes up to 64 sequences with the launches of
+   one, each row bit-identical to decoding that sequence alone, and 64 sequences
+   at 1,024 cached tokens decode 998 tokens/s in aggregate
+   ([reordered projections](../studies/model_generation/batch-reordered.md)).
+   Phase 2, a paged KV cache, is next.
 
 Sampling, quantization, longer contexts, tool-oriented templates and additional
 model families can follow when they answer a concrete need. They are not current

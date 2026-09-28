@@ -21,10 +21,10 @@ from B = 16, where they make half and a quarter as many passes over the
 weights. Weight traffic is therefore not what limits the batched projections;
 their per-row work is. Fast keeps tile 4.
 
-This is phase 1c of the [batched decode plan](../../docs/batched-decode-plan.md#1c-batch-size-study),
-collected on 2026-09-26 from `7b3b131`. All 7,040 timing samples are retained.
-Four trace attempts were rejected for a trace attribution defect and replaced;
-none was rejected or repeated for its timings.
+This is phase 1c of the [batched decode plan](../../docs/history/batched-decode-plan.md#1c-batch-size-study),
+collected on 2026-09-26 from `7b3b131`, a commit of #29. All 7,040 timing
+samples are retained. Four trace attempts were rejected for a trace attribution
+defect and replaced; none was rejected or repeated for its timings.
 
 ## Setup
 
@@ -183,7 +183,7 @@ one built on SIMD-group matrix operations, would change the order of the K
 reduction. Keeping batched rows bit-identical to one-row decode would then mean
 changing the one-row kernel too, and with it Fast's arithmetic. The plan
 reserves that numerical-contract change for a separate decision; its
-[1c record](../../docs/batched-decode-plan.md#validation-record) states
+[1c record](../../docs/history/batched-decode-plan.md#validation-record) states
 the decision before phase 2.
 
 ## Conditions and rejected traces
