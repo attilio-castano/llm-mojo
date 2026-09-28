@@ -3,7 +3,8 @@
 Proposed on 2026-09-23 from baseline `edb610a`. Phase 1, batched decode, is
 complete and merged as `132dc08` (#29); its
 [plan and validation record](history/batched-decode-plan.md) are history now.
-Phase 2, a paged KV cache, is next, and nothing after phase 1 is implemented.
+Phase 2, a paged KV cache, is next: the [paged KV plan](paged-kv-plan.md)
+proposes it. Nothing after phase 1 is implemented.
 Each phase is approved separately and records its own validation, like the
 existing plans. The [project direction](project.md) lists this as a follow-up
 track.
@@ -533,7 +534,8 @@ its [batch-size](../studies/model_generation/batch-size.md),
 [batched projection](../studies/model_generation/batch-projections.md) and
 [reordered projection](../studies/model_generation/batch-reordered.md) studies
 answer its study question: 64 sequences decode 998 tokens/s in aggregate at
-1,024 cached tokens, 7.8 times one sequence's 127.
+1,024 cached tokens, 7.8 times one sequence's 127. The
+[paged KV plan](paged-kv-plan.md) proposes phase 2.
 `src/llm_mojo/serving/` starts in phase 1 with StepBatch and grows only as each
 phase lands. The Qwen template, stop IDs and card values stay in
 `models/qwen2/`. The `serve` command belongs in `cli/`, and the trace driver
