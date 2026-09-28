@@ -1,12 +1,45 @@
 # llm-mojo
 
-A small LLM inference engine written in Mojo, built to be read. It runs
-Qwen2.5-0.5B-Instruct as an interactive chat on the GPU of an Apple Silicon Mac.
-Every part, from the token IDs of your message to the GPU kernels, is
-documented, tested against independent references and measured.
+An educational project on LLM inference: how much of a modern inference engine
+can I build, understand and measure on a MacBook, from first principles, in
+Mojo?
 
-On the reference Apple M4 Pro, replies stream at 107–115 tokens per second after
-the first token ([how this was measured](studies/model_generation/residual-norm.md)).
+I am a mathematician using this project to learn three things by building them
+myself:
+
+- **A systems programming language.** Mojo lets one language cover the
+  tokenizer, the model and the GPU kernels, with data flow, memory and
+  synchronization written out instead of hidden behind a framework.
+- **High-performance GPU kernels.** Why one kernel is faster than another comes
+  down to tensor shapes, memory traffic, which thread owns which work, and when
+  the GPU has to wait. The studies explain each optimization in those terms.
+- **System design.** A chat for one person is only the start. Serving many
+  requests at once raises the questions production engines are built around:
+  which requests share a GPU step, who owns the cache memory, and what happens
+  under memory pressure or failure.
+
+The concrete engine runs Qwen2.5-0.5B-Instruct as an interactive chat on the GPU
+of an Apple Silicon Mac, the hardware I have, so a MacBook sets the limits. Every
+part, from the token IDs of your message to the GPU kernels, is documented,
+tested against independent references and measured. Optimizations that did not
+pay off stay in the record alongside the ones that did, with the reason.
+
+## Where things stand
+
+- **Chat works.** One conversation runs on the GPU, with the weights and cache
+  kept loaded between turns. On the reference Apple M4 Pro, replies stream at
+  107–115 tokens per second after the first token
+  ([how this was measured](studies/model_generation/residual-norm.md)).
+- **Serving has started.** The engine can decode many sequences in one step,
+  and each row is bit-identical to decoding that sequence alone
+  ([generation guide](docs/generation.md)). A paged KV cache, continuous
+  batching and an HTTP frontend are [planned](docs/serving-plan.md).
+- **Open questions.** For one conversation, submitting GPU work limits speed
+  more than arithmetic does. Long prompts are slow to start. And whether building
+  the same cache in different chunk sizes can give identical results is not yet
+  established for the full model. The [project direction](docs/project.md)
+  tracks each question, and the [study index](studies/README.md) holds every
+  measurement.
 
 ## Run the chat
 
@@ -46,9 +79,9 @@ research modes, benchmarks and validation.
 - **Nothing is computed twice.** The model's 24 layers run on the GPU in BF16. A
   key-value cache keeps every processed token, so a new message computes only its
   own tokens, and each reply token after the first costs one model pass.
-- **Speed comes from launching less.** Generating a token is limited mostly by
-  launching GPU work, not by arithmetic or memory bandwidth. The fast route
-  launches fewer, fused kernels per token. Its fusions compute exactly the same
+- **Speed comes from launching less.** For one conversation, generating a token
+  is limited mostly by launching GPU work, not by arithmetic or memory
+  bandwidth. The fast route launches fewer, fused kernels per token. Its fusions compute exactly the same
   bytes; its decode projections sum in a faster order, so their results can
   differ from the baseline route's in the last bits.
 
