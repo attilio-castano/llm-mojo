@@ -95,8 +95,9 @@ prepares assets and launches native executables.
 | ModelRunner | StepBatch upload, forward, token selection, readback, step timing | policy |
 | QwenModel | weights, workspaces, kernel dispatch | sequence state between steps |
 
-Today `QwenModel` owns 24 caches and one `length`, and `ChatSession` owns one
-history. In this design, the model becomes stateless between steps, the
+`QwenModel` once owned 24 caches and one `length`; phase 1a moved KV storage and
+lengths into a caller-owned `KVPool`, and `ChatSession` still owns one history.
+In this design, the model becomes stateless between steps, the
 KVCacheManager owns all KV storage, each request owns its history, and chat
 becomes an engine client whose turns reuse earlier turns through prefix hits.
 
@@ -368,7 +369,9 @@ Checked after every step in debug builds and in every scheduler simulation:
 A block key is `SHA-256(parent_key, block_token_ids, cache_salt)`, so a key
 commits to the complete prefix and tenant. Each Registered block also stores
 its token IDs, which are compared on every hit: the hash is an index, not
-proof. On admission, the manager finds the longest chain of Registered blocks.
+proof. In memory, one engine build writes every block, so the key needs no engine
+identity; persisted blocks do (see the SSD tier below). On admission, the
+manager finds the longest chain of Registered blocks.
 At least the final prompt token must be computed, because its logits are
 needed. When the whole prompt hits, the final block is recomputed into a
 private block, so shared blocks are never written.
@@ -383,11 +386,28 @@ prefix. `cache_salt` isolates tenants when a server has more than one.
 
 ### SSD tier
 
-Registered blocks leaving memory can be written to a slab file with one block
-per fixed-size region, plus an index of key, token IDs and a checksum of the
-block bytes. An index entry is written only after its block data. A request
-whose prefix is on disk enters `LOADING_KV`. The load is asynchronous, and the
-scheduler keeps running other requests. A checksum mismatch is a miss.
+Registered blocks leaving memory persist in the shared store, under the
+conventions it already applies to
+[shared oracle fixtures](development.md#shared-oracle-fixtures):
+
+- **Key.** A persisted block's key adds everything that determines its bytes:
+  the model revision, the pool layout version and the engine's numerical
+  identity. Under Fast, KV bytes depend on the kernels and chunk schedule that
+  wrote them, as a fixture depends on its generator, so a kernel change starts
+  a new namespace instead of mixing blocks.
+- **Publication.** A block is written to staging and published read-only by one
+  rename, so a reader sees a complete block or none. One file per block, named
+  by its key, lets the filesystem serve as the index. Engines sharing the tier
+  (phase 7) publish each key once under a per-key lock.
+- **Verification.** Each entry records its token IDs and the SHA-256 of its
+  bytes, and every load compares both. A mismatch is a miss; the entry is set
+  aside, never trusted or silently deleted.
+- **Capacity.** Least recently loaded entries are evicted within a byte budget.
+  Namespaces that no current engine identity selects are listed and pruned on
+  request, like `fixtures prune`.
+
+A request whose prefix is on disk enters `LOADING_KV`. The load is asynchronous,
+and the scheduler keeps running other requests.
 
 A 4,096-token prefix is 48 MiB: an estimated 10–20 ms of sequential SSD reads.
 The [token profile](../studies/model_generation/token-profile.md) measured about
@@ -409,7 +429,11 @@ Restored bytes equal stored bytes, so a disk hit is as exact as a memory hit.
   batched-versus-solo check below stays valid.
 - Decode projections use the existing multi-row rowwise kernel
   (`_linear_rowwise_rows_apple_gpu_kernel`), which keeps the one-row kernel's
-  lane-strided FP32 accumulation and `warp.sum` order. The other
+  lane-strided FP32 accumulation and `warp.sum` order. Phase 1 later replaced
+  it: decode now uses the decode projection kernel's arrangement 8 for one
+  sequence and for many, whose order differs from the one-row kernel's but not
+  between batched and solo rows
+  ([decode projection order](model.md#decode-projection-order)). The other
   configuration-26 decode kernels need multi-row forms with unchanged per-row
   reductions: SiLU/multiply fusion, residual RMSNorm fusion and GPU argmax.
 
@@ -433,7 +457,7 @@ ownership rather than arithmetic:
 
 - S = 1 through StepBatch equals today's forward: logits and all KV bytes.
 - A decode-only batch equals decoding each sequence alone with the
-  rowwise-order kernels above. Wrong positions, wrong blocks and
+  same kernels. Wrong positions, wrong blocks and
   cross-sequence writes break this equality even when outputs look plausible.
 - Paged attention equals contiguous attention on identical inputs; paging
   changes addresses, not arithmetic.
@@ -493,14 +517,19 @@ configuration and trace identity.
 
 | Phase | Delivers | Exact gate | Study question |
 | --- | --- | --- | --- |
-| 1. Batched decode | StepBatch; multi-row configuration-26 decode kernels; one maximum-context block per sequence; a batch axis in the existing model benchmark | S = 1 equals today; batched rows equal solo rows | How do throughput and per-token latency scale for B = 1–32 at contexts 64, 1024 and 3968? |
+| 1. Batched decode | StepBatch; multi-row configuration-26 decode kernels; one maximum-context block per sequence; a batch axis in the existing model benchmark | S = 1 equals today; batched rows equal solo rows | How do throughput and per-token latency scale for B = 1–64 at contexts 64, 1024 and 3968? |
 | 2. Paged KV | block-major pool, block manager, block states, events, paged decode and prefill attention | paged equals contiguous; invariants; logical event replay | What does translation cost at each block size, and does head-major order help? |
 | 3. Engine core | EngineCore, Scheduler, both runners, chunked prefill, preemption, aborts, step records, trace driver, fitted budget, asynchronous stepping | scheduler and allocator invariants in simulation and on Metal; exact token accounting; asynchronous equals synchronous | How do latency percentiles respond to arrival rate across the scheduling arms, and where does the simulator disagree? |
 | 4. Prefix caching | prefix index, eviction, pinning, chat as an engine client | reused blocks keep their bytes and token IDs; only the uncached suffix is computed; existing chat checks pass | How does time to first token depend on shared-prefix length, hit rate and pool size? |
 | 5. Frontend and API | frontend process, token protocol, model card, HTTP/SSE, supervisor, replay, backpressure, HTTP load generator | replay loses and duplicates nothing and preserves delivered tokens | What do the edge and recovery cost end to end? |
-| 6. SSD tier | slab file, index, asynchronous loading, integrity checks | restored bytes equal stored bytes; disk and memory hits agree | At what prefix length does restoring beat recomputing? |
+| 6. SSD tier | store entries keyed by engine identity, publication by rename, asynchronous loading, verification, eviction | restored bytes equal stored bytes; disk and memory hits agree; a changed engine identity never hits older entries | At what prefix length does restoring beat recomputing? |
 | 7. Replicas (optional) | several engines behind a KV-aware router in the frontend | routing preserves histories and token accounting | Do independent submission threads raise throughput, and what does KV-aware routing gain over round-robin? |
 
+The [batched decode plan](batched-decode-plan.md) details phase 1. Its
+[batch-size](../studies/model_generation/batch-size.md),
+[batched projection](../studies/model_generation/batch-projections.md) and
+[reordered projection](../studies/model_generation/batch-reordered.md) studies
+answer phase 1's study question.
 `src/llm_mojo/serving/` starts in phase 1 with StepBatch and grows only as each
 phase lands. The Qwen template, stop IDs and card values stay in
 `models/qwen2/`. The `serve` command belongs in `cli/`, and the trace driver
@@ -539,6 +568,7 @@ before:
 | Engine simulation | [Dynamo mocker](https://docs.nvidia.com/dynamo/v1.3.0/user-guides/dynosim/mocker) | SimulatedRunner |
 | Per-iteration metrics | [Dynamo forward-pass metrics](https://github.com/ai-dynamo/dynamo/blob/v1.5.0/docs/fern/pages/developer-guide/knowledge-base/concepts/observability/forward-pass-metrics-rfc.md) | step records |
 | KV-aware routing | [Dynamo KV router](https://docs.nvidia.com/dynamo/v1.3.0/components/router/routing-concepts) | phase 7 |
+| Content-addressed, verified store | [shared oracle fixtures](development.md#shared-oracle-fixtures) (#28) | SSD tier conventions |
 
 ## Not adopted
 

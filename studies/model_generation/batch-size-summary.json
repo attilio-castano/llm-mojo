@@ -1,0 +1,2404 @@
+{
+  "timing": [
+    {
+      "context": 64,
+      "sequences": 1,
+      "step_ms": 10.601520749999999,
+      "step_block_ms": [
+        10.942229,
+        8.218771,
+        10.2608125,
+        11.8339585
+      ],
+      "tokens_per_second": 94.32608996214059,
+      "calibration_ratios": [
+        0.9197147126056309,
+        0.9941241823138763,
+        0.9206913682517832,
+        0.9217735130641197
+      ],
+      "noise_floor": 0.08028528739436913,
+      "tiles": {
+        "8": {
+          "step_ms": 10.32331225,
+          "block_ratios": [
+            1.0047824925053124,
+            1.0604730307221333,
+            0.9987049601754526,
+            0.9776690018315018
+          ],
+          "median_ratio": 1.0017437263403826,
+          "outcome": "inconclusive"
+        },
+        "16": {
+          "step_ms": 9.3064895,
+          "block_ratios": [
+            1.0125709558343197,
+            0.9192029454242933,
+            0.9853382497953134,
+            0.9186189786047855
+          ],
+          "median_ratio": 0.9522705976098034,
+          "outcome": "inconclusive"
+        }
+      },
+      "observation_ratios": [
+        0.9702240154398418,
+        1.0458639370178264,
+        0.9258797210371688,
+        0.9133141008001224
+      ],
+      "host_phase_ms": {
+        "preflight": 0.00669825,
+        "step upload": 0.21350000000000002,
+        "embedding enqueue": 0.02847875,
+        "decoder stack enqueue": 6.7252395,
+        "head enqueue": 0.07961475000000001,
+        "forward return": 0.00068775,
+        "readback wait": 1.6577395,
+        "host selection": 0.0001045,
+        "unmap": 0.123979
+      },
+      "throughput_vs_one": 1.0
+    },
+    {
+      "context": 64,
+      "sequences": 2,
+      "step_ms": 13.15447925,
+      "step_block_ms": [
+        12.948125,
+        12.483125,
+        13.3608335,
+        13.547917
+      ],
+      "tokens_per_second": 152.03946594845252,
+      "calibration_ratios": [
+        1.0021318916831587,
+        1.0388524508085917,
+        0.9882897650060529,
+        0.9659664286399157
+      ],
+      "noise_floor": 0.05,
+      "tiles": {
+        "8": {
+          "step_ms": 17.0972915,
+          "block_ratios": [
+            1.3145653152610346,
+            1.3187120464748,
+            1.2695526053940474,
+            1.311928990139858
+          ],
+          "median_ratio": 1.3132471527004463,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 25.98042725,
+          "block_ratios": [
+            2.151976447361709,
+            2.036639380686674,
+            1.9183791191100412,
+            2.085801254136632
+          ],
+          "median_ratio": 2.061220317411653,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        1.0509583763976322,
+        1.0002340658837077,
+        1.0590722718873602,
+        0.9222090888150366
+      ],
+      "host_phase_ms": {
+        "preflight": 0.007156249999999999,
+        "step upload": 0.22123975,
+        "embedding enqueue": 0.029927250000000002,
+        "decoder stack enqueue": 7.453333000000001,
+        "head enqueue": 0.1935105,
+        "forward return": 0.00105225,
+        "readback wait": 4.8277185,
+        "host selection": 0.00015575000000000002,
+        "unmap": 0.1333545
+      },
+      "throughput_vs_one": 1.6118495530714376
+    },
+    {
+      "context": 64,
+      "sequences": 4,
+      "step_ms": 18.306146,
+      "step_block_ms": [
+        19.591833,
+        17.6477295,
+        18.0076045,
+        18.6046875
+      ],
+      "tokens_per_second": 218.50585043951907,
+      "calibration_ratios": [
+        0.982181146603281,
+        0.9947030579769482,
+        1.0008664950410255,
+        0.9982005072646343
+      ],
+      "noise_floor": 0.05,
+      "tiles": {
+        "8": {
+          "step_ms": 22.81004175,
+          "block_ratios": [
+            1.3253340423065834,
+            1.2575743590158253,
+            1.2459921782009862,
+            1.2575694306977376
+          ],
+          "median_ratio": 1.2575718948567816,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 31.45046875,
+          "block_ratios": [
+            1.643474425351831,
+            1.7118506800438007,
+            1.7222387179884937,
+            1.6623867945861808
+          ],
+          "median_ratio": 1.6871187373149907,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        0.9957758961746177,
+        1.0020855827512043,
+        0.9874275988538105,
+        1.046789380243202
+      ],
+      "host_phase_ms": {
+        "preflight": 0.00770825,
+        "step upload": 0.21455174999999999,
+        "embedding enqueue": 0.03278125,
+        "decoder stack enqueue": 10.07589575,
+        "head enqueue": 0.32242725,
+        "forward return": 0.00206225,
+        "readback wait": 6.82401025,
+        "host selection": 0.000198,
+        "unmap": 0.14467724999999998
+      },
+      "throughput_vs_one": 2.3164943074309576
+    },
+    {
+      "context": 64,
+      "sequences": 8,
+      "step_ms": 31.47792725,
+      "step_block_ms": [
+        31.111875,
+        31.2353955,
+        31.720459,
+        32.039813
+      ],
+      "tokens_per_second": 254.14633995635782,
+      "calibration_ratios": [
+        1.006481303360855,
+        0.9978510116832041,
+        1.0032707439700037,
+        0.9930951688138754
+      ],
+      "noise_floor": 0.05,
+      "tiles": {
+        "8": {
+          "step_ms": 35.82169775,
+          "block_ratios": [
+            1.1303286037181897,
+            1.1297590450378163,
+            1.0865633472880372,
+            1.125667986447592
+          ],
+          "median_ratio": 1.127713515742704,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 44.56310425,
+          "block_ratios": [
+            1.3402220015653685,
+            1.369558525852644,
+            1.4018904116377087,
+            1.391740259762714
+          ],
+          "median_ratio": 1.3806493928076788,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        0.9997771086192858,
+        0.9970930793053614,
+        1.0131370264271817,
+        0.9806674145031734
+      ],
+      "host_phase_ms": {
+        "preflight": 0.007426749999999999,
+        "step upload": 0.27592725,
+        "embedding enqueue": 0.0332605,
+        "decoder stack enqueue": 17.83217725,
+        "head enqueue": 0.580052,
+        "forward return": 0.00136475,
+        "readback wait": 13.0110735,
+        "host selection": 0.00035425,
+        "unmap": 0.1760625
+      },
+      "throughput_vs_one": 2.6943376965838812
+    },
+    {
+      "context": 64,
+      "sequences": 16,
+      "step_ms": 57.8796355,
+      "step_block_ms": [
+        56.553229,
+        56.0736455,
+        59.206042,
+        59.885188
+      ],
+      "tokens_per_second": 276.43574223959996,
+      "calibration_ratios": [
+        1.0008476527485284,
+        1.0026156226992589,
+        0.979319044836674,
+        1.0455503537869832
+      ],
+      "noise_floor": 0.05,
+      "tiles": {
+        "8": {
+          "step_ms": 64.770052,
+          "block_ratios": [
+            1.133102197276864,
+            1.1178260640746498,
+            1.1540720150557666,
+            1.069958433581294
+          ],
+          "median_ratio": 1.125464130675757,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 89.63836475,
+          "block_ratios": [
+            1.5876178428615917,
+            1.563969493425856,
+            1.5425594112282313,
+            1.5137441057143557
+          ],
+          "median_ratio": 1.5532644523270436,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        1.00482183185794,
+        1.0141380332114602,
+        0.9618139193005533,
+        1.0396538655656928
+      ],
+      "host_phase_ms": {
+        "preflight": 0.00946925,
+        "step upload": 0.28451025,
+        "embedding enqueue": 0.038072999999999996,
+        "decoder stack enqueue": 31.15676075,
+        "head enqueue": 0.9959899999999999,
+        "forward return": 0.0025935000000000003,
+        "readback wait": 24.91179175,
+        "host selection": 0.00040625000000000004,
+        "unmap": 0.19571875
+      },
+      "throughput_vs_one": 2.93063925739477
+    },
+    {
+      "context": 64,
+      "sequences": 32,
+      "step_ms": 111.84336425000001,
+      "step_block_ms": [
+        111.7500415,
+        107.116021,
+        111.936687,
+        112.3121875
+      ],
+      "tokens_per_second": 286.1144263192172,
+      "calibration_ratios": [
+        1.0103575666233646,
+        1.0027882523754312,
+        0.9859070333214346,
+        1.0200818588810765
+      ],
+      "noise_floor": 0.05,
+      "tiles": {
+        "8": {
+          "step_ms": 123.4720105,
+          "block_ratios": [
+            1.1139380390356264,
+            1.120797843962713,
+            1.1074188439858927,
+            1.185975399020064
+          ],
+          "median_ratio": 1.1173679414991697,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 168.647177,
+          "block_ratios": [
+            1.5591068597398967,
+            1.546594339495978,
+            1.5239598782425536,
+            1.5250766215411369
+          ],
+          "median_ratio": 1.5358354805185574,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        0.9848120900271474,
+        1.001311471651891,
+        0.99399713433769,
+        0.9946474858810521
+      ],
+      "host_phase_ms": {
+        "preflight": 0.011542,
+        "step upload": 0.28413525,
+        "embedding enqueue": 0.03864575,
+        "decoder stack enqueue": 57.25938525,
+        "head enqueue": 1.865396,
+        "forward return": 0.0024997500000000002,
+        "readback wait": 47.7254685,
+        "host selection": 0.00053125,
+        "unmap": 0.19424975
+      },
+      "throughput_vs_one": 3.033248027497527
+    },
+    {
+      "context": 64,
+      "sequences": 64,
+      "step_ms": 211.23599975000002,
+      "step_block_ms": [
+        210.342979,
+        210.410354,
+        222.773938,
+        212.0616455
+      ],
+      "tokens_per_second": 302.97865929928923,
+      "calibration_ratios": [
+        1.0048073270845899,
+        1.0211658809337871,
+        1.0029365508635035,
+        1.0109467013449163
+      ],
+      "noise_floor": 0.05,
+      "tiles": {
+        "8": {
+          "step_ms": 247.80968725,
+          "block_ratios": [
+            1.1741574349957649,
+            1.0361931662903738,
+            1.1326899073773755,
+            1.1533588865216378
+          ],
+          "median_ratio": 1.1430243969495066,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 321.408219,
+          "block_ratios": [
+            1.5141620424245106,
+            1.4510313890329218,
+            1.5158943576821187,
+            1.5109083410813295
+          ],
+          "median_ratio": 1.51253519175292,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        0.9947849586667956,
+        1.018237522590565,
+        0.9944937496666914,
+        0.9921140856555992
+      ],
+      "host_phase_ms": {
+        "preflight": 0.02129125,
+        "step upload": 0.30042725000000003,
+        "embedding enqueue": 0.0392395,
+        "decoder stack enqueue": 113.62643725000001,
+        "head enqueue": 3.6150207500000002,
+        "forward return": 0.001948,
+        "readback wait": 96.74504150000001,
+        "host selection": 0.000729,
+        "unmap": 0.199458
+      },
+      "throughput_vs_one": 3.212034543368595
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "step_ms": 8.3169375,
+      "step_block_ms": [
+        8.192583,
+        8.3869165,
+        8.680938,
+        8.2469585
+      ],
+      "tokens_per_second": 120.23656544250814,
+      "calibration_ratios": [
+        0.9839896647980252,
+        1.2068897430897279,
+        1.0236676612596474,
+        0.9809575857572219
+      ],
+      "noise_floor": 0.20688974308972785,
+      "tiles": {
+        "8": {
+          "step_ms": 8.3763435,
+          "block_ratios": [
+            1.0044418353023854,
+            1.105024414886198,
+            1.004036751873812,
+            1.0002759410155844
+          ],
+          "median_ratio": 1.0042392935880988,
+          "outcome": "inconclusive"
+        },
+        "16": {
+          "step_ms": 8.16633375,
+          "block_ratios": [
+            0.9946256995096072,
+            1.0532829093567873,
+            0.9204619372396605,
+            1.0216020917820368
+          ],
+          "median_ratio": 1.008113895645822,
+          "outcome": "inconclusive"
+        }
+      },
+      "observation_ratios": [
+        0.9983061811814672,
+        0.9278645017350117,
+        1.0411516424328364,
+        0.9966601837296656
+      ],
+      "host_phase_ms": {
+        "preflight": 0.00649975,
+        "step upload": 0.21385425,
+        "embedding enqueue": 0.0234895,
+        "decoder stack enqueue": 5.960531,
+        "head enqueue": 0.0771455,
+        "forward return": 0.00045825,
+        "readback wait": 1.74659375,
+        "host selection": 0.00010400000000000001,
+        "unmap": 0.124573
+      },
+      "throughput_vs_one": 1.0
+    },
+    {
+      "context": 1024,
+      "sequences": 2,
+      "step_ms": 13.182822999999999,
+      "step_block_ms": [
+        13.090021,
+        13.596521,
+        13.2492085,
+        13.1164375
+      ],
+      "tokens_per_second": 151.71257324777858,
+      "calibration_ratios": [
+        1.0007320843870304,
+        0.9892328338992011,
+        1.0620131383697373,
+        1.0013199468224507
+      ],
+      "noise_floor": 0.06201313836973732,
+      "tiles": {
+        "8": {
+          "step_ms": 17.458823,
+          "block_ratios": [
+            1.305222365229346,
+            1.2981017459960917,
+            1.3646947480747347,
+            1.3239074314059809
+          ],
+          "median_ratio": 1.3145648983176634,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 26.3061455,
+          "block_ratios": [
+            1.9788569903032962,
+            1.9759079398316328,
+            1.922379133005634,
+            1.9848916241397514
+          ],
+          "median_ratio": 1.9773824650674645,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        1.0154697752486117,
+        1.0081896355696909,
+        1.0753633496929607,
+        1.0004225972346363
+      ],
+      "host_phase_ms": {
+        "preflight": 0.00723925,
+        "step upload": 0.219719,
+        "embedding enqueue": 0.029489750000000002,
+        "decoder stack enqueue": 7.93103125,
+        "head enqueue": 0.2205625,
+        "forward return": 0.0008230000000000001,
+        "readback wait": 4.993104,
+        "host selection": 9.400000000000001e-05,
+        "unmap": 0.13933325000000002
+      },
+      "throughput_vs_one": 1.2617839896659464
+    },
+    {
+      "context": 1024,
+      "sequences": 4,
+      "step_ms": 18.86997925,
+      "step_block_ms": [
+        18.685125,
+        19.0548335,
+        19.8735415,
+        18.5935415
+      ],
+      "tokens_per_second": 211.9769156608903,
+      "calibration_ratios": [
+        0.9977589125039302,
+        0.9927971031602034,
+        0.9944388120255265,
+        0.9991338928089627
+      ],
+      "noise_floor": 0.05,
+      "tiles": {
+        "8": {
+          "step_ms": 23.24595825,
+          "block_ratios": [
+            1.2391716763694829,
+            1.2307766188585119,
+            1.2494741416592665,
+            1.2375622731146287
+          ],
+          "median_ratio": 1.2383669747420558,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 31.759594,
+          "block_ratios": [
+            1.6756786798970857,
+            1.6933868151251963,
+            1.6865110486420405,
+            1.677057300346426
+          ],
+          "median_ratio": 1.6817841744942332,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        1.002544404750803,
+        0.9937898840582509,
+        0.9922361478468589,
+        1.003475807638285
+      ],
+      "host_phase_ms": {
+        "preflight": 0.00696875,
+        "step upload": 0.21991675,
+        "embedding enqueue": 0.026458250000000003,
+        "decoder stack enqueue": 11.02296875,
+        "head enqueue": 0.33015625000000004,
+        "forward return": 0.00116675,
+        "readback wait": 7.2065315000000005,
+        "host selection": 0.000177,
+        "unmap": 0.1391875
+      },
+      "throughput_vs_one": 1.7629987589943958
+    },
+    {
+      "context": 1024,
+      "sequences": 8,
+      "step_ms": 33.880052,
+      "step_block_ms": [
+        33.1239375,
+        34.636896,
+        34.529458,
+        33.230646
+      ],
+      "tokens_per_second": 236.12714644003498,
+      "calibration_ratios": [
+        0.9987188419251184,
+        0.9955731310334506,
+        1.033891366033026,
+        1.0006024709841632
+      ],
+      "noise_floor": 0.05,
+      "tiles": {
+        "8": {
+          "step_ms": 37.81954175,
+          "block_ratios": [
+            1.1237286351866158,
+            1.1225519750043522,
+            1.138773094825153,
+            1.1241774669558364
+          ],
+          "median_ratio": 1.1239530510712261,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 46.3594375,
+          "block_ratios": [
+            1.3806324717039622,
+            1.38260066065178,
+            1.3875913522914325,
+            1.3716580740732505
+          ],
+          "median_ratio": 1.381616566177871,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        0.9994012051241766,
+        1.0069351385761143,
+        0.9626832960797927,
+        1.0010611071115985
+      ],
+      "host_phase_ms": {
+        "preflight": 0.006479,
+        "step upload": 0.2781455,
+        "embedding enqueue": 0.02677075,
+        "decoder stack enqueue": 18.9943855,
+        "head enqueue": 0.5789065,
+        "forward return": 0.0005625,
+        "readback wait": 13.4839375,
+        "host selection": 0.0005105,
+        "unmap": 0.16932275
+      },
+      "throughput_vs_one": 1.9638547189951183
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "step_ms": 60.413448,
+      "step_block_ms": [
+        60.183771,
+        60.494667,
+        61.988813,
+        60.332229
+      ],
+      "tokens_per_second": 264.84169551123784,
+      "calibration_ratios": [
+        0.9994651797408972,
+        1.0088620043151904,
+        1.0228408067758936,
+        1.005662744534103
+      ],
+      "noise_floor": 0.05,
+      "tiles": {
+        "8": {
+          "step_ms": 68.6013335,
+          "block_ratios": [
+            1.1237385839643252,
+            1.1418105860203032,
+            1.093360562029828,
+            1.125980405802865
+          ],
+          "median_ratio": 1.1248594948835953,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 94.025917,
+          "block_ratios": [
+            1.51253757606954,
+            1.5864342133848166,
+            1.5171113177290996,
+            1.5137816692975532
+          ],
+          "median_ratio": 1.5154464935133265,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        1.001714298164924,
+        0.9965061129413538,
+        1.0056040545124005,
+        1.0078440249120542
+      ],
+      "host_phase_ms": {
+        "preflight": 0.00860425,
+        "step upload": 0.29863575,
+        "embedding enqueue": 0.03566675,
+        "decoder stack enqueue": 34.333239250000005,
+        "head enqueue": 0.9938545000000001,
+        "forward return": 0.001771,
+        "readback wait": 25.8711665,
+        "host selection": 0.000344,
+        "unmap": 0.19201075
+      },
+      "throughput_vs_one": 2.2026718289609954
+    },
+    {
+      "context": 1024,
+      "sequences": 32,
+      "step_ms": 117.47166675,
+      "step_block_ms": [
+        115.566021,
+        119.3773125,
+        122.334271,
+        115.509521
+      ],
+      "tokens_per_second": 272.4061119188981,
+      "calibration_ratios": [
+        1.0003827163003216,
+        1.011524555807034,
+        0.9886826480537085,
+        1.0031350229562461
+      ],
+      "noise_floor": 0.05,
+      "tiles": {
+        "8": {
+          "step_ms": 132.18690625,
+          "block_ratios": [
+            1.1204691610575408,
+            1.1300969693925833,
+            1.1431558851302472,
+            1.1261794702086416
+          ],
+          "median_ratio": 1.1281382198006125,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 177.29337525,
+          "block_ratios": [
+            1.4997878803764217,
+            1.4629969053072271,
+            1.5120130251969561,
+            1.5000134436579136
+          ],
+          "median_ratio": 1.4999006620171675,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        0.9997745879667074,
+        1.0827934209379215,
+        0.9972973799818567,
+        1.004488001785875
+      ],
+      "host_phase_ms": {
+        "preflight": 0.0105105,
+        "step upload": 0.29364625,
+        "embedding enqueue": 0.029927000000000002,
+        "decoder stack enqueue": 64.67136475000001,
+        "head enqueue": 1.85292725,
+        "forward return": 0.00166675,
+        "readback wait": 50.69388549999999,
+        "host selection": 0.00044775,
+        "unmap": 0.1784895
+      },
+      "throughput_vs_one": 2.2655846074474804
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "step_ms": 234.049104,
+      "step_block_ms": [
+        228.0189795,
+        239.131958,
+        242.6187295,
+        228.96625
+      ],
+      "tokens_per_second": 273.4468917257637,
+      "calibration_ratios": [
+        0.9991988978268364,
+        0.9606092674572589,
+        0.9917702664418577,
+        1.0026308462491742
+      ],
+      "noise_floor": 0.05,
+      "tiles": {
+        "8": {
+          "step_ms": 258.523656,
+          "block_ratios": [
+            1.1377501481572025,
+            1.1036732936433082,
+            1.116951832998078,
+            1.121242499912221
+          ],
+          "median_ratio": 1.1190971664551497,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 336.64539575,
+          "block_ratios": [
+            1.4434409611492858,
+            1.4725561778006375,
+            1.4505148503128136,
+            1.4724257602290318
+          ],
+          "median_ratio": 1.4614703052709226,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        1.0438665440488546,
+        1.0030755436920413,
+        0.9977338832629017,
+        0.9894163114553556
+      ],
+      "host_phase_ms": {
+        "preflight": 0.02172925,
+        "step upload": 0.30497925000000004,
+        "embedding enqueue": 0.037260249999999995,
+        "decoder stack enqueue": 127.15194825,
+        "head enqueue": 3.61782275,
+        "forward return": 0.002365,
+        "readback wait": 103.15612525,
+        "host selection": 0.00064625,
+        "unmap": 0.20544774999999998
+      },
+      "throughput_vs_one": 2.2742407080524436
+    },
+    {
+      "context": 3968,
+      "sequences": 1,
+      "step_ms": 10.39746875,
+      "step_block_ms": [
+        11.055958,
+        9.193417,
+        10.610375,
+        10.1845625
+      ],
+      "tokens_per_second": 96.17725468037594,
+      "calibration_ratios": [
+        1.011319326647225,
+        1.0617787706137989,
+        0.9754348456110176,
+        0.9789285008560751
+      ],
+      "noise_floor": 0.06177877061379888,
+      "tiles": {
+        "8": {
+          "step_ms": 10.765073,
+          "block_ratios": [
+            0.9602254360931293,
+            1.2146040696722442,
+            1.026002658961587,
+            0.9504134898094607
+          ],
+          "median_ratio": 0.9931140475273581,
+          "outcome": "inconclusive"
+        },
+        "16": {
+          "step_ms": 9.99546875,
+          "block_ratios": [
+            1.0174738503484202,
+            0.9978941993158409,
+            1.0099419341807225,
+            0.9458186611454402
+          ],
+          "median_ratio": 1.0039180667482817,
+          "outcome": "inconclusive"
+        }
+      },
+      "observation_ratios": [
+        0.9684845133035205,
+        0.940150283354449,
+        1.027982915882438,
+        0.9154199188804213
+      ],
+      "host_phase_ms": {
+        "preflight": 0.0069375,
+        "step upload": 0.2114585,
+        "embedding enqueue": 0.03293725,
+        "decoder stack enqueue": 6.939739749999999,
+        "head enqueue": 0.08630225,
+        "forward return": 0.0013745,
+        "readback wait": 2.580323,
+        "host selection": 9.375e-05,
+        "unmap": 0.129948
+      },
+      "throughput_vs_one": 1.0
+    },
+    {
+      "context": 3968,
+      "sequences": 2,
+      "step_ms": 15.869708249999999,
+      "step_block_ms": [
+        15.5371455,
+        17.626354,
+        16.202271,
+        15.4226255
+      ],
+      "tokens_per_second": 126.02626138385375,
+      "calibration_ratios": [
+        0.9809971851006994,
+        0.8670244283077487,
+        0.99745149923736,
+        0.9797185959031425
+      ],
+      "noise_floor": 0.13297557169225127,
+      "tiles": {
+        "8": {
+          "step_ms": 19.7907085,
+          "block_ratios": [
+            1.2608823562391154,
+            1.2946488518455235,
+            1.2812252916862263,
+            1.2836594099033787
+          ],
+          "median_ratio": 1.2824423507948026,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 28.32957275,
+          "block_ratios": [
+            1.8473798662210088,
+            1.8400554559736173,
+            1.749638585185643,
+            1.857703710346986
+          ],
+          "median_ratio": 1.8437176610973132,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        1.001964508440265,
+        1.1009093052576424,
+        0.9797837966466678,
+        0.9678706817162006
+      ],
+      "host_phase_ms": {
+        "preflight": 0.00667675,
+        "step upload": 0.21210425,
+        "embedding enqueue": 0.026270750000000002,
+        "decoder stack enqueue": 9.391708,
+        "head enqueue": 0.22141650000000002,
+        "forward return": 0.00098975,
+        "readback wait": 5.5294065,
+        "host selection": 8.324999999999999e-05,
+        "unmap": 0.12891675
+      },
+      "throughput_vs_one": 1.3103541144179511
+    },
+    {
+      "context": 3968,
+      "sequences": 4,
+      "step_ms": 22.77654175,
+      "step_block_ms": [
+        21.904875,
+        24.387667,
+        23.4001455,
+        22.152938
+      ],
+      "tokens_per_second": 175.61928601386555,
+      "calibration_ratios": [
+        1.0033477935847614,
+        0.9023447589308153,
+        0.9995655582568921,
+        0.9994093785664006
+      ],
+      "noise_floor": 0.09765524106918466,
+      "tiles": {
+        "8": {
+          "step_ms": 27.53724975,
+          "block_ratios": [
+            1.2035436802456776,
+            1.2891324542308826,
+            1.2048688351232577,
+            1.2070515734034444
+          ],
+          "median_ratio": 1.205960204263351,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 35.38027125,
+          "block_ratios": [
+            1.606433431150143,
+            1.596108847829376,
+            1.5464343023008924,
+            1.5619476051343695
+          ],
+          "median_ratio": 1.5790282264818727,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        1.0024479234811088,
+        1.07146092807235,
+        1.0061802248723073,
+        0.9853794418061417
+      ],
+      "host_phase_ms": {
+        "preflight": 0.0072499999999999995,
+        "step upload": 0.21352074999999998,
+        "embedding enqueue": 0.026406,
+        "decoder stack enqueue": 13.6114165,
+        "head enqueue": 0.326469,
+        "forward return": 0.0012292499999999999,
+        "readback wait": 8.0445205,
+        "host selection": 0.0001875,
+        "unmap": 0.13555224999999999
+      },
+      "throughput_vs_one": 1.825996038226479
+    },
+    {
+      "context": 3968,
+      "sequences": 8,
+      "step_ms": 40.8583645,
+      "step_block_ms": [
+        41.0414375,
+        40.6752915,
+        41.3970415,
+        40.2683335
+      ],
+      "tokens_per_second": 195.798341365328,
+      "calibration_ratios": [
+        0.9734150881045529,
+        1.0084408491577743,
+        1.022364726232912,
+        1.0035020197694549
+      ],
+      "noise_floor": 0.05,
+      "tiles": {
+        "8": {
+          "step_ms": 44.36444775,
+          "block_ratios": [
+            1.0987356376587736,
+            1.0903364281567056,
+            1.0544440655289373,
+            1.1021576740071977
+          ],
+          "median_ratio": 1.0945360329077396,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 53.62203125,
+          "block_ratios": [
+            1.3713421289811492,
+            1.2887943386307559,
+            1.3053381787534408,
+            1.301922606165665
+          ],
+          "median_ratio": 1.303630392459553,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        0.9989865752162944,
+        0.9737296633221895,
+        0.9762991503669246,
+        0.9986362744807094
+      ],
+      "host_phase_ms": {
+        "preflight": 0.006895999999999999,
+        "step upload": 0.29002075000000005,
+        "embedding enqueue": 0.030385500000000003,
+        "decoder stack enqueue": 24.32111475,
+        "head enqueue": 0.5754477499999999,
+        "forward return": 0.00139575,
+        "readback wait": 15.0751145,
+        "host selection": 0.00033325,
+        "unmap": 0.17683325
+      },
+      "throughput_vs_one": 2.0358071356478304
+    },
+    {
+      "context": 3968,
+      "sequences": 16,
+      "step_ms": 74.87019825,
+      "step_block_ms": [
+        74.626271,
+        74.356271,
+        75.690042,
+        75.1141255
+      ],
+      "tokens_per_second": 213.703187302566,
+      "calibration_ratios": [
+        1.0060694108647075,
+        1.1011837387595729,
+        1.0276701326179738,
+        0.9906048496830333
+      ],
+      "noise_floor": 0.10118373875957287,
+      "tiles": {
+        "8": {
+          "step_ms": 83.426521,
+          "block_ratios": [
+            1.0740483335356952,
+            1.1221086874300044,
+            1.1056655280222363,
+            1.1073375436564155
+          ],
+          "median_ratio": 1.106501535839326,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 106.5435835,
+          "block_ratios": [
+            1.439228639989105,
+            1.4237886799490427,
+            1.3847676899751629,
+            1.4345927996535213
+          ],
+          "median_ratio": 1.429190739801282,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        1.0003973615054351,
+        0.9996148163543095,
+        0.9818469679787718,
+        1.011938725342422
+      ],
+      "host_phase_ms": {
+        "preflight": 0.0072812499999999995,
+        "step upload": 0.3082395,
+        "embedding enqueue": 0.03011475,
+        "decoder stack enqueue": 43.86195825,
+        "head enqueue": 0.9981975,
+        "forward return": 0.00053175,
+        "readback wait": 29.044521,
+        "host selection": 0.0003855,
+        "unmap": 0.17634375
+      },
+      "throughput_vs_one": 2.2219722117538265
+    },
+    {
+      "context": 3968,
+      "sequences": 32,
+      "step_ms": 150.58365625,
+      "step_block_ms": [
+        147.2216245,
+        150.9375835,
+        157.0565625,
+        150.229729
+      ],
+      "tokens_per_second": 212.506461835894,
+      "calibration_ratios": [
+        1.0020332203303461,
+        1.0134041300588332,
+        0.9726238500858568,
+        0.9977398514777325
+      ],
+      "noise_floor": 0.05,
+      "tiles": {
+        "8": {
+          "step_ms": 164.600323,
+          "block_ratios": [
+            1.1194530211712097,
+            1.0069522519213974,
+            1.1023645832617803,
+            1.0975196070528732
+          ],
+          "median_ratio": 1.0999420951573269,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 208.77843725,
+          "block_ratios": [
+            1.3932756051017698,
+            1.396562221680558,
+            1.3573680528885286,
+            1.3972147236056862
+          ],
+          "median_ratio": 1.394918913391164,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        0.9999740629176939,
+        1.0017611793478904,
+        0.9797734826023917,
+        0.9999424867852847
+      ],
+      "host_phase_ms": {
+        "preflight": 0.011198,
+        "step upload": 0.3014065,
+        "embedding enqueue": 0.03536475,
+        "decoder stack enqueue": 88.790802,
+        "head enqueue": 1.8506770000000001,
+        "forward return": 0.001948,
+        "readback wait": 58.698792,
+        "host selection": 0.00041624999999999995,
+        "unmap": 0.18952075000000002
+      },
+      "throughput_vs_one": 2.2095292961117754
+    },
+    {
+      "context": 3968,
+      "sequences": 64,
+      "step_ms": 297.24871874999997,
+      "step_block_ms": [
+        293.182229,
+        293.965104,
+        310.646771,
+        300.5323335
+      ],
+      "tokens_per_second": 215.30790870734413,
+      "calibration_ratios": [
+        0.9995269580271866,
+        1.0057599676865048,
+        1.00196156553644,
+        1.0030018933054337
+      ],
+      "noise_floor": 0.05,
+      "tiles": {
+        "8": {
+          "step_ms": 333.164583,
+          "block_ratios": [
+            1.0895593619836512,
+            1.1652057242316414,
+            1.0913932731959874,
+            1.0750013276049977
+          ],
+          "median_ratio": 1.0904763175898193,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 406.4456045,
+          "block_ratios": [
+            1.3628889130799025,
+            1.2702833663786257,
+            1.3451984890019617,
+            1.3322851276706067
+          ],
+          "median_ratio": 1.3387418083362843,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        1.0006625083224783,
+        1.0126428637157232,
+        0.997040144519547,
+        0.9858461051385978
+      ],
+      "host_phase_ms": {
+        "preflight": 0.0196565,
+        "step upload": 0.30199975,
+        "embedding enqueue": 0.033478999999999995,
+        "decoder stack enqueue": 178.89790625,
+        "head enqueue": 3.6177815,
+        "forward return": 0.002052,
+        "readback wait": 117.64778150000001,
+        "host selection": 0.000656,
+        "unmap": 0.1948335
+      },
+      "throughput_vs_one": 2.2386572524124633
+    },
+    {
+      "context": 0,
+      "sequences": 32,
+      "step_ms": 127.34354175,
+      "step_block_ms": [
+        125.882708,
+        126.9699585,
+        134.2680205,
+        127.717125
+      ],
+      "tokens_per_second": 251.2887545001865,
+      "calibration_ratios": [
+        0.9995660682800055,
+        1.0010765341787522,
+        0.9741100860275214,
+        1.0005126877073063
+      ],
+      "noise_floor": 0.05,
+      "tiles": {
+        "8": {
+          "step_ms": 139.94504175,
+          "block_ratios": [
+            1.107285360300028,
+            1.0770779645107835,
+            1.0537756976633539,
+            1.1252397658434004
+          ],
+          "median_ratio": 1.0921816624054057,
+          "outcome": "slower"
+        },
+        "16": {
+          "step_ms": 185.8836255,
+          "block_ratios": [
+            1.4628249975173824,
+            1.459482660166505,
+            1.3463295716859796,
+            1.4671062756113078
+          ],
+          "median_ratio": 1.4611538288419437,
+          "outcome": "slower"
+        }
+      },
+      "observation_ratios": [
+        0.9997822947260321,
+        1.000616373651753,
+        1.0018540444698518,
+        1.0021486571185407
+      ],
+      "host_phase_ms": {
+        "preflight": 0.010937249999999999,
+        "step upload": 0.3044165,
+        "embedding enqueue": 0.0305935,
+        "decoder stack enqueue": 71.110302,
+        "head enqueue": 1.8551042500000001,
+        "forward return": 0.0014375,
+        "readback wait": 52.38309375,
+        "host selection": 0.000448,
+        "unmap": 0.1798235
+      },
+      "throughput_vs_one": null
+    }
+  ],
+  "gpu": [
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "FP32 GQA",
+      "median_ms": 0.509834
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "argmax finish",
+      "median_ms": 0.0036249999999999998
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "argmax partials",
+      "median_ms": 0.0081455
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "attention RMSNorm",
+      "median_ms": 0.007854
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "down projection",
+      "median_ms": 1.6601245
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "embedding",
+      "median_ms": 0.003521
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "fused MLP residual/RMSNorm",
+      "median_ms": 0.22349999999999998
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "fused QKV/RoPE/cache",
+      "median_ms": 0.100147
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "fused SiLU/multiply",
+      "median_ms": 0.08772849999999999
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "fused attention residual/RMSNorm",
+      "median_ms": 0.1994375
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "gate projection",
+      "median_ms": 1.27854
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "output projection",
+      "median_ms": 0.42245699999999997
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "packed QKV projection",
+      "median_ms": 0.4818135
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "token buffer map",
+      "median_ms": 0.0018960000000000001
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "token buffer unmap",
+      "median_ms": 0.00175
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "up projection",
+      "median_ms": 1.2748965
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "vocabulary projection",
+      "median_ms": 1.3164585
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "winner buffer map",
+      "median_ms": 0.002209
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "winner buffer unmap",
+      "median_ms": 0.001771
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "GPU active total",
+      "median_ms": 7.7575145
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "GPU enclosing span",
+      "median_ms": 13.3405625
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "Metal submission intervals",
+      "median_ms": 9.6382655
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "FP32 GQA",
+      "median_ms": 0.5162085000000001
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "argmax finish",
+      "median_ms": 0.0036455000000000003
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "argmax partials",
+      "median_ms": 0.0081045
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "attention RMSNorm",
+      "median_ms": 0.007854
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "down projection",
+      "median_ms": 1.654625
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "embedding",
+      "median_ms": 0.0034795
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "fused MLP residual/RMSNorm",
+      "median_ms": 0.23859999999999998
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "fused QKV/RoPE/cache",
+      "median_ms": 0.0994575
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "fused SiLU/multiply",
+      "median_ms": 0.0857705
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "fused attention residual/RMSNorm",
+      "median_ms": 0.2026655
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "gate projection",
+      "median_ms": 1.256604
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "output projection",
+      "median_ms": 0.4095405
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "packed QKV projection",
+      "median_ms": 0.4708355
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "token buffer map",
+      "median_ms": 0.001938
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "token buffer unmap",
+      "median_ms": 0.001854
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "up projection",
+      "median_ms": 1.2430595000000002
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "vocabulary projection",
+      "median_ms": 1.3074375
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "winner buffer map",
+      "median_ms": 0.002354
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "winner buffer unmap",
+      "median_ms": 0.0018335
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "GPU active total",
+      "median_ms": 7.894600499999999
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "GPU enclosing span",
+      "median_ms": 11.164479
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "Metal submission intervals",
+      "median_ms": 8.278327
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "FP32 GQA",
+      "median_ms": 4.7825855
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "argmax finish",
+      "median_ms": 0.00375
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "argmax partials",
+      "median_ms": 0.0363125
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "attention RMSNorm",
+      "median_ms": 0.0075
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "down projection",
+      "median_ms": 12.5673365
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "embedding",
+      "median_ms": 0.0043125
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "fused MLP residual/RMSNorm",
+      "median_ms": 0.2343765
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "fused QKV/RoPE/cache",
+      "median_ms": 0.113457
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "fused SiLU/multiply",
+      "median_ms": 0.24768800000000002
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "fused attention residual/RMSNorm",
+      "median_ms": 0.2099395
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "gate projection",
+      "median_ms": 11.153209
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "output projection",
+      "median_ms": 2.452249
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "packed QKV projection",
+      "median_ms": 3.062772
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "token buffer map",
+      "median_ms": 0.0018960000000000001
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "token buffer unmap",
+      "median_ms": 0.001833
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "up projection",
+      "median_ms": 11.305793
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "vocabulary projection",
+      "median_ms": 13.904603999999999
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "winner buffer map",
+      "median_ms": 0.0022500000000000003
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "winner buffer unmap",
+      "median_ms": 0.001792
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "GPU active total",
+      "median_ms": 60.727104999999995
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "GPU enclosing span",
+      "median_ms": 61.6789795
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "Metal submission intervals",
+      "median_ms": 8.178779
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "FP32 GQA",
+      "median_ms": 4.891144499999999
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "argmax finish",
+      "median_ms": 0.004021
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "argmax partials",
+      "median_ms": 0.0348955
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "attention RMSNorm",
+      "median_ms": 0.007521
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "down projection",
+      "median_ms": 13.828232499999999
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "embedding",
+      "median_ms": 0.004208
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "fused MLP residual/RMSNorm",
+      "median_ms": 0.549271
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "fused QKV/RoPE/cache",
+      "median_ms": 0.1196265
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "fused SiLU/multiply",
+      "median_ms": 0.24473050000000002
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "fused attention residual/RMSNorm",
+      "median_ms": 0.2222065
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "gate projection",
+      "median_ms": 11.907688499999999
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "output projection",
+      "median_ms": 2.539602
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "packed QKV projection",
+      "median_ms": 3.8559785
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "token buffer map",
+      "median_ms": 0.0020829999999999998
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "token buffer unmap",
+      "median_ms": 0.0018544999999999998
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "up projection",
+      "median_ms": 11.805625
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "vocabulary projection",
+      "median_ms": 15.3563115
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "winner buffer map",
+      "median_ms": 0.0026875
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "winner buffer unmap",
+      "median_ms": 0.002084
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "GPU active total",
+      "median_ms": 65.643295
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "GPU enclosing span",
+      "median_ms": 68.847271
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "Metal submission intervals",
+      "median_ms": 8.914374500000001
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "FP32 GQA",
+      "median_ms": 20.0239795
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "argmax finish",
+      "median_ms": 0.0036665
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "argmax partials",
+      "median_ms": 0.1205835
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "attention RMSNorm",
+      "median_ms": 0.007604
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "down projection",
+      "median_ms": 43.052273
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "embedding",
+      "median_ms": 0.008312
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "fused MLP residual/RMSNorm",
+      "median_ms": 0.2404795
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "fused QKV/RoPE/cache",
+      "median_ms": 0.133563
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "fused SiLU/multiply",
+      "median_ms": 0.7590195
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "fused attention residual/RMSNorm",
+      "median_ms": 0.2394385
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "gate projection",
+      "median_ms": 44.307750999999996
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "output projection",
+      "median_ms": 8.8599585
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "packed QKV projection",
+      "median_ms": 11.4561445
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "token buffer map",
+      "median_ms": 0.0019375
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "token buffer unmap",
+      "median_ms": 0.001833
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "up projection",
+      "median_ms": 44.752919000000006
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "vocabulary projection",
+      "median_ms": 57.6253125
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "winner buffer map",
+      "median_ms": 0.002229
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "winner buffer unmap",
+      "median_ms": 0.0018124999999999999
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "GPU active total",
+      "median_ms": 231.4768605
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "GPU enclosing span",
+      "median_ms": 232.840667
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 0,
+      "stage": "Metal submission intervals",
+      "median_ms": 8.8626055
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "FP32 GQA",
+      "median_ms": 20.424791
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "argmax finish",
+      "median_ms": 0.0037914999999999997
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "argmax partials",
+      "median_ms": 0.11964549999999999
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "attention RMSNorm",
+      "median_ms": 0.007542
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "down projection",
+      "median_ms": 42.9281465
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "embedding",
+      "median_ms": 0.0083545
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "fused MLP residual/RMSNorm",
+      "median_ms": 0.2529595
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "fused QKV/RoPE/cache",
+      "median_ms": 0.1415845
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "fused SiLU/multiply",
+      "median_ms": 0.7642724999999999
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "fused attention residual/RMSNorm",
+      "median_ms": 0.244645
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "gate projection",
+      "median_ms": 44.4007495
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "output projection",
+      "median_ms": 8.693356
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "packed QKV projection",
+      "median_ms": 11.0033335
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "token buffer map",
+      "median_ms": 0.0019585
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "token buffer unmap",
+      "median_ms": 0.001792
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "up projection",
+      "median_ms": 44.4472905
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "vocabulary projection",
+      "median_ms": 57.685854500000005
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "winner buffer map",
+      "median_ms": 0.002354
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "winner buffer unmap",
+      "median_ms": 0.001875
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "GPU active total",
+      "median_ms": 231.6969235
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "GPU enclosing span",
+      "median_ms": 233.3233955
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "row_tile": 4,
+      "repeat": 1,
+      "stage": "Metal submission intervals",
+      "median_ms": 9.859982500000001
+    }
+  ]
+}

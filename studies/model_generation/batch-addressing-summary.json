@@ -1,0 +1,3041 @@
+{
+  "timing": [
+    {
+      "context": 64,
+      "sequences": 1,
+      "step_ms": 9.176896,
+      "step_block_ms": [
+        9.0419585,
+        9.7528755,
+        9.3118335,
+        8.0892705
+      ],
+      "tokens_per_second": 108.96930726903739,
+      "calibration_ratios": [
+        1.195380790566557,
+        0.8183569553410172,
+        0.845881533427332,
+        0.9866413170384153
+      ],
+      "noise_floor": 0.195380790566557,
+      "arrangements": {
+        "11": {
+          "step_ms": 9.8148645,
+          "tokens_per_second": 101.88627667758429,
+          "block_ratios": [
+            1.015175095787754,
+            1.276001169409758,
+            1.1461358394886472,
+            0.878437971483718
+          ],
+          "median_ratio": 1.0806554676382005,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 8.1489475,
+          "tokens_per_second": 122.71523408391083,
+          "block_ratios": [
+            0.9278724990858706,
+            0.9836954112955435,
+            0.7908111019896773,
+            0.9270265428071431
+          ],
+          "median_ratio": 0.9274495209465068,
+          "outcome": "inconclusive"
+        }
+      }
+    },
+    {
+      "context": 64,
+      "sequences": 2,
+      "step_ms": 9.4237705,
+      "step_block_ms": [
+        10.810104,
+        9.9745205,
+        8.8730205,
+        8.0925835
+      ],
+      "tokens_per_second": 212.2292770181532,
+      "calibration_ratios": [
+        1.0126733285822227,
+        0.8009553942968988,
+        0.907843332493146,
+        1.3353430335318752
+      ],
+      "noise_floor": 0.3353430335318752,
+      "arrangements": {
+        "11": {
+          "step_ms": 9.951375,
+          "tokens_per_second": 200.977251887302,
+          "block_ratios": [
+            0.9821266128070644,
+            1.2399253848817806,
+            1.1553419168027879,
+            1.3576144452612724
+          ],
+          "median_ratio": 1.1976336508422842,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 8.0421875,
+          "tokens_per_second": 248.68855644064502,
+          "block_ratios": [
+            0.9897530131111572,
+            0.8111405890532171,
+            0.9792177172408622,
+            1.1355325760408475
+          ],
+          "median_ratio": 0.9844853651760097,
+          "outcome": "inconclusive"
+        }
+      }
+    },
+    {
+      "context": 64,
+      "sequences": 4,
+      "step_ms": 8.19964625,
+      "step_block_ms": [
+        8.101396,
+        8.2135005,
+        8.185792,
+        9.634875
+      ],
+      "tokens_per_second": 487.82592297807963,
+      "calibration_ratios": [
+        0.9901071988086991,
+        0.9800784695879667,
+        0.97673810915303,
+        0.8432149872209033
+      ],
+      "noise_floor": 0.15678501277909673,
+      "arrangements": {
+        "11": {
+          "step_ms": 8.519198,
+          "tokens_per_second": 469.5277654070254,
+          "block_ratios": [
+            1.0930937085913344,
+            0.8404029299691481,
+            1.0017992216858176,
+            1.2154110732331926
+          ],
+          "median_ratio": 1.047446465138576,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 8.99479175,
+          "tokens_per_second": 444.70179090027295,
+          "block_ratios": [
+            1.2938911367320147,
+            1.2328473247612763,
+            0.9903897909481578,
+            0.957150351196537
+          ],
+          "median_ratio": 1.111618557854717,
+          "outcome": "inconclusive"
+        }
+      }
+    },
+    {
+      "context": 64,
+      "sequences": 8,
+      "step_ms": 13.2445415,
+      "step_block_ms": [
+        13.6922915,
+        12.784125,
+        12.7967915,
+        13.823854
+      ],
+      "tokens_per_second": 604.0224193491333,
+      "calibration_ratios": [
+        1.0303333813773976,
+        1.1573289137895633,
+        1.0641355686696934,
+        0.9201877421448461
+      ],
+      "noise_floor": 0.15732891378956326,
+      "arrangements": {
+        "11": {
+          "step_ms": 14.48189625,
+          "tokens_per_second": 552.4138456661019,
+          "block_ratios": [
+            1.0396471444596322,
+            1.1623661097706355,
+            1.1349508700913733,
+            1.0008050992361923
+          ],
+          "median_ratio": 1.0872990072755027,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 10.06944775,
+          "tokens_per_second": 794.4824978112628,
+          "block_ratios": [
+            0.7093285667528676,
+            0.8569637278529857,
+            0.8367118247635406,
+            0.738584039880672
+          ],
+          "median_ratio": 0.7876479323221063,
+          "outcome": "faster"
+        }
+      }
+    },
+    {
+      "context": 64,
+      "sequences": 16,
+      "step_ms": 21.777354,
+      "step_block_ms": [
+        21.7527705,
+        22.007021,
+        21.7725835,
+        21.7821245
+      ],
+      "tokens_per_second": 734.708174372332,
+      "calibration_ratios": [
+        1.0009069879167805,
+        0.9969697170734739,
+        1.0014840912195835,
+        0.9978289078276088
+      ],
+      "noise_floor": 0.05,
+      "arrangements": {
+        "11": {
+          "step_ms": 21.799125,
+          "tokens_per_second": 733.9744141106581,
+          "block_ratios": [
+            0.9868763996614929,
+            0.9973857335484422,
+            0.9952220989604554,
+            1.0052762438855904
+          ],
+          "median_ratio": 0.9963039162544488,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 16.10664575,
+          "tokens_per_second": 993.378773479264,
+          "block_ratios": [
+            0.6570240361239904,
+            0.724555048933964,
+            0.6891450611490976,
+            0.7554759471479489
+          ],
+          "median_ratio": 0.7068500550415309,
+          "outcome": "faster"
+        }
+      }
+    },
+    {
+      "context": 64,
+      "sequences": 32,
+      "step_ms": 40.27892675,
+      "step_block_ms": [
+        39.356687,
+        40.859416,
+        41.1755415,
+        39.6984375
+      ],
+      "tokens_per_second": 794.4600956876291,
+      "calibration_ratios": [
+        1.0009115604674754,
+        0.9971192074796175,
+        0.956699124406172,
+        1.0182312087220058
+      ],
+      "noise_floor": 0.05,
+      "arrangements": {
+        "11": {
+          "step_ms": 39.92863575,
+          "tokens_per_second": 801.4298359793072,
+          "block_ratios": [
+            1.0077253525612444,
+            1.0237986401616717,
+            1.0177562078031936,
+            0.9897512119970765
+          ],
+          "median_ratio": 1.012740780182219,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 25.69968725,
+          "tokens_per_second": 1245.1513393416878,
+          "block_ratios": [
+            0.6380372174542074,
+            0.6365502400795777,
+            0.7137942585175272,
+            0.6209460484408236
+          ],
+          "median_ratio": 0.6372937287668925,
+          "outcome": "faster"
+        }
+      }
+    },
+    {
+      "context": 64,
+      "sequences": 64,
+      "step_ms": 75.0775415,
+      "step_block_ms": [
+        73.884333,
+        76.27075,
+        73.873667,
+        78.035271
+      ],
+      "tokens_per_second": 852.4519945821614,
+      "calibration_ratios": [
+        1.0458746308232898,
+        0.9940297689481223,
+        1.000222223975967,
+        0.9965109174798662
+      ],
+      "noise_floor": 0.05,
+      "arrangements": {
+        "11": {
+          "step_ms": 74.87878125,
+          "tokens_per_second": 854.7147660740004,
+          "block_ratios": [
+            1.008380246663588,
+            1.0009337660884565,
+            0.990614597548397,
+            0.9591658715591281
+          ],
+          "median_ratio": 0.9957741818184267,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 47.16209375,
+          "tokens_per_second": 1357.0220257661908,
+          "block_ratios": [
+            0.6236546354368208,
+            0.6142499895987209,
+            0.6342542180143359,
+            0.6170134122529677
+          ],
+          "median_ratio": 0.6203340238448942,
+          "outcome": "faster"
+        }
+      }
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "step_ms": 8.71912475,
+      "step_block_ms": [
+        8.9164165,
+        8.521833,
+        9.053396,
+        8.173209
+      ],
+      "tokens_per_second": 114.69041086950843,
+      "calibration_ratios": [
+        1.0902292417587267,
+        0.9655566472612171,
+        0.8950899750767557,
+        1.1869419343124592
+      ],
+      "noise_floor": 0.1869419343124592,
+      "arrangements": {
+        "11": {
+          "step_ms": 8.926583,
+          "tokens_per_second": 112.02494840410938,
+          "block_ratios": [
+            0.8384803769751019,
+            1.3688736072001646,
+            1.1355878070254959,
+            1.0115962260588234
+          ],
+          "median_ratio": 1.0735920165421597,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 7.86144775,
+          "tokens_per_second": 127.20303330897289,
+          "block_ratios": [
+            0.996389034273487,
+            0.9697069727578367,
+            0.9509746335462969,
+            0.7969595090024695
+          ],
+          "median_ratio": 0.9603408031520668,
+          "outcome": "inconclusive"
+        }
+      }
+    },
+    {
+      "context": 1024,
+      "sequences": 2,
+      "step_ms": 8.631177000000001,
+      "step_block_ms": [
+        8.6307705,
+        9.606958,
+        8.6315835,
+        8.5071875
+      ],
+      "tokens_per_second": 231.718107507238,
+      "calibration_ratios": [
+        1.145569274492932,
+        0.8796054901041516,
+        0.9704235613314752,
+        1.1930010358887706
+      ],
+      "noise_floor": 0.1930010358887706,
+      "arrangements": {
+        "11": {
+          "step_ms": 8.52155225,
+          "tokens_per_second": 234.69902446470363,
+          "block_ratios": [
+            0.8869209611408784,
+            0.8396172378224241,
+            0.9996534143751602,
+            1.0240546226973921
+          ],
+          "median_ratio": 0.9432871877580193,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 8.177729,
+          "tokens_per_second": 244.5666761517776,
+          "block_ratios": [
+            0.9503844057629093,
+            1.1185185142503187,
+            0.9872193539747958,
+            0.8968862611427646
+          ],
+          "median_ratio": 0.9688018798688525,
+          "outcome": "inconclusive"
+        }
+      }
+    },
+    {
+      "context": 1024,
+      "sequences": 4,
+      "step_ms": 9.05463575,
+      "step_block_ms": [
+        9.029667,
+        9.0796045,
+        8.9645205,
+        10.627
+      ],
+      "tokens_per_second": 441.7626628437263,
+      "calibration_ratios": [
+        1.1568763831490132,
+        1.111818802239679,
+        1.0061260945300978,
+        0.8477678554625012
+      ],
+      "noise_floor": 0.1568763831490132,
+      "arrangements": {
+        "11": {
+          "step_ms": 9.0605415,
+          "tokens_per_second": 441.47471759828045,
+          "block_ratios": [
+            0.9622093065034765,
+            0.9859044368526468,
+            0.8579359508779548,
+            1.1728714896983763
+          ],
+          "median_ratio": 0.9740568716780617,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 8.14657325,
+          "tokens_per_second": 491.00399361166984,
+          "block_ratios": [
+            0.9490760874859954,
+            0.7633885644131527,
+            0.8989632871695986,
+            0.8897573956724915
+          ],
+          "median_ratio": 0.894360341421045,
+          "outcome": "inconclusive"
+        }
+      }
+    },
+    {
+      "context": 1024,
+      "sequences": 8,
+      "step_ms": 14.7219895,
+      "step_block_ms": [
+        14.7207915,
+        16.740042,
+        14.703604,
+        14.7231875
+      ],
+      "tokens_per_second": 543.4048163123605,
+      "calibration_ratios": [
+        0.9974101596371363,
+        0.8843864609180789,
+        1.0065814816557899,
+        1.1265535061616243
+      ],
+      "noise_floor": 0.1265535061616243,
+      "arrangements": {
+        "11": {
+          "step_ms": 14.71861475,
+          "tokens_per_second": 543.5294106057094,
+          "block_ratios": [
+            0.9958447942920376,
+            0.8872946123604128,
+            0.938849788223947,
+            0.9994466286006294
+          ],
+          "median_ratio": 0.9673472912579923,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 11.27278125,
+          "tokens_per_second": 709.6740212181444,
+          "block_ratios": [
+            0.7678694102323136,
+            0.8780912479962731,
+            0.6789536676696786,
+            0.6658928430917412
+          ],
+          "median_ratio": 0.7234115389509961,
+          "outcome": "faster"
+        }
+      }
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "step_ms": 26.042677,
+      "step_block_ms": [
+        25.829583,
+        26.268854,
+        26.2446045,
+        25.8407495
+      ],
+      "tokens_per_second": 614.3761641708338,
+      "calibration_ratios": [
+        0.9996370440823609,
+        1.06039075781532,
+        0.9989712171124545,
+        1.0036384974050385
+      ],
+      "noise_floor": 0.060390757815319995,
+      "arrangements": {
+        "11": {
+          "step_ms": 27.55675,
+          "tokens_per_second": 580.6199932865813,
+          "block_ratios": [
+            1.1162922447147725,
+            1.0266048994757413,
+            1.003752286209199,
+            0.9960858871006394
+          ],
+          "median_ratio": 1.0151785928424701,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 19.67893725,
+          "tokens_per_second": 813.0520361306604,
+          "block_ratios": [
+            0.6748969692630848,
+            0.7302715867026978,
+            0.7028597255416901,
+            0.6892398986340547
+          ],
+          "median_ratio": 0.6960498120878724,
+          "outcome": "faster"
+        }
+      }
+    },
+    {
+      "context": 1024,
+      "sequences": 32,
+      "step_ms": 48.9312815,
+      "step_block_ms": [
+        49.166563,
+        48.696,
+        50.263271,
+        47.9246665
+      ],
+      "tokens_per_second": 653.9783757758318,
+      "calibration_ratios": [
+        1.0029254129478198,
+        1.0125326926236242,
+        0.9694740519374475,
+        0.9963710441260973
+      ],
+      "noise_floor": 0.05,
+      "arrangements": {
+        "11": {
+          "step_ms": 48.708073,
+          "tokens_per_second": 656.9752821056994,
+          "block_ratios": [
+            0.9800416112946676,
+            0.9906408322069504,
+            0.9938737574584876,
+            0.994762381304476
+          ],
+          "median_ratio": 0.9922572948327191,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 34.75129175,
+          "tokens_per_second": 920.8290796844983,
+          "block_ratios": [
+            0.727809533345475,
+            0.6854280680503989,
+            0.6918481257049278,
+            0.742130412178561
+          ],
+          "median_ratio": 0.7098288295252014,
+          "outcome": "faster"
+        }
+      }
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "step_ms": 93.80657275,
+      "step_block_ms": [
+        93.913146,
+        94.9766045,
+        93.6999995,
+        93.093125
+      ],
+      "tokens_per_second": 682.254964911294,
+      "calibration_ratios": [
+        1.074087295510258,
+        1.012108239771827,
+        1.0186415049020359,
+        1.022300250421285
+      ],
+      "noise_floor": 0.07408729551025806,
+      "arrangements": {
+        "11": {
+          "step_ms": 94.68658325,
+          "tokens_per_second": 675.9141348571155,
+          "block_ratios": [
+            1.0528409068388416,
+            0.999128791738309,
+            0.983620643875449,
+            1.0020409493164384
+          ],
+          "median_ratio": 1.0005848705273737,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 66.88076025,
+          "tokens_per_second": 956.9269212964726,
+          "block_ratios": [
+            0.7553213059711565,
+            0.7111340714944671,
+            0.7176125555187961,
+            0.680803116230964
+          ],
+          "median_ratio": 0.7143733135066316,
+          "outcome": "faster"
+        }
+      }
+    },
+    {
+      "context": 3968,
+      "sequences": 1,
+      "step_ms": 9.80515625,
+      "step_block_ms": [
+        11.1991665,
+        9.2112915,
+        10.3776875,
+        9.232625
+      ],
+      "tokens_per_second": 101.9871559925422,
+      "calibration_ratios": [
+        0.9092938300363692,
+        1.1072936406366034,
+        1.0917212047481677,
+        0.9963377154384587
+      ],
+      "noise_floor": 0.1072936406366034,
+      "arrangements": {
+        "11": {
+          "step_ms": 9.22775,
+          "tokens_per_second": 108.36877895478312,
+          "block_ratios": [
+            0.9414479301509171,
+            0.9962191007151029,
+            0.9917861328405778,
+            0.8514840044141693
+          ],
+          "median_ratio": 0.9666170314957474,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 8.334146,
+          "tokens_per_second": 119.98829874110676,
+          "block_ratios": [
+            1.0382450631076756,
+            0.702775431571916,
+            0.7193820018286377,
+            0.9585179226567383
+          ],
+          "median_ratio": 0.8389499622426879,
+          "outcome": "inconclusive"
+        }
+      }
+    },
+    {
+      "context": 3968,
+      "sequences": 2,
+      "step_ms": 11.35704175,
+      "step_block_ms": [
+        11.8559165,
+        12.4400415,
+        10.858167,
+        10.5807915
+      ],
+      "tokens_per_second": 176.1021966833925,
+      "calibration_ratios": [
+        0.9774321959841739,
+        0.8570258788927674,
+        0.9825783670485083,
+        1.1598218810001124
+      ],
+      "noise_floor": 0.1598218810001124,
+      "arrangements": {
+        "11": {
+          "step_ms": 11.2521145,
+          "tokens_per_second": 177.74436973601718,
+          "block_ratios": [
+            1.0306161821553863,
+            0.9960111680275726,
+            1.0419097740020407,
+            1.1551517167749052
+          ],
+          "median_ratio": 1.0362629780787134,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 10.52622925,
+          "tokens_per_second": 190.00156205034202,
+          "block_ratios": [
+            0.8432669322340147,
+            1.0633182454212247,
+            1.0499060527769992,
+            0.8629550971060235
+          ],
+          "median_ratio": 0.9564305749415114,
+          "outcome": "inconclusive"
+        }
+      }
+    },
+    {
+      "context": 3968,
+      "sequences": 4,
+      "step_ms": 12.486552,
+      "step_block_ms": [
+        13.745833,
+        12.5560625,
+        12.4170415,
+        12.39825
+      ],
+      "tokens_per_second": 320.3446395770426,
+      "calibration_ratios": [
+        0.9805653466035853,
+        1.0883421056561322,
+        1.1605388046742051,
+        1.0101358659488233
+      ],
+      "noise_floor": 0.16053880467420512,
+      "arrangements": {
+        "11": {
+          "step_ms": 13.73825025,
+          "tokens_per_second": 291.15789326955957,
+          "block_ratios": [
+            0.9957626026400582,
+            1.0912137176706074,
+            1.1463549618512072,
+            1.0754252007804346
+          ],
+          "median_ratio": 1.083319459225521,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 11.76923975,
+          "tokens_per_second": 339.869021701253,
+          "block_ratios": [
+            0.9132009522213577,
+            0.9070892148798984,
+            0.9844396302428563,
+            0.9125071873635148
+          ],
+          "median_ratio": 0.9128540697924362,
+          "outcome": "inconclusive"
+        }
+      }
+    },
+    {
+      "context": 3968,
+      "sequences": 8,
+      "step_ms": 23.20796875,
+      "step_block_ms": [
+        23.6228125,
+        23.843229,
+        22.793125,
+        21.7436245
+      ],
+      "tokens_per_second": 344.7091852879197,
+      "calibration_ratios": [
+        1.0051653671636263,
+        1.0091614059488336,
+        0.9583280484795306,
+        1.0001811335548036
+      ],
+      "noise_floor": 0.05,
+      "arrangements": {
+        "11": {
+          "step_ms": 22.61928125,
+          "tokens_per_second": 353.6805573784534,
+          "block_ratios": [
+            0.9774181786596053,
+            1.022973198557638,
+            1.0010931960360898,
+            0.9938818170815729
+          ],
+          "median_ratio": 0.9974875065588313,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 19.76832325,
+          "tokens_per_second": 404.68783815541866,
+          "block_ratios": [
+            0.8436711775784111,
+            0.9074293825910439,
+            0.8296060779730826,
+            0.905311221290737
+          ],
+          "median_ratio": 0.8744911994345741,
+          "outcome": "faster"
+        }
+      }
+    },
+    {
+      "context": 3968,
+      "sequences": 16,
+      "step_ms": 40.28960425,
+      "step_block_ms": [
+        43.4008755,
+        39.4544795,
+        39.59925,
+        40.9799585
+      ],
+      "tokens_per_second": 397.1247744385576,
+      "calibration_ratios": [
+        0.9872741622458745,
+        1.0227699113354163,
+        1.017081030575074,
+        0.9599956769111906
+      ],
+      "noise_floor": 0.05,
+      "arrangements": {
+        "11": {
+          "step_ms": 41.22029175,
+          "tokens_per_second": 388.1583395149065,
+          "block_ratios": [
+            0.9841358917439774,
+            0.9887348154961189,
+            0.9955866186063774,
+            0.9773399674915751
+          ],
+          "median_ratio": 0.9864353536200481,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 32.185677,
+          "tokens_per_second": 497.11553372017005,
+          "block_ratios": [
+            0.8175873741206211,
+            0.7379056408679776,
+            0.7661956043825104,
+            0.8420567027094378
+          ],
+          "median_ratio": 0.7918914892515658,
+          "outcome": "faster"
+        }
+      }
+    },
+    {
+      "context": 3968,
+      "sequences": 32,
+      "step_ms": 79.86055225,
+      "step_block_ms": [
+        80.4653125,
+        79.255792,
+        85.3611045,
+        78.922021
+      ],
+      "tokens_per_second": 400.69845622686637,
+      "calibration_ratios": [
+        1.0050283033449972,
+        1.0781320373405643,
+        0.9595575933533053,
+        1.05978817369616
+      ],
+      "noise_floor": 0.07813203734056429,
+      "arrangements": {
+        "11": {
+          "step_ms": 80.2298855,
+          "tokens_per_second": 398.8538659948605,
+          "block_ratios": [
+            0.999848820691489,
+            1.0131739924719296,
+            0.9743250314138725,
+            0.972357275363192
+          ],
+          "median_ratio": 0.9870869260526807,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 66.180302,
+          "tokens_per_second": 483.5275608140924,
+          "block_ratios": [
+            0.8176551728573668,
+            0.7751637341826827,
+            0.8195677451645316,
+            0.8084992135520646
+          ],
+          "median_ratio": 0.8130771932047156,
+          "outcome": "faster"
+        }
+      }
+    },
+    {
+      "context": 3968,
+      "sequences": 64,
+      "step_ms": 163.513927,
+      "step_block_ms": [
+        158.4560625,
+        162.091604,
+        168.8701045,
+        164.93625
+      ],
+      "tokens_per_second": 391.4039689108561,
+      "calibration_ratios": [
+        0.9997219260702,
+        1.021295828499544,
+        0.9888611337952953,
+        0.991474481807365
+      ],
+      "noise_floor": 0.05,
+      "arrangements": {
+        "11": {
+          "step_ms": 165.871219,
+          "tokens_per_second": 385.84150032682885,
+          "block_ratios": [
+            1.0453703955312237,
+            0.9924527540304292,
+            1.0009114890008668,
+            1.0458133391051248
+          ],
+          "median_ratio": 1.0231409422660454,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 134.34711425,
+          "tokens_per_second": 476.37792860146976,
+          "block_ratios": [
+            0.7755977479073697,
+            0.9138778759683825,
+            0.785621719098255,
+            0.8119519730177412
+          ],
+          "median_ratio": 0.7987868460579981,
+          "outcome": "faster"
+        }
+      }
+    },
+    {
+      "context": 0,
+      "sequences": 32,
+      "step_ms": 60.156437249999996,
+      "step_block_ms": [
+        58.281625,
+        60.309833,
+        60.0030415,
+        62.792
+      ],
+      "tokens_per_second": 531.946396143997,
+      "calibration_ratios": [
+        0.9997390515449767,
+        0.9662510174750443,
+        0.9758522740884726,
+        0.9296490157981908
+      ],
+      "noise_floor": 0.07035098420180919,
+      "arrangements": {
+        "11": {
+          "step_ms": 59.3702185,
+          "tokens_per_second": 538.9907736317325,
+          "block_ratios": [
+            0.9795296747484302,
+            0.9967623811156016,
+            0.974233427472808,
+            0.9731539072109876
+          ],
+          "median_ratio": 0.976881551110619,
+          "outcome": "inconclusive"
+        },
+        "8": {
+          "step_ms": 45.24828125,
+          "tokens_per_second": 707.2091826692313,
+          "block_ratios": [
+            0.7714281916171828,
+            0.732255236454151,
+            0.7273485110375821,
+            0.7568221731494549
+          ],
+          "median_ratio": 0.744538704801803,
+          "outcome": "faster"
+        }
+      }
+    }
+  ],
+  "workloads": [
+    {
+      "context": 64,
+      "sequences": 1,
+      "share": null
+    },
+    {
+      "context": 64,
+      "sequences": 2,
+      "share": null
+    },
+    {
+      "context": 64,
+      "sequences": 4,
+      "share": null
+    },
+    {
+      "context": 64,
+      "sequences": 8,
+      "share": -0.41110504941219683
+    },
+    {
+      "context": 64,
+      "sequences": 16,
+      "share": 0.01260816796699321
+    },
+    {
+      "context": 64,
+      "sequences": 32,
+      "share": -0.03512699170847989
+    },
+    {
+      "context": 64,
+      "sequences": 64,
+      "share": 0.011130357859211808
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "share": null
+    },
+    {
+      "context": 1024,
+      "sequences": 2,
+      "share": null
+    },
+    {
+      "context": 1024,
+      "sequences": 4,
+      "share": null
+    },
+    {
+      "context": 1024,
+      "sequences": 8,
+      "share": 0.11805520959973266
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "share": -0.04993776429859715
+    },
+    {
+      "context": 1024,
+      "sequences": 32,
+      "share": 0.02668323374307574
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "share": -0.002047674657274152
+    },
+    {
+      "context": 3968,
+      "sequences": 1,
+      "share": null
+    },
+    {
+      "context": 3968,
+      "sequences": 2,
+      "share": null
+    },
+    {
+      "context": 3968,
+      "sequences": 4,
+      "share": null
+    },
+    {
+      "context": 3968,
+      "sequences": 8,
+      "share": 0.02001846428178505
+    },
+    {
+      "context": 3968,
+      "sequences": 16,
+      "share": 0.065180642210011
+    },
+    {
+      "context": 3968,
+      "sequences": 32,
+      "share": 0.06908238843995947
+    },
+    {
+      "context": 3968,
+      "sequences": 64,
+      "share": -0.11500710471799246
+    },
+    {
+      "context": 0,
+      "sequences": 32,
+      "share": 0.09049687496277962
+    }
+  ],
+  "analysis": {
+    "share_from_16": {
+      "minimum": -0.11500710471799246,
+      "median": 0.011869262913102509,
+      "maximum": 0.09049687496277962,
+      "workloads": 10
+    },
+    "hypothesis": true,
+    "consequence": false,
+    "slower_workloads": [],
+    "projections_ms": {
+      "5": 69.90368575000001,
+      "11": 70.25388475,
+      "8": 43.210192750000004
+    },
+    "projection_share": -0.013119264683718584
+  },
+  "stage_means_ms": {
+    "FP32 GQA/5": 20.696467,
+    "argmax finish/5": 0.003719,
+    "argmax partials/5": 0.11678125,
+    "attention RMSNorm/5": 0.00767725,
+    "down projection/5": 13.25007325,
+    "embedding/5": 0.00827075,
+    "fused MLP residual/RMSNorm/5": 0.24251974999999998,
+    "fused QKV/RoPE/cache/5": 0.13750025,
+    "fused SiLU/multiply/5": 0.76953125,
+    "fused attention residual/RMSNorm/5": 0.24122875,
+    "gate projection/5": 14.9661765,
+    "output projection/5": 3.20321825,
+    "packed QKV projection/5": 4.14017575,
+    "token buffer map/5": 0.00193725,
+    "token buffer unmap/5": 0.0017815,
+    "up projection/5": 14.9181775,
+    "vocabulary projection/5": 19.425864500000003,
+    "winner buffer map/5": 0.002312,
+    "winner buffer unmap/5": 0.00173975,
+    "GPU active total/5": 93.35652124999999,
+    "GPU enclosing span/5": 94.66489575,
+    "Metal submission intervals/5": 9.04529275,
+    "FP32 GQA/11": 21.3005095,
+    "argmax finish/11": 0.0037185,
+    "argmax partials/11": 0.11856249999999999,
+    "attention RMSNorm/11": 0.00779175,
+    "down projection/11": 13.21371675,
+    "embedding/11": 0.008344,
+    "fused MLP residual/RMSNorm/11": 0.29443825,
+    "fused QKV/RoPE/cache/11": 0.13919825,
+    "fused SiLU/multiply/11": 0.7763015,
+    "fused attention residual/RMSNorm/11": 0.25032275,
+    "gate projection/11": 15.005104,
+    "output projection/11": 3.17808375,
+    "packed QKV projection/11": 4.09881375,
+    "token buffer map/11": 0.0019585,
+    "token buffer unmap/11": 0.0017915000000000001,
+    "up projection/11": 14.975375,
+    "vocabulary projection/11": 19.782791500000002,
+    "winner buffer map/11": 0.00231225,
+    "winner buffer unmap/11": 0.0017707500000000002,
+    "GPU active total/11": 97.69813049999999,
+    "GPU enclosing span/11": 99.499469,
+    "Metal submission intervals/11": 9.37206425,
+    "FP32 GQA/8": 20.43817725,
+    "argmax finish/8": 0.0036769999999999997,
+    "argmax partials/8": 0.11698975,
+    "attention RMSNorm/8": 0.00762525,
+    "down projection/8": 5.993595,
+    "embedding/8": 0.0083125,
+    "fused MLP residual/RMSNorm/8": 0.24650875,
+    "fused QKV/RoPE/cache/8": 0.13186475,
+    "fused SiLU/multiply/8": 0.7687195,
+    "fused attention residual/RMSNorm/8": 0.2379255,
+    "gate projection/8": 7.770939500000001,
+    "output projection/8": 1.5156049999999999,
+    "packed QKV projection/8": 2.02571975,
+    "token buffer map/8": 0.0019475,
+    "token buffer unmap/8": 0.00190625,
+    "up projection/8": 7.90773975,
+    "vocabulary projection/8": 17.996593750000002,
+    "winner buffer map/8": 0.002292,
+    "winner buffer unmap/8": 0.001771,
+    "GPU active total/8": 65.74826825,
+    "GPU enclosing span/8": 66.69038549999999,
+    "Metal submission intervals/8": 8.707555249999999
+  },
+  "token_differences": [
+    {
+      "context": 64,
+      "sequences": 1,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 1,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 1,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 2,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 2,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 2,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 4,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 4,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 4,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 8,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 8,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 8,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 16,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 16,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 16,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 1
+    },
+    {
+      "context": 64,
+      "sequences": 32,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 32,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 32,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 1
+    },
+    {
+      "context": 64,
+      "sequences": 64,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 64,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 64,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 2
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 2,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 2,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 2,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 4,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 4,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 4,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 8,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 8,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 8,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 32,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 32,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 32,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 1,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 1,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 1,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 2,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 2,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 2,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 4,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 4,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 4,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 8,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 8,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 8,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 16,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 16,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 16,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 32,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 32,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 32,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 64,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 64,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 64,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 0,
+      "sequences": 32,
+      "block": 0,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 0,
+      "sequences": 32,
+      "block": 0,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 0,
+      "sequences": 32,
+      "block": 0,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 0,
+      "sequences": 32,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 0,
+      "sequences": 32,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 0,
+      "sequences": 32,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 64,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 64,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 64,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 32,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 32,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 32,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 16,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 16,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 16,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 8,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 8,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 8,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 4,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 4,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 4,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 2,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 2,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 2,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 1,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 1,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 1,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 32,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 32,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 32,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 8,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 8,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 8,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 4,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 4,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 4,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 2,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 2,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 2,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 64,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 64,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 64,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 2
+    },
+    {
+      "context": 64,
+      "sequences": 32,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 32,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 32,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 1
+    },
+    {
+      "context": 64,
+      "sequences": 16,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 16,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 16,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 1
+    },
+    {
+      "context": 64,
+      "sequences": 8,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 8,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 8,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 4,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 4,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 4,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 2,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 2,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 2,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 1,
+      "block": 1,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 1,
+      "block": 1,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 1,
+      "block": 1,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 0,
+      "sequences": 32,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 0,
+      "sequences": 32,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 0,
+      "sequences": 32,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 64,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 64,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 64,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 32,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 32,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 32,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 16,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 16,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 16,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 8,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 8,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 8,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 4,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 4,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 4,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 2,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 2,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 2,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 1,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 1,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 1,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 32,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 32,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 32,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 8,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 8,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 8,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 4,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 4,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 4,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 2,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 2,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 2,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 64,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 64,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 64,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 2
+    },
+    {
+      "context": 64,
+      "sequences": 32,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 32,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 32,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 1
+    },
+    {
+      "context": 64,
+      "sequences": 16,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 16,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 16,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 1
+    },
+    {
+      "context": 64,
+      "sequences": 8,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 8,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 8,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 4,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 4,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 4,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 2,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 2,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 2,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 1,
+      "block": 2,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 1,
+      "block": 2,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 1,
+      "block": 2,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 1,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 1,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 1,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 2,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 2,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 2,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 4,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 4,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 4,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 8,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 8,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 8,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 16,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 16,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 16,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 1
+    },
+    {
+      "context": 64,
+      "sequences": 32,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 32,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 32,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 1
+    },
+    {
+      "context": 64,
+      "sequences": 64,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 64,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 64,
+      "sequences": 64,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 2
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 1,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 2,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 2,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 2,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 4,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 4,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 4,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 8,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 8,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 8,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 16,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 32,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 32,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 32,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 1024,
+      "sequences": 64,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 1,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 1,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 1,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 2,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 2,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 2,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 4,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 4,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 4,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 8,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 8,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 8,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 16,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 16,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 16,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 32,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 32,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 32,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 64,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 64,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 3968,
+      "sequences": 64,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    },
+    {
+      "context": 0,
+      "sequences": 32,
+      "block": 3,
+      "arrangement": 5,
+      "differing": 0
+    },
+    {
+      "context": 0,
+      "sequences": 32,
+      "block": 3,
+      "arrangement": 11,
+      "differing": 0
+    },
+    {
+      "context": 0,
+      "sequences": 32,
+      "block": 3,
+      "arrangement": 8,
+      "differing": 0
+    }
+  ]
+}

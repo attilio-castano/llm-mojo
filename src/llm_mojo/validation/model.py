@@ -4,6 +4,7 @@ from collections import Counter
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 
 import numpy as np
@@ -25,7 +26,8 @@ def environment():
     return {k:v for k,v in os.environ.items() if k!='MODULAR_DEBUG'}
 
 
-def build(binary, generation=False):
+def build(binary, generation=False, projection=None):
+    """Compile the model driver or generator; projection selects the decode arrangement (-D DECODE_PROJECTION)."""
     binary=Path(binary).resolve()
     receipt=Path(str(binary)+'.provenance.json')
     if binary.exists() or receipt.exists():
@@ -35,11 +37,25 @@ def build(binary, generation=False):
         raise ValueError('model numerical build requires clean source')
     binary.parent.mkdir(parents=True,exist_ok=True)
     entry='src/llm_mojo/cli/generate_cli.mojo' if generation else 'tests/model_driver.mojo'
-    command=[environment_tool('mojo'),'build','-I','src','-I','tests',entry,'-o',str(binary)]
+    command=[environment_tool('mojo'),'build','-I','src','-I','tests']
+    if projection is not None:
+        command+=['-D',f'DECODE_PROJECTION={int(projection)}']
+    command+=[entry,'-o',str(binary)]
     subprocess.run(command,cwd=repository_root(),env=environment(),check=True)
     if source_identity()!=source:
         raise ValueError('source changed during model compilation')
-    write(receipt,dict(kind='model-development-build',source=source,command=command,binary_sha256=sha(binary)))
+    # The arrangement the build decodes with: the define, or the source default it compiled.
+    write(receipt,dict(kind='model-development-build',source=source,command=command,binary_sha256=sha(binary),
+                       decode_projection=int(projection) if projection is not None else source_decode_projection()))
+
+
+def source_decode_projection(plan=None):
+    """The decode projection arrangement a build without -D DECODE_PROJECTION uses (models/qwen2/plan.mojo)."""
+    plan=Path(plan) if plan is not None else repository_root()/'src/llm_mojo/models/qwen2/plan.mojo'
+    found=re.findall(r'get_defined_int\["DECODE_PROJECTION", default=(\d+)\]',plan.read_text())
+    if len(found)!=1:
+        raise ValueError('the plan does not declare exactly one decode projection default')
+    return int(found[0])
 
 
 def verify_build(binary):
@@ -400,7 +416,7 @@ def numerical_diagnostic(actual, expected):
         zero_reference_nonzero_rows=int(np.sum((norm==0)&(error!=0))),exact=actual.tobytes()==expected.tobytes())
 
 
-def runtime_specification(output, generations=None, mixed_only=False):
+def runtime_specification(output, generations=None, mixed_only=False, decode_only=False):
     declaration=json.loads((repository_root()/'tests/fixtures/model_runtime.json').read_text())
     cases=[]
     if generations is not None:
@@ -430,6 +446,11 @@ def runtime_specification(output, generations=None, mixed_only=False):
         schedule=[1]*length if length<=17 else [length-17,16,1]
         cases.append(dict(name=f'length-{length}',ids=ids(length),schedule=schedule,
             configurations=[0]*len(schedule),full_configurations=[0]))
+    if decode_only:
+        # Only the length cases, whose calls are single decode rows or end with one.
+        declaration['prompts']=[]
+        write(output,dict(declaration=declaration,cases=cases,measurements=[]))
+        return
     for w in declaration['measurements']:
         prefix=w['total']-w['rows']
         for candidate in w['candidates']:
@@ -722,6 +743,39 @@ def lifecycle_study(binary, output, prepared=None):
         prepared_manifest_sha256=sha(prepared/'manifest.json'),stdout=result.stdout))
 
 
+def batch_study(binary, output, prepared=None, steps=16):
+    """Eight real conversations decode together and alone on the checkpoint; tokens, logits and K/V agree."""
+    from llm_mojo.models.qwen2.tokenizer_assets import ensure_prepared
+    binary=Path(binary).resolve()
+    receipt=verify_build(binary)
+    prepared,_=verify_prepared(prepared)
+    tables=ensure_prepared(download=False)
+    result=subprocess.run([str(binary),'--batch',str(prepared),str(tables),str(steps)],cwd=repository_root(),
+        env=environment(),capture_output=True,text=True,check=True)
+    if ('model device Apple M4 Pro backend metal' not in result.stdout or
+            'batch passed:' not in result.stdout): raise ValueError('missing batched decode completion')
+    verify_build(binary)
+    write(output,dict(kind='model-runtime-batch-v1',build=receipt,steps=steps,
+        prepared_manifest_sha256=sha(prepared/'manifest.json'),tokenizer_sha256=sha(tables),stdout=result.stdout))
+
+
+def decode_projection(stdout):
+    """The decode projection arrangement a model driver run reports."""
+    reported=[line.split()[-1] for line in stdout.splitlines() if line.startswith('decode projection ')]
+    if len(reported)!=1:
+        raise ValueError('the model driver did not report its decode projection')
+    return int(reported[0])
+
+
+def reordered(projection):
+    """Arrangements 8-10 sum in another order than the one-row kernel (kernels/linear.mojo)."""
+    return 8<=projection<=10
+
+
+def _bf16_values(path):
+    return (np.fromfile(path,dtype='<u2').astype(np.uint32)<<16).view(np.float32)
+
+
 def decode_parity(binary, output, prepared=None, prefix=53, steps=32):
     """Teacher-forced 24-layer decode: the Fast single-row route against baseline, byte for byte.
 
@@ -729,7 +783,9 @@ def decode_parity(binary, output, prepared=None, prefix=53, steps=32):
     fixed token IDs one row at a time, so every call sees identical inputs. The Fast run
     decodes with configuration 26, GPU argmax, buffer swapping and residual/RMSNorm
     fusion. Every captured boundary of every call must match: hidden states, final
-    norm, logits and all K/V. Only hashes are kept; the captures are discarded.
+    norm, logits and all K/V. Only hashes are kept; the captures are discarded. The
+    build must use an exact projection arrangement, whose projections equal the
+    baseline's; decode-comparison measures reordered ones.
     """
     import hashlib
     import tempfile
@@ -751,9 +807,12 @@ def decode_parity(binary, output, prepared=None, prefix=53, steps=32):
                                   capture_output=True,text=True,check=True)
             if 'model device Apple M4 Pro backend metal' not in result.stdout:
                 raise ValueError('decode parity requires the measured Apple M4 Pro on Metal')
+            if reordered(decode_projection(result.stdout)):
+                raise ValueError('decode parity needs an exact projection arrangement: build the model with '
+                                 '--decode-projection 5, or compare a reordered one with decode-comparison')
             calls=[line.split() for line in result.stdout.splitlines() if line.startswith('call ')]
             files={str(p.relative_to(root)):sha(p) for p in sorted(root.rglob('*')) if p.is_file()}
-            runs[mode]=dict(calls=[' '.join(c[:-2]) for c in calls],
+            runs[mode]=dict(calls=[' '.join(c[:-2]) for c in calls],projection=decode_projection(result.stdout),
                             configurations=[int(c[-1]) for c in calls],files=files)
     fast,baseline=runs['fast'],runs['baseline']
     if fast['configurations']!=[0]+[FUSED_DECODE]*steps or baseline['configurations']!=[0]*(steps+1):
@@ -766,12 +825,80 @@ def decode_parity(binary, output, prepared=None, prefix=53, steps=32):
         raise ValueError(f'{len(changed)} captured boundaries differ, e.g. {changed[:4]}')
     verify_build(binary)
     captures=json.dumps(fast['files'],sort_keys=True).encode()
-    write(output,dict(kind='model-decode-parity-v1',build=receipt,
+    write(output,dict(kind='model-decode-parity-v1',build=receipt,decode_projection=fast['projection'],
         prepared_manifest_sha256=sha(prepared/'manifest.json'),prefix=prefix,steps=steps,
         token_ids=ids,schedule=schedule,calls=fast['calls'],
         configurations={mode:run['configurations'] for mode,run in runs.items()},
         captured_files=len(fast['files']),captures_sha256=hashlib.sha256(captures).hexdigest()))
     print('decode parity:',steps,'Fast decode calls match baseline in',len(fast['files']),'captured files')
+
+
+def decode_comparison(reference, binary, output, prepared=None, prefix=53, steps=32):
+    """Teacher-forced 24-layer Fast decode in a reordered arrangement against an exact one.
+
+    Both builds run decode parity's fixed schedule in Fast mode, so every call sees
+    identical inputs. For each decode call the receipt records, for the logits, the
+    final norm, every layer's output and the appended K/V: the largest absolute
+    difference, the relative RMS difference and the share of BF16 values that
+    differ. It also records whether the selected tokens agree. The captures are
+    discarded.
+    """
+    import tempfile
+    reference,binary,output=(Path(p).resolve() for p in (reference,binary,output))
+    if output.exists() or not output.parent.is_dir():
+        raise ValueError('decode comparison receipt must be a new file in an existing directory')
+    builds=dict(reference=verify_build(reference),candidate=verify_build(binary))
+    prepared,_=verify_prepared(prepared)
+    ids=[(i*103+42)%151643 for i in range(prefix+steps)]
+    schedule=[prefix]+[1]*steps
+    groups=dict(logits=['logits.bin'],final_norm=['final_norm.bin'],
+                layer_outputs=[f'hidden_{i}.bin' for i in range(1,LAYERS+1)],
+                kv_append=[f'append_{kind}_{i}.bin' for kind in ('key','value') for i in range(LAYERS)])
+    runs,calls={},[]
+    with tempfile.TemporaryDirectory(prefix='llm-mojo-decode-comparison-') as scratch:
+        for name,path in (('reference',reference),('candidate',binary)):
+            root=Path(scratch)/name
+            for call in range(len(schedule)):
+                (root/f'call_{call}').mkdir(parents=True)
+            result=subprocess.run([str(path),str(prepared),','.join(map(str,ids)),','.join(map(str,schedule)),
+                                   'fast',str(root)],cwd=repository_root(),env=environment(),
+                                  capture_output=True,text=True,check=True)
+            if 'model device Apple M4 Pro backend metal' not in result.stdout:
+                raise ValueError('decode comparison requires the measured Apple M4 Pro on Metal')
+            lines=[line.split() for line in result.stdout.splitlines() if line.startswith('call ')]
+            runs[name]=dict(root=root,projection=decode_projection(result.stdout),
+                            tokens=[int(c[3]) for c in lines],configurations=[int(c[-1]) for c in lines])
+        exact,candidate=runs['reference'],runs['candidate']
+        if reordered(exact['projection']) or not reordered(candidate['projection']):
+            raise ValueError('decode comparison needs an exact reference and a reordered candidate')
+        if exact['configurations']!=candidate['configurations'] or exact['configurations']!=[0]+[FUSED_DECODE]*steps:
+            raise ValueError('decode comparison did not run the Fast decode route in both builds')
+        for call in range(1,len(schedule)):
+            record=dict(call=call,reference_token=exact['tokens'][call],candidate_token=candidate['tokens'][call])
+            for group,names in groups.items():
+                a=np.concatenate([_bf16_values(exact['root']/f'call_{call}'/n) for n in names])
+                b=np.concatenate([_bf16_values(candidate['root']/f'call_{call}'/n) for n in names])
+                if a.size!=b.size or not a.size or not np.isfinite(a).all() or not np.isfinite(b).all():
+                    raise ValueError(f'incomplete or nonfinite {group} capture at call {call}')
+                difference=(b.astype(np.float64)-a.astype(np.float64))
+                record[group]=dict(max_abs=float(np.abs(difference).max()),
+                                   relative_rms=float(np.sqrt(np.mean(difference**2)/max(np.mean(a.astype(np.float64)**2),1e-300))),
+                                   differing=float(np.mean(a.view(np.uint32)!=b.view(np.uint32))))
+            calls.append(record)
+    for name,path in (('reference',reference),('candidate',binary)):
+        if verify_build(path)!=builds[name]:
+            raise ValueError('a build changed during the comparison')
+    agree=sum(c['reference_token']==c['candidate_token'] for c in calls)
+    summary={group:dict(max_abs=max(c[group]['max_abs'] for c in calls),
+                        max_relative_rms=max(c[group]['relative_rms'] for c in calls),
+                        max_differing=max(c[group]['differing'] for c in calls)) for group in groups}
+    write(output,dict(kind='model-decode-comparison-v1',builds=builds,
+        projections=dict(reference=exact['projection'],candidate=candidate['projection']),
+        prepared_manifest_sha256=sha(prepared/'manifest.json'),prefix=prefix,steps=steps,token_ids=ids,
+        schedule=schedule,tokens_agree=agree,calls=calls,summary=summary))
+    print('decode comparison: arrangement',candidate['projection'],'against',exact['projection'],':',
+          agree,'of',steps,'selected tokens agree; logits relative RMS up to',
+          f"{summary['logits']['max_relative_rms']:.3g}")
 
 
 def main():
@@ -780,16 +907,24 @@ def main():
     s=sub.add_parser('specification');s.add_argument('--output',required=True,type=Path)
     s.add_argument('--generations',type=Path)
     s.add_argument('--mixed-only',action='store_true')
+    s.add_argument('--decode-cases',action='store_true',help='only the length cases, which end in single decode rows')
     b=sub.add_parser('build');b.add_argument('--binary',required=True,type=Path)
     b.add_argument('--generation',action='store_true')
+    b.add_argument('--decode-projection',type=int,help='decode projection arrangement (default: the source default)')
     g=sub.add_parser('generate');g.add_argument('--binary',required=True,type=Path)
     g.add_argument('--output',required=True,type=Path);g.add_argument('--prepared',type=Path)
     g.add_argument('--policy',default='fast',choices=GENERATION_MODES)
     p=sub.add_parser('decode-parity');p.add_argument('--binary',required=True,type=Path)
     p.add_argument('--output',required=True,type=Path);p.add_argument('--prepared',type=Path)
     p.add_argument('--steps',type=int,default=32)
+    q=sub.add_parser('decode-comparison');q.add_argument('--reference-binary',required=True,type=Path)
+    q.add_argument('--binary',required=True,type=Path);q.add_argument('--output',required=True,type=Path)
+    q.add_argument('--prepared',type=Path);q.add_argument('--steps',type=int,default=32)
     l=sub.add_parser('lifecycle');l.add_argument('--binary',required=True,type=Path)
     l.add_argument('--output',required=True,type=Path);l.add_argument('--prepared',type=Path)
+    t=sub.add_parser('batch');t.add_argument('--binary',required=True,type=Path)
+    t.add_argument('--output',required=True,type=Path);t.add_argument('--prepared',type=Path)
+    t.add_argument('--steps',type=int,default=16)
     d=sub.add_parser('diagnose');d.add_argument('--binary',required=True,type=Path)
     d.add_argument('--reference',required=True,type=Path);d.add_argument('--output',required=True,type=Path)
     d.add_argument('--prepared',type=Path)
@@ -808,11 +943,14 @@ def main():
     o.add_argument('--reference',required=True,type=Path);o.add_argument('--output',required=True,type=Path)
     o.add_argument('--prepared',type=Path)
     args=parser.parse_args()
-    if args.command=='specification':runtime_specification(args.output,args.generations,args.mixed_only)
-    elif args.command=='build':build(args.binary,args.generation)
+    if args.command=='specification':runtime_specification(args.output,args.generations,args.mixed_only,args.decode_cases)
+    elif args.command=='build':build(args.binary,args.generation,args.decode_projection)
     elif args.command=='generate':generation_study(args.binary,args.output,args.prepared,args.policy)
     elif args.command=='lifecycle':lifecycle_study(args.binary,args.output,args.prepared)
+    elif args.command=='batch':batch_study(args.binary,args.output,args.prepared,args.steps)
     elif args.command=='decode-parity':decode_parity(args.binary,args.output,args.prepared,steps=args.steps)
+    elif args.command=='decode-comparison':
+        decode_comparison(args.reference_binary,args.binary,args.output,args.prepared,steps=args.steps)
     elif args.command=='diagnose':diagnose(args.binary,args.reference,args.output,args.prepared,args.policy)
     elif args.command=='benchmark':benchmark(args.binary,args.specification,args.output,args.prepared)
     elif args.command=='consistency':evaluate_consistency(args.binary,args.reference,args.output,args.length,args.prepared)

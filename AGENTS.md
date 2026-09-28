@@ -32,6 +32,11 @@ Code, numerical tests, profiling, and explanations are part of the project.
 - `tests/`: correctness tests and independent oracle generators.
 - `studies/`: topic explanations, compact measurements, and graphs.
 
+Imports follow the [dependency direction](docs/cli.md#dependency-direction):
+wiring and tooling import models, models import `serving/`, and `serving/`
+imports `layers/` and `kernels/`; `runtime/` serves every package and imports
+no model. `tests/test_package_boundaries.py` enforces it.
+
 Add structure only when real code needs it. Do not create speculative runtime,
 kernel, benchmark, or experiment hierarchies in advance.
 Extend existing studies and measurement tools; a new parameter choice usually

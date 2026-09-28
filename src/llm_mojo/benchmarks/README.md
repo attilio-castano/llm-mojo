@@ -470,3 +470,73 @@ The receipt distinguishes successful graph replay, the specific unsupported
 builder error, and unexpected correctness/runtime failures. Graph support alone
 would still require verifying actual command-buffer grouping before measuring
 Qwen. This gate does not upgrade or modify installed MAX dependencies.
+
+### Batch-size study
+
+The [batch-size study](../../../studies/model_generation/batch-size.md)
+times decode steps of 1 to 64 sequences at three contexts and one mixed batch.
+Within the four-block procedure it pairs tile 8, tile 16 and an observed arm
+against tile 4, and it traces three batch sizes at 1,024 cached tokens. From a
+clean checkout on M4 Pro:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-build --prepared /absolute/prepared-v1 --output /private/tmp/batch-size-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-collect --build /private/tmp/batch-size-build --output /private/tmp/batch-size-timings
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-capture --build /private/tmp/batch-size-build --output /private/tmp/batch-size-traces
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-archive --timings /private/tmp/batch-size-timings --traces /private/tmp/batch-size-traces --output studies/model_generation
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --output studies/model_generation
+uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_profile batch-size-plot --output studies/model_generation
+```
+
+The [exact batched projections](../../../studies/model_generation/batch-projections.md)
+(1d) reuse the matrix with `--study projections`. The screen pairs arrangements
+3–6 against arrangement 0 (tile 4), and traces capture 64 sequences at 1,024
+cached tokens for each arrangement. `batch-size-confirm` applies the frozen rule
+to the screen and runs the independent confirmation of the selected arrangement.
+It refuses when none qualifies, and the archive then holds no confirmation:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-build --study projections --prepared /absolute/prepared-v1 --output /private/tmp/batch-projections-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-collect --study projections --build /private/tmp/batch-projections-build --output /private/tmp/batch-projections-screen
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-confirm --build /private/tmp/batch-projections-build --screen /private/tmp/batch-projections-screen --output /private/tmp/batch-projections-confirmation
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-capture --study projections --build /private/tmp/batch-projections-build --output /private/tmp/batch-projections-traces
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-archive --study projections --timings /private/tmp/batch-projections-screen --traces /private/tmp/batch-projections-traces --confirmation /private/tmp/batch-projections-confirmation --output studies/model_generation
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --study projections --output studies/model_generation
+uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_profile batch-size-plot --study projections --output studies/model_generation
+```
+
+The [reordered batched projections](../../../studies/model_generation/batch-reordered.md)
+(1e) reuse the matrix with `--study reordered`, which screens arrangements 7–10
+against arrangement 5. Collection first records an accuracy census: every
+arrangement's error against FP64 sums at the five decode projection shapes.
+The frozen rule reads that census as well as the timings. If the confirmed
+arrangement changes the summation order, `batch-size-diagnose` runs the
+teacher-forced and HF comparisons against arrangement 5; the archive then needs
+`--diagnostics`:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-build --study reordered --prepared /absolute/prepared-v1 --output /private/tmp/batch-reordered-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-collect --study reordered --build /private/tmp/batch-reordered-build --output /private/tmp/batch-reordered-screen
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-confirm --study reordered --build /private/tmp/batch-reordered-build --screen /private/tmp/batch-reordered-screen --output /private/tmp/batch-reordered-confirmation
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-capture --study reordered --build /private/tmp/batch-reordered-build --output /private/tmp/batch-reordered-traces
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-diagnose --screen /private/tmp/batch-reordered-screen --confirmation /private/tmp/batch-reordered-confirmation --prepared /absolute/prepared-v1 --output /private/tmp/batch-reordered-diagnostics
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-archive --study reordered --timings /private/tmp/batch-reordered-screen --traces /private/tmp/batch-reordered-traces --confirmation /private/tmp/batch-reordered-confirmation --diagnostics /private/tmp/batch-reordered-diagnostics --output studies/model_generation
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --study reordered --output studies/model_generation
+uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_profile batch-size-plot --study reordered --output studies/model_generation
+```
+
+The [addressing check](../../../docs/batched-decode-plan.md#1f-addressing-check)
+(1f) reuses the matrix with `--study addressing`. It pairs arrangement 5 with
+arrangement 11, which is 5 with raw-pointer loads, and with arrangement 8, and
+selects nothing:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-build --study addressing --prepared /absolute/prepared-v1 --output /private/tmp/batch-addressing-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-collect --study addressing --build /private/tmp/batch-addressing-build --output /private/tmp/batch-addressing-screen
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-capture --study addressing --build /private/tmp/batch-addressing-build --output /private/tmp/batch-addressing-traces
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-archive --study addressing --timings /private/tmp/batch-addressing-screen --traces /private/tmp/batch-addressing-traces --output studies/model_generation
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --study addressing --output studies/model_generation
+```
+
+Its compact record keeps every screen sample and each trace's per-stage totals,
+not the traces' intervals.

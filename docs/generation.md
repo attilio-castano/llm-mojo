@@ -20,25 +20,55 @@ invariants.
 ## Native ownership
 
 `QwenModel` owns one BF16 embedding allocation, also used as the tied LM head,
-the final RMSNorm weights, 24 distinct learned decoder weight sets, and 24
-independent persistent KV caches. It owns one attention workspace, one MLP
-workspace, input and token staging, a final normalized row, next-token logits
-and the GPU argmax partial and result buffers. Clients must preserve this
-ownership; replacing internal allocations is unsupported.
+the final RMSNorm weights and 24 distinct learned decoder weight sets. It owns
+one attention workspace, one MLP workspace, input staging, one step upload
+(token IDs, then each sequence's position and block), and per sequence a final
+normalized row, next-token logits and GPU argmax partial and result buffers. Clients must preserve this ownership; replacing internal allocations
+is unsupported.
+
+KV storage belongs to the caller's `KVPool` (`serving/kv_pool.mojo`): one
+block-major BF16 allocation with persistent K and V views for each block and
+layer, laid out as the [serving plan](serving-plan.md#pool-layout) describes.
+The caller sizes it from `QwenModel.kv_geometry()` (layers, KV heads and head
+size), so the pool assumes no model.
+Each call receives a `StepBatch` (`serving/batch.mojo`) naming the tokens, their
+positions and the blocks they write, alongside its `ExecutionPlan`. Every
+sequence is held in a single block of the full context. A configuration 26 call
+decodes up to `max_sequences` sequences at once, one token each, with the same
+launches as one sequence; `greedy_tokens` returns one token per sequence, and
+each sequence's logits, token and appended K/V equal decoding it alone. Every
+other call covers one sequence. See the [batched decode plan](batched-decode-plan.md).
+Decode projections use arrangement 8, for one sequence and for many: each SIMD
+group computes four rows and four output columns, and each lane sums four
+adjacent products in every 128 inputs. That order differs from the baseline
+route's one-row kernel, so Fast decode's results can differ from configuration
+0's in their last bits, while each batched row still equals decoding that
+sequence alone ([decode projection order](model.md#decode-projection-order)).
+On M4 Pro, 64 sequences per step give 3.8–10.7 times one sequence's
+throughput, depending on context. The
+[batch-size study](../studies/model_generation/batch-size.md) explains why tile
+4 levelled off, the
+[batched projection study](../studies/model_generation/batch-projections.md)
+measures arrangement 5, which replaced it, and the
+[reordered projection study](../studies/model_generation/batch-reordered.md)
+measures arrangement 8, which replaced arrangement 5.
 
 The decoder requires its input and output storage not to alias. Multi-row calls
 copy each intermediate decoder output into the separate input buffer before the
-next layer. Single-row Fast calls instead swap the owners of the input and MLP
+next layer. Fast decode calls instead swap the owners of the input and MLP
 output buffers, which removes 23 copies without changing arithmetic. The last
 layer does not swap, so the final normalization reads the MLP output. There is
 no host synchronization between layers in normal execution.
 
-Every call preflights all layers, token IDs, shapes, allocation extents, row
-capacity, cache lengths and configuration requirements before the first model
-dispatch. The host token upload synchronizes. Layer work then uses one ordered
-Metal stream. Cache lengths count submitted tokens; greedy readback waits for
-completion. Submission/readback failure invalidates the model. Reset marks the
-model invalid before waiting and restores validity only after synchronization.
+Every call validates the step batch (offsets, contiguous positions, write slots,
+block IDs, token IDs and logit rows) and preflights all layers, shapes,
+allocation extents, pool geometry, row capacity, every layer's cache length and
+configuration requirements before the first model dispatch. The host step
+upload synchronizes. Layer work then uses one ordered Metal stream. Cache
+lengths count submitted tokens; greedy readback waits for completion.
+Submission/readback failure invalidates the model. Reset marks the model invalid
+before waiting and restores validity only after synchronization; `KVPool.reset`
+separately clears logical cache lengths.
 
 The runtime processes only new token rows. `submitted_rows` counts submitted
 layer rows, and the diagnostic driver reports it with logical cache length.
@@ -54,14 +84,16 @@ lookup: split8 configuration 2 at
 16/1024, 16/4096, 15/256 and 17/256; configuration 3, combining split8 and
 larger projections, at 64/1024, 64/4096, 256/1024, 256/4096, 65/4096 and
 255/4096; configuration 21 at 16/256. Pairs denote incoming rows / total
-cached rows. Single-row M4 Pro calls use configuration 26: exact QKV/RoPE/cache
-fusion plus SiLU/multiply fusion, always together with residual/RMSNorm fusion,
-inter-layer buffer swapping and separate GPU argmax. The composed route
+cached rows. Single-row M4 Pro calls use configuration 26, the decode
+composition in `layers/decoder_layer.mojo` (`enqueue_decode_batch_layer`): exact
+QKV/RoPE/cache fusion plus SiLU/multiply fusion, always together with
+residual/RMSNorm fusion, inter-layer buffer swapping and separate GPU argmax. The composed route
 passed paired whole-token gates at histories 64, 1024 and 3968. Every other shape and device name falls
 back to configuration 0.
 Baseline 0 already includes integrated attention and optimized multi-row MLP
-7, with rowwise MLP projections for decode. Configuration 26 preserves those
-projection and attention reductions and the intermediate BF16 activation rounding.
+7, with rowwise MLP projections for decode. Configuration 26 preserves the
+attention reductions and the intermediate BF16 activation rounding; its
+projections sum in arrangement 8's order.
 
 `baseline` always selects 0. The historical `consistent` / 20 route uses FP32
 G32 attention and rowwise projections at all row counts; it remains an explicit
@@ -70,8 +102,8 @@ research mode. Diagnostic drivers also accept an explicit retained configuration
 layers for a call.
 
 A plan cannot express the unpromoted compositions from the decode studies:
-configuration 26 always carries all three decode features and exactly one row,
-and no other configuration carries any. Those study arms, configuration 25 and
+configuration 26 always carries all three decode features and one row per
+sequence, and no other configuration carries any. Those study arms, configuration 25 and
 the `auto`, `candidate`, `unfused`, `fusion`, `combined` and per-arm policies
 exist through `edb610a`. Default profiling follows current Fast; historical
 trace replay uses the route recorded in each capture's provenance.
@@ -178,11 +210,13 @@ predictions agree with HF on 191 of 192 generated choices; the exception is an
 exact HF top-logit tie. These are bounded development observations, not a
 general model-quality or exact trajectory-equivalence claim.
 
-`decode-parity` checks the Fast decode route against baseline on the real
-24-layer model:
+`decode-parity` checks the Fast decode composition against baseline on the
+real 24-layer model. It needs an exact projection arrangement (0–7 or 11), whose
+projections equal the baseline's, so that only the fusions could differ. The
+default, arrangement 8, is reordered, so the parity build selects arrangement 5:
 
 ```sh
-uv run --locked python -m llm_mojo.validation.model build --binary build/parity-model
+uv run --locked python -m llm_mojo.validation.model build --decode-projection 5 --binary build/parity-model
 uv run --locked python -m llm_mojo.validation.model decode-parity --binary build/parity-model --output build/decode-parity.json
 ```
 
@@ -190,7 +224,35 @@ Both runs prefill the same 53 fixed tokens with configuration 0 and then decode
 32 fixed tokens one row at a time, so every call sees the same input. Every
 call's hidden states, final norm, logits and K/V must be byte-identical. The
 receipt keeps hashes only. `tests/test_decode_route.mojo` runs the same
-comparison on three synthetic layers in default validation.
+comparison on three synthetic layers in default validation with arrangement 5,
+and checks that the default arrangement takes the same route with the same
+launches and leaves the unfused scratch untouched.
+
+`build --decode-projection N` compiles the driver with another decode
+arrangement; without it, the build uses the source default, arrangement 8. The
+receipt records the arrangement, and the driver prints the one it runs.
+`decode-comparison` runs decode parity's schedule on an exact build and a
+reordered build (arrangements 8–10), such as the default. It records each
+call's logit, final norm, layer output and K/V differences, and whether the
+selected tokens agree:
+
+```sh
+uv run --locked python -m llm_mojo.validation.model build --binary build/default-model
+uv run --locked python -m llm_mojo.validation.model decode-comparison --reference-binary build/parity-model --binary build/default-model --output build/decode-comparison.json
+```
+
+`batch` checks batched decode on the real model. Eight conversations of 11 to
+3,301 prompt tokens are prefilled into their own blocks, then decode 16 steps
+together, eight sequences per step, and again one at a time. Every token, logit
+and K/V byte must agree:
+
+```sh
+uv run --locked python -m llm_mojo.validation.model build --binary build/batch-model
+uv run --locked python -m llm_mojo.validation.model batch --binary build/batch-model --output build/batch.json
+```
+
+`tests/test_decode_batch.mojo` runs the same comparison for 2 to 32 sequences on
+three fixture layers in default validation.
 
 ## History
 

@@ -34,7 +34,7 @@ llm-mojo chat ──► Python checks the assets ──► exec the native chat
 
 [`chat`](../src/llm_mojo/cli/app.py) resolves the options with
 [`resolve_run`](../src/llm_mojo/configuration.py), then
-[`launch_chat`](../src/llm_mojo/runtime/launch.py) prepares the launch:
+[`launch_chat`](../src/llm_mojo/cli/launch.py) prepares the launch:
 
 - [`verify_prepared`](../src/llm_mojo/models/qwen2/assets.py) checks the size and
   SHA-256 of all 196 prepared tensors against their manifest;
@@ -54,6 +54,10 @@ terminal.
 [`QwenModel`](../src/llm_mojo/models/qwen2/model.mojo), which allocates GPU
 buffers and fills them with [`load_bf16`](../src/llm_mojo/models/qwen2/model.mojo),
 one layer at a time through [`ModelLayer.load`](../src/llm_mojo/models/qwen2/model.mojo).
+The session also creates a one-block [`KVPool`](../src/llm_mojo/serving/kv_pool.mojo),
+sized by [`QwenModel.kv_geometry`](../src/llm_mojo/models/qwen2/model.mojo):
+a single allocation holding every layer's cache, which the model reads and
+appends through per-layer views.
 
 | Tensor | Shape | Size |
 | --- | --- | ---: |
@@ -80,15 +84,18 @@ and turns it into IDs with the native byte-level BPE
 appended to the history. If the message plus the whole reply budget would not
 fit in 4,096 tokens, the turn is rejected before anything changes.
 
-The history is the source of truth. `model.length` counts how many of its tokens
-are already in the KV cache; everything after that still has to be computed.
+The history is the source of truth. `ChatSession.length()`, the length of the
+session's KV pool, counts how many of its tokens are already in the KV cache;
+everything after that still has to be computed.
 
 ## 4. Prefill: computing the new tokens
 
 The chat loop calls [`ChatSession.submit_next`](../src/llm_mojo/models/qwen2/chat.mojo)
 until the whole history is cached. Each call takes up to 256 uncached tokens
-(the chunk size) and runs [`QwenModel.forward`](../src/llm_mojo/models/qwen2/model.mojo)
-with a plan from [`fast_plan`](../src/llm_mojo/models/qwen2/plan.mojo). On Apple
+(the chunk size), describes them as a [`StepBatch`](../src/llm_mojo/serving/batch.mojo)
+(token IDs, positions and the cache rows they write) and runs
+[`QwenModel.forward`](../src/llm_mojo/models/qwen2/model.mojo) with the pool and
+a plan from [`fast_plan`](../src/llm_mojo/models/qwen2/plan.mojo). On Apple
 M4 Pro, a multi-row call uses configuration 2, 3 or 21 for the eleven measured
 row and cache sizes in
 [`fast_prefill_configuration`](../src/llm_mojo/models/qwen2/plan.mojo) and
@@ -97,14 +104,16 @@ configuration 0 otherwise. Other devices always get configuration 0.
 For a call with R new tokens, the model:
 
 1. **Checks everything first.** [`QwenModel.preflight`](../src/llm_mojo/models/qwen2/model.mojo)
-   validates the plan, the IDs, the shapes and the cache capacity before any GPU
-   work, so a bad call cannot leave half-written state.
+   validates the step batch, the plan, the IDs, the shapes, the pool and every
+   layer's cache length before any GPU work, so a bad call cannot leave
+   half-written state.
 2. **Uploads the IDs** and looks up their embedding rows with
    [`_embedding`](../src/llm_mojo/models/qwen2/model.mojo): [R] IDs become [R, 896]
    hidden states.
-3. **Runs 24 decoder layers**, each through
-   [`enqueue_decoder_layer_configuration`](../src/llm_mojo/layers/decoder_layer.mojo).
-   Every layer does the same two steps with its own weights:
+3. **Runs 24 decoder layers.** A prompt goes through
+   [`enqueue_decoder_layer_configuration`](../src/llm_mojo/layers/decoder_layer.mojo);
+   a decode call takes the composition in section 6. Every layer does the same
+   two steps with its own weights:
 
    | Attention ([`enqueue_attention_sublayer_integrated`](../src/llm_mojo/layers/attention_sublayer.mojo)) | Shape |
    | --- | --- |
@@ -132,7 +141,7 @@ For a call with R new tokens, the model:
    logits: one score per vocabulary entry.
 
 All of this is enqueued on one ordered GPU stream; the host does not wait between
-layers. Each layer's cache now holds R more tokens, and `model.length` grows by R.
+layers. Each layer's cache now holds R more tokens, and the pool's length grows by R.
 
 ## 5. Choosing the next token
 
@@ -156,12 +165,14 @@ n − 1 decode calls. Its first token is chosen from the prefill's scores, and i
 last one, a stop token or the token that reaches the limit, is chosen but only
 processed by the next turn's prefill.
 
-For one row on M4 Pro, `fast_plan` returns configuration 26, which fuses two pairs
-of steps, together with its three decode features: residual/RMSNorm fusion,
-buffer swapping and GPU argmax. Every decode call takes this route:
+For one row on M4 Pro, `fast_plan` returns configuration 26. Each layer then runs
+[`enqueue_decode_batch_layer`](../src/llm_mojo/layers/decoder_layer.mojo), a fixed
+sequence of ten kernels that takes one row per sequence and fuses two pairs of
+steps, with three decode features: residual/RMSNorm fusion, buffer swapping and
+GPU argmax. Every decode call takes this route:
 
 - **Fused kernels.** One kernel unpacks the QKV projection, applies RoPE and
-  appends to the cache ([`_enqueue_fused_decode_qkv`](../src/llm_mojo/layers/attention_sublayer.mojo)),
+  appends to the cache ([`enqueue_fused_decode_qkv_batch`](../src/llm_mojo/layers/attention_sublayer.mojo)),
   and one kernel computes SiLU(gate) × up.
 - **Residual and RMSNorm together.** [`enqueue_residual_norm`](../src/llm_mojo/kernels/residual_norm.mojo)
   adds each residual and computes the RMSNorm that follows it in one kernel:
@@ -174,10 +185,14 @@ buffer swapping and GPU argmax. Every decode call takes this route:
   the group winners), with the same rule: highest BF16 score, lowest ID on ties,
   non-finite rejected. The host reads three numbers instead of 151,936 scores.
 
-These change how work is launched, not the arithmetic: the fused route produces
-the same bytes as configuration 0. `tests/test_decode_route.mojo` checks this in
-default validation, and `validation.model decode-parity` checks it on the real
-model. The model records what it enqueued in a
+These change how work is launched, not the arithmetic: with an exact projection
+arrangement, the fused route produces the same bytes as configuration 0.
+`tests/test_decode_route.mojo` checks this in default validation, and
+`validation.model decode-parity` checks it on the real model. Fast decode itself
+runs its projections in arrangement 8, which loads four adjacent values per lane
+and sums them in another order than configuration 0's one-row kernel, so its
+results can differ from the baseline's in the last bits
+([decode projection order](model.md#decode-projection-order)). The model records what it enqueued in a
 [`ForwardRoute`](../src/llm_mojo/models/qwen2/model.mojo); generate reports print
 it and validation rejects a Fast decode that did not take this route.
 

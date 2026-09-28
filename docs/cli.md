@@ -165,10 +165,11 @@ historical source identity requires checking out the recorded commit.
 
 | Package | Responsibility |
 | --- | --- |
-| `cli/` | Typer commands and native executable entry points |
+| `cli/` | Typer commands, launch preparation and native executable entry points |
 | `configuration.py` | Typed composition, literal overrides and validation |
 | `models/qwen2/` | Pinned asset preparation, tokenizer, Qwen model and chat semantics |
-| `runtime/` | Native builds, launch preparation, terminal and clock services |
+| `serving/` | Engine step format and KV storage: `StepBatch`, and `KVPool` sized by the model's `KVGeometry` |
+| `runtime/` | Native builds, terminal and clock services |
 | `layers/` | Decoder, attention and MLP composition |
 | `kernels/` | Reusable numerical operations |
 | `validation/` | Numerical acceptance, source receipts and repository validation |
@@ -181,8 +182,41 @@ cache follows absolute local Mojo imports and package initializers plus `uv.lock
 benchmark-only edits do not rebuild chat. New native project imports must use
 absolute `llm_mojo` module paths so dependency tracking remains explicit.
 
+### Dependency direction
+
+Each row imports only from the rows below it:
+
+```text
+cli/ · benchmarks/ · validation/ · configuration.py   pick a model to run, measure or validate
+models/<family>/                                      one model; supplies what serving/ asks of it
+serving/                                              engine types and, later, the engine; names no model
+layers/ → kernels/                                    shared operations; shapes as parameters
+runtime/                                              services for every row; imports no model
+```
+
+- A model family never imports another family.
+- `serving/` defines what the engine needs from a model, and the model supplies
+  it: `KVPool`, for example, is sized by `QwenModel.kv_geometry()`. The engine
+  calls the model at run time, but the import points from the model to
+  `serving/`, which keeps the engine independent of any one model.
+- `kernels/` and `layers/` name no model. New kernels take model dimensions as
+  comptime parameters. The Qwen-shaped defaults and checks in existing routes
+  are parametrized when a second model needs them, under an exact gate at
+  today's shapes.
+- Kernel variants live beside the production operation they compete with;
+  `benchmarks/` measures them and `studies/` explains the results. Each model's
+  execution plan chooses among them from its own measurements, so promotion is
+  per model and device.
+
+[`tests/test_package_boundaries.py`](../tests/test_package_boundaries.py)
+enforces the direction without exceptions and requires every package to have a
+row.
+
 To add a model, implement and validate its assets, tokenizer/template behavior,
-model composition and native capabilities first. Then register its selectable
-configuration and launch dispatch. Shared operations belong in layers/kernels
-when their contracts already support that model. Experimental policy names are
-not automatically promoted to application modes.
+model composition and native capabilities in `models/<family>/` first,
+including an execution plan measured on its own shapes. Then register its
+selectable configuration and launch dispatch. Shared operations belong in
+layers/kernels when their contracts already support that model; otherwise
+parametrize them by shape. Move code out of `models/qwen2/` only when the new
+model would otherwise duplicate it. Experimental policy names are not
+automatically promoted to application modes.

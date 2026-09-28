@@ -1,5 +1,5 @@
 from layout import TileTensor, row_major
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
 from std.testing import assert_equal, assert_raises, TestSuite
 from llm_mojo.kernels.residual import enqueue_residual_apple_gpu
@@ -69,7 +69,7 @@ def test_exact_composition_and_storage() raises:
         var env = TileTensor(expected_norm.unsafe_ptr().unsafe_offset(1),row_major(1,896))
         enqueue_residual_apple_gpu(ctx,xv,bv,eyv)
         enqueue_rms_norm_apple_gpu(ctx,eyv,wv,env)
-        enqueue_residual_norm(ctx,xv,bv,wv,yv,nv)
+        enqueue_residual_norm[896](ctx,xv,bv,wv,yv,nv)
         with y.map_to_host() as actual, expected_y.map_to_host() as expected:
             for i in range(898):
                 assert_equal(bitcast[DType.uint16](actual.unsafe_ptr()[unsafe_offset=i]),bitcast[DType.uint16](expected.unsafe_ptr()[unsafe_offset=i]))
@@ -82,12 +82,52 @@ def test_exact_composition_and_storage() raises:
             for i in range(898): assert_equal(bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=i]),bbits[i])
         with weight.map_to_host() as mapped:
             for i in range(898): assert_equal(bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=i]),wbits[i])
-        with assert_raises(): enqueue_residual_norm(ctx,xv,bv,wv,xv,nv)
-        with assert_raises(): enqueue_residual_norm(ctx,xv,bv,wv,yv,yv)
-        with assert_raises(): enqueue_residual_norm(ctx,xv,bv,wv,yv,TileTensor(x.unsafe_ptr().unsafe_offset(2),row_major(1,896)))
-        with assert_raises(): enqueue_residual_norm(ctx,xv,bv,TileTensor(weight,row_major(895)),yv,nv)
-        with assert_raises(): enqueue_residual_norm(ctx,TileTensor(x,row_major(2,896)),bv,wv,yv,nv)
+        with assert_raises(): enqueue_residual_norm[896](ctx,xv,bv,wv,xv,nv)
+        with assert_raises(): enqueue_residual_norm[896](ctx,xv,bv,wv,yv,yv)
+        with assert_raises(): enqueue_residual_norm[896](ctx,xv,bv,wv,yv,TileTensor(x.unsafe_ptr().unsafe_offset(2),row_major(1,896)))
+        with assert_raises(): enqueue_residual_norm[896](ctx,xv,bv,TileTensor(weight,row_major(895)),yv,nv)
+        with assert_raises(): enqueue_residual_norm[896](ctx,TileTensor(x,row_major(2,896)),bv,wv,yv,nv)
     print("Residual RMSNorm: 48 exact composition sweeps, protected outputs, unchanged inputs and rejected aliases/shapes")
+
+
+def _untouched(mut buffer: DeviceBuffer[DType.bfloat16], label: String) raises:
+    with buffer.map_to_host() as mapped:
+        for i in range(len(buffer)):
+            if bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=i]) != UInt16(0x7fc1):
+                raise Error(label + " changed at element " + String(i))
+
+
+def test_padded_rows_are_rejected_before_launch() raises:
+    """Every [rows, hidden] view must be contiguous: the overlap check spans rows * hidden elements of each."""
+    var ctx = DeviceContext()
+    var padded = ctx.enqueue_create_buffer[DType.bfloat16](2*1792)
+    var x = ctx.enqueue_create_buffer[DType.bfloat16](2*896)
+    var branch = ctx.enqueue_create_buffer[DType.bfloat16](2*896)
+    var weight = ctx.enqueue_create_buffer[DType.bfloat16](896)
+    var y = ctx.enqueue_create_buffer[DType.bfloat16](2*896)
+    var norm = ctx.enqueue_create_buffer[DType.bfloat16](2*896)
+    var sentinel = bitcast[DType.bfloat16](UInt16(0x7fc1))
+    padded.enqueue_fill(sentinel)
+    y.enqueue_fill(sentinel)
+    norm.enqueue_fill(sentinel)
+    x.enqueue_fill(1)
+    branch.enqueue_fill(2)
+    weight.enqueue_fill(1)
+    var xv = TileTensor(x,row_major(2,896))
+    var bv = TileTensor(branch,row_major(2,896))
+    var wv = TileTensor(weight,row_major(896))
+    var yv = TileTensor(y,row_major(2,896))
+    var nv = TileTensor(norm,row_major(2,896))
+    # Two rows of 896 values, 1,792 apart: the column stride is one, the row stride is not.
+    var pv = TileTensor(padded,row_major(2,1792)).tile[2,896](0,0)
+    with assert_raises(): enqueue_residual_norm[896](ctx,pv,bv,wv,yv,nv)
+    with assert_raises(): enqueue_residual_norm[896](ctx,xv,pv,wv,yv,nv)
+    with assert_raises(): enqueue_residual_norm[896](ctx,xv,bv,wv,pv,nv)
+    with assert_raises(): enqueue_residual_norm[896](ctx,xv,bv,wv,yv,pv)
+    _untouched(padded,"padded storage")
+    _untouched(y,"residual output")
+    _untouched(norm,"normal output")
+    print("Residual RMSNorm: padded rows rejected before launch for every [rows, hidden] view")
 
 
 def main() raises:

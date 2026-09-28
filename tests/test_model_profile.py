@@ -3,6 +3,7 @@ import json
 import gzip
 import hashlib
 import copy
+import statistics
 import subprocess
 import tempfile
 from pathlib import Path
@@ -11,7 +12,454 @@ from llm_mojo.benchmarks.model_profile import parse_samples, summarize
 from llm_mojo.benchmarks.capture_trace import parse_target_identity
 
 
+def _batch_stdout(context, drop=None, marked=(3, 1), unsorted=False, comparisons=4, study=None):
+    from llm_mojo.benchmarks.model_profile import batch_sizes
+    lines = ['device: Apple M4 Pro', 'api: metal'] + ([f'study: {study}'] if study else [])
+    for sequences in batch_sizes(context):
+        for comparison in range(comparisons):
+            for arm in range(2):
+                for sample in range(10):
+                    if (sequences, comparison, arm, sample) == drop:
+                        continue
+                    elapsed = 1000*sequences + 100*comparison + 10*arm + sample + 500
+                    record = f'BATCH {sequences} {comparison} {arm} {sample} {elapsed}'
+                    if (comparison, arm) == marked:
+                        marks = [10*i for i in range(10)]
+                        if unsorted:
+                            marks[3], marks[4] = marks[4], marks[3]
+                        record += ' ' + ' '.join(map(str, marks))
+                    lines.append(record)
+    return '\n'.join(lines + ['BATCH_COMPLETE']) + '\n'
+
+
 class ModelProfileTests(unittest.TestCase):
+    def test_batch_contract_declares_its_matrix_and_trace_geometry(self):
+        batch = contract.BATCH_IMPLEMENTATION
+        self.assertEqual(contract.options(batch), contract.options('qwen_model_all_three'))
+        self.assertEqual(len(contract.command_stages(*contract.options(batch))), 249)
+        self.assertEqual(len(contract.batch_workloads()), 22)
+        mixed = contract.mixed_contexts()
+        self.assertEqual((len(mixed), mixed[0], mixed[-1]), (32, 64, 3968))
+        for context, sequences, tile in contract.BATCH_TRACES:
+            spec = contract.batch_specification(context, sequences, tile)
+            self.assertEqual((spec['profile_rows'], spec['key_value_rows'], spec['dispatches_per_iteration']),
+                             (sequences, context+1, 245))
+            data = dict(implementation=batch, entrypoint=contract.ENTRYPOINTS[batch], row_tile=tile,
+                        profile_iterations=8, profile_warmup_iterations=10, **spec)
+            self.assertEqual(contract.configuration(data), dict(spec, row_tile=tile))
+            for key, value in (('profile_rows', sequences+1), ('row_tile', 8), ('profile_iterations', 7)):
+                with self.subTest(key=key), self.assertRaises(ValueError):
+                    contract.configuration(dict(data, **{key: value}))
+        with self.assertRaises(ValueError):
+            contract.batch_specification(1024, 8, 4)
+
+    def test_batch_samples_require_complete_census_and_observed_arm(self):
+        from llm_mojo.benchmarks.model_profile import parse_batch_samples
+        for context in (64, 0):
+            records = parse_batch_samples(_batch_stdout(context), context, 2)
+            self.assertEqual(len(records), (7 if context else 1)*4*2*10)
+            self.assertTrue(all(bool(r['marks']) == ((r['comparison'], r['arm']) == (3, 1)) for r in records))
+        for invalid in (_batch_stdout(64, drop=(16, 2, 1, 4)), _batch_stdout(64, marked=(2, 1)),
+                        _batch_stdout(64, unsorted=True), _batch_stdout(64).replace('api: metal', 'api: cpu'),
+                        _batch_stdout(64).replace('BATCH_COMPLETE\n', '')):
+            with self.subTest(), self.assertRaises(ValueError):
+                parse_batch_samples(invalid, 64, 0)
+
+    def test_batch_summary_applies_the_decision_rule_per_tile(self):
+        from llm_mojo.benchmarks.model_profile import batch_summarize, HOST_PHASES
+        samples = []
+        for context, sequences in contract.batch_workloads():
+            for block in range(4):
+                for comparison in range(4):
+                    for arm in range(2):
+                        for sample in range(10):
+                            base = 1_000_000*(sequences+1)
+                            scale = {1: .8, 2: 1.2}.get(comparison, 1) if arm else 1
+                            elapsed = int(base*scale) + sample
+                            marks = [elapsed*i//10 for i in range(10)] if (comparison, arm) == (3, 1) else []
+                            samples.append(dict(context=context, sequences=sequences, block=block, comparison=comparison,
+                                                arm=arm, sample=sample, elapsed_ns=elapsed, marks=marks))
+        summary = batch_summarize(samples)
+        self.assertEqual(len(summary), 22)
+        for row in summary:
+            self.assertEqual((row['tiles']['8']['outcome'], row['tiles']['16']['outcome']), ('faster', 'slower'))
+            self.assertAlmostEqual(row['tokens_per_second'], row['sequences']*1000/row['step_ms'])
+            self.assertEqual(set(row['host_phase_ms']), set(HOST_PHASES))
+            if row['context']:
+                self.assertAlmostEqual(row['throughput_vs_one'], row['tokens_per_second']/next(
+                    r['tokens_per_second'] for r in summary if (r['context'], r['sequences']) == (row['context'], 1)))
+            else:
+                self.assertIsNone(row['throughput_vs_one'])
+        with self.assertRaises(ValueError):
+            batch_summarize(samples[1:])
+
+    def test_projection_contract_declares_arrangements_and_trace_geometry(self):
+        from llm_mojo.benchmarks.model_profile import batch_comparisons, batch_study
+        declaration = contract.BATCH_PROJECTION_DECLARATION
+        self.assertEqual(json.loads(json.dumps(declaration)), declaration)
+        self.assertNotIn('row_tiles', declaration)
+        self.assertEqual(len(declaration['comparisons']), 5)
+        self.assertEqual([int(a) for a in declaration['arrangements']], [0, 3, 4, 5, 6])
+        self.assertEqual(batch_study('projections')['traces'][0][3:], ('batch-profile-1024-64-a0', dict(arrangement=0)))
+        self.assertEqual(batch_study('size')['traces'][1][2:4], (0, 'batch-profile-1024-16-4'))
+        for context, sequences, arrangement in contract.BATCH_PROJECTION_TRACES:
+            spec = contract.batch_projection_specification(context, sequences, arrangement)
+            self.assertEqual(spec['profile_workload'], f'model-p1024-b64-a{arrangement}')
+            data = dict(implementation=contract.BATCH_IMPLEMENTATION, arrangement=arrangement,
+                        entrypoint=contract.ENTRYPOINTS[contract.BATCH_IMPLEMENTATION],
+                        profile_iterations=8, profile_warmup_iterations=10, **spec)
+            self.assertEqual(contract.configuration(data), dict(spec, arrangement=arrangement))
+            for change in (dict(arrangement=1), dict(profile_rows=16), dict(row_tile=4)):
+                with self.subTest(change=change), self.assertRaises(ValueError):
+                    contract.configuration(dict(data, **change))
+        self.assertEqual(batch_comparisons('size'), (4, 3))
+        self.assertEqual(batch_comparisons('projections'), (5, None))
+        self.assertEqual(batch_comparisons('confirm:6'), (2, None))
+        for invalid in ('confirm:1', 'confirm:', 'confirm:x', 'tiles'):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                batch_comparisons(invalid)
+
+    def test_projection_samples_carry_no_marks_and_name_their_study(self):
+        from llm_mojo.benchmarks.model_profile import parse_batch_samples
+        stdout = _batch_stdout(64, marked=None, comparisons=5, study='projections')
+        self.assertEqual(len(parse_batch_samples(stdout, 64, 1, 5, None, 'projections')), 7*5*2*10)
+        confirm = _batch_stdout(0, marked=None, comparisons=2, study='confirm:5')
+        self.assertEqual(len(parse_batch_samples(confirm, 0, 0, 2, None, 'confirm:5')), 2*2*10)
+        for invalid, arguments in ((_batch_stdout(64, marked=(4, 1), comparisons=5, study='projections'), (5, None, 'projections')),
+                                   (stdout, (5, None, 'confirm:5')), (stdout, (4, 3, 'projections')),
+                                   (_batch_stdout(64, marked=None, comparisons=5), (5, None, 'projections'))):
+            with self.subTest(), self.assertRaises(ValueError):
+                parse_batch_samples(invalid, 64, 0, *arguments)
+
+    def test_projection_decision_qualifies_then_selects_one_arrangement(self):
+        from llm_mojo.benchmarks.model_profile import projection_decision, projection_summarize
+        def samples(ratio, arrangements=contract.BATCH_PROJECTION_ARRANGEMENTS):
+            rows = []
+            for context, sequences in contract.batch_workloads():
+                for block in range(4):
+                    for comparison in range(1+len(arrangements)):
+                        for arm in range(2):
+                            scale = ratio(context, sequences, arrangements[comparison-1]) if arm and comparison else 1
+                            for sample in range(10):
+                                rows.append(dict(context=context, sequences=sequences, block=block, comparison=comparison,
+                                                 arm=arm, sample=sample, elapsed_ns=int(1_000_000*sequences*scale)+sample,
+                                                 marks=[]))
+            return rows
+        # 4 regresses at B = 2 and 5 is inconclusive in one cell, so only 3 and 6 can qualify.
+        def rule(three, six, six_at_eight=None):
+            def ratio(context, sequences, arrangement):
+                if arrangement == 4:
+                    return 1.2 if sequences == 2 else .8
+                if arrangement == 5:
+                    return .97 if (context, sequences) == (64, 4) else .7
+                if arrangement == 6 and sequences == 8 and six_at_eight:
+                    return six_at_eight
+                return three if arrangement == 3 else six
+            return ratio
+        def decide(ratio):
+            return projection_decision(projection_summarize(samples(ratio), contract.BATCH_PROJECTION_ARRANGEMENTS))
+        summary = projection_summarize(samples(rule(.9, .85)), contract.BATCH_PROJECTION_ARRANGEMENTS)
+        self.assertEqual(len(summary), 22)
+        cell = next(r for r in summary if (r['context'], r['sequences']) == (1024, 16))
+        self.assertEqual({a: x['outcome'] for a, x in cell['arrangements'].items()},
+                         {'3': 'faster', '4': 'faster', '5': 'faster', '6': 'faster'})
+        decision = projection_decision(summary)
+        self.assertEqual([q['arrangement'] for q in decision['qualified']], [6, 3])
+        self.assertEqual(decision['selected'], 6)
+        # Equal worst ratios fall to the mean, then to the lower ID.
+        self.assertEqual(decide(rule(.85, .85, six_at_eight=.8))['selected'], 6)
+        self.assertEqual(decide(rule(.85, .85))['selected'], 3)
+        ratio = rule(.9, .85)
+        confirmation = projection_summarize(samples(ratio, (5,)), (5,))
+        self.assertIsNone(projection_decision(confirmation)['selected'])
+        self.assertEqual(projection_decision(projection_summarize(samples(lambda c, b, a: .9, (5,)), (5,)))['selected'], 5)
+        broken = samples(ratio)
+        with self.assertRaises(ValueError):
+            projection_summarize(broken[1:], contract.BATCH_PROJECTION_ARRANGEMENTS)
+        broken[0]['marks'] = [1]
+        with self.assertRaises(ValueError):
+            projection_summarize(broken, contract.BATCH_PROJECTION_ARRANGEMENTS)
+
+    def test_addressing_contract_pairs_raw_and_wide_loads_with_arrangement_5(self):
+        from llm_mojo.benchmarks.model_profile import batch_comparisons, batch_study, reordered_arrangement
+        declaration = contract.BATCH_ADDRESSING_DECLARATION
+        self.assertEqual(json.loads(json.dumps(declaration)), declaration)
+        self.assertEqual([int(a) for a in declaration['arrangements']], [5, 11, 8])
+        self.assertEqual(declaration['comparisons'], [['arrangement-5', f'arrangement-{a}'] for a in (5, 11, 8)])
+        self.assertTrue({'question', 'analysis', 'hypothesis', 'consequence'} <= set(declaration))
+        # The matrix, boundaries and per-workload rule are 1e's.
+        for key in ('batch', 'prefixes', 'mixed', 'timing_boundary', 'trace_boundary', 'decision'):
+            self.assertEqual(declaration[key], contract.BATCH_REORDERED_DECLARATION[key])
+        self.assertEqual([t[2] for t in batch_study('addressing')['traces']], [5, 11, 8])
+        self.assertEqual(contract.batch_projection_specification(1024, 64, 11)['profile_workload'], 'model-p1024-b64-a11')
+        self.assertEqual(batch_comparisons('addressing'), (3, None))
+        self.assertFalse(reordered_arrangement(11) or reordered_arrangement(5))
+        self.assertTrue(all(reordered_arrangement(a) for a in (8, 9, 10)))
+
+    def test_reordered_contract_accuracy_and_tokens(self):
+        from llm_mojo.benchmarks.model_profile import (accuracy_gate, batch_comparisons, batch_study, parse_accuracy,
+                                                       parse_batch_tokens)
+        declaration = contract.BATCH_REORDERED_DECLARATION
+        self.assertEqual(json.loads(json.dumps(declaration)), declaration)
+        self.assertEqual([int(a) for a in declaration['arrangements']], [5, 7, 8, 9, 10])
+        self.assertEqual(batch_study('reordered')['traces'][-1][3:], ('batch-profile-1024-64-a10', dict(arrangement=10)))
+        spec = contract.batch_projection_specification(1024, 64, 9)
+        data = dict(implementation=contract.BATCH_IMPLEMENTATION, arrangement=9, profile_iterations=8,
+                    entrypoint=contract.ENTRYPOINTS[contract.BATCH_IMPLEMENTATION], profile_warmup_iterations=10, **spec)
+        self.assertEqual(contract.configuration(data), dict(spec, arrangement=9))
+        self.assertEqual(batch_comparisons('reordered'), (5, None))
+        self.assertEqual(batch_comparisons('reordered-confirm:9'), (2, None))
+        for invalid in ('reordered-confirm:5', 'reordered-confirm:3', 'confirm:9'):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                batch_comparisons(invalid)
+        def census(worst):
+            lines = ['device: Apple M4 Pro', 'api: metal']
+            for rows, n, k in contract.BATCH_ACCURACY_SHAPES:
+                for a in (5, 7, 8, 9, 10):
+                    lines.append(f'ACCURACY {a} {rows} {n} {k} {rows*n} 3 1 0 {worst(a, n)}')
+            return '\n'.join(lines + ['ACCURACY_COMPLETE']) + '\n'
+        records = parse_accuracy(census(lambda a, n: 2.5 if a >= 9 and n == 151936 else 1.25))
+        self.assertEqual(len(records), 25)
+        self.assertEqual(accuracy_gate(records), {7: True, 8: True, 9: False, 10: False})
+        for bad in (census(lambda a, n: 1).replace('ACCURACY 10 2', 'ACCURACY 11 2'),
+                    census(lambda a, n: 1).replace(' 3 1 0 ', ' 1 3 0 '),
+                    census(lambda a, n: 1).replace('ACCURACY_COMPLETE\n', '')):
+            with self.subTest(), self.assertRaises(ValueError):
+                parse_accuracy(bad)
+        tokens = parse_batch_tokens('tokens: 16 5 0\ntokens: 16 9 2\nBATCH 16 0 0 0 5\n', 1024, 3)
+        self.assertEqual([(t['arrangement'], t['differing']) for t in tokens], [(5, 0), (9, 2)])
+        with self.assertRaises(ValueError):
+            parse_batch_tokens('tokens: 16 9 17\n', 1024, 3)
+
+    def test_reordered_decision_needs_accuracy_one_row_and_large_batches(self):
+        from llm_mojo.benchmarks.model_profile import diagnostic_stop, hf_summary, projection_decision, projection_summarize
+        arrangements = contract.BATCH_REORDERED_ARRANGEMENTS
+        def samples(ratio):
+            rows = []
+            for context, sequences in contract.batch_workloads():
+                for block in range(4):
+                    for comparison in range(1+len(arrangements)):
+                        for arm in range(2):
+                            scale = ratio(sequences, arrangements[comparison-1]) if arm and comparison else 1
+                            for sample in range(10):
+                                rows.append(dict(context=context, sequences=sequences, block=block, comparison=comparison,
+                                                 arm=arm, sample=sample, elapsed_ns=int(1_000_000*sequences*scale)+sample,
+                                                 marks=[]))
+            return rows
+        # 7 gains from B = 16 only; 8 gains everywhere; 9 is fastest but fails accuracy; 10 is slower at one row.
+        table = {7: lambda b: .9 if b >= 16 else 1, 8: lambda b: .8, 9: lambda b: .5, 10: lambda b: 1.2 if b == 1 else .6}
+        summary = projection_summarize(samples(lambda b, a: table[a](b)), arrangements)
+        eligible = {7: True, 8: True, 9: False, 10: True}
+        decision = projection_decision(summary, 1, 16, eligible)
+        self.assertEqual([q['arrangement'] for q in decision['qualified']], [8, 7])
+        self.assertEqual(decision['selected'], 8)
+        self.assertEqual(projection_decision(summary, 1, 16, {**eligible, 8: False})['selected'], 7)
+        choices = [dict(case='c', call=i, token=1, reference_token=1 if i < 9 else 2, kl_nats=0.01*(i+1),
+                        total_variation=0.1, reference_margin=1.0) for i in range(10)]
+        exact = hf_summary(choices)
+        self.assertEqual((exact['decode_choices'], exact['agree'], exact['max_kl_nats']), (10, 9, 0.1))
+        for candidate, stop in ((choices, False), ([dict(c, token=3) if c['call'] == 0 else c for c in choices], False),
+                                ([dict(c, token=3) if c['call'] < 2 else c for c in choices], True),
+                                ([dict(c, kl_nats=0.25) if c['call'] == 3 else c for c in choices], True)):
+            with self.subTest(stop=stop):
+                self.assertEqual(diagnostic_stop(dict(selected=8, hf={'5': exact, '8': hf_summary(candidate)})), stop)
+
+    def test_retained_batch_size_integrity(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import batch_replay
+        source = repository_root()/'studies/model_generation'
+        original = json.loads(gzip.decompress((source/'batch-size.json.gz').read_bytes()))
+        retained = json.loads((source/'batch-size-summary.json').read_text())
+        for damage in (None, 'sample', 'block', 'capture', 'dispatch', 'provenance', 'conditions',
+                       'trace-conditions', 'rejection'):
+            record = copy.deepcopy(original)
+            if damage == 'sample': record['timing']['samples'].pop()
+            elif damage == 'block': record['timing']['blocks'].pop()
+            elif damage == 'capture': record['captures'].pop()
+            elif damage == 'dispatch': record['captures'][2]['samples'].pop()
+            elif damage == 'provenance': record['captures'][2]['provenance']['binary']['sha256'] = '0'*64
+            elif damage == 'conditions': record['timing']['blocks'][3]['after']['power_mode_raw'] = '1'
+            elif damage == 'trace-conditions': record['captures'][0]['conditions']['before']['battery']['power_source'] = 'Battery Power'
+            elif damage == 'rejection': record['rejected_captures'][0]['receipt']['profile']['binary']['sha256'] = '0'*64
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                raw = json.dumps(record).encode()
+                packed = gzip.compress(raw, mtime=0)
+                (directory/'batch-size.json.gz').write_bytes(packed)
+                (directory/'batch-size.json').write_text(json.dumps(dict(kind=record['kind'],
+                    sha256=hashlib.sha256(packed).hexdigest(), uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with self.subTest(damage=damage), redirect_stdout(StringIO()):
+                    if damage is None:
+                        batch_replay(directory)
+                        self.assertEqual(json.loads((directory/'batch-size-summary.json').read_text()), retained)
+                        self.assertEqual(len(record['rejected_captures']), 4)
+                    else:
+                        with self.assertRaises((ValueError, RuntimeError)): batch_replay(directory)
+
+    def test_retained_batch_projections_integrity(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import projection_replay
+        source = repository_root()/'studies/model_generation'
+        original = json.loads(gzip.decompress((source/'batch-projections.json.gz').read_bytes()))
+        retained = json.loads((source/'batch-projections-summary.json').read_text())
+        self.assertEqual((retained['decision']['selected'], retained['confirmed']), (5, True))
+        for damage in (None, 'sample', 'confirmation-sample', 'block', 'capture', 'dispatch', 'provenance',
+                       'conditions', 'confirmation-conditions', 'trace-conditions', 'no-confirmation',
+                       'other-arrangement', 'argument'):
+            record = copy.deepcopy(original)
+            if damage == 'sample': record['timing']['samples'].pop()
+            elif damage == 'confirmation-sample': record['confirmation']['samples'].pop()
+            elif damage == 'block': record['timing']['blocks'].pop()
+            elif damage == 'capture': record['captures'].pop()
+            elif damage == 'dispatch': record['captures'][2]['samples'].pop()
+            elif damage == 'provenance': record['captures'][2]['provenance']['binary']['sha256'] = '0'*64
+            elif damage == 'conditions': record['timing']['blocks'][3]['after']['power_mode_raw'] = '1'
+            elif damage == 'confirmation-conditions': record['confirmation']['blocks'][0]['before']['power_mode_raw'] = '1'
+            elif damage == 'trace-conditions': record['captures'][0]['conditions']['before']['battery']['power_source'] = 'Battery Power'
+            elif damage == 'no-confirmation': record['confirmation'] = None
+            elif damage == 'other-arrangement': record['confirmation']['argument'] = 'confirm:6'
+            elif damage == 'argument': record['timing']['argument'] = 'size'
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                raw = json.dumps(record).encode()
+                packed = gzip.compress(raw, mtime=0)
+                (directory/'batch-projections.json.gz').write_bytes(packed)
+                (directory/'batch-projections.json').write_text(json.dumps(dict(kind=record['kind'],
+                    sha256=hashlib.sha256(packed).hexdigest(), uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with self.subTest(damage=damage), redirect_stdout(StringIO()):
+                    if damage is None:
+                        projection_replay(directory)
+                        self.assertEqual(json.loads((directory/'batch-projections-summary.json').read_text()), retained)
+                    else:
+                        with self.assertRaises((ValueError, RuntimeError)): projection_replay(directory)
+
+    def test_retained_batch_reordered_integrity(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import reordered_replay
+        source = repository_root()/'studies/model_generation'
+        original = json.loads(gzip.decompress((source/'batch-reordered.json.gz').read_bytes()))
+        retained = json.loads((source/'batch-reordered-summary.json').read_text())
+        self.assertEqual((retained['decision']['selected'], retained['confirmed'], retained['diagnostics']['stop']),
+                         (8, True, False))
+        self.assertEqual(sorted(r['status'] for r in original['rejected_captures']),
+                         ['failed during capture', 'rejected by analysis'])
+        for damage in (None, 'sample', 'confirmation-sample', 'block', 'capture', 'dispatch', 'provenance',
+                       'conditions', 'confirmation-conditions', 'trace-conditions', 'no-confirmation',
+                       'other-arrangement', 'argument', 'accuracy', 'accuracy-worse', 'token', 'exact-token',
+                       'no-diagnostics', 'stop', 'hf', 'set-aside-binary', 'failed-receipt'):
+            record = copy.deepcopy(original)
+            failed = next(r for r in record['rejected_captures'] if r['status'] == 'failed during capture')
+            if damage == 'sample': record['timing']['samples'].pop()
+            elif damage == 'confirmation-sample': record['confirmation']['samples'].pop()
+            elif damage == 'block': record['timing']['blocks'].pop()
+            elif damage == 'capture': record['captures'].pop()
+            elif damage == 'dispatch': record['captures'][2]['samples'].pop()
+            elif damage == 'provenance': record['captures'][2]['provenance']['binary']['sha256'] = '0'*64
+            elif damage == 'conditions': record['timing']['blocks'][3]['after']['power_mode_raw'] = '1'
+            elif damage == 'confirmation-conditions': record['confirmation']['blocks'][0]['before']['power_mode_raw'] = '1'
+            elif damage == 'trace-conditions': record['captures'][0]['conditions']['before']['battery']['power_source'] = 'Battery Power'
+            elif damage == 'no-confirmation': record['confirmation'] = None
+            elif damage == 'other-arrangement': record['confirmation']['argument'] = 'reordered-confirm:7'
+            elif damage == 'argument': record['timing']['argument'] = 'projections'
+            elif damage == 'accuracy': record['timing']['accuracy'].pop()
+            elif damage == 'accuracy-worse': next(r for r in record['timing']['accuracy'] if r['arrangement'] == 8)['worst_ulps'] += 1
+            elif damage == 'token': record['timing']['token_differences'].pop()
+            elif damage == 'exact-token': next(r for r in record['timing']['token_differences'] if r['arrangement'] == 7)['differing'] = 1
+            elif damage == 'no-diagnostics': record['diagnostics'] = None
+            elif damage == 'stop': record['diagnostics']['stop'] = True
+            elif damage == 'hf': record['diagnostics']['hf']['8']['agree'] -= 1
+            elif damage == 'set-aside-binary': record['rejected_captures'][0]['receipt']['profile']['binary']['sha256'] = '0'*64
+            elif damage == 'failed-receipt': failed['receipt']['capture']['status'] = 'complete'
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                raw = json.dumps(record).encode()
+                packed = gzip.compress(raw, mtime=0)
+                (directory/'batch-reordered.json.gz').write_bytes(packed)
+                (directory/'batch-reordered.json').write_text(json.dumps(dict(kind=record['kind'],
+                    sha256=hashlib.sha256(packed).hexdigest(), uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with self.subTest(damage=damage), redirect_stdout(StringIO()):
+                    if damage is None:
+                        reordered_replay(directory)
+                        self.assertEqual(json.loads((directory/'batch-reordered-summary.json').read_text()), retained)
+                    else:
+                        with self.assertRaises((ValueError, RuntimeError)): reordered_replay(directory)
+
+    def test_retained_batch_addressing_integrity(self):
+        """1f's compact record: raw-pointer addressing reaches none of arrangement 8's gain."""
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import addressing_replay
+        source = repository_root()/'studies/model_generation'
+        original = json.loads(gzip.decompress((source/'batch-addressing.json.gz').read_bytes()))
+        retained = json.loads((source/'batch-addressing-summary.json').read_text())
+        self.assertEqual((retained['analysis']['hypothesis'], retained['analysis']['consequence']), (True, False))
+        self.assertTrue(abs(retained['analysis']['projection_share']) < 0.05)
+        for damage in (None, 'sample', 'block', 'capture', 'binary', 'conditions', 'trace-conditions', 'argument',
+                       'declaration', 'token', 'exact-token', 'rejected-binary'):
+            record = copy.deepcopy(original)
+            if damage == 'sample': record['timing']['samples'].pop()
+            elif damage == 'block': record['timing']['blocks'].pop()
+            elif damage == 'capture': record['captures'].pop()
+            elif damage == 'binary': record['captures'][2]['binary']['sha256'] = '0'*64
+            elif damage == 'conditions': record['timing']['blocks'][1]['after']['power_mode_raw'] = '1'
+            elif damage == 'trace-conditions': record['captures'][0]['conditions']['before']['battery']['power_source'] = 'Battery Power'
+            elif damage == 'argument': record['timing']['argument'] = 'reordered'
+            elif damage == 'declaration': record['timing']['build']['declaration']['hypothesis'] = 'changed after measuring'
+            elif damage == 'token': record['timing']['token_differences'].pop()
+            elif damage == 'exact-token': next(r for r in record['timing']['token_differences'] if r['arrangement'] == 11)['differing'] = 1
+            elif damage == 'rejected-binary': record['rejected_captures'][0]['receipt']['profile']['binary']['sha256'] = '0'*64
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                raw = json.dumps(record).encode()
+                packed = gzip.compress(raw, mtime=0)
+                (directory/'batch-addressing.json.gz').write_bytes(packed)
+                (directory/'batch-addressing.json').write_text(json.dumps(dict(kind=record['kind'],
+                    sha256=hashlib.sha256(packed).hexdigest(), uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with self.subTest(damage=damage), redirect_stdout(StringIO()):
+                    if damage is None:
+                        addressing_replay(directory)
+                        self.assertEqual(json.loads((directory/'batch-addressing-summary.json').read_text()), retained)
+                    else:
+                        with self.assertRaises((ValueError, RuntimeError)): addressing_replay(directory)
+
+    def test_retained_single_sequence_check(self):
+        """1e's adoption gate: Fast decode of one sequence in arrangement 8 against 5, from the raw steps."""
+        from llm_mojo._repository import repository_root
+        record = json.loads((repository_root()/'studies/model_generation/batch-reordered-single-sequence.json').read_text())
+        def summary(record):
+            runs = record['runs']
+            if ([r['run'] for r in runs] != list(range(1, 17))
+                    or [[r['arrangement'] for r in runs if r['block'] == b] for b in range(1, 5)] != [[5, 8, 8, 5], [8, 5, 5, 8]]*2):
+                raise ValueError('the runs are not four alternating blocks')
+            if any(len(r['decode_step_ns']) != record['prompt']['max_new_tokens']-1
+                   or r['median_ms'] != statistics.median(r['decode_step_ns'])/1e6 for r in runs):
+                raise ValueError('a run lost a decode step or misstates its median')
+            ratios = [statistics.mean(r['median_ms'] for r in runs if r['block'] == b and r['arrangement'] == 8)
+                      / statistics.mean(r['median_ms'] for r in runs if r['block'] == b and r['arrangement'] == 5)
+                      for b in range(1, 5)]
+            median = statistics.median(ratios)
+            verdict = ('regression' if all(r > 1 for r in ratios) and median > 1.05 else
+                       'consistent slowdown below the floor' if all(r > 1 for r in ratios) else 'no regression')
+            return ratios, median, verdict
+        self.assertEqual(summary(record), (record['block_ratios'], record['median_block_ratio'], record['verdict']))
+        self.assertEqual(record['verdict'], 'no regression')
+        self.assertTrue(all(r < 1 for r in record['block_ratios']) and record['texts_identical'])
+        self.assertEqual({a: (b['decode_projection'], b['dirty']) for a, b in record['binaries'].items()},
+                         {'5': (5, False), '8': (8, False)})
+        self.assertNotEqual(record['binaries']['5']['sha256'], record['binaries']['8']['sha256'])
+        for damage in ('step', 'order'):
+            damaged = copy.deepcopy(record)
+            if damage == 'step': damaged['runs'][1]['decode_step_ns'].pop()
+            else: damaged['runs'][0]['arrangement'] = 8
+            with self.subTest(damage=damage), self.assertRaises(ValueError): summary(damaged)
+
     def test_batch_support_distinguishes_backend_failure_from_bad_results(self):
         from llm_mojo.benchmarks.model_profile import batch_support_parse
         base='device: Apple M4 Pro\napi: metal\nBATCH_EAGER_PASS 15\n'

@@ -4,7 +4,7 @@ The measured cells come from the retained runtime study, so a change to the
 lookup cannot silently drift from the evidence that justified it.
 """
 from std.testing import TestSuite, assert_equal, assert_raises
-from llm_mojo.models.qwen2.plan import ExecutionPlan, MEASURED_DEVICE, configured_plan, execution_plan
+from llm_mojo.models.qwen2.plan import ExecutionPlan, MEASURED_DEVICE, configured_plan, execution_plan, fast_plan
 
 comptime M4_PRO = MEASURED_DEVICE
 
@@ -70,7 +70,7 @@ def test_retired_mode_names_and_unmeasured_compositions_are_rejected() raises:
     for name in ["auto", "all-three", "projection-0", "combined", "gpu-argmax", "candidate", "20", ""]:
         with assert_raises():
             _ = execution_plan(name, 1, 64, M4_PRO)
-    # Configuration 26 carries all three decode features on exactly one row; nothing else carries any.
+    # Configuration 26 carries all three decode features on one row per sequence; nothing else carries any.
     ExecutionPlan(26, True, True, True).validate(1)
     for bad in [ExecutionPlan(26, False, True, True), ExecutionPlan(26, True, False, True),
                 ExecutionPlan(26, True, True, False), ExecutionPlan(0, True, False, False),
@@ -85,6 +85,26 @@ def test_retired_mode_names_and_unmeasured_compositions_are_rejected() raises:
         _ = configured_plan(26, 2, 64)
     with assert_raises():
         _ = configured_plan(999, 1, 1)
+
+
+def test_batched_decode_steps_take_configuration_26_on_the_measured_device() raises:
+    # One row per sequence; total is the longest sequence, which may be shorter than the batch.
+    for sequences in [2, 8, 64]:
+        assert_equal(_fields(fast_plan(sequences, 3, M4_PRO, sequences)), SIMD[DType.int64, 4](26, 1, 1, 1))
+        assert_equal(_fields(configured_plan(26, sequences, 4096, sequences)), SIMD[DType.int64, 4](26, 1, 1, 1))
+        ExecutionPlan(26, True, True, True).validate(sequences, sequences)
+    with assert_raises():
+        _ = fast_plan(8, 100, "Apple M1", 8)
+    with assert_raises():
+        _ = fast_plan(7, 100, M4_PRO, 8)
+    with assert_raises():
+        _ = fast_plan(8, 4097, M4_PRO, 8)
+    with assert_raises():
+        ExecutionPlan(26, True, True, True).validate(9, 8)
+    with assert_raises():
+        ExecutionPlan(0, False, False, False).validate(2, 2)
+    with assert_raises():
+        _ = configured_plan(0, 2, 100, 2)
 
 
 def main() raises:

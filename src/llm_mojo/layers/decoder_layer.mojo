@@ -2,6 +2,9 @@
 
 Both existing sublayers retain their arithmetic. The attention output is the
 MLP input; there is no intervening allocation, copy, or synchronization.
+The decode composition (configuration 26) runs one layer for S one-token
+sequences with a fixed sequence of kernels whose per-row arithmetic does not
+depend on S.
 """
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -9,9 +12,13 @@ from std.collections import InlineArray
 from llm_mojo.layers.attention_sublayer import (
     AttentionWeights, AttentionCache, AttentionWorkspace,
     _validate_attention_sublayer, enqueue_attention_sublayer,
-    enqueue_attention_sublayer_integrated,
+    enqueue_attention_sublayer_integrated, enqueue_fused_decode_qkv_batch,
 )
+from llm_mojo.kernels.attention_decode import enqueue_grouped_query_attention_decode_sequences_apple_gpu
+from llm_mojo.kernels.linear import enqueue_linear_decode_rows_apple_gpu
 from llm_mojo.kernels.residual_norm import enqueue_residual_norm
+from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
+from llm_mojo.kernels.swiglu import enqueue_silu_multiply_apple_gpu
 from llm_mojo.layers.mlp import MLPWeights, MLPWorkspace, _validate_mlp, enqueue_mlp_apple_gpu
 
 # Decoder configurations used by the Qwen model. IDs stay numeric because retained
@@ -22,7 +29,7 @@ comptime DECODER_SPLIT8_TILED = 3  # split-8 attention with 16x16 QKV/Wo project
 comptime DECODER_CONSISTENT = 20  # FP32 G32 attention and rowwise projections at every row count
 comptime DECODER_CONSISTENT_MMA = 21  # G32 attention with 8x16 projections and MLP mapping 7 at every row count
 comptime DECODER_CONSISTENT_REUSE4 = 22  # G32 attention; each weight reused across four rowwise reductions
-comptime DECODER_FUSED_DECODE = 26  # one row: fused QKV/RoPE/cache and SiLU/multiply
+comptime DECODER_FUSED_DECODE = 26  # decode composition: enqueue_decode_batch_layer, one row per sequence
 
 
 def decoder_mappings(configuration: Int, rows: Int) raises -> SIMD[DType.int64, 4]:
@@ -32,10 +39,6 @@ def decoder_mappings(configuration: Int, rows: Int) raises -> SIMD[DType.int64, 
     """
     if rows < 1:
         raise Error("invalid decoder rows")
-    if configuration == DECODER_FUSED_DECODE:
-        if rows != 1:
-            raise Error("fused QKV configuration requires one decode row")
-        return SIMD[DType.int64, 4](0, 0, 0, 1)
     if configuration == DECODER_CONSISTENT:
         return SIMD[DType.int64, 4](5, 0, 0, 1)
     if configuration == DECODER_CONSISTENT_MMA:
@@ -161,9 +164,7 @@ def enqueue_decoder_layer[XL: TensorLayout](
     mut attention: AttentionWorkspace, mut mw: MLPWeights, mut mlp: MLPWorkspace,
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     mlp_mapping: Int = 0, integrated: Bool = True,
-    gqa_mapping: Int = 0, projection_mapping: Int = 0, fuse_qkv: Bool = False,
-    fuse_activation: Bool = False,
-    fuse_residual_norm: Bool = False, input_normalized: Bool = False,
+    gqa_mapping: Int = 0, projection_mapping: Int = 0,
 ) raises -> Int:
     """Return the actual attention route; final output is in mlp.output.
 
@@ -172,35 +173,18 @@ def enqueue_decoder_layer[XL: TensorLayout](
     starts invalidates this execution; the caller must drain and reset the cache.
     Mapping selection is explicit. Tiny fixtures use integrated=False; the
     optimized attention path requires the Qwen dimensions.
-    Residual/norm fusion is an internal composition route: attention.output and
-    mlp.normalized are produced together, and the final MLP residual is deferred.
-    Its caller must combine attention.output and mlp.down with the next norm
-    before consuming mlp.output. input_normalized requires the current row's
-    input normalization already stored in attention.normalized.
     """
-    if (fuse_residual_norm or input_normalized) and (not fuse_qkv or not fuse_activation or aw.hidden != 896):
-        raise Error("residual/norm fusion requires Qwen configuration 26")
-    if input_normalized and not fuse_residual_norm:
-        raise Error("precomputed normalization requires residual fusion")
-    if fuse_qkv and not integrated:
-        raise Error("fused QKV requires integrated attention")
-    if fuse_activation and (Int(x.dim[0]()) != 1 or mlp_mapping != 0):
-        raise Error("fused MLP activation requires one row and mapping zero")
     _decoder_preflight(ctx, aw, cache, attention, mw, mlp, x,
                        integrated, gqa_mapping, projection_mapping, mlp_mapping)
     var actual_route: Int
     if integrated:
         actual_route = enqueue_attention_sublayer_integrated(ctx, aw, cache, attention, x,
-                                                           gqa_mapping, projection_mapping, fuse_qkv, input_normalized, fuse_residual_norm)
+                                                           gqa_mapping, projection_mapping)
     else:
         actual_route = enqueue_attention_sublayer(ctx, aw, cache, attention, x, 3)
-    if fuse_residual_norm:
-        enqueue_residual_norm(ctx,x,TileTensor(attention.projected,row_major(1,896)),
-            TileTensor(mw.norm,row_major(896)),TileTensor(attention.output,row_major(1,896)),
-            TileTensor(mlp.normalized,row_major(1,896)))
     enqueue_mlp_apple_gpu(ctx, mw, mlp,
                          TileTensor(attention.output, row_major(Int(x.dim[0]()), aw.hidden)),
-                         mlp_mapping, fuse_activation, fuse_residual_norm, fuse_residual_norm)
+                         mlp_mapping)
     return actual_route
 
 
@@ -208,11 +192,135 @@ def enqueue_decoder_layer_configuration[XL: TensorLayout](
     ctx: DeviceContext, mut aw: AttentionWeights, mut cache: AttentionCache,
     mut attention: AttentionWorkspace, mut mw: MLPWeights, mut mlp: MLPWorkspace,
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin], configuration: Int,
-    fuse_residual_norm: Bool = False, input_normalized: Bool = False,
 ) raises -> Int:
     var mappings = decoder_mappings(configuration, Int(x.dim[0]()))
-    # Configuration 26 fuses QKV/RoPE/cache append and SiLU/multiply.
-    var fused = configuration == DECODER_FUSED_DECODE
     return enqueue_decoder_layer(ctx,aw,cache,attention,mw,mlp,x,
-        Int(mappings[2]),True,Int(mappings[0]),Int(mappings[1]),fused,fused,
-        fuse_residual_norm,input_normalized)
+        Int(mappings[2]),True,Int(mappings[0]),Int(mappings[1]))
+
+
+def _decode_batch_preflight[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, SL: TensorLayout](
+    ctx: DeviceContext, aw: AttentionWeights, attention: AttentionWorkspace,
+    mw: MLPWeights, mlp: MLPWorkspace, x: DeviceBuffer[DType.bfloat16],
+    storage: DeviceBuffer[DType.bfloat16],
+    positions: TileTensor[DType.int32, SL, MutAnyOrigin],
+    blocks: TileTensor[DType.int32, SL, MutAnyOrigin],
+    layer: Int, layers: Int, block_size: Int,
+) raises:
+    comptime assert positions.flat_rank == 1 and blocks.flat_rank == 1
+    comptime HIDDEN = QUERY_HEADS * HEAD_DIM
+    comptime WIDTH = KV_HEADS * HEAD_DIM
+    var s = Int(positions.dim[0]())
+    var i = mw.intermediate
+    if ctx.api() != "metal":
+        raise Error("decode composition requires Metal")
+    if (aw.query_heads != QUERY_HEADS or aw.kv_heads != KV_HEADS or aw.head_dim != HEAD_DIM
+            or aw.hidden != HIDDEN or mw.hidden != HIDDEN or attention.query_heads != QUERY_HEADS
+            or attention.kv_heads != KV_HEADS or attention.head_dim != HEAD_DIM
+            or mlp.hidden != HIDDEN or mlp.intermediate != i):
+        raise Error("decode composition dimensions disagree with the layer")
+    if (s < 1 or Int(blocks.dim[0]()) != s or s > attention.max_rows or s > mlp.max_rows
+            or layers < 1 or layer < 0 or layer >= layers or block_size < 1
+            or block_size > attention.capacity or len(storage) % (2 * layers * block_size * WIDTH) != 0):
+        raise Error("invalid decode composition rows, layer or pool geometry")
+    # Fixed stack storage. Entries 0..11 are writable; 12..22 are read-only.
+    var regions = InlineArray[SIMD[DType.uint64, 2], 23](uninitialized=True)
+    regions[0] = _region(storage, len(storage))
+    regions[1] = _region(attention.normalized, s * HIDDEN)
+    regions[2] = _region(attention.packed, s * (HIDDEN + 2 * WIDTH))
+    regions[3] = _region(attention.query, s * HIDDEN)
+    regions[4] = _region(attention.attention, s * HIDDEN)
+    regions[5] = _region(attention.projected, s * HIDDEN)
+    regions[6] = _region(attention.output, s * HIDDEN)
+    regions[7] = _region(mlp.normalized, s * HIDDEN)
+    regions[8] = _region(mlp.gate, s * i)
+    regions[9] = _region(mlp.up, s * i)
+    regions[10] = _region(mlp.gated, s * i)
+    regions[11] = _region(mlp.down, s * HIDDEN)
+    regions[12] = _region(x, s * HIDDEN)
+    regions[13] = _region(aw.norm, HIDDEN)
+    regions[14] = _region(aw.qkv, (HIDDEN + 2 * WIDTH) * HIDDEN)
+    regions[15] = _region(aw.bias, HIDDEN + 2 * WIDTH)
+    regions[16] = _region(aw.output, HIDDEN * HIDDEN)
+    regions[17] = _region(attention.cosine, block_size * HEAD_DIM)
+    regions[18] = _region(attention.sine, block_size * HEAD_DIM)
+    regions[19] = _region(mw.norm, HIDDEN)
+    regions[20] = _region(mw.gate, i * HIDDEN)
+    regions[21] = _region(mw.up, i * HIDDEN)
+    regions[22] = _region(mw.down, HIDDEN * i)
+    for left in range(12):
+        for right in range(left + 1, 23):
+            var l = regions[left]
+            var z = regions[right]
+            if l[0] < z[0] + z[1] and z[0] < l[0] + l[1]:
+                raise Error("decode composition writable storage overlaps another live tensor")
+
+
+def validate_decode_batch_layer[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, SL: TensorLayout](
+    ctx: DeviceContext, aw: AttentionWeights, attention: AttentionWorkspace,
+    mw: MLPWeights, mlp: MLPWorkspace, x: DeviceBuffer[DType.bfloat16],
+    storage: DeviceBuffer[DType.bfloat16],
+    positions: TileTensor[DType.int32, SL, MutAnyOrigin],
+    blocks: TileTensor[DType.int32, SL, MutAnyOrigin],
+    layer: Int, layers: Int, block_size: Int,
+) raises:
+    """Preflight one decode-composition layer without enqueueing or changing state."""
+    _decode_batch_preflight[QUERY_HEADS, KV_HEADS, HEAD_DIM](ctx, aw, attention, mw, mlp, x, storage,
+                                                             positions, blocks, layer, layers, block_size)
+
+
+def enqueue_decode_batch_layer[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, PROJECTION: Int, SL: TensorLayout](
+    ctx: DeviceContext, mut aw: AttentionWeights, mut attention: AttentionWorkspace,
+    mut mw: MLPWeights, mut mlp: MLPWorkspace, mut x: DeviceBuffer[DType.bfloat16],
+    mut storage: DeviceBuffer[DType.bfloat16],
+    positions: TileTensor[DType.int32, SL, MutAnyOrigin],
+    blocks: TileTensor[DType.int32, SL, MutAnyOrigin],
+    layer: Int, layers: Int, block_size: Int, input_normalized: Bool,
+) raises -> Int:
+    """One layer of the decode composition for S one-token sequences; returns its launch count.
+
+    x holds the S input rows. Every row runs the single-row Fast decode kernels'
+    arithmetic whatever S is: input RMSNorm (skipped when the caller stored it
+    in attention.normalized), packed QKV with bias, fused RoPE and K/V append into
+    each sequence's block, decode attention, Wo, the residual with the MLP norm,
+    gate, up, SiLU times up, and down. attention.output then holds the attention
+    residual and mlp.down the MLP branch; the caller adds them with the next
+    layer's or the final norm. PROJECTION is the projections' batched arrangement.
+    The caller checks positions and blocks against the pool and advances each
+    sequence's cache length.
+    """
+    _decode_batch_preflight[QUERY_HEADS, KV_HEADS, HEAD_DIM](ctx, aw, attention, mw, mlp, x, storage,
+                                                             positions, blocks, layer, layers, block_size)
+    comptime HIDDEN = QUERY_HEADS * HEAD_DIM
+    comptime WIDTH = KV_HEADS * HEAD_DIM
+    comptime PACKED = HIDDEN + 2 * WIDTH
+    var s = Int(positions.dim[0]())
+    var i = mw.intermediate
+    var launches = 9
+    var normal = TileTensor(attention.normalized, row_major(s, HIDDEN))
+    if not input_normalized:
+        enqueue_rms_norm_apple_gpu(ctx, TileTensor(x, row_major(s, HIDDEN)), TileTensor(aw.norm, row_major(HIDDEN)), normal)
+        launches += 1
+    enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, normal, TileTensor(aw.qkv, row_major(PACKED, HIDDEN)),
+        TileTensor(aw.bias, row_major(PACKED)), TileTensor(attention.packed, row_major(s, PACKED)))
+    enqueue_fused_decode_qkv_batch[QUERY_HEADS, KV_HEADS, HEAD_DIM](ctx, attention, storage, positions, blocks,
+                                                                   layer, layers, block_size)
+    enqueue_grouped_query_attention_decode_sequences_apple_gpu[QUERY_HEADS, KV_HEADS, HEAD_DIM](ctx,
+        TileTensor(attention.query, row_major(s, QUERY_HEADS, HEAD_DIM)),
+        TileTensor(storage, row_major(len(storage) // WIDTH, KV_HEADS, HEAD_DIM)),
+        TileTensor(attention.attention, row_major(s, QUERY_HEADS, HEAD_DIM)),
+        positions, blocks, layer, layers, block_size)
+    enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, TileTensor(attention.attention, row_major(s, HIDDEN)),
+        TileTensor(aw.output, row_major(HIDDEN, HIDDEN)), TileTensor(attention.projected, row_major(s, HIDDEN)))
+    enqueue_residual_norm[HIDDEN](ctx, TileTensor(x, row_major(s, HIDDEN)),
+        TileTensor(attention.projected, row_major(s, HIDDEN)), TileTensor(mw.norm, row_major(HIDDEN)),
+        TileTensor(attention.output, row_major(s, HIDDEN)), TileTensor(mlp.normalized, row_major(s, HIDDEN)))
+    var mlp_normal = TileTensor(mlp.normalized, row_major(s, HIDDEN))
+    enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, mlp_normal, TileTensor(mw.gate, row_major(i, HIDDEN)),
+        TileTensor(mlp.gate, row_major(s, i)))
+    enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, mlp_normal, TileTensor(mw.up, row_major(i, HIDDEN)),
+        TileTensor(mlp.up, row_major(s, i)))
+    enqueue_silu_multiply_apple_gpu(ctx, TileTensor(mlp.gate, row_major(s, i)), TileTensor(mlp.up, row_major(s, i)),
+        TileTensor(mlp.gated, row_major(s, i)))
+    enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, TileTensor(mlp.gated, row_major(s, i)),
+        TileTensor(mw.down, row_major(HIDDEN, i)), TileTensor(mlp.down, row_major(s, HIDDEN)))
+    return launches

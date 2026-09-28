@@ -10,6 +10,10 @@ ENTRYPOINTS.update(qwen_model_gpu_argmax='QwenModel.forward+greedy-gpu-argmax', 
 ENTRYPOINTS['qwen_model_buffer_swap'] = 'QwenModel.forward+greedy-buffer-swap'
 ENTRYPOINTS.update(qwen_model_residual_norm='QwenModel.forward+greedy-residual-norm', qwen_model_swap_argmax='QwenModel.forward+greedy-swap-argmax', qwen_model_all_three='QwenModel.forward+greedy-all-three')
 SELECTIONS = {'qwen_model_gpu_argmax':1, 'qwen_model_fused_head':2, 'qwen_model_swap_argmax':1, 'qwen_model_all_three':1}
+# The batch-size study: the all-three decode composition for B sequences in one step.
+BATCH_IMPLEMENTATION = 'qwen_model_batch'
+ENTRYPOINTS[BATCH_IMPLEMENTATION] = 'QwenModel.forward+greedy_tokens'
+SELECTIONS[BATCH_IMPLEMENTATION] = 1
 TARGET_FIELDS = ('profile_workload', 'dispatches_per_iteration', 'key_value_rows')
 PREFIXES = (64, 1024, 3968)
 DECLARATION = dict(model='Qwen2.5-0.5B-Instruct', policy='fast', batch=1,
@@ -84,13 +88,15 @@ def specification(prefix, fused=False, combined=False, selection=0, copy_free=Fa
 
 def options(implementation):
     return (implementation=='qwen_model_fused',
-            implementation in ('qwen_model_combined','qwen_model_residual_norm','qwen_model_swap_argmax','qwen_model_all_three'),
+            implementation in ('qwen_model_combined','qwen_model_residual_norm','qwen_model_swap_argmax','qwen_model_all_three',BATCH_IMPLEMENTATION),
             SELECTIONS.get(implementation,0),
-            implementation in ('qwen_model_buffer_swap','qwen_model_swap_argmax','qwen_model_all_three'),
-            implementation in ('qwen_model_residual_norm','qwen_model_all_three'))
+            implementation in ('qwen_model_buffer_swap','qwen_model_swap_argmax','qwen_model_all_three',BATCH_IMPLEMENTATION),
+            implementation in ('qwen_model_residual_norm','qwen_model_all_three',BATCH_IMPLEMENTATION))
 
 
 def configuration(data):
+    if data.get('implementation') == BATCH_IMPLEMENTATION:
+        return batch_configuration(data)
     if (data.get('implementation') not in ENTRYPOINTS
             or data.get('entrypoint') != ENTRYPOINTS[data['implementation']]):
         raise ValueError('Qwen profile implementation changed')
@@ -157,3 +163,152 @@ PROJECTION_DECLARATION = dict(COMPOSITION_DECLARATION,
     candidate='one output per SIMD group; runtime or fixed 896/4864 width with four-iteration prefetch; 64/128/256 threads',
     extra_correctness='15 full logits/cache comparisons and 195 extra tensors per candidate at prefix64',
     choice='qualify at all contexts; lowest worst-context median ratio, then mean, then ID; separate confirmation required')
+
+
+BATCH_CONTEXTS = (64, 1024, 3968)
+BATCH_SIZES = (1, 2, 4, 8, 16, 32, 64)
+BATCH_MIXED = 32
+BATCH_TILES = (4, 8, 16)
+BATCH_COMPARISONS = [['tile-4','tile-4'], ['tile-4','tile-8'], ['tile-4','tile-16'], ['tile-4','tile-4 observed']]
+BATCH_TRACES = ((1024, 1, 4), (1024, 16, 4), (1024, 64, 4))
+
+
+def mixed_contexts():
+    """The mixed workload (context 0): 32 sequences whose contexts spread evenly from 64 to 3968."""
+    return [64 + s*(3968-64)//(BATCH_MIXED-1) for s in range(BATCH_MIXED)]
+
+
+def batch_workloads():
+    """(context, sequences) cells, context 0 being the mixed batch."""
+    return [(c, b) for c in BATCH_CONTEXTS for b in BATCH_SIZES] + [(0, BATCH_MIXED)]
+
+
+BATCH_DECLARATION = dict(DECLARATION, policy='fast; configuration 26 decode composition for B sequences, one token each',
+    batch=list(BATCH_SIZES), prefixes=list(BATCH_CONTEXTS),
+    mixed=dict(sequences=BATCH_MIXED, contexts=mixed_contexts()), row_tiles=list(BATCH_TILES),
+    comparisons=BATCH_COMPARISONS,
+    cache_layout='block-major pool of 64 full-context blocks in one 3 GiB allocation; block 0 prefilled with the frozen history and copied to every block',
+    timing_boundary='step batch and plan construction through greedy_tokens readback of every sequence; logical rewind and recording excluded',
+    trace_repeats=2, trace_workloads=[list(t) for t in BATCH_TRACES],
+    trace_boundary='normal forward+greedy_tokens for B sequences; fixed logical contexts; no layer synchronizations',
+    decision='Per workload and tile: gain if all four block ratios are below one and the median reduction exceeds '
+             'max(5%, largest absolute calibration deviation); regression by the symmetric rule; otherwise inconclusive.')
+
+
+def batch_specification(context, sequences, tile):
+    if (context, sequences, tile) not in BATCH_TRACES:
+        raise ValueError('undeclared batch trace workload')
+    return dict(profile_rows=sequences, hidden_size=896, key_value_rows=context+1,
+                profile_workload=f'model-p{context}-b{sequences}-t{tile}',
+                dispatches_per_iteration=len(stages(*options(BATCH_IMPLEMENTATION))))
+
+
+# 1d, exact batched projections: arrangements 3-6 against arrangement 0 (tile 4) in the batch-size matrix.
+BATCH_TILE_ARRANGEMENTS = {4: 0, 8: 1, 16: 2}
+BATCH_PROJECTION_ARRANGEMENTS = (3, 4, 5, 6)
+BATCH_PROJECTION_TRACES = tuple((1024, 64, a) for a in (0,) + BATCH_PROJECTION_ARRANGEMENTS)
+BATCH_PROJECTION_DECLARATION = dict(
+    {k: v for k, v in BATCH_DECLARATION.items() if k != 'row_tiles'},
+    policy='fast; configuration 26 decode composition for B sequences, one token each; batched projections in one arrangement',
+    arrangements={'0': 'tile 4: four rows and one column per SIMD group, runtime width, row guard in the loop',
+                  '3': 'four rows and one column, fixed width 896 or 4864 with four iterations of early loads, no guard in the loop',
+                  '4': 'four rows and four columns, runtime width, no guard in the loop',
+                  '5': 'four rows and four columns, fixed width with early loads, no guard in the loop',
+                  '6': 'arrangement 5 with the row tiles of one column block in consecutive SIMD groups'},
+    arithmetic='every output keeps the one-row kernel lane-strided FP32 sum, warp.sum, FP32 bias and BF16 rounding',
+    comparisons=[['arrangement-0', 'arrangement-0']] + [['arrangement-0', f'arrangement-{a}'] for a in BATCH_PROJECTION_ARRANGEMENTS],
+    trace_workloads=[list(t) for t in BATCH_PROJECTION_TRACES],
+    decision='Per workload and arrangement: gain if all four block ratios are below one and the median reduction exceeds '
+             'max(5%, largest absolute calibration deviation); regression by the symmetric rule; otherwise inconclusive.',
+    qualification='no regression in any workload with B >= 2 and a gain in every workload with B >= 4',
+    selection='lowest worst-case median ratio over workloads with B >= 4, then lowest mean ratio, then lower ID',
+    confirmation='a fresh four-block run of the selected arrangement against arrangement 0 over the same workloads, '
+                 'with its own calibration and the same qualifying rule; no other candidate if it fails')
+
+
+# 1e, reordered batched projections: arrangements 7-10 against arrangement 5, the batched default.
+BATCH_REORDERED_CONTROL = 5
+BATCH_REORDERED_ARRANGEMENTS = (7, 8, 9, 10)
+BATCH_REORDERED_TRACES = tuple((1024, 64, a) for a in (BATCH_REORDERED_CONTROL,) + BATCH_REORDERED_ARRANGEMENTS)
+BATCH_ACCURACY_SHAPES = ((8, 1152, 896), (8, 896, 896), (8, 4864, 896), (8, 896, 4864), (2, 151936, 896))
+BATCH_REORDERED_DECLARATION = dict(
+    {k: v for k, v in BATCH_PROJECTION_DECLARATION.items() if k not in ('arrangements', 'comparisons', 'trace_workloads')},
+    policy='fast; configuration 26 decode composition; batched and single-row projections in one arrangement',
+    arrangements={'5': 'the batched default: four rows and four columns, fixed width, early loads, today\'s order',
+                  '7': 'arrangement 5 with eight rows per SIMD group, today\'s order',
+                  '8': 'four rows and four columns; each lane sums four adjacent products in every 128, then warp.sum; '
+                       'one row runs the same order',
+                  '9': 'matrix-unit 8x32 tiles: 8x8 fragments along K in steps of 8, FP32 accumulators, for any row count',
+                  '10': 'matrix-unit 16x16 tiles, as 9'},
+    arithmetic='5 and 7 keep the one-row kernel order; 8-10 change it, and a single row follows the same order',
+    comparisons=[['arrangement-5', 'arrangement-5']] + [['arrangement-5', f'arrangement-{a}'] for a in BATCH_REORDERED_ARRANGEMENTS],
+    trace_workloads=[list(t) for t in BATCH_REORDERED_TRACES],
+    accuracy=dict(shapes=[list(s) for s in BATCH_ACCURACY_SHAPES], reference='FP64 sum of the same BF16 operands',
+                  unit='absolute error in BF16 units in the last place at the FP64 sum',
+                  values='the kernel tests: mixed signs and exponents, every fifth a signed zero, subnormal or neighbour of one',
+                  gate='a reordered arrangement\'s worst error per shape does not exceed arrangement 5\'s'),
+    qualification='the accuracy gate; no regression in any workload; a gain in every workload with B >= 16',
+    selection='lowest worst-case median ratio over workloads with B >= 16, then lowest mean ratio, then lower ID',
+    confirmation='a fresh four-block run of the selected arrangement against arrangement 5 over the same workloads, '
+                 'with its own calibration and the same qualifying rule; then the model-level diagnostics',
+    diagnostics='teacher-forced decode comparison against arrangement 5; HF same-history comparison of 5 and the '
+                'selected arrangement; stop if the selected agrees with HF on more than one fewer decode choice or '
+                'its largest KL divergence more than doubles',
+    adoption='an exact selection becomes the default on 1d\'s terms; a reordered one waits for a separate decision')
+
+
+# 1f, addressing: arrangement 5 with raw-pointer loads (11) and arrangement 8, both against 5.
+BATCH_ADDRESSING_CONTROL = 5
+BATCH_ADDRESSING_ARRANGEMENTS = (11, 8)
+BATCH_ADDRESSING_TRACES = tuple((1024, 64, a) for a in (BATCH_ADDRESSING_CONTROL,) + BATCH_ADDRESSING_ARRANGEMENTS)
+BATCH_ADDRESSING_DECLARATION = dict(
+    {k: v for k, v in BATCH_REORDERED_DECLARATION.items()
+     if k not in ('arrangements', 'arithmetic', 'comparisons', 'trace_workloads', 'accuracy', 'qualification',
+                  'selection', 'confirmation', 'diagnostics', 'adoption')},
+    question='how much of arrangement 8\'s gain over arrangement 5 comes from addressing loads from raw pointers '
+             'rather than from loading four adjacent values at once',
+    arrangements={'5': 'four rows and four columns, fixed width, early loads, the one-row kernel\'s order; scalar '
+                       'loads through the tensor layout',
+                  '11': 'arrangement 5 with each scalar load addressed from a raw pointer offset, in 5\'s order',
+                  '8': 'the decode default: arrangement 5\'s tile with four adjacent values per lane in one '
+                       'raw-pointer vector load, in another order'},
+    arithmetic='5 and 11 keep the one-row kernel order; 8 changes it',
+    comparisons=[['arrangement-5', 'arrangement-5']] + [['arrangement-5', f'arrangement-{a}']
+                                                        for a in BATCH_ADDRESSING_ARRANGEMENTS],
+    trace_workloads=[list(t) for t in BATCH_ADDRESSING_TRACES],
+    analysis='diagnostic, no selection: in each workload where arrangement 8 is a gain, the share of its gain that '
+             'arrangement 11 reaches, (1 - r11) / (1 - r8) of their median paired ratios against arrangement 5; the '
+             'same share of traced projection time at B = 64 and 1,024 cached tokens',
+    hypothesis='load width, not addressing, explains most of the gain: arrangement 11 reaches less than a third of '
+               'arrangement 8\'s gain from B = 16',
+    consequence='only if arrangement 11 is slower in no workload and reaches at least 80% of arrangement 8\'s gain '
+                'in every workload from B = 16 does an exact default go back to a decision; otherwise arrangement '
+                '8 stays')
+
+
+def batch_projection_specification(context, sequences, arrangement):
+    if (context, sequences, arrangement) not in BATCH_PROJECTION_TRACES + BATCH_REORDERED_TRACES + BATCH_ADDRESSING_TRACES:
+        raise ValueError('undeclared projection trace workload')
+    return dict(profile_rows=sequences, hidden_size=896, key_value_rows=context+1,
+                profile_workload=f'model-p{context}-b{sequences}-a{arrangement}',
+                dispatches_per_iteration=len(stages(*options(BATCH_IMPLEMENTATION))))
+
+
+def batch_configuration(data):
+    """A batch trace names 1c's row tile or 1d's arrangement, never both."""
+    if data.get('entrypoint') != ENTRYPOINTS[BATCH_IMPLEMENTATION]:
+        raise ValueError('Qwen batch profile entrypoint changed')
+    if ('row_tile' in data) == ('arrangement' in data):
+        raise ValueError('a Qwen batch trace names a row tile or an arrangement')
+    arm = 'arrangement' if 'arrangement' in data else 'row_tile'
+    fields = (data.get('key_value_rows'), data.get('profile_rows'), data.get(arm))
+    if any(type(value) is not int for value in fields):
+        raise ValueError('invalid Qwen batch trace geometry')
+    specify = batch_projection_specification if arm == 'arrangement' else batch_specification
+    expected = specify(fields[0]-1, fields[1], fields[2])
+    expected[arm] = fields[2]
+    if any(type(data.get(k)) is not type(v) or data.get(k) != v for k, v in expected.items()):
+        raise ValueError('Qwen batch trace geometry changed')
+    if data.get('profile_iterations') != 8 or data.get('profile_warmup_iterations') != 10:
+        raise ValueError('Qwen trace capture budget changed')
+    return expected

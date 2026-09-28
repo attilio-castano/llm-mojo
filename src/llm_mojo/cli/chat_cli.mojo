@@ -71,10 +71,10 @@ def main() raises:
         except error:
             print(error,flush=True)
             if observed:
-                events += "rejected\t"+String(turn)+"\t0\t"+String(session.model.length)+"\t0\n"
+                events += "rejected\t"+String(turn)+"\t0\t"+String(session.length())+"\t0\n"
             continue
         turn += 1
-        var cached_before = session.model.length
+        var cached_before = session.length()
         var prompt_length = len(session.history.tokens)
         if observed:
             events += "begin\t"+String(turn)+"\t"+String(cached_before)+"\t"+String(prompt_length)+"\t0\n"
@@ -87,7 +87,7 @@ def main() raises:
                 if interrupted():
                     session.history.finish("interrupted")
                     break
-                if session.model.length < len(session.history.tokens):
+                if session.length() < len(session.history.tokens):
                     session.submit_next(ctx)
                     continue
                 var token = session.sample(ctx)
@@ -115,7 +115,7 @@ def main() raises:
         elif session.history.reason == "interrupted":
             print("[Reply stopped]",flush=True)
         if observed:
-            events += "finish\t"+String(turn)+"\t"+String(session.model.length)+"\t"+session.history.reason+"\t"+String(now()-turn_started)+"\n"
+            events += "finish\t"+String(turn)+"\t"+String(session.length())+"\t"+session.history.reason+"\t"+String(now()-turn_started)+"\n"
             events += "submitted\t"+String(turn)+"\t0\t"+String(session.model.submitted_rows)+"\t0\n"
             for i in range(len(session.history.tokens)):
                 events += "history\t"+String(turn)+"\t"+String(i)+"\t"+String(session.history.tokens[i])+"\t0\n"

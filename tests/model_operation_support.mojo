@@ -15,7 +15,7 @@ def capture_operations(ctx: DeviceContext, prepared: String, reference: String, 
     var m = MLPWorkspace(ctx,1)
     var xb = ctx.enqueue_create_buffer[DType.bfloat16](896)
     for i in range(24):
-        var layer = ModelLayer(ctx,prepared,i,1)
+        var layer = ModelLayer(ctx,prepared,i)
         var src = reference+"/layer_"+String(i)+"_"
         var dst = output+"/layer_"+String(i)+"_"
         load_bf16(xb,src+"X.bin")
