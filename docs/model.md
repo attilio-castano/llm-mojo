@@ -192,7 +192,7 @@ Y[row, output_feature] = bf16(warp_sum(partial) + f32(B[output_feature]))
 The order depends neither on the number of rows nor on a row's place among
 them, so each batched row equals decoding that sequence alone. Every decode
 input width, 896 and 4,864, is a multiple of 128. The baseline route and the
-exact arrangements 0–7 keep the one-row kernel's order, in which lane `l`
+exact arrangements 0–7 and 11 keep the one-row kernel's order, in which lane `l`
 accumulates `k = l + 32 * i` ([layouts](layouts.md#affine-linear-projection-v0)).
 The two orders' results can differ in the last bits. At the five decode
 shapes, arrangement 8's worst error against an FP64 sum of the same operands

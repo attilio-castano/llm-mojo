@@ -33,7 +33,8 @@ batched step time by 31–65%. 1e's arrangement 8, which sums four adjacent
 products per lane, cut batched steps by a further 17–36% from B = 16 and
 single-sequence steps by about 10%, with arrangement 5's worst-case accuracy
 and HF agreement. It is now the decode arrangement, which changes Fast's
-arithmetic in the last bits.
+arithmetic in the last bits. 1f, a diagnostic of how much of that gain comes from
+addressing, is in progress.
 
 ## 1a. Step format and KV pool
 
@@ -683,6 +684,44 @@ Each step is one commit with its gate:
 
 **Out of scope.** Attention, prefill kernels, split reductions, a different
 arrangement per batch size, and lower-precision accumulation.
+
+## 1f. Addressing check
+
+Requested on 2026-09-28, after 1e's adoption, as a diagnostic: it changes no
+default.
+
+**Question.** Arrangement 8 differs from arrangement 5 in two ways at once. Each
+lane loads four adjacent values with one vector load, and every load is
+addressed from a raw pointer offset instead of through the tensor layout. How
+much of 8's gain does raw addressing give alone, in arrangement 5's order?
+
+**Arrangement 11.** Arrangement 5 with each scalar load addressed as
+`ptr[row * WIDTH + k]`, with `WIDTH` fixed at 896 or 4,864. It keeps 5's tile,
+early loads and lane-strided order, so its outputs equal the one-row kernel's bit
+for bit, and one row runs the one-row kernel. The kernel tests check that.
+
+**Measurement.** The batch-size matrix under its own declaration: arrangement 5
+against itself, 11 and 8 in four blocks, 5,280 samples, and traces of 5, 11 and
+8 at B = 64 and 1,024 cached tokens, two repeats each. Every sample must
+reproduce its arm's tokens, and arrangement 11's must equal arrangement 5's.
+There is no selection and no confirmation.
+
+**Analysis.** In each workload where arrangement 8 is a gain, the share of its
+gain that arrangement 11 reaches, (1 − r11) / (1 − r8), from their median paired
+ratios against arrangement 5; and the same share of traced projection time.
+
+**Hypothesis, recorded before measurement.** Load width, not addressing,
+explains most of arrangement 8's gain: arrangement 11 reaches less than a third
+of it from B = 16.
+
+**Consequence.** Arrangement 8 stays the default unless arrangement 11 is slower
+in no workload and reaches at least 80% of 8's gain in every workload from
+B = 16. Then an exact default goes back to you as a decision, with 1e's gates.
+
+**Steps.** First, arrangement 11 with its exactness tests and the study's
+declaration and arms. Then the screen and traces on a quiet machine, with the
+analysis. An archive and a study follow if you ask for them or the consequence
+applies.
 
 ## Validation record
 

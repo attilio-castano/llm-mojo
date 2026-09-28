@@ -211,7 +211,7 @@ exact HF top-logit tie. These are bounded development observations, not a
 general model-quality or exact trajectory-equivalence claim.
 
 `decode-parity` checks the Fast decode composition against baseline on the
-real 24-layer model. It needs an exact projection arrangement (0–7), whose
+real 24-layer model. It needs an exact projection arrangement (0–7 or 11), whose
 projections equal the baseline's, so that only the fusions could differ. The
 default, arrangement 8, is reordered, so the parity build selects arrangement 5:
 

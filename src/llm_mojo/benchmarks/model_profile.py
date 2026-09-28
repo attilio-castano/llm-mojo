@@ -1412,6 +1412,8 @@ PROJECTION_BATCH_STEM = 'batch-projections'
 PROJECTION_BATCH_KIND = 'qwen-batch-projections-v1'
 REORDERED_BATCH_STEM = 'batch-reordered'
 REORDERED_BATCH_KIND = 'qwen-batch-reordered-v1'
+ADDRESSING_BATCH_STEM = 'batch-addressing'
+ADDRESSING_BATCH_KIND = 'qwen-batch-addressing-v1'
 
 
 def batch_study(name):
@@ -1434,6 +1436,11 @@ def batch_study(name):
                   for c, b, a in contract.BATCH_REORDERED_TRACES]
         return dict(stem=REORDERED_BATCH_STEM, kind=REORDERED_BATCH_KIND,
                     declaration=contract.BATCH_REORDERED_DECLARATION, argument='reordered', traces=traces)
+    if name == 'addressing':
+        traces = [(c, b, a, f'batch-profile-{c}-{b}-a{a}', dict(arrangement=a))
+                  for c, b, a in contract.BATCH_ADDRESSING_TRACES]
+        return dict(stem=ADDRESSING_BATCH_STEM, kind=ADDRESSING_BATCH_KIND,
+                    declaration=contract.BATCH_ADDRESSING_DECLARATION, argument='addressing', traces=traces)
     raise ValueError('unknown batch study')
 
 
@@ -1445,6 +1452,8 @@ def batch_comparisons(argument):
         return 1+len(contract.BATCH_PROJECTION_ARRANGEMENTS), None
     if argument == 'reordered':
         return 1+len(contract.BATCH_REORDERED_ARRANGEMENTS), None
+    if argument == 'addressing':
+        return 1+len(contract.BATCH_ADDRESSING_ARRANGEMENTS), None
     if argument.startswith('confirm:') and argument[8:].isdigit() and int(argument[8:]) in contract.BATCH_PROJECTION_ARRANGEMENTS:
         return 2, None
     prefix = 'reordered-confirm:'
@@ -1949,7 +1958,7 @@ def projection_replay(directory):
 
 def reordered_arrangement(arrangement):
     """Arrangements 8-10 sum in another order than the one-row kernel (kernels/linear.mojo)."""
-    return arrangement >= 8
+    return 8 <= arrangement <= 10
 
 
 def diagnostic_stop(diagnostics):
@@ -2332,9 +2341,9 @@ def main():
                                             'batch-size-replay','batch-size-plot',
                                             *RETIRED])
     parser.add_argument('--projections',action='store_true',help='Replay/plot the projection arrangement study')
-    parser.add_argument('--study', choices=['size','projections','reordered'], default='size',
-                        help='batch-size-* study: 1c row tiles (size), 1d exact arrangements (projections) '
-                             'or 1e reordered arrangements (reordered)')
+    parser.add_argument('--study', choices=['size','projections','reordered','addressing'], default='size',
+                        help='batch-size-* study: 1c row tiles (size), 1d exact arrangements (projections), '
+                             '1e reordered arrangements (reordered) or 1f addressing (addressing)')
     parser.add_argument('--screen', type=Path, help='screen timings for batch-size-confirm and batch-size-diagnose')
     parser.add_argument('--confirmation', type=Path, help='confirmation timings for batch-size-archive and -diagnose')
     parser.add_argument('--diagnostics', type=Path, help='1e model-level diagnostics for batch-size-archive')

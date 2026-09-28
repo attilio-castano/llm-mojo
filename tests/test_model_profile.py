@@ -180,6 +180,22 @@ class ModelProfileTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             projection_summarize(broken, contract.BATCH_PROJECTION_ARRANGEMENTS)
 
+    def test_addressing_contract_pairs_raw_and_wide_loads_with_arrangement_5(self):
+        from llm_mojo.benchmarks.model_profile import batch_comparisons, batch_study, reordered_arrangement
+        declaration = contract.BATCH_ADDRESSING_DECLARATION
+        self.assertEqual(json.loads(json.dumps(declaration)), declaration)
+        self.assertEqual([int(a) for a in declaration['arrangements']], [5, 11, 8])
+        self.assertEqual(declaration['comparisons'], [['arrangement-5', f'arrangement-{a}'] for a in (5, 11, 8)])
+        self.assertTrue({'question', 'analysis', 'hypothesis', 'consequence'} <= set(declaration))
+        # The matrix, boundaries and per-workload rule are 1e's.
+        for key in ('batch', 'prefixes', 'mixed', 'timing_boundary', 'trace_boundary', 'decision'):
+            self.assertEqual(declaration[key], contract.BATCH_REORDERED_DECLARATION[key])
+        self.assertEqual([t[2] for t in batch_study('addressing')['traces']], [5, 11, 8])
+        self.assertEqual(contract.batch_projection_specification(1024, 64, 11)['profile_workload'], 'model-p1024-b64-a11')
+        self.assertEqual(batch_comparisons('addressing'), (3, None))
+        self.assertFalse(reordered_arrangement(11) or reordered_arrangement(5))
+        self.assertTrue(all(reordered_arrangement(a) for a in (8, 9, 10)))
+
     def test_reordered_contract_accuracy_and_tokens(self):
         from llm_mojo.benchmarks.model_profile import (accuracy_gate, batch_comparisons, batch_study, parse_accuracy,
                                                        parse_batch_tokens)

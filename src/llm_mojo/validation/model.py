@@ -769,7 +769,7 @@ def decode_projection(stdout):
 
 def reordered(projection):
     """Arrangements 8-10 sum in another order than the one-row kernel (kernels/linear.mojo)."""
-    return projection>=8
+    return 8<=projection<=10
 
 
 def _bf16_values(path):

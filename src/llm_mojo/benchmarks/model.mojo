@@ -3,8 +3,9 @@
 The token-profile modes (bench, verify, profile) time one sequence. The batch
 mode and the MODEL_BATCH_PROFILE build time decode steps of B sequences: the
 batch-size study (1c) pairs row tiles, the projection study (1d) pairs exact
-batched projection arrangements, and the reordered study (1e) pairs arrangements
-with other summation orders, whose accuracy the accuracy mode records
+batched projection arrangements, the reordered study (1e) pairs arrangements
+with other summation orders, whose accuracy the accuracy mode records, and the
+addressing check (1f) pairs raw-pointer and vector loads with arrangement 5
 (docs/batched-decode-plan.md).
 Completed decode experiments (fusion, selection, buffer swap, composition,
 projection arrangement, scheduling and launch probes) are replay-only; their
@@ -16,7 +17,7 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, DeviceGraph, DeviceGraphBuilder
 from layout import TileTensor, TensorLayout, row_major
 from std.gpu import global_idx
-from llm_mojo.kernels.linear import DECODE_ARRANGEMENTS, enqueue_linear_decode_rows_apple_gpu
+from llm_mojo.kernels.linear import DECODE_ARRANGEMENTS, decode_arrangement_reordered, enqueue_linear_decode_rows_apple_gpu
 from llm_mojo.models.qwen2.model import QwenModel, save_bf16
 from llm_mojo.models.qwen2.plan import fast_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
@@ -144,7 +145,8 @@ def batch_arms(study: String) raises -> List[Int]:
     Comparison 0 pairs the control with itself. size: 1c's tiles 4, 8 and 16 and
     the observed arm. projections: 1d's screen of arrangements 3-6 against 0.
     confirm:A: 1d's confirmation of A. reordered: 1e's screen of 7-10 against 5.
-    reordered-confirm:A: 1e's confirmation of A.
+    reordered-confirm:A: 1e's confirmation of A. addressing: 1f's arrangements 11 and 8
+    against 5.
     """
     if study == "size":
         return [0, 1, 2, -1]
@@ -152,6 +154,8 @@ def batch_arms(study: String) raises -> List[Int]:
         return [0, 3, 4, 5, 6]
     if study == "reordered":
         return [5, 7, 8, 9, 10]
+    if study == "addressing":
+        return [5, 11, 8]
     var parts = study.split(":")
     if len(parts) == 2:
         var arrangement = Int(String(parts[1]))
@@ -225,7 +229,7 @@ def batch_bench(prepared: String, tables: String, context: Int, first: Int, stud
             for s in range(sequences):
                 if reference[s] != expected[0][s] if position else False:
                     differing += 1
-            if differing and arms[position] < 8:
+            if differing and not decode_arrangement_reordered(arms[position]):
                 raise Error("an exact arrangement changed a sequence's token")
             print("tokens:",sequences,arms[position],differing)
             expected.append(reference^)

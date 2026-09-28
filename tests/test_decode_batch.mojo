@@ -231,10 +231,12 @@ def test_decode_arrangements_check_shapes_before_launch() raises:
     var input = TileTensor(x,row_major(2,512))
     var weight = TileTensor(w,row_major(1150,512))
     var output = TileTensor(y,row_major(2,1150))
-    # Arrangements 3, 5-8 fix the width; 4-8 compute four columns at a time.
+    # Arrangements 3, 5-8 and 11 fix the width; 4-8 and 11 compute four columns at a time.
     comptime for arrangement in range(3, 9):
         with assert_raises():
             enqueue_linear_decode_rows_apple_gpu[arrangement](ctx,input,weight,output)
+    with assert_raises():
+        enqueue_linear_decode_rows_apple_gpu[11](ctx,input,weight,output)
     with y.map_to_host() as mapped:
         for i in range(len(y)):
             assert_equal(mapped.unsafe_ptr()[unsafe_offset=i].cast[DType.float32](), Float32(-123))
@@ -519,7 +521,7 @@ def test_exact_and_reordered_steps_equal_each_sequence_decoded_alone() raises:
     var ctx = DeviceContext()
     for sequences in [3, 16]:
         _steps_equal_solo[5](ctx, sequences, 4)
-    comptime for arrangement in range(8, DECODE_ARRANGEMENTS):
+    comptime for arrangement in range(8, 11):
         for sequences in [3, 16]:
             _steps_equal_solo[arrangement](ctx, sequences, 4)
 

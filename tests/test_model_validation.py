@@ -25,7 +25,7 @@ class ModelComparisonTests(unittest.TestCase):
         stdout='model device Apple M4 Pro backend metal\ndecode projection 9\ncall 0 token 5\n'
         self.assertEqual(decode_projection(stdout),9)
         self.assertTrue(reordered(9) and reordered(10) and reordered(8))
-        self.assertFalse(any(reordered(a) for a in range(8)))
+        self.assertFalse(any(reordered(a) for a in (*range(8), 11)))
         for bad in ('model device Apple M4 Pro backend metal\n', stdout+'decode projection 5\n'):
             with self.assertRaises(ValueError): decode_projection(bad)
 

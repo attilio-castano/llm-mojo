@@ -257,8 +257,37 @@ BATCH_REORDERED_DECLARATION = dict(
     adoption='an exact selection becomes the default on 1d\'s terms; a reordered one waits for a separate decision')
 
 
+# 1f, addressing: arrangement 5 with raw-pointer loads (11) and arrangement 8, both against 5.
+BATCH_ADDRESSING_CONTROL = 5
+BATCH_ADDRESSING_ARRANGEMENTS = (11, 8)
+BATCH_ADDRESSING_TRACES = tuple((1024, 64, a) for a in (BATCH_ADDRESSING_CONTROL,) + BATCH_ADDRESSING_ARRANGEMENTS)
+BATCH_ADDRESSING_DECLARATION = dict(
+    {k: v for k, v in BATCH_REORDERED_DECLARATION.items()
+     if k not in ('arrangements', 'arithmetic', 'comparisons', 'trace_workloads', 'accuracy', 'qualification',
+                  'selection', 'confirmation', 'diagnostics', 'adoption')},
+    question='how much of arrangement 8\'s gain over arrangement 5 comes from addressing loads from raw pointers '
+             'rather than from loading four adjacent values at once',
+    arrangements={'5': 'four rows and four columns, fixed width, early loads, the one-row kernel\'s order; scalar '
+                       'loads through the tensor layout',
+                  '11': 'arrangement 5 with each scalar load addressed from a raw pointer offset, in 5\'s order',
+                  '8': 'the decode default: arrangement 5\'s tile with four adjacent values per lane in one '
+                       'raw-pointer vector load, in another order'},
+    arithmetic='5 and 11 keep the one-row kernel order; 8 changes it',
+    comparisons=[['arrangement-5', 'arrangement-5']] + [['arrangement-5', f'arrangement-{a}']
+                                                        for a in BATCH_ADDRESSING_ARRANGEMENTS],
+    trace_workloads=[list(t) for t in BATCH_ADDRESSING_TRACES],
+    analysis='diagnostic, no selection: in each workload where arrangement 8 is a gain, the share of its gain that '
+             'arrangement 11 reaches, (1 - r11) / (1 - r8) of their median paired ratios against arrangement 5; the '
+             'same share of traced projection time at B = 64 and 1,024 cached tokens',
+    hypothesis='load width, not addressing, explains most of the gain: arrangement 11 reaches less than a third of '
+               'arrangement 8\'s gain from B = 16',
+    consequence='only if arrangement 11 is slower in no workload and reaches at least 80% of arrangement 8\'s gain '
+                'in every workload from B = 16 does an exact default go back to a decision; otherwise arrangement '
+                '8 stays')
+
+
 def batch_projection_specification(context, sequences, arrangement):
-    if (context, sequences, arrangement) not in BATCH_PROJECTION_TRACES + BATCH_REORDERED_TRACES:
+    if (context, sequences, arrangement) not in BATCH_PROJECTION_TRACES + BATCH_REORDERED_TRACES + BATCH_ADDRESSING_TRACES:
         raise ValueError('undeclared projection trace workload')
     return dict(profile_rows=sequences, hidden_size=896, key_value_rows=context+1,
                 profile_workload=f'model-p{context}-b{sequences}-a{arrangement}',

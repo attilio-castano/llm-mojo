@@ -21,9 +21,9 @@ comptime MAX_CONTEXT = 4096
 # 1e selected and confirmed it against arrangement 5, and it was adopted on
 # 2026-09-27. Its one-row path sums in the same order, so batched rows equal
 # solo rows, but the order differs from the one-row kernel's (docs/model.md,
-# decode projection order). Exact arrangements 0-7 keep the one-row kernel's
-# arithmetic; decode parity and the route test use 5. Validation builds may
-# select another arrangement with -D DECODE_PROJECTION=N.
+# decode projection order). Exact arrangements 0-7 and 11 keep the one-row
+# kernel's arithmetic; decode parity and the route test use 5. Validation
+# builds may select another arrangement with -D DECODE_PROJECTION=N.
 comptime DECODE_PROJECTION = get_defined_int["DECODE_PROJECTION", default=8]()
 
 
