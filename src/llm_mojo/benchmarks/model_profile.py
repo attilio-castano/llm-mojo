@@ -2133,6 +2133,120 @@ def reordered_replay(directory):
     return record
 
 
+def addressing_archive(timings, traces, output):
+    """1f's compact record: every screen sample, and each accepted trace's per-stage totals, not its intervals."""
+    spec = batch_study('addressing')
+    timing = json.loads((timings/'timings.json').read_text())
+    if timing.get('argument') != spec['argument'] or timing['build']['declaration'] != spec['declaration']:
+        raise ValueError('the addressing record requires the addressing screen')
+    captures = []
+    for context, sequences, arrangement, name, arm in spec['traces']:
+        for repeat in range(2):
+            target = traces/f'{name}-r{repeat}'
+            if not (target/'submissions.xml').exists():
+                export_trace(target)
+            capture = curate(target, context, repeat)
+            capture.update(sequences=sequences, **arm)
+            captures.append(dict(prefix=context, sequences=sequences, arrangement=arrangement, repeat=repeat,
+                                 conditions=capture['conditions'], binary=capture['provenance']['binary'],
+                                 stages=batch_capture_totals(capture, timing['build'])))
+    record = dict(kind=spec['kind'], timing=timing, captures=captures,
+                  analysis_source_sha256={str(p.relative_to(repository_root())): sha(p) for p in
+                    [Path(__file__).resolve(), Path(__file__).with_name('analyze_trace.py').resolve(),
+                     Path(__file__).with_name('model_contract.py').resolve()]},
+                  rejected_captures=json.loads((traces/'rejections.json').read_text()) if (traces/'rejections.json').exists() else [])
+    def scrub(value):
+        if isinstance(value, dict):
+            return {k: ('<verified-local-asset>' if k in ('prepared','tables') else scrub(v)) for k,v in value.items()}
+        if isinstance(value, list):
+            return [scrub(v) for v in value]
+        return value
+    raw = json.dumps(scrub(record), separators=(',', ':'), allow_nan=False).encode()
+    packed = gzip.compress(raw, mtime=0)
+    output.mkdir(parents=True, exist_ok=True)
+    (output/(spec['stem']+'.json.gz')).write_bytes(packed)
+    write(output/(spec['stem']+'.json'), dict(kind=spec['kind'], sha256=hashlib.sha256(packed).hexdigest(),
+                                             uncompressed_sha256=hashlib.sha256(raw).hexdigest(), bytes=len(packed)))
+    addressing_replay(output)
+
+
+def addressing_replay(directory):
+    """Verify 1f's compact record and recompute its declared analysis; it selects nothing."""
+    manifest = json.loads((directory/(ADDRESSING_BATCH_STEM+'.json')).read_text())
+    packed = (directory/(ADDRESSING_BATCH_STEM+'.json.gz')).read_bytes()
+    raw = gzip.decompress(packed)
+    if (hashlib.sha256(packed).hexdigest() != manifest['sha256']
+            or hashlib.sha256(raw).hexdigest() != manifest['uncompressed_sha256']):
+        raise ValueError('addressing record hash mismatch')
+    record = json.loads(raw)
+    if record['kind'] != ADDRESSING_BATCH_KIND or manifest['kind'] != ADDRESSING_BATCH_KIND:
+        raise ValueError('not an addressing record')
+    timing = record['timing']
+    build_record = timing['build']
+    if build_record['declaration'] != contract.BATCH_ADDRESSING_DECLARATION or timing.get('argument') != 'addressing':
+        raise ValueError('addressing declaration changed')
+    if [b['block'] for b in timing['blocks']] != list(range(4)):
+        raise ValueError('incomplete addressing block conditions')
+    for side in ([b[s] for b in timing['blocks'] for s in ('before', 'after')]
+                 + [c['conditions'][s] for c in record['captures'] for s in ('before', 'after')]):
+        require_ac(side)
+        require_nominal_thermal_state(side)
+        if side['power_mode_raw'] != '0':
+            raise ValueError('addressing power mode changed')
+    arms = (contract.BATCH_ADDRESSING_CONTROL,) + contract.BATCH_ADDRESSING_ARRANGEMENTS
+    tokens = Counter((r['context'], r['sequences'], r['block'], r['arrangement']) for r in timing['token_differences'])
+    if tokens != Counter((c, b, block, a) for c, b in contract.batch_workloads() for block in range(4) for a in arms):
+        raise ValueError('incomplete token census')
+    if any(r['differing'] for r in timing['token_differences'] if not reordered_arrangement(r['arrangement'])):
+        raise ValueError('an exact arrangement changed a token')
+    summary = projection_summarize(timing['samples'], contract.BATCH_ADDRESSING_ARRANGEMENTS)
+    # The declared analysis: where arrangement 8 is a gain, the share of it that arrangement 11 reaches.
+    workloads = []
+    for r in summary:
+        raw11, wide = r['arrangements']['11'], r['arrangements']['8']
+        share = (1-raw11['median_ratio'])/(1-wide['median_ratio']) if wide['outcome'] == 'faster' else None
+        workloads.append(dict(context=r['context'], sequences=r['sequences'], share=share))
+    large = [w['share'] for w in workloads if w['sequences'] >= 16 and w['share'] is not None]
+    slower = [[r['context'], r['sequences']] for r in summary if r['arrangements']['11']['outcome'] == 'slower']
+    expected = Counter((c, b, a, repeat) for c, b, a in contract.BATCH_ADDRESSING_TRACES for repeat in range(2))
+    if Counter((c['prefix'], c['sequences'], c['arrangement'], c['repeat']) for c in record['captures']) != expected:
+        raise ValueError('incomplete addressing trace census')
+    for capture in record['captures']:
+        name = f"batch-profile-{capture['prefix']}-{capture['sequences']}-a{capture['arrangement']}"
+        if capture['binary'] != build_record['binaries'][name]:
+            raise ValueError('addressing trace differs from the frozen build')
+    for rejected in record['rejected_captures']:
+        workload = (rejected['prefix'], rejected['sequences'], rejected['arrangement'])
+        binary = rejected['receipt']['profile']['binary']
+        if (workload not in contract.BATCH_ADDRESSING_TRACES or rejected['status'] != 'rejected by analysis'
+                or {k: binary[k] for k in ('sha256', 'bytes')} != build_record['binaries']['batch-profile-%d-%d-a%d' % workload]):
+            raise ValueError('rejected capture is not an attempt of the frozen addressing build')
+    stages = defaultdict(list)
+    for capture in record['captures']:
+        for stage, value in capture['stages'].items():
+            stages[stage, capture['arrangement']].append(value)
+    means = {f'{stage}/{a}': stats.mean(values) for (stage, a), values in stages.items()}
+    projections = ('packed QKV projection', 'output projection', 'gate projection', 'up projection',
+                   'down projection', 'vocabulary projection')
+    total = {a: sum(means[f'{s}/{a}'] for s in projections) for a in arms}
+    analysis = dict(share_from_16=dict(minimum=min(large), median=stats.median(large), maximum=max(large),
+                                       workloads=len(large)),
+                    hypothesis=all(s < 1/3 for s in large),
+                    consequence=not slower and all(s >= 0.8 for s in large), slower_workloads=slower,
+                    projections_ms={str(a): total[a] for a in arms},
+                    projection_share=(total[5]-total[11])/(total[5]-total[8]))
+    write(directory/(ADDRESSING_BATCH_STEM+'-summary.json'),
+          dict(timing=summary, workloads=workloads, analysis=analysis, stage_means_ms=means,
+               token_differences=timing['token_differences']))
+    for r, w in zip(summary, workloads):
+        print(f"context {r['context']:4d} sequences {r['sequences']:2d}: {r['step_ms']:8.2f} ms/step; "
+              + ', '.join(f"{a}: {x['median_ratio']:.3f} {x['outcome']}" for a, x in r['arrangements'].items())
+              + ('' if w['share'] is None else f"; share {w['share']:.2f}"))
+    print('from B = 16, share of arrangement 8\'s gain:', analysis['share_from_16'], 'hypothesis:', analysis['hypothesis'],
+          'consequence:', analysis['consequence'], 'projection share:', round(analysis['projection_share'], 3))
+    return record
+
+
 def batch_plot(directory):
     """Regenerate the batch-size figures exclusively from the checked archive."""
     import matplotlib
@@ -2379,9 +2493,13 @@ def main():
         reordered_diagnostics(args.screen.resolve(), args.confirmation.resolve(), args.output.resolve(), args.prepared)
     elif args.command == 'batch-size-capture': batch_capture(args.build.resolve(), args.output.resolve(), args.study)
     elif args.command == 'batch-size-archive':
-        batch_archive(args.timings, args.traces, args.output, args.study, args.confirmation, args.diagnostics)
+        if args.study == 'addressing':
+            addressing_archive(args.timings, args.traces, args.output)
+        else:
+            batch_archive(args.timings, args.traces, args.output, args.study, args.confirmation, args.diagnostics)
     elif args.command == 'batch-size-replay':
-        dict(size=batch_replay, projections=projection_replay, reordered=reordered_replay)[args.study](args.output)
+        dict(size=batch_replay, projections=projection_replay, reordered=reordered_replay,
+             addressing=addressing_replay)[args.study](args.output)
     elif args.command == 'batch-size-plot':
         if args.study == 'size': batch_plot(args.output)
         else: projection_plot(args.output, args.study)

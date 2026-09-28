@@ -390,6 +390,45 @@ class ModelProfileTests(unittest.TestCase):
                     else:
                         with self.assertRaises((ValueError, RuntimeError)): reordered_replay(directory)
 
+    def test_retained_batch_addressing_integrity(self):
+        """1f's compact record: raw-pointer addressing reaches none of arrangement 8's gain."""
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import addressing_replay
+        source = repository_root()/'studies/model_generation'
+        original = json.loads(gzip.decompress((source/'batch-addressing.json.gz').read_bytes()))
+        retained = json.loads((source/'batch-addressing-summary.json').read_text())
+        self.assertEqual((retained['analysis']['hypothesis'], retained['analysis']['consequence']), (True, False))
+        self.assertTrue(abs(retained['analysis']['projection_share']) < 0.05)
+        for damage in (None, 'sample', 'block', 'capture', 'binary', 'conditions', 'trace-conditions', 'argument',
+                       'declaration', 'token', 'exact-token', 'rejected-binary'):
+            record = copy.deepcopy(original)
+            if damage == 'sample': record['timing']['samples'].pop()
+            elif damage == 'block': record['timing']['blocks'].pop()
+            elif damage == 'capture': record['captures'].pop()
+            elif damage == 'binary': record['captures'][2]['binary']['sha256'] = '0'*64
+            elif damage == 'conditions': record['timing']['blocks'][1]['after']['power_mode_raw'] = '1'
+            elif damage == 'trace-conditions': record['captures'][0]['conditions']['before']['battery']['power_source'] = 'Battery Power'
+            elif damage == 'argument': record['timing']['argument'] = 'reordered'
+            elif damage == 'declaration': record['timing']['build']['declaration']['hypothesis'] = 'changed after measuring'
+            elif damage == 'token': record['timing']['token_differences'].pop()
+            elif damage == 'exact-token': next(r for r in record['timing']['token_differences'] if r['arrangement'] == 11)['differing'] = 1
+            elif damage == 'rejected-binary': record['rejected_captures'][0]['receipt']['profile']['binary']['sha256'] = '0'*64
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                raw = json.dumps(record).encode()
+                packed = gzip.compress(raw, mtime=0)
+                (directory/'batch-addressing.json.gz').write_bytes(packed)
+                (directory/'batch-addressing.json').write_text(json.dumps(dict(kind=record['kind'],
+                    sha256=hashlib.sha256(packed).hexdigest(), uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with self.subTest(damage=damage), redirect_stdout(StringIO()):
+                    if damage is None:
+                        addressing_replay(directory)
+                        self.assertEqual(json.loads((directory/'batch-addressing-summary.json').read_text()), retained)
+                    else:
+                        with self.assertRaises((ValueError, RuntimeError)): addressing_replay(directory)
+
     def test_retained_single_sequence_check(self):
         """1e's adoption gate: Fast decode of one sequence in arrangement 8 against 5, from the raw steps."""
         from llm_mojo._repository import repository_root

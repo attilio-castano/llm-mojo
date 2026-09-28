@@ -534,4 +534,9 @@ selects nothing:
 uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-build --study addressing --prepared /absolute/prepared-v1 --output /private/tmp/batch-addressing-build
 uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-collect --study addressing --build /private/tmp/batch-addressing-build --output /private/tmp/batch-addressing-screen
 uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-capture --study addressing --build /private/tmp/batch-addressing-build --output /private/tmp/batch-addressing-traces
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-archive --study addressing --timings /private/tmp/batch-addressing-screen --traces /private/tmp/batch-addressing-traces --output studies/model_generation
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --study addressing --output studies/model_generation
 ```
+
+Its compact record keeps every screen sample and each trace's per-stage totals,
+not the traces' intervals.

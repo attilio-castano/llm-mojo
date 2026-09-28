@@ -189,6 +189,9 @@ of the two repeats' medians over eight measured steps, in milliseconds:
 
 Per lane and per 128 inputs, arrangement 5 issues 32 scalar loads and
 arrangement 8 eight vector loads, for the same 64 multiply-adds. Arrangement 8
+also addresses its loads from raw pointers; the
+[addressing check](../../docs/batched-decode-plan.md#1f-addressing-check) found
+that this alone gains nothing, so the vector loads account for the difference. Arrangement 8
 halved the QKV, output, gate, up and down projections. At B = 64 their sixteen
 four-row passes request 0.6–3.3 GB of weights per step, which arrangement 8
 reads at 387–554 GB/s. That is above the chip's nominal 273 GB/s, so caches

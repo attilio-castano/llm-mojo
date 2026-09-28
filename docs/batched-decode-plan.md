@@ -33,8 +33,8 @@ batched step time by 31–65%. 1e's arrangement 8, which sums four adjacent
 products per lane, cut batched steps by a further 17–36% from B = 16 and
 single-sequence steps by about 10%, with arrangement 5's worst-case accuracy
 and HF agreement. It is now the decode arrangement, which changes Fast's
-arithmetic in the last bits. 1f, a diagnostic of how much of that gain comes from
-addressing, is in progress.
+arithmetic in the last bits. 1f, a diagnostic, found that none of that gain comes
+from addressing: it is the four-wide loads.
 
 ## 1a. Step format and KV pool
 
@@ -723,7 +723,53 @@ declaration and arms. Then the screen and traces on a quiet machine, with the
 analysis. An archive and a study follow if you ask for them or the consequence
 applies.
 
+**Result.** Raw-pointer addressing gives none of the gain. Arrangement 11 was
+inconclusive against arrangement 5 in all 22 workloads, with median ratios of
+0.977–1.023 from B = 16. There it reached between −12% and 9% of arrangement
+8's gain, a median of 1%. In the traces, all projections took 69.9 ms with
+arrangement 5, 70.3 ms with 11 and 43.2 ms with 8. The compiler already turns
+arrangement 5's layout indexing into the same address arithmetic; what costs
+time is the number of load instructions, which only the four-wide loads cut.
+The hypothesis held, the consequence did not apply, and arrangement 8 stays the
+default. At your request the result is kept as a compact record, not a study:
+see the validation record below.
+
 ## Validation record
+
+### 1f on `6b222ee`, 2026-09-28
+
+Two commits implement 1f:
+
+| Commit | Change |
+| --- | --- |
+| `d263f99` | arrangement 11 with its exactness tests, the addressing declaration and arms, and the reordered checks narrowed to 8–10 |
+| `6b222ee` | layout checks before launch for arrangements 8 and 11 and for residual RMSNorm's normal output, from review on #29 |
+
+- **Exactness.** `tests/test_decode_batch.mojo` passed on both commits:
+  arrangement 11's outputs equal the one-row kernel's bit for bit at every
+  decode width for 1 to 64 rows, and its batched steps equal arrangement 0's.
+  The Python suite passed.
+- **Screen.** The frozen build was rebuilt from a clean `6b222ee` after the
+  layout checks. Four blocks from 13:21 to 13:29 produced 5,280 samples, each
+  reproducing its arm's tokens with 245 launches; arrangement 11 changed no
+  token. AC power, normal power mode and no thermal or performance warning were
+  recorded before and after every block and trace. One-minute load averages
+  were 4.2 at the start, just after the rebuild and its tests, and 1.8 at the
+  end of the screen.
+- **Traces.** Six accepted captures at B = 64 and 1,024 cached tokens cover
+  11,952 measured commands. Arrangement 8's repeat 0 failed the coverage check:
+  two measured commands' Compute slots were labelled as WindowServer's, the
+  label swap 1c recorded. It was replaced with the same binary, which passed on
+  the first recapture, and the rejected attempt's evidence is kept.
+- **Analysis.** As declared; see the [result](#1f-addressing-check).
+- **Record.** `studies/model_generation/batch-addressing.json.gz`, 59,720 bytes,
+  keeps every screen sample, each accepted trace's per-stage totals rather than
+  its intervals, and the rejected attempt. `batch-size-replay --study
+  addressing` verifies it and recomputes the analysis into
+  `batch-addressing-summary.json`; the retained-record test rejects eleven
+  kinds of damage.
+
+**Deviation from the plan.** None beyond the replaced trace.
 
 ### 1e adoption on `39fecba`, 2026-09-27
 
