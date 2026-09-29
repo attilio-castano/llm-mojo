@@ -24,8 +24,8 @@ local implementation, builds, tests, validation and incremental commits, with
 pushing, pull requests and toolchain upgrades needing a separate decision.
 Paging changes addresses, not arithmetic, so no step changes the numerical
 contract. The approval also moved
-[keys and events to phase 4](#keys-and-events-move-to-phase-4). 2a is
-complete; see the [validation record](#validation-record).
+[keys and events to phase 4](#keys-and-events-move-to-phase-4). 2a and 2b
+are complete; see the [validation record](#validation-record).
 
 ## What paging must preserve
 
@@ -400,6 +400,54 @@ If 2d selects and confirms a layout and the single-sequence check passes:
   split-K decode.
 
 ## Validation record
+
+### 2b on `fdce177`, 2026-09-29
+
+`fdce177` adds `serving/blocks.mojo`. `BlockManager` keeps each sequence's
+table, its committed length and the length its blocks are reserved for, and
+each block's state. A step reserves room for its new positions, which
+allocates a block at each block boundary, and commits the new length once its
+writes are enqueued. Truncation and release free whole blocks, last block
+first. A seed permutes the free list, and `check()` verifies the invariants.
+
+- **Properties.** `tests/test_block_manager.mojo` runs seeded random
+  operations, 54,500 in all, with every invariant checked after each:
+  - pools of 1, 2, 7, 64 and 512 blocks at block sizes 32, 64, 128 and 4,096,
+    from scattered and in-order free lists;
+  - a 40-block pool whose 100-position limit is not a whole number of blocks.
+
+  The test counts each kind of operation and requires at least 500 of each. It
+  saw 7,101 adds, 3,814 reservations that allocated blocks, 6,774 rejected
+  reservations, 6,447 commits, 6,229 truncations, 6,666 releases, 3,920
+  reserve-and-commit steps and 6,391 other rejections. After every run,
+  releasing all sequences left every block free and Reset. Scenario tests
+  cover allocation at a block's 33rd position, interleaved growth, truncation
+  inside a Complete block and tail-first release. A seeded 64-block table is a
+  permutation of the pool.
+- **Rejections.** Each of these raises and leaves the manager's state
+  unchanged:
+  - invalid geometry;
+  - a reservation that needs more blocks than are free, passes the
+    per-sequence limit or falls below the sequence's length;
+  - a commit past the reservation or below the length;
+  - a truncation past the length or below zero;
+  - a sequence never added, negative or released.
+- **Sensitivity.** Three deliberate faults, each reverted, failed the tests:
+  - truncation that left freed blocks Partial;
+  - a commit that marked a partly written block Complete;
+  - a reservation one block short. The scatter test hit it as an out-of-range
+    index and now checks the table's length first.
+- **Suite.** `uv run --locked llm-mojo validate` passed on 2b's tree before the
+  commit, in 32 minutes: frozen oracle anchors, 283 Python tests, all 28 native
+  test files and the Unicode tokenizer run on Metal, and every benchmark smoke
+  route.
+
+**Deviations from the plan.** The plan states that a sequence's table has
+`ceil(length / BS)` blocks. That holds between steps. While a step's blocks are
+reserved but not committed, the table covers the reserved length, and those
+blocks are Partial; `check()` verifies the table against the reservation. The
+invariant that lengths agree with the pool's written counts needs the pool, so
+2c checks it.
 
 ### 2a on `fe9c081`, 2026-09-29
 
