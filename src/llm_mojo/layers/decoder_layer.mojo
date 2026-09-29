@@ -269,8 +269,7 @@ def _decode_batch_preflight[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, SL: 
             or attention.kv_heads != KV_HEADS or attention.head_dim != HEAD_DIM
             or mlp.hidden != HIDDEN or mlp.intermediate != i):
         raise Error("decode composition dimensions disagree with the layer")
-    if (s < 1 or Int(tables.dim[0]()) != s or s > attention.max_rows or s > mlp.max_rows
-            or block_size > attention.capacity):
+    if s < 1 or Int(tables.dim[0]()) != s or s > attention.max_rows or s > mlp.max_rows:
         raise Error("invalid decode composition rows, layer or pool geometry")
     validate_paged_pool[KV_HEADS, HEAD_DIM](len(storage), layer, layers, block_size, Int(tables.dim[1]()))
     # Fixed stack storage. Entries 0..11 are writable; 12..22 are read-only.

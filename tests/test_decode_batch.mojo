@@ -10,7 +10,11 @@ one sequence at a time, with guard rows and unwritten pool rows poisoned:
 - residual RMSNorm and argmax against single-row launches;
 - whole batched decode steps against each sequence decoded alone, on three
   layers of the verified decoder fixture, with invalid batches rejected before
-  any state changes.
+  any state changes;
+- sequences held in blocks of 32, 64 and 128 slots, in both orders within a
+  block: their prefill through each prefill configuration and their batched
+  decode steps against one block per sequence decoded alone, with every row no
+  sequence wrote still poisoned.
 The paged fused QKV/RoPE/append and decode attention that these steps launch
 are checked against the unfused path and route 4 in tests/test_paged_kv.mojo.
 """
@@ -26,6 +30,7 @@ from llm_mojo.kernels.token_selection import enqueue_argmax
 from llm_mojo.layers.decoder_layer import DECODER_FUSED_DECODE
 from llm_mojo.models.qwen2.model import CaptureRequest, QwenModel
 from llm_mojo.models.qwen2.plan import DECODE_PROJECTION, baseline_plan, configured_plan
+from std.math import ceildiv
 from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.kv_pool import KVPool
 from decoder_layer_support import decoder_support, load_decoder
@@ -345,7 +350,7 @@ def _prefill(ctx: DeviceContext, mut model: QwenModel, mut pool: KVPool, s: Int,
     var ids = List[Int]()
     for p in range(length):
         ids.append(_token(s, p))
-    model.forward(ctx, StepBatch.sequence(ids, 0, _block(s), CONTEXT), pool, baseline_plan(length, length))
+    model.forward(ctx, StepBatch.sequence(ids, 0, [_block(s)], CONTEXT), pool, baseline_plan(length, length))
 
 
 def _decode(sequences: Int, step: Int, lengths: List[Int]) raises -> StepBatch:
@@ -406,7 +411,7 @@ def _steps_equal_solo[ARRANGEMENT: Int = DECODE_PROJECTION](ctx: DeviceContext, 
         assert_equal(batched.last_route.decode_launches, 1 + 10 + 9 * (FIXTURE_LAYERS - 1) + FIXTURE_LAYERS + 3)
         for s in range(sequences):
             var p = lengths[s] + step
-            solo.forward[False, ARRANGEMENT](ctx, StepBatch.sequence([_token(s, p)], p, _block(s), CONTEXT), solo_pool,
+            solo.forward[False, ARRANGEMENT](ctx, StepBatch.sequence([_token(s, p)], p, [_block(s)], CONTEXT), solo_pool,
                                              configured_plan(DECODER_FUSED_DECODE, 1, p + 1))
             var label = "sequences " + String(sequences) + " step " + String(step) + " sequence " + String(s)
             assert_equal(tokens[s], solo.greedy(ctx))
@@ -497,6 +502,127 @@ def test_arrangements_give_identical_batched_steps() raises:
         assert_true(model.observation[i] >= model.observation[i - 1] or i == 6)
 
 
+def _paged_prefill(ctx: DeviceContext, mut model: QwenModel, mut pool: KVPool, s: Int, length: Int,
+                   table: List[Int], configuration: Int) raises:
+    """A sequence's prefix in chunks of at most MAX_PREFIX rows, through one prefill configuration."""
+    var offset = 0
+    while offset < length:
+        var rows = min(MAX_PREFIX, length - offset)
+        var ids = List[Int]()
+        for p in range(offset, offset + rows):
+            ids.append(_token(s, p))
+        model.forward(ctx, StepBatch.sequence(ids, offset, table, pool.block_size), pool,
+                      configured_plan(configuration, rows, offset + rows))
+        offset += rows
+
+
+def _same_sequence(pool: KVPool, table: List[Int], one: KVPool, block: Int, length: Int, label: String) raises:
+    """Every written K and V row of a paged sequence equals its one-block copy, in every layer."""
+    var size = pool.block_size
+    for layer in range(FIXTURE_LAYERS):
+        for kv in range(2):
+            var reference = one.view(block, layer, kv)
+            with reference.map_to_host() as r:
+                for b in range(ceildiv(length, size)):
+                    var view = pool.view(table[b], layer, kv)
+                    with view.map_to_host() as m:
+                        for slot in range(min(size, length - b * size)):
+                            for head in range(2):
+                                var start = (head * size + slot) * 64 if pool.head_major else (slot * 2 + head) * 64
+                                var row = (b * size + slot) * 128 + head * 64
+                                for d in range(64):
+                                    if (bitcast[DType.uint16](m.unsafe_ptr()[unsafe_offset=start + d])
+                                            != bitcast[DType.uint16](r.unsafe_ptr()[unsafe_offset=row + d])):
+                                        raise Error(label + ": layer " + String(layer) + " position "
+                                                    + String(b * size + slot) + " differs")
+
+
+def _paged_steps[HEAD_MAJOR: Bool](ctx: DeviceContext, size: Int) raises:
+    """Eight sequences in blocks of `size` slots against one block per sequence, decoded alone.
+
+    Prefixes end before, at and after the 32- and 64-slot boundaries, and six
+    decode steps cross them, up to the fixture's 65 positions. Each sequence
+    prefills through configuration 0, 2, 3 or 21. Tables interleave the
+    sequences' blocks in reverse, as sequences growing in turn would.
+    """
+    var prefixes: List[Int] = [1, 8, 29, 31, 32, 36, 53, 59]
+    var configurations: List[Int] = [0, 2, 3, 21]
+    var sequences = len(prefixes)
+    var steps = 6
+    var width = ceildiv(CONTEXT, size)
+    var model = _fixture_model(ctx, sequences)
+    var solo = _fixture_model(ctx, 1)
+    var pool = KVPool(ctx, sequences * width + 2, size, model.kv_geometry(), HEAD_MAJOR)
+    var one = KVPool(ctx, sequences, CONTEXT, solo.kv_geometry())
+    _poison(pool.storage)
+    _poison(one.storage)
+    var tables = List[Int](capacity=sequences * width)
+    for s in range(sequences):
+        for b in range(width):
+            tables.append(sequences * width - 1 - (b * sequences + s))
+    var label = String(size) + "-slot " + ("head-major" if HEAD_MAJOR else "slot-major")
+    for s in range(sequences):
+        var table = List[Int](capacity=width)
+        for b in range(width):
+            table.append(tables[s * width + b])
+        _paged_prefill(ctx, model, pool, s, prefixes[s], table, configurations[s % 4])
+        _paged_prefill(ctx, solo, one, s, prefixes[s], [s], configurations[s % 4])
+        _same_sequence(pool, table, one, s, prefixes[s], label + " prefill of sequence " + String(s))
+    for step in range(steps):
+        var ids = List[Int]()
+        var positions = List[Int]()
+        var starts = List[Int]()
+        var seq_lens = List[Int]()
+        var slots = List[Int]()
+        var rows = List[Int]()
+        var longest = 0
+        for s in range(sequences):
+            var p = prefixes[s] + step
+            ids.append(_token(s, p))
+            positions.append(p)
+            starts.append(s)
+            seq_lens.append(p + 1)
+            slots.append(tables[s * width + p // size] * size + p % size)
+            rows.append(s)
+            longest = max(longest, p + 1)
+        starts.append(sequences)
+        model.forward(ctx, StepBatch(ids^, positions^, starts^, sequences, seq_lens^, width, tables.copy(), slots^,
+                                     rows^), pool, configured_plan(DECODER_FUSED_DECODE, sequences, longest, sequences))
+        var tokens = model.greedy_tokens(ctx)
+        for s in range(sequences):
+            var p = prefixes[s] + step
+            solo.forward(ctx, StepBatch.sequence([_token(s, p)], p, [s], CONTEXT), one,
+                         configured_plan(DECODER_FUSED_DECODE, 1, p + 1))
+            var at = label + " step " + String(step) + " sequence " + String(s)
+            assert_equal(tokens[s], solo.greedy(ctx))
+            _same_rows(model.logits, s * VOCABULARY, solo.logits, VOCABULARY, at + " logits")
+            _same_rows(model.normalized, s * 896, solo.normalized, 896, at + " final norm")
+            assert_equal(pool.length(tables[s * width + p // size]), p % size + 1)
+    var written = 0
+    for s in range(sequences):
+        var table = List[Int](capacity=width)
+        for b in range(width):
+            table.append(tables[s * width + b])
+        _same_sequence(pool, table, one, s, prefixes[s] + steps, label + " sequence " + String(s))
+        written += prefixes[s] + steps
+    # Only the sequences' rows changed: every other slot of every block keeps its poison.
+    var changed = 0
+    with pool.storage.map_to_host() as mapped:
+        for i in range(len(pool.storage)):
+            if bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=i]) != POISON:
+                changed += 1
+    assert_equal(changed, written * FIXTURE_LAYERS * 2 * 128)
+
+
+def test_paged_sequences_equal_one_block_each() raises:
+    var support = decoder_support()
+    support.verify_case(CASE)
+    var ctx = DeviceContext()
+    for size in [32, 64, 128]:
+        _paged_steps[False](ctx, size)
+        _paged_steps[True](ctx, size)
+
+
 def _unchanged(model: QwenModel, pool: KVPool, submitted: Int) raises:
     assert_equal(model.valid, True)
     assert_equal(model.submitted_rows, submitted)
@@ -514,7 +640,7 @@ def test_invalid_batched_steps_change_nothing() raises:
         var ids = List[Int]()
         for p in range(5 + s):
             ids.append(_token(s, p))
-        model.forward(ctx, StepBatch.sequence(ids, 0, s, CONTEXT), pool, baseline_plan(5 + s, 5 + s))
+        model.forward(ctx, StepBatch.sequence(ids, 0, [s], CONTEXT), pool, baseline_plan(5 + s, 5 + s))
     var submitted = model.submitted_rows
     var fused = configured_plan(DECODER_FUSED_DECODE, 2, 8, 2)
     # A prefill chunk beside a decode.
@@ -537,11 +663,22 @@ def test_invalid_batched_steps_change_nothing() raises:
     with assert_raises():
         model.forward(ctx, StepBatch([1, 2], [5, 7], [0, 1, 2], 2, [6, 8], 1, [0, 1], [5, 72], [0, 1]), pool, fused)
     _unchanged(model, pool, submitted)
-    # A pool whose block size is not the model's.
-    var other = KVPool(ctx, 8, CONTEXT - 1, model.kv_geometry())
+    # Several blocks of a size that is not a multiple of 32, whose 32-row tiles would straddle blocks.
+    var uneven = KVPool(ctx, 8, 48, model.kv_geometry())
     with assert_raises():
-        model.forward(ctx, StepBatch([1, 2], [0, 0], [0, 1, 2], 2, [1, 1], 1, [0, 1], [0, 64], [0, 1]), other, fused)
-    assert_equal(other.length(0), 0)
+        model.forward(ctx, StepBatch([1, 2], [0, 0], [0, 1, 2], 2, [1, 1], 2, [0, 1, 2, 3], [0, 96], [0, 1]),
+                      uneven, fused)
+    assert_equal(uneven.length(0), 0)
+    _unchanged(model, pool, submitted)
+    # A table wider than the model's context in 32-slot blocks.
+    var narrow = KVPool(ctx, 16, 32, model.kv_geometry())
+    var single = configured_plan(DECODER_FUSED_DECODE, 1, 1, 1)
+    with assert_raises():
+        model.forward(ctx, StepBatch([1], [0], [0, 1], 1, [1], 4, [0, 1, 2, 3], [0], [0]), narrow, single)
+    # A position past the model's context.
+    with assert_raises():
+        model.forward(ctx, StepBatch([1], [65], [0, 1], 1, [66], 3, [4, 5, 6], [193], [0]), narrow, single)
+    assert_equal(narrow.length(0), 0)
     _unchanged(model, pool, submitted)
     # Captures cover one sequence.
     with assert_raises():

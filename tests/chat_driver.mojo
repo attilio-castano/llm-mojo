@@ -13,8 +13,8 @@ from llm_mojo.serving.kv_pool import KVPool
 
 def caches(kv: KVPool, directory: String) raises:
     for i in range(24):
-        save_bf16(kv.caches[kv.index(0,i)].key,directory+"/key_"+String(i)+".bin",kv.block_size*128)
-        save_bf16(kv.caches[kv.index(0,i)].value,directory+"/value_"+String(i)+".bin",kv.block_size*128)
+        save_bf16(kv.view(0,i,0),directory+"/key_"+String(i)+".bin",kv.block_size*128)
+        save_bf16(kv.view(0,i,1),directory+"/value_"+String(i)+".bin",kv.block_size*128)
 
 
 def replay_history(mut model: QwenModel, mut kv: KVPool, ctx: DeviceContext, ids: List[Int]) raises:
@@ -24,7 +24,7 @@ def replay_history(mut model: QwenModel, mut kv: KVPool, ctx: DeviceContext, ids
         var suffix = List[Int]()
         for i in range(rows):
             suffix.append(ids[cached+i])
-        model.forward(ctx,StepBatch.sequence(suffix,cached,0,kv.block_size),kv,fast_plan(rows,cached+rows,ctx.name()))
+        model.forward(ctx,StepBatch.sequence(suffix,cached,[0],kv.block_size),kv,fast_plan(rows,cached+rows,ctx.name()))
     ctx.synchronize()
 
 
@@ -39,9 +39,7 @@ def main() raises:
     var session = ChatSession(ctx,args[1],tokenizer,work,String(DEFAULT_SYSTEM),256,512)
     var replay = QwenModel(ctx,args[1],512,256)
     var replay_kv = KVPool(ctx,1,512,replay.kv_geometry())
-    for i in range(24):
-        session.kv.caches[session.kv.index(0,i)].key.enqueue_fill(123)
-        session.kv.caches[session.kv.index(0,i)].value.enqueue_fill(123)
+    session.kv.storage.enqueue_fill(123)
     var prompts: List[String] = ["My name is Ada. Reply briefly.","What is my name?", "Scrivi una frase sul caffè. ☕"]
     for turn in range(len(prompts)):
         var directory = args[3]+"/turn"+String(turn)

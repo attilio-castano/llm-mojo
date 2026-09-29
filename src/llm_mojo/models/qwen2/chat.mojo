@@ -105,7 +105,7 @@ struct ChatSession(Movable):
         var ids = List[Int](capacity=rows)
         for i in range(rows):
             ids.append(self.history.tokens[cached+i])
-        self.model.forward(ctx,StepBatch.sequence(ids,cached,0,self.kv.block_size),self.kv,
+        self.model.forward(ctx,StepBatch.sequence(ids,cached,[0],self.kv.block_size),self.kv,
             fast_plan(rows,cached+rows,ctx.name()))
 
     def sample(mut self, ctx: DeviceContext) raises -> Int:

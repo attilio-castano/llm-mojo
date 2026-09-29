@@ -1,7 +1,8 @@
 """Fixed Qwen model ownership. Native execution; prepared files are verified by tooling.
 
-The model owns weights and workspaces. KV storage and sequence lengths belong to the
-caller's KVPool; each forward receives a StepBatch describing the step. The
+The model owns weights and workspaces. KV storage and its written slots belong to the
+caller's KVPool; each forward receives a StepBatch describing the step, whose block
+tables say where each sequence's rows live in the pool. The
 cross-layer copy or owner swap keeps the decoder alias contract intact. Numerical
 comparisons are diagnostics; storage and lifecycle invariants remain exact.
 Which kernels a call uses is decided by an ExecutionPlan (models/qwen2/plan.mojo):
@@ -110,6 +111,38 @@ def swap_hidden_buffers(mut left: DeviceBuffer[DType.bfloat16], mut right: Devic
     var previous = left^
     left = right^
     right = previous^
+
+
+def save_sequence_rows(kv: KVPool, table: List[Int], layer: Int, kv_index: Int, rows: Int, path: String,
+                       first: Int = 0) raises:
+    """Diagnostic readback of a sequence's K (kv_index 0) or V rows first .. first + rows - 1 in one layer.
+
+    Rows come out in position order, each as its KV heads' values in head order,
+    whatever the pool's order within a block: for a sequence in one slot-major
+    block, the block's region as it lies in memory. Deliberately synchronizes.
+    """
+    var heads = kv.geometry.kv_heads
+    var dim = kv.geometry.head_dim
+    var size = kv.block_size
+    if first < 0 or rows < 0 or first + rows > len(table) * size:
+        raise Error("invalid diagnostic extent")
+    var data = List[UInt8](capacity=rows*heads*dim*2)
+    var t = first
+    while t < first + rows:
+        var end = min(first + rows, (t // size + 1) * size)
+        var view = kv.view(table[t // size], layer, kv_index)
+        with view.map_to_host() as mapped:
+            for position in range(t, end):
+                var slot = position % size
+                for head in range(heads):
+                    var start = (head*size + slot)*dim if kv.head_major else (slot*heads + head)*dim
+                    for d in range(dim):
+                        var bits = bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=start+d])
+                        data.append(UInt8(bits & 255))
+                        data.append(UInt8(bits >> 8))
+        t = end
+    var file = open(path,"w")
+    file.write_bytes(data)
 
 
 @fieldwise_init
@@ -267,16 +300,18 @@ struct QwenModel(Movable):
         batch.validate(kv.blocks,kv.block_size,VOCABULARY)
         var rows = batch.rows()
         var sequences = batch.sequences()
-        # Every sequence is held in one block; only configuration 26 steps several (plan.validate).
-        if batch.max_blocks != 1:
-            raise Error("Qwen steps sequences held in one block each")
+        var size = kv.block_size
         if not self.valid or rows > self.max_rows or sequences > self.max_sequences:
             raise Error("invalid Qwen state, row extent or context overflow")
         plan.validate(rows, sequences)
         if len(self.layers) < 1:
             raise Error("empty Qwen layer stack")
-        if kv.geometry != self.kv_geometry() or kv.block_size != self.capacity:
+        if kv.geometry != self.kv_geometry():
             raise Error("KV pool geometry does not match the model")
+        # A table of several blocks needs blocks of a multiple of 32 slots, so that no
+        # 32-row tile straddles two blocks, and fits the step buffer.
+        if batch.max_blocks > self.table_width or (batch.max_blocks > 1 and size % 32 != 0):
+            raise Error("block tables need blocks of a multiple of 32 slots, at most one per 32 positions")
         if (len(self.embedding) != VOCABULARY*HIDDEN or len(self.norm) != HIDDEN
             or len(self.input) != self.max_rows*HIDDEN
             or len(self.step_input) != 2*self.max_rows+self.max_sequences*self.table_width
@@ -286,12 +321,17 @@ struct QwenModel(Movable):
             or self.attention.capacity != self.capacity
             or self.attention.max_rows != self.max_rows or self.mlp.max_rows != self.max_rows):
             raise Error("inconsistent model allocation geometry")
-        # Each sequence's step must start exactly where every layer of its block ends.
+        # Each sequence's step starts exactly where its blocks' written slots end:
+        # blocks before its first position full, that block holding the positions
+        # before it, and later blocks empty.
         for s in range(sequences):
-            var base = kv.index(batch.block_table[s],0)
             var past = batch.positions[batch.query_start[s]]
-            for i in range(len(self.layers)):
-                if kv.caches[base+i].length != past or kv.caches[base+i].capacity != self.capacity:
+            var length = batch.seq_lens[s]
+            if length > self.capacity:
+                raise Error("a sequence exceeds the model's context")
+            for b in range((length + size - 1) // size):
+                var written = kv.written[batch.block_table[s*batch.max_blocks+b]]
+                if written != (size if b < past // size else (past % size if b == past // size else 0)):
                     raise Error("inconsistent model cache lengths")
         if plan.configuration == DECODER_FUSED_DECODE:
             var positions = TileTensor(self.step_input.unsafe_ptr().unsafe_offset(self.max_rows),row_major(sequences))
@@ -327,8 +367,9 @@ struct QwenModel(Movable):
             mut self, ctx: DeviceContext, batch: StepBatch, mut kv: KVPool, plan: ExecutionPlan) raises:
         """Submit all layers for one step under plan. The step upload synchronizes; layer execution does not.
 
-        The batch names each sequence's block in `kv`, whose layer views must all
-        hold exactly the rows before that sequence's first position. With
+        The batch's tables name each sequence's blocks in `kv`, whose written
+        slots must hold exactly the rows before that sequence's first position;
+        the step advances them. With
         plan.gpu_argmax the vocabulary projection is followed by GPU argmax;
         otherwise greedy scans the materialized logits on the CPU. PROJECTION is
         the decode composition's projection arrangement for every row. Exact
@@ -357,9 +398,20 @@ struct QwenModel(Movable):
         try:
             var route: ForwardRoute
             if plan.configuration == DECODER_FUSED_DECODE:
-                route = self._decode_step[OBSERVE, CAPTURE, PROJECTION](ctx, batch, kv, plan, request)
+                if kv.head_major:
+                    route = self._decode_step[OBSERVE, CAPTURE, PROJECTION, True](ctx, batch, kv, plan, request)
+                else:
+                    route = self._decode_step[OBSERVE, CAPTURE, PROJECTION, False](ctx, batch, kv, plan, request)
+            elif kv.head_major:
+                route = self._layer_step[OBSERVE, CAPTURE, True](ctx, batch, kv, plan, request)
             else:
-                route = self._layer_step[OBSERVE, CAPTURE](ctx, batch, kv, plan, request)
+                route = self._layer_step[OBSERVE, CAPTURE, False](ctx, batch, kv, plan, request)
+            # Every layer's writes are enqueued: each sequence's blocks now hold its new length.
+            for s in range(batch.sequences()):
+                var past = batch.positions[batch.query_start[s]]
+                var length = batch.seq_lens[s]
+                for b in range(past // kv.block_size, (length + kv.block_size - 1) // kv.block_size):
+                    kv.written[batch.block_table[s*batch.max_blocks+b]] = min(kv.block_size, length - b*kv.block_size)
             self.ready = True
             self.submitted_rows += batch.rows()*len(self.layers)
             self.last_route = route
@@ -375,9 +427,9 @@ struct QwenModel(Movable):
         ctx.enqueue_function[embedding_kernel](token_view,weight_view,input_view,Int32(rows),
             grid_dim=(rows*HIDDEN+255)//256,block_dim=256)
 
-    def _decode_step[OBSERVE: Bool, CAPTURE: Bool, PROJECTION: Int](mut self, ctx: DeviceContext, batch: StepBatch,
-                                                                  mut kv: KVPool, plan: ExecutionPlan,
-                                                                  request: CaptureRequest) raises -> ForwardRoute:
+    def _decode_step[OBSERVE: Bool, CAPTURE: Bool, PROJECTION: Int, HEAD_MAJOR: Bool](
+            mut self, ctx: DeviceContext, batch: StepBatch, mut kv: KVPool, plan: ExecutionPlan,
+            request: CaptureRequest) raises -> ForwardRoute:
         """Configuration 26: one row per sequence through the decode composition, GPU argmax per row."""
         var sequences = batch.sequences()
         var layer_count = len(self.layers)
@@ -395,11 +447,9 @@ struct QwenModel(Movable):
             save_bf16(self.input,capture+"/hidden_0.bin",sequences*HIDDEN)
         for i in range(layer_count):
             var normalized_input = i > 0
-            route.decode_launches += enqueue_decode_batch_layer[QUERY_HEADS,KV_HEADS,HEAD_DIM,PROJECTION,False](ctx,
+            route.decode_launches += enqueue_decode_batch_layer[QUERY_HEADS,KV_HEADS,HEAD_DIM,PROJECTION,HEAD_MAJOR](ctx,
                 self.layers[i].attention,self.attention,self.layers[i].mlp,self.mlp,self.input,kv.storage,
                 positions,tables,i,layer_count,kv.block_size,normalized_input)
-            for s in range(sequences):
-                kv.caches[kv.index(batch.block_table[s],i)].length = batch.positions[s]+1
             route.layers += 1
             if normalized_input:
                 route.normalized_inputs += 1
@@ -425,13 +475,13 @@ struct QwenModel(Movable):
             route.decode_launches += 1
             comptime if CAPTURE:
                 save_bf16(self.mlp.output,capture+"/hidden_"+String(i+1)+".bin",sequences*HIDDEN)
-                # Captures cover one sequence: its appended row and its block's whole cache.
-                var view = kv.index(batch.block_table[0],i)
-                var appended = (kv.caches[view].length-1)*KV_WIDTH
-                save_bf16(kv.caches[view].key,capture+"/append_key_"+String(i)+".bin",KV_WIDTH,appended)
-                save_bf16(kv.caches[view].value,capture+"/append_value_"+String(i)+".bin",KV_WIDTH,appended)
-                save_bf16(kv.caches[view].key,capture+"/cache_key_"+String(i)+".bin",self.capacity*KV_WIDTH)
-                save_bf16(kv.caches[view].value,capture+"/cache_value_"+String(i)+".bin",self.capacity*KV_WIDTH)
+                # Captures cover one sequence: its appended row and every row of its blocks.
+                var table = batch.block_table.copy()
+                var held = len(table)*kv.block_size
+                save_sequence_rows(kv,table,i,0,1,capture+"/append_key_"+String(i)+".bin",batch.positions[0])
+                save_sequence_rows(kv,table,i,1,1,capture+"/append_value_"+String(i)+".bin",batch.positions[0])
+                save_sequence_rows(kv,table,i,0,held,capture+"/cache_key_"+String(i)+".bin")
+                save_sequence_rows(kv,table,i,1,held,capture+"/cache_value_"+String(i)+".bin")
             if i+1 < layer_count:
                 swap_hidden_buffers(self.input,self.mlp.output)
                 route.owner_swaps += 1
@@ -450,11 +500,11 @@ struct QwenModel(Movable):
             save_bf16(self.logits,capture+"/logits.bin",sequences*VOCABULARY)
         return route
 
-    def _layer_step[OBSERVE: Bool, CAPTURE: Bool](mut self, ctx: DeviceContext, batch: StepBatch, mut kv: KVPool,
-                                                  plan: ExecutionPlan, request: CaptureRequest) raises -> ForwardRoute:
+    def _layer_step[OBSERVE: Bool, CAPTURE: Bool, HEAD_MAJOR: Bool](mut self, ctx: DeviceContext, batch: StepBatch,
+                                                                   mut kv: KVPool, plan: ExecutionPlan,
+                                                                   request: CaptureRequest) raises -> ForwardRoute:
         """Every other configuration: one sequence through the generic layer dispatch and a CPU greedy."""
         var rows = batch.rows()
-        var base = kv.index(batch.block_table[0],0)
         var layer_count = len(self.layers)
         var route = ForwardRoute(plan.configuration, 0, 0, 0, 0, 0, 0, False, False, 1, 0)
         var capture = request.directory
@@ -469,10 +519,9 @@ struct QwenModel(Movable):
             save_bf16(self.input,capture+"/hidden_0.bin",rows*HIDDEN)
         var input_view = TileTensor(self.input,row_major(rows,HIDDEN))
         for i in range(layer_count):
-            _ = enqueue_decoder_layer_configuration_paged[False](ctx,self.layers[i].attention,kv.storage,
+            _ = enqueue_decoder_layer_configuration_paged[HEAD_MAJOR](ctx,self.layers[i].attention,kv.storage,
                 table,positions,past,i,layer_count,kv.block_size,self.attention,self.layers[i].mlp,self.mlp,
                 TileTensor(self.input,row_major(rows,HIDDEN)),plan.configuration)
-            kv.caches[base+i].length = past+rows
             route.layers += 1
             comptime if CAPTURE:
                 if request.include_norms:
@@ -482,8 +531,10 @@ struct QwenModel(Movable):
                 save_bf16(self.mlp.output,capture+"/hidden_"+String(i+1)+".bin",rows*HIDDEN)
                 save_bf16(self.attention.rotated_key,capture+"/append_key_"+String(i)+".bin",rows*KV_WIDTH)
                 save_bf16(self.attention.raw_value,capture+"/append_value_"+String(i)+".bin",rows*KV_WIDTH)
-                save_bf16(kv.caches[base+i].key,capture+"/cache_key_"+String(i)+".bin",self.capacity*KV_WIDTH)
-                save_bf16(kv.caches[base+i].value,capture+"/cache_value_"+String(i)+".bin",self.capacity*KV_WIDTH)
+                save_sequence_rows(kv,batch.block_table,i,0,batch.max_blocks*kv.block_size,
+                                   capture+"/cache_key_"+String(i)+".bin")
+                save_sequence_rows(kv,batch.block_table,i,1,batch.max_blocks*kv.block_size,
+                                   capture+"/cache_value_"+String(i)+".bin")
             if i+1 < layer_count:
                 ctx.enqueue_function[_copy_rows[type_of(input_view.layout),type_of(input_view.layout)]](
                     TileTensor(self.mlp.output,row_major(rows,HIDDEN)),

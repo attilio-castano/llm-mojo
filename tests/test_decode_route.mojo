@@ -116,7 +116,7 @@ def _decode_route[PROJECTION: Int]() raises:
     var prompt = List[Int]()
     for i in range(PREFIX):
         prompt.append(i)
-    var prefill = StepBatch.sequence(prompt, 0, 0, PREFIX + STEPS)
+    var prefill = StepBatch.sequence(prompt, 0, [0], PREFIX + STEPS)
     fast.forward(ctx, prefill, fast_kv, baseline_plan(PREFIX, PREFIX))
     baseline.forward(ctx, prefill, baseline_kv, baseline_plan(PREFIX, PREFIX))
     assert_equal(fast.greedy(ctx), baseline.greedy(ctx))
@@ -129,7 +129,7 @@ def _decode_route[PROJECTION: Int]() raises:
         # The fused plan is explicit, so this runs on any Apple GPU, not only the measured device.
         var fused = configured_plan(DECODER_FUSED_DECODE, 1, total)
         var plain = baseline_plan(1, total)
-        var batch = StepBatch.sequence(ids, PREFIX + step, 0, PREFIX + STEPS)
+        var batch = StepBatch.sequence(ids, PREFIX + step, [0], PREFIX + STEPS)
         if exact and step + 1 == STEPS:
             # The last step also captures every layer boundary, including both norms.
             var os = Python.import_module("os")
@@ -156,8 +156,12 @@ def _decode_route[PROJECTION: Int]() raises:
             _same(fast.mlp.output, baseline.mlp.output, 896, "final hidden state")
             for i in range(LAYERS):
                 var name = "layer " + String(i)
-                _same(fast_kv.caches[i].key, baseline_kv.caches[i].key, fast.capacity * 128, name + " keys")
-                _same(fast_kv.caches[i].value, baseline_kv.caches[i].value, fast.capacity * 128, name + " values")
+                var fast_keys = fast_kv.view(0, i, 0)
+                var baseline_keys = baseline_kv.view(0, i, 0)
+                var fast_values = fast_kv.view(0, i, 1)
+                var baseline_values = baseline_kv.view(0, i, 1)
+                _same(fast_keys, baseline_keys, fast.capacity * 128, name + " keys")
+                _same(fast_values, baseline_values, fast.capacity * 128, name + " values")
     if exact:
         var names = List[String]()
         for i in range(LAYERS + 1):

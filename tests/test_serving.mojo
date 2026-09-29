@@ -23,7 +23,7 @@ def _mixed() -> StepBatch:
 
 
 def test_sequence_describes_one_block() raises:
-    var chunk = StepBatch.sequence([7, 8, 9], 5, 2, 16)
+    var chunk = StepBatch.sequence([7, 8, 9], 5, [2], 16)
     _assert_list(chunk.token_ids, [7, 8, 9])
     _assert_list(chunk.positions, [5, 6, 7])
     _assert_list(chunk.query_start, [0, 3])
@@ -36,22 +36,40 @@ def test_sequence_describes_one_block() raises:
     assert_equal(chunk.rows(), 3)
     assert_equal(chunk.sequences(), 1)
     chunk.validate(3, 16, VOCABULARY)
-    var decode = StepBatch.sequence([4], 0, 0, 8)
+    var decode = StepBatch.sequence([4], 0, [0], 8)
     assert_equal(decode.decode_count, 1)
     decode.validate(1, 8, VOCABULARY)
 
 
 def test_sequence_rejects_steps_outside_one_block() raises:
     with assert_raises():
-        _ = StepBatch.sequence(List[Int](), 0, 0, 8)
+        _ = StepBatch.sequence(List[Int](), 0, [0], 8)
     with assert_raises():
-        _ = StepBatch.sequence([1], -1, 0, 8)
+        _ = StepBatch.sequence([1], -1, [0], 8)
     with assert_raises():
-        _ = StepBatch.sequence([1], 0, -1, 8)
+        _ = StepBatch.sequence([1], 0, [-1], 8)
     with assert_raises():
-        _ = StepBatch.sequence([1, 2], 7, 0, 8)
+        _ = StepBatch.sequence([1, 2], 7, [0], 8)
     with assert_raises():
-        StepBatch.sequence([1], 0, 3, 8).validate(3, 8, VOCABULARY)
+        StepBatch.sequence([1], 0, [3], 8).validate(3, 8, VOCABULARY)
+
+
+def test_sequence_spans_its_table() raises:
+    # Positions 6..9 in blocks of four: slots 2 and 3 of block 2, then 0 and 1 of block 9.
+    var chunk = StepBatch.sequence([7, 8, 9, 10], 6, [5, 2, 9], 4)
+    _assert_list(chunk.positions, [6, 7, 8, 9])
+    _assert_list(chunk.slot_mapping, [10, 11, 36, 37])
+    _assert_list(chunk.block_table, [5, 2, 9])
+    _assert_list(chunk.seq_lens, [10])
+    assert_equal(chunk.max_blocks, 3)
+    chunk.validate(10, 4, VOCABULARY)
+    with assert_raises():
+        _ = StepBatch.sequence([1, 2], 11, [5, 2, 9], 4)
+    with assert_raises():
+        _ = StepBatch.sequence([1], 0, List[Int](), 4)
+    # A table naming one block twice is rejected by validation.
+    with assert_raises():
+        StepBatch.sequence([1], 4, [3, 3], 4).validate(10, 4, VOCABULARY)
 
 
 def test_mixed_batch_validates() raises:
@@ -135,59 +153,62 @@ def test_pool_views_follow_block_major_layout() raises:
     assert_equal(ctx.api(), "metal")
     var pool = KVPool(ctx, 2, 4, KVGeometry(3, 2, 2))
     assert_true(pool.geometry == KVGeometry(3, 2, 2))
+    assert_equal(pool.region(), 16)
     assert_equal(len(pool.storage), 2 * 3 * 2 * 16)
-    assert_equal(len(pool.caches), 6)
     for block in range(2):
         for layer in range(3):
-            var view = pool.index(block, layer)
-            assert_equal(view, block * 3 + layer)
-            assert_equal(pool.key_offset(block, layer), 2 * view * 16)
-            assert_equal(pool.caches[view].capacity, 4)
-            assert_equal(len(pool.caches[view].key), 16)
-            pool.caches[view].key.enqueue_fill(Scalar[DType.bfloat16](Float32(2 * view + 1)))
-            pool.caches[view].value.enqueue_fill(Scalar[DType.bfloat16](Float32(2 * view + 2)))
+            var index = block * 3 + layer
+            assert_equal(pool.key_offset(block, layer), 2 * index * 16)
+            var key = pool.view(block, layer, 0)
+            var value = pool.view(block, layer, 1)
+            assert_equal(len(key), 16)
+            assert_equal(len(value), 16)
+            key.enqueue_fill(Scalar[DType.bfloat16](Float32(2 * index + 1)))
+            value.enqueue_fill(Scalar[DType.bfloat16](Float32(2 * index + 2)))
     ctx.synchronize()
     with pool.storage.map_to_host() as mapped:
         for element in range(len(pool.storage)):
             var region = element // 16
             assert_equal(Int(mapped.unsafe_ptr()[unsafe_offset=element].cast[DType.float32]()), region + 1)
     # A kernel writing through one view changes exactly that view's range.
-    var target = pool.index(1, 2)
-    var tensor = TileTensor(pool.caches[target].value, row_major(4, 4))
+    var target = pool.view(1, 2, 1)
+    var tensor = TileTensor(target, row_major(4, 4))
     ctx.enqueue_function[_mark[type_of(tensor.layout)]](tensor, grid_dim=1, block_dim=32)
     ctx.synchronize()
     with pool.storage.map_to_host() as mapped:
         for element in range(len(pool.storage)):
             var region = element // 16
             var expected = region + 1
-            if region == 2 * target + 1:
+            if region == 2 * (1 * 3 + 2) + 1:
                 expected = 100 + element % 16
             assert_equal(Int(mapped.unsafe_ptr()[unsafe_offset=element].cast[DType.float32]()), expected)
+    # Head-major order rearranges rows inside a region, not the regions.
+    var heads = KVPool(ctx, 2, 4, KVGeometry(3, 2, 2), True)
+    assert_true(heads.head_major and not pool.head_major)
+    assert_equal(len(heads.storage), len(pool.storage))
+    assert_equal(heads.key_offset(1, 2), pool.key_offset(1, 2))
 
 
-def test_pool_lengths_truncate_and_reset() raises:
+def test_pool_written_slots_truncate_and_reset() raises:
     var ctx = DeviceContext()
     var pool = KVPool(ctx, 2, 4, KVGeometry(3, 2, 2))
-    for layer in range(3):
-        pool.caches[pool.index(1, layer)].length = 3
-    assert_equal(pool.length(1), 3)
     assert_equal(pool.length(0), 0)
+    assert_equal(pool.length(1), 0)
+    pool.written[1] = 3
+    assert_equal(pool.length(1), 3)
     pool.truncate(1, 2)
-    for layer in range(3):
-        assert_equal(pool.caches[pool.index(1, layer)].length, 2)
+    assert_equal(pool.length(1), 2)
+    # Truncation cannot extend a block, go below zero or name a block outside the pool.
     with assert_raises():
         pool.truncate(1, 3)
     with assert_raises():
         pool.truncate(1, -1)
-    # Rejection is atomic: one short layer blocks the whole truncation.
-    pool.caches[pool.index(1, 2)].length = 1
     with assert_raises():
-        pool.truncate(1, 2)
-    assert_equal(pool.caches[pool.index(1, 0)].length, 2)
-    assert_equal(pool.caches[pool.index(1, 2)].length, 1)
+        pool.truncate(2, 0)
+    assert_equal(pool.length(1), 2)
     pool.reset(ctx)
-    for view in range(len(pool.caches)):
-        assert_equal(pool.caches[view].length, 0)
+    assert_equal(pool.length(0), 0)
+    assert_equal(pool.length(1), 0)
 
 
 def test_pool_rejects_invalid_geometry_and_views() raises:
@@ -208,9 +229,11 @@ def test_pool_rejects_invalid_geometry_and_views() raises:
     assert_true(KVGeometry(2, 1, 2) != KVGeometry(2, 2, 1))
     var pool = KVPool(ctx, 1, 2, KVGeometry(2, 1, 2))
     with assert_raises():
-        _ = pool.index(1, 0)
+        _ = pool.key_offset(1, 0)
     with assert_raises():
-        _ = pool.index(0, 2)
+        _ = pool.view(0, 2, 0)
+    with assert_raises():
+        _ = pool.view(0, 0, 2)
     with assert_raises():
         _ = pool.length(-1)
     var storage = ctx.enqueue_create_buffer[DType.bfloat16](10)

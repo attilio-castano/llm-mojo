@@ -56,7 +56,7 @@ def main() raises:
         for i in range(rows):
             ids.append(history[offset+i])
         var plan = execution_plan(mode,rows,offset+rows,ctx.name())
-        model.forward(ctx,StepBatch.sequence(ids,offset,0,MAX_CONTEXT),kv,plan)
+        model.forward(ctx,StepBatch.sequence(ids,offset,[0],MAX_CONTEXT),kv,plan)
         if diagnostics:
             events += "configuration\t"+String(offset)+"\t"+String(plan.configuration)+"\t0\n"
             events += "route\t"+String(calls)+"\t"+model.last_route.describe()+"\t0\n"
@@ -83,7 +83,7 @@ def main() raises:
             var ids: List[Int] = [token]
             var decode_started = now()
             var cached = kv.length(0)
-            model.forward(ctx,StepBatch.sequence(ids,cached,0,MAX_CONTEXT),kv,execution_plan(mode,1,cached+1,ctx.name()))
+            model.forward(ctx,StepBatch.sequence(ids,cached,[0],MAX_CONTEXT),kv,execution_plan(mode,1,cached+1,ctx.name()))
             if diagnostics:
                 ctx.synchronize()
                 events += "decode\t"+String(step)+"\t1\t"+String(now()-decode_started)+"\n"

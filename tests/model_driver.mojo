@@ -25,35 +25,35 @@ def lifecycle(path: String) raises:
     for configuration in configurations:
         model.reset(ctx)
         kv.reset(ctx)
-        model.forward(ctx,StepBatch.sequence(ids,0,0,4),kv,configured_plan(configuration,3,3))
+        model.forward(ctx,StepBatch.sequence(ids,0,[0],4),kv,configured_plan(configuration,3,3))
         _ = model.greedy(ctx)
         assert_equal(kv.length(0),3)
         assert_equal(model.submitted_rows,3*LAYERS)
         with assert_raises():
-            model.forward(ctx,StepBatch.sequence(List[Int](),3,0,4),kv,one)
+            model.forward(ctx,StepBatch.sequence(List[Int](),3,[0],4),kv,one)
         with assert_raises():
-            model.forward(ctx,StepBatch.sequence([-1],3,0,4),kv,one)
+            model.forward(ctx,StepBatch.sequence([-1],3,[0],4),kv,one)
         with assert_raises():
-            model.forward(ctx,StepBatch.sequence([VOCABULARY],3,0,4),kv,one)
+            model.forward(ctx,StepBatch.sequence([VOCABULARY],3,[0],4),kv,one)
         with assert_raises():
-            model.forward(ctx,StepBatch.sequence([1,2],3,0,4),kv,baseline_plan(2,5))
+            model.forward(ctx,StepBatch.sequence([1,2],3,[0],4),kv,baseline_plan(2,5))
         with assert_raises():
-            model.forward(ctx,StepBatch.sequence([1],3,0,4),kv,configured_plan(999,1,4))
-        # A step must start exactly where every layer's cache ends.
+            model.forward(ctx,StepBatch.sequence([1],3,[0],4),kv,configured_plan(999,1,4))
+        # A step must start exactly where its block's written slots end.
         with assert_raises():
-            model.forward(ctx,StepBatch.sequence([1],2,0,4),kv,baseline_plan(1,3))
-        kv.caches[kv.index(0,LAYERS-1)].length = 2
+            model.forward(ctx,StepBatch.sequence([1],2,[0],4),kv,baseline_plan(1,3))
+        kv.written[0] = 2
         with assert_raises():
-            model.forward(ctx,StepBatch.sequence([1],3,0,4),kv,one)
-        kv.caches[kv.index(0,LAYERS-1)].length = 3
+            model.forward(ctx,StepBatch.sequence([1],3,[0],4),kv,one)
+        kv.written[0] = 3
         # The pool must match the model's geometry; only configuration 26 steps several sequences.
         var mismatched = KVPool(ctx,1,8,model.kv_geometry())
         with assert_raises():
-            model.forward(ctx,StepBatch.sequence([1],0,0,8),mismatched,baseline_plan(1,1))
+            model.forward(ctx,StepBatch.sequence([1],0,[0],8),mismatched,baseline_plan(1,1))
         assert_equal(mismatched.length(0),0)
         var narrow = KVPool(ctx,1,4,KVGeometry(LAYERS,1,64))
         with assert_raises():
-            model.forward(ctx,StepBatch.sequence([1],0,0,4),narrow,baseline_plan(1,1))
+            model.forward(ctx,StepBatch.sequence([1],0,[0],4),narrow,baseline_plan(1,1))
         assert_equal(narrow.length(0),0)
         var pair = KVPool(ctx,2,4,model.kv_geometry())
         with assert_raises():
@@ -63,15 +63,14 @@ def lifecycle(path: String) raises:
         assert_equal(kv.length(0),3)
         assert_equal(model.submitted_rows,3*LAYERS)
         assert_equal(model.valid,True)
-        model.forward(ctx,StepBatch.sequence([2],3,0,4),kv,configured_plan(0,1,4))
+        model.forward(ctx,StepBatch.sequence([2],3,[0],4),kv,configured_plan(0,1,4))
         _ = model.greedy(ctx)
-        for i in range(LAYERS):
-            assert_equal(kv.caches[kv.index(0,i)].length,4)
+        assert_equal(kv.length(0),4)
         with assert_raises():
-            model.forward(ctx,StepBatch.sequence([1],4,0,4),kv,one)
+            model.forward(ctx,StepBatch.sequence([1],4,[0],4),kv,one)
     model.reset(ctx)
     kv.reset(ctx)
-    model.forward(ctx,StepBatch.sequence(ids,0,0,4),kv,configured_plan(0,3,3))
+    model.forward(ctx,StepBatch.sequence(ids,0,[0],4),kv,configured_plan(0,3,3))
     var first = model.greedy(ctx)
     var bits = List[UInt16]()
     with model.logits.map_to_host() as mapped:
@@ -79,7 +78,7 @@ def lifecycle(path: String) raises:
             bits.append(bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=i]))
     model.reset(ctx)
     kv.reset(ctx)
-    model.forward(ctx,StepBatch.sequence(ids,0,0,4),kv,configured_plan(0,3,3))
+    model.forward(ctx,StepBatch.sequence(ids,0,[0],4),kv,configured_plan(0,3,3))
     assert_equal(model.greedy(ctx),first)
     with model.logits.map_to_host() as mapped:
         for i in range(VOCABULARY):
@@ -98,12 +97,12 @@ def lifecycle(path: String) raises:
             _ = model.greedy(ctx)
         assert_equal(model.valid,False)
         with assert_raises():
-            model.forward(ctx,StepBatch.sequence([1],kv.length(0),0,4),kv,one)
+            model.forward(ctx,StepBatch.sequence([1],kv.length(0),[0],4),kv,one)
         model.reset(ctx)
         kv.reset(ctx)
         assert_equal(kv.length(0),0)
         assert_equal(model.submitted_rows,0)
-        model.forward(ctx,StepBatch.sequence([1],0,0,4),kv,one)
+        model.forward(ctx,StepBatch.sequence([1],0,[0],4),kv,one)
     print("lifecycle passed: configurations invalid-input overflow reset replay ties nonfinite invalidation")
 
 
@@ -125,7 +124,7 @@ def benchmark(path: String, plan: String, warmups: Int, samples: Int) raises:
                 var ids = List[Int]()
                 for i in range(prefix):
                     ids.append((i*103+42)%151643)
-                model.forward(ctx,StepBatch.sequence(ids,0,0,MAX_CONTEXT),kv,configured_plan(0,prefix,prefix))
+                model.forward(ctx,StepBatch.sequence(ids,0,[0],MAX_CONTEXT),kv,configured_plan(0,prefix,prefix))
                 ctx.synchronize()
             active_prefix = prefix
         var ids = List[Int]()
@@ -135,7 +134,7 @@ def benchmark(path: String, plan: String, warmups: Int, samples: Int) raises:
             # Reuse the unchanged real prefix, overwriting only the suffix.
             model.submitted_rows = prefix*LAYERS
             kv.truncate(0,prefix)
-            var batch = StepBatch.sequence(ids,prefix,0,MAX_CONTEXT)
+            var batch = StepBatch.sequence(ids,prefix,[0],MAX_CONTEXT)
             var started = now()
             model.forward(ctx,batch,kv,configured_plan(config,rows,prefix+rows))
             ctx.synchronize()
@@ -156,7 +155,7 @@ def _prefill_fast(ctx: DeviceContext, mut model: QwenModel, mut kv: KVPool, ids:
         var chunk = List[Int](capacity=count)
         for i in range(count):
             chunk.append(ids[offset+i])
-        model.forward(ctx,StepBatch.sequence(chunk,offset,block,MAX_CONTEXT),kv,fast_plan(count,offset+count,ctx.name()))
+        model.forward(ctx,StepBatch.sequence(chunk,offset,[block],MAX_CONTEXT),kv,fast_plan(count,offset+count,ctx.name()))
         offset += count
     return model.greedy(ctx)
 
@@ -228,7 +227,7 @@ def batch(path: String, tables: String, steps: Int) raises:
                 logits.append(bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=i]))
         for s in range(BATCH_SEQUENCES):
             var position = lengths[s]+step
-            model.forward(ctx,StepBatch.sequence([next[s]],position,s,MAX_CONTEXT),solo,fast_plan(1,position+1,ctx.name()))
+            model.forward(ctx,StepBatch.sequence([next[s]],position,[s],MAX_CONTEXT),solo,fast_plan(1,position+1,ctx.name()))
             if model.greedy(ctx) != tokens[s]:
                 raise Error("sequence "+String(s)+" token differs at step "+String(step))
             with model.logits.map_to_host() as mapped:
@@ -294,9 +293,7 @@ def main() raises:
     var model = QwenModel(ctx,args[1],capacity,maximum)
     var kv = KVPool(ctx,1,capacity,model.kv_geometry())
     # Exact untouched-cache checks use a finite recognizable poison pattern.
-    for i in range(LAYERS):
-        kv.caches[kv.index(0,i)].key.enqueue_fill(123)
-        kv.caches[kv.index(0,i)].value.enqueue_fill(123)
+    kv.storage.enqueue_fill(123)
     var offset = 0
     for i in range(len(schedule)):
         var chunk = List[Int]()
@@ -304,7 +301,7 @@ def main() raises:
             chunk.append(ids[offset+j])
         var cached = offset+schedule[i]
         var plan = execution_plan(args[4],schedule[i],cached,ctx.name()) if dynamic else configured_plan(configurations[i],schedule[i],cached)
-        var batch = StepBatch.sequence(chunk,offset,0,capacity)
+        var batch = StepBatch.sequence(chunk,offset,[0],capacity)
         if args[5] != "-":
             model.forward_captured(ctx,batch,kv,plan,CaptureRequest(args[5]+"/call_"+String(i),False))
         else:
