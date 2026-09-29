@@ -57,7 +57,9 @@ one layer at a time through [`ModelLayer.load`](../src/llm_mojo/models/qwen2/mod
 The session also creates a one-block [`KVPool`](../src/llm_mojo/serving/kv_pool.mojo),
 sized by [`QwenModel.kv_geometry`](../src/llm_mojo/models/qwen2/model.mojo):
 a single allocation holding every layer's cache, which the model reads and
-appends through the session's block table.
+appends through the session's block table. A
+[`BlockManager`](../src/llm_mojo/serving/blocks.mojo) hands the conversation its
+blocks as it grows.
 
 | Tensor | Shape | Size |
 | --- | --- | ---: |

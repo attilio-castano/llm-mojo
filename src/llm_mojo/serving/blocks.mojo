@@ -18,6 +18,7 @@ shared blocks in phase 4:
 Every rejected operation raises before it changes any state.
 """
 from std.math import ceildiv
+from llm_mojo.serving.kv_pool import KVPool
 
 comptime RESET = 0
 comptime PARTIAL = 1
@@ -188,3 +189,24 @@ struct BlockManager(Movable):
                 raise Error("block " + String(block) + " is not exactly free or held once")
             if free[block] == 1 and self.states[block] != RESET:
                 raise Error("a free block is not Reset")
+
+    def check_pool(self, pool: KVPool) raises:
+        """Raise unless the pool's written slots agree with every committed length.
+
+        Blocks wholly below a sequence's length are full, its next block holds
+        the rest, and every other block, free or reserved, is empty. Holds
+        between steps: during a step the model has advanced the pool before the
+        step is committed here.
+        """
+        self.check()
+        if pool.blocks != self.blocks or pool.block_size != self.block_size:
+            raise Error("the pool and the block manager disagree about blocks")
+        var expected = List[Int](capacity=self.blocks)
+        for _ in range(self.blocks):
+            expected.append(0)
+        for s in range(len(self.active)):
+            for i in range(len(self.tables[s])):
+                expected[self.tables[s][i]] = min(max(self.lengths[s] - i * self.block_size, 0), self.block_size)
+        for block in range(self.blocks):
+            if pool.length(block) != expected[block]:
+                raise Error("block " + String(block) + "'s written slots disagree with its sequence's length")

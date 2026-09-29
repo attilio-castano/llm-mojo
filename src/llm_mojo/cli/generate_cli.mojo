@@ -7,6 +7,7 @@ from llm_mojo.models.qwen2.model import QwenModel, generation_budget
 from llm_mojo.models.qwen2.plan import MAX_CONTEXT, execution_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace, TokenizerDecoder
 from llm_mojo.serving.batch import StepBatch
+from llm_mojo.serving.blocks import BlockManager
 from llm_mojo.serving.kv_pool import KVPool
 
 
@@ -44,6 +45,8 @@ def main() raises:
     var ctx = DeviceContext()
     var model = QwenModel(ctx,args[1],MAX_CONTEXT,max_rows)
     var kv = KVPool(ctx,1,MAX_CONTEXT,model.kv_geometry())
+    var blocks = BlockManager(1,MAX_CONTEXT,MAX_CONTEXT)
+    var sequence = blocks.add()
     if diagnostics:
         events += "device\t0\t"+ctx.name()+"/"+ctx.api()+"\t0\n"
         events += "load\t0\t0\t"+String(now()-started)+"\n"
@@ -56,7 +59,9 @@ def main() raises:
         for i in range(rows):
             ids.append(history[offset+i])
         var plan = execution_plan(mode,rows,offset+rows,ctx.name())
-        model.forward(ctx,StepBatch.sequence(ids,offset,[0],MAX_CONTEXT),kv,plan)
+        blocks.reserve(sequence,offset+rows)
+        model.forward(ctx,StepBatch.sequence(ids,offset,blocks.table(sequence),MAX_CONTEXT),kv,plan)
+        blocks.commit(sequence,offset+rows)
         if diagnostics:
             events += "configuration\t"+String(offset)+"\t"+String(plan.configuration)+"\t0\n"
             events += "route\t"+String(calls)+"\t"+model.last_route.describe()+"\t0\n"
@@ -82,8 +87,11 @@ def main() raises:
         if step+1 < budget:
             var ids: List[Int] = [token]
             var decode_started = now()
-            var cached = kv.length(0)
-            model.forward(ctx,StepBatch.sequence(ids,cached,[0],MAX_CONTEXT),kv,execution_plan(mode,1,cached+1,ctx.name()))
+            var cached = blocks.length(sequence)
+            blocks.reserve(sequence,cached+1)
+            model.forward(ctx,StepBatch.sequence(ids,cached,blocks.table(sequence),MAX_CONTEXT),kv,
+                          execution_plan(mode,1,cached+1,ctx.name()))
+            blocks.commit(sequence,cached+1)
             if diagnostics:
                 ctx.synchronize()
                 events += "decode\t"+String(step)+"\t1\t"+String(now()-decode_started)+"\n"
@@ -94,7 +102,7 @@ def main() raises:
     if len(bytes) > 0:
         print(String(from_utf8=bytes),end="",flush=True)
     if diagnostics:
-        events += "cache\t0\t"+String(kv.length(0))+"\t0\n"
+        events += "cache\t0\t"+String(blocks.length(sequence))+"\t0\n"
         events += "submitted\t0\t"+String(model.submitted_rows)+"\t0\n"
         events += "finish\t"+String(len(history)-prompt_length)+"\t"+finish_reason+"\t"+String(now()-started)+"\n"
         var report = open(args[7],"w")

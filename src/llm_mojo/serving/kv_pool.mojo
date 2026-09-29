@@ -83,6 +83,21 @@ struct KVPool(Movable):
             raise Error("truncation cannot extend a block")
         self.written[block] = length
 
+    def truncate_table(mut self, table: List[Int], length: Int) raises:
+        """Shorten the sequence whose blocks `table` lists to `length` positions.
+
+        Every block past the new length becomes empty, so it can hold another
+        sequence's first rows. Rejection leaves every count unchanged.
+        """
+        var counts = List[Int](capacity=len(table))
+        for b in range(len(table)):
+            var count = min(max(length - b * self.block_size, 0), self.block_size)
+            if length < 0 or count > self.length(table[b]):
+                raise Error("truncation cannot extend a block")
+            counts.append(count)
+        for b in range(len(table)):
+            self.written[table[b]] = counts[b]
+
     def reset(mut self, ctx: DeviceContext) raises:
         """Finish pending use, then make every slot of every block logically absent."""
         ctx.synchronize()

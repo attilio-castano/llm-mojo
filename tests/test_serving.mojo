@@ -5,6 +5,7 @@ from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceContext
 from llm_mojo.layers.attention_sublayer import AttentionCache
 from llm_mojo.serving.batch import StepBatch
+from llm_mojo.serving.blocks import BlockManager
 from llm_mojo.serving.kv_pool import KVGeometry, KVPool
 
 comptime VOCABULARY = 151936
@@ -209,6 +210,47 @@ def test_pool_written_slots_truncate_and_reset() raises:
     pool.reset(ctx)
     assert_equal(pool.length(0), 0)
     assert_equal(pool.length(1), 0)
+
+
+def test_pool_follows_the_block_manager() raises:
+    var ctx = DeviceContext()
+    var pool = KVPool(ctx, 6, 4, KVGeometry(2, 2, 2))
+    var blocks = BlockManager(6, 4, 24)
+    var a = blocks.add()
+    var b = blocks.add()
+    # a holds six positions in blocks 0 and 1, and b three in block 2; the model advances the pool.
+    blocks.reserve(a, 6)
+    blocks.reserve(b, 3)
+    pool.written[0] = 4
+    pool.written[1] = 2
+    pool.written[2] = 3
+    blocks.commit(a, 6)
+    blocks.commit(b, 3)
+    _assert_list(blocks.table(a), [0, 1])
+    _assert_list(blocks.table(b), [2])
+    blocks.check_pool(pool)
+    # A pool that disagrees with a committed length fails the check.
+    pool.written[1] = 1
+    with assert_raises():
+        blocks.check_pool(pool)
+    pool.written[1] = 2
+    # Truncation empties the blocks past the new length in the pool, then frees them.
+    pool.truncate_table(blocks.table(a), 3)
+    blocks.truncate(a, 3)
+    assert_equal(pool.length(0), 3)
+    assert_equal(pool.length(1), 0)
+    blocks.check_pool(pool)
+    # It cannot extend a sequence, and a rejected truncation changes nothing.
+    with assert_raises():
+        pool.truncate_table(blocks.table(a), 5)
+    assert_equal(pool.length(0), 3)
+    # Releasing a sequence empties its blocks.
+    pool.truncate_table(blocks.table(b), 0)
+    blocks.release(b)
+    blocks.check_pool(pool)
+    # A pool of another geometry fails the check.
+    with assert_raises():
+        blocks.check_pool(KVPool(ctx, 6, 8, KVGeometry(2, 2, 2)))
 
 
 def test_pool_rejects_invalid_geometry_and_views() raises:
