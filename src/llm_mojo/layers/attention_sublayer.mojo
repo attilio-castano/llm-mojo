@@ -3,6 +3,8 @@
 See docs/attention-sublayer.md for rounding, lifetime and cache contracts.
 The caller initializes weights and rotary tables, retains all objects, and uses
 one context/stream through completion. Rotary tables are explicit model inputs.
+The K/V writes also have paged forms that address a block pool through a
+table (kernels/paged_kv.mojo).
 """
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -28,6 +30,7 @@ from llm_mojo.kernels.attention_prefill import (
     enqueue_grouped_query_attention_prefill_split_apple_gpu,
 )
 from llm_mojo.kernels.residual import enqueue_residual_apple_gpu
+from llm_mojo.kernels.paged_kv import kv_row, validate_paged_pool
 
 
 struct AttentionWeights(Movable):
@@ -371,6 +374,162 @@ def enqueue_fused_decode_qkv_batch[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: In
     ctx.enqueue_function[kernel](packed, cosine, sine, query, pool, positions, blocks,
         Int32(layer), Int32(layers), Int32(block_size),
         grid_dim=(ceildiv(THREADS, 128), sequences), block_dim=128)
+
+
+def _fused_decode_qkv_paged[
+    QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, HEAD_MAJOR: Bool,
+    PL: TensorLayout, TL: TensorLayout, QL: TensorLayout, CL: TensorLayout, SL: TensorLayout,
+    BL: TensorLayout,
+](
+    packed: TileTensor[DType.bfloat16, PL, MutAnyOrigin],
+    cosine: TileTensor[DType.bfloat16, TL, MutAnyOrigin],
+    sine: TileTensor[DType.bfloat16, TL, MutAnyOrigin],
+    query: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    pool: TileTensor[DType.bfloat16, CL, MutAnyOrigin],
+    positions: TileTensor[DType.int32, SL, MutAnyOrigin],
+    tables: TileTensor[DType.int32, BL, MutAnyOrigin],
+    layer: Int32, layers: Int32, block_size: Int32,
+):
+    """_fused_decode_qkv_batch for sequence block_idx.y of a paged batch.
+
+    The rotation is _fused_decode_qkv_batch's, line for line. Only the K and V
+    addresses differ: position p goes to slot p % block_size of block
+    tables[s, p // block_size] in `layer` of the flat pool.
+    """
+    comptime assert is_apple_gpu()
+    comptime assert HEAD_DIM % 2 == 0
+    comptime assert packed.flat_rank == 2 and cosine.flat_rank == 2 and sine.flat_rank == 2
+    comptime assert query.flat_rank == 3 and pool.flat_rank == 1
+    comptime assert positions.flat_rank == 1 and tables.flat_rank == 2
+    comptime HALF = HEAD_DIM // 2
+    comptime WIDTH = KV_HEADS * HEAD_DIM
+    comptime QUERY_WIDTH = QUERY_HEADS * HEAD_DIM
+    var i = global_idx.x
+    var s = block_idx.y
+    var p = Int(positions[s])
+    var size = Int(block_size)
+    var block = Int(tables[s, p // size])
+    var slot = p % size
+    if i < (QUERY_HEADS + KV_HEADS) * HALF:
+        var head = i // HALF
+        var pair = i % HALF
+        var first_column = head * HEAD_DIM + pair
+        var first = rebind[Scalar[DType.bfloat16]](packed[s, first_column])
+        var second = rebind[Scalar[DType.bfloat16]](packed[s, first_column + HALF])
+        var c0 = rebind[Scalar[DType.bfloat16]](cosine[p, pair])
+        var c1 = rebind[Scalar[DType.bfloat16]](cosine[p, pair + HALF])
+        var s0 = rebind[Scalar[DType.bfloat16]](sine[p, pair])
+        var s1 = rebind[Scalar[DType.bfloat16]](sine[p, pair + HALF])
+        var ac: Scalar[DType.bfloat16] = first.fma[FastMathFlag.NONE](c0, 0)
+        var bs: Scalar[DType.bfloat16] = second.fma[FastMathFlag.NONE](s0, 0)
+        var bc: Scalar[DType.bfloat16] = second.fma[FastMathFlag.NONE](c1, 0)
+        var ass: Scalar[DType.bfloat16] = first.fma[FastMathFlag.NONE](s1, 0)
+        var low: Scalar[DType.bfloat16] = ac - bs
+        var high: Scalar[DType.bfloat16] = bc + ass
+        if head < QUERY_HEADS:
+            query[s, head, pair] = rebind[query.ElementType](low)
+            query[s, head, pair + HALF] = rebind[query.ElementType](high)
+        else:
+            var key = kv_row[KV_HEADS, HEAD_DIM, HEAD_MAJOR](block, Int(layer), Int(layers), 0, slot,
+                                                            Int(head) - QUERY_HEADS, size)
+            pool[key + Int(pair)] = rebind[pool.ElementType](low)
+            pool[key + Int(pair) + HALF] = rebind[pool.ElementType](high)
+    if i < WIDTH:
+        var value = kv_row[KV_HEADS, HEAD_DIM, HEAD_MAJOR](block, Int(layer), Int(layers), 1, slot,
+                                                          Int(i) // HEAD_DIM, size)
+        pool[value + Int(i) % HEAD_DIM] = rebind[pool.ElementType](packed[s, QUERY_WIDTH + WIDTH + i])
+
+
+def enqueue_fused_decode_qkv_paged[
+    QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, HEAD_MAJOR: Bool, SL: TensorLayout, BL: TensorLayout,
+](
+    ctx: DeviceContext, mut work: AttentionWorkspace, mut storage: DeviceBuffer[DType.bfloat16],
+    positions: TileTensor[DType.int32, SL, MutAnyOrigin],
+    tables: TileTensor[DType.int32, BL, MutAnyOrigin],
+    layer: Int, layers: Int, block_size: Int,
+) raises:
+    """Unpack, rotate and append S decode rows into a paged pool: work.packed [S, qkv] to work.query and the pool.
+
+    tables is [S, blocks]. The caller has checked every position against its
+    table and the rotary tables, and every table entry against the pool.
+    """
+    comptime WIDTH = KV_HEADS * HEAD_DIM
+    comptime THREADS = (QUERY_HEADS + KV_HEADS) * (HEAD_DIM // 2)
+    comptime assert positions.flat_rank == 1 and tables.flat_rank == 2
+    var sequences = Int(positions.dim[0]())
+    if (sequences < 1 or sequences > work.max_rows or Int(tables.dim[0]()) != sequences
+            or work.query_heads != QUERY_HEADS or work.kv_heads != KV_HEADS or work.head_dim != HEAD_DIM):
+        raise Error("invalid paged fused decode geometry")
+    validate_paged_pool[KV_HEADS, HEAD_DIM](len(storage), layer, layers, block_size, Int(tables.dim[1]()))
+    var packed = TileTensor(work.packed, row_major(sequences, QUERY_HEADS * HEAD_DIM + 2 * WIDTH))
+    var cosine = TileTensor(work.cosine, row_major(work.capacity, HEAD_DIM))
+    var sine = TileTensor(work.sine, row_major(work.capacity, HEAD_DIM))
+    var query = TileTensor(work.query, row_major(sequences, QUERY_HEADS, HEAD_DIM))
+    var pool = TileTensor(storage, row_major(len(storage)))
+    comptime kernel = _fused_decode_qkv_paged[QUERY_HEADS, KV_HEADS, HEAD_DIM, HEAD_MAJOR, type_of(packed.layout),
+        type_of(cosine.layout), type_of(query.layout), type_of(pool.layout), SL, BL]
+    ctx.enqueue_function[kernel](packed, cosine, sine, query, pool, positions, tables,
+        Int32(layer), Int32(layers), Int32(block_size),
+        grid_dim=(ceildiv(THREADS, 128), sequences), block_dim=128)
+
+
+def _append_paged[
+    KV_HEADS: Int, HEAD_DIM: Int, HEAD_MAJOR: Bool,
+    KL: TensorLayout, VL: TensorLayout, PL: TensorLayout, TL: TensorLayout,
+](
+    key: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
+    value: TileTensor[DType.bfloat16, VL, MutAnyOrigin],
+    pool: TileTensor[DType.bfloat16, PL, MutAnyOrigin],
+    table: TileTensor[DType.int32, TL, MutAnyOrigin],
+    rows: Int32, past: Int32, layer: Int32, layers: Int32, block_size: Int32,
+):
+    """_append into a paged pool: row r of the chunk goes to position past + r of one sequence."""
+    comptime assert key.flat_rank == 2 and value.flat_rank == 2
+    comptime assert pool.flat_rank == 1 and table.flat_rank == 1
+    comptime WIDTH = KV_HEADS * HEAD_DIM
+    var i = global_idx.x
+    if i < Int(rows) * WIDTH:
+        var r = i // WIDTH
+        var column = i % WIDTH
+        var position = Int(past) + Int(r)
+        var size = Int(block_size)
+        var block = Int(table[position // size])
+        var head = Int(column) // HEAD_DIM
+        var d = Int(column) % HEAD_DIM
+        pool[kv_row[KV_HEADS, HEAD_DIM, HEAD_MAJOR](block, Int(layer), Int(layers), 0, position % size, head, size)
+             + d] = key[r, column]
+        pool[kv_row[KV_HEADS, HEAD_DIM, HEAD_MAJOR](block, Int(layer), Int(layers), 1, position % size, head, size)
+             + d] = value[r, column]
+
+
+def enqueue_append_paged[
+    KV_HEADS: Int, HEAD_DIM: Int, HEAD_MAJOR: Bool, KL: TensorLayout, VL: TensorLayout, TL: TensorLayout,
+](
+    ctx: DeviceContext,
+    key: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
+    value: TileTensor[DType.bfloat16, VL, MutAnyOrigin],
+    mut storage: DeviceBuffer[DType.bfloat16],
+    table: TileTensor[DType.int32, TL, MutAnyOrigin],
+    past: Int, layer: Int, layers: Int, block_size: Int,
+) raises:
+    """Write a chunk's K and V rows [R, kv width] at positions past .. past + R - 1 of one paged sequence.
+
+    table lists the sequence's blocks; it must cover every written position.
+    The caller has checked its entries against the pool.
+    """
+    comptime assert key.flat_rank == 2 and value.flat_rank == 2 and table.flat_rank == 1
+    comptime WIDTH = KV_HEADS * HEAD_DIM
+    var rows = Int(key.dim[0]())
+    var width = Int(table.dim[0]())
+    if (rows < 1 or Int(key.dim[1]()) != WIDTH or Int(value.dim[0]()) != rows or Int(value.dim[1]()) != WIDTH
+            or past < 0 or past + rows > width * block_size):
+        raise Error("paged append requires K/V [R, kv width] at positions its table covers")
+    validate_paged_pool[KV_HEADS, HEAD_DIM](len(storage), layer, layers, block_size, width)
+    var pool = TileTensor(storage, row_major(len(storage)))
+    comptime kernel = _append_paged[KV_HEADS, HEAD_DIM, HEAD_MAJOR, KL, VL, type_of(pool.layout), TL]
+    ctx.enqueue_function[kernel](key, value, pool, table, Int32(rows), Int32(past),
+        Int32(layer), Int32(layers), Int32(block_size),
+        grid_dim=ceildiv(rows * WIDTH, 128), block_dim=128)
 
 
 def _enqueue_attention_qkv(

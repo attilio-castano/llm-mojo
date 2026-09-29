@@ -4,6 +4,8 @@ The materialized control retains BF16 probability rounding. Fused paths keep
 FP32 online state and expose only O; the MMA path rounds unnormalized tile
 weights to BF16 before PV by default. The explicit FP32 rolled-MMA option
 retains FP32 scores and weights through PV. These paths are separately tested.
+Routes 6 and 10 also have a paged form that reads K/V through a block table
+(kernels/paged_kv.mojo) with unchanged arithmetic.
 """
 from layout import TensorLayout, TileTensor, row_major, stack_allocation
 from llm_mojo.kernels.attention import (
@@ -20,6 +22,7 @@ from std.gpu.primitives import warp
 from std.math import exp, max, min, ceildiv
 from std.sys.info import is_apple_gpu
 from std.utils.numerics import neg_inf
+from llm_mojo.kernels.paged_kv import kv_row, kv_slot_stride, validate_paged_pool
 
 
 def _softmax[
@@ -760,6 +763,280 @@ def enqueue_grouped_query_attention_prefill_split_apple_gpu[
         grid_dim=(14, ceildiv(r, 32), SPLITS), block_dim=128,
     )
     comptime merge = _merge_prefill_splits[SPLITS, QL, PL]
+    ctx.enqueue_function[merge](
+        partial, output, Int32(r), grid_dim=ceildiv(r * 14, 4), block_dim=128,
+    )
+
+
+def _paged_mma[
+    SPLITS: Int, HEAD_MAJOR: Bool, QL: TensorLayout, PL: TensorLayout, TL: TensorLayout, OL: TensorLayout,
+](
+    q: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    pool: TileTensor[DType.bfloat16, PL, MutAnyOrigin],
+    table: TileTensor[DType.int32, TL, MutAnyOrigin],
+    output: TileTensor[DType.float32 if SPLITS > 1 else DType.bfloat16, OL, MutAnyOrigin],
+    rows: Int32,
+    tokens: Int32,
+    layer: Int32,
+    layers: Int32,
+    block_size: Int32,
+):
+    """_mma_tuned[2, FP32=True, BQ=32, SPLITS] over one paged sequence: routes 6 and 10.
+
+    Every line but the K/V tile loads is _mma_tuned's schedule-2, FP32, 32-row
+    path. A tile's 32 rows start at a multiple of 32 and so lie in one block,
+    whose table entry each thread reads once per tile; the rows then follow at
+    the pool's slot stride. Q/O and the split partials keep their layouts.
+    """
+    comptime assert is_apple_gpu()
+    comptime assert q.flat_rank == 3 and pool.flat_rank == 1 and table.flat_rank == 1
+    comptime assert output.flat_rank == (4 if SPLITS > 1 else 3)
+    comptime assert SPLITS == 1 or SPLITS == 4 or SPLITS == 8
+    comptime OTYPE = DType.float32 if SPLITS > 1 else DType.bfloat16
+    comptime BQ = 32
+    comptime BK = 32
+    comptime HEADS = 1
+    comptime W = BQ // 8
+    comptime STRIDE = kv_slot_stride[2, 64, HEAD_MAJOR]()
+    # Apple's 8x8 fragment assigns two adjacent columns to each lane. Four
+    # lanes share one row; XOR 1 and XOR 8 reduce that row without a block sum.
+    var tid = thread_idx.x
+    var lane = Int(lane_id())
+    var fr = ((lane & 6) >> 1) + ((lane & 16) >> 2)
+    var fc = ((lane & 1) << 1) + ((lane & 8) >> 1)
+    var local_r = (tid // 32) * 8 + fr
+    var kh = block_idx.x // ceildiv(7, HEADS)
+    var head0 = kh * 7 + (block_idx.x % ceildiv(7, HEADS)) * HEADS
+    var h = head0 + local_r // BQ
+    var r = block_idx.y * BQ + local_r % BQ
+    var valid = r < Int(rows) and h < kh * 7 + 7
+    var past = Int(tokens) - Int(rows)
+    var end = min(Int(tokens), past + block_idx.y * BQ + BQ)
+    var begin = 0
+    comptime if SPLITS > 1:
+        # Partition whole KV tiles: disjoint coverage, unchanged tile order
+        # inside a split, and potentially empty causal pieces for early rows.
+        var tiles = ceildiv(Int(tokens), BK)
+        begin = (tiles * block_idx.z // SPLITS) * BK
+        end = min(end, (tiles * (block_idx.z + 1) // SPLITS) * BK)
+    var size = Int(block_size)
+    var ks = stack_allocation[
+        DType.bfloat16, address_space=AddressSpace.SHARED
+    ](row_major[BK, 64]())
+    comptime assert ks.flat_rank == 2
+    var vs = stack_allocation[
+        DType.bfloat16, address_space=AddressSpace.SHARED
+    ](row_major[BK, 64]())
+    comptime assert vs.flat_rank == 2
+    var scores = stack_allocation[
+        DType.float32, address_space=AddressSpace.SHARED
+    ](row_major[BQ * HEADS, BK]())
+    comptime assert scores.flat_rank == 2
+    var probs = stack_allocation[
+        DType.float32, address_space=AddressSpace.SHARED
+    ](row_major[BQ * HEADS, BK]())
+    comptime assert probs.flat_rank == 2
+    var u = SIMD[DType.float32, 16](0)
+    var m: Float32 = neg_inf[DType.float32]()
+    var z: Float32 = 0
+    for base in range(begin, end, BK):
+        var block = Int(table[base // size])
+        var key = kv_row[2, 64, HEAD_MAJOR](block, Int(layer), Int(layers), 0, base % size, Int(kh), size)
+        var value = kv_row[2, 64, HEAD_MAJOR](block, Int(layer), Int(layers), 1, base % size, Int(kh), size)
+        for index in range(tid, BK * 64, W * 32):
+            var t = base + index // 64
+            var d = index % 64
+            var kval: Scalar[DType.bfloat16] = 0
+            var vval: Scalar[DType.bfloat16] = 0
+            if t < end:
+                kval = rebind[Scalar[DType.bfloat16]](pool[key + Int(index // 64) * STRIDE + Int(d)])
+                vval = rebind[Scalar[DType.bfloat16]](pool[value + Int(index // 64) * STRIDE + Int(d)])
+            ks[index // 64, d] = kval
+            vs[index // 64, d] = vval
+        barrier()
+        comptime for j in range(BK // 8):
+            var acc = SIMD[DType.float32, 2](0)
+            for ds in range(8):
+                var a = SIMD[DType.bfloat16, 2](0)
+                if valid:
+                    a[0] = rebind[Scalar[DType.bfloat16]](
+                        q[r, h, ds * 8 + fc]
+                    )
+                    a[1] = rebind[Scalar[DType.bfloat16]](
+                        q[r, h, ds * 8 + fc + 1]
+                    )
+                var b = SIMD[DType.bfloat16, 2](0)
+                b[0] = rebind[Scalar[DType.bfloat16]](
+                    ks[j * 8 + fc, ds * 8 + fr]
+                )
+                b[1] = rebind[Scalar[DType.bfloat16]](
+                    ks[j * 8 + fc + 1, ds * 8 + fr]
+                )
+                var previous = acc
+                _mma_apple_8x8(acc, a, b, previous)
+            comptime for c in range(2):
+                var t = base + j * 8 + fc + c
+                var s: Float32 = neg_inf[DType.float32]()
+                if valid and t < end and t <= past + r:
+                    s = acc[c] * 0.125
+                scores[local_r, j * 8 + fc + c] = s
+        barrier()
+        var tile_m: Float32 = neg_inf[DType.float32]()
+        comptime for j in range(BK // 8):
+            comptime for c in range(2):
+                tile_m = max(
+                    tile_m, rebind[Float32](scores[local_r, j * 8 + fc + c])
+                )
+        tile_m = max(tile_m, warp.shuffle_xor(tile_m, UInt32(1)))
+        tile_m = max(tile_m, warp.shuffle_xor(tile_m, UInt32(8)))
+        var new_m = max(m, tile_m)
+        # Rescale the old unnormalized output once per KV tile. Probabilities
+        # retain FP32 for the accuracy path; m and z are always FP32.
+        var alpha = exp(m - new_m)
+        comptime if SPLITS > 1:
+            # An all-masked row has m=new_m=-inf. Its neutral state must
+            # survive without exp(-inf - -inf) contaminating z or u.
+            if z == 0:
+                alpha = 0
+        var tile_z: Float32 = 0
+        comptime for j in range(BK // 8):
+            comptime for c in range(2):
+                var t = base + j * 8 + fc + c
+                var p: Float32 = 0
+                if valid and t < end and t <= past + r:
+                    p = exp(
+                        rebind[Float32](scores[local_r, j * 8 + fc + c])
+                        - new_m
+                    )
+                tile_z += p
+                probs[local_r, j * 8 + fc + c] = p
+        tile_z += warp.shuffle_xor(tile_z, UInt32(1))
+        tile_z += warp.shuffle_xor(tile_z, UInt32(8))
+        z = z * alpha + tile_z
+        m = new_m
+        u *= alpha
+        # PV loads the same lane-owned probability addresses just written.
+        # The MMA collective exchanges loaded register fragments. Shared K/V
+        # publication and reuse still require the outer block barriers.
+        barrier()
+        comptime for ds in range(8):
+            var acc = SIMD[DType.float32, 2](u[ds * 2], u[ds * 2 + 1])
+            comptime for j in range(BK // 8):
+                var a = SIMD[DType.float32, 2](0)
+                var b = SIMD[DType.float32, 2](0)
+                a[0] = rebind[Scalar[DType.float32]](
+                    probs[local_r, j * 8 + fc]
+                )
+                a[1] = rebind[Scalar[DType.float32]](
+                    probs[local_r, j * 8 + fc + 1]
+                )
+                b[0] = rebind[Scalar[DType.float32]](
+                    vs[j * 8 + fr, ds * 8 + fc].cast[DType.float32]()
+                )
+                b[1] = rebind[Scalar[DType.float32]](
+                    vs[j * 8 + fr, ds * 8 + fc + 1].cast[DType.float32]()
+                )
+                var previous = acc
+                _mma_apple_8x8(acc, a, b, previous)
+            u[ds * 2] = acc[0]
+            u[ds * 2 + 1] = acc[1]
+        barrier()
+    if valid:
+        comptime for ds in range(8):
+            comptime if SPLITS > 1:
+                comptime assert output.flat_rank == 4
+                output[r, h, block_idx.z, ds * 8 + fc] = u[ds * 2].cast[OTYPE]()
+                output[r, h, block_idx.z, ds * 8 + fc + 1] = u[ds * 2 + 1].cast[OTYPE]()
+            else:
+                comptime assert output.flat_rank == 3
+                output[r, h, ds * 8 + fc] = (u[ds * 2] / z).cast[OTYPE]()
+                output[r, h, ds * 8 + fc + 1] = (u[ds * 2 + 1] / z).cast[OTYPE]()
+        comptime if SPLITS > 1:
+            comptime assert output.flat_rank == 4
+            if fc == 0:
+                output[r, h, block_idx.z, 64] = m.cast[OTYPE]()
+                output[r, h, block_idx.z, 65] = z.cast[OTYPE]()
+
+
+def _validate_paged_prefill[
+    QL: TensorLayout, PL: TensorLayout, TL: TensorLayout
+](
+    ctx: DeviceContext,
+    q: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    pool: TileTensor[DType.bfloat16, PL, MutAnyOrigin],
+    table: TileTensor[DType.int32, TL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    tokens: Int, layer: Int, layers: Int, block_size: Int,
+) raises:
+    comptime assert q.flat_rank == 3 and pool.flat_rank == 1
+    comptime assert table.flat_rank == 1 and output.flat_rank == 3
+    if ctx.api() != "metal":
+        raise Error("paged prefill requires Metal")
+    var r = Int(q.dim[0]())
+    if r < 1 or r > tokens or tokens > 4096:
+        raise Error("paged prefill requires 1 <= R <= T <= 4096")
+    if Int(q.dim[1]()) != 14 or Int(q.dim[2]()) != 64:
+        raise Error("paged prefill requires Q[R,14,64]")
+    if Int(output.dim[0]()) != r or Int(output.dim[1]()) != 14 or Int(output.dim[2]()) != 64:
+        raise Error("paged prefill output shape must match query")
+    var width = Int(table.dim[0]())
+    validate_paged_pool[2, 64](Int(pool.dim[0]()), layer, layers, block_size, width)
+    if ceildiv(tokens, block_size) > width:
+        raise Error("paged prefill table does not cover the sequence")
+
+
+def enqueue_paged_attention_prefill_apple_gpu[
+    HEAD_MAJOR: Bool, QL: TensorLayout, PL: TensorLayout, TL: TensorLayout,
+](
+    ctx: DeviceContext,
+    q: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    pool: TileTensor[DType.bfloat16, PL, MutAnyOrigin],
+    table: TileTensor[DType.int32, TL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    tokens: Int, layer: Int, layers: Int, block_size: Int,
+) raises:
+    """Route 6 over a paged sequence: the FP32 rolled-MMA prefill for its last R of `tokens` rows.
+
+    Q/O are [R,14,64]; the flat pool holds the sequence's first `tokens` K/V rows
+    in the blocks its table lists. One dispatch; no allocation or sync.
+    """
+    _validate_paged_prefill(ctx, q, pool, table, output, tokens, layer, layers, block_size)
+    var r = Int(q.dim[0]())
+    comptime kernel = _paged_mma[1, HEAD_MAJOR, QL, PL, TL, QL]
+    ctx.enqueue_function[kernel](
+        q, pool, table, output, Int32(r), Int32(tokens), Int32(layer), Int32(layers), Int32(block_size),
+        grid_dim=(14, ceildiv(r, 32)), block_dim=128,
+    )
+
+
+def enqueue_paged_attention_prefill_split_apple_gpu[
+    SPLITS: Int, HEAD_MAJOR: Bool, QL: TensorLayout, PL: TensorLayout, TL: TensorLayout, WL: TensorLayout,
+](
+    ctx: DeviceContext,
+    q: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    pool: TileTensor[DType.bfloat16, PL, MutAnyOrigin],
+    table: TileTensor[DType.int32, TL, MutAnyOrigin],
+    partial: TileTensor[DType.float32, WL, MutAnyOrigin],
+    output: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    tokens: Int, layer: Int, layers: Int, block_size: Int,
+) raises:
+    """Route 10 (SPLITS = 8) or 9 (4) over a paged sequence: split partial states, then the unchanged merge.
+
+    Caller-owned partial storage is [R,14,SPLITS,66], as for the contiguous split.
+    """
+    comptime assert SPLITS == 4 or SPLITS == 8
+    comptime assert partial.flat_rank == 4
+    _validate_paged_prefill(ctx, q, pool, table, output, tokens, layer, layers, block_size)
+    var r = Int(q.dim[0]())
+    if (Int(partial.dim[0]()) != r or Int(partial.dim[1]()) != 14
+        or Int(partial.dim[2]()) != SPLITS or Int(partial.dim[3]()) != 66):
+        raise Error("paged split prefill requires FP32 workspace [R,14,SPLITS,66]")
+    comptime kernel = _paged_mma[SPLITS, HEAD_MAJOR, QL, PL, TL, WL]
+    ctx.enqueue_function[kernel](
+        q, pool, table, partial, Int32(r), Int32(tokens), Int32(layer), Int32(layers), Int32(block_size),
+        grid_dim=(14, ceildiv(r, 32), SPLITS), block_dim=128,
+    )
+    comptime merge = _merge_prefill_splits[SPLITS, QL, WL]
     ctx.enqueue_function[merge](
         partial, output, Int32(r), grid_dim=ceildiv(r * 14, 4), block_dim=128,
     )
