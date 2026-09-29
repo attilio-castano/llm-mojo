@@ -19,12 +19,13 @@ committed with its own gate:
 5. **2e, adoption.** The selected block size becomes the default, and the
    documents that describe current behavior change.
 
-Status: proposed on 2026-09-28; nothing is implemented. The proposed terms are
-phase 1's: local implementation, builds, tests, validation and incremental
-commits, with pushing, pull requests and toolchain upgrades needing a separate
-decision. Paging changes addresses, not arithmetic, so no step changes the
-numerical contract. The plan also proposes one change to the serving plan:
-[keys and events move to phase 4](#keys-and-events-move-to-phase-4).
+Status: proposed on 2026-09-28 and approved on 2026-09-29 on phase 1's terms:
+local implementation, builds, tests, validation and incremental commits, with
+pushing, pull requests and toolchain upgrades needing a separate decision.
+Paging changes addresses, not arithmetic, so no step changes the numerical
+contract. The approval also moved
+[keys and events to phase 4](#keys-and-events-move-to-phase-4). 2a started the
+same day.
 
 ## What paging must preserve
 
@@ -176,14 +177,15 @@ sub-buffer made when needed.
 
 ### Keys and events move to phase 4
 
-The serving plan puts block keys, KV events and event replay in phase 2. This
-plan proposes moving them to phase 4, with the Registered state. In phase 2 no
-block outlives its sequence and none is reused. An event log would record only
-allocation churn, which the invariants already check, and nothing would read
-it. In phase 4 events describe reusable blocks, and replaying them checks the
-prefix index they build. If you approve, the serving plan's phase table changes
-with this plan: phase 2's gate becomes paged equals one block, the allocation
-invariants and write isolation, and phase 4 gains the logical event replay.
+The serving plan put block keys, KV events and event replay in phase 2. With
+this plan's approval on 2026-09-29 they moved to phase 4, with the Registered
+state. In phase 2 no block outlives its sequence and none is reused. An event
+log would record only allocation churn, which the invariants already check,
+and nothing would read it. In phase 4 events describe reusable blocks, and
+replaying them checks the prefix index they build. The serving plan's phase
+table changed accordingly: phase 2's gate is paged equals one block, the
+allocation invariants and write isolation, and phase 4 gains the logical event
+replay.
 
 ## 2a. Paged kernels
 

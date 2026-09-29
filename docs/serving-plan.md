@@ -3,8 +3,9 @@
 Proposed on 2026-09-23 from baseline `edb610a`. Phase 1, batched decode, is
 complete and merged as `132dc08` (#29); its
 [plan and validation record](history/batched-decode-plan.md) are history now.
-Phase 2, a paged KV cache, is next: the [paged KV plan](paged-kv-plan.md)
-proposes it. Nothing after phase 1 is implemented.
+Phase 2, a paged KV cache, is in progress under the
+[paged KV plan](paged-kv-plan.md), approved on 2026-09-29, which also moved
+block keys and KV events to phase 4. Nothing after phase 1 is complete.
 Each phase is approved separately and records its own validation, like the
 existing plans. The [project direction](project.md) lists this as a follow-up
 track.
@@ -522,9 +523,9 @@ configuration and trace identity.
 | Phase | Delivers | Exact gate | Study question |
 | --- | --- | --- | --- |
 | 1. Batched decode | StepBatch; multi-row configuration-26 decode kernels; one maximum-context block per sequence; a batch axis in the existing model benchmark | S = 1 equals today; batched rows equal solo rows | How do throughput and per-token latency scale for B = 1–64 at contexts 64, 1024 and 3968? |
-| 2. Paged KV | block-major pool, block manager, block states, events, paged decode and prefill attention | paged equals contiguous; invariants; logical event replay | What does translation cost at each block size, and does head-major order help? |
+| 2. Paged KV | small blocks in the block-major pool, a block manager with the Reset, Partial and Complete states, paged decode and prefill attention | paged equals one block per sequence; allocation invariants; no writes outside a sequence's blocks | What does translation cost at each block size, and does head-major order help? |
 | 3. Engine core | EngineCore, Scheduler, both runners, chunked prefill, preemption, aborts, step records, trace driver, fitted budget, asynchronous stepping | scheduler and allocator invariants in simulation and on Metal; exact token accounting; asynchronous equals synchronous | How do latency percentiles respond to arrival rate across the scheduling arms, and where does the simulator disagree? |
-| 4. Prefix caching | prefix index, eviction, pinning, chat as an engine client | reused blocks keep their bytes and token IDs; only the uncached suffix is computed; existing chat checks pass | How does time to first token depend on shared-prefix length, hit rate and pool size? |
+| 4. Prefix caching | block keys, Registered blocks, KV events, prefix index, eviction, pinning, chat as an engine client | reused blocks keep their bytes and token IDs; only the uncached suffix is computed; logical event replay; existing chat checks pass | How does time to first token depend on shared-prefix length, hit rate and pool size? |
 | 5. Frontend and API | frontend process, token protocol, model card, HTTP/SSE, supervisor, replay, backpressure, HTTP load generator | replay loses and duplicates nothing and preserves delivered tokens | What do the edge and recovery cost end to end? |
 | 6. SSD tier | store entries keyed by engine identity, publication by rename, asynchronous loading, verification, eviction | restored bytes equal stored bytes; disk and memory hits agree; a changed engine identity never hits older entries | At what prefix length does restoring beat recomputing? |
 | 7. Replicas (optional) | several engines behind a KV-aware router in the frontend | routing preserves histories and token accounting | Do independent submission threads raise throughput, and what does KV-aware routing gain over round-robin? |
@@ -535,7 +536,7 @@ its [batch-size](../studies/model_generation/batch-size.md),
 [reordered projection](../studies/model_generation/batch-reordered.md) studies
 answer its study question: 64 sequences decode 998 tokens/s in aggregate at
 1,024 cached tokens, 7.8 times one sequence's 127. The
-[paged KV plan](paged-kv-plan.md) proposes phase 2.
+[paged KV plan](paged-kv-plan.md) details phase 2.
 `src/llm_mojo/serving/` starts in phase 1 with StepBatch and grows only as each
 phase lands. The Qwen template, stop IDs and card values stay in
 `models/qwen2/`. The `serve` command belongs in `cli/`, and the trace driver
