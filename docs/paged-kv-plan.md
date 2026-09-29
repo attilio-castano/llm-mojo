@@ -25,7 +25,8 @@ pushing, pull requests and toolchain upgrades needing a separate decision.
 Paging changes addresses, not arithmetic, so no step changes the numerical
 contract. The approval also moved
 [keys and events to phase 4](#keys-and-events-move-to-phase-4). 2a and 2b
-are complete; see the [validation record](#validation-record).
+are complete, and 2c's gates have passed apart from its timing sanity check; see
+the [validation record](#validation-record).
 
 ## What paging must preserve
 
@@ -400,6 +401,67 @@ If 2d selects and confirms a layout and the single-sequence check passes:
   split-K decode.
 
 ## Validation record
+
+### 2c on `1c88501`, 2026-09-29
+
+Three commits implement 2c, each validated before it was committed:
+
+| Commit | Change |
+| --- | --- |
+| `a8039dc` | the model launches 2a's paged kernels in every configuration, still one block per sequence; phase 1's one-block kernels are deleted |
+| `1cb1942` | the pool counts written slots per block instead of holding per-layer views; the model steps tables of several blocks in either order within a block |
+| `1c88501` | chat, generate and the model and chat drivers get their tables from the block manager; the drivers and the batch validation take a block size and an order |
+
+- **Unchanged at one block.** Executables built from `6422f84` and from each
+  commit gave byte-identical outputs on phase 1's equality gate, 5,283 files
+  per side:
+  - the model driver: four Fast histories, among them 240 + 16 rows through
+    configuration 21 and 2,048 + 1,920 rows, configurations 3, 2, 26 and 0
+    explicitly, and the baseline and consistent modes;
+  - the chat driver, generation, the benchmark's `verify` at 64 and 1,024
+    cached tokens, and the piped chat CLI.
+- **Paged equals one block.** With the last commit's build, the model and
+  chat driver scenarios ran at 32, 64 and 128 slots in both orders: 4,980
+  files per layout, identical to the one-block run. In the 1,824 cache captures
+  of each layout, the rows through each call's length are identical and every
+  row after them still holds the fill.
+- **Batched equals solo across blocks.** `tests/test_decode_batch.mojo`
+  decodes eight fixture sequences in 32-, 64- and 128-slot blocks in both
+  orders. They are prefilled through configurations 0, 2, 3 and 21 and cross
+  the 32 and 64 boundaries. Every step and every written row equals one block
+  per sequence decoded alone. On the checkpoint, the model driver's batch mode
+  decoded eight conversations of 11 to 3,301 prompt tokens for 16 steps, with
+  64-slot blocks allocated to the conversations in turn, slot-major and
+  head-major, and with 32-slot blocks. Every token, all 151,936 logits per row
+  and every written K/V row equal decoding alone. `validation.model batch --block-size 64`
+  ran from a clean `1c88501` and wrote its receipt.
+- **Write isolation.** In both batched tests, every slot that no step wrote
+  keeps its poison or fill.
+- **Rejections.** Each of these is rejected with written counts, lengths and
+  counters unchanged:
+  - a table of several blocks whose size is not a multiple of 32;
+  - a table wider than the model's context in 32-slot blocks;
+  - a position past the model's context;
+  - a position that disagrees with its block's written slots.
+- **Suite.** `uv run --locked llm-mojo validate` passed on each commit's tree,
+  in 34, 37 and 33 minutes: frozen oracle anchors, 283 Python tests, all 28
+  native test files plus the Unicode tokenizer run on Metal, and every benchmark
+  smoke route.
+- **Timing sanity check.** Not yet run: it is a measurement and waits for a
+  quiet machine.
+
+**Deviations from the plan.**
+- Phase 1's one-block kernels, `_decode_sequences_kernel` and
+  `_fused_decode_qkv_batch`, and the contiguous `validate_decoder_configuration`
+  are deleted, since nothing calls them (your decision on 2026-09-29).
+  `tests/test_paged_kv.mojo` now checks the paged fused write against the
+  unfused path.
+- `StepBatch.sequence` takes the sequence's table; a one-block overload was
+  ambiguous with list literals, and its callers pass `[block]`.
+- The model accepts any block size for one-block tables, not only the model's
+  capacity, and a block may be larger than the context.
+- The model benchmark keeps one block per sequence with direct tables; 2d
+  gives it the study's layouts.
 
 ### 2b on `fdce177`, 2026-09-29
 
