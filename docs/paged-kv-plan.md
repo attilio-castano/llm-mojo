@@ -24,8 +24,8 @@ local implementation, builds, tests, validation and incremental commits, with
 pushing, pull requests and toolchain upgrades needing a separate decision.
 Paging changes addresses, not arithmetic, so no step changes the numerical
 contract. The approval also moved
-[keys and events to phase 4](#keys-and-events-move-to-phase-4). 2a started the
-same day.
+[keys and events to phase 4](#keys-and-events-move-to-phase-4). 2a is
+complete; see the [validation record](#validation-record).
 
 ## What paging must preserve
 
@@ -400,6 +400,52 @@ If 2d selects and confirms a layout and the single-sequence check passes:
   split-K decode.
 
 ## Validation record
+
+### 2a on `fe9c081`, 2026-09-29
+
+`fe9c081` adds `kernels/paged_kv.mojo`'s address function and the paged forms
+of the five launches. Route 4's arithmetic serves batched decode and routes 11
+and 4, so four kernels cover the five launches:
+
+| Paged form | Equals, bit for bit |
+| --- | --- |
+| `enqueue_paged_attention_g32_apple_gpu` | route 4 for each batched decode row, and route 11 for a sequence's query rows |
+| `enqueue_paged_attention_prefill_apple_gpu` | route 6 |
+| `enqueue_paged_attention_prefill_split_apple_gpu[8]` | route 10 |
+| `enqueue_fused_decode_qkv_paged` | phase 1's `enqueue_fused_decode_qkv_batch` |
+| `enqueue_append_paged` | `_append` |
+
+- **Exactness.** `tests/test_paged_kv.mojo` lays each sequence's rows through
+  scattered tables in layer 1 of 2, with its own address formula, at block
+  sizes 32, 64 and 128 and one block of 4,096 slots, in both orders:
+  - decode: 1, 2, 3, 8, 16 and 32 sequences of 1 to 4,096 keys, including
+    31–33, 63–65, 127–129, 4,095 and 4,096;
+  - prefill: chunks of 1, 15, 16, 17, 64, 255 and 256 rows after a prefix
+    ending at a block edge, inside a block, and filling the context.
+
+  Every output matches its contiguous form. The test also pins the address
+  function to both documented layouts and to phase 1's pool offsets.
+- **Isolation.** Unwritten slots, those of each sequence's last block
+  included, and unused blocks hold a NaN poison. After every write, exactly the
+  written K/V rows differ from it, and each equals the contiguous write.
+- **Sensitivity.** Three deliberate faults, each reverted, failed the test:
+  - reading every key from a sequence's first block failed at 32-slot blocks;
+  - starting every prefill tile at its block's first slot failed at 64;
+  - writing each appended V row one slot late failed at 32.
+- **Unchanged.** The contiguous forms' code is untouched.
+- **Suite.** `uv run --locked llm-mojo validate` passed on 2a's tree before the
+  commit, in 35 minutes:
+  - all oracles match the frozen anchors, with the three large families
+    verified from the shared store;
+  - 283 Python tests;
+  - all 27 native test files, `test_paged_kv.mojo` among them, plus the
+    Unicode tokenizer run on Metal;
+  - every benchmark smoke route.
+
+**Deviation from the plan.** The plan listed the batched decode kernel and
+routes 11 and 4 as separate launches to page. They share route 4's arithmetic,
+so one paged kernel serves all three, given each query row's position and each
+sequence's table row.
 
 ### Baseline on `6422f84`, 2026-09-28
 
