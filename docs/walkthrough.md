@@ -111,11 +111,11 @@ For a call with R new tokens, the model:
    [`_embedding`](../src/llm_mojo/models/qwen2/model.mojo): [R] IDs become [R, 896]
    hidden states.
 3. **Runs 24 decoder layers.** A prompt goes through
-   [`enqueue_decoder_layer_configuration`](../src/llm_mojo/layers/decoder_layer.mojo);
+   [`enqueue_decoder_layer_configuration_paged`](../src/llm_mojo/layers/decoder_layer.mojo);
    a decode call takes the composition in section 6. Every layer does the same
    two steps with its own weights:
 
-   | Attention ([`enqueue_attention_sublayer_integrated`](../src/llm_mojo/layers/attention_sublayer.mojo)) | Shape |
+   | Attention ([`enqueue_attention_sublayer_integrated_paged`](../src/llm_mojo/layers/attention_sublayer.mojo)) | Shape |
    | --- | --- |
    | RMSNorm of each row | [R, 896] |
    | QKV projection: 14 query heads and 2 key and 2 value heads of 64 values | [R, 896] → [R, 1152] |
@@ -172,7 +172,7 @@ steps, with three decode features: residual/RMSNorm fusion, buffer swapping and
 GPU argmax. Every decode call takes this route:
 
 - **Fused kernels.** One kernel unpacks the QKV projection, applies RoPE and
-  appends to the cache ([`enqueue_fused_decode_qkv_batch`](../src/llm_mojo/layers/attention_sublayer.mojo)),
+  appends to the cache ([`enqueue_fused_decode_qkv_paged`](../src/llm_mojo/layers/attention_sublayer.mojo)),
   and one kernel computes SiLU(gate) × up.
 - **Residual and RMSNorm together.** [`enqueue_residual_norm`](../src/llm_mojo/kernels/residual_norm.mojo)
   adds each residual and computes the RMSNorm that follows it in one kernel:

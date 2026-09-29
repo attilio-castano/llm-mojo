@@ -7,7 +7,7 @@ on the same logical rows:
 - G32 attention (route 4's arithmetic) against route 4 for batched decode rows,
   and against route 11 for one sequence's query rows;
 - the FP32 rolled-MMA prefill against routes 6 and 10;
-- fused decode QKV/RoPE/append against serving phase 1's one-block kernel, and
+- fused decode QKV/RoPE/append against the unfused unpack, RoPE and copy, and
   the prefill append against the contiguous append, with every other pool
   element keeping its poison.
 Block sizes 32, 64 and 128 and one block per sequence, in slot-major and
@@ -31,8 +31,9 @@ from llm_mojo.kernels.attention_prefill import (
     enqueue_paged_attention_prefill_split_apple_gpu,
 )
 from llm_mojo.kernels.paged_kv import kv_row
+from llm_mojo.kernels.rope import enqueue_rope_apple_gpu
 from llm_mojo.layers.attention_sublayer import (
-    AttentionWorkspace, _append, enqueue_append_paged, enqueue_fused_decode_qkv_batch, enqueue_fused_decode_qkv_paged,
+    AttentionWorkspace, _append, _unpack_qkv, enqueue_append_paged, enqueue_fused_decode_qkv_paged,
 )
 from llm_mojo.serving.kv_pool import KVGeometry, KVPool
 
@@ -324,11 +325,12 @@ def _fused[HEAD_MAJOR: Bool](ctx: DeviceContext, size: Int) raises:
     var lengths = _decode_lengths()
     var pages = Pages(lengths, size, 17)
     var storage = ctx.enqueue_create_buffer[DType.bfloat16](pages.elements())
-    # Serving phase 1's kernel writes sequence s into block s of a pool of full-context blocks.
-    var reference = ctx.enqueue_create_buffer[DType.bfloat16](32 * LAYERS * 2 * ONE_BLOCK * WIDTH)
     var work = AttentionWorkspace(ctx, 32, ONE_BLOCK, 14, 2, 64, False, False)
+    var solo = AttentionWorkspace(ctx, 1, ONE_BLOCK, 14, 2, 64, False, False)
     _fill(work.cosine, 11, 121, 6)
     _fill(work.sine, 12, 121, 6)
+    _fill(solo.cosine, 11, 121, 6)
+    _fill(solo.sine, 12, 121, 6)
     with work.packed.map_to_host() as mapped:
         for i in range(32 * 1152):
             # Diverse exact BF16 bits, signs, subnormals and rounding cases.
@@ -336,45 +338,66 @@ def _fused[HEAD_MAJOR: Bool](ctx: DeviceContext, size: Int) raises:
             if i % 2:
                 bits |= 0x8000
             mapped.unsafe_ptr()[unsafe_offset=i] = bitcast[DType.bfloat16](bits)
+    # The unfused path, one sequence at a time: unpack, then RoPE for Q and K; V is copied.
     var expected = ctx.enqueue_create_buffer[DType.bfloat16](32 * 896)
+    var rows = List[UInt16](capacity=32 * 2 * WIDTH)
+    _poison(expected)
+    var c = TileTensor(solo.cosine, row_major(ONE_BLOCK, 64))
+    var t = TileTensor(solo.sine, row_major(ONE_BLOCK, 64))
+    for s in range(32):
+        var position = lengths[s] - 1
+        with work.packed.map_to_host() as source:
+            with solo.packed.map_to_host() as target:
+                for i in range(1152):
+                    target.unsafe_ptr()[unsafe_offset=i] = source.unsafe_ptr()[unsafe_offset=s * 1152 + i]
+        var packed = TileTensor(solo.packed, row_major(1, 1152))
+        var raw_q = TileTensor(solo.raw_query, row_major(1, 896))
+        var raw_k = TileTensor(solo.raw_key, row_major(1, 128))
+        var raw_v = TileTensor(solo.raw_value, row_major(1, 128))
+        ctx.enqueue_function[_unpack_qkv[type_of(packed.layout), type_of(raw_q.layout), type_of(raw_k.layout)]](
+            packed, raw_q, raw_k, raw_v, Int32(1), Int32(896), Int32(128), grid_dim=9, block_dim=128)
+        enqueue_rope_apple_gpu(ctx, TileTensor(solo.raw_query, row_major(1, 14, 64)), c, t,
+                               TileTensor(expected.unsafe_ptr().unsafe_offset(s * 896), row_major(1, 14, 64)), position)
+        enqueue_rope_apple_gpu(ctx, TileTensor(solo.raw_key, row_major(1, 2, 64)), c, t,
+                               TileTensor(solo.rotated_key, row_major(1, 2, 64)), position)
+        with solo.rotated_key.map_to_host() as key:
+            for i in range(WIDTH):
+                rows.append(bitcast[DType.uint16](key.unsafe_ptr()[unsafe_offset=i]))
+        with solo.raw_value.map_to_host() as value:
+            for i in range(WIDTH):
+                rows.append(bitcast[DType.uint16](value.unsafe_ptr()[unsafe_offset=i]))
+    var query = ctx.enqueue_create_buffer[DType.bfloat16](32 * 896)
     for sequences in [1, 2, 3, 8, 16, 32]:
         var ends = List[Int](capacity=sequences)
-        var owners = List[Int](capacity=sequences)
         for s in range(sequences):
             ends.append(lengths[s] - 1)
-            owners.append(s)
         var positions = _positions(ctx, ends)
-        var blocks = _positions(ctx, owners)
         var tables = _tables(ctx, pages, sequences)
         _poison(storage)
-        _poison(reference)
-        _poison(work.query)
-        enqueue_fused_decode_qkv_batch[14, 2, 64](ctx, work, reference,
-            TileTensor(positions, row_major(sequences)), TileTensor(blocks, row_major(sequences)),
-            LAYER, LAYERS, ONE_BLOCK)
-        ctx.enqueue_copy(dst_buf=expected, src_buf=work.query)
         _poison(work.query)
         enqueue_fused_decode_qkv_paged[14, 2, 64, HEAD_MAJOR](ctx, work, storage,
             TileTensor(positions, row_major(sequences)), TileTensor(tables, row_major(sequences, pages.width)),
             LAYER, LAYERS, size)
         var label = "fused decode, " + _label(size, HEAD_MAJOR) + ", sequences " + String(sequences)
-        _same(expected, work.query, label + ", query")
-        with reference.map_to_host() as a:
-            with storage.map_to_host() as b:
-                for s in range(sequences):
-                    var p = ends[s]
-                    for kv in range(2):
-                        for head in range(2):
-                            var one = ((s * LAYERS + LAYER) * 2 + kv) * ONE_BLOCK * WIDTH + p * WIDTH + head * 64
-                            var paged = _offset(pages.block(s, p), kv, p % size, head, size, HEAD_MAJOR)
-                            for d in range(64):
-                                if (bitcast[DType.uint16](a.unsafe_ptr()[unsafe_offset=one + d])
-                                        != bitcast[DType.uint16](b.unsafe_ptr()[unsafe_offset=paged + d])):
-                                    raise Error(label + ": sequence " + String(s) + " row differs")
+        # The first `sequences` query rows are the unfused path's; the rest keep their poison.
+        _poison(query)
+        ctx.enqueue_copy(dst_buf=query.create_sub_buffer[DType.bfloat16](0, sequences * 896),
+                         src_buf=expected.create_sub_buffer[DType.bfloat16](0, sequences * 896))
+        _same(query, work.query, label + ", query")
+        with storage.map_to_host() as b:
+            for s in range(sequences):
+                var p = ends[s]
+                for kv in range(2):
+                    for head in range(2):
+                        var paged = _offset(pages.block(s, p), kv, p % size, head, size, HEAD_MAJOR)
+                        for d in range(64):
+                            if (rows[(s * 2 + kv) * WIDTH + head * 64 + d]
+                                    != bitcast[DType.uint16](b.unsafe_ptr()[unsafe_offset=paged + d])):
+                                raise Error(label + ": sequence " + String(s) + " row differs")
         assert_equal(_written(storage), sequences * 2 * WIDTH)
 
 
-def test_fused_decode_writes_equal_one_block_writes() raises:
+def test_fused_decode_writes_equal_the_unfused_path() raises:
     var ctx = DeviceContext()
     for size in [32, 64, 128, ONE_BLOCK]:
         _fused[False](ctx, size)

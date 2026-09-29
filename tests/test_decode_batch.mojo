@@ -8,39 +8,31 @@ one sequence at a time, with guard rows and unwritten pool rows poisoned:
   launches for the reordered ones, which must also stay within the worst-case
   FP32 summation error of an FP64 reference;
 - residual RMSNorm and argmax against single-row launches;
-- fused QKV/RoPE/append against the unfused path for each sequence;
-- decode attention against route 4 on each sequence's own cache view;
 - whole batched decode steps against each sequence decoded alone, on three
   layers of the verified decoder fixture, with invalid batches rejected before
   any state changes.
+The paged fused QKV/RoPE/append and decode attention that these steps launch
+are checked against the unfused path and route 4 in tests/test_paged_kv.mojo.
 """
 from layout import TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
 from std.testing import TestSuite, assert_equal, assert_raises, assert_true
-from llm_mojo.kernels.attention_decode import (
-    enqueue_grouped_query_attention_decode_apple_gpu,
-    enqueue_grouped_query_attention_decode_sequences_apple_gpu,
-)
 from llm_mojo.kernels.linear import (
     DECODE_ARRANGEMENTS, decode_arrangement_reordered, enqueue_linear_apple_gpu, enqueue_linear_decode_rows_apple_gpu,
 )
 from llm_mojo.kernels.residual_norm import enqueue_residual_norm
-from llm_mojo.kernels.rope import enqueue_rope_apple_gpu
 from llm_mojo.kernels.token_selection import enqueue_argmax
-from llm_mojo.layers.attention_sublayer import AttentionWorkspace, _append, _unpack_qkv, enqueue_fused_decode_qkv_batch
 from llm_mojo.layers.decoder_layer import DECODER_FUSED_DECODE
 from llm_mojo.models.qwen2.model import CaptureRequest, QwenModel
 from llm_mojo.models.qwen2.plan import DECODE_PROJECTION, baseline_plan, configured_plan
 from llm_mojo.serving.batch import StepBatch
-from llm_mojo.serving.kv_pool import KVGeometry, KVPool
+from llm_mojo.serving.kv_pool import KVPool
 from decoder_layer_support import decoder_support, load_decoder
 
 comptime POISON = UInt16(0x7FC1)
-# Pool for the sequence kernels: scattered blocks of the full context, in layer 1 of 2.
+# Pools of scattered one-sequence blocks.
 comptime BLOCKS = 33
-comptime BLOCK_SIZE = 4096
-comptime LAYER = 1
 # Whole steps: three layers of the verified decoder fixture, whose 65 positions bound the context.
 comptime CASE = "h896_i4864_nq14_nk2_d64_t65_s4001_base"
 comptime FIXTURE_LAYERS = 3
@@ -63,24 +55,8 @@ def _poison(mut buffer: DeviceBuffer[DType.bfloat16]) raises:
     buffer.enqueue_fill(bitcast[DType.bfloat16](POISON))
 
 
-def _length(s: Int) -> Int:
-    """Keys attended by sequence s: short, around one and two SIMD-group rounds, and full."""
-    var lengths: List[Int] = [1, 2, 31, 32, 33, 64, 65, 257, 1024, 4096]
-    return lengths[s] if s < len(lengths) else (s*977) % BLOCK_SIZE + 1
-
-
 def _block(s: Int) -> Int:
     return (s*7+3) % BLOCKS
-
-
-def _steps(ctx: DeviceContext, sequences: Int) raises -> DeviceBuffer[DType.int32]:
-    """Positions, then blocks, for a decode step of `sequences` sequences."""
-    var steps = ctx.enqueue_create_buffer[DType.int32](2*sequences)
-    with steps.map_to_host() as mapped:
-        for s in range(sequences):
-            mapped.unsafe_ptr()[unsafe_offset=s] = Int32(_length(s)-1)
-            mapped.unsafe_ptr()[unsafe_offset=sequences+s] = Int32(_block(s))
-    return steps^
 
 
 def _same(mut expected: DeviceBuffer[DType.bfloat16], mut actual: DeviceBuffer[DType.bfloat16],
@@ -333,98 +309,6 @@ def test_argmax_rows_equal_single_rows() raises:
                         assert_equal(actual.unsafe_ptr()[unsafe_offset=i],expected.unsafe_ptr()[unsafe_offset=i])
                     for r in range(rows):
                         assert_equal(actual.unsafe_ptr()[unsafe_offset=r*3+2],UInt32(1 if r == 2 else 0))
-
-
-def _fused_qkv(ctx: DeviceContext, sequences: Int) raises:
-    var geometry = KVGeometry(2,2,64)
-    var candidate = KVPool(ctx,BLOCKS,BLOCK_SIZE,geometry)
-    var reference = KVPool(ctx,BLOCKS,BLOCK_SIZE,geometry)
-    _poison(candidate.storage)
-    _poison(reference.storage)
-    var work = AttentionWorkspace(ctx,sequences,BLOCK_SIZE,14,2,64,False,False)
-    var solo = AttentionWorkspace(ctx,1,BLOCK_SIZE,14,2,64,False,False)
-    _fill(work.cosine,11,121,6)
-    _fill(work.sine,12,121,6)
-    _fill(solo.cosine,11,121,6)
-    _fill(solo.sine,12,121,6)
-    with work.packed.map_to_host() as mapped:
-        for i in range(sequences*1152):
-            # Diverse exact BF16 bits, signs, subnormals and rounding cases.
-            var bits = UInt16((i*1667 + (i//1152)*61) % 0x4300)
-            if i % 2:
-                bits |= 0x8000
-            mapped.unsafe_ptr()[unsafe_offset=i] = bitcast[DType.bfloat16](bits)
-    _poison(work.query)
-    var expected = ctx.enqueue_create_buffer[DType.bfloat16](sequences*896)
-    _poison(expected)
-    var c = TileTensor(solo.cosine,row_major(BLOCK_SIZE,64))
-    var t = TileTensor(solo.sine,row_major(BLOCK_SIZE,64))
-    for s in range(sequences):
-        var position = _length(s)-1
-        with work.packed.map_to_host() as source:
-            with solo.packed.map_to_host() as target:
-                for i in range(1152):
-                    target.unsafe_ptr()[unsafe_offset=i] = source.unsafe_ptr()[unsafe_offset=s*1152+i]
-        var packed = TileTensor(solo.packed,row_major(1,1152))
-        var raw_q = TileTensor(solo.raw_query,row_major(1,896))
-        var raw_k = TileTensor(solo.raw_key,row_major(1,128))
-        var raw_v = TileTensor(solo.raw_value,row_major(1,128))
-        ctx.enqueue_function[_unpack_qkv[type_of(packed.layout),type_of(raw_q.layout),type_of(raw_k.layout)]](
-            packed,raw_q,raw_k,raw_v,Int32(1),Int32(896),Int32(128),grid_dim=9,block_dim=128)
-        enqueue_rope_apple_gpu(ctx,TileTensor(solo.raw_query,row_major(1,14,64)),c,t,
-                               TileTensor(expected.unsafe_ptr().unsafe_offset(s*896),row_major(1,14,64)),position)
-        enqueue_rope_apple_gpu(ctx,TileTensor(solo.raw_key,row_major(1,2,64)),c,t,
-                               TileTensor(solo.rotated_key,row_major(1,2,64)),position)
-        var view = reference.index(_block(s),LAYER)
-        var rotated = TileTensor(solo.rotated_key,row_major(1,128))
-        var keys = TileTensor(reference.caches[view].key,row_major(BLOCK_SIZE,128))
-        var values = TileTensor(reference.caches[view].value,row_major(BLOCK_SIZE,128))
-        ctx.enqueue_function[_append[type_of(rotated.layout),type_of(raw_v.layout),type_of(keys.layout)]](
-            rotated,raw_v,keys,values,Int32(1),Int32(128),Int32(position),grid_dim=1,block_dim=128)
-    var steps = _steps(ctx,sequences)
-    enqueue_fused_decode_qkv_batch[14,2,64](ctx,work,candidate.storage,
-        TileTensor(steps.unsafe_ptr(),row_major(sequences)),
-        TileTensor(steps.unsafe_ptr().unsafe_offset(sequences),row_major(sequences)),LAYER,2,BLOCK_SIZE)
-    _same(expected,work.query,"fused query, sequences "+String(sequences))
-    _same(reference.storage,candidate.storage,"fused pool, sequences "+String(sequences))
-
-
-def test_fused_qkv_batch_equals_unfused_path_per_sequence() raises:
-    var ctx = DeviceContext()
-    for sequences in [1, 2, 3, 8, 16, 32]:
-        _fused_qkv(ctx,sequences)
-
-
-def test_decode_attention_sequences_equal_route_4() raises:
-    var ctx = DeviceContext()
-    var pool = KVPool(ctx,BLOCKS,BLOCK_SIZE,KVGeometry(2,2,64))
-    _fill(pool.storage,21,119,8)
-    var split = ctx.enqueue_create_buffer[DType.float32](14*66)
-    var storage = TileTensor(pool.storage,row_major(len(pool.storage)//128,2,64))
-    for sequences in [1, 2, 3, 8, 16, 32]:
-        var query = ctx.enqueue_create_buffer[DType.bfloat16](sequences*896)
-        _fill(query,sequences,119,8)
-        var batch = ctx.enqueue_create_buffer[DType.bfloat16]((sequences+2)*896)
-        var solo = ctx.enqueue_create_buffer[DType.bfloat16]((sequences+2)*896)
-        _poison(batch)
-        _poison(solo)
-        var steps = _steps(ctx,sequences)
-        enqueue_grouped_query_attention_decode_sequences_apple_gpu[14,2,64](ctx,
-            TileTensor(query,row_major(sequences,14,64)),storage,
-            TileTensor(batch.unsafe_ptr().unsafe_offset(896),row_major(sequences,14,64)),
-            TileTensor(steps.unsafe_ptr(),row_major(sequences)),
-            TileTensor(steps.unsafe_ptr().unsafe_offset(sequences),row_major(sequences)),LAYER,2,BLOCK_SIZE)
-        for s in range(sequences):
-            var view = pool.index(_block(s),LAYER)
-            var keys = _length(s)
-            enqueue_grouped_query_attention_decode_apple_gpu[32,1,1,fp32_scores=True](ctx,
-                TileTensor(query.unsafe_ptr().unsafe_offset(s*896),row_major(1,14,64)),
-                TileTensor(pool.caches[view].key,row_major(keys,2,64)),
-                TileTensor(pool.caches[view].value,row_major(keys,2,64)),
-                TileTensor(solo.unsafe_ptr().unsafe_offset((s+1)*896),row_major(1,14,64)),
-                TileTensor(split,row_major(14,1,66)))
-        _same(solo,batch,"attention, sequences "+String(sequences))
-    assert_true(_length(9) == BLOCK_SIZE)
 
 
 def _fixture_model(ctx: DeviceContext, max_sequences: Int) raises -> QwenModel:

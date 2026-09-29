@@ -15,8 +15,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from llm_mojo.layers.attention_sublayer import AttentionWeights, AttentionWorkspace
 from llm_mojo.layers.mlp import MLPWeights, MLPWorkspace
 from llm_mojo.layers.decoder_layer import (
-    DECODER_FUSED_DECODE, decoder_mappings, enqueue_decode_batch_layer, enqueue_decoder_layer_configuration,
-    validate_decode_batch_layer, validate_decoder_configuration,
+    DECODER_FUSED_DECODE, enqueue_decode_batch_layer, enqueue_decoder_layer_configuration_paged,
+    validate_decode_batch_layer, validate_decoder_configuration_paged,
 )
 from llm_mojo.kernels.residual_norm import enqueue_residual_norm
 from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
@@ -183,11 +183,14 @@ struct QwenModel(Movable):
     var selection_partials: DeviceBuffer[DType.uint32]
     var selection_result: DeviceBuffer[DType.uint32]
     var gpu_argmax: Bool
-    # The step's one upload: max_rows token IDs, then each sequence's position and block.
+    # The step's one upload: max_rows token IDs, max_rows positions, then each
+    # sequence's block table, up to table_width blocks.
     var step_input: DeviceBuffer[DType.int32]
     var capacity: Int
     var max_rows: Int
     var max_sequences: Int
+    # Blocks in the widest table: the context in the smallest block size, 32.
+    var table_width: Int
     # A successful forward has produced logits that greedy can read.
     var ready: Bool
     var valid: Bool
@@ -205,6 +208,7 @@ struct QwenModel(Movable):
         self.capacity = capacity
         self.max_rows = max_rows
         self.max_sequences = max_sequences
+        self.table_width = (capacity + 31) // 32
         self.ready = False
         self.valid = True
         self.submitted_rows = 0
@@ -226,7 +230,7 @@ struct QwenModel(Movable):
         self.selection_partials = ctx.enqueue_create_buffer[DType.uint32](max_sequences*ARGMAX_GROUPS*3)
         self.selection_result = ctx.enqueue_create_buffer[DType.uint32](max_sequences*3)
         self.gpu_argmax = False
-        self.step_input = ctx.enqueue_create_buffer[DType.int32](max_rows+2*max_sequences)
+        self.step_input = ctx.enqueue_create_buffer[DType.int32](2*max_rows+max_sequences*self.table_width)
 
     def __init__(out self, ctx: DeviceContext, path: String, capacity: Int, max_rows: Int,
                  max_sequences: Int = 1) raises:
@@ -274,7 +278,8 @@ struct QwenModel(Movable):
         if kv.geometry != self.kv_geometry() or kv.block_size != self.capacity:
             raise Error("KV pool geometry does not match the model")
         if (len(self.embedding) != VOCABULARY*HIDDEN or len(self.norm) != HIDDEN
-            or len(self.input) != self.max_rows*HIDDEN or len(self.step_input) != self.max_rows+2*self.max_sequences
+            or len(self.input) != self.max_rows*HIDDEN
+            or len(self.step_input) != 2*self.max_rows+self.max_sequences*self.table_width
             or len(self.normalized) != self.max_sequences*HIDDEN or len(self.logits) != self.max_sequences*VOCABULARY
             or len(self.selection_partials) != self.max_sequences*ARGMAX_GROUPS*3
             or len(self.selection_result) != self.max_sequences*3
@@ -290,19 +295,28 @@ struct QwenModel(Movable):
                     raise Error("inconsistent model cache lengths")
         if plan.configuration == DECODER_FUSED_DECODE:
             var positions = TileTensor(self.step_input.unsafe_ptr().unsafe_offset(self.max_rows),row_major(sequences))
-            var blocks = TileTensor(self.step_input.unsafe_ptr().unsafe_offset(self.max_rows+self.max_sequences),
-                                    row_major(sequences))
+            var tables = TileTensor(self.step_input.unsafe_ptr().unsafe_offset(2*self.max_rows),
+                                    row_major(sequences,batch.max_blocks))
             for i in range(len(self.layers)):
                 validate_decode_batch_layer[QUERY_HEADS,KV_HEADS,HEAD_DIM](ctx,self.layers[i].attention,
                     self.attention,self.layers[i].mlp,self.mlp,self.input,kv.storage,
-                    positions,blocks,i,len(self.layers),kv.block_size)
+                    positions,tables,i,len(self.layers),kv.block_size)
             return
-        var mappings = decoder_mappings(plan.configuration,rows)
-        var base = kv.index(batch.block_table[0],0)
         for i in range(len(self.layers)):
-            validate_decoder_configuration(ctx,self.layers[i].attention,kv.caches[base+i],self.attention,
-                self.layers[i].mlp,self.mlp,TileTensor(self.input,row_major(rows,HIDDEN)),
-                Int(mappings[0]),Int(mappings[1]),Int(mappings[2]))
+            validate_decoder_configuration_paged(ctx,self.layers[i].attention,kv.storage,batch.positions[0],
+                self.attention,self.layers[i].mlp,self.mlp,TileTensor(self.input,row_major(rows,HIDDEN)),
+                plan.configuration)
+
+    def _upload(mut self, batch: StepBatch) raises:
+        """The step's one upload: token IDs and positions of every row, then each sequence's table."""
+        var rows = batch.rows()
+        var entries = batch.sequences()*batch.max_blocks
+        with self.step_input.map_to_host() as mapped:
+            for i in range(rows):
+                mapped.unsafe_ptr()[unsafe_offset=i] = Int32(batch.token_ids[i])
+                mapped.unsafe_ptr()[unsafe_offset=self.max_rows+i] = Int32(batch.positions[i])
+            for i in range(entries):
+                mapped.unsafe_ptr()[unsafe_offset=2*self.max_rows+i] = Int32(batch.block_table[i])
 
     @always_inline
     def _mark[OBSERVE: Bool](mut self, slot: Int):
@@ -369,15 +383,11 @@ struct QwenModel(Movable):
         var layer_count = len(self.layers)
         var route = ForwardRoute(plan.configuration, 0, 0, 0, 0, 0, 0, False, False, sequences, 0)
         var capture = request.directory
-        with self.step_input.map_to_host() as mapped:
-            for s in range(sequences):
-                mapped.unsafe_ptr()[unsafe_offset=s] = Int32(batch.token_ids[s])
-                mapped.unsafe_ptr()[unsafe_offset=self.max_rows+s] = Int32(batch.positions[s])
-                mapped.unsafe_ptr()[unsafe_offset=self.max_rows+self.max_sequences+s] = Int32(batch.block_table[s])
+        self._upload(batch)
         self._mark[OBSERVE](MARK_TOKENS)
         var positions = TileTensor(self.step_input.unsafe_ptr().unsafe_offset(self.max_rows),row_major(sequences))
-        var blocks = TileTensor(self.step_input.unsafe_ptr().unsafe_offset(self.max_rows+self.max_sequences),
-                                row_major(sequences))
+        var tables = TileTensor(self.step_input.unsafe_ptr().unsafe_offset(2*self.max_rows),
+                                row_major(sequences,batch.max_blocks))
         self._embed(ctx, sequences)
         route.decode_launches += 1
         self._mark[OBSERVE](MARK_EMBEDDING)
@@ -385,9 +395,9 @@ struct QwenModel(Movable):
             save_bf16(self.input,capture+"/hidden_0.bin",sequences*HIDDEN)
         for i in range(layer_count):
             var normalized_input = i > 0
-            route.decode_launches += enqueue_decode_batch_layer[QUERY_HEADS,KV_HEADS,HEAD_DIM,PROJECTION](ctx,
+            route.decode_launches += enqueue_decode_batch_layer[QUERY_HEADS,KV_HEADS,HEAD_DIM,PROJECTION,False](ctx,
                 self.layers[i].attention,self.attention,self.layers[i].mlp,self.mlp,self.input,kv.storage,
-                positions,blocks,i,layer_count,kv.block_size,normalized_input)
+                positions,tables,i,layer_count,kv.block_size,normalized_input)
             for s in range(sequences):
                 kv.caches[kv.index(batch.block_table[s],i)].length = batch.positions[s]+1
             route.layers += 1
@@ -448,19 +458,21 @@ struct QwenModel(Movable):
         var layer_count = len(self.layers)
         var route = ForwardRoute(plan.configuration, 0, 0, 0, 0, 0, 0, False, False, 1, 0)
         var capture = request.directory
-        with self.step_input.map_to_host() as mapped:
-            for i in range(rows):
-                mapped.unsafe_ptr()[unsafe_offset=i] = Int32(batch.token_ids[i])
+        var past = batch.positions[0]
+        self._upload(batch)
         self._mark[OBSERVE](MARK_TOKENS)
+        var positions = TileTensor(self.step_input.unsafe_ptr().unsafe_offset(self.max_rows),row_major(rows))
+        var table = TileTensor(self.step_input.unsafe_ptr().unsafe_offset(2*self.max_rows),row_major(batch.max_blocks))
         self._embed(ctx, rows)
         self._mark[OBSERVE](MARK_EMBEDDING)
         comptime if CAPTURE:
             save_bf16(self.input,capture+"/hidden_0.bin",rows*HIDDEN)
         var input_view = TileTensor(self.input,row_major(rows,HIDDEN))
         for i in range(layer_count):
-            _ = enqueue_decoder_layer_configuration(ctx,self.layers[i].attention,
-                kv.caches[base+i],self.attention,self.layers[i].mlp,self.mlp,
+            _ = enqueue_decoder_layer_configuration_paged[False](ctx,self.layers[i].attention,kv.storage,
+                table,positions,past,i,layer_count,kv.block_size,self.attention,self.layers[i].mlp,self.mlp,
                 TileTensor(self.input,row_major(rows,HIDDEN)),plan.configuration)
+            kv.caches[base+i].length = past+rows
             route.layers += 1
             comptime if CAPTURE:
                 if request.include_norms:

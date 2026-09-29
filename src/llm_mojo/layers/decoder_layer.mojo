@@ -11,10 +11,12 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.collections import InlineArray
 from llm_mojo.layers.attention_sublayer import (
     AttentionWeights, AttentionCache, AttentionWorkspace,
-    _validate_attention_sublayer, enqueue_attention_sublayer,
-    enqueue_attention_sublayer_integrated, enqueue_fused_decode_qkv_batch,
+    _validate_sublayer, enqueue_attention_sublayer,
+    enqueue_attention_sublayer_integrated, enqueue_attention_sublayer_integrated_paged,
+    enqueue_fused_decode_qkv_paged,
 )
-from llm_mojo.kernels.attention_decode import enqueue_grouped_query_attention_decode_sequences_apple_gpu
+from llm_mojo.kernels.attention_decode import enqueue_paged_attention_g32_apple_gpu
+from llm_mojo.kernels.paged_kv import validate_paged_pool
 from llm_mojo.kernels.linear import enqueue_linear_decode_rows_apple_gpu
 from llm_mojo.kernels.residual_norm import enqueue_residual_norm
 from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
@@ -68,6 +70,24 @@ def _decoder_preflight[XL: TensorLayout](
     x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
     integrated: Bool, gqa_mapping: Int, projection_mapping: Int, mlp_mapping: Int,
 ) raises:
+    var k = aw.kv_heads * aw.head_dim
+    _decoder_checks(ctx, aw, a, mw, m, x, integrated, gqa_mapping, projection_mapping, mlp_mapping,
+                    cache.length, cache.capacity, cache.kv_heads, cache.head_dim,
+                    _region(cache.key, cache.capacity * k), _region(cache.value, cache.capacity * k))
+
+
+def _decoder_checks[XL: TensorLayout](
+    ctx: DeviceContext, aw: AttentionWeights,
+    mut a: AttentionWorkspace, mw: MLPWeights, m: MLPWorkspace,
+    x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
+    integrated: Bool, gqa_mapping: Int, projection_mapping: Int, mlp_mapping: Int,
+    past: Int, capacity: Int, kv_heads: Int, head_dim: Int,
+    key_region: SIMD[DType.uint64, 2], value_region: SIMD[DType.uint64, 2],
+) raises:
+    """Checks for either KV storage, given its facts and writable regions.
+
+    A pool is one region; its caller passes an empty second region.
+    """
     comptime assert x.flat_rank == 2
     var r = Int(x.dim[0]())
     var h = aw.hidden
@@ -75,7 +95,7 @@ def _decoder_preflight[XL: TensorLayout](
     if (aw.query_heads <= 0 or aw.kv_heads <= 0 or aw.head_dim <= 0
         or aw.head_dim % 2 != 0 or aw.query_heads % aw.kv_heads != 0
         or h != aw.query_heads * aw.head_dim or i <= 0
-        or cache.capacity < 1 or cache.capacity > 4096
+        or capacity < 1 or capacity > 4096
         or a.capacity < 1 or a.capacity > 4096):
         raise Error("decoder geometry or capacity is invalid")
     if (gqa_mapping != 0 and gqa_mapping != 4 and gqa_mapping != 5) or (projection_mapping != 0 and projection_mapping != 5 and projection_mapping != 6 and projection_mapping != 7):
@@ -95,19 +115,19 @@ def _decoder_preflight[XL: TensorLayout](
     comptime assert x.rank == 2
     if Int(x.layout.stride[0]().product()) != h or Int(x.layout.stride[1]().product()) != 1:
         raise Error("decoder requires contiguous row-major input")
-    _ = _validate_attention_sublayer(ctx, aw, cache, a, x,
-                                    6 + gqa_mapping if integrated else 3,
-                                    (2 if projection_mapping == 6 else projection_mapping - 2) if projection_mapping >= 6 else
-                                    ((((3 if projection_mapping == 5 else 2) if r >= 16 else 1) if gqa_mapping != 5 else 0) if integrated else 0),
-                                    projection_mapping - 4 if projection_mapping >= 7 else (1 if projection_mapping == 5 else 0))
+    _ = _validate_sublayer(ctx, aw, a, x,
+                           6 + gqa_mapping if integrated else 3,
+                           (2 if projection_mapping == 6 else projection_mapping - 2) if projection_mapping >= 6 else
+                           ((((3 if projection_mapping == 5 else 2) if r >= 16 else 1) if gqa_mapping != 5 else 0) if integrated else 0),
+                           projection_mapping - 4 if projection_mapping >= 7 else (1 if projection_mapping == 5 else 0),
+                           past, capacity, kv_heads, head_dim)
     _validate_mlp(ctx, mw, m, TileTensor(a.output, row_major(r, h)), mlp_mapping)
     var n = a.max_rows
     var k = aw.kv_heads * aw.head_dim
-    var c = cache.capacity
     # Fixed stack storage. Entries 0..22 are writable; 23..33 are read-only.
     var regions = InlineArray[SIMD[DType.uint64, 2], 34](uninitialized=True)
-    regions[0] = _region(cache.key, c * k)
-    regions[1] = _region(cache.value, c * k)
+    regions[0] = key_region
+    regions[1] = value_region
     regions[2] = _region(a.normalized, n * h)
     regions[3] = _region(a.raw_query, n * h)
     regions[4] = _region(a.raw_key, n * k)
@@ -146,17 +166,6 @@ def _decoder_preflight[XL: TensorLayout](
             var z = regions[right]
             if l[0] < z[0] + z[1] and z[0] < l[0] + l[1]:
                 raise Error("decoder writable storage overlaps another live tensor")
-
-
-def validate_decoder_configuration[XL: TensorLayout](
-    ctx: DeviceContext, aw: AttentionWeights, cache: AttentionCache,
-    mut attention: AttentionWorkspace, mw: MLPWeights, mlp: MLPWorkspace,
-    x: TileTensor[DType.bfloat16, XL, MutAnyOrigin],
-    gqa_mapping: Int, projection_mapping: Int, mlp_mapping: Int,
-) raises:
-    """Preflight one integrated layer call without enqueueing or changing state."""
-    _decoder_preflight(ctx, aw, cache, attention, mw, mlp, x, True,
-                       gqa_mapping, projection_mapping, mlp_mapping)
 
 
 def enqueue_decoder_layer[XL: TensorLayout](
@@ -198,15 +207,57 @@ def enqueue_decoder_layer_configuration[XL: TensorLayout](
         Int(mappings[2]),True,Int(mappings[0]),Int(mappings[1]))
 
 
-def _decode_batch_preflight[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, SL: TensorLayout](
+def validate_decoder_configuration_paged[XL: TensorLayout](
+    ctx: DeviceContext, aw: AttentionWeights, storage: DeviceBuffer[DType.bfloat16], past: Int,
+    mut attention: AttentionWorkspace, mw: MLPWeights, mlp: MLPWorkspace,
+    x: TileTensor[DType.bfloat16, XL, MutAnyOrigin], configuration: Int,
+) raises:
+    """Preflight one integrated layer call on a paged sequence of `past` cached rows, changing nothing.
+
+    The pool is one writable region. The caller has checked the sequence's
+    table against the pool and its written slots.
+    """
+    var mappings = decoder_mappings(configuration, Int(x.dim[0]()))
+    _decoder_checks(ctx, aw, attention, mw, mlp, x, True,
+                    Int(mappings[0]), Int(mappings[1]), Int(mappings[2]),
+                    past, attention.capacity, aw.kv_heads, aw.head_dim,
+                    _region(storage, len(storage)), SIMD[DType.uint64, 2](0, 0))
+
+
+def enqueue_decoder_layer_configuration_paged[HEAD_MAJOR: Bool, XL: TensorLayout, TL: TensorLayout,
+                                              SL: TensorLayout](
+    ctx: DeviceContext, mut aw: AttentionWeights, mut storage: DeviceBuffer[DType.bfloat16],
+    table: TileTensor[DType.int32, TL, MutAnyOrigin],
+    positions: TileTensor[DType.int32, SL, MutAnyOrigin],
+    past: Int, layer: Int, layers: Int, block_size: Int,
+    mut attention: AttentionWorkspace, mut mw: MLPWeights, mut mlp: MLPWorkspace,
+    x: TileTensor[DType.bfloat16, XL, MutAnyOrigin], configuration: Int,
+) raises -> Int:
+    """enqueue_decoder_layer_configuration for one paged sequence; returns the attention route.
+
+    The rows of x take positions past .. past + R - 1, which `positions` holds
+    on the device, and `table` lists the sequence's blocks. The caller advances
+    the sequence's length.
+    """
+    validate_decoder_configuration_paged(ctx, aw, storage, past, attention, mw, mlp, x, configuration)
+    var mappings = decoder_mappings(configuration, Int(x.dim[0]()))
+    var route = enqueue_attention_sublayer_integrated_paged[HEAD_MAJOR](ctx, aw, storage, table, positions,
+        past, layer, layers, block_size, attention, x, Int(mappings[0]), Int(mappings[1]))
+    enqueue_mlp_apple_gpu(ctx, mw, mlp,
+                         TileTensor(attention.output, row_major(Int(x.dim[0]()), aw.hidden)),
+                         Int(mappings[2]))
+    return route
+
+
+def _decode_batch_preflight[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, SL: TensorLayout, TL: TensorLayout](
     ctx: DeviceContext, aw: AttentionWeights, attention: AttentionWorkspace,
     mw: MLPWeights, mlp: MLPWorkspace, x: DeviceBuffer[DType.bfloat16],
     storage: DeviceBuffer[DType.bfloat16],
     positions: TileTensor[DType.int32, SL, MutAnyOrigin],
-    blocks: TileTensor[DType.int32, SL, MutAnyOrigin],
+    tables: TileTensor[DType.int32, TL, MutAnyOrigin],
     layer: Int, layers: Int, block_size: Int,
 ) raises:
-    comptime assert positions.flat_rank == 1 and blocks.flat_rank == 1
+    comptime assert positions.flat_rank == 1 and tables.flat_rank == 2
     comptime HIDDEN = QUERY_HEADS * HEAD_DIM
     comptime WIDTH = KV_HEADS * HEAD_DIM
     var s = Int(positions.dim[0]())
@@ -218,10 +269,10 @@ def _decode_batch_preflight[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, SL: 
             or attention.kv_heads != KV_HEADS or attention.head_dim != HEAD_DIM
             or mlp.hidden != HIDDEN or mlp.intermediate != i):
         raise Error("decode composition dimensions disagree with the layer")
-    if (s < 1 or Int(blocks.dim[0]()) != s or s > attention.max_rows or s > mlp.max_rows
-            or layers < 1 or layer < 0 or layer >= layers or block_size < 1
-            or block_size > attention.capacity or len(storage) % (2 * layers * block_size * WIDTH) != 0):
+    if (s < 1 or Int(tables.dim[0]()) != s or s > attention.max_rows or s > mlp.max_rows
+            or block_size > attention.capacity):
         raise Error("invalid decode composition rows, layer or pool geometry")
+    validate_paged_pool[KV_HEADS, HEAD_DIM](len(storage), layer, layers, block_size, Int(tables.dim[1]()))
     # Fixed stack storage. Entries 0..11 are writable; 12..22 are read-only.
     var regions = InlineArray[SIMD[DType.uint64, 2], 23](uninitialized=True)
     regions[0] = _region(storage, len(storage))
@@ -241,8 +292,8 @@ def _decode_batch_preflight[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, SL: 
     regions[14] = _region(aw.qkv, (HIDDEN + 2 * WIDTH) * HIDDEN)
     regions[15] = _region(aw.bias, HIDDEN + 2 * WIDTH)
     regions[16] = _region(aw.output, HIDDEN * HIDDEN)
-    regions[17] = _region(attention.cosine, block_size * HEAD_DIM)
-    regions[18] = _region(attention.sine, block_size * HEAD_DIM)
+    regions[17] = _region(attention.cosine, attention.capacity * HEAD_DIM)
+    regions[18] = _region(attention.sine, attention.capacity * HEAD_DIM)
     regions[19] = _region(mw.norm, HIDDEN)
     regions[20] = _region(mw.gate, i * HIDDEN)
     regions[21] = _region(mw.up, i * HIDDEN)
@@ -255,41 +306,43 @@ def _decode_batch_preflight[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, SL: 
                 raise Error("decode composition writable storage overlaps another live tensor")
 
 
-def validate_decode_batch_layer[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, SL: TensorLayout](
+def validate_decode_batch_layer[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, SL: TensorLayout, TL: TensorLayout](
     ctx: DeviceContext, aw: AttentionWeights, attention: AttentionWorkspace,
     mw: MLPWeights, mlp: MLPWorkspace, x: DeviceBuffer[DType.bfloat16],
     storage: DeviceBuffer[DType.bfloat16],
     positions: TileTensor[DType.int32, SL, MutAnyOrigin],
-    blocks: TileTensor[DType.int32, SL, MutAnyOrigin],
+    tables: TileTensor[DType.int32, TL, MutAnyOrigin],
     layer: Int, layers: Int, block_size: Int,
 ) raises:
     """Preflight one decode-composition layer without enqueueing or changing state."""
     _decode_batch_preflight[QUERY_HEADS, KV_HEADS, HEAD_DIM](ctx, aw, attention, mw, mlp, x, storage,
-                                                             positions, blocks, layer, layers, block_size)
+                                                             positions, tables, layer, layers, block_size)
 
 
-def enqueue_decode_batch_layer[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, PROJECTION: Int, SL: TensorLayout](
+def enqueue_decode_batch_layer[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, PROJECTION: Int, HEAD_MAJOR: Bool,
+                               SL: TensorLayout, TL: TensorLayout](
     ctx: DeviceContext, mut aw: AttentionWeights, mut attention: AttentionWorkspace,
     mut mw: MLPWeights, mut mlp: MLPWorkspace, mut x: DeviceBuffer[DType.bfloat16],
     mut storage: DeviceBuffer[DType.bfloat16],
     positions: TileTensor[DType.int32, SL, MutAnyOrigin],
-    blocks: TileTensor[DType.int32, SL, MutAnyOrigin],
+    tables: TileTensor[DType.int32, TL, MutAnyOrigin],
     layer: Int, layers: Int, block_size: Int, input_normalized: Bool,
 ) raises -> Int:
     """One layer of the decode composition for S one-token sequences; returns its launch count.
 
     x holds the S input rows. Every row runs the single-row Fast decode kernels'
     arithmetic whatever S is: input RMSNorm (skipped when the caller stored it
-    in attention.normalized), packed QKV with bias, fused RoPE and K/V append into
-    each sequence's block, decode attention, Wo, the residual with the MLP norm,
+    in attention.normalized), packed QKV with bias, fused RoPE and K/V append
+    into the paged pool, decode attention, Wo, the residual with the MLP norm,
     gate, up, SiLU times up, and down. attention.output then holds the attention
     residual and mlp.down the MLP branch; the caller adds them with the next
-    layer's or the final norm. PROJECTION is the projections' batched arrangement.
-    The caller checks positions and blocks against the pool and advances each
-    sequence's cache length.
+    layer's or the final norm. PROJECTION is the projections' batched arrangement,
+    and HEAD_MAJOR the pool's order within a block. tables is [S, blocks], one
+    row per sequence. The caller checks positions and tables against the pool
+    and advances each sequence's length.
     """
     _decode_batch_preflight[QUERY_HEADS, KV_HEADS, HEAD_DIM](ctx, aw, attention, mw, mlp, x, storage,
-                                                             positions, blocks, layer, layers, block_size)
+                                                             positions, tables, layer, layers, block_size)
     comptime HIDDEN = QUERY_HEADS * HEAD_DIM
     comptime WIDTH = KV_HEADS * HEAD_DIM
     comptime PACKED = HIDDEN + 2 * WIDTH
@@ -302,13 +355,13 @@ def enqueue_decode_batch_layer[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, P
         launches += 1
     enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, normal, TileTensor(aw.qkv, row_major(PACKED, HIDDEN)),
         TileTensor(aw.bias, row_major(PACKED)), TileTensor(attention.packed, row_major(s, PACKED)))
-    enqueue_fused_decode_qkv_batch[QUERY_HEADS, KV_HEADS, HEAD_DIM](ctx, attention, storage, positions, blocks,
-                                                                   layer, layers, block_size)
-    enqueue_grouped_query_attention_decode_sequences_apple_gpu[QUERY_HEADS, KV_HEADS, HEAD_DIM](ctx,
+    enqueue_fused_decode_qkv_paged[QUERY_HEADS, KV_HEADS, HEAD_DIM, HEAD_MAJOR](ctx, attention, storage,
+        positions, tables, layer, layers, block_size)
+    enqueue_paged_attention_g32_apple_gpu[QUERY_HEADS, KV_HEADS, HEAD_DIM, HEAD_MAJOR](ctx,
         TileTensor(attention.query, row_major(s, QUERY_HEADS, HEAD_DIM)),
-        TileTensor(storage, row_major(len(storage) // WIDTH, KV_HEADS, HEAD_DIM)),
+        TileTensor(storage, row_major(len(storage))),
         TileTensor(attention.attention, row_major(s, QUERY_HEADS, HEAD_DIM)),
-        positions, blocks, layer, layers, block_size)
+        positions, tables, 1, layer, layers, block_size)
     enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, TileTensor(attention.attention, row_major(s, HIDDEN)),
         TileTensor(aw.output, row_major(HIDDEN, HIDDEN)), TileTensor(attention.projected, row_major(s, HIDDEN)))
     enqueue_residual_norm[HIDDEN](ctx, TileTensor(x, row_major(s, HIDDEN)),
