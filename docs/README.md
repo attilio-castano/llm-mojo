@@ -18,8 +18,8 @@ Each fact has one home; other pages give a sentence and a link. Start with the
 | [How a token flows through the engine](walkthrough.md) | One chat turn from the command line to streamed text, with shapes, sizes and where the time goes |
 | [Project direction](project.md) | Goal, what the evidence establishes, determinism and the next research questions |
 | [Layout notation](layouts.md) | How logical values, storage, thread ownership and reduction order are written down |
-| [Serving plan](serving-plan.md) | The proposed multi-request engine: interfaces, KV blocks, gates and phases |
-| [Batched decode plan](batched-decode-plan.md) | Phase 1 of the serving plan: the step format and KV pool, batched decode kernels, the batch-size study, exact batched projections and reordered batched projections |
+| [Serving plan](serving-plan.md) | The multi-request engine: interfaces, KV blocks, gates and phases, with phase 1 complete |
+| [Paged KV plan](paged-kv-plan.md) | Phase 2 of the serving plan, in progress: paged kernels, a block manager, the paged model and the translation-cost study |
 
 ## Contracts
 

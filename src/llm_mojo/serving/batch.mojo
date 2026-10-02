@@ -42,18 +42,27 @@ struct StepBatch(Movable):
         self.logits_rows = logits_rows^
 
     @staticmethod
-    def sequence(ids: List[Int], past: Int, block: Int, block_size: Int) raises -> StepBatch:
-        """One sequence writing `ids` at positions `past, past + 1, ...` in one block."""
+    def sequence(ids: List[Int], past: Int, table: List[Int], block_size: Int) raises -> StepBatch:
+        """One sequence writing `ids` at positions `past, past + 1, ...` in the blocks its table lists.
+
+        Position p lives in block table[p // block_size]; a table of one entry
+        holds the whole sequence in one block.
+        """
         var rows = len(ids)
-        if rows < 1 or past < 0 or block < 0 or block_size < 1 or past + rows > block_size:
-            raise Error("a sequence step must fit in its block")
+        var width = len(table)
+        if rows < 1 or past < 0 or width < 1 or block_size < 1 or past + rows > width * block_size:
+            raise Error("a sequence step must fit in its table")
+        for block in table:
+            if block < 0:
+                raise Error("a sequence step must fit in its table")
         var positions = List[Int](capacity=rows)
         var slots = List[Int](capacity=rows)
         for i in range(rows):
-            positions.append(past + i)
-            slots.append(block * block_size + past + i)
+            var position = past + i
+            positions.append(position)
+            slots.append(table[position // block_size] * block_size + position % block_size)
         return StepBatch(ids.copy(), positions^, [0, rows], 1 if rows == 1 else 0,
-            [past + rows], 1, [block], slots^, [rows - 1])
+            [past + rows], width, table.copy(), slots^, [rows - 1])
 
     def rows(self) -> Int:
         return len(self.token_ids)

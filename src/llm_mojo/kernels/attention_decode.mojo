@@ -1,4 +1,4 @@
-"""Output-only decode attention: bounded experiments, route 4 and its batched form."""
+"""Output-only decode attention: bounded experiments, route 4 and its paged, batched form."""
 
 from layout import TensorLayout, TileTensor, row_major, stack_allocation
 from max.gpu.host import DeviceContext
@@ -6,8 +6,9 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.gpu import block_idx, thread_idx
 from std.gpu.primitives import warp
-from std.math import exp, max
+from std.math import exp, max, min
 from std.sys.info import is_apple_gpu
+from llm_mojo.kernels.paged_kv import kv_row, kv_slot_stride, validate_paged_pool
 
 
 def _decode_kernel[
@@ -215,65 +216,74 @@ def _decode_merge_kernel[
     output[0, head, lane + 32] = (u1 / z).cast[DType.bfloat16]()
 
 
-def _decode_sequences_kernel[
+def _paged_g32_kernel[
     QUERY_HEADS: Int,
     KV_HEADS: Int,
     HEAD_DIM: Int,
+    HEAD_MAJOR: Bool,
     QL: TensorLayout,
-    KL: TensorLayout,
+    PL: TensorLayout,
     OL: TensorLayout,
     SL: TensorLayout,
+    TL: TensorLayout,
 ](
     query: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
-    pool: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
+    pool: TileTensor[DType.bfloat16, PL, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
     positions: TileTensor[DType.int32, SL, MutAnyOrigin],
-    blocks: TileTensor[DType.int32, SL, MutAnyOrigin],
+    tables: TileTensor[DType.int32, TL, MutAnyOrigin],
+    rows_per_sequence: Int32,
     layer: Int32,
     layers: Int32,
     block_size: Int32,
 ):
-    """Route 4 arithmetic (_decode_kernel[32, 1, 1] with FP32 scores) per sequence.
+    """Route 4's arithmetic (_decode_kernel[32, 1, 1] with FP32 scores) for one query row of a paged sequence.
 
-    Threadgroup (head, s) attends with query row s to the positions[s] + 1 keys
-    of block blocks[s] in layer `layer`. The pool is viewed as [rows, KV_HEADS,
-    HEAD_DIM] rows of Pool[block, layer, kv, slot]. Keys go to SIMD groups by
-    position mod 32 and merge in group order, as in route 4, so a sequence's
-    output depends only on its own query and keys.
+    Threadgroup (head, row) attends with query row `row` to the positions[row] + 1
+    keys of sequence row // rows_per_sequence, whose blocks its table row lists.
+    SIMD group g takes the keys t ≡ g (mod 32) in increasing order, reading the
+    table once per block, and the 32 groups merge in group order, as in route 4.
+    A block holds a multiple of 32 slots or the whole sequence, so t ≡ g (mod 32)
+    exactly when its slot is.
     """
     comptime assert is_apple_gpu()
     comptime assert HEAD_DIM == 64, "each lane owns head dimensions lane and lane + 32"
     comptime assert QUERY_HEADS % KV_HEADS == 0
-    comptime assert query.flat_rank == 3 and pool.flat_rank == 3 and output.flat_rank == 3
-    comptime assert positions.flat_rank == 1 and blocks.flat_rank == 1
+    comptime assert query.flat_rank == 3 and pool.flat_rank == 1 and output.flat_rank == 3
+    comptime assert positions.flat_rank == 1 and tables.flat_rank == 2
     comptime GROUP = QUERY_HEADS // KV_HEADS
+    comptime STRIDE = kv_slot_stride[KV_HEADS, HEAD_DIM, HEAD_MAJOR]()
     var lane = thread_idx.x % 32
     var group = thread_idx.x // 32
     var head = block_idx.x
     var kv_head = head // GROUP
-    var s = block_idx.y
-    var visible = Int(positions[s]) + 1
-    var key_row = (Int(blocks[s]) * Int(layers) + Int(layer)) * 2 * Int(block_size)
-    var value_row = key_row + Int(block_size)
-    var q0 = rebind[Float32](query[s, head, lane].cast[DType.float32]())
-    var q1 = rebind[Float32](query[s, head, lane + 32].cast[DType.float32]())
+    var row = block_idx.y
+    var sequence = Int(row) // Int(rows_per_sequence)
+    var visible = Int(positions[row]) + 1
+    var size = Int(block_size)
+    var q0 = rebind[Float32](query[row, head, lane].cast[DType.float32]())
+    var q1 = rebind[Float32](query[row, head, lane + 32].cast[DType.float32]())
     var m: Float32 = -3.402823466e38
     var z: Float32 = 0
     var u0: Float32 = 0
     var u1: Float32 = 0
-    for t in range(group, visible, 32):
-        var k0 = rebind[Float32](pool[key_row + t, kv_head, lane].cast[DType.float32]())
-        var k1 = rebind[Float32](pool[key_row + t, kv_head, lane + 32].cast[DType.float32]())
-        var v0 = rebind[Float32](pool[value_row + t, kv_head, lane].cast[DType.float32]())
-        var v1 = rebind[Float32](pool[value_row + t, kv_head, lane + 32].cast[DType.float32]())
-        var score = warp.sum(q0 * k0 + q1 * k1) * 0.125
-        var new_m = max(m, score)
-        var alpha = exp(m - new_m)
-        var beta = exp(score - new_m)
-        z = alpha * z + beta
-        u0 = alpha * u0 + beta * v0
-        u1 = alpha * u1 + beta * v1
-        m = new_m
+    for first in range(0, visible, size):
+        var block = Int(tables[sequence, first // size])
+        var key = kv_row[KV_HEADS, HEAD_DIM, HEAD_MAJOR](block, Int(layer), Int(layers), 0, 0, Int(kv_head), size)
+        var value = kv_row[KV_HEADS, HEAD_DIM, HEAD_MAJOR](block, Int(layer), Int(layers), 1, 0, Int(kv_head), size)
+        for slot in range(Int(group), min(size, visible - first), 32):
+            var k0 = rebind[Float32](pool[key + slot * STRIDE + Int(lane)].cast[DType.float32]())
+            var k1 = rebind[Float32](pool[key + slot * STRIDE + Int(lane) + 32].cast[DType.float32]())
+            var v0 = rebind[Float32](pool[value + slot * STRIDE + Int(lane)].cast[DType.float32]())
+            var v1 = rebind[Float32](pool[value + slot * STRIDE + Int(lane) + 32].cast[DType.float32]())
+            var score = warp.sum(q0 * k0 + q1 * k1) * 0.125
+            var new_m = max(m, score)
+            var alpha = exp(m - new_m)
+            var beta = exp(score - new_m)
+            z = alpha * z + beta
+            u0 = alpha * u0 + beta * v0
+            u1 = alpha * u1 + beta * v1
+            m = new_m
     var partial = stack_allocation[
         DType.float32, address_space=AddressSpace.SHARED
     ](row_major[32, 1, 66]())
@@ -296,53 +306,58 @@ def _decode_sequences_kernel[
             merged_z += weight * partial[g, 0, 65]
             merged0 += weight * partial[g, 0, lane]
             merged1 += weight * partial[g, 0, lane + 32]
-        output[s, head, lane] = (merged0 / merged_z).cast[DType.bfloat16]()
-        output[s, head, lane + 32] = (merged1 / merged_z).cast[DType.bfloat16]()
+        output[row, head, lane] = (merged0 / merged_z).cast[DType.bfloat16]()
+        output[row, head, lane + 32] = (merged1 / merged_z).cast[DType.bfloat16]()
 
 
-def enqueue_grouped_query_attention_decode_sequences_apple_gpu[
+def enqueue_paged_attention_g32_apple_gpu[
     QUERY_HEADS: Int,
     KV_HEADS: Int,
     HEAD_DIM: Int,
+    HEAD_MAJOR: Bool,
     QL: TensorLayout,
-    KL: TensorLayout,
+    PL: TensorLayout,
     OL: TensorLayout,
     SL: TensorLayout,
+    TL: TensorLayout,
 ](
     context: DeviceContext,
     query: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
-    pool: TileTensor[DType.bfloat16, KL, MutAnyOrigin],
+    pool: TileTensor[DType.bfloat16, PL, MutAnyOrigin],
     output: TileTensor[DType.bfloat16, OL, MutAnyOrigin],
     positions: TileTensor[DType.int32, SL, MutAnyOrigin],
-    blocks: TileTensor[DType.int32, SL, MutAnyOrigin],
+    tables: TileTensor[DType.int32, TL, MutAnyOrigin],
+    rows_per_sequence: Int,
     layer: Int,
     layers: Int,
     block_size: Int,
 ) raises:
-    """Decode S sequences in one launch: Q/O [S, heads, dim], K/V in a block pool.
+    """Route 4's arithmetic for R query rows over paged K/V in one launch.
 
-    The caller has checked every position against the block size and every block
-    against the pool, and keeps all storage live through completion. Arithmetic
-    per sequence is route 4's; see _decode_sequences_kernel.
+    Q/O are [R, heads, dim], the pool is flat, positions [R] hold each row's
+    absolute position and tables [S, blocks] each sequence's blocks, with
+    R = S * rows_per_sequence. Batched decode passes one row per sequence; one
+    sequence's rows (routes 11 and 4) pass rows_per_sequence = R. The caller has
+    checked every position against its table and every table entry against the
+    pool, and keeps all storage live through completion.
     """
-    comptime assert query.flat_rank == 3 and pool.flat_rank == 3 and output.flat_rank == 3
-    comptime assert positions.flat_rank == 1 and blocks.flat_rank == 1
-    var sequences = Int(query.dim[0]())
+    comptime assert query.flat_rank == 3 and pool.flat_rank == 1 and output.flat_rank == 3
+    comptime assert positions.flat_rank == 1 and tables.flat_rank == 2
+    var rows = Int(query.dim[0]())
+    var sequences = Int(tables.dim[0]())
     if context.api() != "metal":
-        raise Error("decode requires the Metal device API")
-    if (sequences < 1 or Int(query.dim[1]()) != QUERY_HEADS or Int(query.dim[2]()) != HEAD_DIM
-            or Int(output.dim[0]()) != sequences or Int(output.dim[1]()) != QUERY_HEADS
-            or Int(output.dim[2]()) != HEAD_DIM or Int(pool.dim[1]()) != KV_HEADS
-            or Int(pool.dim[2]()) != HEAD_DIM or Int(positions.dim[0]()) != sequences
-            or Int(blocks.dim[0]()) != sequences):
-        raise Error("batched decode requires Q/O [S, heads, dim], a [rows, kv heads, dim] pool and S positions and blocks")
-    if block_size < 1 or block_size > 4096 or layers < 1 or layer < 0 or layer >= layers:
-        raise Error("batched decode requires a valid layer and block size")
-    comptime kernel = _decode_sequences_kernel[QUERY_HEADS, KV_HEADS, HEAD_DIM, QL, KL, OL, SL]
+        raise Error("paged attention requires the Metal device API")
+    if (rows < 1 or Int(query.dim[1]()) != QUERY_HEADS or Int(query.dim[2]()) != HEAD_DIM
+            or Int(output.dim[0]()) != rows or Int(output.dim[1]()) != QUERY_HEADS
+            or Int(output.dim[2]()) != HEAD_DIM or Int(positions.dim[0]()) != rows
+            or rows_per_sequence < 1 or sequences * rows_per_sequence != rows):
+        raise Error("paged attention requires Q/O [R, heads, dim], R positions and one table row per sequence")
+    validate_paged_pool[KV_HEADS, HEAD_DIM](Int(pool.dim[0]()), layer, layers, block_size, Int(tables.dim[1]()))
+    comptime kernel = _paged_g32_kernel[QUERY_HEADS, KV_HEADS, HEAD_DIM, HEAD_MAJOR, QL, PL, OL, SL, TL]
     context.enqueue_function[kernel](
-        query, pool, output, positions, blocks,
-        Int32(layer), Int32(layers), Int32(block_size),
-        grid_dim=(QUERY_HEADS, sequences),
+        query, pool, output, positions, tables,
+        Int32(rows_per_sequence), Int32(layer), Int32(layers), Int32(block_size),
+        grid_dim=(QUERY_HEADS, rows),
         block_dim=32 * 32,
     )
 

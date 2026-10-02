@@ -1,8 +1,8 @@
 """Qwen text-chat framing and a persistent native batch-one session.
 
-History is authoritative; the session's one-block KV pool length identifies its
-already submitted prefix. No rendered-text round trip is used for generated
-assistant tokens.
+History is authoritative; the length its block manager has committed identifies
+the already submitted prefix, whose K/V rows live in the blocks of the session's
+table. No rendered-text round trip is used for generated assistant tokens.
 """
 from max.gpu.host import DeviceContext
 from llm_mojo.models.qwen2.model import QwenModel, VOCABULARY
@@ -10,6 +10,7 @@ from llm_mojo.models.qwen2.plan import MAX_CONTEXT, fast_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
 from llm_mojo.models.qwen2.tokens import IM_END, is_stop
 from llm_mojo.serving.batch import StepBatch
+from llm_mojo.serving.blocks import BlockManager
 from llm_mojo.serving.kv_pool import KVPool
 
 comptime DEFAULT_SYSTEM = "You are Qwen, created by Alibaba Cloud. You are a helpful assistant."
@@ -76,20 +77,32 @@ struct ChatHistory(Movable):
 struct ChatSession(Movable):
     var model: QwenModel
     var kv: KVPool
+    var blocks: BlockManager
+    var sequence: Int
     var history: ChatHistory
 
     def __init__(out self, ctx: DeviceContext, prepared: String,
                  tokenizer: Tokenizer, mut work: TokenizerWorkspace,
-                 system: String, chunk_rows: Int = 256, capacity: Int = MAX_CONTEXT) raises:
+                 system: String, chunk_rows: Int = 256, capacity: Int = MAX_CONTEXT,
+                 block_size: Int = 0, head_major: Bool = False) raises:
+        """A session whose conversation fills blocks of block_size slots; 0 holds it in one block."""
         self.history = ChatHistory(tokenizer,work,system)
         if len(self.history.tokens)+3 >= capacity:
             raise Error("system message exceeds chat capacity")
         self.model = QwenModel(ctx,prepared,capacity,chunk_rows)
-        self.kv = KVPool(ctx,1,capacity,self.model.kv_geometry())
+        var size = block_size if block_size > 0 else capacity
+        var count = (capacity+size-1)//size
+        self.kv = KVPool(ctx,count,size,self.model.kv_geometry(),head_major)
+        self.blocks = BlockManager(count,size,capacity)
+        self.sequence = self.blocks.add()
 
     def length(self) raises -> Int:
         """Conversation tokens whose KV writes have been submitted."""
-        return self.kv.length(0)
+        return self.blocks.length(self.sequence)
+
+    def table(self) raises -> List[Int]:
+        """The session's blocks in position order."""
+        return self.blocks.table(self.sequence)
 
     def begin(mut self, tokenizer: Tokenizer, mut work: TokenizerWorkspace,
               message: String, maximum: Int) raises:
@@ -98,26 +111,38 @@ struct ChatSession(Movable):
         self.history.begin(tokenizer,work,message,maximum,self.model.capacity)
 
     def submit_next(mut self, ctx: DeviceContext) raises:
-        var cached = self.kv.length(0)
+        var cached = self.length()
         if not self.history.generating or not self.model.valid or cached >= len(self.history.tokens):
             raise Error("no valid pending chat input")
         var rows = min(self.model.max_rows,len(self.history.tokens)-cached)
         var ids = List[Int](capacity=rows)
         for i in range(rows):
             ids.append(self.history.tokens[cached+i])
-        self.model.forward(ctx,StepBatch.sequence(ids,cached,0,self.kv.block_size),self.kv,
+        self.blocks.reserve(self.sequence,cached+rows)
+        self.model.forward(ctx,StepBatch.sequence(ids,cached,self.table(),self.kv.block_size),self.kv,
             fast_plan(rows,cached+rows,ctx.name()))
+        self.blocks.commit(self.sequence,cached+rows)
 
     def sample(mut self, ctx: DeviceContext) raises -> Int:
-        if not self.history.generating or self.kv.length(0) != len(self.history.tokens):
+        if not self.history.generating or self.length() != len(self.history.tokens):
             raise Error("chat sample requires a completely cached prefix")
         var token = self.model.greedy(ctx)
         self.history.accept(token)
         return token
 
+    def truncate(mut self, length: Int) raises:
+        """Forget submitted positions from `length` on; their blocks return to the manager.
+
+        The caller guarantees that no queued work still depends on them.
+        """
+        self.kv.truncate_table(self.table(),length)
+        self.blocks.truncate(self.sequence,length)
+
     def reset(mut self, ctx: DeviceContext) raises:
         self.model.reset(ctx)
         self.kv.reset(ctx)
+        self.blocks.reset()
+        self.sequence = self.blocks.add()
         self.history.reset()
 
     def fail(mut self):

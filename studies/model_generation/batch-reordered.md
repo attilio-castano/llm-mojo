@@ -34,11 +34,11 @@ instructions set most of the cost. The vocabulary projection's 272 MB matrix can
 stay in cache, and arrangement 8 gains only 10% on it. Only fewer passes help
 there: the matrix-unit tiles cut it from 19.9 ms to 9.3 and 7.9 ms.
 
-This is 1e of the [batched decode plan](../../docs/batched-decode-plan.md#1e-reordered-batched-projections),
-collected on 2026-09-26 and 27 from `3185eea`. All 8,800 screen samples, 3,520
-confirmation samples, the accuracy census, ten traces and the model-level
-diagnostics are retained, with two capture attempts that were set aside. No
-sample or block was discarded or repeated.
+This is 1e of the [batched decode plan](../../docs/history/batched-decode-plan.md#1e-reordered-batched-projections),
+collected on 2026-09-26 and 27 from `3185eea`, a commit of #29. All 8,800
+screen samples, 3,520 confirmation samples, the accuracy census, ten traces and
+the model-level diagnostics are retained, with two capture attempts that were
+set aside. No sample or block was discarded or repeated.
 
 ## Setup
 
@@ -190,7 +190,7 @@ of the two repeats' medians over eight measured steps, in milliseconds:
 Per lane and per 128 inputs, arrangement 5 issues 32 scalar loads and
 arrangement 8 eight vector loads, for the same 64 multiply-adds. Arrangement 8
 also addresses its loads from raw pointers; the
-[addressing check](../../docs/batched-decode-plan.md#1f-addressing-check) found
+[addressing check](../../docs/history/batched-decode-plan.md#1f-addressing-check) found
 that this alone gains nothing, so the vector loads account for the difference. Arrangement 8
 halved the QKV, output, gate, up and down projections. At B = 64 their sixteen
 four-row passes request 0.6–3.3 GB of weights per step, which arrangement 8

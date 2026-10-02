@@ -129,6 +129,16 @@ Generated oracle arrays belong in `build/`; their independent generators,
 pinned dependencies and frozen data hashes belong in tests. Model weights,
 compiled binaries, full traces and temporary logs remain outside Git.
 
+## Evidence commits
+
+Every archive and validation record names the commit whose code was measured or
+validated. Pull requests are squash-merged, so `main` holds one commit per pull
+request, and a commit named by evidence is often only on its pull request's
+branch. GitHub keeps each pull request's commits after the branch is deleted:
+`git fetch origin pull/N/head` retrieves those of pull request N, and GitHub's
+page for a commit names the pull request that contains it. New studies and
+records name that pull request beside the commit.
+
 The historical campaign is preserved at merged revision `a86f4db`; see
 [the study index](../studies/README.md). Old numerical results remain historical
 observations. Fresh runs use the current protocol and can weaken or change a

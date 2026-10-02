@@ -47,9 +47,10 @@ An execution failure invalidates the session; `/reset` is required before reuse.
 
 ## Ownership and turn boundaries
 
-`ChatHistory` owns exact token IDs. `ChatSession.length()`, the length of the
-session's one-block KV pool, identifies the prefix already submitted to all 24
-layer caches. Every model call receives a suffix beginning
+`ChatHistory` owns exact token IDs. `ChatSession.length()`, the length the
+session's block manager has committed, identifies the prefix already submitted
+to all 24 layer caches; the session holds the conversation in one block of the
+full context. Every model call receives a suffix beginning
 at that position and selects Fast using the actual row count and cumulative
 context length. Single-row M4 Pro Fast calls combine residual/RMSNorm fusion,
 buffer swapping and GPU argmax; see the [measured study](../studies/model_generation/residual-norm.md).
@@ -66,8 +67,8 @@ retains the whole accepted user message and an empty/partial assistant turn.
 
 `ChatHistory.begin` constructs and checks the complete suffix before mutation.
 It reserves two closure tokens beyond the configured generation allowance.
-`/reset` synchronizes, resets the model and clears its KV pool lengths before
-restoring the system-only history. Normal generation uses no signal handler: the
+`/reset` synchronizes, resets the model, clears its KV pool's written slots and
+releases its blocks before restoring the system-only history. Normal generation uses no signal handler: the
 Darwin process blocks SIGINT before creating GPU threads and consumes it
 synchronously between calls.
 
