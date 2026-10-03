@@ -57,7 +57,9 @@ one layer at a time through [`ModelLayer.load`](../src/llm_mojo/models/qwen2/mod
 The session also creates a one-block [`KVPool`](../src/llm_mojo/serving/kv_pool.mojo),
 sized by [`QwenModel.kv_geometry`](../src/llm_mojo/models/qwen2/model.mojo):
 a single allocation holding every layer's cache, which the model reads and
-appends through per-layer views.
+appends through the session's block table. A
+[`BlockManager`](../src/llm_mojo/serving/blocks.mojo) hands the conversation its
+blocks as it grows.
 
 | Tensor | Shape | Size |
 | --- | --- | ---: |
@@ -104,18 +106,18 @@ configuration 0 otherwise. Other devices always get configuration 0.
 For a call with R new tokens, the model:
 
 1. **Checks everything first.** [`QwenModel.preflight`](../src/llm_mojo/models/qwen2/model.mojo)
-   validates the step batch, the plan, the IDs, the shapes, the pool and every
-   layer's cache length before any GPU work, so a bad call cannot leave
+   validates the step batch, the plan, the IDs, the shapes, the pool and the
+   written slots of the sequence's blocks before any GPU work, so a bad call cannot leave
    half-written state.
 2. **Uploads the IDs** and looks up their embedding rows with
    [`_embedding`](../src/llm_mojo/models/qwen2/model.mojo): [R] IDs become [R, 896]
    hidden states.
 3. **Runs 24 decoder layers.** A prompt goes through
-   [`enqueue_decoder_layer_configuration`](../src/llm_mojo/layers/decoder_layer.mojo);
+   [`enqueue_decoder_layer_configuration_paged`](../src/llm_mojo/layers/decoder_layer.mojo);
    a decode call takes the composition in section 6. Every layer does the same
    two steps with its own weights:
 
-   | Attention ([`enqueue_attention_sublayer_integrated`](../src/llm_mojo/layers/attention_sublayer.mojo)) | Shape |
+   | Attention ([`enqueue_attention_sublayer_integrated_paged`](../src/llm_mojo/layers/attention_sublayer.mojo)) | Shape |
    | --- | --- |
    | RMSNorm of each row | [R, 896] |
    | QKV projection: 14 query heads and 2 key and 2 value heads of 64 values | [R, 896] → [R, 1152] |
@@ -141,7 +143,7 @@ For a call with R new tokens, the model:
    logits: one score per vocabulary entry.
 
 All of this is enqueued on one ordered GPU stream; the host does not wait between
-layers. Each layer's cache now holds R more tokens, and the pool's length grows by R.
+layers. Each layer's cache now holds R more tokens, and the block's written slots grow by R.
 
 ## 5. Choosing the next token
 
@@ -172,7 +174,7 @@ steps, with three decode features: residual/RMSNorm fusion, buffer swapping and
 GPU argmax. Every decode call takes this route:
 
 - **Fused kernels.** One kernel unpacks the QKV projection, applies RoPE and
-  appends to the cache ([`enqueue_fused_decode_qkv_batch`](../src/llm_mojo/layers/attention_sublayer.mojo)),
+  appends to the cache ([`enqueue_fused_decode_qkv_paged`](../src/llm_mojo/layers/attention_sublayer.mojo)),
   and one kernel computes SiLU(gate) × up.
 - **Residual and RMSNorm together.** [`enqueue_residual_norm`](../src/llm_mojo/kernels/residual_norm.mojo)
   adds each residual and computes the RMSNorm that follows it in one kernel:

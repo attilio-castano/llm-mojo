@@ -1,4 +1,5 @@
 """Actual checkpoint: persistent chat versus full-history replay, with raw caches."""
+from std.memory import bitcast
 from std.sys import argv
 from std.testing import assert_equal, assert_raises
 from max.gpu.host import DeviceContext
@@ -11,10 +12,36 @@ from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.kv_pool import KVPool
 
 
-def caches(kv: KVPool, directory: String) raises:
-    for i in range(24):
-        save_bf16(kv.caches[kv.index(0,i)].key,directory+"/key_"+String(i)+".bin",kv.block_size*128)
-        save_bf16(kv.caches[kv.index(0,i)].value,directory+"/value_"+String(i)+".bin",kv.block_size*128)
+def caches(session: ChatSession, directory: String) raises:
+    """Every layer's K and V rows in position order through the session's capacity.
+
+    Positions outside the session's blocks read as the pool's fill, 123, as they
+    do in a pool of one block, so the dumps do not depend on the block size.
+    """
+    var table = session.table()
+    var size = session.kv.block_size
+    var fill = bitcast[DType.uint16](Scalar[DType.bfloat16](123))
+    for layer in range(24):
+        for index in range(2):
+            var data = List[UInt8](capacity=session.model.capacity*256)
+            for b in range((session.model.capacity+size-1)//size):
+                var slots = min(size,session.model.capacity-b*size)
+                if b < len(table):
+                    var view = session.kv.view(table[b],layer,index)
+                    with view.map_to_host() as mapped:
+                        for slot in range(slots):
+                            for head in range(2):
+                                var start = (head*size+slot)*64 if session.kv.head_major else (slot*2+head)*64
+                                for d in range(64):
+                                    var bits = bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=start+d])
+                                    data.append(UInt8(bits & 255))
+                                    data.append(UInt8(bits >> 8))
+                else:
+                    for _ in range(slots*128):
+                        data.append(UInt8(fill & 255))
+                        data.append(UInt8(fill >> 8))
+            var file = open(directory+("/key_" if index == 0 else "/value_")+String(layer)+".bin","w")
+            file.write_bytes(data)
 
 
 def replay_history(mut model: QwenModel, mut kv: KVPool, ctx: DeviceContext, ids: List[Int]) raises:
@@ -24,29 +51,28 @@ def replay_history(mut model: QwenModel, mut kv: KVPool, ctx: DeviceContext, ids
         var suffix = List[Int]()
         for i in range(rows):
             suffix.append(ids[cached+i])
-        model.forward(ctx,StepBatch.sequence(suffix,cached,0,kv.block_size),kv,fast_plan(rows,cached+rows,ctx.name()))
+        model.forward(ctx,StepBatch.sequence(suffix,cached,[0],kv.block_size),kv,fast_plan(rows,cached+rows,ctx.name()))
     ctx.synchronize()
 
 
 def main() raises:
     var args = argv()
-    if len(args)!=4:
-        raise Error("chat_driver prepared tokenizer output")
+    if len(args) < 4 or len(args) > 6:
+        raise Error("chat_driver prepared tokenizer output [block-size [head-major]]")
     var tokenizer = Tokenizer(args[2])
     var work = TokenizerWorkspace()
     var ctx = DeviceContext()
     print("device",ctx.name(),"backend",ctx.api())
-    var session = ChatSession(ctx,args[1],tokenizer,work,String(DEFAULT_SYSTEM),256,512)
+    var session = ChatSession(ctx,args[1],tokenizer,work,String(DEFAULT_SYSTEM),256,512,
+                              Int(args[4]) if len(args) > 4 else 0,len(args) > 5 and args[5] == "head-major")
     var replay = QwenModel(ctx,args[1],512,256)
     var replay_kv = KVPool(ctx,1,512,replay.kv_geometry())
-    for i in range(24):
-        session.kv.caches[session.kv.index(0,i)].key.enqueue_fill(123)
-        session.kv.caches[session.kv.index(0,i)].value.enqueue_fill(123)
+    session.kv.storage.enqueue_fill(123)
     var prompts: List[String] = ["My name is Ada. Reply briefly.","What is my name?", "Scrivi una frase sul caffè. ☕"]
     for turn in range(len(prompts)):
         var directory = args[3]+"/turn"+String(turn)
         var before = session.length()
-        caches(session.kv,directory+"/before")
+        caches(session,directory+"/before")
         session.begin(tokenizer,work,prompts[turn],12)
         var prompt_length = len(session.history.tokens)
         var ids_file = open(directory+"/prompt.txt","w")
@@ -74,7 +100,7 @@ def main() raises:
                     ctx.synchronize()
                     if arm == 0:
                         session.model.submitted_rows = before*24
-                        session.kv.truncate(0,before)
+                        session.truncate(before)
                     else:
                         replay.reset(ctx)
                         replay_kv.reset(ctx)
@@ -94,7 +120,7 @@ def main() raises:
             else:
                 _ = session.sample(ctx)
         assert_equal(session.model.submitted_rows,session.length()*24)
-        caches(session.kv,directory+"/after")
+        caches(session,directory+"/after")
         print("finish",turn,"cached",session.length(),"history",len(session.history.tokens),"generated",session.history.generated,"reason",session.history.reason)
     var old_length = session.length()
     var old_history = len(session.history.tokens)

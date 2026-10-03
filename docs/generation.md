@@ -22,22 +22,24 @@ invariants.
 `QwenModel` owns one BF16 embedding allocation, also used as the tied LM head,
 the final RMSNorm weights and 24 distinct learned decoder weight sets. It owns
 one attention workspace, one MLP workspace, input staging, one step upload
-(token IDs, then each sequence's position and block), and per sequence a final
+(each row's token ID and position, then each sequence's block table), and per sequence a final
 normalized row, next-token logits and GPU argmax partial and result buffers. Clients must preserve this ownership; replacing internal allocations
 is unsupported.
 
 KV storage belongs to the caller's `KVPool` (`serving/kv_pool.mojo`): one
-block-major BF16 allocation with persistent K and V views for each block and
-layer, laid out as the [serving plan](serving-plan.md#pool-layout) describes.
-The caller sizes it from `QwenModel.kv_geometry()` (layers, KV heads and head
-size), so the pool assumes no model.
+block-major BF16 allocation, laid out as the [serving plan](serving-plan.md#pool-layout)
+describes, with a count of each block's written slots. The caller sizes it from
+`QwenModel.kv_geometry()` (layers, KV heads and head size), so the pool assumes
+no model.
 Each call receives a `StepBatch` (`serving/batch.mojo`) naming the tokens, their
-positions and the blocks they write, alongside its `ExecutionPlan`. Every
-sequence is held in a single block of the full context. A configuration 26 call
+positions and each sequence's block table, alongside its `ExecutionPlan`; every
+kernel that reads or writes K/V goes through the tables. The chat, generation
+and benchmark clients hold each sequence in a single block of the full context;
+the [paged KV plan](paged-kv-plan.md) moves them to smaller blocks. A configuration 26 call
 decodes up to `max_sequences` sequences at once, one token each, with the same
 launches as one sequence; `greedy_tokens` returns one token per sequence, and
 each sequence's logits, token and appended K/V equal decoding it alone. Every
-other call covers one sequence. See the [batched decode plan](batched-decode-plan.md).
+other call covers one sequence. See the [batched decode plan](history/batched-decode-plan.md).
 Decode projections use arrangement 8, for one sequence and for many: each SIMD
 group computes four rows and four output columns, and each lane sums four
 adjacent products in every 128 inputs. That order differs from the baseline
@@ -62,13 +64,13 @@ no host synchronization between layers in normal execution.
 
 Every call validates the step batch (offsets, contiguous positions, write slots,
 block IDs, token IDs and logit rows) and preflights all layers, shapes,
-allocation extents, pool geometry, row capacity, every layer's cache length and
-configuration requirements before the first model dispatch. The host step
-upload synchronizes. Layer work then uses one ordered Metal stream. Cache
-lengths count submitted tokens; greedy readback waits for completion.
-Submission/readback failure invalidates the model. Reset marks the model invalid
-before waiting and restores validity only after synchronization; `KVPool.reset`
-separately clears logical cache lengths.
+allocation extents, pool geometry, row capacity, each sequence's blocks against
+their written slots and configuration requirements before the first model
+dispatch. The host step upload synchronizes. Layer work then uses one ordered
+Metal stream. Written slots count submitted tokens; greedy readback waits for
+completion. Submission/readback failure invalidates the model. Reset marks the
+model invalid before waiting and restores validity only after synchronization;
+`KVPool.reset` separately clears the written slots.
 
 The runtime processes only new token rows. `submitted_rows` counts submitted
 layer rows, and the diagnostic driver reports it with logical cache length.

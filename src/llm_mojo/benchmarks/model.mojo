@@ -6,7 +6,7 @@ batch-size study (1c) pairs row tiles, the projection study (1d) pairs exact
 batched projection arrangements, the reordered study (1e) pairs arrangements
 with other summation orders, whose accuracy the accuracy mode records, and the
 addressing check (1f) pairs raw-pointer and vector loads with arrangement 5
-(docs/batched-decode-plan.md).
+(docs/history/batched-decode-plan.md).
 Completed decode experiments (fusion, selection, buffer swap, composition,
 projection arrangement, scheduling and launch probes) are replay-only; their
 collectors exist through commit edb610a. See studies/model_generation/README.md.
@@ -35,8 +35,8 @@ def rewind(mut model: QwenModel, mut kv: KVPool, prefix: Int) raises:
 def snapshot(mut model: QwenModel, kv: KVPool, path: String) raises:
     save_bf16(model.logits,path+"-logits.bin",151936)
     for layer in range(24):
-        save_bf16(kv.caches[kv.index(0,layer)].key,path+"-k"+String(layer)+".bin",4096*128)
-        save_bf16(kv.caches[kv.index(0,layer)].value,path+"-v"+String(layer)+".bin",4096*128)
+        save_bf16(kv.view(0,layer,0),path+"-k"+String(layer)+".bin",4096*128)
+        save_bf16(kv.view(0,layer,1),path+"-v"+String(layer)+".bin",4096*128)
 
 
 def poison_outputs(mut model: QwenModel, mut kv: KVPool, prefix: Int) raises:
@@ -46,10 +46,12 @@ def poison_outputs(mut model: QwenModel, mut kv: KVPool, prefix: Int) raises:
     model.mlp.activated.enqueue_fill(sentinel)
     model.mlp.gated.enqueue_fill(sentinel)
     for layer in range(24):
-        with kv.caches[kv.index(0,layer)].key.map_to_host() as mapped:
+        var key = kv.view(0,layer,0)
+        with key.map_to_host() as mapped:
             for column in range(128):
                 mapped.unsafe_ptr()[unsafe_offset=prefix*128+column] = sentinel
-        with kv.caches[kv.index(0,layer)].value.map_to_host() as mapped:
+        var value = kv.view(0,layer,1)
+        with value.map_to_host() as mapped:
             for column in range(128):
                 mapped.unsafe_ptr()[unsafe_offset=prefix*128+column] = sentinel
 
@@ -57,7 +59,7 @@ def poison_outputs(mut model: QwenModel, mut kv: KVPool, prefix: Int) raises:
 def step[OBSERVE: Bool](mut model: QwenModel, mut kv: KVPool, ctx: DeviceContext, ids: List[Int]) raises -> Int:
     """One single-row Fast decode step: configuration 26, GPU argmax, swap, fused norms."""
     var cached = kv.length(0)
-    model.forward[OBSERVE](ctx,StepBatch.sequence(ids,cached,0,kv.block_size),kv,fast_plan(1,cached+1,ctx.name()))
+    model.forward[OBSERVE](ctx,StepBatch.sequence(ids,cached,[0],kv.block_size),kv,fast_plan(1,cached+1,ctx.name()))
     return model.greedy[OBSERVE](ctx)
 
 
@@ -94,7 +96,7 @@ def batch_setup(ctx: DeviceContext, mut model: QwenModel, mut kv: KVPool, histor
         var chunk = List[Int](capacity=count)
         for i in range(count):
             chunk.append(history[offset+i])
-        model.forward(ctx,StepBatch.sequence(chunk,offset,0,kv.block_size),kv,fast_plan(count,offset+count,ctx.name()))
+        model.forward(ctx,StepBatch.sequence(chunk,offset,[0],kv.block_size),kv,fast_plan(count,offset+count,ctx.name()))
         offset += count
     ctx.synchronize()
     var block = len(kv.storage)//kv.blocks
@@ -109,8 +111,7 @@ def batch_rewind(mut model: QwenModel, mut kv: KVPool, contexts: List[Int], sequ
     # Earlier readback completed every step. Only logical lengths are rewound.
     model.submitted_rows = 0
     for s in range(sequences):
-        for layer in range(kv.geometry.layers):
-            kv.caches[kv.index(s,layer)].length = contexts[s]
+        kv.written[s] = contexts[s]
 
 
 def batch_step[OBSERVE: Bool, ARRANGEMENT: Int](mut model: QwenModel, mut kv: KVPool, ctx: DeviceContext,
@@ -458,16 +459,14 @@ def main() raises:
     var model = QwenModel(ctx,args[2],4096,256)
     var kv = KVPool(ctx,1,4096,model.kv_geometry())
     # Define all inactive storage for exact before/after comparisons.
-    for layer in range(24):
-        kv.caches[kv.index(0,layer)].key.enqueue_fill(0)
-        kv.caches[kv.index(0,layer)].value.enqueue_fill(0)
+    kv.storage.enqueue_fill(0)
     var offset = 0
     while offset < prefix:
         var count = min(256,prefix-offset)
         var chunk = List[Int](capacity=count)
         for i in range(count):
             chunk.append(history[offset+i])
-        model.forward(ctx,StepBatch.sequence(chunk,offset,0,4096),kv,fast_plan(count,offset+count,ctx.name()))
+        model.forward(ctx,StepBatch.sequence(chunk,offset,[0],4096),kv,fast_plan(count,offset+count,ctx.name()))
         offset += count
     ctx.synchronize()
     var ids: List[Int] = [history[prefix]]
