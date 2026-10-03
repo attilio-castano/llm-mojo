@@ -32,6 +32,7 @@ reproduction commands.
 
 | Study | Status | What it establishes |
 | --- | --- | --- |
+| [Paged KV translation cost](paged-kv.md) | Not adopted | Blocks of 32, 64 and 128 slots make decode steps up to 2.9, 1.9 and 1.5 times as long at 3,968 cached tokens, all of it in decode attention's per-block loop, while prefill pays at most 1.5%; one block per sequence stays the default |
 | [Exact batched projections](batch-projections.md) | Superseded | Arrangement 5, four rows by four columns per SIMD group: 31–65% shorter batched steps with bit-identical outputs, 705 tokens/s for 64 sequences at 1,024 cached tokens; arrangement 8 replaced it |
 | [Batched decode against batch size](batch-size.md) | Diagnostic | With tile 4, throughput levels off at 2.2–3.2× one sequence by B = 64; per-row work in the multi-row projections sets the cost, and tiles 8 and 16 are slower than tile 4 |
 | [Inter-layer buffer swapping](buffer-swap.md) | Not promoted alone | 23 fewer compute copies with exact outputs; 5.3–8.3% median paired reductions missed the standalone gate |

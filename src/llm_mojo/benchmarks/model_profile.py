@@ -2708,15 +2708,16 @@ def paged_plot(directory):
                                           for r in rows], fontsize=8)
     prefill.set_xlim(-.6, len(rows)-.4)
     prefill.set_title('Prefill: one chunk of one sequence, from the token upload to device synchronization')
-    values = [v for r in timing['decode']+timing['prefill'] for x in r['layouts'].values() for v in x['block_ratios']]
-    values += [1+r['noise_floor'] for r in timing['decode']+timing['prefill']]
-    values += [1-r['noise_floor'] for r in timing['decode']+timing['prefill']]
-    low, high = min(values), max(values)
-    for ax in [*top, prefill]:
-        ax.axhline(1, color=PAGED_INK['muted'], linewidth=.8)
-        ax.set_ylim(low-(high-low)*.06, high+(high-low)*.06)
-    top[0].set_ylabel('Time relative to one block per sequence')
-    prefill.set_ylabel('Time relative to one block per sequence')
+    # Decode panels share one scale; prefill, whose effects are small, has its own.
+    for axes, part in (([*top], 'decode'), ([prefill], 'prefill')):
+        values = [v for r in timing[part] for x in r['layouts'].values() for v in x['block_ratios']]
+        values += [1+sign*r['noise_floor'] for r in timing[part] for sign in (-1, 1)]
+        low, high = min(values), max(values)
+        for ax in axes:
+            ax.axhline(1, color=PAGED_INK['muted'], linewidth=.8)
+            ax.set_ylim(low-(high-low)*.06, high+(high-low)*.06)
+    top[0].set_ylabel('Step time relative to one block per sequence')
+    prefill.set_ylabel('Chunk time relative to one block,\nits own scale')
     from matplotlib.lines import Line2D
     from matplotlib.patches import Patch
     handles = [Line2D([], [], **{k: v for k, v in style(layout).items() if k not in ('elinewidth', 'capsize')})
@@ -2729,25 +2730,51 @@ def paged_plot(directory):
     plt.close(fig)
     # Where translation would show: attention and the KV writes in the traces.
     gpu = {(r['layout'], r['stage'], r['repeat']): r['median_ms'] for r in summary['gpu']}
+    def traced_ms(layout, stage):
+        return stats.mean(gpu[layout, stage, r] for r in range(2))
     stages = [('Attention', 'FP32 GQA'), ('KV writes', 'fused QKV/RoPE/cache'), ('All active GPU time', 'GPU active total')]
     traced = [layout for _, _, layout in contract.PAGED_TRACES if layout != contract.PAGED_CONTROL]
-    fig, ax = plt.subplots(figsize=(9.5, 4.6), constrained_layout=True)
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.8), constrained_layout=True, gridspec_kw=dict(width_ratios=[3, 2]))
     width = .24
     for g, (_, stage) in enumerate(stages):
-        base = stats.mean(gpu[contract.PAGED_CONTROL, stage, r] for r in range(2))
+        base = traced_ms(contract.PAGED_CONTROL, stage)
         for j, layout in enumerate(traced):
             x = g+(j-(len(traced)-1)/2)*width
             repeats = [gpu[layout, stage, r]/base for r in range(2)]
-            ax.bar(x, stats.mean(repeats)-1, bottom=1, width=width*.85,
-                   color=PAGED_COLORS[contract.PAGED_LAYOUTS[layout]['block_size']], label=name(layout) if g == 0 else None)
-            ax.scatter([x, x], repeats, color=PAGED_INK['primary'], s=9, zorder=3,
-                       label='each trace repeat' if g == 0 and j == 0 else None)
-    ax.axhline(1, color=PAGED_INK['muted'], linewidth=.8)
-    ax.set_xticks(range(len(stages)), [f'{label}\n{stats.mean(gpu[contract.PAGED_CONTROL, stage, r] for r in range(2)):.2f} ms '
-                                       'per step with one block' for label, stage in stages])
-    ax.set_ylabel('Active GPU time relative to one block per sequence')
-    ax.set_title('Traces of 64 sequences at 3,968 cached tokens, two repeats per layout', fontsize=11)
-    fig.legend(loc='outside lower center', ncol=4, fontsize=8, frameon=False)
+            axes[0].bar(x, stats.mean(repeats)-1, bottom=1, width=width*.85,
+                        color=PAGED_COLORS[contract.PAGED_LAYOUTS[layout]['block_size']],
+                        label=name(layout) if g == 0 else None)
+            axes[0].scatter([x, x], repeats, color=PAGED_INK['primary'], s=9, zorder=3,
+                            label='each trace repeat' if g == 0 and j == 0 else None)
+    axes[0].axhline(1, color=PAGED_INK['muted'], linewidth=.8)
+    axes[0].set_xticks(range(len(stages)), [f'{label}\n{traced_ms(contract.PAGED_CONTROL, stage):.2f} ms per step\nwith one block'
+                                            for label, stage in stages])
+    axes[0].set_ylabel('Active GPU time relative to one block')
+    axes[0].set_title('Relative to one block per sequence')
+    # Where the added time sits: attention, the KV writes and every other dispatch, stacked.
+    parts = [('Attention', lambda l: traced_ms(l, 'FP32 GQA'), PAGED_INK['primary']),
+             ('KV writes', lambda l: traced_ms(l, 'fused QKV/RoPE/cache'), PAGED_INK['secondary']),
+             ('Every other dispatch', lambda l: traced_ms(l, 'GPU active total') - traced_ms(l, 'FP32 GQA')
+              - traced_ms(l, 'fused QKV/RoPE/cache'), PAGED_INK['axis'])]
+    labels = [str(contract.PAGED_LAYOUTS[l]['block_size']) + '-slot' for l in traced]
+    bottoms = [0.]*len(traced)
+    for label, value, color in parts:
+        added = [value(l) - value(contract.PAGED_CONTROL) for l in traced]
+        axes[1].bar(range(len(traced)), added, bottom=bottoms, width=.55, color=color, label=label,
+                    edgecolor='white', linewidth=1)
+        bottoms = [b + a for b, a in zip(bottoms, added)]
+    for i, total in enumerate(bottoms):
+        axes[1].annotate(f'+{total:.1f} ms', (i, total), textcoords='offset points', xytext=(0, 4), ha='center',
+                         fontsize=9, color=PAGED_INK['primary'])
+    axes[1].axhline(0, color=PAGED_INK['muted'], linewidth=.8)
+    axes[1].set_ylim(top=max(bottoms)*1.15)
+    axes[1].set_xticks(range(len(traced)), labels)
+    axes[1].set_xlabel('Slot-major blocks')
+    axes[1].set_ylabel('Active GPU milliseconds added per step')
+    axes[1].set_title('Added to one block per sequence')
+    axes[1].legend(fontsize=8, frameon=False, loc='upper right')
+    fig.legend(*axes[0].get_legend_handles_labels(), loc='outside lower center', ncol=4, fontsize=8, frameon=False)
+    fig.suptitle('Traces of 64 sequences at 3,968 cached tokens, two repeats per layout', fontsize=12)
     fig.savefig(directory/(PAGED_STEM+'-traces.png'), dpi=170)
     plt.close(fig)
 

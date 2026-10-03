@@ -151,6 +151,65 @@ class ModelProfileTests(unittest.TestCase):
         confirmation = paged_decision(summary({}, layouts=(3,)))
         self.assertEqual((confirmation['qualified'], confirmation['selected']), ([3], 3))
 
+    def test_retained_paged_kv_integrity(self):
+        """2d's archive: no layout qualifies, and decode attention carries the cost."""
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import paged_replay
+        source = repository_root()/'studies/model_generation'
+        original = json.loads(gzip.decompress((source/'paged-kv.json.gz').read_bytes()))
+        retained = json.loads((source/'paged-kv-summary.json').read_text())
+        self.assertEqual((retained['decision']['qualified'], retained['decision']['selected']), ([], None))
+        self.assertIsNone(retained['confirmation'])
+        attention = {(g['layout'], g['repeat']): g['median_ms'] for g in retained['gpu'] if g['stage'] == 'FP32 GQA'}
+        self.assertTrue(all(attention[1, r] > attention[3, r] > attention[5, r] > attention[0, r] for r in range(2)))
+        for damage in (None, 'sample', 'prefill', 'block', 'capture', 'conditions', 'trace-conditions', 'argument',
+                       'declaration', 'token', 'prefill-token', 'confirmation'):
+            record = copy.deepcopy(original)
+            if damage == 'sample': record['timing']['samples'].pop()
+            elif damage == 'prefill': record['timing']['prefill_samples'].pop()
+            elif damage == 'block': record['timing']['blocks'].pop()
+            elif damage == 'capture': record['captures'].pop()
+            elif damage == 'conditions': record['timing']['blocks'][2]['before']['power_mode_raw'] = '1'
+            elif damage == 'trace-conditions': record['captures'][3]['conditions']['after']['battery']['power_source'] = 'Battery Power'
+            elif damage == 'argument': record['timing']['argument'] = 'paged-confirm:3'
+            elif damage == 'declaration': record['timing']['build']['declaration']['hypothesis'] = 'changed after measuring'
+            elif damage == 'token': record['timing']['token_differences'][5]['differing'] = 1
+            elif damage == 'prefill-token': record['timing']['prefill_token_differences'].pop()
+            elif damage == 'confirmation': record['confirmation'] = record['timing']
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                raw = json.dumps(record).encode()
+                packed = gzip.compress(raw, mtime=0)
+                (directory/'paged-kv.json.gz').write_bytes(packed)
+                (directory/'paged-kv.json').write_text(json.dumps(dict(kind=record['kind'],
+                    sha256=hashlib.sha256(packed).hexdigest(), uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with self.subTest(damage=damage), redirect_stdout(StringIO()):
+                    if damage is None:
+                        paged_replay(directory)
+                        self.assertEqual(json.loads((directory/'paged-kv-summary.json').read_text()), retained)
+                    else:
+                        with self.assertRaises((ValueError, RuntimeError)): paged_replay(directory)
+
+    def test_retained_paged_kv_2c_timing(self):
+        """2c's timing sanity check: one block per sequence, 6422f84's generator against a84ad34's, no claim."""
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import single_sequence_summary
+        record = json.loads((repository_root()/'studies/model_generation/paged-kv-2c-timing.json').read_text())
+        self.assertEqual(single_sequence_summary(record), (record['block_ratios'], record['median_block_ratio'], record['verdict']))
+        self.assertEqual((record['verdict'], record['texts_identical']), ('no regression', True))
+        self.assertEqual(record['prompt']['sha256'], contract.SINGLE_SEQUENCE['prompt']['sha256'])
+        self.assertEqual({arm: (b['commit'][:7], b['archive'], b['decode_projection'], b['kv_block_size'])
+                          for arm, b in record['binaries'].items()},
+                         {'baseline': ('6422f84', True, 8, None), 'candidate': ('a84ad34', False, 8, None)})
+        for damage in ('step', 'order'):
+            damaged = copy.deepcopy(record)
+            if damage == 'step': damaged['runs'][5]['decode_step_ns'].pop()
+            else: damaged['runs'][1]['arm'] = 'baseline'
+            with self.subTest(damage=damage), self.assertRaises(ValueError):
+                single_sequence_summary(damaged)
+
     def test_single_sequence_rule_from_raw_steps(self):
         from llm_mojo.benchmarks.model_profile import single_sequence_summary
         def record(candidate_ms):

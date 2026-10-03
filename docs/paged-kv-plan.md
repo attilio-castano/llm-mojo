@@ -24,9 +24,13 @@ local implementation, builds, tests, validation and incremental commits, with
 pushing, pull requests and toolchain upgrades needing a separate decision.
 Paging changes addresses, not arithmetic, so no step changes the numerical
 contract. The approval also moved
-[keys and events to phase 4](#keys-and-events-move-to-phase-4). 2a and 2b
-are complete, and 2c's gates have passed apart from its timing sanity check; see
-the [validation record](#validation-record).
+[keys and events to phase 4](#keys-and-events-move-to-phase-4). 2a, 2b and 2c
+are complete and merged as `a84ad34` (#32). 2d is complete: no block size
+qualified, because small blocks make decode attention pay for every block a
+sequence spans ([study](../studies/model_generation/paged-kv.md)). 2e's
+adoption therefore does not run, one block per sequence stays the default, and
+phase 3 starts with that question open. See the
+[validation record](#validation-record).
 
 ## What paging must preserve
 
@@ -406,6 +410,63 @@ If 2d selects and confirms a layout and the single-sequence check passes:
 
 ## Validation record
 
+### 2d on `dd7ed24`, 2026-10-03
+
+`dd7ed24` adds the study's tooling on a branch cut from `a84ad34`. The model
+benchmark's batch mode times the decode matrix across layouts, a
+`paged-prefill` mode the prefill chunks, and a `MODEL_PAGED_PROFILE` build is
+the trace target; `model_profile.py --study paged` builds, collects, confirms,
+captures, archives, replays and plots, with the decision rule frozen in the
+contract.
+
+- **Tooling.** `uv run --locked llm-mojo validate` passed on its tree in 31
+  minutes: 288 Python tests, all 28 native test files plus the Unicode
+  tokenizer run, and every benchmark smoke. Before collection, untimed
+  functional runs checked every path: all seven layouts selected layout 0's
+  tokens at every batch size at 3,968 cached tokens; the prefill mode ran each
+  chunk in its declared configuration with equal tokens; a generator in
+  64-slot head-major blocks wrote the same text as `a84ad34`'s; the trace
+  target finished in 14 s, inside the 30 s capture.
+- **Screen.** From a clean `dd7ed24` build, 16:47–17:25: four blocks of the 22
+  decode workloads and the 13 prefill chunks, 12,320 and 7,280 samples. Every
+  layout's history equalled layout 0's byte for byte, and all 616 decode and
+  364 prefill token checks agreed.
+- **Decision.** No layout qualified: each is a regression in 13 to 15 of the
+  35 workloads, and none is a gain in any. So there is no confirmation run, no
+  single-sequence check and no 2e. With 32-, 64- and 128-slot blocks, steps of
+  64 sequences at 3,968 cached tokens take 2.81, 1.81 and 1.35 times as long as
+  with one block per sequence. Prefill chunks pay at most 1.5%, except the
+  configuration-21 chunk, which shares decode's attention kernel and pays 12.9%
+  with 32-slot blocks. Head-major order changes nothing.
+- **Traces.** 17:27–17:36, eight captures, none rejected. Attention's active
+  time per step rises from 87.5 ms to 321.1, 191.6 and 131.7 ms, which is the
+  whole increase: the KV writes gain at most 0.05 ms. The
+  [study](../studies/model_generation/paged-kv.md) traces this to the paged
+  decode kernel walking its keys block by block, so that each block's table read
+  precedes its loads.
+- **Hypothesis.** Right about prefill's rolled-MMA routes, head-major order and
+  the host; wrong about decode, where it bounded the cost at a quarter of
+  attention time at 32 slots and predicted that 64 would be selected.
+- **Lifecycle.** The check this plan requires before measurement was missed and
+  ran after it: the model driver built from `dd7ed24`'s archive passed in
+  normal and device-sync mode. `dd7ed24` changes nothing on that driver's path
+  but adds `KVPool.relayout`.
+- **Conditions.** AC power, normal power mode and no thermal or performance
+  warning before and after every block and capture.
+
+**Deviations from the plan.**
+- The single-sequence check is a committed command, `model_profile
+  single-sequence`, instead of a script. Its prompt, whose text 1e did not
+  keep, is declared by its construction, which reproduces 1e's recorded hash.
+  2c's timing check used it.
+- `validation.model build` builds any commit from its git archive with this
+  checkout's toolchain, which the baseline generator needed, and a generator in
+  a KV layout (`-D KV_BLOCK_SIZE`, `-D KV_HEAD_MAJOR`) for the single-sequence
+  check. The default stays one block per sequence.
+- The control's step also takes its tables from the block manager, so the
+  timed host work is the same in every arm; the prefill pools' tables come from
+  the same seeded manager as the decode pool's.
+
 ### 2c review fix on `f87e989`, 2026-10-03
 
 Codex's review of #32 found that the model driver's lifecycle check had failed
@@ -480,8 +541,18 @@ Three commits implement 2c, each validated before it was committed:
   in 34, 37 and 33 minutes: frozen oracle anchors, 283 Python tests, all 28
   native test files plus the Unicode tokenizer run on Metal, and every benchmark
   smoke route.
-- **Timing sanity check.** Not yet run: it is a measurement and waits for a
-  quiet machine.
+- **Timing sanity check, no claim.** Run on 2026-10-03 with 2d's
+  `single-sequence` command: sixteen generation runs of 128 tokens after the
+  1,176-token prompt in four alternating blocks, comparing `6422f84`'s generate
+  executable, built from its archive, with `a84ad34`'s, each holding the
+  sequence in one block. Median decode steps were 7.129 ms for `6422f84` (runs
+  6.722–7.162 ms) and 7.109 ms for 2c (6.725–8.446 ms). The block ratios were
+  0.991, 1.097, 0.971 and 1.035, with a median of
+  1.013: no regression under the rule, and below the 5% floor. Block 2's ratio
+  comes from one 2c run at 8.45 ms, the slowest of all sixteen; the one-minute
+  load average rose from 1.5 to 7.8 during the runs. Both generated the same
+  text. The [record](../studies/model_generation/paged-kv-2c-timing.json) keeps
+  every decode step.
 
 **Deviations from the plan.**
 - Phase 1's one-block kernels, `_decode_sequences_kernel` and

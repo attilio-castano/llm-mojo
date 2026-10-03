@@ -543,7 +543,7 @@ not the traces' intervals.
 
 ### Paged KV study
 
-The [translation-cost study](../../../docs/paged-kv-plan.md#2d-translation-cost-study)
+The [paged KV translation-cost study](../../../studies/model_generation/paged-kv.md)
 (2d) reuses the matrix with `--study paged`. Layout 0 holds each sequence in one
 block of the whole context; layouts 1–6 use blocks of 32, 64 and 128 slots,
 slot-major and then head-major. Each block of the procedure adds a prefill
