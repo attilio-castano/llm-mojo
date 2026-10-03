@@ -253,6 +253,9 @@ validation take a block size and order.
   slots; every other byte of the pool stays the same.
 - **Rejections.** A step that breaks any of the model's checks leaves counts,
   lengths and counters unchanged.
+- **Lifecycle on the checkpoint.** `validation.model lifecycle` passes from a
+  clean build. `llm-mojo validate` runs no checkpoint driver, so it needs its
+  own run.
 - **Suite.** `uv run --locked llm-mojo validate` passes. Decode parity and the
   route test keep their checks.
 - **Timing sanity check, no claim.** Alternating generation runs of `6422f84`'s
@@ -308,6 +311,7 @@ machine. Instead:
   one-sequence pools.
 - Every decode sample must reproduce its reference tokens with 245 launches,
   and every layout the control's tokens.
+- Before measurement, the measured commit passes 2c's lifecycle check.
 
 ### Reported quantities
 
@@ -401,6 +405,35 @@ If 2d selects and confirms a layout and the single-sequence check passes:
   split-K decode.
 
 ## Validation record
+
+### 2c review fix on `f87e989`, 2026-10-03
+
+Codex's review of #32 found that the model driver's lifecycle check had failed
+since `1cb1942`. It expected the model, whose context is 4 tokens, to reject a
+pool of one 8-slot block. That was phase 1's rule that a block equals the
+model's context, which 2c dropped on purpose (see 2c's deviations). Nothing
+had run the check: `llm-mojo validate` starts no checkpoint driver, and 2c's
+gate used phase 1's equality scenarios, which leave it out, although
+`1cb1942` edited it for the new pool.
+
+`f87e989` replaces that case with the rule that took its place: a pool's
+blocks must hold the step. A three-token step laid out for 4-slot blocks, valid
+on its own, goes to a pool of one 2-slot block. The model must reject it and
+leave the block's written count at zero.
+
+- **Lifecycle.** `validation.model lifecycle` passed from a clean `f87e989`,
+  and the same source passed in device-sync mode. `0c438eb`'s driver fails at
+  the old case.
+- **Deliberate fault.** With the rule that a sequence must fit its table
+  removed from `StepBatch.validate`, the driver aborts in the new case: the
+  model's preflight reads a second table entry that the one-block sequence
+  does not have. The fault was reverted.
+- **Suite.** `uv run --locked llm-mojo validate` passed in 33 minutes, the
+  first full run since the Metal toolchain was downloaded again; `metal`
+  reports the same version, 32023.883.
+
+2c's gate now includes the lifecycle check, so 2e runs it again with 2c's
+other gates, and 2d's measured commit must pass it first.
 
 ### 2c on `1c88501`, 2026-09-29
 
