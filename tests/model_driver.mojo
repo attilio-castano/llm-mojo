@@ -47,11 +47,12 @@ def lifecycle(path: String) raises:
         with assert_raises():
             model.forward(ctx,StepBatch.sequence([1],3,[0],4),kv,one)
         kv.written[0] = 3
-        # The pool must match the model's geometry; only configuration 26 steps several sequences.
-        var mismatched = KVPool(ctx,1,8,model.kv_geometry())
+        # A pool's blocks must hold the step and its geometry must match the model's;
+        # only configuration 26 steps several sequences.
+        var small = KVPool(ctx,1,2,model.kv_geometry())
         with assert_raises():
-            model.forward(ctx,StepBatch.sequence([1],0,[0],8),mismatched,baseline_plan(1,1))
-        assert_equal(mismatched.length(0),0)
+            model.forward(ctx,StepBatch.sequence(ids,0,[0],4),small,configured_plan(configuration,3,3))
+        assert_equal(small.length(0),0)
         var narrow = KVPool(ctx,1,4,KVGeometry(LAYERS,1,64))
         with assert_raises():
             model.forward(ctx,StepBatch.sequence([1],0,[0],4),narrow,baseline_plan(1,1))
