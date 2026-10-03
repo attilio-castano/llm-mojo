@@ -6,23 +6,28 @@ batch-size study (1c) pairs row tiles, the projection study (1d) pairs exact
 batched projection arrangements, the reordered study (1e) pairs arrangements
 with other summation orders, whose accuracy the accuracy mode records, and the
 addressing check (1f) pairs raw-pointer and vector loads with arrangement 5
-(docs/history/batched-decode-plan.md).
+(docs/history/batched-decode-plan.md). The paged KV study (2d,
+docs/paged-kv-plan.md) pairs KV layouts in the batch mode, its paged-prefill
+mode and the MODEL_PAGED_PROFILE build.
 Completed decode experiments (fusion, selection, buffer swap, composition,
 projection arrangement, scheduling and launch probes) are replay-only; their
 collectors exist through commit edb610a. See studies/model_generation/README.md.
 """
 from std.sys import argv, is_defined, get_defined_int, get_defined_string
 from std.time import sleep
+from std.math import ceildiv
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, DeviceGraph, DeviceGraphBuilder
 from layout import TileTensor, TensorLayout, row_major
 from std.gpu import global_idx
 from llm_mojo.kernels.linear import DECODE_ARRANGEMENTS, decode_arrangement_reordered, enqueue_linear_decode_rows_apple_gpu
-from llm_mojo.models.qwen2.model import QwenModel, save_bf16
+from llm_mojo.kernels.paged_kv import kv_row
+from llm_mojo.models.qwen2.model import HEAD_DIM, KV_HEADS, KV_WIDTH, LAYERS, QwenModel, save_bf16
 from llm_mojo.models.qwen2.plan import fast_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
 from llm_mojo.runtime.clock import now
 from llm_mojo.serving.batch import StepBatch
+from llm_mojo.serving.blocks import BlockManager
 from llm_mojo.serving.kv_pool import KVPool
 
 
@@ -375,6 +380,377 @@ def batch_profile[ARRANGEMENT: Int](prepared: String, tables: String, context: I
     sleep(0.25)
 
 
+# The paged KV study (2d). Layout 0, the control, holds each sequence in one block of
+# the whole context, slot-major; layouts 1-6 use blocks of 32, 64 and 128 slots, each
+# slot-major and then head-major. Every pool's table comes from a block manager whose
+# free list is a seeded permutation, so a sequence's blocks are scattered.
+comptime PAGED_LAYOUTS = 7
+comptime PAGED_SEED = 2026
+# Elements of one sequence's 4,096 slots in every layer, K and V: 48 MiB.
+comptime PAGED_SINGLE = 4096 * LAYERS * 2 * KV_WIDTH
+
+
+def paged_block_size(layout: Int) raises -> Int:
+    if layout == 0:
+        return 4096
+    if layout < 1 or layout >= PAGED_LAYOUTS:
+        raise Error("unknown paged KV layout")
+    return 32 << ((layout - 1) // 2)
+
+
+def paged_head_major(layout: Int) -> Bool:
+    return layout > 0 and (layout - 1) % 2 == 1
+
+
+def paged_arms(study: String) raises -> List[Int]:
+    """The arms' layouts: for paged, 0 against itself, then 1-6 against 0; for paged-confirm:L, 0 against L."""
+    if study == "paged":
+        return [0, 1, 2, 3, 4, 5, 6]
+    var parts = study.split(":")
+    if len(parts) == 2 and String(parts[0]) == "paged-confirm":
+        var layout = Int(String(parts[1]))
+        if layout >= 1 and layout < PAGED_LAYOUTS:
+            return [0, layout]
+    raise Error("unknown paged KV study")
+
+
+def paged_table(blocks: Int, size: Int, length: Int) raises -> List[Int]:
+    """The table of one sequence of `length` positions, alone in a pool of `blocks` blocks."""
+    var manager = BlockManager(blocks, size, 4096, PAGED_SEED)
+    var sequence = manager.add()
+    manager.reserve(sequence, length)
+    return manager.table(sequence)
+
+
+def paged_row(pool: KVPool, table: List[Int], layer: Int, kv: Int, position: Int, head: Int) -> Int:
+    var block = table[position // pool.block_size]
+    var slot = position % pool.block_size
+    if pool.head_major:
+        return kv_row[KV_HEADS, HEAD_DIM, True](block, layer, LAYERS, kv, slot, head, pool.block_size)
+    return kv_row[KV_HEADS, HEAD_DIM, False](block, layer, LAYERS, kv, slot, head, pool.block_size)
+
+
+def paged_rows(pool: KVPool, table: List[Int], length: Int) raises -> List[UInt16]:
+    """A sequence's K/V rows below `length` in position order: layer, K then V, position, head."""
+    var rows = List[UInt16](capacity=LAYERS*2*length*KV_WIDTH)
+    var storage = pool.storage.create_sub_buffer[DType.bfloat16](0,len(pool.storage))
+    with storage.map_to_host() as mapped:
+        for layer in range(LAYERS):
+            for kv in range(2):
+                for position in range(length):
+                    for head in range(KV_HEADS):
+                        var row = paged_row(pool,table,layer,kv,position,head)
+                        for d in range(HEAD_DIM):
+                            rows.append(bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=row+d]))
+    return rows^
+
+
+def paged_singles(ctx: DeviceContext, mut model: QwenModel, history: List[Int], arms: List[Int],
+                  length: Int) raises -> DeviceBuffer[DType.bfloat16]:
+    """Each arm's layout holding `length` positions of the frozen history, one 48 MiB region per layout.
+
+    The history is prefilled in Fast chunks once per layout, through a scratch
+    pool of one sequence, and its K/V rows must equal layout 0's byte for byte.
+    """
+    var singles = ctx.enqueue_create_buffer[DType.bfloat16](PAGED_LAYOUTS*PAGED_SINGLE)
+    var scratch = KVPool(ctx,1,4096,model.kv_geometry())
+    var reference = List[UInt16]()
+    for layout in range(PAGED_LAYOUTS):
+        var used = layout == 0
+        for arm in arms:
+            used = used or arm == layout
+        if not used:
+            continue
+        var size = paged_block_size(layout)
+        scratch.relayout(ctx,size,paged_head_major(layout))
+        scratch.storage.enqueue_fill(0)
+        var table = paged_table(scratch.blocks,size,4096)
+        var offset = 0
+        while offset < length:
+            var count = min(256,length-offset)
+            var chunk = List[Int](capacity=count)
+            for i in range(count):
+                chunk.append(history[offset+i])
+            model.forward(ctx,StepBatch.sequence(chunk,offset,table,size),scratch,fast_plan(count,offset+count,ctx.name()))
+            offset += count
+        ctx.synchronize()
+        var rows = paged_rows(scratch,table,length)
+        if layout == 0:
+            reference = rows^
+        else:
+            for i in range(len(reference)):
+                if rows[i] != reference[i]:
+                    raise Error("a paged layout's history differs from one block per sequence")
+        ctx.enqueue_copy(dst_buf=singles.create_sub_buffer[DType.bfloat16](layout*PAGED_SINGLE,PAGED_SINGLE),
+                         src_buf=scratch.storage)
+    ctx.synchronize()
+    return singles^
+
+
+def paged_rebuild(ctx: DeviceContext, mut kv: KVPool, singles: DeviceBuffer[DType.bfloat16], layout: Int,
+                  contexts: List[Int], sequences: Int) raises -> BlockManager:
+    """Before an arm, outside timing: hold the working pool in `layout`, let a seeded manager
+    allocate each sequence's blocks for its cached rows and the step's row, and copy the
+    cached blocks from the layout's history."""
+    var size = paged_block_size(layout)
+    kv.relayout(ctx,size,paged_head_major(layout))
+    var manager = BlockManager(kv.blocks,size,4096,PAGED_SEED)
+    var single = paged_table(4096//size,size,4096)
+    var block = len(kv.storage)//kv.blocks
+    for s in range(sequences):
+        var sequence = manager.add()
+        manager.reserve(sequence,contexts[s]+1)
+        var table = manager.table(sequence)
+        for j in range(ceildiv(contexts[s],size)):
+            ctx.enqueue_copy(dst_buf=kv.storage.create_sub_buffer[DType.bfloat16](table[j]*block,block),
+                             src_buf=singles.create_sub_buffer[DType.bfloat16](layout*PAGED_SINGLE+single[j]*block,block))
+            kv.written[table[j]] = min(size,contexts[s]-j*size)
+        manager.commit(sequence,contexts[s])
+    ctx.synchronize()
+    manager.check_pool(kv)
+    return manager^
+
+
+def paged_rewind(mut model: QwenModel, mut kv: KVPool, manager: BlockManager, contexts: List[Int],
+                 sequences: Int) raises:
+    # Earlier readback completed every step. Only the step's block is rewound.
+    model.submitted_rows = 0
+    for s in range(sequences):
+        var table = manager.table(s)
+        kv.written[table[contexts[s]//kv.block_size]] = contexts[s]%kv.block_size
+
+
+def paged_step(mut model: QwenModel, mut kv: KVPool, ctx: DeviceContext, manager: BlockManager,
+               tokens: List[Int], contexts: List[Int], sequences: Int) raises -> List[Int]:
+    """One decode token per sequence, as batch_step, with each table taken from the block manager."""
+    var tables = List[List[Int]](capacity=sequences)
+    var width = 0
+    for s in range(sequences):
+        tables.append(manager.table(s))
+        width = max(width,len(tables[s]))
+    var ids = List[Int](capacity=sequences)
+    var positions = List[Int](capacity=sequences)
+    var starts = List[Int](capacity=sequences+1)
+    var seq_lens = List[Int](capacity=sequences)
+    var blocks = List[Int](capacity=sequences*width)
+    var slots = List[Int](capacity=sequences)
+    var rows = List[Int](capacity=sequences)
+    var longest = 0
+    for s in range(sequences):
+        ids.append(tokens[s])
+        positions.append(contexts[s])
+        starts.append(s)
+        seq_lens.append(contexts[s]+1)
+        for b in range(width):
+            blocks.append(tables[s][b] if b < len(tables[s]) else 0)
+        slots.append(tables[s][contexts[s]//kv.block_size]*kv.block_size+contexts[s]%kv.block_size)
+        rows.append(s)
+        longest = max(longest,contexts[s]+1)
+    starts.append(sequences)
+    var batch = StepBatch(ids^,positions^,starts^,sequences,seq_lens^,width,blocks^,slots^,rows^)
+    model.forward(ctx,batch,kv,fast_plan(sequences,longest,ctx.name(),sequences))
+    return model.greedy_tokens(ctx)
+
+
+def paged_bench(prepared: String, tables: String, context: Int, first: Int, study: String) raises:
+    """The batch mode across KV layouts: per batch size, layout 0 against itself, then each candidate
+    against 0. The working pool, the 3 GiB of 64 full contexts, is rebuilt before every arm."""
+    var arms = paged_arms(study)
+    var ctx = DeviceContext()
+    if ctx.api() != "metal" or ctx.name() != "Apple M4 Pro":
+        raise Error("study requires Apple M4 Pro / Metal")
+    var history = frozen_history(tables)
+    var contexts = batch_contexts(context)
+    var sizes: List[Int] = [1, 2, 4, 8, 16, 32, 64]
+    if context == 0:
+        sizes = [BATCH_MIXED]
+    var longest = 0
+    for c in contexts:
+        longest = max(longest,c)
+    if len(history) < longest+BATCH_POOL+1:
+        raise Error("insufficient frozen token history")
+    var tokens = List[Int](capacity=BATCH_POOL)
+    for s in range(BATCH_POOL):
+        tokens.append(history[contexts[s]+s])
+    var model = QwenModel(ctx,prepared,4096,256,BATCH_POOL)
+    var singles = paged_singles(ctx,model,history,arms,longest)
+    var kv = KVPool(ctx,BATCH_POOL,4096,model.kv_geometry())
+    print("device:",ctx.name())
+    print("api:",ctx.api())
+    print("context:",context,"pool slots:",BATCH_POOL*4096)
+    print("study:",study)
+    print("history rows equal to layout 0:",longest)
+    var records = String()
+    for index in range(len(sizes)):
+        var sequences = sizes[len(sizes)-1-index] if first == 1 else sizes[index]
+        # Each layout's untimed step must select layout 0's tokens.
+        var expected = List[List[Int]]()
+        for position in range(len(arms)):
+            var manager = paged_rebuild(ctx,kv,singles,arms[position],contexts,sequences)
+            paged_rewind(model,kv,manager,contexts,sequences)
+            var reference = paged_step(model,kv,ctx,manager,tokens,contexts,sequences)
+            batch_check(model,reference,reference,sequences)
+            var differing = 0
+            if position > 0:
+                for s in range(sequences):
+                    if reference[s] != expected[0][s]:
+                        differing += 1
+            if differing > 0:
+                raise Error("a paged layout changed a sequence's token")
+            print("tokens:",sequences,arms[position],differing)
+            expected.append(reference^)
+        print("sequences:",sequences,"first token:",expected[0][0],"last token:",expected[0][sequences-1])
+        for position in range(len(arms)):
+            var comparison = len(arms)-1-position if first == 1 else position
+            for arm_index in range(2):
+                var arm = (first+arm_index)%2
+                var layout = arms[comparison] if arm == 1 else arms[0]
+                var manager = paged_rebuild(ctx,kv,singles,layout,contexts,sequences)
+                for sample in range(20):
+                    paged_rewind(model,kv,manager,contexts,sequences)
+                    var start = now()
+                    var selected = paged_step(model,kv,ctx,manager,tokens,contexts,sequences)
+                    var elapsed = now()-start
+                    batch_check(model,selected,expected[0],sequences)
+                    if sample >= 10:
+                        records += ("BATCH "+String(sequences)+" "+String(comparison)+" "+String(arm)+" "
+                                    +String(sample-10)+" "+String(elapsed)+"\n")
+    print(records,end="")
+    print("BATCH_COMPLETE")
+
+
+def paged_prefill_workloads() -> List[Int]:
+    """2d's prefill chunks as rows, total pairs: the runtime study's eleven cells, then
+    256-row chunks after 256 and 2,816 cached tokens."""
+    return [16, 1024, 16, 4096, 15, 256, 17, 256, 64, 1024, 64, 4096, 256, 1024, 256, 4096,
+            65, 4096, 255, 4096, 16, 256, 256, 512, 256, 3072]
+
+
+def paged_restore(ctx: DeviceContext, mut kv: KVPool, singles: DeviceBuffer[DType.bfloat16], layout: Int,
+                  length: Int) raises -> List[Int]:
+    """Before an arm, outside timing: the one-sequence pool in `layout`, a copy of the layout's
+    history with `length` positions written. Returns its table."""
+    var size = paged_block_size(layout)
+    kv.relayout(ctx,size,paged_head_major(layout))
+    ctx.enqueue_copy(dst_buf=kv.storage,src_buf=singles.create_sub_buffer[DType.bfloat16](layout*PAGED_SINGLE,PAGED_SINGLE))
+    ctx.synchronize()
+    var table = paged_table(kv.blocks,size,4096)
+    for j in range(len(table)):
+        kv.written[table[j]] = min(max(length-j*size,0),size)
+    return table^
+
+
+def paged_prefill(prepared: String, tables: String, first: Int, study: String) raises:
+    """2d's prefill workloads, one process per block: for each chunk, layout 0 against itself, then
+    each candidate against 0, timed from the token upload to device synchronization."""
+    var arms = paged_arms(study)
+    var ctx = DeviceContext()
+    if ctx.api() != "metal" or ctx.name() != "Apple M4 Pro":
+        raise Error("study requires Apple M4 Pro / Metal")
+    var history = frozen_history(tables)
+    var workloads = paged_prefill_workloads()
+    var count = len(workloads)//2
+    var longest = 0
+    for w in range(count):
+        longest = max(longest,workloads[2*w+1]-workloads[2*w])
+    if len(history) < 4096:
+        raise Error("insufficient frozen token history")
+    var model = QwenModel(ctx,prepared,4096,256)
+    var singles = paged_singles(ctx,model,history,arms,longest)
+    var kv = KVPool(ctx,1,4096,model.kv_geometry())
+    print("device:",ctx.name())
+    print("api:",ctx.api())
+    print("study:",study)
+    print("history rows equal to layout 0:",longest)
+    var records = String()
+    for index in range(count):
+        var w = count-1-index if first == 1 else index
+        var rows = workloads[2*w]
+        var total = workloads[2*w+1]
+        var prefix = total-rows
+        var ids = List[Int](capacity=rows)
+        for i in range(rows):
+            ids.append(history[prefix+i])
+        var plan = fast_plan(rows,total,ctx.name())
+        print("prefill workload:",w,rows,total,plan.configuration)
+        # Each layout's untimed chunk must select layout 0's token.
+        var expected = List[Int]()
+        for position in range(len(arms)):
+            var table = paged_restore(ctx,kv,singles,arms[position],prefix)
+            model.forward(ctx,StepBatch.sequence(ids,prefix,table,kv.block_size),kv,plan)
+            var token = model.greedy(ctx)
+            var differing = 1 if position > 0 and token != expected[0] else 0
+            if differing > 0:
+                raise Error("a paged layout changed a prefill token")
+            print("prefill tokens:",w,arms[position],differing)
+            expected.append(token)
+        for position in range(len(arms)):
+            var comparison = len(arms)-1-position if first == 1 else position
+            for arm_index in range(2):
+                var arm = (first+arm_index)%2
+                var layout = arms[comparison] if arm == 1 else arms[0]
+                var table = paged_restore(ctx,kv,singles,layout,prefix)
+                for sample in range(20):
+                    # Earlier readback completed every forward; only the chunk's positions are rewound.
+                    kv.truncate_table(table,prefix)
+                    model.submitted_rows = prefix*LAYERS
+                    var batch = StepBatch.sequence(ids,prefix,table,kv.block_size)
+                    var start = now()
+                    model.forward(ctx,batch,kv,plan)
+                    ctx.synchronize()
+                    var elapsed = now()-start
+                    if (model.greedy(ctx) != expected[0] or model.submitted_rows != total*LAYERS
+                            or model.last_route.configuration != plan.configuration):
+                        raise Error("a prefill sample changed its token, accounting or route")
+                    if sample >= 10:
+                        records += ("PREFILL "+String(w)+" "+String(comparison)+" "+String(arm)+" "
+                                    +String(sample-10)+" "+String(elapsed)+"\n")
+    print(records,end="")
+    print("PREFILL_COMPLETE")
+
+
+def paged_profile(prepared: String, tables: String, context: Int, sequences: Int, layout: Int,
+                  workload: String) raises:
+    """Trace target for one layout: ten warmups and eight plain batched steps inside the profile region."""
+    var ctx = DeviceContext()
+    if ctx.api() != "metal" or ctx.name() != "Apple M4 Pro":
+        raise Error("study requires Apple M4 Pro / Metal")
+    var history = frozen_history(tables)
+    var contexts = batch_contexts(context)
+    var tokens = List[Int](capacity=BATCH_POOL)
+    for s in range(BATCH_POOL):
+        tokens.append(history[contexts[s]+s])
+    var model = QwenModel(ctx,prepared,4096,256,BATCH_POOL)
+    var arms: List[Int] = [0, layout]
+    var singles = paged_singles(ctx,model,history,arms,context)
+    var kv = KVPool(ctx,BATCH_POOL,4096,model.kv_geometry())
+    var control = paged_rebuild(ctx,kv,singles,0,contexts,sequences)
+    paged_rewind(model,kv,control,contexts,sequences)
+    var expected = paged_step(model,kv,ctx,control,tokens,contexts,sequences)
+    var manager = paged_rebuild(ctx,kv,singles,layout,contexts,sequences)
+    for _ in range(10):
+        paged_rewind(model,kv,manager,contexts,sequences)
+        batch_check(model,paged_step(model,kv,ctx,manager,tokens,contexts,sequences),expected,sequences)
+    print("device:",ctx.name())
+    print("api:",ctx.api())
+    print("correctness: passed")
+    print("profile implementation:","QwenModel.forward+greedy_tokens")
+    print("rows:",sequences)
+    print("hidden: 896")
+    print("key value rows:",context+1)
+    print("profile workload:",workload)
+    print("profile dispatches per iteration:",245)
+    print("warmup iterations: 10")
+    print("profile iterations: 8")
+    print("post-profile idle milliseconds: 250")
+    print("PROFILE_REGION_BEGIN")
+    for _ in range(8):
+        paged_rewind(model,kv,manager,contexts,sequences)
+        batch_check(model,paged_step(model,kv,ctx,manager,tokens,contexts,sequences),expected,sequences)
+    print("PROFILE_REGION_END")
+    sleep(0.25)
+
+
 def _batch_advance[LT: TensorLayout](x: TileTensor[DType.int32, LT, MutAnyOrigin]):
     comptime assert x.flat_rank == 1
     if global_idx.x == 0:
@@ -421,6 +797,11 @@ def main() raises:
             String(get_defined_string["MODEL_TABLES"]()),get_defined_int["MODEL_BATCH_PROFILE"](),
             get_defined_int["MODEL_BATCH_SEQUENCES"](),String(get_defined_string["MODEL_BATCH_WORKLOAD"]()))
         return
+    comptime if is_defined["MODEL_PAGED_PROFILE"]():
+        paged_profile(String(get_defined_string["MODEL_PREPARED"]()),String(get_defined_string["MODEL_TABLES"]()),
+            get_defined_int["MODEL_PAGED_PROFILE"](),get_defined_int["MODEL_BATCH_SEQUENCES"](),
+            get_defined_int["MODEL_BATCH_LAYOUT"](),String(get_defined_string["MODEL_BATCH_WORKLOAD"]()))
+        return
     var cli = argv()
     if len(cli) == 2 and String(cli[1]) == "accuracy":
         accuracy_census()
@@ -430,7 +811,16 @@ def main() raises:
         var first = Int(String(cli[5]))
         if (context != 0 and context != 64 and context != 1024 and context != 3968) or first < 0 or first > 1:
             raise Error("invalid batch-size workload")
-        batch_bench(String(cli[2]),String(cli[3]),context,first,String(cli[6]))
+        if String(cli[6]).startswith("paged"):
+            paged_bench(String(cli[2]),String(cli[3]),context,first,String(cli[6]))
+        else:
+            batch_bench(String(cli[2]),String(cli[3]),context,first,String(cli[6]))
+        return
+    if len(cli) == 6 and String(cli[1]) == "paged-prefill":
+        var first = Int(String(cli[4]))
+        if first < 0 or first > 1:
+            raise Error("invalid paged prefill order")
+        paged_prefill(String(cli[2]),String(cli[3]),first,String(cli[5]))
         return
     var args = List[String]()
     comptime if is_defined["MODEL_PROFILE_PREFIX"]():

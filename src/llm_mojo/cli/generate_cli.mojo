@@ -1,5 +1,6 @@
 """Native plain-text greedy generation with optional diagnostic events."""
-from std.sys import argv
+from std.math import ceildiv
+from std.sys import argv, get_defined_int
 from llm_mojo.runtime.clock import now
 from llm_mojo.models.qwen2.tokens import is_stop
 from max.gpu.host import DeviceContext
@@ -10,8 +11,16 @@ from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.blocks import BlockManager
 from llm_mojo.serving.kv_pool import KVPool
 
+# The sequence lives in one block of the whole context unless a build sets
+# -D KV_BLOCK_SIZE to a multiple of 32, and -D KV_HEAD_MAJOR=1 orders each block
+# by head; the paged KV study's single-sequence check compares such builds.
+comptime KV_BLOCK_SIZE = get_defined_int["KV_BLOCK_SIZE", default=MAX_CONTEXT]()
+comptime KV_HEAD_MAJOR = get_defined_int["KV_HEAD_MAJOR", default=0]() == 1
+
 
 def main() raises:
+    comptime assert KV_BLOCK_SIZE == MAX_CONTEXT or (KV_BLOCK_SIZE > 0 and KV_BLOCK_SIZE % 32 == 0), (
+        "KV_BLOCK_SIZE must be a multiple of 32")
     var started = now()
     var args = argv()
     if len(args) != 7 and len(args) != 8:
@@ -44,8 +53,9 @@ def main() raises:
     var max_rows = min(chunk_rows,prompt_length) if chunk_rows > 0 else prompt_length
     var ctx = DeviceContext()
     var model = QwenModel(ctx,args[1],MAX_CONTEXT,max_rows)
-    var kv = KVPool(ctx,1,MAX_CONTEXT,model.kv_geometry())
-    var blocks = BlockManager(1,MAX_CONTEXT,MAX_CONTEXT)
+    var count = ceildiv(MAX_CONTEXT,KV_BLOCK_SIZE)
+    var kv = KVPool(ctx,count,KV_BLOCK_SIZE,model.kv_geometry(),KV_HEAD_MAJOR)
+    var blocks = BlockManager(count,KV_BLOCK_SIZE,MAX_CONTEXT)
     var sequence = blocks.add()
     if diagnostics:
         events += "device\t0\t"+ctx.name()+"/"+ctx.api()+"\t0\n"
@@ -60,7 +70,7 @@ def main() raises:
             ids.append(history[offset+i])
         var plan = execution_plan(mode,rows,offset+rows,ctx.name())
         blocks.reserve(sequence,offset+rows)
-        model.forward(ctx,StepBatch.sequence(ids,offset,blocks.table(sequence),MAX_CONTEXT),kv,plan)
+        model.forward(ctx,StepBatch.sequence(ids,offset,blocks.table(sequence),KV_BLOCK_SIZE),kv,plan)
         blocks.commit(sequence,offset+rows)
         if diagnostics:
             events += "configuration\t"+String(offset)+"\t"+String(plan.configuration)+"\t0\n"
@@ -89,7 +99,7 @@ def main() raises:
             var decode_started = now()
             var cached = blocks.length(sequence)
             blocks.reserve(sequence,cached+1)
-            model.forward(ctx,StepBatch.sequence(ids,cached,blocks.table(sequence),MAX_CONTEXT),kv,
+            model.forward(ctx,StepBatch.sequence(ids,cached,blocks.table(sequence),KV_BLOCK_SIZE),kv,
                           execution_plan(mode,1,cached+1,ctx.name()))
             blocks.commit(sequence,cached+1)
             if diagnostics:

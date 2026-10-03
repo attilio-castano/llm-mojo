@@ -232,7 +232,12 @@ launches and leaves the unfused scratch untouched.
 
 `build --decode-projection N` compiles the driver with another decode
 arrangement; without it, the build uses the source default, arrangement 8. The
-receipt records the arrangement, and the driver prints the one it runs.
+receipt records the arrangement, and the driver prints the one it runs. With
+`--generation`, `--block-size N` builds a generator that holds its sequence in
+blocks of N slots, a multiple of 32, and `--head-major` orders each block by
+head; without them the sequence lives in one block of the whole context.
+`--commit REV` compiles that commit's sources from its git archive with this
+checkout's toolchain, which must be the commit's `uv.lock`.
 `decode-comparison` runs decode parity's schedule on an exact build and a
 reordered build (arrangements 8–10), such as the default. It records each
 call's logit, final norm, layer output and K/V differences, and whether the

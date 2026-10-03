@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 
 import numpy as np
 
@@ -26,27 +27,53 @@ def environment():
     return {k:v for k,v in os.environ.items() if k!='MODULAR_DEBUG'}
 
 
-def build(binary, generation=False, projection=None):
-    """Compile the model driver or generator; projection selects the decode arrangement (-D DECODE_PROJECTION)."""
+def build(binary, generation=False, projection=None, block_size=None, head_major=False, commit=None):
+    """Compile the model driver or generator; projection selects the decode arrangement (-D DECODE_PROJECTION).
+
+    A generator may hold its sequence in blocks of block_size slots, head-major if head_major
+    (-D KV_BLOCK_SIZE, -D KV_HEAD_MAJOR). commit compiles that commit's sources from its git
+    archive with this checkout's toolchain, which needs the commit's uv.lock.
+    """
     binary=Path(binary).resolve()
     receipt=Path(str(binary)+'.provenance.json')
     if binary.exists() or receipt.exists():
         raise ValueError('refusing to overwrite a model build')
-    source=source_identity()
-    if source['repository']['dirty']:
-        raise ValueError('model numerical build requires clean source')
-    binary.parent.mkdir(parents=True,exist_ok=True)
+    if (block_size is not None or head_major) and not generation:
+        raise ValueError('a KV layout is a generator build option')
+    if head_major and block_size is None:
+        raise ValueError('head-major order needs a block size')
     entry='src/llm_mojo/cli/generate_cli.mojo' if generation else 'tests/model_driver.mojo'
     command=[environment_tool('mojo'),'build','-I','src','-I','tests']
     if projection is not None:
         command+=['-D',f'DECODE_PROJECTION={int(projection)}']
+    if block_size is not None:
+        command+=['-D',f'KV_BLOCK_SIZE={int(block_size)}']
+    if head_major:
+        command+=['-D','KV_HEAD_MAJOR=1']
     command+=[entry,'-o',str(binary)]
-    subprocess.run(command,cwd=repository_root(),env=environment(),check=True)
-    if source_identity()!=source:
-        raise ValueError('source changed during model compilation')
-    # The arrangement the build decodes with: the define, or the source default it compiled.
+    binary.parent.mkdir(parents=True,exist_ok=True)
+    with tempfile.TemporaryDirectory() as temporary:
+        root=repository_root()
+        if commit is None:
+            source=source_identity()
+            if source['repository']['dirty']:
+                raise ValueError('model numerical build requires clean source')
+        else:
+            full=subprocess.run(['git','rev-parse','--verify',f'{commit}^{{commit}}'],cwd=root,check=True,
+                                capture_output=True,text=True).stdout.strip()
+            archive=subprocess.run(['git','archive',full],cwd=root,check=True,capture_output=True).stdout
+            root=Path(temporary)
+            subprocess.run(['tar','-x','-C',str(root)],input=archive,check=True)
+            if sha(root/'uv.lock')!=sha(repository_root()/'uv.lock'):
+                raise ValueError('the commit locks another toolchain')
+            source=source_identity(root,dict(commit=full,branch=None,dirty=False,archive=True))
+        subprocess.run(command,cwd=root,env=environment(),check=True)
+        if commit is None and source_identity()!=source:
+            raise ValueError('source changed during model compilation')
+        # The arrangement the build decodes with: the define, or the source default it compiled.
+        decode=int(projection) if projection is not None else source_decode_projection(root/'src/llm_mojo/models/qwen2/plan.mojo')
     write(receipt,dict(kind='model-development-build',source=source,command=command,binary_sha256=sha(binary),
-                       decode_projection=int(projection) if projection is not None else source_decode_projection()))
+                       decode_projection=decode,kv_block_size=block_size,kv_head_major=head_major))
 
 
 def source_decode_projection(plan=None):
@@ -920,6 +947,9 @@ def main():
     b=sub.add_parser('build');b.add_argument('--binary',required=True,type=Path)
     b.add_argument('--generation',action='store_true')
     b.add_argument('--decode-projection',type=int,help='decode projection arrangement (default: the source default)')
+    b.add_argument('--block-size',type=int,help='generator KV block size (default: one block of the context)')
+    b.add_argument('--head-major',action='store_true',help='generator KV blocks in head-major order')
+    b.add_argument('--commit',help='build this commit from its git archive')
     g=sub.add_parser('generate');g.add_argument('--binary',required=True,type=Path)
     g.add_argument('--output',required=True,type=Path);g.add_argument('--prepared',type=Path)
     g.add_argument('--policy',default='fast',choices=GENERATION_MODES)
@@ -954,7 +984,8 @@ def main():
     o.add_argument('--prepared',type=Path)
     args=parser.parse_args()
     if args.command=='specification':runtime_specification(args.output,args.generations,args.mixed_only,args.decode_cases)
-    elif args.command=='build':build(args.binary,args.generation,args.decode_projection)
+    elif args.command=='build':build(args.binary,args.generation,args.decode_projection,args.block_size,
+                                       args.head_major,args.commit)
     elif args.command=='generate':generation_study(args.binary,args.output,args.prepared,args.policy)
     elif args.command=='lifecycle':lifecycle_study(args.binary,args.output,args.prepared)
     elif args.command=='batch':batch_study(args.binary,args.output,args.prepared,args.steps,args.block_size,
