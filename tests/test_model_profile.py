@@ -99,6 +99,12 @@ class ModelProfileTests(unittest.TestCase):
                 batch_comparisons(invalid)
         prompt = contract.single_sequence_prompt()
         self.assertEqual(hashlib.sha256(prompt.encode()).hexdigest(), contract.SINGLE_SEQUENCE['prompt']['sha256'])
+        # The rerun shares the matrix, procedure and rule, and keeps its own archive.
+        rerun = batch_study('paged-loop')
+        self.assertEqual((rerun['stem'], rerun['argument'], rerun['traces']),
+                         ('paged-kv-loop', 'paged', batch_study('paged')['traces']))
+        changed = {k for k in rerun['declaration'] if rerun['declaration'][k] != contract.PAGED_DECLARATION.get(k)}
+        self.assertEqual(changed, {'attention', 'hypothesis'})
 
     def test_paged_prefill_records_need_declared_chunks_equal_tokens_and_a_full_census(self):
         from llm_mojo.benchmarks.model_profile import parse_paged_prefill

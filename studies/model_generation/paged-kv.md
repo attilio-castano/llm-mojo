@@ -1,5 +1,11 @@
 # Why small KV blocks slow decode attention
 
+> **Status update, 2026-10-04.** Decode attention now walks each SIMD group's
+> keys in one loop, with every block's offset staged in threadgroup memory
+> ([2d follow-up](../../docs/paged-kv-plan.md#2d-follow-up-decode-attention-in-one-loop)).
+> The kernel described below is the one this study measured; a rerun of the
+> same matrix measures the new one.
+
 Holding a sequence's K and V in blocks of 32, 64 or 128 slots costs prefill
 almost nothing and decode a great deal. At 3,968 cached tokens, a step of 64
 sequences takes **2.81 times** as long in 32-slot blocks as in one block of the

@@ -346,6 +346,15 @@ PAGED_DECLARATION = dict(
     hypothesis='recorded before measurement in docs/paged-kv-plan.md')
 
 
+# 2d's rerun after its follow-up: the same matrix, procedure and rule, with decode attention
+# walking each SIMD group's keys in one loop from block offsets staged in threadgroup memory.
+PAGED_LOOP_DECLARATION = dict(
+    PAGED_DECLARATION,
+    attention='each SIMD group walks its keys t = g (mod 32) in one loop; the threadgroup first stages the K '
+              'offset of every block the row sees in threadgroup memory, one table read per block',
+    hypothesis='recorded before the rerun in docs/paged-kv-plan.md')
+
+
 def paged_specification(context, sequences, layout):
     if (context, sequences, layout) not in PAGED_TRACES:
         raise ValueError('undeclared paged KV trace workload')

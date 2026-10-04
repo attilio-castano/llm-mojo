@@ -1418,6 +1418,9 @@ ADDRESSING_BATCH_STEM = 'batch-addressing'
 ADDRESSING_BATCH_KIND = 'qwen-batch-addressing-v1'
 PAGED_STEM = 'paged-kv'
 PAGED_KIND = 'qwen-paged-kv-v1'
+PAGED_LOOP_STEM = 'paged-kv-loop'
+PAGED_LOOP_KIND = 'qwen-paged-kv-loop-v1'
+PAGED_STUDIES = ('paged', 'paged-loop')
 
 
 def batch_study(name):
@@ -1445,11 +1448,15 @@ def batch_study(name):
                   for c, b, a in contract.BATCH_ADDRESSING_TRACES]
         return dict(stem=ADDRESSING_BATCH_STEM, kind=ADDRESSING_BATCH_KIND,
                     declaration=contract.BATCH_ADDRESSING_DECLARATION, argument='addressing', traces=traces)
-    if name == 'paged':
+    if name in PAGED_STUDIES:
+        # 2d and its rerun share the benchmark's paged study; the build's kernel differs.
         traces = [(c, b, layout, f'paged-profile-{c}-{b}-l{layout}', dict(layout=layout))
                   for c, b, layout in contract.PAGED_TRACES]
-        return dict(stem=PAGED_STEM, kind=PAGED_KIND, declaration=contract.PAGED_DECLARATION, argument='paged',
-                    traces=traces)
+        if name == 'paged':
+            return dict(stem=PAGED_STEM, kind=PAGED_KIND, declaration=contract.PAGED_DECLARATION, argument='paged',
+                        traces=traces)
+        return dict(stem=PAGED_LOOP_STEM, kind=PAGED_LOOP_KIND, declaration=contract.PAGED_LOOP_DECLARATION,
+                    argument='paged', traces=traces)
     raise ValueError('unknown batch study')
 
 
@@ -1621,7 +1628,7 @@ def batch_collect(directory, output, study='size', argument=None):
     if argument == 'reordered':
         extra['accuracy'] = parse_accuracy(execute([directory/'model', 'accuracy'], output/'accuracy.log'))
     # 2d adds one prefill process per block, after the decode contexts or, in reversed blocks, before them.
-    paged = study == 'paged'
+    paged = study in PAGED_STUDIES
     if paged:
         extra.update(prefill_samples=[], prefill_token_differences=[])
     for block in range(4):
@@ -1650,7 +1657,7 @@ def batch_collect(directory, output, study='size', argument=None):
 
 def screen_decision(study, timing):
     """The frozen selection of 1d (study projections), 1e (study reordered) or 2d (study paged) from its screen."""
-    if study == 'paged':
+    if study in PAGED_STUDIES:
         return paged_decision(paged_summarize(timing, contract.PAGED_CANDIDATES))
     if study == 'projections':
         return projection_decision(projection_summarize(timing['samples'], contract.BATCH_PROJECTION_ARRANGEMENTS))
@@ -1666,8 +1673,9 @@ def batch_confirm(directory, screen, output, study='projections'):
     decision = screen_decision(study, timing)
     if decision['selected'] is None:
         raise ValueError('no arrangement qualified, so there is nothing to confirm')
-    print(f"Confirming {'layout' if study == 'paged' else 'arrangement'} {decision['selected']}", flush=True)
-    prefix = dict(projections='confirm:', reordered='reordered-confirm:', paged='paged-confirm:')[study]
+    print(f"Confirming {'layout' if study in PAGED_STUDIES else 'arrangement'} {decision['selected']}", flush=True)
+    prefix = dict(projections='confirm:', reordered='reordered-confirm:', paged='paged-confirm:',
+                  **{'paged-loop': 'paged-confirm:'})[study]
     batch_collect(directory, output, study, f"{prefix}{decision['selected']}")
 
 
@@ -1844,7 +1852,8 @@ def batch_archive(timings, traces, output, study='size', confirmation=None, diag
     (output/(spec['stem']+'.json.gz')).write_bytes(packed)
     write(output/(spec['stem']+'.json'), dict(kind=spec['kind'], sha256=hashlib.sha256(packed).hexdigest(),
                                              uncompressed_sha256=hashlib.sha256(raw).hexdigest(), bytes=len(packed)))
-    dict(size=batch_replay, projections=projection_replay, reordered=reordered_replay, paged=paged_replay)[study](output)
+    dict(size=batch_replay, projections=projection_replay, reordered=reordered_replay, paged=paged_replay,
+         **{'paged-loop': lambda directory: paged_replay(directory, 'paged-loop')})[study](output)
 
 
 def batch_capture_totals(capture, build_record):
@@ -2405,20 +2414,21 @@ def paged_census(timing, layouts):
         raise ValueError('a paged layout changed a token')
 
 
-def paged_replay(directory):
-    """Verify 2d's archive and regenerate its summary: screen, decision, confirmation and traces."""
-    manifest = json.loads((directory/(PAGED_STEM+'.json')).read_text())
-    packed = (directory/(PAGED_STEM+'.json.gz')).read_bytes()
+def paged_replay(directory, study='paged'):
+    """Verify 2d's archive, or its rerun's, and regenerate its summary: screen, decision, confirmation and traces."""
+    spec = batch_study(study)
+    manifest = json.loads((directory/(spec['stem']+'.json')).read_text())
+    packed = (directory/(spec['stem']+'.json.gz')).read_bytes()
     raw = gzip.decompress(packed)
     if (hashlib.sha256(packed).hexdigest() != manifest['sha256']
             or hashlib.sha256(raw).hexdigest() != manifest['uncompressed_sha256']):
         raise ValueError('paged KV archive hash mismatch')
     record = json.loads(raw)
-    if record['kind'] != PAGED_KIND or manifest['kind'] != PAGED_KIND:
+    if record['kind'] != spec['kind'] or manifest['kind'] != spec['kind']:
         raise ValueError('not a paged KV archive')
     screen = record['timing']
     build_record = screen['build']
-    if build_record['declaration'] != contract.PAGED_DECLARATION or screen.get('argument') != 'paged':
+    if build_record['declaration'] != spec['declaration'] or screen.get('argument') != 'paged':
         raise ValueError('paged KV declaration changed')
     paged_census(screen, contract.PAGED_CANDIDATES)
     summary = paged_summarize(screen, contract.PAGED_CANDIDATES)
@@ -2457,7 +2467,7 @@ def paged_replay(directory):
         for stage, value in batch_capture_totals(capture, build_record).items():
             gpu.append(dict(context=capture['prefix'], sequences=capture['sequences'], layout=capture['layout'],
                             repeat=capture['repeat'], stage=stage, median_ms=value))
-    write(directory/(PAGED_STEM+'-summary.json'),
+    write(directory/(spec['stem']+'-summary.json'),
           dict(timing=summary, decision=decision, confirmation=confirmation, confirmed=confirmed, gpu=gpu))
     for r in summary['decode']:
         print(f"context {r['context']:4d} sequences {r['sequences']:2d}: {r['ms']:8.2f} ms/step; "
@@ -2644,13 +2654,14 @@ PAGED_COLORS = {32: '#2a78d6', 64: '#eb6834', 128: '#1baf7a'}
 PAGED_INK = dict(primary='#0b0b0b', secondary='#52514e', muted='#898781', band='#f0efec', axis='#c3c2b7')
 
 
-def paged_plot(directory):
-    """Regenerate 2d's figures exclusively from the checked archive."""
+def paged_plot(directory, study='paged'):
+    """Regenerate 2d's figures, or its rerun's, exclusively from the checked archive."""
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
-    paged_replay(directory)
-    summary = json.loads((directory/(PAGED_STEM+'-summary.json')).read_text())
+    paged_replay(directory, study)
+    stem = batch_study(study)['stem']
+    summary = json.loads((directory/(stem+'-summary.json')).read_text())
     timing = summary['timing']
     plt.rcParams.update({'font.family':'DejaVu Sans','font.size':10,'axes.spines.top':False,
                          'axes.spines.right':False,'figure.facecolor':'white','axes.facecolor':'white',
@@ -2726,7 +2737,7 @@ def paged_plot(directory):
                loc='outside lower center', ncol=4, fontsize=9, frameon=False)
     fig.suptitle('Paged KV layouts against one block per sequence · median of four paired block ratios; '
                  'whiskers show their range', fontsize=12)
-    fig.savefig(directory/(PAGED_STEM+'-ratios.png'), dpi=170)
+    fig.savefig(directory/(stem+'-ratios.png'), dpi=170)
     plt.close(fig)
     # Where translation would show: attention and the KV writes in the traces.
     gpu = {(r['layout'], r['stage'], r['repeat']): r['median_ms'] for r in summary['gpu']}
@@ -2775,7 +2786,7 @@ def paged_plot(directory):
     axes[1].legend(fontsize=8, frameon=False, loc='upper right')
     fig.legend(*axes[0].get_legend_handles_labels(), loc='outside lower center', ncol=4, fontsize=8, frameon=False)
     fig.suptitle('Traces of 64 sequences at 3,968 cached tokens, two repeats per layout', fontsize=12)
-    fig.savefig(directory/(PAGED_STEM+'-traces.png'), dpi=170)
+    fig.savefig(directory/(stem+'-traces.png'), dpi=170)
     plt.close(fig)
 
 
@@ -2895,9 +2906,11 @@ def main():
                                             'batch-size-replay','batch-size-plot','single-sequence',
                                             *RETIRED])
     parser.add_argument('--projections',action='store_true',help='Replay/plot the projection arrangement study')
-    parser.add_argument('--study', choices=['size','projections','reordered','addressing','paged'], default='size',
+    parser.add_argument('--study', choices=['size','projections','reordered','addressing','paged','paged-loop'],
+                        default='size',
                         help='batch-size-* study: 1c row tiles (size), 1d exact arrangements (projections), '
-                             '1e reordered arrangements (reordered), 1f addressing (addressing) or 2d KV layouts (paged)')
+                             '1e reordered arrangements (reordered), 1f addressing (addressing), 2d KV layouts (paged) '
+                             'or their rerun with decode attention in one loop (paged-loop)')
     parser.add_argument('--baseline', type=Path, help='single-sequence: the receipted baseline generator')
     parser.add_argument('--candidate', type=Path, help='single-sequence: the receipted candidate generator')
     parser.add_argument('--purpose', help='single-sequence: what the check decides')
@@ -2942,10 +2955,11 @@ def main():
             batch_archive(args.timings, args.traces, args.output, args.study, args.confirmation, args.diagnostics)
     elif args.command == 'batch-size-replay':
         dict(size=batch_replay, projections=projection_replay, reordered=reordered_replay,
-             addressing=addressing_replay, paged=paged_replay)[args.study](args.output)
+             addressing=addressing_replay, paged=paged_replay,
+             **{'paged-loop': lambda directory: paged_replay(directory, 'paged-loop')})[args.study](args.output)
     elif args.command == 'batch-size-plot':
         if args.study == 'size': batch_plot(args.output)
-        elif args.study == 'paged': paged_plot(args.output)
+        elif args.study in PAGED_STUDIES: paged_plot(args.output, args.study)
         else: projection_plot(args.output, args.study)
     elif args.command == 'single-sequence':
         if not (args.baseline and args.candidate and args.prepared and args.purpose):

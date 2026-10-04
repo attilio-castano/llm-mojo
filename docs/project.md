@@ -143,8 +143,8 @@ research questions, not prerequisites for calling the current milestone complete
    ([reordered projections](../studies/model_generation/batch-reordered.md)).
    Phase 2 added a paged KV cache, but its
    [translation-cost study](../studies/model_generation/paged-kv.md) kept one block
-   per sequence as the default: small blocks make decode attention pay for every
-   block a sequence spans.
+   per sequence as the default: small blocks made decode attention pay for every
+   block a sequence spans. A follow-up fixes that kernel and reruns the study.
 
 Sampling, quantization, longer contexts, tool-oriented templates and additional
 model families can follow when they answer a concrete need. They are not current

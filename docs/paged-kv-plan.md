@@ -26,10 +26,11 @@ Paging changes addresses, not arithmetic, so no step changes the numerical
 contract. The approval also moved
 [keys and events to phase 4](#keys-and-events-move-to-phase-4). 2a, 2b and 2c
 are complete and merged as `a84ad34` (#32). 2d is complete: no block size
-qualified, because small blocks make decode attention pay for every block a
-sequence spans ([study](../studies/model_generation/paged-kv.md)). 2e's
-adoption therefore does not run, one block per sequence stays the default, and
-phase 3 starts with that question open. See the
+qualified, because small blocks made decode attention pay for every block a
+sequence spans ([study](../studies/model_generation/paged-kv.md)). On
+2026-10-04 you asked to fix that kernel first; the
+[2d follow-up](#2d-follow-up-decode-attention-in-one-loop) does so and reruns
+2d's matrix. One block per sequence stays the default until then. See the
 [validation record](#validation-record).
 
 ## What paging must preserve
@@ -369,6 +370,53 @@ Frozen before measurement:
 - **Host: negligible.** At B = 64 and 3,968 cached tokens with 32-slot blocks,
   the manager fills 8,000 table entries per step and the upload grows to
   32 KiB, beside B = 64 steps of 47 ms or more.
+
+## 2d follow-up: decode attention in one loop
+
+2d found that small blocks make decode attention pay for every block a
+sequence spans ([study](../studies/model_generation/paged-kv.md)), and on
+2026-10-04 you asked to fix the kernel before anything else. `_paged_g32_kernel`
+walked each SIMD group's keys block by block and read a block's table entry
+before loading its keys, so with 32-slot blocks every key waited for its own
+table read. It now copies the K offset of every block a row sees into
+threadgroup memory first, one table read per block for the whole threadgroup,
+and walks each group's keys in one loop with a block counter, as it does in
+one block. Every group takes the same keys in the same order with the same
+arithmetic, so no result changes.
+
+### Gate
+
+- **Kernels.** 2a's tests and the batched decode tests pass bit for bit:
+  decode rows equal route 4, and paged prefill routes 6, 10 and 11, at block
+  sizes 32, 64 and 128 and one block of 4,096 slots, in both orders.
+- **Unchanged on the checkpoint.** Model drivers built from `ca58f15` and from
+  the fix produce byte-identical outputs and captures: Fast histories,
+  configuration 21 and explicit configurations, at one block and in 32-slot,
+  64-slot head-major and 128-slot blocks.
+- **Suite.** `uv run --locked llm-mojo validate`, the lifecycle check and the
+  batch validation in 64-slot blocks pass.
+
+### Rerun
+
+2d's matrix runs again unchanged, with the same layouts, procedure, decision
+rule and traces (`--study paged-loop`), and keeps its own archive beside 2d's.
+If a layout qualifies, it is confirmed, and the single-sequence check compares
+`6422f84`'s generator with one built in that layout. 2e then needs your
+decision.
+
+### Hypothesis, recorded before the rerun
+
+An informal development run, which is not evidence, put 32-slot steps of 64
+sequences at 3,968 cached tokens within 1% of one block.
+
+- **Decode: no resolvable cost at any block size.** A key now costs a
+  threadgroup-memory read and a counter step, and a block one table read shared
+  by the threadgroup.
+- **Prefill:** as in 2d, at most 1.5%, with the configuration-21 chunk now
+  among the others.
+- **Head-major: no resolvable difference.**
+- **Selection:** every layout qualifies, and 32-slot slot-major blocks are
+  selected and confirmed.
 
 ## 2e. Adoption
 
