@@ -6,9 +6,10 @@ complete and merged as `132dc08` (#29); its
 Phase 2, a paged KV cache, followed the
 [paged KV plan](paged-kv-plan.md), approved on 2026-09-29, which also moved
 block keys and KV events to phase 4. Its paged kernels, block manager and paged
-model are merged as `a84ad34` (#32), and its translation-cost study kept one
-block per sequence as the default: small blocks made decode attention pay for
-every block. A follow-up fixes that kernel and reruns the study.
+model are merged as `a84ad34` (#32). Its translation-cost study found that
+small blocks made decode attention pay for every block; after a fix to that
+kernel, a rerun selected and confirmed 32-slot blocks. Adopting them, step 2e,
+waits for a decision.
 Each phase is approved separately and records its own validation, like the
 existing plans. The [project direction](project.md) lists this as a follow-up
 track.
@@ -544,8 +545,11 @@ answer its study question: 64 sequences decode 998 tokens/s in aggregate at
 question for 2a's kernels: prefill paid at most 1.5% for 32-slot blocks, but
 decode attention paid for every block a sequence spans, so steps of 64
 sequences at 3,968 cached tokens took 2.8, 1.8 and 1.4 times as long with 32-,
-64- and 128-slot blocks. Head-major order did not help. A follow-up fixes the
-decode kernel and reruns the study.
+64- and 128-slot blocks. Head-major order did not help. With decode attention
+walking each group's keys in one loop, the
+[rerun](../studies/model_generation/paged-kv-loop.md) found no resolvable cost
+at any block size and selected 32-slot slot-major blocks: 133 ms against 132 ms
+for 64 sequences at 3,968 cached tokens.
 `src/llm_mojo/serving/` starts in phase 1 with StepBatch and grows only as each
 phase lands. The Qwen template, stop IDs and card values stay in
 `models/qwen2/`. The `serve` command belongs in `cli/`, and the trace driver

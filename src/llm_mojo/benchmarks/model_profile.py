@@ -2768,22 +2768,26 @@ def paged_plot(directory, study='paged'):
              ('Every other dispatch', lambda l: traced_ms(l, 'GPU active total') - traced_ms(l, 'FP32 GQA')
               - traced_ms(l, 'fused QKV/RoPE/cache'), PAGED_INK['axis'])]
     labels = [str(contract.PAGED_LAYOUTS[l]['block_size']) + '-slot' for l in traced]
-    bottoms = [0.]*len(traced)
+    # Additions stack up from zero and reductions down from it.
+    above, below = [0.]*len(traced), [0.]*len(traced)
     for label, value, color in parts:
         added = [value(l) - value(contract.PAGED_CONTROL) for l in traced]
-        axes[1].bar(range(len(traced)), added, bottom=bottoms, width=.55, color=color, label=label,
-                    edgecolor='white', linewidth=1)
-        bottoms = [b + a for b, a in zip(bottoms, added)]
-    for i, total in enumerate(bottoms):
-        axes[1].annotate(f'+{total:.1f} ms', (i, total), textcoords='offset points', xytext=(0, 4), ha='center',
+        axes[1].bar(range(len(traced)), added, bottom=[u if a >= 0 else d for a, u, d in zip(added, above, below)],
+                    width=.55, color=color, label=label, edgecolor='white', linewidth=1)
+        above = [u + max(a, 0) for u, a in zip(above, added)]
+        below = [d + min(a, 0) for d, a in zip(below, added)]
+    for i, (u, d) in enumerate(zip(above, below)):
+        axes[1].annotate(f'{u + d:+.1f} ms', (i, u), textcoords='offset points', xytext=(0, 4), ha='center',
                          fontsize=9, color=PAGED_INK['primary'])
     axes[1].axhline(0, color=PAGED_INK['muted'], linewidth=.8)
-    axes[1].set_ylim(top=max(bottoms)*1.15)
+    low, high = min(below), max(above)
+    span = (high - low) or 1
+    axes[1].set_ylim(low - span*.08, high + span*.18)
     axes[1].set_xticks(range(len(traced)), labels)
     axes[1].set_xlabel('Slot-major blocks')
     axes[1].set_ylabel('Active GPU milliseconds added per step')
     axes[1].set_title('Added to one block per sequence')
-    axes[1].legend(fontsize=8, frameon=False, loc='upper right')
+    axes[1].legend(fontsize=8, frameon=False, loc='upper left', bbox_to_anchor=(1, 1))
     fig.legend(*axes[0].get_legend_handles_labels(), loc='outside lower center', ncol=4, fontsize=8, frameon=False)
     fig.suptitle('Traces of 64 sequences at 3,968 cached tokens, two repeats per layout', fontsize=12)
     fig.savefig(directory/(stem+'-traces.png'), dpi=170)

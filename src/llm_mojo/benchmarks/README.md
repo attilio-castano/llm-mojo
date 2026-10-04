@@ -565,6 +565,10 @@ uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --
 uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_profile batch-size-plot --study paged --output studies/model_generation
 ```
 
+[The rerun](../../../studies/model_generation/paged-kv-loop.md) after the
+decode kernel's fix passes `--study paged-loop` to the same commands, which keeps
+its archive, `paged-kv-loop.json.gz`, beside 2d's.
+
 `single-sequence` runs 1e's single-sequence check between two receipted
 generator builds: sixteen Fast runs of 128 tokens after a 1,176-token prompt in
 four alternating blocks, under a rule fixed in the contract. A build can come

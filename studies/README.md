@@ -31,7 +31,8 @@ blocked.
 
 | Study | What it establishes |
 | --- | --- |
-| [Paged KV translation cost](model_generation/paged-kv.md) | Small KV blocks make decode attention pay per block: steps up to 2.9 times as long with 32-slot blocks at 3,968 cached tokens, while prefill pays at most 1.5%; one block per sequence stays the default |
+| [Paged KV after the one-loop decode kernel](model_generation/paged-kv-loop.md) | With decode attention in one loop per SIMD group, 32-, 64- and 128-slot KV blocks cost nothing resolvable; 32-slot blocks are selected and confirmed, and match phase 1 on one sequence |
+| [Paged KV translation cost](model_generation/paged-kv.md) | 2a's decode kernel paid for every block a sequence spans: steps up to 2.9 times as long with 32-slot blocks at 3,968 cached tokens, while prefill paid at most 1.5% |
 | [Exact batched projections](model_generation/batch-projections.md) | Four columns per SIMD group cut batched step time by 31–65% with bit-identical outputs; the reordered projections replaced it |
 | [Batched decode against batch size](model_generation/batch-size.md) | With tile 4, decoding up to 64 sequences per step levels off at 2.2–3.2× one sequence's throughput; the multi-row projections' per-row work, not weight traffic, sets the cost |
 | [Inter-layer buffer swapping](model_generation/buffer-swap.md) | Exact outputs with 23 fewer compute commands; 5.3–8.3% median paired reductions and 90–94 tokens/s streaming, but the full promotion gate fails |

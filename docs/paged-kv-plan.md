@@ -28,10 +28,12 @@ contract. The approval also moved
 are complete and merged as `a84ad34` (#32). 2d is complete: no block size
 qualified, because small blocks made decode attention pay for every block a
 sequence spans ([study](../studies/model_generation/paged-kv.md)). On
-2026-10-04 you asked to fix that kernel first; the
-[2d follow-up](#2d-follow-up-decode-attention-in-one-loop) does so and reruns
-2d's matrix. One block per sequence stays the default until then. See the
-[validation record](#validation-record).
+2026-10-04 you asked to fix that kernel first. The
+[2d follow-up](#2d-follow-up-decode-attention-in-one-loop) did, and its
+[rerun](../studies/model_generation/paged-kv-loop.md) of 2d's matrix selected
+and confirmed 32-slot slot-major blocks, which also passed the single-sequence
+check. 2e, adopting them, waits for your decision; until then one block per
+sequence stays the default. See the [validation record](#validation-record).
 
 ## What paging must preserve
 
@@ -457,6 +459,47 @@ If 2d selects and confirms a layout and the single-sequence check passes:
   split-K decode.
 
 ## Validation record
+
+### 2d follow-up on `26b0a08`, 2026-10-04
+
+`26b0a08` walks paged decode attention's keys in one loop per SIMD group, from
+block offsets staged in threadgroup memory.
+
+- **Kernels.** 2a's paged kernel tests and the batched decode tests passed bit
+  for bit: decode rows equal route 4, and paged prefill routes 6, 10 and 11, at
+  block sizes 32, 64 and 128 and one block of 4,096 slots, in both orders.
+- **Unchanged on the checkpoint.** Model drivers built from `ca58f15`'s archive
+  and from the fix produced byte-identical stdout and 14,268 captured files per
+  build: 37 rows then eight decodes, four 256-row chunks then four decodes,
+  240 + 16 rows through configuration 21 then two decodes, 2,048 + 1,920 rows
+  then two decodes, and configurations 3, 2, 26 and 0 explicitly, each at one
+  block and in 32-slot, 64-slot head-major and 128-slot blocks.
+- **Suite.** `uv run --locked llm-mojo validate` passed in 34 minutes: 290
+  Python tests, all 28 native test files plus the Unicode tokenizer run, and
+  every benchmark smoke. From a clean `26b0a08`, the lifecycle study passed,
+  also in device-sync mode, and `validation.model batch --block-size 64`
+  decoded its eight conversations together equal to alone.
+- **Rerun.** From a clean `26b0a08` build, 08:56–09:36: every layout is a
+  regression in none of the 35 workloads, and the rule selected 32-slot
+  slot-major blocks. Its one gain, at 64 cached tokens and B = 1, rests on a
+  block ratio of 0.58. Thirteen calibrations exceeded 5%, up to 18.2%.
+- **Confirmation.** 09:36–09:47: no regression in any workload, so the layout
+  is confirmed. Decode ratios 0.999–1.023, prefill 1.000–1.015; at 64
+  sequences and 3,968 cached tokens 133.37 ms against 131.78 ms.
+- **Traces.** 09:47–09:56, none rejected. Attention takes 88.3–93.3 ms per step
+  in every layout, where 32-slot blocks took 321.1 ms in 2d; the KV writes still
+  take 0.03–0.04 ms more in blocks than in one block.
+- **Single-sequence check.** 09:58–09:59: `6422f84`'s generator against
+  `26b0a08`'s built with `--block-size 32`. Block ratios 1.006, 1.014, 0.997 and
+  1.002, median 1.004: no regression, and the same text. The
+  [record](../studies/model_generation/paged-kv-single-sequence.json) keeps
+  every decode step.
+- **Hypothesis.** Every part held.
+- **Conditions.** AC power, normal power mode and no thermal or performance
+  warning before and after every block, capture and single-sequence block.
+
+The [study](../studies/model_generation/paged-kv-loop.md) reports the rerun.
+2e can adopt 32-slot slot-major blocks once you decide.
 
 ### 2d on `dd7ed24`, 2026-10-03
 

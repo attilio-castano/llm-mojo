@@ -198,6 +198,56 @@ class ModelProfileTests(unittest.TestCase):
                     else:
                         with self.assertRaises((ValueError, RuntimeError)): paged_replay(directory)
 
+    def test_retained_paged_kv_loop_integrity(self):
+        """2d's rerun after the one-loop kernel: every layout qualifies, 32 slots are selected and confirmed."""
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import paged_replay
+        source = repository_root()/'studies/model_generation'
+        original = json.loads(gzip.decompress((source/'paged-kv-loop.json.gz').read_bytes()))
+        retained = json.loads((source/'paged-kv-loop-summary.json').read_text())
+        self.assertEqual((retained['decision']['qualified'], retained['decision']['selected'], retained['confirmed']),
+                         (list(contract.PAGED_CANDIDATES), 1, True))
+        self.assertEqual(original['timing']['build']['declaration'], contract.PAGED_LOOP_DECLARATION)
+        for damage in (None, 'sample', 'prefill', 'capture', 'conditions', 'declaration', 'token', 'no-confirmation',
+                       'confirmation-argument', 'confirmation-sample', 'confirmation-build'):
+            record = copy.deepcopy(original)
+            if damage == 'sample': record['timing']['samples'].pop()
+            elif damage == 'prefill': record['timing']['prefill_samples'].pop()
+            elif damage == 'capture': record['captures'].pop()
+            elif damage == 'conditions': record['confirmation']['blocks'][1]['after']['power_mode_raw'] = '1'
+            elif damage == 'declaration': record['timing']['build']['declaration'] = contract.PAGED_DECLARATION
+            elif damage == 'token': record['confirmation']['prefill_token_differences'][3]['differing'] = 1
+            elif damage == 'no-confirmation': record['confirmation'] = None
+            elif damage == 'confirmation-argument': record['confirmation']['argument'] = 'paged-confirm:2'
+            elif damage == 'confirmation-sample': record['confirmation']['samples'].pop()
+            elif damage == 'confirmation-build': record['confirmation']['build'] = copy.deepcopy(original['timing']['build']) | dict(binaries={})
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                raw = json.dumps(record).encode()
+                packed = gzip.compress(raw, mtime=0)
+                (directory/'paged-kv-loop.json.gz').write_bytes(packed)
+                (directory/'paged-kv-loop.json').write_text(json.dumps(dict(kind=record['kind'],
+                    sha256=hashlib.sha256(packed).hexdigest(), uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with self.subTest(damage=damage), redirect_stdout(StringIO()):
+                    if damage is None:
+                        paged_replay(directory, 'paged-loop')
+                        self.assertEqual(json.loads((directory/'paged-kv-loop-summary.json').read_text()), retained)
+                    else:
+                        with self.assertRaises((ValueError, RuntimeError)): paged_replay(directory, 'paged-loop')
+
+    def test_retained_paged_kv_single_sequence_check(self):
+        """2d's adoption gate: one sequence in 32-slot blocks with the one-loop kernel against 6422f84."""
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import single_sequence_summary
+        record = json.loads((repository_root()/'studies/model_generation/paged-kv-single-sequence.json').read_text())
+        self.assertEqual(single_sequence_summary(record), (record['block_ratios'], record['median_block_ratio'], record['verdict']))
+        self.assertEqual((record['verdict'], record['texts_identical']), ('no regression', True))
+        self.assertEqual({arm: (b['commit'][:7], b['archive'], b['decode_projection'], b['kv_block_size'], b['kv_head_major'])
+                          for arm, b in record['binaries'].items()},
+                         {'baseline': ('6422f84', True, 8, None, False), 'candidate': ('26b0a08', False, 8, 32, False)})
+
     def test_retained_paged_kv_2c_timing(self):
         """2c's timing sanity check: one block per sequence, 6422f84's generator against a84ad34's, no claim."""
         from llm_mojo._repository import repository_root
