@@ -67,7 +67,9 @@ class ModelComparisonTests(unittest.TestCase):
             for bad in (good.replace('finish\t1\tstop\t11\n',''),
                         good.replace('cache\t0\t1','cache\t0\t2'),
                         good.replace('submitted\t0\t24','submitted\t0\t48'),
-                        good.replace('151645','10')):
+                        good.replace('151645','10'),
+                        good.replace('Apple M4 Pro/metal','Apple M4 Pro/cpu'),
+                        good.replace('device\t0\tApple M4 Pro/metal\t0\n','')):
                 p.write_text(bad)
                 with self.assertRaises(ValueError): generation_events(p,32)
 

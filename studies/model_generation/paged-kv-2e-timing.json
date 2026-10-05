@@ -359,6 +359,7 @@
       "run": 1,
       "block": 1,
       "arm": "baseline",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         14101208,
         12356208,
@@ -495,6 +496,7 @@
       "run": 2,
       "block": 1,
       "arm": "candidate",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         14287084,
         12116292,
@@ -631,6 +633,7 @@
       "run": 3,
       "block": 1,
       "arm": "candidate",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         12224459,
         11569625,
@@ -767,6 +770,7 @@
       "run": 4,
       "block": 1,
       "arm": "baseline",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         12615375,
         12163042,
@@ -903,6 +907,7 @@
       "run": 5,
       "block": 2,
       "arm": "candidate",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         13084584,
         12151333,
@@ -1039,6 +1044,7 @@
       "run": 6,
       "block": 2,
       "arm": "baseline",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         13078250,
         12115166,
@@ -1175,6 +1181,7 @@
       "run": 7,
       "block": 2,
       "arm": "baseline",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         13345041,
         12016000,
@@ -1311,6 +1318,7 @@
       "run": 8,
       "block": 2,
       "arm": "candidate",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         12538667,
         12169333,
@@ -1447,6 +1455,7 @@
       "run": 9,
       "block": 3,
       "arm": "baseline",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         13496125,
         11961416,
@@ -1583,6 +1592,7 @@
       "run": 10,
       "block": 3,
       "arm": "candidate",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         12569666,
         12069125,
@@ -1719,6 +1729,7 @@
       "run": 11,
       "block": 3,
       "arm": "candidate",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         13385333,
         12516167,
@@ -1855,6 +1866,7 @@
       "run": 12,
       "block": 3,
       "arm": "baseline",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         13590792,
         11757708,
@@ -1991,6 +2003,7 @@
       "run": 13,
       "block": 4,
       "arm": "candidate",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         13289209,
         12398917,
@@ -2127,6 +2140,7 @@
       "run": 14,
       "block": 4,
       "arm": "baseline",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         13096542,
         12182000,
@@ -2263,6 +2277,7 @@
       "run": 15,
       "block": 4,
       "arm": "baseline",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         12884042,
         12311667,
@@ -2399,6 +2414,7 @@
       "run": 16,
       "block": 4,
       "arm": "candidate",
+      "device": "Apple M4 Pro/metal",
       "decode_step_ns": [
         12535416,
         12330333,

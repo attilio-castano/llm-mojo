@@ -286,19 +286,45 @@ class ModelProfileTests(unittest.TestCase):
                 for arm in order:
                     step = 8_000_000 if arm == 'baseline' else int(candidate_ms[block-1]*1_000_000)
                     steps = [step + i for i in range(127)]
-                    runs.append(dict(run=len(runs)+1, block=block, arm=arm, decode_step_ns=steps,
-                                     median_ms=statistics.median(steps)/1e6))
+                    runs.append(dict(run=len(runs)+1, block=block, arm=arm, device='Apple M4 Pro/metal',
+                                     decode_step_ns=steps, median_ms=statistics.median(steps)/1e6))
             return dict(prompt=dict(max_new_tokens=128), runs=runs)
         for candidate, verdict in (((7.9, 8.1, 7.8, 8.0), 'no regression'), ((8.1, 8.2, 8.2, 8.3), 'consistent slowdown below the floor'),
                                    ((8.5, 8.6, 8.7, 8.5), 'regression')):
             with self.subTest(candidate=candidate):
                 self.assertEqual(single_sequence_summary(record(candidate))[2], verdict)
-        for damage in ('step', 'order'):
+        for damage in ('step', 'order', 'device', 'no device'):
             damaged = record((8, 8, 8, 8))
             if damage == 'step': damaged['runs'][3]['decode_step_ns'].pop()
-            else: damaged['runs'][0]['arm'] = 'candidate'
+            elif damage == 'order': damaged['runs'][0]['arm'] = 'candidate'
+            elif damage == 'device': damaged['runs'][6]['device'] = 'Apple M4 Pro/cpu'
+            else: del damaged['runs'][9]['device']
             with self.subTest(damage=damage), self.assertRaises(ValueError):
                 single_sequence_summary(damaged)
+
+    def test_single_sequence_run_must_prove_the_metal_device(self):
+        """A run counts only if its report passes the generation validator; the run keeps the device it proves."""
+        from llm_mojo.benchmarks.model_profile import single_sequence_run
+        from llm_mojo.validation.model import route_record
+        def describe(configuration):
+            return ' '.join(f'{k}={v}' for k, v in route_record(configuration).items())
+        good = '\n'.join(['event\tindex\tvalue\tnanoseconds', 'mode\t0\tfast\t0',
+                          *(f'prompt\t{i}\t{42+i}\t0' for i in range(3)), 'device\t0\tApple M4 Pro/metal\t0',
+                          'configuration\t0\t0\t0', f'route\t0\t{describe(0)}\t0', 'token\t0\t7\t10', 'decode\t0\t1\t5',
+                          f'route\t1\t{describe(26)}\t0', 'token\t1\t151645\t20', 'cache\t0\t4\t0', 'submitted\t0\t96\t0',
+                          'finish\t2\tstop\t21']) + '\n'
+        declared = dict(max_new_tokens=32, policy='fast', prompt=dict(tokens=3))
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory)/'run.tsv'
+            report.write_text(good)
+            self.assertEqual(single_sequence_run(report, declared), ('Apple M4 Pro/metal', [5]))
+            for damage, text, run in (('CPU fallback', good.replace('Apple M4 Pro/metal', 'Apple M4 Pro/cpu'), declared),
+                                      ('no device', good.replace('device\t0\tApple M4 Pro/metal\t0\n', ''), declared),
+                                      ('another route', good.replace('mode\t0\tfast', 'mode\t0\tbaseline'), declared),
+                                      ('another prompt', good, dict(declared, prompt=dict(tokens=4)))):
+                report.write_text(text)
+                with self.subTest(damage=damage), self.assertRaises(ValueError):
+                    single_sequence_run(report, run)
 
     def test_batch_contract_declares_its_matrix_and_trace_geometry(self):
         batch = contract.BATCH_IMPLEMENTATION

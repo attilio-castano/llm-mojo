@@ -373,7 +373,8 @@ SINGLE_SEQUENCE = dict(
                 sha256='7a74b43ca1f6fb3d3ae131776b5dabddb6079bb57428cb4d35d6828b72fad0b2'),
     max_new_tokens=128, chunk_rows=256, policy='fast',
     blocks=[['baseline', 'candidate', 'candidate', 'baseline'], ['candidate', 'baseline', 'baseline', 'candidate']]*2,
-    procedure='Each run: generator PREPARED TABLES PROMPT 128 256 fast REPORT, reading the report\'s decode events. '
+    procedure='Each run: generator PREPARED TABLES PROMPT 128 256 fast REPORT. The report must pass the generation '
+              'validator, which requires the M4 Pro\'s Metal device, and the run keeps its device and decode events. '
               'Sixteen runs in four blocks ordered baseline candidate candidate baseline, then candidate baseline '
               'baseline candidate, alternating.',
     rule='Block ratio: the candidate\'s mean median decode step over the baseline\'s, per block. All four above 1 '

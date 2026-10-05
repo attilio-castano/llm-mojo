@@ -571,8 +571,10 @@ its archive, `paged-kv-loop.json.gz`, beside 2d's.
 
 `single-sequence` runs 1e's single-sequence check between two receipted
 generator builds: sixteen Fast runs of 128 tokens after a 1,176-token prompt in
-four alternating blocks, under a rule fixed in the contract. A build can come
-from a past commit's archive or hold its sequence in another KV layout:
+four alternating blocks, under a rule fixed in the contract. Each run's report
+must pass the generation validator, which requires the M4 Pro's Metal device,
+and the record keeps every run's device, which the replay checks. A build can
+come from a past commit's archive or hold its sequence in another KV layout:
 
 ```sh
 uv run --locked python -m llm_mojo.validation.model build --generation --commit 6422f84 --binary /private/tmp/generator-6422f84

@@ -28,7 +28,7 @@ import numpy as np
 from .._repository import environment_tool, repository_root
 from ..validation.evidence import source_identity, sha, write
 from llm_mojo.models.qwen2.assets import verify_prepared
-from ..validation.model import environment
+from ..validation.model import environment, generation_events
 from llm_mojo.models.qwen2.tokenizer_assets import ensure_prepared
 from .environment import stable_environment, conditions_snapshot, require_ac, require_nominal_thermal_state, ensure_record_location
 from . import model_contract as contract
@@ -2485,6 +2485,8 @@ def single_sequence_summary(record):
     if ([r['run'] for r in runs] != list(range(1, 17))
             or [[r['arm'] for r in runs if r['block'] == b] for b in range(1, 5)] != contract.SINGLE_SEQUENCE['blocks']):
         raise ValueError('the runs are not four alternating blocks')
+    if any(r.get('device') != 'Apple M4 Pro/metal' for r in runs):
+        raise ValueError('a run does not prove the M4 Pro Metal device')
     if any(len(r['decode_step_ns']) != record['prompt']['max_new_tokens']-1
            or r['median_ms'] != stats.median(r['decode_step_ns'])/1e6 for r in runs):
         raise ValueError('a run lost a decode step or misstates its median')
@@ -2495,6 +2497,19 @@ def single_sequence_summary(record):
     verdict = ('regression' if all(r > 1 for r in ratios) and median > 1.05 else
                'consistent slowdown below the floor' if all(r > 1 for r in ratios) else 'no regression')
     return ratios, median, verdict
+
+
+def single_sequence_run(report, declared):
+    """One run's device and decode steps, from a report that passes the generation validator.
+
+    The validator requires the M4 Pro's Metal device, the token limit or a true stop, the cache length and
+    submitted rows, one decode per token after the first and a route of the declared policy for every call.
+    """
+    validated = generation_events(report, declared['max_new_tokens'], declared['policy'])
+    if len(validated['prompt_ids']) != declared['prompt']['tokens']:
+        raise ValueError('the prompt encoded to another length')
+    device, = [e['value'] for e in validated['events'] if e['event'] == 'device']
+    return device, [int(e['nanoseconds']) for e in validated['events'] if e['event'] == 'decode']
 
 
 def single_sequence(baseline, candidate, prepared, output, purpose):
@@ -2533,12 +2548,9 @@ def single_sequence(baseline, candidate, prepared, output, purpose):
             result = subprocess.run([str(paths[arm]), identity['prepared'], identity['tables'], str(prompt),
                                      str(declared['max_new_tokens']), str(declared['chunk_rows']), declared['policy'],
                                      str(report)], cwd=repository_root(), env=environment(), capture_output=True, check=True)
-            rows = [line.split('\t') for line in report.read_text().splitlines()[1:]]
-            if sum(r[0] == 'prompt' for r in rows) != declared['prompt']['tokens']:
-                raise ValueError('the prompt encoded to another length')
-            steps = [int(r[3]) for r in rows if r[0] == 'decode']
-            runs.append(dict(run=run, block=block, arm=arm, decode_step_ns=steps, median_ms=stats.median(steps)/1e6,
-                             text_sha256=hashlib.sha256(result.stdout).hexdigest()))
+            device, steps = single_sequence_run(report, declared)
+            runs.append(dict(run=run, block=block, arm=arm, device=device, decode_step_ns=steps,
+                             median_ms=stats.median(steps)/1e6, text_sha256=hashlib.sha256(result.stdout).hexdigest()))
             print(f'run {run} {arm}: median decode step {runs[-1]["median_ms"]:.3f} ms', flush=True)
         blocks.append(dict(block=block, before=before, after=snapshot()))
     for arm in paths:
