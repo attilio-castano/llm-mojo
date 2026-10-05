@@ -145,7 +145,7 @@ research questions, not prerequisites for calling the current milestone complete
    [translation-cost study](../studies/model_generation/paged-kv.md) found that
    decode attention paid for every block a sequence spans; after a fix, the
    [rerun](../studies/model_generation/paged-kv-loop.md) found no resolvable cost
-   and selected 32-slot blocks, whose adoption awaits a decision.
+   and selected 32-slot blocks, the default since 2026-10-05. Phase 2 is complete.
 
 Sampling, quantization, longer contexts, tool-oriented templates and additional
 model families can follow when they answer a concrete need. They are not current

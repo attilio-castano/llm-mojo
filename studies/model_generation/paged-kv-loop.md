@@ -21,8 +21,8 @@ block; this is its rerun after the
 [2d follow-up](../../docs/paged-kv-plan.md#2d-follow-up-decode-attention-in-one-loop),
 collected on 2026-10-04 from `26b0a08`. All 12,320 decode and 7,280 prefill
 screen samples and the 3,520 decode and 2,080 prefill confirmation samples are
-retained, and no trace was rejected. Adopting 32-slot blocks, step 2e, waits for
-a decision.
+retained, and no trace was rejected. 32-slot blocks became the default on
+2026-10-05, in step 2e.
 
 ## What changed
 
@@ -126,10 +126,10 @@ An informal development run, which the plan recorded as not evidence, had shown
 ## Decision
 
 The rerun selected and confirmed 32-slot slot-major blocks, and the
-single-sequence check passed. Adoption is 2e: the plan's default block size and
-order, chat, generation and the batch validation in that layout, 2c's gates
-again at it, and the documents that describe KV storage. It needs its own
-decision.
+single-sequence check passed. Step 2e adopted them on 2026-10-05:
+`models/qwen2/plan.mojo` names the default block size and order, chat,
+generation and the batch validation use it, 2c's gates passed again at it, and
+the documents that describe KV storage say so.
 
 ## Conditions and limits
 

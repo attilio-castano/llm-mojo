@@ -27,12 +27,12 @@ reproduction commands.
 | [Residual/RMSNorm alone and composed](residual-norm.md) | Promoted | Today's single-row decode route: configuration 26 with GPU argmax, buffer swapping and residual/RMSNorm fusion; 17.1–24.5% lower latency and 107–115 tokens/s |
 | [Combined QKV and activation fusion](combined-fusion.md) | Promoted | Configuration 26, the decode configuration: 16.9–19.4% lower latency with exact outputs and cache storage |
 | [Reordered batched projections](batch-reordered.md) | Promoted | Arrangement 8, four adjacent products per lane: 17–36% shorter batched steps than arrangement 5 from B = 16, about 10% shorter single-sequence steps and 998 tokens/s for 64 sequences at 1,024 cached tokens, with 5's worst-case accuracy and HF agreement; it changes Fast's summation order |
+| [Paged KV after the one-loop decode kernel](paged-kv-loop.md) | Promoted | With decode attention in one loop per SIMD group, blocks of 32, 64 and 128 slots cost nothing resolvable in 35 decode and prefill workloads; 32-slot slot-major blocks, selected and confirmed, are the default since 2026-10-05 |
 
 ## Decode experiments
 
 | Study | Status | What it establishes |
 | --- | --- | --- |
-| [Paged KV after the one-loop decode kernel](paged-kv-loop.md) | Selected | With decode attention in one loop per SIMD group, blocks of 32, 64 and 128 slots cost nothing resolvable in 35 decode and prefill workloads; 32-slot slot-major blocks are selected and confirmed, and adoption awaits a decision |
 | [Paged KV translation cost](paged-kv.md) | Superseded | 2a's decode kernel made steps up to 2.9, 1.9 and 1.5 times as long with 32-, 64- and 128-slot blocks at 3,968 cached tokens, all of it in its per-block loop; the one-loop kernel replaced it |
 | [Exact batched projections](batch-projections.md) | Superseded | Arrangement 5, four rows by four columns per SIMD group: 31–65% shorter batched steps with bit-identical outputs, 705 tokens/s for 64 sequences at 1,024 cached tokens; arrangement 8 replaced it |
 | [Batched decode against batch size](batch-size.md) | Diagnostic | With tile 4, throughput levels off at 2.2–3.2× one sequence by B = 64; per-row work in the multi-row projections sets the cost, and tiles 8 and 16 are slower than tile 4 |

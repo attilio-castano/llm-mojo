@@ -32,8 +32,9 @@ sequence spans ([study](../studies/model_generation/paged-kv.md)). On
 [2d follow-up](#2d-follow-up-decode-attention-in-one-loop) did, and its
 [rerun](../studies/model_generation/paged-kv-loop.md) of 2d's matrix selected
 and confirmed 32-slot slot-major blocks, which also passed the single-sequence
-check. 2e, adopting them, waits for your decision; until then one block per
-sequence stays the default. See the [validation record](#validation-record).
+check. On 2026-10-05 you approved 2e, which made them the default for chat,
+generation and the batch validation. Phase 2 is complete; see the
+[validation record](#validation-record).
 
 ## What paging must preserve
 
@@ -459,6 +460,56 @@ If 2d selects and confirms a layout and the single-sequence check passes:
   split-K decode.
 
 ## Validation record
+
+### 2e on `c356c08`, 2026-10-05
+
+`c356c08` makes 32-slot slot-major blocks the default.
+`models/qwen2/plan.mojo` names `KV_BLOCK_SIZE` 32 and `KV_HEAD_MAJOR` off
+beside the decode arrangement. A build may change them with `-D`, and a size
+that is not a multiple of 32 up to the context fails to compile. Chat sessions,
+the generator, the chat driver and the model driver's batch mode take the
+default unless given another layout. The model driver's captures and lifecycle
+check keep one block, and the benchmarks keep the study's layouts. Build
+receipts and the batch validation record the layout they use.
+
+- **Unchanged against phase 1.** Executables built from `6422f84`'s archive
+  and from 2e's tree gave byte-identical outputs on phase 1's equality gate,
+  5,283 files per side. The chat driver, the piped chat CLI and generation ran
+  in 32-slot blocks; the model driver and the benchmark's `verify` ran in one
+  block.
+- **Paged equals one block.** With the model driver's histories also in 32-slot
+  blocks, the other 3,459 files stayed byte-identical. In the 1,824 cache
+  captures, the rows through each call's length are identical, and every row
+  after them still holds the fill.
+- **Batched equals solo across blocks.** `tests/test_decode_batch.mojo` passed
+  in the suite. From a clean `c356c08`, `validation.model batch` with no layout
+  argument decoded its eight conversations of 11 to 3,301 prompt tokens for 16
+  steps in 32-slot slot-major blocks allocated in turn. Every token, logit row
+  and written K/V row equals decoding alone, every slot that no step wrote kept
+  its fill, and the receipt records the layout.
+- **Rejections.** The suite's rejection tests passed. Builds with
+  `-D KV_BLOCK_SIZE=48` and `=8192` fail to compile on the plan's constraint.
+- **Lifecycle on the checkpoint.** `validation.model lifecycle` passed from a
+  clean `c356c08`. The driver built from its archive passed in normal and
+  device-sync mode.
+- **Suite.** `uv run --locked llm-mojo validate` passed in 33 minutes: frozen
+  oracle anchors, 293 Python tests, all 28 native test files plus the Unicode
+  tokenizer run, and every benchmark smoke.
+- **Timing sanity check, no claim.** The GPU was busy at first, so a watcher
+  waited for two quiet minutes, with the one-minute load below 4 and GPU
+  utilization at most 15%. `single-sequence` then ran 15:27–15:28: sixteen
+  generation runs of 128 tokens after the 1,176-token prompt, in four
+  alternating blocks. It compared `6422f84`'s generator with `c356c08`'s, which
+  holds the sequence in 32-slot blocks by default; both were built from their
+  archives. Median decode steps were 7.442 ms for `6422f84` (runs
+  7.341–7.506 ms) and 7.425 ms for 2e (7.358–7.514 ms). The block ratios were
+  0.984, 1.003, 1.009 and 0.997, with a median of 1.000: no regression, and the
+  same text. The load average stayed between 2.1 and 2.8, with AC power, normal
+  power mode and no thermal or performance warning before and after every
+  block. The [record](../studies/model_generation/paged-kv-2e-timing.json)
+  keeps every decode step.
+
+Phase 2 is complete.
 
 ### 2d follow-up on `26b0a08`, 2026-10-04
 

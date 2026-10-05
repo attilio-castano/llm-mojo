@@ -8,8 +8,8 @@ Phase 2, a paged KV cache, followed the
 block keys and KV events to phase 4. Its paged kernels, block manager and paged
 model are merged as `a84ad34` (#32). Its translation-cost study found that
 small blocks made decode attention pay for every block; after a fix to that
-kernel, a rerun selected and confirmed 32-slot blocks. Adopting them, step 2e,
-waits for a decision.
+kernel, a rerun selected and confirmed 32-slot blocks, the default since
+2026-10-05. Phase 2 is complete.
 Each phase is approved separately and records its own validation, like the
 existing plans. The [project direction](project.md) lists this as a follow-up
 track.
@@ -549,7 +549,7 @@ sequences at 3,968 cached tokens took 2.8, 1.8 and 1.4 times as long with 32-,
 walking each group's keys in one loop, the
 [rerun](../studies/model_generation/paged-kv-loop.md) found no resolvable cost
 at any block size and selected 32-slot slot-major blocks: 133 ms against 132 ms
-for 64 sequences at 3,968 cached tokens.
+for 64 sequences at 3,968 cached tokens. They are the default since 2e.
 `src/llm_mojo/serving/` starts in phase 1 with StepBatch and grows only as each
 phase lands. The Qwen template, stop IDs and card values stay in
 `models/qwen2/`. The `serve` command belongs in `cli/`, and the trace driver

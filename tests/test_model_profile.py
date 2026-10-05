@@ -266,6 +266,18 @@ class ModelProfileTests(unittest.TestCase):
             with self.subTest(damage=damage), self.assertRaises(ValueError):
                 single_sequence_summary(damaged)
 
+    def test_retained_paged_kv_2e_timing(self):
+        """2e's timing sanity check: the default 32-slot blocks, 6422f84's generator against c356c08's, no claim."""
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import single_sequence_summary
+        record = json.loads((repository_root()/'studies/model_generation/paged-kv-2e-timing.json').read_text())
+        self.assertEqual(single_sequence_summary(record), (record['block_ratios'], record['median_block_ratio'], record['verdict']))
+        self.assertEqual((record['verdict'], record['texts_identical']), ('no regression', True))
+        self.assertEqual(record['prompt']['sha256'], contract.SINGLE_SEQUENCE['prompt']['sha256'])
+        self.assertEqual({arm: (b['commit'][:7], b['archive'], b['decode_projection'], b['kv_block_size'], b['kv_head_major'])
+                          for arm, b in record['binaries'].items()},
+                         {'baseline': ('6422f84', True, 8, None, False), 'candidate': ('c356c08', True, 8, 32, False)})
+
     def test_single_sequence_rule_from_raw_steps(self):
         from llm_mojo.benchmarks.model_profile import single_sequence_summary
         def record(candidate_ms):

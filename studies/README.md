@@ -13,6 +13,7 @@ and [layouts](../docs/layouts.md) define the values, storage and ownership.
 | [Residual/RMSNorm alone and composed](model_generation/residual-norm.md) | Promoted all-three Fast route: 17.1–24.5% lower latency, 107–115 tokens/s; exact independent and composed checks |
 | [Combined QKV and activation fusion](model_generation/combined-fusion.md) | Promoted M4 Pro single-token Fast route: 16.9–19.4% lower latency, 86–90 tokens/s streaming medians, exact outputs and cache storage |
 | [Reordered batched projections](model_generation/batch-reordered.md) | Promoted decode projections: four adjacent products per lane cut batched steps by 17–36% from B = 16 and single-sequence steps by about 10%, with arrangement 5's worst-case accuracy and HF agreement; 998 tokens/s for 64 sequences at 1,024 cached tokens |
+| [Paged KV after the one-loop decode kernel](model_generation/paged-kv-loop.md) | Default KV storage: 32-slot blocks, selected and confirmed with decode attention in one loop per SIMD group, cost nothing resolvable in 35 decode and prefill workloads and match phase 1 on one sequence |
 | [Native terminal chat](model_generation/chat.md) | Multi-turn cache reuse, exact history and terminal lifecycle, with paired prefill and actual interaction timings |
 | [Fast full-model runtime](model_generation/runtime.md) | All 24 layers, native generation, numerical diagnostics and 11 measured dispatch choices |
 
@@ -31,7 +32,6 @@ blocked.
 
 | Study | What it establishes |
 | --- | --- |
-| [Paged KV after the one-loop decode kernel](model_generation/paged-kv-loop.md) | With decode attention in one loop per SIMD group, 32-, 64- and 128-slot KV blocks cost nothing resolvable; 32-slot blocks are selected and confirmed, and match phase 1 on one sequence |
 | [Paged KV translation cost](model_generation/paged-kv.md) | 2a's decode kernel paid for every block a sequence spans: steps up to 2.9 times as long with 32-slot blocks at 3,968 cached tokens, while prefill paid at most 1.5% |
 | [Exact batched projections](model_generation/batch-projections.md) | Four columns per SIMD group cut batched step time by 31–65% with bit-identical outputs; the reordered projections replaced it |
 | [Batched decode against batch size](model_generation/batch-size.md) | With tile 4, decoding up to 64 sequences per step levels off at 2.2–3.2× one sequence's throughput; the multi-row projections' per-row work, not weight traffic, sets the cost |
