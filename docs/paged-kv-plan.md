@@ -461,6 +461,40 @@ If 2d selects and confirms a layout and the single-sequence check passes:
 
 ## Validation record
 
+### Single-sequence review fix on `bb5aed1`, 2026-10-05
+
+Codex's review of #33 found that `single-sequence`, the command behind 2c's
+timing check and the single-sequence checks of 2d and 2e, accepted a run's
+timings without checking which device produced them, and that its records kept
+no device. AGENTS.md requires proof of the runtime device and backend, and a
+record's `environment` block only shows what the machine offers. `bb5aed1`
+makes each run's report pass the generation validator, as the generation
+study's reports do. The validator requires the M4 Pro's Metal device, the token
+limit, the cache length and submitted rows, one decode per token after the
+first and a Fast route for every call. Each run keeps its device, and the replay
+rejects a run without `Apple M4 Pro/metal`.
+
+- **Records.** The three records, for
+  [2c](../studies/model_generation/paged-kv-2c-timing.json), the
+  [2d follow-up](../studies/model_generation/paged-kv-single-sequence.json) and
+  [2e](../studies/model_generation/paged-kv-2e-timing.json), gained each run's
+  device from its own report, kept outside Git. All 48 reports pass the
+  validator, and each report's decode steps equal its run's exactly. Nothing
+  else changed, and every replay gives its stored verdict, so every number in
+  this plan stands.
+- **Tests.** The command rejects a report with a CPU device, with no device,
+  with another route or with another prompt length. The replay rejects a record
+  whose run names another device or none.
+- **Functional run.** The fixed command ran `6422f84`'s and `c356c08`'s
+  generators end to end and kept `Apple M4 Pro/metal` for all sixteen runs. Its
+  timings came from a busy machine and are not evidence.
+- **Suite.** The Python suite passed, 295 tests. The change touches no engine
+  code or numerical contract.
+
+Phase 1's [1e record](../studies/model_generation/batch-reordered-single-sequence.json)
+was collected the same way and keeps no device. Its reports were not kept, so it
+cannot gain one.
+
 ### 2e on `c356c08`, 2026-10-05
 
 `c356c08` makes 32-slot slot-major blocks the default.
