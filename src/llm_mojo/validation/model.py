@@ -70,10 +70,14 @@ def build(binary, generation=False, projection=None, block_size=None, head_major
         subprocess.run(command,cwd=root,env=environment(),check=True)
         if commit is None and source_identity()!=source:
             raise ValueError('source changed during model compilation')
-        # The arrangement the build decodes with: the define, or the source default it compiled.
-        decode=int(projection) if projection is not None else source_decode_projection(root/'src/llm_mojo/models/qwen2/plan.mojo')
+        # The arrangement and KV layout the build uses: the defines, or the source defaults it compiled.
+        plan=root/'src/llm_mojo/models/qwen2/plan.mojo'
+        decode=int(projection) if projection is not None else source_decode_projection(plan)
+        default_size,default_order=source_kv_layout(plan)
     write(receipt,dict(kind='model-development-build',source=source,command=command,binary_sha256=sha(binary),
-                       decode_projection=decode,kv_block_size=block_size,kv_head_major=head_major))
+                       decode_projection=decode,
+                       kv_block_size=int(block_size) if block_size is not None else default_size,
+                       kv_head_major=head_major or (block_size is None and default_order)))
 
 
 def source_decode_projection(plan=None):
@@ -83,6 +87,20 @@ def source_decode_projection(plan=None):
     if len(found)!=1:
         raise ValueError('the plan does not declare exactly one decode projection default')
     return int(found[0])
+
+
+def source_kv_layout(plan=None):
+    """The KV block size and head-major order a build without -D KV_BLOCK_SIZE uses (models/qwen2/plan.mojo).
+
+    None is one block of the whole context, which plans before the layout's adoption held.
+    """
+    plan=Path(plan) if plan is not None else repository_root()/'src/llm_mojo/models/qwen2/plan.mojo'
+    text=plan.read_text()
+    sizes=re.findall(r'get_defined_int\["KV_BLOCK_SIZE", default=(\d+)\]',text)
+    orders=re.findall(r'get_defined_int\["KV_HEAD_MAJOR", default=(\d+)\]',text)
+    if len(sizes)>1 or len(orders)>1:
+        raise ValueError('the plan declares more than one KV layout default')
+    return (int(sizes[0]) if sizes else None),(bool(orders) and orders[0]=='1')
 
 
 def verify_build(binary):
@@ -774,8 +792,9 @@ def batch_study(binary, output, prepared=None, steps=16, block_size=None, head_m
     """Eight real conversations decode together and alone on the checkpoint; tokens, logits and K/V agree.
 
     block_size holds the batched conversations in blocks of that many slots,
-    allocated in turn so their tables interleave; the default is one block of
-    the full context each. head_major orders each block's rows by head.
+    allocated in turn so their tables interleave; the default is the plan's
+    layout. head_major orders each block's rows by head. The receipt records the
+    layout the driver reports.
     """
     from llm_mojo.models.qwen2.tokenizer_assets import ensure_prepared
     binary=Path(binary).resolve()
@@ -789,9 +808,12 @@ def batch_study(binary, output, prepared=None, steps=16, block_size=None, head_m
         env=environment(),capture_output=True,text=True,check=True)
     if ('model device Apple M4 Pro backend metal' not in result.stdout or
             'batch passed:' not in result.stdout): raise ValueError('missing batched decode completion')
+    reported=[line.split()[2:] for line in result.stdout.splitlines() if line.startswith('batched blocks ')]
+    if len(reported)!=1 or (block_size is not None and int(reported[0][0])!=int(block_size)):
+        raise ValueError('the model driver did not report the batched layout')
     verify_build(binary)
     write(output,dict(kind='model-runtime-batch-v1',build=receipt,steps=steps,
-        block_size=block_size,head_major=head_major,
+        block_size=int(reported[0][0]),head_major=reported[0][1]=='head-major',
         prepared_manifest_sha256=sha(prepared/'manifest.json'),tokenizer_sha256=sha(tables),stdout=result.stdout))
 
 

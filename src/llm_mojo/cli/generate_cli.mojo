@@ -1,26 +1,18 @@
 """Native plain-text greedy generation with optional diagnostic events."""
 from std.math import ceildiv
-from std.sys import argv, get_defined_int
+from std.sys import argv
 from llm_mojo.runtime.clock import now
 from llm_mojo.models.qwen2.tokens import is_stop
 from max.gpu.host import DeviceContext
 from llm_mojo.models.qwen2.model import QwenModel, generation_budget
-from llm_mojo.models.qwen2.plan import MAX_CONTEXT, execution_plan
+from llm_mojo.models.qwen2.plan import KV_BLOCK_SIZE, KV_HEAD_MAJOR, MAX_CONTEXT, execution_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace, TokenizerDecoder
 from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.blocks import BlockManager
 from llm_mojo.serving.kv_pool import KVPool
 
-# The sequence lives in one block of the whole context unless a build sets
-# -D KV_BLOCK_SIZE to a multiple of 32, and -D KV_HEAD_MAJOR=1 orders each block
-# by head; the paged KV study's single-sequence check compares such builds.
-comptime KV_BLOCK_SIZE = get_defined_int["KV_BLOCK_SIZE", default=MAX_CONTEXT]()
-comptime KV_HEAD_MAJOR = get_defined_int["KV_HEAD_MAJOR", default=0]() == 1
-
 
 def main() raises:
-    comptime assert KV_BLOCK_SIZE == MAX_CONTEXT or (KV_BLOCK_SIZE > 0 and KV_BLOCK_SIZE % 32 == 0), (
-        "KV_BLOCK_SIZE must be a multiple of 32")
     var started = now()
     var args = argv()
     if len(args) != 7 and len(args) != 8:

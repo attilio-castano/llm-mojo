@@ -27,6 +27,23 @@ comptime MAX_CONTEXT = 4096
 comptime DECODE_PROJECTION = get_defined_int["DECODE_PROJECTION", default=8]()
 
 
+def _kv_block_size[size: Int]() -> Int:
+    comptime assert size > 0 and size <= MAX_CONTEXT and size % 32 == 0, (
+        "KV_BLOCK_SIZE must be a multiple of 32 up to MAX_CONTEXT")
+    return size
+
+
+# Chat, generation and the batch validation hold each sequence's K/V in blocks of
+# KV_BLOCK_SIZE slots, slot-major unless KV_HEAD_MAJOR. The paged KV study selected
+# and confirmed 32-slot slot-major blocks, adopted on 2026-10-05
+# (studies/model_generation/paged-kv-loop.md); a layout changes where a row lives,
+# never a result. Builds may select another multiple of 32 with -D KV_BLOCK_SIZE=N,
+# MAX_CONTEXT holding a sequence in one block, and head-major order with
+# -D KV_HEAD_MAJOR=1.
+comptime KV_BLOCK_SIZE = _kv_block_size[get_defined_int["KV_BLOCK_SIZE", default=32]()]()
+comptime KV_HEAD_MAJOR = get_defined_int["KV_HEAD_MAJOR", default=0]() == 1
+
+
 @fieldwise_init
 struct ExecutionPlan(ImplicitlyCopyable, Movable):
     """One call's decoder configuration and decode features.

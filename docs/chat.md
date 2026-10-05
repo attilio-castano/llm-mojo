@@ -49,8 +49,9 @@ An execution failure invalidates the session; `/reset` is required before reuse.
 
 `ChatHistory` owns exact token IDs. `ChatSession.length()`, the length the
 session's block manager has committed, identifies the prefix already submitted
-to all 24 layer caches; the session holds the conversation in one block of the
-full context. Every model call receives a suffix beginning
+to all 24 layer caches; the session holds the conversation in 32-slot blocks,
+which its block manager hands out as the conversation grows
+([paged storage](layouts.md#paged-kv-storage)). Every model call receives a suffix beginning
 at that position and selects Fast using the actual row count and cumulative
 context length. Single-row M4 Pro Fast calls combine residual/RMSNorm fusion,
 buffer swapping and GPU argmax; see the [measured study](../studies/model_generation/residual-norm.md).

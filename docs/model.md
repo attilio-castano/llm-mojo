@@ -258,6 +258,10 @@ group_size = Nq / Nkv = 7
 kv_head(query_head) = query_head / group_size
 ```
 
+In the model, `K` and `V` are views through the sequence's block table into the
+caller's KV pool, 32-slot blocks by default; translation changes where a row is
+read, not the arithmetic below ([paged storage](layouts.md#paged-kv-storage)).
+
 Query row `r` represents active position `past + r`, so its inclusive causal
 key range is `0 .. past + r`. Within that range, V0 performs:
 
