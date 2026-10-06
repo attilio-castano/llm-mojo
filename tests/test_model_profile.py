@@ -753,6 +753,20 @@ class ModelProfileTests(unittest.TestCase):
             else: damaged['runs'][0]['arrangement'] = 8
             with self.subTest(damage=damage), self.assertRaises(ValueError): summary(damaged)
 
+    def test_retained_single_sequence_repeat(self):
+        """1e's check repeated with device proof: the same executables, arrangement 5 against 8, every run on Metal."""
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import single_sequence_summary
+        studies = repository_root()/'studies/model_generation'
+        record = json.loads((studies/'batch-reordered-single-sequence-repeat.json').read_text())
+        original = json.loads((studies/'batch-reordered-single-sequence.json').read_text())
+        self.assertEqual(single_sequence_summary(record), (record['block_ratios'], record['median_block_ratio'], record['verdict']))
+        self.assertEqual((record['verdict'], record['texts_identical']), ('no regression', True))
+        self.assertEqual(record['prompt']['sha256'], original['prompt']['sha256'])
+        self.assertEqual({arm: (b['commit'], b['archive'], b['decode_projection'], b['sha256']) for arm, b in record['binaries'].items()},
+                         {arm: (original['binaries'][a]['commit'], False, int(a), original['binaries'][a]['sha256'])
+                          for arm, a in (('baseline', '5'), ('candidate', '8'))})
+
     def test_batch_support_distinguishes_backend_failure_from_bad_results(self):
         from llm_mojo.benchmarks.model_profile import batch_support_parse
         base='device: Apple M4 Pro\napi: metal\nBATCH_EAGER_PASS 15\n'
