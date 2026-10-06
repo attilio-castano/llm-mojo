@@ -324,6 +324,22 @@ On 2026-09-27 arrangement 8 became the default. Adopting it:
   model. The [model contract](../../docs/model.md#decode-projection-order)
   documents the new order.
 
+The check's record keeps no device, and its reports were not kept. On
+2026-10-06 the check was repeated with `single-sequence`, which accepts a run
+only if its report proves the M4 Pro's Metal device. A checkout of `9d5a24f`,
+built with that commit's tool, reproduced both measured executables byte for
+byte. All sixteen runs ran on `Apple M4 Pro/metal` and generated the same text.
+Under the same rule the verdict is again no regression, with block ratios of
+1.028, 1.082, 0.867 and 0.914. The first two blocks lost the original's gain.
+Three of arrangement 8's runs there had medians of 8.5–9.5 ms, with about half
+their steps over 9 ms. Its other five runs took 7.35–7.54 ms, and arrangement
+5's took 8.01–9.28 ms. The machine had been quiet for two minutes before the
+run, and the recorded conditions show nothing unusual. The repeat proves on
+Metal that arrangement 8 does not slow one sequence, but it does not cleanly
+reproduce the 10%: its median runs took 7.53 ms against 8.15 ms. Its
+[record](batch-reordered-single-sequence-repeat.json) keeps every step and each
+run's device.
+
 ## Evidence and reproduction
 
 The lossless [archive](batch-reordered.json.gz) is 1,039,797 bytes; its
@@ -341,7 +357,9 @@ It retains:
 
 The single-sequence check's [record](batch-reordered-single-sequence.json)
 keeps each run's 127 decode steps, both binaries' hashes and provenance, the
-prompt's hash and the recorded conditions.
+prompt's hash and the recorded conditions. Its
+[repeat's record](batch-reordered-single-sequence-repeat.json) also keeps each
+run's device.
 
 `batch-size-replay --study reordered` verifies the archive, reapplies the
 accuracy gate, the frozen rule and the stop rule, and regenerates
@@ -358,5 +376,6 @@ uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_pr
 copies that lose a sample, block, trace, measured command, accuracy or token
 record, change a binary, fail the recorded power conditions, drop or alter the
 diagnostics, or carry a confirmation of another arrangement. It also recomputes
-the single-sequence check's verdict from its raw steps. Collecting new
+the single-sequence check's verdict from its raw steps, and the repeat's, whose
+executables must be the check's. Collecting new
 evidence uses the [measurement tools](../../src/llm_mojo/benchmarks/README.md#batch-size-study).

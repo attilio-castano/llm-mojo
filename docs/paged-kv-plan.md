@@ -493,7 +493,9 @@ rejects a run without `Apple M4 Pro/metal`.
 
 Phase 1's [1e record](../studies/model_generation/batch-reordered-single-sequence.json)
 was collected the same way and keeps no device. Its reports were not kept, so it
-cannot gain one.
+cannot gain one. On 2026-10-06 a
+[repeat](../studies/model_generation/batch-reordered.md#decision) of the same
+executables proved the device and found no regression.
 
 ### 2e on `c356c08`, 2026-10-05
 
