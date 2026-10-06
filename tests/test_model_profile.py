@@ -32,7 +32,300 @@ def _batch_stdout(context, drop=None, marked=(3, 1), unsorted=False, comparisons
     return '\n'.join(lines + ['BATCH_COMPLETE']) + '\n'
 
 
+def _prefill_stdout(layouts=(0, 1, 2, 3, 4, 5, 6), study='paged', drop=None, configuration=None, differing=0):
+    lines = ['device: Apple M4 Pro', 'api: metal', f'study: {study}', 'history rows equal to layout 0: 4080']
+    for w, (rows, total, declared) in enumerate(contract.PAGED_PREFILL_WORKLOADS):
+        lines.append(f'prefill workload: {w} {rows} {total} {configuration if configuration is not None and w == 3 else declared}')
+        lines += [f'prefill tokens: {w} {layout} {differing if i == 1 else 0}' for i, layout in enumerate(layouts)]
+        for comparison in range(len(layouts)):
+            for arm in range(2):
+                for sample in range(10):
+                    if (w, comparison, arm, sample) != drop:
+                        lines.append(f'PREFILL {w} {comparison} {arm} {sample} {1000*rows + 10*comparison + arm + 1}')
+    return '\n'.join(lines + ['PREFILL_COMPLETE']) + '\n'
+
+
+def _paged_timing(scale, layouts=contract.PAGED_CANDIDATES):
+    """Synthetic 2d timings: comparison i's second arm takes scale(cell, layout) times layout 0's time."""
+    samples, prefill = [], []
+    count = 1+len(layouts)
+    for context, sequences in contract.batch_workloads():
+        for block in range(4):
+            for comparison in range(count):
+                for arm in range(2):
+                    factor = scale((context, sequences), layouts[comparison-1]) if comparison and arm else 1
+                    samples += [dict(context=context, sequences=sequences, block=block, comparison=comparison, arm=arm,
+                                     sample=sample, elapsed_ns=int(1_000_000*(sequences+1)*factor)+sample, marks=[])
+                                for sample in range(10)]
+    for w, (rows, _, _) in enumerate(contract.PAGED_PREFILL_WORKLOADS):
+        for block in range(4):
+            for comparison in range(count):
+                for arm in range(2):
+                    factor = scale(('prefill', w), layouts[comparison-1]) if comparison and arm else 1
+                    prefill += [dict(workload=w, block=block, comparison=comparison, arm=arm, sample=sample,
+                                     elapsed_ns=int(100_000*rows*factor)+sample) for sample in range(10)]
+    return dict(samples=samples, prefill_samples=prefill)
+
+
 class ModelProfileTests(unittest.TestCase):
+    def test_paged_contract_declares_layouts_workloads_and_traces(self):
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import batch_comparisons, batch_study
+        declaration = contract.PAGED_DECLARATION
+        self.assertEqual(json.loads(json.dumps(declaration)), declaration)
+        self.assertEqual(len(declaration['comparisons']), 7)
+        self.assertEqual(len({(v['block_size'], v['order']) for v in contract.PAGED_LAYOUTS.values()}), 7)
+        self.assertEqual(len(contract.batch_workloads()) + len(contract.PAGED_PREFILL_WORKLOADS), 35)
+        runtime = json.loads((repository_root()/'tests/fixtures/model_runtime.json').read_text())
+        self.assertEqual([(w['rows'], w['total']) for w in runtime['measurements']],
+                         [(rows, total) for rows, total, _ in contract.PAGED_PREFILL_WORKLOADS[:11]])
+        self.assertEqual({c for *_, c in contract.PAGED_PREFILL_WORKLOADS[:11]}, {2, 3, 21})
+        self.assertEqual({c for *_, c in contract.PAGED_PREFILL_WORKLOADS[11:]}, {0})
+        self.assertEqual(batch_study('paged')['traces'][1][3:], ('paged-profile-3968-64-l1', dict(layout=1)))
+        for context, sequences, layout in contract.PAGED_TRACES:
+            spec = contract.paged_specification(context, sequences, layout)
+            self.assertEqual((spec['profile_workload'], spec['dispatches_per_iteration']), (f'model-p3968-b64-l{layout}', 245))
+            data = dict(implementation=contract.BATCH_IMPLEMENTATION, layout=layout,
+                        entrypoint=contract.ENTRYPOINTS[contract.BATCH_IMPLEMENTATION],
+                        profile_iterations=8, profile_warmup_iterations=10, **spec)
+            self.assertEqual(contract.configuration(data), dict(spec, layout=layout))
+            for change in (dict(layout=2), dict(arrangement=8), dict(profile_rows=32)):
+                with self.subTest(change=change), self.assertRaises(ValueError):
+                    contract.configuration(dict(data, **change))
+        self.assertEqual(batch_comparisons('paged'), (7, None))
+        self.assertEqual(batch_comparisons('paged-confirm:3'), (2, None))
+        for invalid in ('paged-confirm:0', 'paged-confirm:7', 'paged-confirm:', 'paged-confirm:x', 'paged-confirm:-1'):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                batch_comparisons(invalid)
+        prompt = contract.single_sequence_prompt()
+        self.assertEqual(hashlib.sha256(prompt.encode()).hexdigest(), contract.SINGLE_SEQUENCE['prompt']['sha256'])
+        # The rerun shares the matrix, procedure and rule, and keeps its own archive.
+        rerun = batch_study('paged-loop')
+        self.assertEqual((rerun['stem'], rerun['argument'], rerun['traces']),
+                         ('paged-kv-loop', 'paged', batch_study('paged')['traces']))
+        changed = {k for k in rerun['declaration'] if rerun['declaration'][k] != contract.PAGED_DECLARATION.get(k)}
+        self.assertEqual(changed, {'attention', 'hypothesis'})
+
+    def test_paged_prefill_records_need_declared_chunks_equal_tokens_and_a_full_census(self):
+        from llm_mojo.benchmarks.model_profile import parse_paged_prefill
+        records, tokens = parse_paged_prefill(_prefill_stdout(), 2, 7, 'paged')
+        self.assertEqual((len(records), len(tokens)), (13*7*2*10, 13*7))
+        self.assertTrue(all(r['block'] == 2 for r in records + tokens))
+        confirm = _prefill_stdout(layouts=(0, 3), study='paged-confirm:3')
+        self.assertEqual(len(parse_paged_prefill(confirm, 0, 2, 'paged-confirm:3')[0]), 13*2*2*10)
+        for invalid in (_prefill_stdout(drop=(5, 3, 1, 9)), _prefill_stdout(configuration=3), _prefill_stdout(differing=1),
+                        _prefill_stdout(study='paged-confirm:1'), _prefill_stdout().replace('PREFILL_COMPLETE\n', ''),
+                        _prefill_stdout().replace('api: metal', 'api: cpu')):
+            with self.subTest(), self.assertRaises(ValueError):
+                parse_paged_prefill(invalid, 0, 7, 'paged')
+
+    def test_paged_summary_rates_every_layout_in_decode_and_prefill(self):
+        from llm_mojo.benchmarks.model_profile import paged_decision, paged_summarize
+        # Layout 1 is 20% slower in one decode workload, layout 2 10% faster in every prefill chunk.
+        def scale(cell, layout):
+            return {1: 1.2 if cell == (3968, 64) else 1, 2: .9 if cell[0] == 'prefill' else 1}.get(layout, 1)
+        timing = _paged_timing(scale)
+        summary = paged_summarize(timing, contract.PAGED_CANDIDATES)
+        self.assertEqual((len(summary['decode']), len(summary['prefill'])), (22, 13))
+        slow = next(r for r in summary['decode'] if (r['context'], r['sequences']) == (3968, 64))
+        self.assertEqual(slow['layouts']['1']['outcome'], 'slower')
+        self.assertAlmostEqual(slow['layouts']['1']['tokens_per_second'], 64*1000/slow['layouts']['1']['ms'])
+        self.assertTrue(all(r['layouts']['2']['outcome'] == 'faster' for r in summary['prefill']))
+        self.assertEqual([(r['rows'], r['total'], r['configuration']) for r in summary['prefill']],
+                         list(contract.PAGED_PREFILL_WORKLOADS))
+        decision = paged_decision(summary)
+        self.assertEqual((decision['qualified'], decision['selected']), ([2, 3, 4, 5, 6], 2))
+        for damage in ('samples', 'prefill_samples'):
+            damaged = dict(timing, **{damage: timing[damage][1:]})
+            with self.subTest(damage=damage), self.assertRaises(ValueError):
+                paged_summarize(damaged, contract.PAGED_CANDIDATES)
+
+    def test_paged_decision_selects_the_smallest_qualifying_block_size(self):
+        from llm_mojo.benchmarks.model_profile import paged_decision
+        def summary(outcomes, layouts=contract.PAGED_CANDIDATES):
+            row = lambda i: dict(layouts={str(l): dict(outcome=outcomes.get(l, {}).get(i, 'inconclusive')) for l in layouts})
+            return dict(decode=[row(i) for i in range(22)], prefill=[row(22+i) for i in range(13)])
+        for outcomes, selected in (({}, 1),
+                                   ({1: {30: 'slower'}}, 2),
+                                   ({2: {3: 'faster'}}, 2),
+                                   ({1: {0: 'slower'}, 2: {5: 'slower'}}, 3),
+                                   ({1: {0: 'slower'}, 2: {5: 'slower'}, 4: {7: 'faster'}}, 4),
+                                   ({1: {0: 'slower'}, 2: {5: 'slower'}, 3: {1: 'slower'}, 4: {2: 'slower'},
+                                     5: {3: 'slower'}, 6: {34: 'slower'}}, None)):
+            with self.subTest(outcomes=outcomes):
+                self.assertEqual(paged_decision(summary(outcomes))['selected'], selected)
+        confirmation = paged_decision(summary({}, layouts=(3,)))
+        self.assertEqual((confirmation['qualified'], confirmation['selected']), ([3], 3))
+
+    def test_retained_paged_kv_integrity(self):
+        """2d's archive: no layout qualifies, and decode attention carries the cost."""
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import paged_replay
+        source = repository_root()/'studies/model_generation'
+        original = json.loads(gzip.decompress((source/'paged-kv.json.gz').read_bytes()))
+        retained = json.loads((source/'paged-kv-summary.json').read_text())
+        self.assertEqual((retained['decision']['qualified'], retained['decision']['selected']), ([], None))
+        self.assertIsNone(retained['confirmation'])
+        attention = {(g['layout'], g['repeat']): g['median_ms'] for g in retained['gpu'] if g['stage'] == 'FP32 GQA'}
+        self.assertTrue(all(attention[1, r] > attention[3, r] > attention[5, r] > attention[0, r] for r in range(2)))
+        for damage in (None, 'sample', 'prefill', 'block', 'capture', 'conditions', 'trace-conditions', 'argument',
+                       'declaration', 'token', 'prefill-token', 'confirmation'):
+            record = copy.deepcopy(original)
+            if damage == 'sample': record['timing']['samples'].pop()
+            elif damage == 'prefill': record['timing']['prefill_samples'].pop()
+            elif damage == 'block': record['timing']['blocks'].pop()
+            elif damage == 'capture': record['captures'].pop()
+            elif damage == 'conditions': record['timing']['blocks'][2]['before']['power_mode_raw'] = '1'
+            elif damage == 'trace-conditions': record['captures'][3]['conditions']['after']['battery']['power_source'] = 'Battery Power'
+            elif damage == 'argument': record['timing']['argument'] = 'paged-confirm:3'
+            elif damage == 'declaration': record['timing']['build']['declaration']['hypothesis'] = 'changed after measuring'
+            elif damage == 'token': record['timing']['token_differences'][5]['differing'] = 1
+            elif damage == 'prefill-token': record['timing']['prefill_token_differences'].pop()
+            elif damage == 'confirmation': record['confirmation'] = record['timing']
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                raw = json.dumps(record).encode()
+                packed = gzip.compress(raw, mtime=0)
+                (directory/'paged-kv.json.gz').write_bytes(packed)
+                (directory/'paged-kv.json').write_text(json.dumps(dict(kind=record['kind'],
+                    sha256=hashlib.sha256(packed).hexdigest(), uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with self.subTest(damage=damage), redirect_stdout(StringIO()):
+                    if damage is None:
+                        paged_replay(directory)
+                        self.assertEqual(json.loads((directory/'paged-kv-summary.json').read_text()), retained)
+                    else:
+                        with self.assertRaises((ValueError, RuntimeError)): paged_replay(directory)
+
+    def test_retained_paged_kv_loop_integrity(self):
+        """2d's rerun after the one-loop kernel: every layout qualifies, 32 slots are selected and confirmed."""
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import paged_replay
+        source = repository_root()/'studies/model_generation'
+        original = json.loads(gzip.decompress((source/'paged-kv-loop.json.gz').read_bytes()))
+        retained = json.loads((source/'paged-kv-loop-summary.json').read_text())
+        self.assertEqual((retained['decision']['qualified'], retained['decision']['selected'], retained['confirmed']),
+                         (list(contract.PAGED_CANDIDATES), 1, True))
+        self.assertEqual(original['timing']['build']['declaration'], contract.PAGED_LOOP_DECLARATION)
+        for damage in (None, 'sample', 'prefill', 'capture', 'conditions', 'declaration', 'token', 'no-confirmation',
+                       'confirmation-argument', 'confirmation-sample', 'confirmation-build'):
+            record = copy.deepcopy(original)
+            if damage == 'sample': record['timing']['samples'].pop()
+            elif damage == 'prefill': record['timing']['prefill_samples'].pop()
+            elif damage == 'capture': record['captures'].pop()
+            elif damage == 'conditions': record['confirmation']['blocks'][1]['after']['power_mode_raw'] = '1'
+            elif damage == 'declaration': record['timing']['build']['declaration'] = contract.PAGED_DECLARATION
+            elif damage == 'token': record['confirmation']['prefill_token_differences'][3]['differing'] = 1
+            elif damage == 'no-confirmation': record['confirmation'] = None
+            elif damage == 'confirmation-argument': record['confirmation']['argument'] = 'paged-confirm:2'
+            elif damage == 'confirmation-sample': record['confirmation']['samples'].pop()
+            elif damage == 'confirmation-build': record['confirmation']['build'] = copy.deepcopy(original['timing']['build']) | dict(binaries={})
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                raw = json.dumps(record).encode()
+                packed = gzip.compress(raw, mtime=0)
+                (directory/'paged-kv-loop.json.gz').write_bytes(packed)
+                (directory/'paged-kv-loop.json').write_text(json.dumps(dict(kind=record['kind'],
+                    sha256=hashlib.sha256(packed).hexdigest(), uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+                with self.subTest(damage=damage), redirect_stdout(StringIO()):
+                    if damage is None:
+                        paged_replay(directory, 'paged-loop')
+                        self.assertEqual(json.loads((directory/'paged-kv-loop-summary.json').read_text()), retained)
+                    else:
+                        with self.assertRaises((ValueError, RuntimeError)): paged_replay(directory, 'paged-loop')
+
+    def test_retained_paged_kv_single_sequence_check(self):
+        """2d's adoption gate: one sequence in 32-slot blocks with the one-loop kernel against 6422f84."""
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import single_sequence_summary
+        record = json.loads((repository_root()/'studies/model_generation/paged-kv-single-sequence.json').read_text())
+        self.assertEqual(single_sequence_summary(record), (record['block_ratios'], record['median_block_ratio'], record['verdict']))
+        self.assertEqual((record['verdict'], record['texts_identical']), ('no regression', True))
+        self.assertEqual({arm: (b['commit'][:7], b['archive'], b['decode_projection'], b['kv_block_size'], b['kv_head_major'])
+                          for arm, b in record['binaries'].items()},
+                         {'baseline': ('6422f84', True, 8, None, False), 'candidate': ('26b0a08', False, 8, 32, False)})
+
+    def test_retained_paged_kv_2c_timing(self):
+        """2c's timing sanity check: one block per sequence, 6422f84's generator against a84ad34's, no claim."""
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import single_sequence_summary
+        record = json.loads((repository_root()/'studies/model_generation/paged-kv-2c-timing.json').read_text())
+        self.assertEqual(single_sequence_summary(record), (record['block_ratios'], record['median_block_ratio'], record['verdict']))
+        self.assertEqual((record['verdict'], record['texts_identical']), ('no regression', True))
+        self.assertEqual(record['prompt']['sha256'], contract.SINGLE_SEQUENCE['prompt']['sha256'])
+        self.assertEqual({arm: (b['commit'][:7], b['archive'], b['decode_projection'], b['kv_block_size'])
+                          for arm, b in record['binaries'].items()},
+                         {'baseline': ('6422f84', True, 8, None), 'candidate': ('a84ad34', False, 8, None)})
+        for damage in ('step', 'order'):
+            damaged = copy.deepcopy(record)
+            if damage == 'step': damaged['runs'][5]['decode_step_ns'].pop()
+            else: damaged['runs'][1]['arm'] = 'baseline'
+            with self.subTest(damage=damage), self.assertRaises(ValueError):
+                single_sequence_summary(damaged)
+
+    def test_retained_paged_kv_2e_timing(self):
+        """2e's timing sanity check: the default 32-slot blocks, 6422f84's generator against c356c08's, no claim."""
+        from llm_mojo._repository import repository_root
+        from llm_mojo.benchmarks.model_profile import single_sequence_summary
+        record = json.loads((repository_root()/'studies/model_generation/paged-kv-2e-timing.json').read_text())
+        self.assertEqual(single_sequence_summary(record), (record['block_ratios'], record['median_block_ratio'], record['verdict']))
+        self.assertEqual((record['verdict'], record['texts_identical']), ('no regression', True))
+        self.assertEqual(record['prompt']['sha256'], contract.SINGLE_SEQUENCE['prompt']['sha256'])
+        self.assertEqual({arm: (b['commit'][:7], b['archive'], b['decode_projection'], b['kv_block_size'], b['kv_head_major'])
+                          for arm, b in record['binaries'].items()},
+                         {'baseline': ('6422f84', True, 8, None, False), 'candidate': ('c356c08', True, 8, 32, False)})
+
+    def test_single_sequence_rule_from_raw_steps(self):
+        from llm_mojo.benchmarks.model_profile import single_sequence_summary
+        def record(candidate_ms):
+            runs = []
+            for block, order in enumerate(contract.SINGLE_SEQUENCE['blocks'], 1):
+                for arm in order:
+                    step = 8_000_000 if arm == 'baseline' else int(candidate_ms[block-1]*1_000_000)
+                    steps = [step + i for i in range(127)]
+                    runs.append(dict(run=len(runs)+1, block=block, arm=arm, device='Apple M4 Pro/metal',
+                                     decode_step_ns=steps, median_ms=statistics.median(steps)/1e6))
+            return dict(prompt=dict(max_new_tokens=128), runs=runs)
+        for candidate, verdict in (((7.9, 8.1, 7.8, 8.0), 'no regression'), ((8.1, 8.2, 8.2, 8.3), 'consistent slowdown below the floor'),
+                                   ((8.5, 8.6, 8.7, 8.5), 'regression')):
+            with self.subTest(candidate=candidate):
+                self.assertEqual(single_sequence_summary(record(candidate))[2], verdict)
+        for damage in ('step', 'order', 'device', 'no device'):
+            damaged = record((8, 8, 8, 8))
+            if damage == 'step': damaged['runs'][3]['decode_step_ns'].pop()
+            elif damage == 'order': damaged['runs'][0]['arm'] = 'candidate'
+            elif damage == 'device': damaged['runs'][6]['device'] = 'Apple M4 Pro/cpu'
+            else: del damaged['runs'][9]['device']
+            with self.subTest(damage=damage), self.assertRaises(ValueError):
+                single_sequence_summary(damaged)
+
+    def test_single_sequence_run_must_prove_the_metal_device(self):
+        """A run counts only if its report passes the generation validator; the run keeps the device it proves."""
+        from llm_mojo.benchmarks.model_profile import single_sequence_run
+        from llm_mojo.validation.model import route_record
+        def describe(configuration):
+            return ' '.join(f'{k}={v}' for k, v in route_record(configuration).items())
+        good = '\n'.join(['event\tindex\tvalue\tnanoseconds', 'mode\t0\tfast\t0',
+                          *(f'prompt\t{i}\t{42+i}\t0' for i in range(3)), 'device\t0\tApple M4 Pro/metal\t0',
+                          'configuration\t0\t0\t0', f'route\t0\t{describe(0)}\t0', 'token\t0\t7\t10', 'decode\t0\t1\t5',
+                          f'route\t1\t{describe(26)}\t0', 'token\t1\t151645\t20', 'cache\t0\t4\t0', 'submitted\t0\t96\t0',
+                          'finish\t2\tstop\t21']) + '\n'
+        declared = dict(max_new_tokens=32, policy='fast', prompt=dict(tokens=3))
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory)/'run.tsv'
+            report.write_text(good)
+            self.assertEqual(single_sequence_run(report, declared), ('Apple M4 Pro/metal', [5]))
+            for damage, text, run in (('CPU fallback', good.replace('Apple M4 Pro/metal', 'Apple M4 Pro/cpu'), declared),
+                                      ('no device', good.replace('device\t0\tApple M4 Pro/metal\t0\n', ''), declared),
+                                      ('another route', good.replace('mode\t0\tfast', 'mode\t0\tbaseline'), declared),
+                                      ('another prompt', good, dict(declared, prompt=dict(tokens=4)))):
+                report.write_text(text)
+                with self.subTest(damage=damage), self.assertRaises(ValueError):
+                    single_sequence_run(report, run)
+
     def test_batch_contract_declares_its_matrix_and_trace_geometry(self):
         batch = contract.BATCH_IMPLEMENTATION
         self.assertEqual(contract.options(batch), contract.options('qwen_model_all_three'))

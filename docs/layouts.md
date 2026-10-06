@@ -286,6 +286,43 @@ and [GQA prefill](../studies/gqa_prefill/README.md) studies explain the fused
 implementations' sequence/query ownership, shared K/V tiles, accumulator
 state, workspace and synchronization, alongside their measurements.
 
+## Paged K/V storage
+
+The model's cached keys and values live in one pool of blocks, each holding `BS`
+consecutive positions of one sequence in every layer:
+
+```text
+Pool[block, layer, kv, slot, head, dim]    slot-major, the default
+Pool[block, layer, kv, head, slot, dim]    head-major
+```
+
+`kv` is 0 for K and 1 for V, and `kernels/paged_kv.mojo` maps a coordinate to
+its offset. A sequence's table lists its blocks in position order, so its
+logical keys are a gather, the first mapping here that is not affine:
+
+```text
+K_s[t, head, dim] = Pool[table_s[t / BS], layer, 0, t % BS, head, dim]
+```
+
+Inside one block and layer the rows keep the attention contract's layout:
+`(BS, Nkv, D) : (Nkv*D, D, 1)` slot-major, or `(Nkv, BS, D) : (BS*D, D, 1)`
+head-major. A table of one block of the whole context is the contract's
+contiguous `(T, Nkv, D)` view. Chat, generation and the batch validation hold
+sequences in 32-slot slot-major blocks, which the
+[paged KV study](../studies/model_generation/paged-kv-loop.md) selected and
+confirmed; `models/qwen2/plan.mojo` names the default.
+
+A table of several blocks needs a block size that is a multiple of 32, so the
+32-row tiles that attention reads never straddle two blocks. Prefill attention
+translates once per tile. Decode attention copies the K offset of every block a
+row sees into threadgroup memory and then walks each SIMD group's keys in one
+loop. Translation changes where a row is read, never which rows a reduction
+visits or in what order, so every layout produces the same bytes.
+
+The pool owns the storage and counts each block's written slots;
+`serving/blocks.mojo`'s block manager owns which sequence holds which block; and
+the model checks every step's table against those counts before it launches.
+
 ## Use in code and evidence
 
 - Name semantic axes before reducing them to integer positions.

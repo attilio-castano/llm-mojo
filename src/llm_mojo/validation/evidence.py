@@ -15,10 +15,12 @@ def write(path, value):
     Path(path).write_text(json.dumps(value, indent=2, allow_nan=False) + '\n')
 
 
-def source_identity():
-    root = repository_root()
+def source_identity(root=None, repository=None):
+    """The checkout's state and every source file's hash; root and repository describe another
+    tree instead, such as a commit's archive."""
+    root = Path(root) if root is not None else repository_root()
     paths = [p for base in ('src', 'tests') for p in (root / base).rglob('*')
              if p.is_file() and p.suffix in ('.mojo', '.py', '.json', '.gz', '.lock')]
     paths += [root / 'pyproject.toml', root / 'uv.lock']
-    return dict(repository=repository_state(),
+    return dict(repository=repository if repository is not None else repository_state(),
                 sources={str(p.relative_to(root)): sha(p) for p in sorted(paths)})

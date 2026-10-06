@@ -103,3 +103,19 @@ struct KVPool(Movable):
         ctx.synchronize()
         for block in range(self.blocks):
             self.written[block] = 0
+
+    def relayout(mut self, ctx: DeviceContext, block_size: Int, head_major: Bool) raises:
+        """Hold the same storage in blocks of `block_size` slots, in the given order within a block.
+
+        Pending use finishes first, and every block becomes empty: the bytes stay,
+        but no slot means anything until it is written again. The pool's slots
+        must split into whole blocks. Rejection changes nothing.
+        """
+        var slots = self.blocks * self.block_size
+        if block_size < 1 or block_size > 4096 or slots % block_size != 0:
+            raise Error("invalid KV pool layout")
+        ctx.synchronize()
+        self.blocks = slots // block_size
+        self.block_size = block_size
+        self.head_major = head_major
+        self.written = List[Int](length=self.blocks, fill=0)

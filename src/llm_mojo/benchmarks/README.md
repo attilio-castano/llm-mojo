@@ -540,3 +540,44 @@ uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --
 
 Its compact record keeps every screen sample and each trace's per-stage totals,
 not the traces' intervals.
+
+### Paged KV study
+
+The [paged KV translation-cost study](../../../studies/model_generation/paged-kv.md)
+(2d) reuses the matrix with `--study paged`. Layout 0 holds each sequence in one
+block of the whole context; layouts 1–6 use blocks of 32, 64 and 128 slots,
+slot-major and then head-major. Each block of the procedure adds a prefill
+process that times 13 one-sequence chunks under Fast's plan. One 3 GiB working
+pool serves every layout: before every arm, outside the timed interval, it is
+held in that arm's layout, a seeded block manager allocates each sequence's
+blocks, and each sequence's cached blocks are copied from its layout's history.
+That history is prefilled once per layout and must equal layout 0's byte for
+byte, and every step must select layout 0's tokens. `batch-size-confirm`
+applies the frozen rule and reruns the selected layout against layout 0:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-build --study paged --prepared /absolute/prepared-v1 --output /private/tmp/paged-kv-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-collect --study paged --build /private/tmp/paged-kv-build --output /private/tmp/paged-kv-screen
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-confirm --study paged --build /private/tmp/paged-kv-build --screen /private/tmp/paged-kv-screen --output /private/tmp/paged-kv-confirmation
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-capture --study paged --build /private/tmp/paged-kv-build --output /private/tmp/paged-kv-traces
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-archive --study paged --timings /private/tmp/paged-kv-screen --traces /private/tmp/paged-kv-traces --confirmation /private/tmp/paged-kv-confirmation --output studies/model_generation
+uv run --locked python -m llm_mojo.benchmarks.model_profile batch-size-replay --study paged --output studies/model_generation
+uv run --locked --with matplotlib==3.10.8 python -m llm_mojo.benchmarks.model_profile batch-size-plot --study paged --output studies/model_generation
+```
+
+[The rerun](../../../studies/model_generation/paged-kv-loop.md) after the
+decode kernel's fix passes `--study paged-loop` to the same commands, which keeps
+its archive, `paged-kv-loop.json.gz`, beside 2d's.
+
+`single-sequence` runs 1e's single-sequence check between two receipted
+generator builds: sixteen Fast runs of 128 tokens after a 1,176-token prompt in
+four alternating blocks, under a rule fixed in the contract. Each run's report
+must pass the generation validator, which requires the M4 Pro's Metal device,
+and the record keeps every run's device, which the replay checks. A build can
+come from a past commit's archive or hold its sequence in another KV layout:
+
+```sh
+uv run --locked python -m llm_mojo.validation.model build --generation --commit 6422f84 --binary /private/tmp/generator-6422f84
+uv run --locked python -m llm_mojo.validation.model build --generation --block-size 64 --binary /private/tmp/generator-64
+uv run --locked python -m llm_mojo.benchmarks.model_profile single-sequence --baseline /private/tmp/generator-6422f84 --candidate /private/tmp/generator-64 --prepared /absolute/prepared-v1 --purpose 'what the check decides' --output /private/tmp/single-sequence
+```

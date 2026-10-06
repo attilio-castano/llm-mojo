@@ -5,7 +5,9 @@ measure the current Fast route. The batch-size commands time decode steps of 1
 to 64 sequences: --study size (1c) pairs three projection row tiles, --study
 projections (1d) screens and confirms exact batched projection arrangements, and
 --study reordered (1e) screens arrangements with other summation orders, with an
-accuracy census and model-level diagnostics.
+accuracy census and model-level diagnostics, and --study paged (2d) screens KV
+block sizes and orders in decode and prefill. single-sequence compares two
+generator builds on one sequence.
 Completed decode experiments are replay-only: their archives, parsers and
 summaries remain, their collectors do not.
 """
@@ -26,7 +28,7 @@ import numpy as np
 from .._repository import environment_tool, repository_root
 from ..validation.evidence import source_identity, sha, write
 from llm_mojo.models.qwen2.assets import verify_prepared
-from ..validation.model import environment
+from ..validation.model import environment, generation_events
 from llm_mojo.models.qwen2.tokenizer_assets import ensure_prepared
 from .environment import stable_environment, conditions_snapshot, require_ac, require_nominal_thermal_state, ensure_record_location
 from . import model_contract as contract
@@ -1414,6 +1416,11 @@ REORDERED_BATCH_STEM = 'batch-reordered'
 REORDERED_BATCH_KIND = 'qwen-batch-reordered-v1'
 ADDRESSING_BATCH_STEM = 'batch-addressing'
 ADDRESSING_BATCH_KIND = 'qwen-batch-addressing-v1'
+PAGED_STEM = 'paged-kv'
+PAGED_KIND = 'qwen-paged-kv-v1'
+PAGED_LOOP_STEM = 'paged-kv-loop'
+PAGED_LOOP_KIND = 'qwen-paged-kv-loop-v1'
+PAGED_STUDIES = ('paged', 'paged-loop')
 
 
 def batch_study(name):
@@ -1441,6 +1448,15 @@ def batch_study(name):
                   for c, b, a in contract.BATCH_ADDRESSING_TRACES]
         return dict(stem=ADDRESSING_BATCH_STEM, kind=ADDRESSING_BATCH_KIND,
                     declaration=contract.BATCH_ADDRESSING_DECLARATION, argument='addressing', traces=traces)
+    if name in PAGED_STUDIES:
+        # 2d and its rerun share the benchmark's paged study; the build's kernel differs.
+        traces = [(c, b, layout, f'paged-profile-{c}-{b}-l{layout}', dict(layout=layout))
+                  for c, b, layout in contract.PAGED_TRACES]
+        if name == 'paged':
+            return dict(stem=PAGED_STEM, kind=PAGED_KIND, declaration=contract.PAGED_DECLARATION, argument='paged',
+                        traces=traces)
+        return dict(stem=PAGED_LOOP_STEM, kind=PAGED_LOOP_KIND, declaration=contract.PAGED_LOOP_DECLARATION,
+                    argument='paged', traces=traces)
     raise ValueError('unknown batch study')
 
 
@@ -1460,10 +1476,18 @@ def batch_comparisons(argument):
     if (argument.startswith(prefix) and argument[len(prefix):].isdigit()
             and int(argument[len(prefix):]) in contract.BATCH_REORDERED_ARRANGEMENTS):
         return 2, None
+    if argument == 'paged':
+        return 1+len(contract.PAGED_CANDIDATES), None
+    prefix = 'paged-confirm:'
+    if (argument.startswith(prefix) and argument[len(prefix):].isdigit()
+            and int(argument[len(prefix):]) in contract.PAGED_CANDIDATES):
+        return 2, None
     raise ValueError('unknown batch study argument')
 
 
 def batch_trace_specification(context, sequences, arm):
+    if 'layout' in arm:
+        return contract.paged_specification(context, sequences, arm['layout'])
     if 'arrangement' in arm:
         return contract.batch_projection_specification(context, sequences, arm['arrangement'])
     return contract.batch_specification(context, sequences, arm['row_tile'])
@@ -1484,9 +1508,11 @@ def batch_build(output, prepared, study='size'):
     machine = stable_environment()
     for context, sequences, arrangement, name, arm in spec['traces']:
         specification = batch_trace_specification(context, sequences, arm)
-        command = [environment_tool('mojo'), 'build', '-I', 'src',
-                   '-D', f'MODEL_BATCH_PROFILE={context}', '-D', f'MODEL_BATCH_SEQUENCES={sequences}',
-                   '-D', f'MODEL_BATCH_ARRANGEMENT={arrangement}',
+        # A paged trace's third field is its layout; it decodes in the default arrangement.
+        target = (['-D', f'MODEL_PAGED_PROFILE={context}', '-D', f'MODEL_BATCH_LAYOUT={arrangement}'] if 'layout' in arm
+                  else ['-D', f'MODEL_BATCH_PROFILE={context}', '-D', f'MODEL_BATCH_ARRANGEMENT={arrangement}'])
+        command = [environment_tool('mojo'), 'build', '-I', 'src', *target,
+                   '-D', f'MODEL_BATCH_SEQUENCES={sequences}',
                    '-D', 'MODEL_BATCH_WORKLOAD='+specification['profile_workload'],
                    '-D', 'MODEL_PREPARED='+identity['prepared'],
                    '-D', 'MODEL_TABLES='+identity['tables'], 'src/llm_mojo/benchmarks/model.mojo', '-o', output/name]
@@ -1601,12 +1627,24 @@ def batch_collect(directory, output, study='size', argument=None):
     extra = {}
     if argument == 'reordered':
         extra['accuracy'] = parse_accuracy(execute([directory/'model', 'accuracy'], output/'accuracy.log'))
+    # 2d adds one prefill process per block, after the decode contexts or, in reversed blocks, before them.
+    paged = study in PAGED_STUDIES
+    if paged:
+        extra.update(prefill_samples=[], prefill_token_differences=[])
     for block in range(4):
         before = conditions()
         reverse = block in (1, 2)
-        for context in (list(reversed(contexts)) if reverse else contexts):
+        processes = contexts + (['prefill'] if paged else [])
+        for context in (list(reversed(processes)) if reverse else processes):
+            if context == 'prefill':
+                stdout = execute([directory/'model', 'paged-prefill', args['prepared'], args['tables'], int(reverse),
+                                  argument], output/f'prefill-b{block}.log', timeout=3600)
+                records, differences = parse_paged_prefill(stdout, block, comparisons, argument)
+                extra['prefill_samples'].extend(records)
+                extra['prefill_token_differences'].extend(differences)
+                continue
             stdout = execute([directory/'model', 'batch', args['prepared'], args['tables'], context, int(reverse),
-                              argument], output/f'c{context}-b{block}.log')
+                              argument], output/f'c{context}-b{block}.log', timeout=3600 if paged else 600)
             samples.extend(parse_batch_samples(stdout, context, block, comparisons, observed, argument))
             tokens.extend(parse_batch_tokens(stdout, context, block))
         blocks.append(dict(block=block, before=before, after=conditions()))
@@ -1618,7 +1656,9 @@ def batch_collect(directory, output, study='size', argument=None):
 
 
 def screen_decision(study, timing):
-    """The frozen selection of 1d (study projections) or 1e (study reordered) from its screen."""
+    """The frozen selection of 1d (study projections), 1e (study reordered) or 2d (study paged) from its screen."""
+    if study in PAGED_STUDIES:
+        return paged_decision(paged_summarize(timing, contract.PAGED_CANDIDATES))
     if study == 'projections':
         return projection_decision(projection_summarize(timing['samples'], contract.BATCH_PROJECTION_ARRANGEMENTS))
     return projection_decision(projection_summarize(timing['samples'], contract.BATCH_REORDERED_ARRANGEMENTS),
@@ -1633,8 +1673,9 @@ def batch_confirm(directory, screen, output, study='projections'):
     decision = screen_decision(study, timing)
     if decision['selected'] is None:
         raise ValueError('no arrangement qualified, so there is nothing to confirm')
-    print(f"Confirming arrangement {decision['selected']}", flush=True)
-    prefix = 'confirm:' if study == 'projections' else 'reordered-confirm:'
+    print(f"Confirming {'layout' if study in PAGED_STUDIES else 'arrangement'} {decision['selected']}", flush=True)
+    prefix = dict(projections='confirm:', reordered='reordered-confirm:', paged='paged-confirm:',
+                  **{'paged-loop': 'paged-confirm:'})[study]
     batch_collect(directory, output, study, f"{prefix}{decision['selected']}")
 
 
@@ -1811,16 +1852,18 @@ def batch_archive(timings, traces, output, study='size', confirmation=None, diag
     (output/(spec['stem']+'.json.gz')).write_bytes(packed)
     write(output/(spec['stem']+'.json'), dict(kind=spec['kind'], sha256=hashlib.sha256(packed).hexdigest(),
                                              uncompressed_sha256=hashlib.sha256(raw).hexdigest(), bytes=len(packed)))
-    dict(size=batch_replay, projections=projection_replay, reordered=reordered_replay)[study](output)
+    dict(size=batch_replay, projections=projection_replay, reordered=reordered_replay, paged=paged_replay,
+         **{'paged-loop': lambda directory: paged_replay(directory, 'paged-loop')})[study](output)
 
 
 def batch_capture_totals(capture, build_record):
     """Validate one retained trace against the frozen build; per-step GPU totals."""
     provenance = capture['provenance']
     contract.configuration(provenance)
-    arm = 'arrangement' if 'arrangement' in capture else 'row_tile'
-    suffix = f"a{capture['arrangement']}" if arm == 'arrangement' else str(capture['row_tile'])
-    name = f"batch-profile-{capture['prefix']}-{capture['sequences']}-{suffix}"
+    arm = next(key for key in ('row_tile', 'arrangement', 'layout') if key in capture)
+    suffix = dict(row_tile=str(capture.get('row_tile')), arrangement=f"a{capture.get('arrangement')}",
+                  layout=f"l{capture.get('layout')}")[arm]
+    name = f"{'paged' if arm == 'layout' else 'batch'}-profile-{capture['prefix']}-{capture['sequences']}-{suffix}"
     if (provenance['repository'] != build_record['source']['repository']
             or provenance['source_sha256'] != build_record['source']['sources']
             or provenance['assets'] != {k:v for k,v in build_record['assets'].items() if k.endswith('_sha256')}
@@ -2247,6 +2290,285 @@ def addressing_replay(directory):
     return record
 
 
+def parse_paged_prefill(stdout, block, comparisons, argument):
+    """PREFILL <workload> <comparison> <arm> <sample> <elapsed> records of one block's prefill process,
+    and its per-layout token checks. Every chunk must run Fast's declared configuration."""
+    if ('device: Apple M4 Pro\napi: metal\n' not in stdout or stdout.count('PREFILL_COMPLETE') != 1
+            or f'\nstudy: {argument}\n' not in stdout):
+        raise ValueError('missing measured device, study or prefill completion')
+    workloads, records, tokens = {}, [], []
+    for line in stdout.splitlines():
+        if line.startswith('prefill workload: '):
+            index, rows, total, configuration = map(int, line.split()[2:])
+            workloads[index] = (rows, total, configuration)
+        elif line.startswith('prefill tokens: '):
+            index, layout, differing = map(int, line.split()[2:])
+            tokens.append(dict(block=block, workload=index, layout=layout, differing=differing))
+        elif line.startswith('PREFILL '):
+            values = list(map(int, line.split()[1:]))
+            if len(values) != 5 or values[4] <= 0:
+                raise ValueError('invalid prefill timing record')
+            workload, comparison, arm, sample, elapsed = values
+            records.append(dict(workload=workload, block=block, comparison=comparison, arm=arm, sample=sample,
+                                elapsed_ns=elapsed))
+    if workloads != dict(enumerate(contract.PAGED_PREFILL_WORKLOADS)):
+        raise ValueError('prefill workloads or their configurations changed')
+    count = len(contract.PAGED_PREFILL_WORKLOADS)
+    expected = Counter((w, c, a, s) for w in range(count) for c in range(comparisons) for a in range(2) for s in range(10))
+    if Counter((r['workload'], r['comparison'], r['arm'], r['sample']) for r in records) != expected:
+        raise ValueError('incomplete prefill timing census')
+    if len(tokens) != count*comparisons or any(t['differing'] for t in tokens):
+        raise ValueError('a paged layout changed a prefill token')
+    return records, tokens
+
+
+def _paired_rows(groups, cells, layouts):
+    """Per cell: layout 0's median time and calibration, then each layout's paired ratios and outcome.
+
+    groups maps (cell, block, comparison, arm) to elapsed times; comparison 0 pairs layout 0 with
+    itself and comparison i pairs it with layouts[i-1].
+    """
+    rows = []
+    for cell in cells:
+        medians = {(b, c, a): stats.median(groups[cell, b, c, a])
+                   for b in range(4) for c in range(1+len(layouts)) for a in range(2)}
+        control = [medians[b, 0, 0]/1e6 for b in range(4)]
+        calibration = [medians[b, 0, 1]/medians[b, 0, 0] for b in range(4)]
+        noise = max(.05, max(abs(r-1) for r in calibration))
+        candidates = {}
+        for comparison, layout in enumerate(layouts, 1):
+            ratios = [medians[b, comparison, 1]/medians[b, comparison, 0] for b in range(4)]
+            candidates[str(layout)] = dict(ms=stats.median(medians[b, comparison, 1] for b in range(4))/1e6,
+                                           block_ratios=ratios, median_ratio=stats.median(ratios),
+                                           outcome=_outcome(ratios, noise))
+        rows.append(dict(ms=stats.median(control), block_ms=control, calibration_ratios=calibration,
+                         noise_floor=noise, layouts=candidates))
+    return rows
+
+
+def paged_summarize(timing, layouts):
+    """2d's 22 decode and 13 prefill workloads: layout 0's time and calibration, and each layout's ratios."""
+    count = 1+len(layouts)
+    decode = Counter((c, b, block, comparison, arm, sample) for c, b in contract.batch_workloads()
+                     for block in range(4) for comparison in range(count) for arm in range(2) for sample in range(10))
+    keys = ('context', 'sequences', 'block', 'comparison', 'arm', 'sample')
+    if Counter(tuple(r[k] for k in keys) for r in timing['samples']) != decode:
+        raise ValueError('incomplete paged decode timing census')
+    if any(r['elapsed_ns'] <= 0 or r['marks'] for r in timing['samples']):
+        raise ValueError('invalid paged decode timing sample')
+    workloads = range(len(contract.PAGED_PREFILL_WORKLOADS))
+    prefill = Counter((w, block, comparison, arm, sample) for w in workloads
+                      for block in range(4) for comparison in range(count) for arm in range(2) for sample in range(10))
+    keys = ('workload', 'block', 'comparison', 'arm', 'sample')
+    if Counter(tuple(r[k] for k in keys) for r in timing['prefill_samples']) != prefill:
+        raise ValueError('incomplete paged prefill timing census')
+    groups = defaultdict(list)
+    for r in timing['samples']:
+        groups[(r['context'], r['sequences']), r['block'], r['comparison'], r['arm']].append(r['elapsed_ns'])
+    for r in timing['prefill_samples']:
+        groups[('prefill', r['workload']), r['block'], r['comparison'], r['arm']].append(r['elapsed_ns'])
+    cells = contract.batch_workloads()
+    rows = _paired_rows(groups, cells, layouts)
+    for (context, sequences), row in zip(cells, rows):
+        row.update(context=context, sequences=sequences, tokens_per_second=sequences*1000/row['ms'])
+        for x in row['layouts'].values():
+            x['tokens_per_second'] = sequences*1000/x['ms']
+    chunks = _paired_rows(groups, [('prefill', w) for w in workloads], layouts)
+    for (rows_, total, configuration), row in zip(contract.PAGED_PREFILL_WORKLOADS, chunks):
+        row.update(rows=rows_, total=total, configuration=configuration)
+    return dict(decode=rows, prefill=chunks)
+
+
+def paged_decision(summary):
+    """2d's frozen rule: a layout qualifies with a regression in none of the 35 workloads. The
+    smallest qualifying block size is selected, slot-major unless head-major also qualifies and is
+    a gain in at least one workload, or head-major when only it qualifies at that size."""
+    rows = summary['decode'] + summary['prefill']
+    outcomes = {int(layout): [r['layouts'][layout]['outcome'] for r in rows] for layout in rows[0]['layouts']}
+    qualified = [layout for layout in sorted(outcomes) if 'slower' not in outcomes[layout]]
+    gains = {str(layout): outcomes[layout].count('faster') for layout in sorted(outcomes)}
+    if not qualified:
+        return dict(qualified=[], selected=None, gains=gains)
+    size = min(contract.PAGED_LAYOUTS[layout]['block_size'] for layout in qualified)
+    at_size = {contract.PAGED_LAYOUTS[layout]['order']: layout for layout in qualified
+               if contract.PAGED_LAYOUTS[layout]['block_size'] == size}
+    head = at_size.get('head-major')
+    if head is not None and ('slot-major' not in at_size or 'faster' in outcomes[head]):
+        selected = head
+    else:
+        selected = at_size['slot-major']
+    return dict(qualified=qualified, selected=selected, gains=gains)
+
+
+def paged_census(timing, layouts):
+    """Every decode step and prefill chunk of every layout selected layout 0's tokens."""
+    arms = (contract.PAGED_CONTROL,) + tuple(layouts)
+    tokens = Counter((r['context'], r['sequences'], r['block'], r['arrangement']) for r in timing['token_differences'])
+    if tokens != Counter((c, b, block, a) for c, b in contract.batch_workloads() for block in range(4) for a in arms):
+        raise ValueError('incomplete paged decode token census')
+    chunks = Counter((r['workload'], r['block'], r['layout']) for r in timing['prefill_token_differences'])
+    if chunks != Counter((w, block, a) for w in range(len(contract.PAGED_PREFILL_WORKLOADS)) for block in range(4)
+                         for a in arms):
+        raise ValueError('incomplete paged prefill token census')
+    if any(r['differing'] for r in timing['token_differences'] + timing['prefill_token_differences']):
+        raise ValueError('a paged layout changed a token')
+
+
+def paged_replay(directory, study='paged'):
+    """Verify 2d's archive, or its rerun's, and regenerate its summary: screen, decision, confirmation and traces."""
+    spec = batch_study(study)
+    manifest = json.loads((directory/(spec['stem']+'.json')).read_text())
+    packed = (directory/(spec['stem']+'.json.gz')).read_bytes()
+    raw = gzip.decompress(packed)
+    if (hashlib.sha256(packed).hexdigest() != manifest['sha256']
+            or hashlib.sha256(raw).hexdigest() != manifest['uncompressed_sha256']):
+        raise ValueError('paged KV archive hash mismatch')
+    record = json.loads(raw)
+    if record['kind'] != spec['kind'] or manifest['kind'] != spec['kind']:
+        raise ValueError('not a paged KV archive')
+    screen = record['timing']
+    build_record = screen['build']
+    if build_record['declaration'] != spec['declaration'] or screen.get('argument') != 'paged':
+        raise ValueError('paged KV declaration changed')
+    paged_census(screen, contract.PAGED_CANDIDATES)
+    summary = paged_summarize(screen, contract.PAGED_CANDIDATES)
+    decision = paged_decision(summary)
+    timings, confirmation, confirmed = [screen], None, None
+    if decision['selected'] is None:
+        if record['confirmation'] is not None:
+            raise ValueError('confirmation without a selected layout')
+    else:
+        run = record['confirmation']
+        if run is None or run['build'] != build_record or run.get('argument') != f"paged-confirm:{decision['selected']}":
+            raise ValueError('missing or mismatched confirmation of the selected layout')
+        paged_census(run, (decision['selected'],))
+        confirmation = paged_summarize(run, (decision['selected'],))
+        confirmed = paged_decision(confirmation)['selected'] == decision['selected']
+        timings.append(run)
+    if any([b['block'] for b in timing['blocks']] != list(range(4)) for timing in timings):
+        raise ValueError('incomplete paged KV block conditions')
+    expected = Counter((c, b, layout, r) for c, b, layout in contract.PAGED_TRACES for r in range(2))
+    if Counter((c['prefix'], c['sequences'], c['layout'], c['repeat']) for c in record['captures']) != expected:
+        raise ValueError('incomplete paged KV trace census')
+    for block in [*[b for timing in timings for b in timing['blocks']], *[c['conditions'] for c in record['captures']]]:
+        for side in ('before', 'after'):
+            require_ac(block[side])
+            require_nominal_thermal_state(block[side])
+            if block[side]['power_mode_raw'] != '0':
+                raise ValueError('paged KV power mode changed')
+    for rejected in record['rejected_captures']:
+        workload = (rejected['prefix'], rejected['sequences'], rejected['layout'])
+        binary = rejected['receipt']['profile']['binary']
+        if (workload not in contract.PAGED_TRACES or rejected['status'] != 'rejected by analysis'
+                or {k: binary[k] for k in ('sha256', 'bytes')} != build_record['binaries']['paged-profile-%d-%d-l%d' % workload]):
+            raise ValueError('rejected capture is not an attempt of the frozen paged KV build')
+    gpu = []
+    for capture in record['captures']:
+        for stage, value in batch_capture_totals(capture, build_record).items():
+            gpu.append(dict(context=capture['prefix'], sequences=capture['sequences'], layout=capture['layout'],
+                            repeat=capture['repeat'], stage=stage, median_ms=value))
+    write(directory/(spec['stem']+'-summary.json'),
+          dict(timing=summary, decision=decision, confirmation=confirmation, confirmed=confirmed, gpu=gpu))
+    for r in summary['decode']:
+        print(f"context {r['context']:4d} sequences {r['sequences']:2d}: {r['ms']:8.2f} ms/step; "
+              + ', '.join(f"{l}: {x['median_ratio']:.3f} {x['outcome']}" for l, x in r['layouts'].items()))
+    for r in summary['prefill']:
+        print(f"prefill {r['rows']:3d} rows to {r['total']:4d}: {r['ms']:8.2f} ms; "
+              + ', '.join(f"{l}: {x['median_ratio']:.3f} {x['outcome']}" for l, x in r['layouts'].items()))
+    print('qualified:', decision['qualified'], 'selected:', decision['selected'], 'confirmed:', confirmed)
+    return record
+
+
+def single_sequence_summary(record):
+    """Block ratios, their median and the verdict of a single-sequence record, from its raw decode steps."""
+    runs = record['runs']
+    if ([r['run'] for r in runs] != list(range(1, 17))
+            or [[r['arm'] for r in runs if r['block'] == b] for b in range(1, 5)] != contract.SINGLE_SEQUENCE['blocks']):
+        raise ValueError('the runs are not four alternating blocks')
+    if any(r.get('device') != 'Apple M4 Pro/metal' for r in runs):
+        raise ValueError('a run does not prove the M4 Pro Metal device')
+    if any(len(r['decode_step_ns']) != record['prompt']['max_new_tokens']-1
+           or r['median_ms'] != stats.median(r['decode_step_ns'])/1e6 for r in runs):
+        raise ValueError('a run lost a decode step or misstates its median')
+    ratios = [stats.mean(r['median_ms'] for r in runs if r['block'] == b and r['arm'] == 'candidate')
+              / stats.mean(r['median_ms'] for r in runs if r['block'] == b and r['arm'] == 'baseline')
+              for b in range(1, 5)]
+    median = stats.median(ratios)
+    verdict = ('regression' if all(r > 1 for r in ratios) and median > 1.05 else
+               'consistent slowdown below the floor' if all(r > 1 for r in ratios) else 'no regression')
+    return ratios, median, verdict
+
+
+def single_sequence_run(report, declared):
+    """One run's device and decode steps, from a report that passes the generation validator.
+
+    The validator requires the M4 Pro's Metal device, the token limit or a true stop, the cache length and
+    submitted rows, one decode per token after the first and a route of the declared policy for every call.
+    """
+    validated = generation_events(report, declared['max_new_tokens'], declared['policy'])
+    if len(validated['prompt_ids']) != declared['prompt']['tokens']:
+        raise ValueError('the prompt encoded to another length')
+    device, = [e['value'] for e in validated['events'] if e['event'] == 'device']
+    return device, [int(e['nanoseconds']) for e in validated['events'] if e['event'] == 'decode']
+
+
+def single_sequence(baseline, candidate, prepared, output, purpose):
+    """1e's single-sequence check between two receipted generator builds; the record keeps every decode step."""
+    ensure_record_location(output)
+    output.mkdir(parents=True, exist_ok=False)
+    identity = assets(prepared)
+    binaries, paths = {}, {}
+    for arm, binary in (('baseline', baseline), ('candidate', candidate)):
+        binary = Path(binary).resolve()
+        receipt_path = Path(str(binary)+'.provenance.json')
+        receipt = json.loads(receipt_path.read_text())
+        if (receipt.get('kind') != 'model-development-build' or receipt['binary_sha256'] != sha(binary)
+                or receipt['source']['repository']['dirty'] or not receipt['command'][-3].endswith('generate_cli.mojo')):
+            raise ValueError(f'the {arm} is not a clean receipted generator build')
+        paths[arm] = binary
+        binaries[arm] = dict(sha256=receipt['binary_sha256'], receipt_sha256=sha(receipt_path),
+                             commit=receipt['source']['repository']['commit'],
+                             archive=receipt['source']['repository'].get('archive', False),
+                             command=receipt['command'][1:-1]+[f'<external>/{binary.name}'],
+                             decode_projection=receipt['decode_projection'],
+                             kv_block_size=receipt.get('kv_block_size'), kv_head_major=receipt.get('kv_head_major', False))
+    prompt = output/'prompt.txt'
+    prompt.write_text(contract.single_sequence_prompt())
+    declared = contract.SINGLE_SEQUENCE
+    if sha(prompt) != declared['prompt']['sha256']:
+        raise ValueError('the single-sequence prompt changed')
+    def snapshot():
+        return dict(conditions(), load_average=list(os.getloadavg()))
+    runs, blocks, run = [], [], 0
+    for block, order in enumerate(declared['blocks'], 1):
+        before = snapshot()
+        for arm in order:
+            run += 1
+            report = output/f'run{run}-{arm}.tsv'
+            result = subprocess.run([str(paths[arm]), identity['prepared'], identity['tables'], str(prompt),
+                                     str(declared['max_new_tokens']), str(declared['chunk_rows']), declared['policy'],
+                                     str(report)], cwd=repository_root(), env=environment(), capture_output=True, check=True)
+            device, steps = single_sequence_run(report, declared)
+            runs.append(dict(run=run, block=block, arm=arm, device=device, decode_step_ns=steps,
+                             median_ms=stats.median(steps)/1e6, text_sha256=hashlib.sha256(result.stdout).hexdigest()))
+            print(f'run {run} {arm}: median decode step {runs[-1]["median_ms"]:.3f} ms', flush=True)
+        blocks.append(dict(block=block, before=before, after=snapshot()))
+    for arm in paths:
+        if sha(paths[arm]) != binaries[arm]['sha256']:
+            raise ValueError('a generator changed during the check')
+    record = dict(kind='qwen-single-sequence-check-v1', purpose=purpose, procedure=declared['procedure'],
+                  rule=declared['rule'], prompt=dict(declared['prompt'], max_new_tokens=declared['max_new_tokens'],
+                                                     chunk_rows=declared['chunk_rows'], policy=declared['policy']),
+                  binaries=binaries, assets={k: v for k, v in identity.items() if k.endswith('_sha256')},
+                  environment=stable_environment(), conditions=blocks, runs=runs)
+    ratios, median, verdict = single_sequence_summary(record)
+    record.update(block_ratios=ratios, median_block_ratio=median,
+                  texts_identical=len({r['text_sha256'] for r in runs}) == 1, verdict=verdict)
+    write(output/'single-sequence.json', record)
+    print('block ratios:', ', '.join(f'{r:.3f}' for r in ratios), 'median:', f'{median:.3f}', 'verdict:', verdict,
+          'texts identical:', record['texts_identical'])
+
+
 def batch_plot(directory):
     """Regenerate the batch-size figures exclusively from the checked archive."""
     import matplotlib
@@ -2337,6 +2659,151 @@ PLOT_STUDIES = dict(
                           '10':'10: matrix units 16x16'},
                    title='Batched projection arrangements against arrangement 5',
                    ylabel='Step time relative to arrangement 5'))
+
+
+# Block sizes by hue (validated categorical slots on a light surface); head-major marks are hollow.
+PAGED_COLORS = {32: '#2a78d6', 64: '#eb6834', 128: '#1baf7a'}
+PAGED_INK = dict(primary='#0b0b0b', secondary='#52514e', muted='#898781', band='#f0efec', axis='#c3c2b7')
+
+
+def paged_plot(directory, study='paged'):
+    """Regenerate 2d's figures, or its rerun's, exclusively from the checked archive."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    paged_replay(directory, study)
+    stem = batch_study(study)['stem']
+    summary = json.loads((directory/(stem+'-summary.json')).read_text())
+    timing = summary['timing']
+    plt.rcParams.update({'font.family':'DejaVu Sans','font.size':10,'axes.spines.top':False,
+                         'axes.spines.right':False,'figure.facecolor':'white','axes.facecolor':'white',
+                         'axes.edgecolor':PAGED_INK['axis'],'xtick.color':PAGED_INK['secondary'],
+                         'ytick.color':PAGED_INK['secondary'],'text.color':PAGED_INK['primary']})
+    candidates = list(contract.PAGED_CANDIDATES)
+    def name(layout):
+        return f"{contract.PAGED_LAYOUTS[layout]['block_size']}-slot blocks, {contract.PAGED_LAYOUTS[layout]['order']}"
+    def style(layout):
+        color = PAGED_COLORS[contract.PAGED_LAYOUTS[layout]['block_size']]
+        head = contract.PAGED_LAYOUTS[layout]['order'] == 'head-major'
+        return dict(color=color, marker='o', markersize=5, markeredgecolor=color, markeredgewidth=1.2,
+                    markerfacecolor='white' if head else color, linewidth=1 if head else 1.6, elinewidth=.8, capsize=0)
+    offset = {layout: (i-(len(candidates)-1)/2)*.07 for i, layout in enumerate(candidates)}
+    def ratios(cell):
+        m = cell['median_ratio']
+        return m, [[m-min(cell['block_ratios'])], [max(cell['block_ratios'])-m]]
+    sizes = list(contract.BATCH_SIZES)
+    fig = plt.figure(figsize=(14, 8.4), constrained_layout=True)
+    grid = fig.add_gridspec(2, 4, width_ratios=[3, 3, 3, 1.7])
+    top = [fig.add_subplot(grid[0, i]) for i in range(4)]
+    prefill = fig.add_subplot(grid[1, :])
+    for ax, context in zip(top, contract.BATCH_CONTEXTS):
+        rows = [r for r in timing['decode'] if r['context'] == context]
+        ax.fill_between(sizes, [1-r['noise_floor'] for r in rows], [1+r['noise_floor'] for r in rows],
+                        color=PAGED_INK['band'], linewidth=0)
+        for layout in candidates:
+            for b, row in zip(sizes, rows):
+                m, error = ratios(row['layouts'][str(layout)])
+                ax.errorbar(b*2**offset[layout], m, yerr=error, **style(layout))
+            ax.plot([b*2**offset[layout] for b in sizes], [r['layouts'][str(layout)]['median_ratio'] for r in rows],
+                    color=style(layout)['color'], linewidth=style(layout)['linewidth'])
+        ax.set_xscale('log', base=2)
+        ax.set_xticks(sizes, [str(b) for b in sizes])
+        ax.minorticks_off()
+        ax.set_xlabel('Sequences decoding in one step')
+        ax.set_title(f'Decode, {context:,} cached tokens')
+    mixed = next(r for r in timing['decode'] if r['context'] == 0)
+    top[3].axhspan(1-mixed['noise_floor'], 1+mixed['noise_floor'], color=PAGED_INK['band'], linewidth=0)
+    for i, layout in enumerate(candidates):
+        m, error = ratios(mixed['layouts'][str(layout)])
+        top[3].errorbar(i, m, yerr=error, linestyle='none', **style(layout))
+    top[3].set_xticks(range(len(candidates)), [str(contract.PAGED_LAYOUTS[l]['block_size'])
+                                                + ('h' if contract.PAGED_LAYOUTS[l]['order'] == 'head-major' else '')
+                                                for l in candidates])
+    top[3].set_xlabel('Block size; h: head-major')
+    top[3].set_title('Decode, mixed batch')
+    rows = timing['prefill']
+    for i, row in enumerate(rows):
+        prefill.fill_between([i-.42, i+.42], 1-row['noise_floor'], 1+row['noise_floor'], color=PAGED_INK['band'], linewidth=0)
+        for layout in candidates:
+            m, error = ratios(row['layouts'][str(layout)])
+            prefill.errorbar(i+offset[layout]*1.6, m, yerr=error, linestyle='none', **style(layout))
+    prefill.set_xticks(range(len(rows)), [f"{r['rows']} rows\nafter {r['total']-r['rows']:,}\nconfiguration {r['configuration']}"
+                                          for r in rows], fontsize=8)
+    prefill.set_xlim(-.6, len(rows)-.4)
+    prefill.set_title('Prefill: one chunk of one sequence, from the token upload to device synchronization')
+    # Decode panels share one scale; prefill, whose effects are small, has its own.
+    for axes, part in (([*top], 'decode'), ([prefill], 'prefill')):
+        values = [v for r in timing[part] for x in r['layouts'].values() for v in x['block_ratios']]
+        values += [1+sign*r['noise_floor'] for r in timing[part] for sign in (-1, 1)]
+        low, high = min(values), max(values)
+        for ax in axes:
+            ax.axhline(1, color=PAGED_INK['muted'], linewidth=.8)
+            ax.set_ylim(low-(high-low)*.06, high+(high-low)*.06)
+    top[0].set_ylabel('Step time relative to one block per sequence')
+    prefill.set_ylabel('Chunk time relative to one block,\nits own scale')
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+    handles = [Line2D([], [], **{k: v for k, v in style(layout).items() if k not in ('elinewidth', 'capsize')})
+               for layout in candidates] + [Patch(color=PAGED_INK['band'])]
+    fig.legend(handles, [name(layout) for layout in candidates]+['within the noise floor: inconclusive'],
+               loc='outside lower center', ncol=4, fontsize=9, frameon=False)
+    fig.suptitle('Paged KV layouts against one block per sequence · median of four paired block ratios; '
+                 'whiskers show their range', fontsize=12)
+    fig.savefig(directory/(stem+'-ratios.png'), dpi=170)
+    plt.close(fig)
+    # Where translation would show: attention and the KV writes in the traces.
+    gpu = {(r['layout'], r['stage'], r['repeat']): r['median_ms'] for r in summary['gpu']}
+    def traced_ms(layout, stage):
+        return stats.mean(gpu[layout, stage, r] for r in range(2))
+    stages = [('Attention', 'FP32 GQA'), ('KV writes', 'fused QKV/RoPE/cache'), ('All active GPU time', 'GPU active total')]
+    traced = [layout for _, _, layout in contract.PAGED_TRACES if layout != contract.PAGED_CONTROL]
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.8), constrained_layout=True, gridspec_kw=dict(width_ratios=[3, 2]))
+    width = .24
+    for g, (_, stage) in enumerate(stages):
+        base = traced_ms(contract.PAGED_CONTROL, stage)
+        for j, layout in enumerate(traced):
+            x = g+(j-(len(traced)-1)/2)*width
+            repeats = [gpu[layout, stage, r]/base for r in range(2)]
+            axes[0].bar(x, stats.mean(repeats)-1, bottom=1, width=width*.85,
+                        color=PAGED_COLORS[contract.PAGED_LAYOUTS[layout]['block_size']],
+                        label=name(layout) if g == 0 else None)
+            axes[0].scatter([x, x], repeats, color=PAGED_INK['primary'], s=9, zorder=3,
+                            label='each trace repeat' if g == 0 and j == 0 else None)
+    axes[0].axhline(1, color=PAGED_INK['muted'], linewidth=.8)
+    axes[0].set_xticks(range(len(stages)), [f'{label}\n{traced_ms(contract.PAGED_CONTROL, stage):.2f} ms per step\nwith one block'
+                                            for label, stage in stages])
+    axes[0].set_ylabel('Active GPU time relative to one block')
+    axes[0].set_title('Relative to one block per sequence')
+    # Where the added time sits: attention, the KV writes and every other dispatch, stacked.
+    parts = [('Attention', lambda l: traced_ms(l, 'FP32 GQA'), PAGED_INK['primary']),
+             ('KV writes', lambda l: traced_ms(l, 'fused QKV/RoPE/cache'), PAGED_INK['secondary']),
+             ('Every other dispatch', lambda l: traced_ms(l, 'GPU active total') - traced_ms(l, 'FP32 GQA')
+              - traced_ms(l, 'fused QKV/RoPE/cache'), PAGED_INK['axis'])]
+    labels = [str(contract.PAGED_LAYOUTS[l]['block_size']) + '-slot' for l in traced]
+    # Additions stack up from zero and reductions down from it.
+    above, below = [0.]*len(traced), [0.]*len(traced)
+    for label, value, color in parts:
+        added = [value(l) - value(contract.PAGED_CONTROL) for l in traced]
+        axes[1].bar(range(len(traced)), added, bottom=[u if a >= 0 else d for a, u, d in zip(added, above, below)],
+                    width=.55, color=color, label=label, edgecolor='white', linewidth=1)
+        above = [u + max(a, 0) for u, a in zip(above, added)]
+        below = [d + min(a, 0) for d, a in zip(below, added)]
+    for i, (u, d) in enumerate(zip(above, below)):
+        axes[1].annotate(f'{u + d:+.1f} ms', (i, u), textcoords='offset points', xytext=(0, 4), ha='center',
+                         fontsize=9, color=PAGED_INK['primary'])
+    axes[1].axhline(0, color=PAGED_INK['muted'], linewidth=.8)
+    low, high = min(below), max(above)
+    span = (high - low) or 1
+    axes[1].set_ylim(low - span*.08, high + span*.18)
+    axes[1].set_xticks(range(len(traced)), labels)
+    axes[1].set_xlabel('Slot-major blocks')
+    axes[1].set_ylabel('Active GPU milliseconds added per step')
+    axes[1].set_title('Added to one block per sequence')
+    axes[1].legend(fontsize=8, frameon=False, loc='upper left', bbox_to_anchor=(1, 1))
+    fig.legend(*axes[0].get_legend_handles_labels(), loc='outside lower center', ncol=4, fontsize=8, frameon=False)
+    fig.suptitle('Traces of 64 sequences at 3,968 cached tokens, two repeats per layout', fontsize=12)
+    fig.savefig(directory/(stem+'-traces.png'), dpi=170)
+    plt.close(fig)
 
 
 def projection_plot(directory, study='projections'):
@@ -2452,12 +2919,17 @@ def main():
                                             'terminal','archive','replay','plot','fusion-replay','fusion-plot',
                                             'selection-replay','selection-plot','batch-size-build','batch-size-collect',
                                             'batch-size-confirm','batch-size-diagnose','batch-size-capture','batch-size-archive',
-                                            'batch-size-replay','batch-size-plot',
+                                            'batch-size-replay','batch-size-plot','single-sequence',
                                             *RETIRED])
     parser.add_argument('--projections',action='store_true',help='Replay/plot the projection arrangement study')
-    parser.add_argument('--study', choices=['size','projections','reordered','addressing'], default='size',
+    parser.add_argument('--study', choices=['size','projections','reordered','addressing','paged','paged-loop'],
+                        default='size',
                         help='batch-size-* study: 1c row tiles (size), 1d exact arrangements (projections), '
-                             '1e reordered arrangements (reordered) or 1f addressing (addressing)')
+                             '1e reordered arrangements (reordered), 1f addressing (addressing), 2d KV layouts (paged) '
+                             'or their rerun with decode attention in one loop (paged-loop)')
+    parser.add_argument('--baseline', type=Path, help='single-sequence: the receipted baseline generator')
+    parser.add_argument('--candidate', type=Path, help='single-sequence: the receipted candidate generator')
+    parser.add_argument('--purpose', help='single-sequence: what the check decides')
     parser.add_argument('--screen', type=Path, help='screen timings for batch-size-confirm and batch-size-diagnose')
     parser.add_argument('--confirmation', type=Path, help='confirmation timings for batch-size-archive and -diagnose')
     parser.add_argument('--diagnostics', type=Path, help='1e model-level diagnostics for batch-size-archive')
@@ -2499,10 +2971,16 @@ def main():
             batch_archive(args.timings, args.traces, args.output, args.study, args.confirmation, args.diagnostics)
     elif args.command == 'batch-size-replay':
         dict(size=batch_replay, projections=projection_replay, reordered=reordered_replay,
-             addressing=addressing_replay)[args.study](args.output)
+             addressing=addressing_replay, paged=paged_replay,
+             **{'paged-loop': lambda directory: paged_replay(directory, 'paged-loop')})[args.study](args.output)
     elif args.command == 'batch-size-plot':
         if args.study == 'size': batch_plot(args.output)
+        elif args.study in PAGED_STUDIES: paged_plot(args.output, args.study)
         else: projection_plot(args.output, args.study)
+    elif args.command == 'single-sequence':
+        if not (args.baseline and args.candidate and args.prepared and args.purpose):
+            parser.error('single-sequence needs --baseline, --candidate, --prepared and --purpose')
+        single_sequence(args.baseline, args.candidate, args.prepared, args.output.resolve(), args.purpose)
     elif args.command == 'selection-plot':
         if args.projections: projection_plot(args.output)
         else: selection_plot(args.output,args.residual_norm)

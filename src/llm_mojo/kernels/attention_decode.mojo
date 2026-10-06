@@ -6,10 +6,13 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.gpu import block_idx, thread_idx
 from std.gpu.primitives import warp
-from std.math import exp, max, min
+from std.math import exp, max
 from std.sys.info import is_apple_gpu
 from llm_mojo.kernels.paged_kv import kv_row, kv_slot_stride, validate_paged_pool
 
+# The most blocks a paged decode row may see, which its threadgroup stages: one
+# per 32 positions of a 4,096-position context.
+comptime PAGED_MAX_BLOCKS = 128
 
 def _decode_kernel[
     groups: Int,
@@ -241,10 +244,13 @@ def _paged_g32_kernel[
 
     Threadgroup (head, row) attends with query row `row` to the positions[row] + 1
     keys of sequence row // rows_per_sequence, whose blocks its table row lists.
-    SIMD group g takes the keys t ≡ g (mod 32) in increasing order, reading the
-    table once per block, and the 32 groups merge in group order, as in route 4.
-    A block holds a multiple of 32 slots or the whole sequence, so t ≡ g (mod 32)
-    exactly when its slot is.
+    SIMD group g takes the keys t ≡ g (mod 32) in increasing order, and the 32
+    groups merge in group order, as in route 4. The threadgroup first copies the
+    K offset of every block the row sees into threadgroup memory, one table read
+    per block, so a group's keys run in one loop, as they do in one block, with
+    no table read in it. A block holds a multiple of 32 slots or the whole
+    sequence, so key t lies at slot t % size of block t // size, and a group's
+    keys step 32 slots at a time through a block.
     """
     comptime assert is_apple_gpu()
     comptime assert HEAD_DIM == 64, "each lane owns head dimensions lane and lane + 32"
@@ -267,23 +273,40 @@ def _paged_g32_kernel[
     var z: Float32 = 0
     var u0: Float32 = 0
     var u1: Float32 = 0
-    for first in range(0, visible, size):
-        var block = Int(tables[sequence, first // size])
-        var key = kv_row[KV_HEADS, HEAD_DIM, HEAD_MAJOR](block, Int(layer), Int(layers), 0, 0, Int(kv_head), size)
-        var value = kv_row[KV_HEADS, HEAD_DIM, HEAD_MAJOR](block, Int(layer), Int(layers), 1, 0, Int(kv_head), size)
-        for slot in range(Int(group), min(size, visible - first), 32):
-            var k0 = rebind[Float32](pool[key + slot * STRIDE + Int(lane)].cast[DType.float32]())
-            var k1 = rebind[Float32](pool[key + slot * STRIDE + Int(lane) + 32].cast[DType.float32]())
-            var v0 = rebind[Float32](pool[value + slot * STRIDE + Int(lane)].cast[DType.float32]())
-            var v1 = rebind[Float32](pool[value + slot * STRIDE + Int(lane) + 32].cast[DType.float32]())
-            var score = warp.sum(q0 * k0 + q1 * k1) * 0.125
-            var new_m = max(m, score)
-            var alpha = exp(m - new_m)
-            var beta = exp(score - new_m)
-            z = alpha * z + beta
-            u0 = alpha * u0 + beta * v0
-            u1 = alpha * u1 + beta * v1
-            m = new_m
+    var blocks = (visible + size - 1) // size
+    var bases = stack_allocation[
+        DType.int64, address_space=AddressSpace.SHARED
+    ](row_major[PAGED_MAX_BLOCKS]())
+    comptime assert bases.flat_rank == 1
+    for index in range(Int(thread_idx.x), blocks, 32 * 32):
+        bases[index] = Int64(kv_row[KV_HEADS, HEAD_DIM, HEAD_MAJOR](
+            Int(tables[sequence, index]), Int(layer), Int(layers), 0, 0, Int(kv_head), size))
+    barrier()
+    # A group holds size / 32 keys of each block in a table of several blocks;
+    # one block holds all of them. V follows K in every block and layer.
+    var keys_per_block = size // 32 if blocks > 1 else visible
+    var value_offset = size * KV_HEADS * HEAD_DIM
+    var index = 0
+    var within = 0
+    for _ in range(Int(group), visible, 32):
+        var key = Int(bases[index]) + (within * 32 + Int(group)) * STRIDE
+        var value = key + value_offset
+        var k0 = rebind[Float32](pool[key + Int(lane)].cast[DType.float32]())
+        var k1 = rebind[Float32](pool[key + Int(lane) + 32].cast[DType.float32]())
+        var v0 = rebind[Float32](pool[value + Int(lane)].cast[DType.float32]())
+        var v1 = rebind[Float32](pool[value + Int(lane) + 32].cast[DType.float32]())
+        var score = warp.sum(q0 * k0 + q1 * k1) * 0.125
+        var new_m = max(m, score)
+        var alpha = exp(m - new_m)
+        var beta = exp(score - new_m)
+        z = alpha * z + beta
+        u0 = alpha * u0 + beta * v0
+        u1 = alpha * u1 + beta * v1
+        m = new_m
+        within += 1
+        if within == keys_per_block:
+            within = 0
+            index += 1
     var partial = stack_allocation[
         DType.float32, address_space=AddressSpace.SHARED
     ](row_major[32, 1, 66]())
@@ -352,6 +375,8 @@ def enqueue_paged_attention_g32_apple_gpu[
             or Int(output.dim[2]()) != HEAD_DIM or Int(positions.dim[0]()) != rows
             or rows_per_sequence < 1 or sequences * rows_per_sequence != rows):
         raise Error("paged attention requires Q/O [R, heads, dim], R positions and one table row per sequence")
+    if Int(tables.dim[1]()) > PAGED_MAX_BLOCKS:
+        raise Error("paged attention stages at most " + String(PAGED_MAX_BLOCKS) + " blocks per sequence")
     validate_paged_pool[KV_HEADS, HEAD_DIM](Int(pool.dim[0]()), layer, layers, block_size, Int(tables.dim[1]()))
     comptime kernel = _paged_g32_kernel[QUERY_HEADS, KV_HEADS, HEAD_DIM, HEAD_MAJOR, QL, PL, OL, SL, TL]
     context.enqueue_function[kernel](

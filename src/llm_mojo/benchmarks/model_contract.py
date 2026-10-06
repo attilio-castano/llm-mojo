@@ -294,17 +294,112 @@ def batch_projection_specification(context, sequences, arrangement):
                 dispatches_per_iteration=len(stages(*options(BATCH_IMPLEMENTATION))))
 
 
+# 2d, paged KV translation cost (docs/paged-kv-plan.md): blocks of 32, 64 and 128 slots, each
+# slot-major and head-major, against layout 0, one block of the whole context per sequence.
+PAGED_CONTROL = 0
+PAGED_LAYOUTS = {0: dict(block_size=4096, order='slot-major'),
+                 1: dict(block_size=32, order='slot-major'), 2: dict(block_size=32, order='head-major'),
+                 3: dict(block_size=64, order='slot-major'), 4: dict(block_size=64, order='head-major'),
+                 5: dict(block_size=128, order='slot-major'), 6: dict(block_size=128, order='head-major')}
+PAGED_CANDIDATES = (1, 2, 3, 4, 5, 6)
+# Rows, total positions after the chunk and the configuration Fast's plan runs: the runtime
+# study's eleven cells, then 256-row chunks after 256 and 2,816 cached tokens.
+PAGED_PREFILL_WORKLOADS = ((16, 1024, 2), (16, 4096, 2), (15, 256, 2), (17, 256, 2), (64, 1024, 3),
+                           (64, 4096, 3), (256, 1024, 3), (256, 4096, 3), (65, 4096, 3), (255, 4096, 3),
+                           (16, 256, 21), (256, 512, 0), (256, 3072, 0))
+PAGED_TRACES = tuple((3968, 64, layout) for layout in (0, 1, 3, 5))
+PAGED_DECLARATION = dict(
+    {k: v for k, v in BATCH_DECLARATION.items()
+     if k not in ('row_tiles', 'comparisons', 'trace_workloads', 'decision', 'cache_layout', 'timing_boundary')},
+    question='what address translation costs in decode and prefill at block sizes 32, 64 and 128 against one '
+             'block per sequence, and whether head-major order within a block changes it',
+    policy='fast; configuration 26 decode composition for B sequences, one token each, decode projection '
+           'arrangement 8; prefill chunks under Fast\'s plan',
+    layouts={str(k): f"{v['block_size']}-slot blocks, {v['order']}" for k, v in PAGED_LAYOUTS.items()},
+    cache_layout='one working pool of 262,144 slots (3 GiB) held in each arm\'s layout: 64 blocks of 4,096, 2,048 of '
+                 '128, 4,096 of 64 or 8,192 of 32; every table from a block manager whose free list is a '
+                 'permutation seeded with 2026; before every arm, the control\'s included and outside timing, '
+                 'each sequence\'s cached blocks are copied from its layout\'s history',
+    history='the frozen history prefilled once per layout in 256-row Fast chunks into a one-sequence pool of '
+            '48 MiB; every layout\'s K/V rows must equal layout 0\'s byte for byte before measurement, and every '
+            'step and chunk must select layout 0\'s tokens',
+    prefill=dict(workloads=[list(w) for w in PAGED_PREFILL_WORKLOADS],
+                 procedure='one process per block on one-sequence pools, the same comparisons and order'),
+    comparisons=[['layout-0', 'layout-0']] + [['layout-0', f'layout-{layout}'] for layout in PAGED_CANDIDATES],
+    timing_boundary=dict(
+        decode='step batch construction, its tables from the block manager included, through greedy_tokens '
+               'readback of every sequence; logical rewind and recording excluded',
+        prefill='a resident forward from the token upload to device synchronization; logical rewind, batch '
+                'construction and greedy readback excluded'),
+    trace_workloads=[list(t) for t in PAGED_TRACES],
+    decision='Per workload and layout: gain if all four block ratios are below one and the median reduction exceeds '
+             'max(5%, largest absolute calibration deviation); regression by the symmetric rule; otherwise inconclusive.',
+    qualification='a regression in none of the 35 workloads, 22 decode and 13 prefill',
+    selection='the smallest qualifying block size; at that size slot-major, unless head-major also qualifies and is '
+              'a gain in at least one workload; head-major when only it qualifies at that size',
+    confirmation='a fresh four-block run of the selected layout against layout 0 over all 35 workloads, with its own '
+                 'calibration and the same rule; no other layout if it fails',
+    single_sequence='sixteen generation runs in four alternating blocks, 128 tokens after the 1,176-token prompt, '
+                    'comparing 6422f84\'s generate executable with one built in the selected layout; slower in all '
+                    'four blocks by a median above 5% stops adoption, slower in all four by less returns the decision',
+    otherwise='one block per sequence stays the default',
+    hypothesis='recorded before measurement in docs/paged-kv-plan.md')
+
+
+# 2d's rerun after its follow-up: the same matrix, procedure and rule, with decode attention
+# walking each SIMD group's keys in one loop from block offsets staged in threadgroup memory.
+PAGED_LOOP_DECLARATION = dict(
+    PAGED_DECLARATION,
+    attention='each SIMD group walks its keys t = g (mod 32) in one loop; the threadgroup first stages the K '
+              'offset of every block the row sees in threadgroup memory, one table read per block',
+    hypothesis='recorded before the rerun in docs/paged-kv-plan.md')
+
+
+def paged_specification(context, sequences, layout):
+    if (context, sequences, layout) not in PAGED_TRACES:
+        raise ValueError('undeclared paged KV trace workload')
+    return dict(profile_rows=sequences, hidden_size=896, key_value_rows=context+1,
+                profile_workload=f'model-p{context}-b{sequences}-l{layout}',
+                dispatches_per_iteration=len(stages(*options(BATCH_IMPLEMENTATION))))
+
+
+# The single-sequence check of 1a, 1b and 1e: the Fast generator, 128 tokens after a 1,176-token
+# prompt, sixteen runs in four alternating blocks.
+SINGLE_SEQUENCE_SENTENCE = ('A train travels sixty kilometers in forty-five minutes. Explain how to calculate its '
+                            'average speed, keeping track of distance, time, and units.')
+SINGLE_SEQUENCE = dict(
+    prompt=dict(construction='the sentence repeated 42 times, joined by spaces, then a newline',
+                sentence=SINGLE_SEQUENCE_SENTENCE, repeats=42, tokens=1176,
+                sha256='7a74b43ca1f6fb3d3ae131776b5dabddb6079bb57428cb4d35d6828b72fad0b2'),
+    max_new_tokens=128, chunk_rows=256, policy='fast',
+    blocks=[['baseline', 'candidate', 'candidate', 'baseline'], ['candidate', 'baseline', 'baseline', 'candidate']]*2,
+    procedure='Each run: generator PREPARED TABLES PROMPT 128 256 fast REPORT. The report must pass the generation '
+              'validator, which requires the M4 Pro\'s Metal device, and the run keeps its device and decode events. '
+              'Sixteen runs in four blocks ordered baseline candidate candidate baseline, then candidate baseline '
+              'baseline candidate, alternating.',
+    rule='Block ratio: the candidate\'s mean median decode step over the baseline\'s, per block. All four above 1 '
+         'and their median above 1.05: regression. All four above 1 otherwise: consistent slowdown below the floor. '
+         'Anything else: no regression. Fixed before measuring.')
+
+
+def single_sequence_prompt():
+    prompt = SINGLE_SEQUENCE['prompt']
+    return ' '.join([prompt['sentence']]*prompt['repeats']) + '\n'
+
+
 def batch_configuration(data):
-    """A batch trace names 1c's row tile or 1d's arrangement, never both."""
+    """A batch trace names 1c's row tile, an arrangement of 1d-1f or 2d's KV layout, exactly one."""
     if data.get('entrypoint') != ENTRYPOINTS[BATCH_IMPLEMENTATION]:
         raise ValueError('Qwen batch profile entrypoint changed')
-    if ('row_tile' in data) == ('arrangement' in data):
-        raise ValueError('a Qwen batch trace names a row tile or an arrangement')
-    arm = 'arrangement' if 'arrangement' in data else 'row_tile'
+    named = [key for key in ('row_tile', 'arrangement', 'layout') if key in data]
+    if len(named) != 1:
+        raise ValueError('a Qwen batch trace names a row tile, an arrangement or a layout')
+    arm = named[0]
     fields = (data.get('key_value_rows'), data.get('profile_rows'), data.get(arm))
     if any(type(value) is not int for value in fields):
         raise ValueError('invalid Qwen batch trace geometry')
-    specify = batch_projection_specification if arm == 'arrangement' else batch_specification
+    specify = dict(row_tile=batch_specification, arrangement=batch_projection_specification,
+                   layout=paged_specification)[arm]
     expected = specify(fields[0]-1, fields[1], fields[2])
     expected[arm] = fields[2]
     if any(type(data.get(k)) is not type(v) or data.get(k) != v for k, v in expected.items()):

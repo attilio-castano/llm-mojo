@@ -3,9 +3,13 @@
 Proposed on 2026-09-23 from baseline `edb610a`. Phase 1, batched decode, is
 complete and merged as `132dc08` (#29); its
 [plan and validation record](history/batched-decode-plan.md) are history now.
-Phase 2, a paged KV cache, is in progress under the
+Phase 2, a paged KV cache, followed the
 [paged KV plan](paged-kv-plan.md), approved on 2026-09-29, which also moved
-block keys and KV events to phase 4. Nothing after phase 1 is complete.
+block keys and KV events to phase 4. Its paged kernels, block manager and paged
+model are merged as `a84ad34` (#32). Its translation-cost study found that
+small blocks made decode attention pay for every block; after a fix to that
+kernel, a rerun selected and confirmed 32-slot blocks, the default since
+2026-10-05. Phase 2 is complete.
 Each phase is approved separately and records its own validation, like the
 existing plans. The [project direction](project.md) lists this as a follow-up
 track.
@@ -536,7 +540,16 @@ its [batch-size](../studies/model_generation/batch-size.md),
 [reordered projection](../studies/model_generation/batch-reordered.md) studies
 answer its study question: 64 sequences decode 998 tokens/s in aggregate at
 1,024 cached tokens, 7.8 times one sequence's 127. The
-[paged KV plan](paged-kv-plan.md) details phase 2.
+[paged KV plan](paged-kv-plan.md) details phase 2, and its
+[translation-cost study](../studies/model_generation/paged-kv.md) answered its
+question for 2a's kernels: prefill paid at most 1.5% for 32-slot blocks, but
+decode attention paid for every block a sequence spans, so steps of 64
+sequences at 3,968 cached tokens took 2.8, 1.8 and 1.4 times as long with 32-,
+64- and 128-slot blocks. Head-major order did not help. With decode attention
+walking each group's keys in one loop, the
+[rerun](../studies/model_generation/paged-kv-loop.md) found no resolvable cost
+at any block size and selected 32-slot slot-major blocks: 133 ms against 132 ms
+for 64 sequences at 3,968 cached tokens. They are the default since 2e.
 `src/llm_mojo/serving/` starts in phase 1 with StepBatch and grows only as each
 phase lands. The Qwen template, stop IDs and card values stay in
 `models/qwen2/`. The `serve` command belongs in `cli/`, and the trace driver

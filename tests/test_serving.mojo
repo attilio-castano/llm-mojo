@@ -212,6 +212,37 @@ def test_pool_written_slots_truncate_and_reset() raises:
     assert_equal(pool.length(1), 0)
 
 
+def test_pool_relayout_keeps_storage_and_empties_blocks() raises:
+    var ctx = DeviceContext()
+    var pool = KVPool(ctx, 2, 64, KVGeometry(3, 2, 2))
+    var storage = len(pool.storage)
+    pool.written[1] = 5
+    pool.relayout(ctx, 32, True)
+    assert_equal(pool.blocks, 4)
+    assert_equal(pool.block_size, 32)
+    assert_true(pool.head_major)
+    assert_equal(len(pool.storage), storage)
+    for block in range(4):
+        assert_equal(pool.length(block), 0)
+    # Offsets follow the new blocks.
+    assert_equal(pool.region(), 32 * 2 * 2)
+    assert_equal(pool.key_offset(3, 1), 2 * (3 * 3 + 1) * pool.region())
+    pool.written[2] = 7
+    pool.relayout(ctx, 128, False)
+    assert_equal(pool.blocks, 1)
+    assert_equal(pool.length(0), 0)
+    assert_true(not pool.head_major)
+    # The slots must split into whole blocks of a valid size; rejection changes nothing.
+    pool.written[0] = 9
+    for size in [0, 48, 256, 4097]:
+        with assert_raises():
+            pool.relayout(ctx, size, True)
+    assert_equal(pool.blocks, 1)
+    assert_equal(pool.block_size, 128)
+    assert_true(not pool.head_major)
+    assert_equal(pool.length(0), 9)
+
+
 def test_pool_follows_the_block_manager() raises:
     var ctx = DeviceContext()
     var pool = KVPool(ctx, 6, 4, KVGeometry(2, 2, 2))

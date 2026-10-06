@@ -141,7 +141,11 @@ research questions, not prerequisites for calling the current milestone complete
    one, each row bit-identical to decoding that sequence alone, and 64 sequences
    at 1,024 cached tokens decode 998 tokens/s in aggregate
    ([reordered projections](../studies/model_generation/batch-reordered.md)).
-   Phase 2, a paged KV cache, is next.
+   Phase 2 added a paged KV cache. Its
+   [translation-cost study](../studies/model_generation/paged-kv.md) found that
+   decode attention paid for every block a sequence spans; after a fix, the
+   [rerun](../studies/model_generation/paged-kv-loop.md) found no resolvable cost
+   and selected 32-slot blocks, the default since 2026-10-05. Phase 2 is complete.
 
 Sampling, quantization, longer contexts, tool-oriented templates and additional
 model families can follow when they answer a concrete need. They are not current

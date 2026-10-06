@@ -19,7 +19,7 @@ Each fact has one home; other pages give a sentence and a link. Start with the
 | [Project direction](project.md) | Goal, what the evidence establishes, determinism and the next research questions |
 | [Layout notation](layouts.md) | How logical values, storage, thread ownership and reduction order are written down |
 | [Serving plan](serving-plan.md) | The multi-request engine: interfaces, KV blocks, gates and phases, with phase 1 complete |
-| [Paged KV plan](paged-kv-plan.md) | Phase 2 of the serving plan, in progress: paged kernels, a block manager, the paged model and the translation-cost study |
+| [Paged KV plan](paged-kv-plan.md) | Phase 2 of the serving plan, complete: paged kernels, a block manager and the paged model, with 32-slot blocks the default after the translation-cost study and its rerun |
 
 ## Contracts
 

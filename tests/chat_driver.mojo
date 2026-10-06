@@ -5,7 +5,7 @@ from std.testing import assert_equal, assert_raises
 from max.gpu.host import DeviceContext
 from llm_mojo.models.qwen2.chat import ChatSession, DEFAULT_SYSTEM
 from llm_mojo.models.qwen2.model import QwenModel, save_bf16
-from llm_mojo.models.qwen2.plan import fast_plan
+from llm_mojo.models.qwen2.plan import KV_BLOCK_SIZE, KV_HEAD_MAJOR, fast_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
 from llm_mojo.runtime.clock import now
 from llm_mojo.serving.batch import StepBatch
@@ -63,8 +63,10 @@ def main() raises:
     var work = TokenizerWorkspace()
     var ctx = DeviceContext()
     print("device",ctx.name(),"backend",ctx.api())
+    # The plan's layout unless a block size, 0 for one block, and an order are given.
     var session = ChatSession(ctx,args[1],tokenizer,work,String(DEFAULT_SYSTEM),256,512,
-                              Int(args[4]) if len(args) > 4 else 0,len(args) > 5 and args[5] == "head-major")
+                              Int(args[4]) if len(args) > 4 else KV_BLOCK_SIZE,
+                              args[5] == "head-major" if len(args) > 5 else len(args) <= 4 and KV_HEAD_MAJOR)
     var replay = QwenModel(ctx,args[1],512,256)
     var replay_kv = KVPool(ctx,1,512,replay.kv_geometry())
     session.kv.storage.enqueue_fill(123)

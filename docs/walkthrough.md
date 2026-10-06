@@ -54,12 +54,13 @@ terminal.
 [`QwenModel`](../src/llm_mojo/models/qwen2/model.mojo), which allocates GPU
 buffers and fills them with [`load_bf16`](../src/llm_mojo/models/qwen2/model.mojo),
 one layer at a time through [`ModelLayer.load`](../src/llm_mojo/models/qwen2/model.mojo).
-The session also creates a one-block [`KVPool`](../src/llm_mojo/serving/kv_pool.mojo),
-sized by [`QwenModel.kv_geometry`](../src/llm_mojo/models/qwen2/model.mojo):
-a single allocation holding every layer's cache, which the model reads and
-appends through the session's block table. A
-[`BlockManager`](../src/llm_mojo/serving/blocks.mojo) hands the conversation its
-blocks as it grows.
+The session also creates a [`KVPool`](../src/llm_mojo/serving/kv_pool.mojo) of
+128 blocks of 32 slots, sized by
+[`QwenModel.kv_geometry`](../src/llm_mojo/models/qwen2/model.mojo): a single
+allocation holding every layer's cache, which the model reads and appends
+through the session's block table. A
+[`BlockManager`](../src/llm_mojo/serving/blocks.mojo) hands the conversation a
+block every 32 tokens as it grows ([paged storage](layouts.md#paged-kv-storage)).
 
 | Tensor | Shape | Size |
 | --- | --- | ---: |
@@ -143,7 +144,8 @@ For a call with R new tokens, the model:
    logits: one score per vocabulary entry.
 
 All of this is enqueued on one ordered GPU stream; the host does not wait between
-layers. Each layer's cache now holds R more tokens, and the block's written slots grow by R.
+layers. Each layer's cache now holds R more tokens, and the written slots of the
+sequence's blocks grow by R.
 
 ## 5. Choosing the next token
 

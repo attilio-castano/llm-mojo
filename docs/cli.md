@@ -168,7 +168,7 @@ historical source identity requires checking out the recorded commit.
 | `cli/` | Typer commands, launch preparation and native executable entry points |
 | `configuration.py` | Typed composition, literal overrides and validation |
 | `models/qwen2/` | Pinned asset preparation, tokenizer, Qwen model and chat semantics |
-| `serving/` | Engine step format and KV storage: `StepBatch`, and `KVPool` sized by the model's `KVGeometry` |
+| `serving/` | Engine step format and KV storage: `StepBatch`, `KVPool` sized by the model's `KVGeometry`, and `BlockManager`, which assigns each sequence its blocks |
 | `runtime/` | Native builds, terminal and clock services |
 | `layers/` | Decoder, attention and MLP composition |
 | `kernels/` | Reusable numerical operations |

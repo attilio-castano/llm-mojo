@@ -4,7 +4,8 @@ from std.memory import bitcast
 from std.testing import assert_equal, assert_raises
 from max.gpu.host import DeviceContext
 from llm_mojo.models.qwen2.model import CaptureRequest, LAYERS, QwenModel, VOCABULARY
-from llm_mojo.models.qwen2.plan import DECODE_PROJECTION, MAX_CONTEXT, baseline_plan, configured_plan, execution_plan, fast_plan
+from llm_mojo.models.qwen2.plan import (DECODE_PROJECTION, KV_BLOCK_SIZE, KV_HEAD_MAJOR, MAX_CONTEXT, baseline_plan,
+    configured_plan, execution_plan, fast_plan)
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
 from llm_mojo.runtime.clock import now
 from llm_mojo.serving.batch import StepBatch
@@ -349,8 +350,9 @@ def main() raises:
         benchmark(args[2],args[3],Int(args[4]),Int(args[5]))
         return
     if len(args) >= 5 and len(args) <= 7 and args[1] == "--batch":
-        batch(args[2],args[3],Int(args[4]),Int(args[5]) if len(args) > 5 else MAX_CONTEXT,
-              len(args) > 6 and args[6] == "head-major")
+        # The batched side takes the plan's layout unless a block size and an order are given.
+        batch(args[2],args[3],Int(args[4]),Int(args[5]) if len(args) > 5 else KV_BLOCK_SIZE,
+              args[6] == "head-major" if len(args) > 6 else len(args) <= 5 and KV_HEAD_MAJOR)
         return
     if len(args) == 5 and args[1] == "--operations":
         var ctx = DeviceContext()

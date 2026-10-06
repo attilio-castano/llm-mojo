@@ -6,7 +6,7 @@ table. No rendered-text round trip is used for generated assistant tokens.
 """
 from max.gpu.host import DeviceContext
 from llm_mojo.models.qwen2.model import QwenModel, VOCABULARY
-from llm_mojo.models.qwen2.plan import MAX_CONTEXT, fast_plan
+from llm_mojo.models.qwen2.plan import KV_BLOCK_SIZE, KV_HEAD_MAJOR, MAX_CONTEXT, fast_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace
 from llm_mojo.models.qwen2.tokens import IM_END, is_stop
 from llm_mojo.serving.batch import StepBatch
@@ -84,8 +84,9 @@ struct ChatSession(Movable):
     def __init__(out self, ctx: DeviceContext, prepared: String,
                  tokenizer: Tokenizer, mut work: TokenizerWorkspace,
                  system: String, chunk_rows: Int = 256, capacity: Int = MAX_CONTEXT,
-                 block_size: Int = 0, head_major: Bool = False) raises:
-        """A session whose conversation fills blocks of block_size slots; 0 holds it in one block."""
+                 block_size: Int = KV_BLOCK_SIZE, head_major: Bool = KV_HEAD_MAJOR) raises:
+        """A session whose conversation fills blocks of block_size slots, by default the plan's
+        layout; 0 holds it in one block."""
         self.history = ChatHistory(tokenizer,work,system)
         if len(self.history.tokens)+3 >= capacity:
             raise Error("system message exceeds chat capacity")

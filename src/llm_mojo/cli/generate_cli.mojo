@@ -1,10 +1,11 @@
 """Native plain-text greedy generation with optional diagnostic events."""
+from std.math import ceildiv
 from std.sys import argv
 from llm_mojo.runtime.clock import now
 from llm_mojo.models.qwen2.tokens import is_stop
 from max.gpu.host import DeviceContext
 from llm_mojo.models.qwen2.model import QwenModel, generation_budget
-from llm_mojo.models.qwen2.plan import MAX_CONTEXT, execution_plan
+from llm_mojo.models.qwen2.plan import KV_BLOCK_SIZE, KV_HEAD_MAJOR, MAX_CONTEXT, execution_plan
 from llm_mojo.models.qwen2.tokenizer import Tokenizer, TokenizerWorkspace, TokenizerDecoder
 from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.blocks import BlockManager
@@ -44,8 +45,9 @@ def main() raises:
     var max_rows = min(chunk_rows,prompt_length) if chunk_rows > 0 else prompt_length
     var ctx = DeviceContext()
     var model = QwenModel(ctx,args[1],MAX_CONTEXT,max_rows)
-    var kv = KVPool(ctx,1,MAX_CONTEXT,model.kv_geometry())
-    var blocks = BlockManager(1,MAX_CONTEXT,MAX_CONTEXT)
+    var count = ceildiv(MAX_CONTEXT,KV_BLOCK_SIZE)
+    var kv = KVPool(ctx,count,KV_BLOCK_SIZE,model.kv_geometry(),KV_HEAD_MAJOR)
+    var blocks = BlockManager(count,KV_BLOCK_SIZE,MAX_CONTEXT)
     var sequence = blocks.add()
     if diagnostics:
         events += "device\t0\t"+ctx.name()+"/"+ctx.api()+"\t0\n"
@@ -60,7 +62,7 @@ def main() raises:
             ids.append(history[offset+i])
         var plan = execution_plan(mode,rows,offset+rows,ctx.name())
         blocks.reserve(sequence,offset+rows)
-        model.forward(ctx,StepBatch.sequence(ids,offset,blocks.table(sequence),MAX_CONTEXT),kv,plan)
+        model.forward(ctx,StepBatch.sequence(ids,offset,blocks.table(sequence),KV_BLOCK_SIZE),kv,plan)
         blocks.commit(sequence,offset+rows)
         if diagnostics:
             events += "configuration\t"+String(offset)+"\t"+String(plan.configuration)+"\t0\n"
@@ -89,7 +91,7 @@ def main() raises:
             var decode_started = now()
             var cached = blocks.length(sequence)
             blocks.reserve(sequence,cached+1)
-            model.forward(ctx,StepBatch.sequence(ids,cached,blocks.table(sequence),MAX_CONTEXT),kv,
+            model.forward(ctx,StepBatch.sequence(ids,cached,blocks.table(sequence),KV_BLOCK_SIZE),kv,
                           execution_plan(mode,1,cached+1,ctx.name()))
             blocks.commit(sequence,cached+1)
             if diagnostics:

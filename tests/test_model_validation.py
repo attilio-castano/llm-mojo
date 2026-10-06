@@ -8,7 +8,7 @@ from llm_mojo.validation.model import (bf16, compare, consistency_accuracy,
     verify_consistency_observations, CONSISTENCY_BOUNDARIES,
     numerical_diagnostic, prediction_diagnostic, storage_diagnostic)
 from llm_mojo.validation.model import generation_events, require_empty_prompt_rejection, route_record
-from llm_mojo.validation.model import decode_projection, reordered, source_decode_projection
+from llm_mojo.validation.model import decode_projection, reordered, source_decode_projection, source_kv_layout
 from llm_mojo.benchmarks.model_contract import BATCH_REORDERED_ARRANGEMENTS, BATCH_REORDERED_CONTROL
 
 
@@ -40,6 +40,19 @@ class ModelComparisonTests(unittest.TestCase):
                 plan.write_text(bad)
                 with self.assertRaises(ValueError): source_decode_projection(plan)
 
+    def test_build_receipt_names_the_source_default_kv_layout(self):
+        # Adopted on 2026-10-05: 32-slot slot-major blocks (studies/model_generation/paged-kv-loop.md).
+        self.assertEqual(source_kv_layout(), (32, False))
+        size='comptime KV_BLOCK_SIZE = _kv_block_size[get_defined_int["KV_BLOCK_SIZE", default=64]()]()\n'
+        order='comptime KV_HEAD_MAJOR = get_defined_int["KV_HEAD_MAJOR", default=1]() == 1\n'
+        with tempfile.TemporaryDirectory() as temporary:
+            plan=Path(temporary)/'plan.mojo'
+            for text,layout in (('', (None, False)), (size, (64, False)), (size+order, (64, True))):
+                plan.write_text(text)
+                self.assertEqual(source_kv_layout(plan), layout)
+            plan.write_text(size*2)
+            with self.assertRaises(ValueError): source_kv_layout(plan)
+
     def test_generation_event_contract_rejects_truncation_and_bad_cache_accounting(self):
         good=('event\tindex\tvalue\tnanoseconds\n'
               'prompt\t0\t42\t0\n'
@@ -54,7 +67,9 @@ class ModelComparisonTests(unittest.TestCase):
             for bad in (good.replace('finish\t1\tstop\t11\n',''),
                         good.replace('cache\t0\t1','cache\t0\t2'),
                         good.replace('submitted\t0\t24','submitted\t0\t48'),
-                        good.replace('151645','10')):
+                        good.replace('151645','10'),
+                        good.replace('Apple M4 Pro/metal','Apple M4 Pro/cpu'),
+                        good.replace('device\t0\tApple M4 Pro/metal\t0\n','')):
                 p.write_text(bad)
                 with self.assertRaises(ValueError): generation_events(p,32)
 
