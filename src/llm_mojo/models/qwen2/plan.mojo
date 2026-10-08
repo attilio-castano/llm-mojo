@@ -10,7 +10,7 @@ fixed research routes kept for comparison; see docs/generation.md.
 from std.sys import get_defined_int
 from llm_mojo.layers.decoder_layer import (
     DECODER_BASELINE, DECODER_SPLIT8, DECODER_SPLIT8_TILED, DECODER_CONSISTENT,
-    DECODER_CONSISTENT_MMA, DECODER_FUSED_DECODE, decoder_mappings,
+    DECODER_CONSISTENT_MMA, DECODER_FUSED_DECODE, DECODER_MIXED, decoder_mappings,
 )
 
 comptime MEASURED_DEVICE = "Apple M4 Pro"
@@ -48,10 +48,9 @@ comptime KV_HEAD_MAJOR = get_defined_int["KV_HEAD_MAJOR", default=0]() == 1
 struct ExecutionPlan(ImplicitlyCopyable, Movable):
     """One call's decoder configuration and decode features.
 
-    Configuration 26 always carries all three features and one row per
-    sequence; no other configuration carries any or steps more than one
-    sequence. The unpromoted compositions measured in the decode studies are not
-    expressible.
+    Configuration 26 carries all three features and one row per sequence.
+    Configuration 27 carries them for the explicit mixed reference path.
+    Other configurations remain single-sequence routes with no features.
     """
     var configuration: Int
     var gpu_argmax: Bool
@@ -61,6 +60,10 @@ struct ExecutionPlan(ImplicitlyCopyable, Movable):
     def validate(self, rows: Int, sequences: Int = 1) raises:
         var fused = self.configuration == DECODER_FUSED_DECODE
         var features = self.gpu_argmax or self.swap_buffers or self.fuse_residual_norm
+        if self.configuration == DECODER_MIXED:
+            if rows < sequences or sequences < 1 or not (self.gpu_argmax and self.swap_buffers and self.fuse_residual_norm):
+                raise Error("configuration 27 requires valid rows and all composition features")
+            return
         if fused:
             if not (rows == sequences and self.gpu_argmax and self.swap_buffers and self.fuse_residual_norm):
                 raise Error("configuration 26 requires one row per sequence with GPU argmax, buffer swap and residual/RMSNorm fusion")
@@ -124,12 +127,15 @@ def consistent_plan(rows: Int, total: Int) raises -> ExecutionPlan:
 
 
 def configured_plan(configuration: Int, rows: Int, total: Int, sequences: Int = 1) raises -> ExecutionPlan:
-    """An explicit retained configuration for diagnostics; 26 carries its decode features."""
-    if sequences > 1:
+    """An explicit diagnostic route; 26 and 27 carry their composition features."""
+    if configuration == DECODER_MIXED:
+        if rows < sequences or sequences < 1 or total < 1 or total > MAX_CONTEXT:
+            raise Error("invalid mixed execution extent")
+    elif sequences > 1:
         _check_batch(rows, total, sequences)
     else:
         _check(rows, total)
-    var fused = configuration == DECODER_FUSED_DECODE
+    var fused = configuration == DECODER_FUSED_DECODE or configuration == DECODER_MIXED
     var plan = ExecutionPlan(configuration, fused, fused, fused)
     plan.validate(rows, sequences)
     return plan^
