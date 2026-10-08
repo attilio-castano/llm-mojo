@@ -30,10 +30,12 @@ pay off stay in the record alongside the ones that did, with the reason.
   kept loaded between turns. On the reference Apple M4 Pro, replies stream at
   107–115 tokens per second after the first token
   ([how this was measured](studies/model_generation/residual-norm.md)).
-- **Serving has started.** The engine can decode many sequences in one step,
-  and each row is bit-identical to decoding that sequence alone
-  ([generation guide](docs/generation.md)). A paged KV cache, continuous
-  batching and an HTTP frontend are [planned](docs/serving-plan.md).
+- **The synchronous serving core works.** Paged KV storage, mixed prefill/decode,
+  continuous admission, aborts and recomputation under memory pressure are native
+  Mojo. The [engine study](studies/model_generation/engine-core.md) retains
+  correctness checks and load measurements, including regressions under pressure.
+  Asynchronous stepping and frontend integration remain in the
+  [serving plan](docs/serving-plan.md).
 - **Open questions.** For one conversation, submitting GPU work limits speed
   more than arithmetic does. Long prompts are slow to start. And whether building
   the same cache in different chunk sizes can give identical results is not yet

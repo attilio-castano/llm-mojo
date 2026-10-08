@@ -2,12 +2,50 @@
 
 Implementation authorized on 2026-10-08 from baseline
 `cb2416abf3c9fbb19c460fa99709d93eeabba97e` on `codex/engine-core`.
-**Status: in progress.** This is a declaration, not a passing validation receipt
-or a measurement result. The [serving plan](../../docs/serving-plan.md)
-defines the architecture; [experimental method](../../docs/experiments.md#serving-measurement-contract)
+**Status: synchronous core and bounded load studies validated.** Mixed execution,
+request lifecycle, KV-pressure replay and optional fitted budgeting are implemented.
+Asynchronous LLM stepping remains open on the locked runtime. Measurements below
+bind clean implementation commit `b18563b`; the final follow-up adds acceptance
+tests, archive-file replay and retained evidence without changing production Mojo.
+The [serving plan](../../docs/serving-plan.md) defines the architecture;
+[experimental method](../../docs/experiments.md#serving-measurement-contract)
 defines retention and paired comparisons.
 
+The native `EngineCore` accepts arrivals and aborts at step boundaries, schedules
+decode rows and one prefill tail, and delivers ordered token/finish events. Its
+Metal runner completes each step before cache ownership changes. The trace driver
+exercises this backend with fixed arrivals; the existing terminal chat still uses
+its direct Fast session. Frontend integration follows this core milestone.
+
+```mermaid
+flowchart LR
+    arrivals[Arrivals and aborts] --> engine[EngineCore]
+    engine --> batch[StepBatch]
+    batch --> runner[QwenRunner and Metal]
+    runner --> engine
+    engine --> events[Token and finish events]
+    engine <--> cache[BlockManager and KVPool]
+```
+
 ## Readiness receipt
+
+The [retained readiness receipt](engine-core-readiness.json) passes the baseline
+and clean candidate gates. Its [lossless validation archive](engine-core-validation.json.gz)
+retains the logs, checkpoint reports, commands, build receipts and small asset
+manifests. Baseline source is the exact `cb2416a` archive, whose temporary Git
+identity is recorded separately. The baseline suite passed 296 Python tests and
+28 native test files; the candidate suite passed 302 Python tests and 31 native
+files during development, followed by the final 310-test Python suite. These
+are separate recorded scopes, not a combined count from one invocation.
+
+The [final acceptance extension](engine-core-acceptance.json) passes 17 native engine tests, including abort
+after partial prefill and actual decode. A full-checkpoint numeric-fault driver
+passes ordinary and device-sync-mode runs on Apple M4 Pro/Metal. It submits a
+mixed step through all 24 layers, detects a deliberately nonfinite tied-head
+weight during greedy readback, emits one error finish for each of three live
+requests, returns all blocks and rejects subsequent work. Prepared files remain
+unchanged. This tests numeric-fault cleanup, without a device-loss recovery claim.
+Production Mojo hashes remain identical to the measured `b18563b` implementation.
 
 Before phase 3 evidence collection, retain one `engine-core-readiness-v1` receipt
 with `schema_version`, baseline and candidate source identity, toolchain and
@@ -148,7 +186,7 @@ tree or Python inference engine is required. The `model_profile` commands are
 `engine-specification`, `engine-build`, `engine-collect` and `engine-replay`.
 Collection requires a clean build receipt, pinned prepared assets, actual runtime
 device identity and frozen trace JSON. Replay needs only the archive and manifest.
-Their existence is not a completed load-study result.
+The completed bounded results and their replay commands follow below.
 
 A run manifest contains the schema-versioned declaration, build/source hashes,
 binary hashes, prepared-model/tokenizer hashes, exact trace document and its
@@ -221,8 +259,8 @@ chunk under its predicted target, while mandatory decode or one-token progress
 can exceed it. Replay recomputes the fit, calibration residuals, evaluation
 predictions and request metrics from retained data. It reports prediction
 errors, constrained steps, measured/predicted target overruns and actual work;
-it establishes no goodput or asynchronous claim. The existence of this tool is
-not a measured improvement.
+it establishes no goodput or asynchronous claim. The held-out results below
+measure its latency/throughput tradeoff; it remains optional.
 
 ## Pairing, metrics and replay
 
@@ -261,6 +299,164 @@ Regression tests must show it rejects omitted steps/tokens, duplicate delivery,
 incorrect termination, a wrong device and a changed summary even when envelope
 hashes are updated. Compact lossless archives, readable manifests and summaries
 are retained; weights, binaries, arrays and full traces stay outside Git.
+
+## Completed load studies
+
+The [results card](engine-core-results.json) recomputes the retained matrix's
+72 complete natural-greedy trace runs: three fixed-arm
+grids of 20 runs and a separate 12-run adaptive evaluation. Each trace has eight
+requests. Every run drained, returned its full KV pool and passed event, budget,
+device and work-accounting checks. All paired arms delivered identical histories
+using reference configuration 27. These are short synthetic token workloads on
+one M4 Pro/Metal machine, with BF16 storage, FP32 reductions, 32-slot slot-major
+KV, context limit 4,096, MAX 26.5.0 and Mojo 1.0.0. They establish no production
+capacity, semantic quality, Fast-route speedup or client goodput result.
+
+Tables report the median of four per-block metrics. Each block's latency
+quantiles use linear interpolation: eight request samples for TTFT/TPOT and
+248 delivered-token intervals in the fixed traces. Individual blocks, request
+histories and quantiles remain in the archives. Requests within a block are not
+independent repeats.
+
+### Adequate KV capacity
+
+The [offline archive](engine-core-offline.json.gz) uses all arrivals at zero,
+128 blocks and eight sequence slots. Every arm delivers 256 tokens and computes
+2,424 token rows. Serial has 256 steps; static/continuous have 39 and chunked has
+46. Their control/self-control noise floor is 5.86%.
+
+| Arm | Tokens/s | TTFT p50, ms | TPOT p50, ms | Token gap p95, ms | Token gap p99, ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Serial | 65.0 | 1,602.4 | 10.7 | 12.2 | 13.1 |
+| Static | 158.9 | 421.6 | 38.6 | 14.4 | 983.5 |
+| Continuous | 158.5 | 428.7 | 38.4 | 14.3 | 983.0 |
+| Chunked, 256 rows | 149.3 | 455.1 | 37.8 | 151.8 | 192.4 |
+
+Median paired makespan ratios against serial are 0.41855, 0.41543 and 0.43726,
+respectively; all qualify as faster under the declared offline rule. Chunked
+makespan falls 56.3% versus serial. Batching decode amortizes per-step work across
+requests. Chunking introduces more prefill steps and changes when that work stalls
+decodes: its p95 gaps rise, while its p99 gaps fall sharply versus continuous.
+Both percentiles matter; aggregate throughput cannot select a token-latency policy.
+
+The [online archive](engine-core-online.json.gz) freezes seed 19 and a Poisson
+arrival rate of four requests/s before execution, with the same prompts, outputs
+and pool. It reports a finite trace distribution, rather than a capacity claim.
+
+| Arm | Tokens/s | TTFT p50, ms | TPOT p50, ms | Token gap p95, ms | Token gap p99, ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Serial | 67.7 | 500.6 | 10.3 | 12.2 | 13.2 |
+| Static | 77.7 | 254.5 | 10.6 | 11.9 | 14.8 |
+| Continuous | 82.8 | 109.2 | 12.2 | 12.6 | 371.1 |
+| Chunked, 256 rows | 82.1 | 111.5 | 12.3 | 133.9 | 183.7 |
+
+Continuous admission lowers queueing for this trace. Chunking again exchanges
+rare large stalls for more frequent smaller stalls. Neither policy dominates
+every latency statistic.
+
+### KV pressure
+
+The [pressure archive](engine-core-pressure.json.gz) reuses the offline trace
+with 40 blocks. Every request fits alone; their combined working set does not.
+
+| Arm | Tokens/s | Preemptions per run | Computed token rows | Paired makespan / serial |
+| --- | ---: | ---: | ---: | ---: |
+| Serial | 64.8 | 0 | 2,424 | 1.000 |
+| Static | 22.8 | 62 | 18,488 | 2.855 |
+| Continuous | 23.2 | 62 | 18,488 | 2.805 |
+| Chunked | 27.9 | 57 | 16,432 | 2.378 |
+
+All four blocks have the same preemption and work counts. Concurrent arms are
+slower under the 5% noise floor. History retention and replay establish finite
+progress and exactly-once delivery, but repeated admission/eviction creates
+thrashing. Chunked replay computes 6.78 times the serial token work. Memory-aware
+admission and reducing repeated preemption are concrete follow-up questions;
+pressure correctness is not a throughput result.
+
+### Fitted execution budget
+
+The [frozen intent](engine-core-intent.json) selects the provisional 25 ms
+predicted synchronous execution target before fitting. The
+[policy archive](engine-core-policy.json.gz) binds the complete offline calibration
+archive and retains every calibration sample. Its fitted cost is
+
+```text
+predicted_ns = 9,926,060 + 431,597 * token_rows + 320 * attended_positions
+```
+
+The fitted attention-partition and logit-row coefficients are zero. That is a
+result of this joint fit, not evidence those operations have zero physical cost.
+Calibration MAE is 1.31 ms and p95 absolute error is 3.61 ms; maximum error is
+49.23 ms. Upward integer rounding does not turn least squares into a bound.
+
+The [held-out archive](engine-core-adaptive.json.gz) uses seed 29, 16 arrivals/s,
+different token IDs and prompt lengths 48, 192, 80, 768, 144, 1,536, 320 and 128,
+with 24 output tokens per request and 128 blocks. Its 184 token intervals and
+eight request samples per block are separate from calibration. The frozen policy
+selects prefill chunks of at most 34 rows, versus the fixed total budget of 256.
+
+| Held-out arm | Tokens/s | TTFT p50, ms | TPOT p50, ms | Token gap p95, ms | Token gap p99, ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Fixed chunked | 68.3 | 602.9 | 82.7 | 244.3 | 279.0 |
+| Fitted budget | 59.1 | 805.8 | 22.1 | 24.1 | 25.0 |
+
+Every paired history matches. Adaptive/control makespan ratios are 1.18427,
+1.31504, 1.03495 and 1.35307 (median 1.24966); self-control variation reaches
+13.10%. These online results establish the observed tradeoff, without an offline
+gain classification. Prefill is spread over more steps, reducing decode stalls
+while increasing overhead and time to finish prompts.
+
+All 648 adaptive step predictions are at most 25 ms. Measured executions exceed
+it in **3, 2, 2 and 109 of 162 steps per block**, totaling 116/648. The last
+block's token-gap p95 is 31.0 ms, versus 23.8–24.4 ms in the other blocks.
+Held-out per-block prediction MAE ranges 2.30–3.14 ms; p95 absolute error ranges
+4.50–6.14 ms. The model is useful for a tested scheduling tradeoff, but does not
+establish a reliable latency bound. The fixed default stays 256; fitted budgeting
+requires an explicit policy. Client SLOs and goodput remain undeclared.
+
+### Numerical comparison with Fast
+
+The [diagnostic archive](engine-core-diagnostics.json.gz) supplies identical
+histories to reference 27 and Fast: three prompts of 32, 512 and 1,024 tokens,
+256-row prompt chunks and eight supplied decode rows each. All six processes
+and 62 captured calls complete on Metal; all 305,225,216 captured BF16 boundary
+elements are finite. It retains routes, native output, file identities, FP64
+logit distances and the regeneration script. Full arrays remain outside Git.
+
+Greedy choices agree at 26/27 requested prediction points. The first difference
+is the third prediction of request 0, at cached length 34: reference chooses
+3914 and Fast configuration 26 chooses 50, with maximum logit difference 0.15625
+and logit RMS difference 0.036307. The fixed supplied history continues after
+that difference. Reference matches all supplied engine-history choices. These
+are diagnostics without an invented closeness threshold; they do not promote
+configuration 27 as a replacement for Fast.
+
+### Replay and next work
+
+Archives include raw native event/step records, frozen trace documents, complete
+source/binary/asset identities and condition snapshots. Adaptive replay embeds
+the original calibration archive and refits its coefficients. The readable
+envelopes bind compressed and uncompressed hashes. Replay either an external
+collection directory or the retained archive file:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay \
+  --output studies/model_generation/engine-core-offline.json.gz
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay \
+  --output studies/model_generation/engine-core-online.json.gz
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay \
+  --output studies/model_generation/engine-core-pressure.json.gz
+uv run --locked python -m llm_mojo.benchmarks.engine_budget replay \
+  --output studies/model_generation/engine-core-adaptive.json.gz
+```
+
+Replayed summaries equal the summaries retained inside the archives. Full derived
+request-summary files are generated locally and ignored by Git; the compact
+results card remains readable evidence. The results favor studying
+memory-aware admission, repeated preemption and cost-model variability before
+choosing a universal policy. Multi-prefill steps, a measured Fast runner, prefix
+caching and frontend integration remain separate work. The asynchronous gate
+below is still open for LLM stepping.
 
 ## Metadata preparation gate
 

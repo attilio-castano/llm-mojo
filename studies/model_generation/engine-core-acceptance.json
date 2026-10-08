@@ -1,0 +1,98 @@
+{
+  "created_at": "2026-10-08T18:36:27.681095+00:00",
+  "scope": "test-only dirty native source; production Mojo matches b18563b; safe resident numeric fault, no hardware failure or recovery claim",
+  "source_before_build": "/private/tmp/llm-mojo-engine-acceptance-source-before-build.json",
+  "source_after": "/private/tmp/llm-mojo-engine-acceptance-source-after.json",
+  "native_source_hashes_unchanged": true,
+  "production_mojo_matches_commit": "b18563b3a43c389991cd6679bf03892f140f15b0",
+  "concurrent_nonnative_changed_sources": [],
+  "binary": {
+    "path": "/private/tmp/llm-mojo-engine-metal-acceptance-check",
+    "sha256": "e3621125ff5e586a130bc04bb5be58c9f96dcf72dc016ea95a29fa0654664eaa"
+  },
+  "prepared": {
+    "path": "/Users/attiliocastano/.cache/llm-mojo/qwen2.5-0.5b-instruct/7ae557604adf67be50417f59c2c2f167def9a775/model-prepared-v1",
+    "manifest_sha256": "b950f5f16efab9cf7813fa2b8e0455032ad210ebdb19cbe851ab3156e8176192"
+  },
+  "toolchain_packages": {
+    "modular": "not a distribution name in locked environment",
+    "mojo": "1.0.0",
+    "max": "26.5.0"
+  },
+  "uv_lock_sha256": "903ea1a7c05a268cc14d36bc817cee7edb0cd2f278c0c557777ef0d472cfad57",
+  "actual_device": "Apple M4 Pro",
+  "actual_backend": "metal",
+  "checks": [
+    {
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "mojo",
+        "run",
+        "-I",
+        "src",
+        "tests/test_engine.mojo"
+      ],
+      "environment": {},
+      "exit_code": 0,
+      "stdout_stderr": "/private/tmp/llm-mojo-engine-acceptance-core.log",
+      "sha256": "2029451c9290350dec71379a1810c359b58adee0280c401309130559b88bef1a"
+    },
+    {
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "tests/engine_metal_driver.mojo",
+        "-o",
+        "/private/tmp/llm-mojo-engine-metal-acceptance-check"
+      ],
+      "environment": {},
+      "exit_code": 0,
+      "stdout_stderr": "/private/tmp/llm-mojo-engine-acceptance-build.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "/private/tmp/llm-mojo-engine-metal-acceptance-check",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/build/model-prepared-v1"
+      ],
+      "environment": {},
+      "exit_code": 0,
+      "stdout_stderr": "/private/tmp/llm-mojo-engine-acceptance-metal.log",
+      "sha256": "dee87618ec4231ce727437ecf96667b25dfc44bc2446f2b9e38550587d1fc67e"
+    },
+    {
+      "command": [
+        "/private/tmp/llm-mojo-engine-metal-acceptance-check",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/build/model-prepared-v1"
+      ],
+      "environment": {
+        "MODULAR_DEBUG": "device-sync-mode"
+      },
+      "exit_code": 0,
+      "stdout_stderr": "/private/tmp/llm-mojo-engine-acceptance-metal-sync.log",
+      "sha256": "dee87618ec4231ce727437ecf96667b25dfc44bc2446f2b9e38550587d1fc67e"
+    }
+  ],
+  "core_tests": {
+    "run": 17,
+    "passed": 17,
+    "failed": 0
+  },
+  "metal_checks": {
+    "modes": [
+      "ordinary",
+      "device-sync-mode"
+    ],
+    "submitted_layer_rows": 264,
+    "failing_step_layer_rows": 192,
+    "terminal_requests": 3,
+    "free_blocks": 4
+  }
+}

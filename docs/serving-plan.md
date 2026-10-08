@@ -10,13 +10,17 @@ model are merged as `a84ad34` (#32). Its translation-cost study found that
 small blocks made decode attention pay for every block; after a fix to that
 kernel, a rerun selected and confirmed 32-slot blocks, the default since
 2026-10-05. Phase 2 is complete.
-Phase 3 is being implemented from `cb2416a` on `codex/engine-core`, authorized
-on 2026-10-08. Its [readiness and measurement declaration](../studies/model_generation/engine-core.md)
-separates the synchronous core, fitted budgeting and asynchronous stepping.
+Phase 3's synchronous core and bounded load studies are validated on
+`codex/engine-core`, authorized from `cb2416a` on 2026-10-08. Its
+[engine study](../studies/model_generation/engine-core.md) retains readiness,
+correctness, fitted-budget evaluation and the separate asynchronous API probe.
 The initial runner uses reference configuration 27 in every arm, so scheduling
 has one numerical route. Existing chat and generation remain Fast; a measured
 Fast engine route is a separate optimization decision.
-No phase 3 validation or performance result is claimed by this declaration.
+The measurements bind clean implementation `b18563b`; full asynchronous stepping
+remains open. Concurrent scheduling helps with adequate KV capacity and regresses
+under the tested memory pressure. Fitted budgeting remains optional and establishes
+a measured tradeoff, without a client latency guarantee.
 Each phase is approved separately and records its own validation, like the
 existing plans. The [project direction](project.md) lists this as a follow-up
 track.
@@ -202,17 +206,23 @@ leading decode sequences and one prefill launch for the remaining chunk. Launch
 count depends on the layer count and on whether a step contains decode or
 prefill work, never on S. The vocabulary projection reads only `logits_rows`.
 
-Workspaces are sized once from the token budget and maximum sequence count.
-The step loop allocates nothing. Today's call is S = 1.
+GPU workspaces are sized once from the token budget and maximum sequence count.
+The synchronous core currently allocates host metadata and event lists per step;
+its measurements include that bookkeeping. Avoiding those allocations is a
+later optimization. A mixed call contains singleton decode sequences and at
+most one multi-row prefill sequence.
 
 ### ModelRunner
 
-`execute(batch) -> StepResult` returns one selected token per sampling
-sequence plus the step's timings. Two implementations share the interface:
+The implemented `ModelRunner` interface has `execute(batch, kv) -> List[Int]`
+and `now_ns()`. Execution returns tokens in `logits_rows` order and completes
+before cache ownership can change. `EngineCore` records timings in `EngineStep`.
+Two implementations share this interface:
 
-- `MetalRunner` executes on the GPU.
-- `SimulatedRunner` advances a virtual clock with the fitted step-time model
-  and returns tokens from a deterministic script.
+- `QwenRunner` executes synchronously on Metal with reference configuration 27.
+- `SimulatedRunner` advances a virtual clock using configured synthetic fixed,
+  per-token and per-position costs, and returns a deterministic token script.
+  It does not consume the fitted hardware policy.
 
 The scheduler, KV manager and EngineCore are the same code in both. The
 simulator explores policies quickly; hardware measurements confirm them.

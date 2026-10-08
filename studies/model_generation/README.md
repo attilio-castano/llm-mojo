@@ -18,12 +18,13 @@ reproduction commands.
 - **Blocked**: stopped at a capability the backend does not provide.
 - **Failed gate**: a qualification that did not pass; its evidence is kept unchanged.
 
-## Current route
+## Current routes and engine
 
 | Study | Status | What it establishes |
 | --- | --- | --- |
 | [Fast runtime](runtime.md) | Current | All 24 layers, native generation, the eleven measured multi-row configuration cells and HF numerical diagnostics |
 | [Terminal chat](chat.md) | Current | Session state, exact token history, persistent caches, controls and measured cache reuse |
+| [Synchronous engine core](engine-core.md) | Current | Mixed reference execution, request lifecycle and KV-pressure replay; bounded load studies, optional fitted-budget tradeoffs and an open asynchronous gate |
 | [Residual/RMSNorm alone and composed](residual-norm.md) | Promoted | Today's single-row decode route: configuration 26 with GPU argmax, buffer swapping and residual/RMSNorm fusion; 17.1–24.5% lower latency and 107–115 tokens/s |
 | [Combined QKV and activation fusion](combined-fusion.md) | Promoted | Configuration 26, the decode configuration: 16.9–19.4% lower latency with exact outputs and cache storage |
 | [Reordered batched projections](batch-reordered.md) | Promoted | Arrangement 8, four adjacent products per lane: 17–36% shorter batched steps than arrangement 5 from B = 16, about 10% shorter single-sequence steps and 998 tokens/s for 64 sequences at 1,024 cached tokens, with 5's worst-case accuracy and HF agreement; it changes Fast's summation order |
@@ -68,3 +69,6 @@ its tables without weights or a GPU:
 ```sh
 uv run --locked python studies/model_generation/summarize.py
 ```
+
+The engine archives have separate [replay commands](engine-core.md#replay-and-next-work),
+including independent reconstruction of the fitted cost model.

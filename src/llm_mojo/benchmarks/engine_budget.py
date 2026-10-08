@@ -247,8 +247,11 @@ def evaluate(build, policy_path, trace_path, output, blocks=128, maximum_sequenc
 
 
 def replay(output):
-    manifest = json.loads((output/'engine-adaptive.json').read_text())
-    compressed = (output/'engine-adaptive.json.gz').read_bytes()
+    archive = output if output.is_file() else output/'engine-adaptive.json.gz'
+    manifest_path = archive.with_suffix('')
+    summary_path = archive.with_name(archive.name.removesuffix('.json.gz')+'-summary.json')
+    manifest = json.loads(manifest_path.read_text())
+    compressed = archive.read_bytes()
     raw = gzip.decompress(compressed)
     if (manifest['kind']!='engine-adaptive-evaluation-v1' or len(compressed)!=manifest['bytes']
             or hashlib.sha256(compressed).hexdigest()!=manifest['sha256']
@@ -264,7 +267,7 @@ def replay(output):
     result = summary(record)
     if result!=record['summary']:
         raise ValueError('adaptive archived summary differs')
-    write(output/'engine-adaptive-summary.json',result)
+    write(summary_path,result)
     return result
 
 

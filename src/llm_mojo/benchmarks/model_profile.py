@@ -3312,8 +3312,11 @@ def validate_engine_record_build(record):
 
 
 def engine_replay(directory):
-    manifest = json.loads((directory/'engine-core.json').read_text())
-    compressed = (directory/'engine-core.json.gz').read_bytes()
+    archive = directory if directory.is_file() else directory/'engine-core.json.gz'
+    manifest_path = archive.with_suffix('')
+    summary_path = archive.with_name(archive.name.removesuffix('.json.gz')+'-summary.json')
+    manifest = json.loads(manifest_path.read_text())
+    compressed = archive.read_bytes()
     payload = gzip.decompress(compressed)
     if (manifest.get('kind') != 'qwen-engine-core-v1' or len(compressed) != manifest['bytes']
             or hashlib.sha256(compressed).hexdigest() != manifest['sha256']
@@ -3328,7 +3331,7 @@ def engine_replay(directory):
     summary = engine_study_summary(record)
     if summary != record.get('summary'):
         raise ValueError('engine archived summary changed')
-    write(directory/'engine-core-summary.json', summary)
+    write(summary_path, summary)
     return summary
 
 

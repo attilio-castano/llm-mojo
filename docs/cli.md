@@ -168,7 +168,7 @@ historical source identity requires checking out the recorded commit.
 | `cli/` | Typer commands, launch preparation and native executable entry points |
 | `configuration.py` | Typed composition, literal overrides and validation |
 | `models/qwen2/` | Pinned asset preparation, tokenizer, Qwen model and chat semantics |
-| `serving/` | Engine step format and KV storage: `StepBatch`, `KVPool` sized by the model's `KVGeometry`, and `BlockManager`, which assigns each sequence its blocks |
+| `serving/` | Synchronous `EngineCore`, the `ModelRunner` interface, request lifecycle, step scheduling and KV ownership through `StepBatch`, `KVPool` and `BlockManager` |
 | `runtime/` | Native builds, terminal and clock services |
 | `layers/` | Decoder, attention and MLP composition |
 | `kernels/` | Reusable numerical operations |
@@ -189,7 +189,7 @@ Each row imports only from the rows below it:
 ```text
 cli/ · benchmarks/ · validation/ · configuration.py   pick a model to run, measure or validate
 models/<family>/                                      one model; supplies what serving/ asks of it
-serving/                                              engine types and, later, the engine; names no model
+serving/                                              synchronous request engine and its types; names no model
 layers/ → kernels/                                    shared operations; shapes as parameters
 runtime/                                              services for every row; imports no model
 ```

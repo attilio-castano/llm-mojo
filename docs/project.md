@@ -93,7 +93,7 @@ question concerns prefill and KV-cache schedules for a single sequence.
 Preserving an existing cache byte for byte is already a required invariant.
 Producing identical cache values when building it under different schedules is
 the additional research question. Here, scheduling means how one sequence is
-divided into model calls; multi-request scheduling remains outside current scope.
+divided into model calls; those earlier studies do not cover multi-request scheduling.
 
 The [decoder policy study](../studies/decoder_layer/policies.md) establishes exact
 schedule agreement for the tested single-layer configurations and measures its
@@ -148,13 +148,15 @@ research questions, not prerequisites for calling the current milestone complete
    decode attention paid for every block a sequence spans; after a fix, the
    [rerun](../studies/model_generation/paged-kv-loop.md) found no resolvable cost
    and selected 32-slot blocks, the default since 2026-10-05. Phase 2 is complete.
-   Phase 3 is being implemented from `cb2416a`: mixed steps, a synchronous
-   scheduler, bounded admission, aborts and recomputation under KV pressure,
-   followed by measured budgeting and asynchronous stepping. Its
-   [readiness and measurement declaration](../studies/model_generation/engine-core.md)
-   freezes what each stage must establish. Phase 3 has no completed validation
-   or serving-performance claim yet; prefix caching and HTTP/restart recovery
-   remain later phases.
+   Phase 3 now has validated mixed steps, a synchronous scheduler, bounded
+   admission, aborts and recomputation under KV pressure. Its
+   [engine study](../studies/model_generation/engine-core.md) retains readiness,
+   numerical diagnostics and offline/online/pressure measurements. Concurrent
+   scheduling reduces offline makespan with adequate KV capacity, but heavy replay
+   makes it slower than serial under the tested memory limit. Optional fitted
+   budgeting improves delivered-token gaps at a throughput cost and does not
+   establish a latency bound. Asynchronous stepping remains open on MAX 26.5;
+   prefix caching and HTTP/restart recovery remain later phases.
 
 Sampling, quantization, longer contexts, tool-oriented templates and additional
 model families can follow when they answer a concrete need. They are not current

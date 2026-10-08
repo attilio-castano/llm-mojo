@@ -1,0 +1,1557 @@
+{
+  "kind": "engine-core-readiness-v1",
+  "schema_version": 1,
+  "created_utc": "2026-10-08T18:23:31.526072+00:00",
+  "ready": true,
+  "synchronous_study_ready": true,
+  "full_asynchronous_serving_ready": false,
+  "readiness_scope": "baseline and candidate qualification to collect bounded synchronous research engine traces; not completion of phase 3, fitted-budget improvement, asynchronous execution or serving product readiness",
+  "baseline": {
+    "original_commit": "cb2416abf3c9fbb19c460fa99709d93eeabba97e",
+    "execution_archive_root": "/private/tmp/llm-mojo-engine-baseline-cb2416a",
+    "source": {
+      "repository": {
+        "commit": "9aa201038a3fc93d17d087f4d63a9b0fb8b53696",
+        "branch": "main",
+        "dirty": false
+      },
+      "sources": {
+        "pyproject.toml": "a427ded05afd0cd285e214945d6acfbfe46e4c40436c38e6565152714794db7b",
+        "src/llm_mojo/__init__.mojo": "54ca844ca97d5f13084dae07021cbe9535b95cf3414d5133daec18787507d905",
+        "src/llm_mojo/__init__.py": "d45f08c560f8a501262a3c17663244a1a74fb76658d746e99a430dbc1f9935b7",
+        "src/llm_mojo/_repository.py": "4f202ce0ef30d29f58240d1b089ee8331827b6403daf5e1f48d1f56da6d39cab",
+        "src/llm_mojo/benchmarks/__init__.mojo": "b8a8f32ace824dd687bc6b2f87afeb3180f7b5ac78684ecefd669201a1e9801c",
+        "src/llm_mojo/benchmarks/__init__.py": "11fddc93cafb04100810b633bfea5b41fb2ba60a48383c9fecb3fdd1ae9cd00c",
+        "src/llm_mojo/benchmarks/analyze_trace.py": "00ac0b73b851052c3fa791c36dcc918a08eed73a6975a54c1fff984f194e7c1b",
+        "src/llm_mojo/benchmarks/attention_contract.py": "31663c78f909fcd83506e69d495b2b13c4662055a9a76afc4dcfffa440dbd938",
+        "src/llm_mojo/benchmarks/attention_decode.mojo": "91004ab06ae1e92b508fac5709e1fa2f90256a6709125518421319dcafe335dd",
+        "src/llm_mojo/benchmarks/attention_decode_contract.py": "36b34c75a5186931331d6ae9bab8da6e493e55f6c8a612614c26a6c613dbd201",
+        "src/llm_mojo/benchmarks/attention_decode_support.mojo": "55ad60c4cbf1379adfb0575e840db8726d8d64103d6d973c20d71366c32a9968",
+        "src/llm_mojo/benchmarks/attention_prefill.mojo": "293de23d51dfc7d1b8b35095c6225aca0361f26325934dde76c8e5069c636672",
+        "src/llm_mojo/benchmarks/attention_prefill_contract.py": "8cd0df325ea4cbab884b3205e50832a0dc289d1d18194375bdd9f90ef8ac2578",
+        "src/llm_mojo/benchmarks/attention_prefill_ir.mojo": "5b33ebf3957b68fc960b0a45f1b5b60d67d72537b839b40fea7e8f4da5f1073e",
+        "src/llm_mojo/benchmarks/attention_prefill_support.mojo": "fdc70fa268f740dde80534a3eaac3c09d09614deceaec504b12b8c5a9d2c54ca",
+        "src/llm_mojo/benchmarks/attention_sublayer.mojo": "c38ce4c2320afed884d1c95f33b41b341c100b3bed7a463a7bd8b4b3ef34f3d6",
+        "src/llm_mojo/benchmarks/attention_sublayer_contract.py": "a0bca7364c6de60ea2a726d223c7f50b3ffe9613390f83329018a5bb73e4dc40",
+        "src/llm_mojo/benchmarks/capture_trace.py": "38c69e2b85358e97999e5cf9de204353c10d7d50da3f0e9f2524448a5da7aad8",
+        "src/llm_mojo/benchmarks/decoder_layer.mojo": "76657a8201f470e95359dbb60063374225d207cb889fe82a23506087116d793b",
+        "src/llm_mojo/benchmarks/decoder_layer_contract.py": "9b9795fdd9b9323f0cca8433a091d00f3c7c721edeff6f2ba620a1facb8a3957",
+        "src/llm_mojo/benchmarks/environment.py": "815e2f79a5189a7dcf5b97fc2c159fb38e5924e3d388ec2c37650b9a92beb48c",
+        "src/llm_mojo/benchmarks/mlp.mojo": "dc0690af5f73e6f5b876b8f5cd9dacca90f7d95bfc87c4e3c64e9d46f0754145",
+        "src/llm_mojo/benchmarks/mlp_contract.py": "d6d628df468484dd41f890ed0c27bc44df8b3971ce9e91ed0e9fa9a717822a3f",
+        "src/llm_mojo/benchmarks/model.mojo": "9f5511584e7535abb9d4e1c6ece824b84ed535b3fe1ec35967368999c75569aa",
+        "src/llm_mojo/benchmarks/model_contract.py": "33a504233b9ea6346de161f9328b680bb06569e3332ab8652cb8c6a2db83a584",
+        "src/llm_mojo/benchmarks/model_profile.py": "acec608e1cb73319eb1bc9d1aedd2d4c868c6180c5f86b37005ca206fbde0fb9",
+        "src/llm_mojo/benchmarks/operations.mojo": "2519d5fe757cda7076e474f9aba677dbe16a7137df7ba0cf68830eb8ecc2a9dd",
+        "src/llm_mojo/benchmarks/plot.py": "431447bf9beaa40cdea49aee0665520314549504370a819e839dafd801ec3b22",
+        "src/llm_mojo/benchmarks/profile.py": "db4a59b94cadaafd56cbbb495de18fb125616d8646e17506e2b3c5ac1b9341c1",
+        "src/llm_mojo/benchmarks/profile_summary.py": "76015047382bf017d5d767dede798da7dab61e5b222995ea7bf75170b6950a36",
+        "src/llm_mojo/benchmarks/run.py": "4d270d1ff11f38dd33616b06e729d32b4333a89001d78af753ae4086be144dc5",
+        "src/llm_mojo/benchmarks/smoke.py": "111f6422e0e852fd11e8ac960ae4d0bd192c2435483af6c289c18c4cbdc56d08",
+        "src/llm_mojo/benchmarks/study.py": "1b3c21f9dd4bafd8f9ca4f2751e2225a9cf0db32b72d7cbe2a7fa5556689b804",
+        "src/llm_mojo/benchmarks/tokenizer.mojo": "cc80098f020652151d6f868344e117c5c79a79aed7fa74e2fe7e2d560270f1ea",
+        "src/llm_mojo/benchmarks/tokenizer_contract.py": "317d6386ed1e3df6d9aef66284432d6b157ba3dd91ba66759bd28ba9f07e57cc",
+        "src/llm_mojo/cli/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/cli/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/cli/app.py": "c0c6a8a3f171bddf245c31c3779d13a198db2b93dd87fa85cd2445f15f025351",
+        "src/llm_mojo/cli/chat_cli.mojo": "ce259e116ac9fb72befa1384bb37d5290a4aefa9a775f6b981e7dad6ef5e96bf",
+        "src/llm_mojo/cli/generate_cli.mojo": "2ed994666a49d428ed996287d5dce5fcd3ad17d06cb2131ff35b1d24c8001d1c",
+        "src/llm_mojo/cli/launch.py": "37fac0091a71fa70d4eb38d6d40ec5748ec7f65c8a20ce2aa3fc8e4c2294dca1",
+        "src/llm_mojo/cli/tokenizer_cli.mojo": "a9b5404bed33e2fb577c3d9cfc8bc1952fcee1d64c056d3cfa195526fb4480bc",
+        "src/llm_mojo/configuration.py": "a4bd6ade850d673be70250579254ce8ffdbf8e4a270d7583c25dac54ade2f23e",
+        "src/llm_mojo/decoder_validation.py": "61db7eb6252f99b5cba35eb63e8c807c378b1637dd9cdbd08d61fa562f104ce0",
+        "src/llm_mojo/kernels/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/kernels/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/kernels/attention.mojo": "3210f50d6850db60a6cacf4c30d860ca0b72177ad1c9b313c7ae7d92b79be973",
+        "src/llm_mojo/kernels/attention_decode.mojo": "6b05604ca3a979a5f2d3bfdb30a14f9f107d8996a83a3139e90a9286104c820c",
+        "src/llm_mojo/kernels/attention_prefill.mojo": "c320a4b45586d7766c60ba1c03b2cc70a292a2c13c6ed06a685cad5f75308e13",
+        "src/llm_mojo/kernels/bf16_arithmetic.mojo": "e41319b3ea6239d3928ee49e2ec85944a9d328f983806e9dc44356cd757591be",
+        "src/llm_mojo/kernels/linear.mojo": "576ca76ac4df8192205fabfe0729ac22d9af204ce60a2a30d91f78a10442a320",
+        "src/llm_mojo/kernels/paged_kv.mojo": "607d3fe8fb03460ea74aaf1f767fe34ac66ff954b76deb4ed57d0faedc91c7d1",
+        "src/llm_mojo/kernels/residual.mojo": "c23ef599682d1d6f698c7fef4ba8f8c969dd815716a4160e8fcc774e0acc02da",
+        "src/llm_mojo/kernels/residual_norm.mojo": "311531f0558eedd906f5e78ea85a93e5965c0b8da20f0591466ff1c6b8715534",
+        "src/llm_mojo/kernels/rms_norm.mojo": "a555c33f86c6f893b780beab8033a9495ad62e502d0670753e7639850fba0f56",
+        "src/llm_mojo/kernels/rope.mojo": "12add6e982c6d1b500c1f346bf3733a9306acd1d15994fbaed8eb610904b289e",
+        "src/llm_mojo/kernels/swiglu.mojo": "1cb48dde45aa91addab073b530cb1b0db309d118d03b5880cbeb98a2a54bcf01",
+        "src/llm_mojo/kernels/token_selection.mojo": "cac022c72d356a27c39515c0b23b4bbcde1fad59e3926bfd5a6922a57e48ce00",
+        "src/llm_mojo/layers/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/layers/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/layers/attention_sublayer.mojo": "bb5c89863cc63151dac61f5db81903c34a42fc6f38eae4de34e0b275c3d6b131",
+        "src/llm_mojo/layers/decoder_layer.mojo": "464e642d73403834594e97c827b70ad1525f1e12695c8f6a8281859d3eaa1e84",
+        "src/llm_mojo/layers/decoder_policy.mojo": "7046baa0b2bfb372cb5beb8d1a503377a641ffdc200eb153c74d9496e9505ca8",
+        "src/llm_mojo/layers/mlp.mojo": "2976546a15ea87a2c6aec46458104cf44d113156c3786b74fbe03254677a23b5",
+        "src/llm_mojo/mlp_validation.py": "6aa7e9ebef5f8253dc0bd91abdaa08a79ffae759653a97a3d15f3202fc96ee89",
+        "src/llm_mojo/model_validation.py": "0fa33d99e383d04f4bce0658af48249c1aede0cfaa60b72d2dfbac2ecb60d069",
+        "src/llm_mojo/models/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/models/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/models/qwen2/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/models/qwen2/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/models/qwen2/assets.py": "3cb46aaefc7bc957dca8ff6c75693116ff42c06a63b0c95f2c896f017d2efffb",
+        "src/llm_mojo/models/qwen2/chat.mojo": "c3ee1fc26772c301e1f7d081cba0c863bfd7be692439d41cdbc759f0aacd6691",
+        "src/llm_mojo/models/qwen2/model.mojo": "231474bcb5391b942dbc4bd91a903f3852019c5d8272bbf1f9351962812011f1",
+        "src/llm_mojo/models/qwen2/plan.mojo": "093715afdd7d2bae018b1b84a768d7e44f54dd224c123713b6f6fa7b260bf85d",
+        "src/llm_mojo/models/qwen2/tokenizer.mojo": "50dfaebcc034e2dd584ac8b02fd3907504de5aa7b0150d869c5e4586b67b3a13",
+        "src/llm_mojo/models/qwen2/tokenizer_assets.py": "4dc28615b0dcd9071a8524cd32653dc16d6d7762afe6e1705e4970580ecc38b0",
+        "src/llm_mojo/models/qwen2/tokens.mojo": "57b2aec1ad3f09a15812127221c811cc3e016dea5cd05e82b3d476b4ccc580ce",
+        "src/llm_mojo/runtime/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/runtime/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/runtime/artifacts.py": "045491ab88f59b354940bc641329fefa406f1e2cd805d5e37205a27a1c04cb4d",
+        "src/llm_mojo/runtime/build.py": "fd440c4e2b8e0c64e79ea7b5cc287694a6035e9518685df0b4851176db9aa0c3",
+        "src/llm_mojo/runtime/clock.mojo": "a01574476c1dbba683981757da898377296902e58d6fb71b835300d3a4bbf5b2",
+        "src/llm_mojo/runtime/store.py": "ba5a0d8ceecd7d6b69b3e02b928262201a0fe2eb601c14fb2857238936676a4e",
+        "src/llm_mojo/runtime/terminal.mojo": "21d4ce77748ae6e2b67810565e7324030debd04392e2f59391e649c9aa128e01",
+        "src/llm_mojo/runtime/toolchain.py": "d6b28fa02fadd95bd2c6216eead5000b30282e5433fea05aac50418e9250c82f",
+        "src/llm_mojo/serving/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/serving/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/serving/batch.mojo": "1a96a4e6902d0b87d29fb393fe84232162b8855e22945c4a7d70ee1cdc609a1f",
+        "src/llm_mojo/serving/blocks.mojo": "cb1d4661ca2fd6df1c5c643d55c0574af584d7870571e9b0c02935fa47a234ab",
+        "src/llm_mojo/serving/kv_pool.mojo": "c4233fffd2baeb52b836ba20423f204431f4fffbe3d5752c838f3440bdcf147d",
+        "src/llm_mojo/validate.py": "36824098dfc50761b9ed7fad3c04091467d960de1c31b63064a8c6d1c89e0a00",
+        "src/llm_mojo/validation/__init__.py": "38d0c60ff93189ad715142cdff8711fcbdca29c10c85211a3f7895401eb5d7b0",
+        "src/llm_mojo/validation/decoder.py": "de0da9bcaf645ad0c30164e5a01d0c96cef57dbbd7083577f1c365e2fed6814e",
+        "src/llm_mojo/validation/evidence.py": "237b9be32602d8e0e1d7d4c4d796d0c70df4a7e4929f71c684308319aaf81606",
+        "src/llm_mojo/validation/fixtures.py": "adc34ecf1a72bc74c71268b69a5581d779d3393ac4c880ffc5a654726841d753",
+        "src/llm_mojo/validation/mlp.py": "3ed4418b328eb3934d32d2e46ae94527fcbe230ce0e83781bdee990f3ac2f4fe",
+        "src/llm_mojo/validation/model.py": "c199d52206667ac08e661c5636a263779af53b3764f0386278035cb085ae4388",
+        "src/llm_mojo/validation/suite.py": "55bedbc772117c38433848aec01c8a5a767f737f7d708e7e6cf4ee3cb69ff0b5",
+        "tests/attention_sublayer_support.mojo": "83354628e5fd7bf669545a0eed2ed4e5dffa773bd7feb7b87437492f0811e2bd",
+        "tests/chat_driver.mojo": "eb287c3c2d6b22e4e239565fd31deae10dda6d96f0b8417f61e58494ae64ba69",
+        "tests/chat_study.py": "15153e60705745b68a0729b1baf36f2dcc77fc7f570942c7dce6db4c066ed731",
+        "tests/chat_terminal.py": "7cea754e6224d10c38f8b14dd6da32e9e1ca94fab7fde7dbb8892d2089fe4582",
+        "tests/decoder_layer_support.mojo": "20bc6d05723638af6086ec4e87b2342566044ab1d3ea589b1623f372d87a0b8e",
+        "tests/decoder_layer_support.py": "f04e237bd75b29d2b7dc8f5f3ec867525ca62e081cb8d5888a38d2185439cf07",
+        "tests/fixtures/attention/generate.py": "587eb5ed0c63e2a05f3026c2dde839c7fd92c37ec9e7c8bdab22cb37bccf3ea4",
+        "tests/fixtures/attention/generate_decode.py": "dd82f833f9507cd54edfaf95c5b2ade7381fefb6f612547b8849711be503861a",
+        "tests/fixtures/attention/generate_prefill.py": "35193674d82c1b5ca18a642b452de298ad58dcc2a609396c895f8b2819a3f54e",
+        "tests/fixtures/attention_sublayer/checkpoint.py": "03485aaed630e273c89fcf5b8bfd8c51a32aca4d764202702f82b158a6e7367c",
+        "tests/fixtures/attention_sublayer/checkpoint_checksums.json": "a6730403ed7a3ae4becc02e39a1910bdb5781c3846b0bdd71eca20fc26a6cb20",
+        "tests/fixtures/attention_sublayer/checksums.json": "64bc40d13d26492880d7c848da237afb4e5406588a01f5f4575c1bee6dcf49de",
+        "tests/fixtures/attention_sublayer/generate.py": "bb48bf3b84ae87944685071d269f85690e81488fa3cebe5a055c9dd205235ec2",
+        "tests/fixtures/attention_sublayer/precision.py": "5a33b83d6bef9c3ff4824e1007591a3cca305225c3297667129f8d700280b5a2",
+        "tests/fixtures/attention_sublayer/precision_checksums.json": "3a4d9e6642be1729b206f18de7253b784bc70b455e3ead7bc1a3d402a21d7f84",
+        "tests/fixtures/attention_sublayer/upstream.py": "e6228d7ecfa07976479372758d28fc10a99cf9391a1b3cf18955be419dcac02b",
+        "tests/fixtures/chat.json": "ec6c402990c2b7c697e34b171b45b6a67ea88eedcc8a74426cd1f28e265fa254",
+        "tests/fixtures/chat_reference.py": "59a8b1eb154dc94107e2ddfd7196c75deac97424b0f46bc93327c0377be793f1",
+        "tests/fixtures/chat_reference.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/checksums.json": "becd13cec305f11367f5523d4c80732052215f7862070c6635ad4b7cb59ab51b",
+        "tests/fixtures/decoder_acceptance.py": "f1a21f7ad82e00465032c337422d054eeb906e11f4f4d6c46d8c9e2bcf1068c3",
+        "tests/fixtures/decoder_acceptance.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/decoder_layer/checksums.json": "e351604090115cf4a7ec060aa594d37b9c8fd5e744afe4b0549bea90910afab4",
+        "tests/fixtures/decoder_layer/contract.py": "2646e775d0063c1fef450f604911cf7aa427b22b236921e3e78511678284819f",
+        "tests/fixtures/decoder_layer/development.json.gz": "f5aedbaf44d8a96a4625d749c9f056aa5767f86b0f63aba75ff057b8eaf00ca6",
+        "tests/fixtures/decoder_layer/generate.py": "08915679cf8464c7b57c552a2f4254be769cd68b1ee1e6db3a7f99d4744ff06c",
+        "tests/fixtures/decoder_layer/reference.py": "e3dfa596a4823de3f8b874aa788d56826382fae67db448cde422552b992d14e6",
+        "tests/fixtures/decoder_layer/test_reference.py": "813e4de124dbe71cbe040c697ddbc7e3902ecf0768ea8464927fdadecb6f3878",
+        "tests/fixtures/decoder_policies.json": "8fd4206465fc6dd1ade4feebb1d31e1f9423ecde2fd445cea04260534c05b608",
+        "tests/fixtures/decoder_reference.py": "b76370e78cea0a62bb8b75eae4cdfd67d408a47cffab0730add3dd2190b16bb6",
+        "tests/fixtures/decoder_reference.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/generate.py": "4638cd68d5b5cc54f94c68581e6be3f0bfbb3abf71d81160930794dcfccb4047",
+        "tests/fixtures/generate.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/linear/generate.py": "f84abf1d3d798e9c5c798059c1cbb6f235e54e7b54b8a4f9b9a9dc426d67c348",
+        "tests/fixtures/mlp/checksums.json": "6de9811889f14c9ece9999b7e4ee6116dfc41bb3dfac95486ec86f3582ec43e7",
+        "tests/fixtures/mlp/contract.py": "439686ec0dfd22d6cc3d4427f5b6f622c4b20bdb5ff609cc04bf762b6c0cc155",
+        "tests/fixtures/mlp/development.json.gz": "20409161073dbf8ff5b6f7d78375a3f1ecfcd598d13ed201aaa9f2e261fcc69f",
+        "tests/fixtures/mlp/generate.py": "f9f8e2fe4031929922891090c5ed99c4f20ab52567729e93d011cf76afc95459",
+        "tests/fixtures/mlp/numerics.py": "ae713d7ec1754884524bac9bbd59b902b7fcc3edc012a72156ef7f1d41fd7f7d",
+        "tests/fixtures/mlp/reference.py": "c02a4ab733ad6702b663aecc3593b72a68c6d419797a6fc06f1e60d6a995851f",
+        "tests/fixtures/mlp/test_reference.py": "c1b759ce27855d955e1662781ecdd100423c25168d3dbe36c7ed83b4d262ed1f",
+        "tests/fixtures/mlp_acceptance.py": "985d5a031abc3238c0a9d12e9d844db73223fc5b56dd7b1891fbdc66f9086727",
+        "tests/fixtures/mlp_acceptance.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/mlp_decode_holdout.json": "575764613e7c208cfac36b71ce352a80e693a4b84e359b5327d04875973ece7c",
+        "tests/fixtures/mlp_optimization_holdout.json": "b30d1e12d84f7249be2dc298efdc424548b661041dc901918d63c36463647440",
+        "tests/fixtures/model_attention_diagnosis.py": "d5679a799703fa3e11289a8ab72512cfb219f92df319b0b22e6f0645cd133582",
+        "tests/fixtures/model_backend_contract.json": "18c559629a9ba0133cf34649c4f860855e2481d6f750db773fb0e6aaf740fca6",
+        "tests/fixtures/model_calibration.json": "f8b3d207d39758095239b647e1ec01d98eaed6f72cf34c504295fdd42a716d9d",
+        "tests/fixtures/model_calibration.py": "17af95705616c71999607b2b4a991499e2a54a015c18ec3e9b964beddbcc6541",
+        "tests/fixtures/model_calibration.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/model_consistency.json": "567f03fd1cf0705836783898fc424fd38c44bfadd30db5fbdc2b26341028f23c",
+        "tests/fixtures/model_consistency.py": "94de9081dba758a58dfb99c8c24497914dd1863035eec16136325260ff385ce8",
+        "tests/fixtures/model_consistency.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/model_contract.json": "383a3f123bb5affad0d00e8333f971c92c950c739a452a4ff952de032395b506",
+        "tests/fixtures/model_diagnosis_contract.json": "295fdaf4c6f80c7f6dd55287164647569d654887a05f56db9b0562d2a1aac621",
+        "tests/fixtures/model_fast.json": "49f9187432b6d0af0a811a183bc14d419edbc7fb3132604546553698a2d2ee2f",
+        "tests/fixtures/model_reference.py": "77abb97113d46d0bb41de06eb0cc15afa3433f432f78e49acea84b404e80186d",
+        "tests/fixtures/model_reference.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/model_reference_diagnosis.py": "048bc04b2d8e49114c90e33c8db97ebdf1a3929fce0ccc69312aea16856e1c14",
+        "tests/fixtures/model_reference_diagnosis.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/model_runtime.json": "d6c9ea600c6a034ba582f8eaf1fc48f1796c5c4f69ad5b27423ec413561491d7",
+        "tests/fixtures/rms_norm/generate.py": "3c2f8125fcb42e3002d8e2bf1863dfcb32c8148bf3e7f8ec7c99e5f227e2233f",
+        "tests/fixtures/rope/generate.py": "d774a3f319657349f82b415162cfadebc2be15ee7b905f08621ced785b92b708",
+        "tests/fixtures/tokenizer/benchmark_checksums.json": "a956a0e77235bce3efc2e7bcc688a7e03b93b8a8fb15c1642756f1cae5f8384e",
+        "tests/fixtures/tokenizer/checksums.json": "b81503eeff73486c8ee41e6ca4c02513bc72d5bf758939abbfaeaf3bc77676ac",
+        "tests/fixtures/tokenizer/generate.py": "caacb80a537036e075e3c0161fc42ec99bf9f96f7309cb4d40862def39ca3d34",
+        "tests/fixtures/tokenizer/holdout_checksums.json": "44cd78fac48ba231f589e1588ff55197cb31cb5a907f704df9bd4413fe228574",
+        "tests/fixtures/tokenizer/unicode_checksums.json": "18a4a2380c985dbb9efb4d0643d77a1ddf1d3ef4b1cc331555cc15801c89d0dd",
+        "tests/fixtures/tokenizer_reference.py": "10e78df36c0a2b3a1ce072a8b9bf67ec076f76cc882fa5d4ce55434a37a88eff",
+        "tests/fixtures/tokenizer_reference.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/mlp_support.mojo": "3b8c232d8411d98781ef3e97653c8541a358a6c76550c4becbb9192cac3b927d",
+        "tests/mlp_support.py": "8f3381c858b21b9d0558c23470bcf832fd86b9a3c22b0aa7878a5e58e5769dba",
+        "tests/model_driver.mojo": "50bc10f9a2a16b1b90ac873a7efdb9fc81e35b3a7d78de20ed1318c9c19c4633",
+        "tests/model_operation_support.mojo": "788de9473c18654934b4d239c27880bd359af2f7ea9087dcdfefc7cdde9a8d09",
+        "tests/test_attention.mojo": "f3a510430c01e225a6306c57c8d4a01524970a282f8c460ca06306e0d3081a8a",
+        "tests/test_attention_decode.mojo": "50efb3d406cd0d541c60c8dbeed97b43a18c0bf793a29cfb9c811b50f3573f18",
+        "tests/test_attention_decode_benchmark.mojo": "f81e767fc538945ef2137b24dc670fb30702496a2b812849c8762081b61de191",
+        "tests/test_attention_precision.mojo": "83465dd237e6e95fb6b38052b4eb7bbea8bb84cb86be477e88ab48aafbe906f4",
+        "tests/test_attention_prefill.mojo": "334f99acb6be1fb8289cbe5d1313ffa6fc8b9df9c245f47ff98fe50effead9a2",
+        "tests/test_attention_primitives.mojo": "e0ec35182b15a8ff17a573e1bddf1c1f49ab245a6fbf5af2799f0631594d938f",
+        "tests/test_attention_profile.py": "8df6f0a09b150a531bb30372b29fc96749c166951a8709a61445472c25f628b9",
+        "tests/test_attention_sublayer.mojo": "2059182ffeac6caeb349ee4f065fb240539a4ed5b5b4cf270c3fb681d19b89b4",
+        "tests/test_attention_sublayer_operations.mojo": "4016e604b1a0ad0527174f5db05e566908005f3805fcbc2856619ae473f2c1fc",
+        "tests/test_block_manager.mojo": "ada0981a20e016dad7dbdca7198e0a5a49ca0c629c06f46b96db3774581ccc0e",
+        "tests/test_chat.mojo": "d2ab8990c431bfd64961971b498c0a03e7357c58296e9fb92a10bf1019d6dc01",
+        "tests/test_chat_launcher.py": "db9af78d2e2e32a8b47fcacdf8752707822fb3b76609750b3e80610304d4d402",
+        "tests/test_cli.py": "8e636132e96f553278c968df655878b0792f044ddd5d84f7d434c8127aabfbfa",
+        "tests/test_consistency.mojo": "22ecad487efcd473f4c85e3a736458a3eda2cc1bc262f380f1a64b7ce9dffcf6",
+        "tests/test_decode_batch.mojo": "a4a769fb684049165c0fe7d33b4e862c79322925dac778cc598147c7f4524fbf",
+        "tests/test_decode_route.mojo": "59cd040a80dad0d3632729e186def8c9c7278097362d97494ee848e7366cb791",
+        "tests/test_decoder_layer.mojo": "73eada74807e850b6998dbadfe65750acbdd276e635a4cf048e176a74b6b2644",
+        "tests/test_decoder_selection.mojo": "e8feeda43caff8ed478b03c884a3e2cc6caf54c8b5f8d58637bfc42da40034cb",
+        "tests/test_decoder_selection.py": "913042be985cc082812903d83ad52fd346a0edfffa529395890aed5666698bad",
+        "tests/test_decoder_tooling.py": "a9bd8a4a0376798bc69c8ee679c30c6c165784608ffac5f181cc37c9b7b953d7",
+        "tests/test_decoder_validation.py": "b8c9ffb11e744bd220b6fdc7040add2dfe46353f55e7817bad02b806fc0a01e1",
+        "tests/test_docs_links.py": "f8d3235534bee4586be28684ac9198a721f26a27a5139a79c715752d101daa1b",
+        "tests/test_environment_tool.py": "5304e747872ddcc41916e9df975e7095284aac058daaf523193c36b9343d7f6e",
+        "tests/test_execution_plan.mojo": "75a155e1c96911074762bfc1a5c75c6a6e4bbe636762dba17052ad28749cf409",
+        "tests/test_fixture_cache.py": "cfe754ec3730ff0383cf142ddb2481bb948c4758dd206d620d4eeb29ed670eca",
+        "tests/test_import.mojo": "d82ead4423a78c5f518b5820997212ac8ad8dd2d068ed57953479ee2322a4aeb",
+        "tests/test_linear.mojo": "99e4476307cdbf58356b254b0b6ebc5623f9025aaa00b65067dc4f59ae7b1c93",
+        "tests/test_mlp.mojo": "dcebd60f0f4bd17d0da635e79950bb240e255922548423aeebe963af0b57571b",
+        "tests/test_mlp_tooling.py": "30bb81a9c9109b3393660c4ac4d3fafec781aa2b3da34c2fe6e9d5f33be46834",
+        "tests/test_mlp_validation.py": "6d2433af6b690be9b90347f31ecdeb64e33f36296f66fff07d819b3055332615",
+        "tests/test_model.mojo": "d66e554f2bc9973ced4c7a753d99353220464901e57d8de4705a553e74def4e9",
+        "tests/test_model_assets.py": "e02cf687bf85f0256f4825f807aa1ce3f1321d90c4aa841b6a45c76092e4acee",
+        "tests/test_model_profile.py": "f528f1b731b3761fa0840e85b2aea577bf0048e6671cda85b5b1d394132f18be",
+        "tests/test_model_study.py": "8cad8710f29c860c9c9ca5aa0e19ea2698f1efb721b98dd939ed646fedb142fd",
+        "tests/test_model_validation.py": "9c1aa26312699df1b5887a93c55d28530dced81e79cfffac4221618a28058238",
+        "tests/test_native_build.py": "0089835f71b33b2e2d02897f55058e7caaf445baa7e02f4d6b6e84bbb241e77e",
+        "tests/test_package_boundaries.py": "ce06f15506fdab5931ca925bffa4192101e904fa6f3b242e10b61ca90cfe4039",
+        "tests/test_paged_kv.mojo": "fd21fe5b9df730bae8ccbdf4b7fcbfe5639fd80c5acee7946d264ba087a945ae",
+        "tests/test_plot_selection.py": "c449a6a6acf70174af07d4fe10968dad59292538aa24c4cba66501657aaeeeb5",
+        "tests/test_residual_norm.mojo": "7074bbca41bc6d0ded2181b6c0f7103b785ae80a5a882733e9ad596c059081bd",
+        "tests/test_rms_norm.mojo": "0deb0398026312be1811329baf5b8f379f5ae37b474adf89a7438ce2ca5aae0f",
+        "tests/test_rope.mojo": "73bee783ba18cc4c431e493de3189f0f67d315b8aa3a3c19e2fb33aa758a1496",
+        "tests/test_serving.mojo": "f21ac99b0562d3eac456c5c47ccca04ed7d9f1bf1cf05e7fdb6b152b6a252cd3",
+        "tests/test_setup.py": "71e0d1613f291c22db9b13b6bda9fe72a656ac48c8fc5dc7ff1a872d9cc04179",
+        "tests/test_study.py": "aa0f3c5b8b4c66dab252df6d8a40bbfeeaad8336439d707f2f90ebb107a1eb01",
+        "tests/test_study_evidence.py": "0d151aeee9c82a3e0e31fe4afa51831f2be200ed88731e7d06c3ee9ffd83d151",
+        "tests/test_swiglu.mojo": "cedd280552c4e5e0917f2c87ee7a7121679a8a27ed099c35fa94ee3393e2e344",
+        "tests/test_token_selection.mojo": "65c626eceb486327e9a3a25cfb9362ccd97ef462d3a27fd5f411aa4cf074444c",
+        "tests/test_tokenizer.mojo": "4757252c5050dbf7981edb4886c7560820767835807553b182cbc163e84141c5",
+        "tests/test_tokenizer_assets.py": "6d8a44d0b404d164584fa33906a5c87392cb5b6c084f1900f96878ca32c0d62c",
+        "tests/test_tokenizer_benchmark.py": "e0bc165b0db058b60531310b910857c6ff9542417e7bc27a385899929ae44ca1",
+        "tests/test_trace_analyzer.py": "a4a83479bee9567f06cb5cc282de72c09dde4714969dba04c3e668fa19d684ef",
+        "tests/test_trace_capture.py": "384cb922565a35f350eb2fddd200a658ed4bf355e6e5692a6e7fa3c817dcae99",
+        "uv.lock": "903ea1a7c05a268cc14d36bc817cee7edb0cd2f278c0c557777ef0d472cfad57"
+      }
+    },
+    "original_source_archive_exact": true,
+    "source_identity_sha256": "19299c910893293dfc38937230107e17363736cecb4a7c019c84d48882f97edc"
+  },
+  "candidate": {
+    "root": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+    "source": {
+      "repository": {
+        "commit": "b18563b3a43c389991cd6679bf03892f140f15b0",
+        "branch": "codex/engine-core",
+        "dirty": false
+      },
+      "sources": {
+        "pyproject.toml": "a427ded05afd0cd285e214945d6acfbfe46e4c40436c38e6565152714794db7b",
+        "src/llm_mojo/__init__.mojo": "54ca844ca97d5f13084dae07021cbe9535b95cf3414d5133daec18787507d905",
+        "src/llm_mojo/__init__.py": "d45f08c560f8a501262a3c17663244a1a74fb76658d746e99a430dbc1f9935b7",
+        "src/llm_mojo/_repository.py": "4f202ce0ef30d29f58240d1b089ee8331827b6403daf5e1f48d1f56da6d39cab",
+        "src/llm_mojo/benchmarks/__init__.mojo": "b8a8f32ace824dd687bc6b2f87afeb3180f7b5ac78684ecefd669201a1e9801c",
+        "src/llm_mojo/benchmarks/__init__.py": "11fddc93cafb04100810b633bfea5b41fb2ba60a48383c9fecb3fdd1ae9cd00c",
+        "src/llm_mojo/benchmarks/analyze_trace.py": "00ac0b73b851052c3fa791c36dcc918a08eed73a6975a54c1fff984f194e7c1b",
+        "src/llm_mojo/benchmarks/attention_contract.py": "31663c78f909fcd83506e69d495b2b13c4662055a9a76afc4dcfffa440dbd938",
+        "src/llm_mojo/benchmarks/attention_decode.mojo": "91004ab06ae1e92b508fac5709e1fa2f90256a6709125518421319dcafe335dd",
+        "src/llm_mojo/benchmarks/attention_decode_contract.py": "36b34c75a5186931331d6ae9bab8da6e493e55f6c8a612614c26a6c613dbd201",
+        "src/llm_mojo/benchmarks/attention_decode_support.mojo": "55ad60c4cbf1379adfb0575e840db8726d8d64103d6d973c20d71366c32a9968",
+        "src/llm_mojo/benchmarks/attention_prefill.mojo": "293de23d51dfc7d1b8b35095c6225aca0361f26325934dde76c8e5069c636672",
+        "src/llm_mojo/benchmarks/attention_prefill_contract.py": "8cd0df325ea4cbab884b3205e50832a0dc289d1d18194375bdd9f90ef8ac2578",
+        "src/llm_mojo/benchmarks/attention_prefill_ir.mojo": "5b33ebf3957b68fc960b0a45f1b5b60d67d72537b839b40fea7e8f4da5f1073e",
+        "src/llm_mojo/benchmarks/attention_prefill_support.mojo": "fdc70fa268f740dde80534a3eaac3c09d09614deceaec504b12b8c5a9d2c54ca",
+        "src/llm_mojo/benchmarks/attention_sublayer.mojo": "c38ce4c2320afed884d1c95f33b41b341c100b3bed7a463a7bd8b4b3ef34f3d6",
+        "src/llm_mojo/benchmarks/attention_sublayer_contract.py": "a0bca7364c6de60ea2a726d223c7f50b3ffe9613390f83329018a5bb73e4dc40",
+        "src/llm_mojo/benchmarks/capture_trace.py": "38c69e2b85358e97999e5cf9de204353c10d7d50da3f0e9f2524448a5da7aad8",
+        "src/llm_mojo/benchmarks/decoder_layer.mojo": "76657a8201f470e95359dbb60063374225d207cb889fe82a23506087116d793b",
+        "src/llm_mojo/benchmarks/decoder_layer_contract.py": "9b9795fdd9b9323f0cca8433a091d00f3c7c721edeff6f2ba620a1facb8a3957",
+        "src/llm_mojo/benchmarks/engine_budget.py": "65c04551afde494217d26f9d16a32ab1de173832ea18ac422923f516e1e1502d",
+        "src/llm_mojo/benchmarks/engine_trace.mojo": "17b605017c9fa501c1057a4b58a1ab17e782dd8c4b058986b96ecbc48028e26b",
+        "src/llm_mojo/benchmarks/environment.py": "815e2f79a5189a7dcf5b97fc2c159fb38e5924e3d388ec2c37650b9a92beb48c",
+        "src/llm_mojo/benchmarks/metadata_probe.mojo": "c032cb3095ecef63e5de19bf6c2bb9d75b00134bbcd253dd7179d105ab6c14df",
+        "src/llm_mojo/benchmarks/mlp.mojo": "dc0690af5f73e6f5b876b8f5cd9dacca90f7d95bfc87c4e3c64e9d46f0754145",
+        "src/llm_mojo/benchmarks/mlp_contract.py": "d6d628df468484dd41f890ed0c27bc44df8b3971ce9e91ed0e9fa9a717822a3f",
+        "src/llm_mojo/benchmarks/model.mojo": "9f5511584e7535abb9d4e1c6ece824b84ed535b3fe1ec35967368999c75569aa",
+        "src/llm_mojo/benchmarks/model_contract.py": "37b187d37b4e34ba9a6383023524ff2ec09a4c1bd402e37945e40db7d051b7a9",
+        "src/llm_mojo/benchmarks/model_profile.py": "86e5335be91153a7eab6a1ce198049fcbdc3cce07f76b74a1b1cc97184bdb85e",
+        "src/llm_mojo/benchmarks/operations.mojo": "2519d5fe757cda7076e474f9aba677dbe16a7137df7ba0cf68830eb8ecc2a9dd",
+        "src/llm_mojo/benchmarks/plot.py": "431447bf9beaa40cdea49aee0665520314549504370a819e839dafd801ec3b22",
+        "src/llm_mojo/benchmarks/profile.py": "db4a59b94cadaafd56cbbb495de18fb125616d8646e17506e2b3c5ac1b9341c1",
+        "src/llm_mojo/benchmarks/profile_summary.py": "76015047382bf017d5d767dede798da7dab61e5b222995ea7bf75170b6950a36",
+        "src/llm_mojo/benchmarks/run.py": "4d270d1ff11f38dd33616b06e729d32b4333a89001d78af753ae4086be144dc5",
+        "src/llm_mojo/benchmarks/smoke.py": "111f6422e0e852fd11e8ac960ae4d0bd192c2435483af6c289c18c4cbdc56d08",
+        "src/llm_mojo/benchmarks/study.py": "1b3c21f9dd4bafd8f9ca4f2751e2225a9cf0db32b72d7cbe2a7fa5556689b804",
+        "src/llm_mojo/benchmarks/tokenizer.mojo": "cc80098f020652151d6f868344e117c5c79a79aed7fa74e2fe7e2d560270f1ea",
+        "src/llm_mojo/benchmarks/tokenizer_contract.py": "317d6386ed1e3df6d9aef66284432d6b157ba3dd91ba66759bd28ba9f07e57cc",
+        "src/llm_mojo/cli/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/cli/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/cli/app.py": "c0c6a8a3f171bddf245c31c3779d13a198db2b93dd87fa85cd2445f15f025351",
+        "src/llm_mojo/cli/chat_cli.mojo": "ce259e116ac9fb72befa1384bb37d5290a4aefa9a775f6b981e7dad6ef5e96bf",
+        "src/llm_mojo/cli/generate_cli.mojo": "2ed994666a49d428ed996287d5dce5fcd3ad17d06cb2131ff35b1d24c8001d1c",
+        "src/llm_mojo/cli/launch.py": "37fac0091a71fa70d4eb38d6d40ec5748ec7f65c8a20ce2aa3fc8e4c2294dca1",
+        "src/llm_mojo/cli/tokenizer_cli.mojo": "a9b5404bed33e2fb577c3d9cfc8bc1952fcee1d64c056d3cfa195526fb4480bc",
+        "src/llm_mojo/configuration.py": "a4bd6ade850d673be70250579254ce8ffdbf8e4a270d7583c25dac54ade2f23e",
+        "src/llm_mojo/decoder_validation.py": "61db7eb6252f99b5cba35eb63e8c807c378b1637dd9cdbd08d61fa562f104ce0",
+        "src/llm_mojo/kernels/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/kernels/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/kernels/attention.mojo": "3210f50d6850db60a6cacf4c30d860ca0b72177ad1c9b313c7ae7d92b79be973",
+        "src/llm_mojo/kernels/attention_decode.mojo": "6b05604ca3a979a5f2d3bfdb30a14f9f107d8996a83a3139e90a9286104c820c",
+        "src/llm_mojo/kernels/attention_prefill.mojo": "c320a4b45586d7766c60ba1c03b2cc70a292a2c13c6ed06a685cad5f75308e13",
+        "src/llm_mojo/kernels/bf16_arithmetic.mojo": "e41319b3ea6239d3928ee49e2ec85944a9d328f983806e9dc44356cd757591be",
+        "src/llm_mojo/kernels/linear.mojo": "576ca76ac4df8192205fabfe0729ac22d9af204ce60a2a30d91f78a10442a320",
+        "src/llm_mojo/kernels/paged_kv.mojo": "607d3fe8fb03460ea74aaf1f767fe34ac66ff954b76deb4ed57d0faedc91c7d1",
+        "src/llm_mojo/kernels/residual.mojo": "c23ef599682d1d6f698c7fef4ba8f8c969dd815716a4160e8fcc774e0acc02da",
+        "src/llm_mojo/kernels/residual_norm.mojo": "311531f0558eedd906f5e78ea85a93e5965c0b8da20f0591466ff1c6b8715534",
+        "src/llm_mojo/kernels/rms_norm.mojo": "a555c33f86c6f893b780beab8033a9495ad62e502d0670753e7639850fba0f56",
+        "src/llm_mojo/kernels/rope.mojo": "12add6e982c6d1b500c1f346bf3733a9306acd1d15994fbaed8eb610904b289e",
+        "src/llm_mojo/kernels/swiglu.mojo": "1cb48dde45aa91addab073b530cb1b0db309d118d03b5880cbeb98a2a54bcf01",
+        "src/llm_mojo/kernels/token_selection.mojo": "cac022c72d356a27c39515c0b23b4bbcde1fad59e3926bfd5a6922a57e48ce00",
+        "src/llm_mojo/layers/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/layers/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/layers/attention_sublayer.mojo": "e9954079c4744f93683174a58f6abbe61494572bf3d2d4be207499b2c321f938",
+        "src/llm_mojo/layers/decoder_layer.mojo": "5a5a94b6221897e3a9164cbd836bd2df7960fbdab61acd085c7b5e5a3faaeae8",
+        "src/llm_mojo/layers/decoder_policy.mojo": "7046baa0b2bfb372cb5beb8d1a503377a641ffdc200eb153c74d9496e9505ca8",
+        "src/llm_mojo/layers/mlp.mojo": "2976546a15ea87a2c6aec46458104cf44d113156c3786b74fbe03254677a23b5",
+        "src/llm_mojo/mlp_validation.py": "6aa7e9ebef5f8253dc0bd91abdaa08a79ffae759653a97a3d15f3202fc96ee89",
+        "src/llm_mojo/model_validation.py": "0fa33d99e383d04f4bce0658af48249c1aede0cfaa60b72d2dfbac2ecb60d069",
+        "src/llm_mojo/models/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/models/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/models/qwen2/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/models/qwen2/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/models/qwen2/assets.py": "3cb46aaefc7bc957dca8ff6c75693116ff42c06a63b0c95f2c896f017d2efffb",
+        "src/llm_mojo/models/qwen2/chat.mojo": "c3ee1fc26772c301e1f7d081cba0c863bfd7be692439d41cdbc759f0aacd6691",
+        "src/llm_mojo/models/qwen2/model.mojo": "77c6e14b2a6b828f4bbd147e943e1b720afff462b3f3c5deb91b006e4347c8f5",
+        "src/llm_mojo/models/qwen2/plan.mojo": "44db03b890f88a26526b860a6d53287ed8d83d53c9509063cf5f738c56f6d44d",
+        "src/llm_mojo/models/qwen2/runner.mojo": "76790aeda4a18180c97c4ef699922aef87fcd6b3a981a35bdd9a64887d69042a",
+        "src/llm_mojo/models/qwen2/tokenizer.mojo": "50dfaebcc034e2dd584ac8b02fd3907504de5aa7b0150d869c5e4586b67b3a13",
+        "src/llm_mojo/models/qwen2/tokenizer_assets.py": "4dc28615b0dcd9071a8524cd32653dc16d6d7762afe6e1705e4970580ecc38b0",
+        "src/llm_mojo/models/qwen2/tokens.mojo": "57b2aec1ad3f09a15812127221c811cc3e016dea5cd05e82b3d476b4ccc580ce",
+        "src/llm_mojo/runtime/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/runtime/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/runtime/artifacts.py": "045491ab88f59b354940bc641329fefa406f1e2cd805d5e37205a27a1c04cb4d",
+        "src/llm_mojo/runtime/build.py": "fd440c4e2b8e0c64e79ea7b5cc287694a6035e9518685df0b4851176db9aa0c3",
+        "src/llm_mojo/runtime/clock.mojo": "a01574476c1dbba683981757da898377296902e58d6fb71b835300d3a4bbf5b2",
+        "src/llm_mojo/runtime/store.py": "ba5a0d8ceecd7d6b69b3e02b928262201a0fe2eb601c14fb2857238936676a4e",
+        "src/llm_mojo/runtime/terminal.mojo": "21d4ce77748ae6e2b67810565e7324030debd04392e2f59391e649c9aa128e01",
+        "src/llm_mojo/runtime/toolchain.py": "d6b28fa02fadd95bd2c6216eead5000b30282e5433fea05aac50418e9250c82f",
+        "src/llm_mojo/serving/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/serving/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "src/llm_mojo/serving/batch.mojo": "1a96a4e6902d0b87d29fb393fe84232162b8855e22945c4a7d70ee1cdc609a1f",
+        "src/llm_mojo/serving/blocks.mojo": "cb1d4661ca2fd6df1c5c643d55c0574af584d7870571e9b0c02935fa47a234ab",
+        "src/llm_mojo/serving/engine.mojo": "81384bb2f1b0fb39289da1433fc128cb68ac1442683679e9008de1af3cdac87e",
+        "src/llm_mojo/serving/kv_pool.mojo": "c4233fffd2baeb52b836ba20423f204431f4fffbe3d5752c838f3440bdcf147d",
+        "src/llm_mojo/serving/runner.mojo": "e584fda815c38541843d71d4a4aec73d4377a87bef3c4b61bcdc6b106d7cc5bf",
+        "src/llm_mojo/validate.py": "36824098dfc50761b9ed7fad3c04091467d960de1c31b63064a8c6d1c89e0a00",
+        "src/llm_mojo/validation/__init__.py": "38d0c60ff93189ad715142cdff8711fcbdca29c10c85211a3f7895401eb5d7b0",
+        "src/llm_mojo/validation/decoder.py": "de0da9bcaf645ad0c30164e5a01d0c96cef57dbbd7083577f1c365e2fed6814e",
+        "src/llm_mojo/validation/evidence.py": "237b9be32602d8e0e1d7d4c4d796d0c70df4a7e4929f71c684308319aaf81606",
+        "src/llm_mojo/validation/fixtures.py": "adc34ecf1a72bc74c71268b69a5581d779d3393ac4c880ffc5a654726841d753",
+        "src/llm_mojo/validation/mlp.py": "3ed4418b328eb3934d32d2e46ae94527fcbe230ce0e83781bdee990f3ac2f4fe",
+        "src/llm_mojo/validation/model.py": "c199d52206667ac08e661c5636a263779af53b3764f0386278035cb085ae4388",
+        "src/llm_mojo/validation/suite.py": "55bedbc772117c38433848aec01c8a5a767f737f7d708e7e6cf4ee3cb69ff0b5",
+        "tests/attention_sublayer_support.mojo": "83354628e5fd7bf669545a0eed2ed4e5dffa773bd7feb7b87437492f0811e2bd",
+        "tests/chat_driver.mojo": "eb287c3c2d6b22e4e239565fd31deae10dda6d96f0b8417f61e58494ae64ba69",
+        "tests/chat_study.py": "15153e60705745b68a0729b1baf36f2dcc77fc7f570942c7dce6db4c066ed731",
+        "tests/chat_terminal.py": "7cea754e6224d10c38f8b14dd6da32e9e1ca94fab7fde7dbb8892d2089fe4582",
+        "tests/decoder_layer_support.mojo": "20bc6d05723638af6086ec4e87b2342566044ab1d3ea589b1623f372d87a0b8e",
+        "tests/decoder_layer_support.py": "f04e237bd75b29d2b7dc8f5f3ec867525ca62e081cb8d5888a38d2185439cf07",
+        "tests/fixtures/attention/generate.py": "587eb5ed0c63e2a05f3026c2dde839c7fd92c37ec9e7c8bdab22cb37bccf3ea4",
+        "tests/fixtures/attention/generate_decode.py": "dd82f833f9507cd54edfaf95c5b2ade7381fefb6f612547b8849711be503861a",
+        "tests/fixtures/attention/generate_prefill.py": "35193674d82c1b5ca18a642b452de298ad58dcc2a609396c895f8b2819a3f54e",
+        "tests/fixtures/attention_sublayer/checkpoint.py": "03485aaed630e273c89fcf5b8bfd8c51a32aca4d764202702f82b158a6e7367c",
+        "tests/fixtures/attention_sublayer/checkpoint_checksums.json": "a6730403ed7a3ae4becc02e39a1910bdb5781c3846b0bdd71eca20fc26a6cb20",
+        "tests/fixtures/attention_sublayer/checksums.json": "64bc40d13d26492880d7c848da237afb4e5406588a01f5f4575c1bee6dcf49de",
+        "tests/fixtures/attention_sublayer/generate.py": "bb48bf3b84ae87944685071d269f85690e81488fa3cebe5a055c9dd205235ec2",
+        "tests/fixtures/attention_sublayer/precision.py": "5a33b83d6bef9c3ff4824e1007591a3cca305225c3297667129f8d700280b5a2",
+        "tests/fixtures/attention_sublayer/precision_checksums.json": "3a4d9e6642be1729b206f18de7253b784bc70b455e3ead7bc1a3d402a21d7f84",
+        "tests/fixtures/attention_sublayer/upstream.py": "e6228d7ecfa07976479372758d28fc10a99cf9391a1b3cf18955be419dcac02b",
+        "tests/fixtures/chat.json": "ec6c402990c2b7c697e34b171b45b6a67ea88eedcc8a74426cd1f28e265fa254",
+        "tests/fixtures/chat_reference.py": "59a8b1eb154dc94107e2ddfd7196c75deac97424b0f46bc93327c0377be793f1",
+        "tests/fixtures/chat_reference.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/checksums.json": "becd13cec305f11367f5523d4c80732052215f7862070c6635ad4b7cb59ab51b",
+        "tests/fixtures/decoder_acceptance.py": "f1a21f7ad82e00465032c337422d054eeb906e11f4f4d6c46d8c9e2bcf1068c3",
+        "tests/fixtures/decoder_acceptance.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/decoder_layer/checksums.json": "e351604090115cf4a7ec060aa594d37b9c8fd5e744afe4b0549bea90910afab4",
+        "tests/fixtures/decoder_layer/contract.py": "2646e775d0063c1fef450f604911cf7aa427b22b236921e3e78511678284819f",
+        "tests/fixtures/decoder_layer/development.json.gz": "f5aedbaf44d8a96a4625d749c9f056aa5767f86b0f63aba75ff057b8eaf00ca6",
+        "tests/fixtures/decoder_layer/generate.py": "08915679cf8464c7b57c552a2f4254be769cd68b1ee1e6db3a7f99d4744ff06c",
+        "tests/fixtures/decoder_layer/reference.py": "e3dfa596a4823de3f8b874aa788d56826382fae67db448cde422552b992d14e6",
+        "tests/fixtures/decoder_layer/test_reference.py": "813e4de124dbe71cbe040c697ddbc7e3902ecf0768ea8464927fdadecb6f3878",
+        "tests/fixtures/decoder_policies.json": "8fd4206465fc6dd1ade4feebb1d31e1f9423ecde2fd445cea04260534c05b608",
+        "tests/fixtures/decoder_reference.py": "b76370e78cea0a62bb8b75eae4cdfd67d408a47cffab0730add3dd2190b16bb6",
+        "tests/fixtures/decoder_reference.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/generate.py": "4638cd68d5b5cc54f94c68581e6be3f0bfbb3abf71d81160930794dcfccb4047",
+        "tests/fixtures/generate.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/linear/generate.py": "f84abf1d3d798e9c5c798059c1cbb6f235e54e7b54b8a4f9b9a9dc426d67c348",
+        "tests/fixtures/mlp/checksums.json": "6de9811889f14c9ece9999b7e4ee6116dfc41bb3dfac95486ec86f3582ec43e7",
+        "tests/fixtures/mlp/contract.py": "439686ec0dfd22d6cc3d4427f5b6f622c4b20bdb5ff609cc04bf762b6c0cc155",
+        "tests/fixtures/mlp/development.json.gz": "20409161073dbf8ff5b6f7d78375a3f1ecfcd598d13ed201aaa9f2e261fcc69f",
+        "tests/fixtures/mlp/generate.py": "f9f8e2fe4031929922891090c5ed99c4f20ab52567729e93d011cf76afc95459",
+        "tests/fixtures/mlp/numerics.py": "ae713d7ec1754884524bac9bbd59b902b7fcc3edc012a72156ef7f1d41fd7f7d",
+        "tests/fixtures/mlp/reference.py": "c02a4ab733ad6702b663aecc3593b72a68c6d419797a6fc06f1e60d6a995851f",
+        "tests/fixtures/mlp/test_reference.py": "c1b759ce27855d955e1662781ecdd100423c25168d3dbe36c7ed83b4d262ed1f",
+        "tests/fixtures/mlp_acceptance.py": "985d5a031abc3238c0a9d12e9d844db73223fc5b56dd7b1891fbdc66f9086727",
+        "tests/fixtures/mlp_acceptance.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/mlp_decode_holdout.json": "575764613e7c208cfac36b71ce352a80e693a4b84e359b5327d04875973ece7c",
+        "tests/fixtures/mlp_optimization_holdout.json": "b30d1e12d84f7249be2dc298efdc424548b661041dc901918d63c36463647440",
+        "tests/fixtures/model_attention_diagnosis.py": "d5679a799703fa3e11289a8ab72512cfb219f92df319b0b22e6f0645cd133582",
+        "tests/fixtures/model_backend_contract.json": "18c559629a9ba0133cf34649c4f860855e2481d6f750db773fb0e6aaf740fca6",
+        "tests/fixtures/model_calibration.json": "f8b3d207d39758095239b647e1ec01d98eaed6f72cf34c504295fdd42a716d9d",
+        "tests/fixtures/model_calibration.py": "17af95705616c71999607b2b4a991499e2a54a015c18ec3e9b964beddbcc6541",
+        "tests/fixtures/model_calibration.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/model_consistency.json": "567f03fd1cf0705836783898fc424fd38c44bfadd30db5fbdc2b26341028f23c",
+        "tests/fixtures/model_consistency.py": "94de9081dba758a58dfb99c8c24497914dd1863035eec16136325260ff385ce8",
+        "tests/fixtures/model_consistency.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/model_contract.json": "383a3f123bb5affad0d00e8333f971c92c950c739a452a4ff952de032395b506",
+        "tests/fixtures/model_diagnosis_contract.json": "295fdaf4c6f80c7f6dd55287164647569d654887a05f56db9b0562d2a1aac621",
+        "tests/fixtures/model_fast.json": "49f9187432b6d0af0a811a183bc14d419edbc7fb3132604546553698a2d2ee2f",
+        "tests/fixtures/model_reference.py": "77abb97113d46d0bb41de06eb0cc15afa3433f432f78e49acea84b404e80186d",
+        "tests/fixtures/model_reference.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/model_reference_diagnosis.py": "048bc04b2d8e49114c90e33c8db97ebdf1a3929fce0ccc69312aea16856e1c14",
+        "tests/fixtures/model_reference_diagnosis.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/fixtures/model_runtime.json": "d6c9ea600c6a034ba582f8eaf1fc48f1796c5c4f69ad5b27423ec413561491d7",
+        "tests/fixtures/rms_norm/generate.py": "3c2f8125fcb42e3002d8e2bf1863dfcb32c8148bf3e7f8ec7c99e5f227e2233f",
+        "tests/fixtures/rope/generate.py": "d774a3f319657349f82b415162cfadebc2be15ee7b905f08621ced785b92b708",
+        "tests/fixtures/tokenizer/benchmark_checksums.json": "a956a0e77235bce3efc2e7bcc688a7e03b93b8a8fb15c1642756f1cae5f8384e",
+        "tests/fixtures/tokenizer/checksums.json": "b81503eeff73486c8ee41e6ca4c02513bc72d5bf758939abbfaeaf3bc77676ac",
+        "tests/fixtures/tokenizer/generate.py": "caacb80a537036e075e3c0161fc42ec99bf9f96f7309cb4d40862def39ca3d34",
+        "tests/fixtures/tokenizer/holdout_checksums.json": "44cd78fac48ba231f589e1588ff55197cb31cb5a907f704df9bd4413fe228574",
+        "tests/fixtures/tokenizer/unicode_checksums.json": "18a4a2380c985dbb9efb4d0643d77a1ddf1d3ef4b1cc331555cc15801c89d0dd",
+        "tests/fixtures/tokenizer_reference.py": "10e78df36c0a2b3a1ce072a8b9bf67ec076f76cc882fa5d4ce55434a37a88eff",
+        "tests/fixtures/tokenizer_reference.py.lock": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453",
+        "tests/mlp_support.mojo": "3b8c232d8411d98781ef3e97653c8541a358a6c76550c4becbb9192cac3b927d",
+        "tests/mlp_support.py": "8f3381c858b21b9d0558c23470bcf832fd86b9a3c22b0aa7878a5e58e5769dba",
+        "tests/model_driver.mojo": "50bc10f9a2a16b1b90ac873a7efdb9fc81e35b3a7d78de20ed1318c9c19c4633",
+        "tests/model_operation_support.mojo": "788de9473c18654934b4d239c27880bd359af2f7ea9087dcdfefc7cdde9a8d09",
+        "tests/test_attention.mojo": "f3a510430c01e225a6306c57c8d4a01524970a282f8c460ca06306e0d3081a8a",
+        "tests/test_attention_decode.mojo": "50efb3d406cd0d541c60c8dbeed97b43a18c0bf793a29cfb9c811b50f3573f18",
+        "tests/test_attention_decode_benchmark.mojo": "f81e767fc538945ef2137b24dc670fb30702496a2b812849c8762081b61de191",
+        "tests/test_attention_precision.mojo": "83465dd237e6e95fb6b38052b4eb7bbea8bb84cb86be477e88ab48aafbe906f4",
+        "tests/test_attention_prefill.mojo": "334f99acb6be1fb8289cbe5d1313ffa6fc8b9df9c245f47ff98fe50effead9a2",
+        "tests/test_attention_primitives.mojo": "e0ec35182b15a8ff17a573e1bddf1c1f49ab245a6fbf5af2799f0631594d938f",
+        "tests/test_attention_profile.py": "8df6f0a09b150a531bb30372b29fc96749c166951a8709a61445472c25f628b9",
+        "tests/test_attention_sublayer.mojo": "2059182ffeac6caeb349ee4f065fb240539a4ed5b5b4cf270c3fb681d19b89b4",
+        "tests/test_attention_sublayer_operations.mojo": "4016e604b1a0ad0527174f5db05e566908005f3805fcbc2856619ae473f2c1fc",
+        "tests/test_block_manager.mojo": "ada0981a20e016dad7dbdca7198e0a5a49ca0c629c06f46b96db3774581ccc0e",
+        "tests/test_chat.mojo": "d2ab8990c431bfd64961971b498c0a03e7357c58296e9fb92a10bf1019d6dc01",
+        "tests/test_chat_launcher.py": "db9af78d2e2e32a8b47fcacdf8752707822fb3b76609750b3e80610304d4d402",
+        "tests/test_cli.py": "8e636132e96f553278c968df655878b0792f044ddd5d84f7d434c8127aabfbfa",
+        "tests/test_consistency.mojo": "22ecad487efcd473f4c85e3a736458a3eda2cc1bc262f380f1a64b7ce9dffcf6",
+        "tests/test_decode_batch.mojo": "a4a769fb684049165c0fe7d33b4e862c79322925dac778cc598147c7f4524fbf",
+        "tests/test_decode_route.mojo": "59cd040a80dad0d3632729e186def8c9c7278097362d97494ee848e7366cb791",
+        "tests/test_decoder_layer.mojo": "73eada74807e850b6998dbadfe65750acbdd276e635a4cf048e176a74b6b2644",
+        "tests/test_decoder_selection.mojo": "e8feeda43caff8ed478b03c884a3e2cc6caf54c8b5f8d58637bfc42da40034cb",
+        "tests/test_decoder_selection.py": "913042be985cc082812903d83ad52fd346a0edfffa529395890aed5666698bad",
+        "tests/test_decoder_tooling.py": "a9bd8a4a0376798bc69c8ee679c30c6c165784608ffac5f181cc37c9b7b953d7",
+        "tests/test_decoder_validation.py": "b8c9ffb11e744bd220b6fdc7040add2dfe46353f55e7817bad02b806fc0a01e1",
+        "tests/test_docs_links.py": "f8d3235534bee4586be28684ac9198a721f26a27a5139a79c715752d101daa1b",
+        "tests/test_engine.mojo": "8e4db4783076f5c8b8a3e3b3d3478cf29de209e57123fba2272d7a1ad3ecb6ac",
+        "tests/test_engine_budget.py": "110f946298feb35242967475774fdb55801805d7afa879a3c9419b64b065414e",
+        "tests/test_engine_trace.py": "455d94cce72242af1b18045ebd7faa44125cbf06487bb17c0d9acdfd65c63b79",
+        "tests/test_environment_tool.py": "5304e747872ddcc41916e9df975e7095284aac058daaf523193c36b9343d7f6e",
+        "tests/test_execution_plan.mojo": "75a155e1c96911074762bfc1a5c75c6a6e4bbe636762dba17052ad28749cf409",
+        "tests/test_fixture_cache.py": "cfe754ec3730ff0383cf142ddb2481bb948c4758dd206d620d4eeb29ed670eca",
+        "tests/test_import.mojo": "d82ead4423a78c5f518b5820997212ac8ad8dd2d068ed57953479ee2322a4aeb",
+        "tests/test_linear.mojo": "99e4476307cdbf58356b254b0b6ebc5623f9025aaa00b65067dc4f59ae7b1c93",
+        "tests/test_mixed_layer.mojo": "03c1f9680cdc729ed8dc8eed44359fe28b28cfb13d7e4227831bcba38869ff65",
+        "tests/test_mixed_model.mojo": "ac5e949f99748abcbb9566ee0b065b9db309cbfb293619ae91133494cc65b8ea",
+        "tests/test_mlp.mojo": "dcebd60f0f4bd17d0da635e79950bb240e255922548423aeebe963af0b57571b",
+        "tests/test_mlp_tooling.py": "30bb81a9c9109b3393660c4ac4d3fafec781aa2b3da34c2fe6e9d5f33be46834",
+        "tests/test_mlp_validation.py": "6d2433af6b690be9b90347f31ecdeb64e33f36296f66fff07d819b3055332615",
+        "tests/test_model.mojo": "d66e554f2bc9973ced4c7a753d99353220464901e57d8de4705a553e74def4e9",
+        "tests/test_model_assets.py": "e02cf687bf85f0256f4825f807aa1ce3f1321d90c4aa841b6a45c76092e4acee",
+        "tests/test_model_profile.py": "f528f1b731b3761fa0840e85b2aea577bf0048e6671cda85b5b1d394132f18be",
+        "tests/test_model_study.py": "8cad8710f29c860c9c9ca5aa0e19ea2698f1efb721b98dd939ed646fedb142fd",
+        "tests/test_model_validation.py": "9c1aa26312699df1b5887a93c55d28530dced81e79cfffac4221618a28058238",
+        "tests/test_native_build.py": "0089835f71b33b2e2d02897f55058e7caaf445baa7e02f4d6b6e84bbb241e77e",
+        "tests/test_package_boundaries.py": "ce06f15506fdab5931ca925bffa4192101e904fa6f3b242e10b61ca90cfe4039",
+        "tests/test_paged_kv.mojo": "fd21fe5b9df730bae8ccbdf4b7fcbfe5639fd80c5acee7946d264ba087a945ae",
+        "tests/test_plot_selection.py": "c449a6a6acf70174af07d4fe10968dad59292538aa24c4cba66501657aaeeeb5",
+        "tests/test_residual_norm.mojo": "7074bbca41bc6d0ded2181b6c0f7103b785ae80a5a882733e9ad596c059081bd",
+        "tests/test_rms_norm.mojo": "0deb0398026312be1811329baf5b8f379f5ae37b474adf89a7438ce2ca5aae0f",
+        "tests/test_rope.mojo": "73bee783ba18cc4c431e493de3189f0f67d315b8aa3a3c19e2fb33aa758a1496",
+        "tests/test_serving.mojo": "f21ac99b0562d3eac456c5c47ccca04ed7d9f1bf1cf05e7fdb6b152b6a252cd3",
+        "tests/test_setup.py": "71e0d1613f291c22db9b13b6bda9fe72a656ac48c8fc5dc7ff1a872d9cc04179",
+        "tests/test_study.py": "aa0f3c5b8b4c66dab252df6d8a40bbfeeaad8336439d707f2f90ebb107a1eb01",
+        "tests/test_study_evidence.py": "0d151aeee9c82a3e0e31fe4afa51831f2be200ed88731e7d06c3ee9ffd83d151",
+        "tests/test_swiglu.mojo": "cedd280552c4e5e0917f2c87ee7a7121679a8a27ed099c35fa94ee3393e2e344",
+        "tests/test_token_selection.mojo": "65c626eceb486327e9a3a25cfb9362ccd97ef462d3a27fd5f411aa4cf074444c",
+        "tests/test_tokenizer.mojo": "4757252c5050dbf7981edb4886c7560820767835807553b182cbc163e84141c5",
+        "tests/test_tokenizer_assets.py": "6d8a44d0b404d164584fa33906a5c87392cb5b6c084f1900f96878ca32c0d62c",
+        "tests/test_tokenizer_benchmark.py": "e0bc165b0db058b60531310b910857c6ff9542417e7bc27a385899929ae44ca1",
+        "tests/test_trace_analyzer.py": "a4a83479bee9567f06cb5cc282de72c09dde4714969dba04c3e668fa19d684ef",
+        "tests/test_trace_capture.py": "384cb922565a35f350eb2fddd200a658ed4bf355e6e5692a6e7fa3c817dcae99",
+        "uv.lock": "903ea1a7c05a268cc14d36bc817cee7edb0cd2f278c0c557777ef0d472cfad57"
+      }
+    },
+    "source_identity_sha256": "5a8d33761eef90553a16de440d19b6764636ae0a048a5bc14005cd7afabcf8b7",
+    "implementation_commits": [
+      "eca7957b1025fada42dff61d7d1d0c90201ab987",
+      "dd6410bc5d3a6c9db2cc3db18151994bac815ed1",
+      "b18563b3a43c389991cd6679bf03892f140f15b0"
+    ]
+  },
+  "toolchain": {
+    "environment": {
+      "hardware": {
+        "model": "Mac16,7",
+        "chip": "Apple M4 Pro",
+        "logical_cpu_count": "14",
+        "gpu_api": "metal",
+        "gpu_target": "metal:4-metal4",
+        "physical_memory_bytes": 25769803776
+      },
+      "software": {
+        "macos": "26.6.2",
+        "macos_build": "25G83",
+        "darwin": "25.6.0",
+        "xcode": [
+          "Xcode 26.6",
+          "Build version 17F113"
+        ],
+        "metal": [
+          "Apple metal version 32023.883 (metalfe-32023.883)",
+          "Target: air64-apple-darwin25.6.0",
+          "Thread model: posix"
+        ],
+        "uv": "uv 0.12.5 (210d1f678 2026-08-14 aarch64-apple-darwin)",
+        "mojo": "1.0.0",
+        "max": "26.5.0"
+      }
+    },
+    "uv_lock_sha256": "903ea1a7c05a268cc14d36bc817cee7edb0cd2f278c0c557777ef0d472cfad57",
+    "baseline_lock_equal": true,
+    "pinned_stable": {
+      "mojo": "1.0.0",
+      "max": "26.5.0"
+    }
+  },
+  "assets": {
+    "prepared": "/Users/attiliocastano/.cache/llm-mojo/qwen2.5-0.5b-instruct/7ae557604adf67be50417f59c2c2f167def9a775/model-prepared-v1",
+    "tables": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/build/checkpoints/qwen2.5-0.5b-instruct/7ae557604adf67be50417f59c2c2f167def9a775/prepared-v1/tables.bin",
+    "prepared_sha256": "b950f5f16efab9cf7813fa2b8e0455032ad210ebdb19cbe851ab3156e8176192",
+    "tables_sha256": "28bce5aedb018845f4886852133a8ccbe7b1505324e6422d2cd019749fc1f900",
+    "model_revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+    "checkpoint_sha256": "fdf756fa7fcbe7404d5c60e26bff1a0c8b8aa1f72ced49e7dd0210fe288fb7fe",
+    "prepared_format": "qwen-model-prepared-v1",
+    "prepared_tensor_count": 196,
+    "oracle_preparation_device": "cpu",
+    "note": "CPU identifies independent prepared reference generation; every retained native GPU check proves Apple M4 Pro/metal"
+  },
+  "builds": {
+    "candidate_engine": {
+      "receipt": {
+        "path": "/private/tmp/llm-mojo-engine-evidence-20261008/build/build.json",
+        "sha256": "d7480cb151e45c523410b2e6192ce26c142bbbec3bdb984d8415a0395120f171",
+        "bytes": 29380
+      },
+      "command": [
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/engine_trace.mojo",
+        "-o",
+        "/private/tmp/llm-mojo-engine-evidence-20261008/build/engine"
+      ],
+      "binaries": {
+        "engine": {
+          "sha256": "ba8dd1df5ecb523a036a946d94f86b0d8633f4ee73d0000b67b617b35d2f65d8",
+          "bytes": 1131096
+        }
+      }
+    },
+    "candidate_model": {
+      "receipt": {
+        "path": "/private/tmp/llm-mojo-engine-evidence-20261008/model.provenance.json",
+        "sha256": "b3c40e315c2c0ca7d08fbda01f0fad804e55acd9a358816d83e9ecce0dd51a83",
+        "bytes": 27200
+      },
+      "command": [
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo",
+        "build",
+        "-I",
+        "src",
+        "-I",
+        "tests",
+        "tests/model_driver.mojo",
+        "-o",
+        "/private/tmp/llm-mojo-engine-evidence-20261008/model"
+      ],
+      "binary": {
+        "path": "/private/tmp/llm-mojo-engine-evidence-20261008/model",
+        "sha256": "1aa6849a414d3c55158746152e25a8f846d5bb52ee8ce30811d75afb864e6ed9",
+        "bytes": 1344616
+      }
+    },
+    "candidate_generator": {
+      "receipt": {
+        "path": "/private/tmp/llm-mojo-engine-evidence-20261008/generator.provenance.json",
+        "sha256": "41af33b2e8120850f2861ba71c4a61ae919104e0812b6c410559072043de01a2",
+        "bytes": 27215
+      },
+      "command": [
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo",
+        "build",
+        "-I",
+        "src",
+        "-I",
+        "tests",
+        "src/llm_mojo/cli/generate_cli.mojo",
+        "-o",
+        "/private/tmp/llm-mojo-engine-evidence-20261008/generator"
+      ],
+      "binary": {
+        "path": "/private/tmp/llm-mojo-engine-evidence-20261008/generator",
+        "sha256": "e47ac6e693c02526cb0ba00eb5d1af0b2b4d086eb544fcb2f4b3a254eb6a13e9",
+        "bytes": 1080792
+      }
+    },
+    "baseline_model": {
+      "receipt": {
+        "path": "/private/tmp/engine-baseline-archive-model.provenance.json",
+        "sha256": "38b5d0c2a5be74bca0e424ae519a120ae410cacc47c45b0f7c9e7135aafbdd65",
+        "bytes": 25965
+      },
+      "binary": {
+        "path": "/private/tmp/engine-baseline-archive-model",
+        "sha256": "03be9802f195259bf1013a2336f5c6a84c147da2da7388b3b90d6ce747f23da4",
+        "bytes": 1267216
+      }
+    },
+    "baseline_generator": {
+      "receipt": {
+        "path": "/private/tmp/engine-baseline-generator.provenance.json",
+        "sha256": "c753d05d9b53e6089a94fcad2bdab9e1f8bfe59f548c349afed2be8a6055269b",
+        "bytes": 25965
+      },
+      "binary": {
+        "path": "/private/tmp/engine-baseline-generator",
+        "sha256": "616aec8bfb42e2eeb25885e2c2040c40ba61e6d23d7530d53472f7110874135e",
+        "bytes": 1027080
+      }
+    }
+  },
+  "checks": [
+    {
+      "name": "baseline_clean_archive_and_source_identity",
+      "source_scope": "baseline",
+      "required": true,
+      "command": "PYTHONPATH=/private/tmp/llm-mojo-engine-baseline-cb2416a/src /Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python -m llm_mojo.validation.model build --binary /private/tmp/engine-baseline-archive-model",
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained execution ledger CommandExecution/item_completed, independently matched to custom tool call and output",
+      "result": {
+        "path": "/private/tmp/engine-baseline-archive-lifecycle",
+        "sha256": "6195beb85b916773aa13d6d1affdd529fef3a268b3d2500c6b3ff1ec0db81070",
+        "bytes": 26777
+      },
+      "scope": {
+        "original_commit": "cb2416abf3c9fbb19c460fa99709d93eeabba97e",
+        "execution_archive_commit": "9aa201038a3fc93d17d087f4d63a9b0fb8b53696",
+        "source_files": 226,
+        "original_archive_sources_exact": true,
+        "archive_clean": true
+      },
+      "recorded_build_command": [
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo",
+        "build",
+        "-I",
+        "src",
+        "-I",
+        "tests",
+        "tests/model_driver.mojo",
+        "-o",
+        "/private/tmp/engine-baseline-archive-model"
+      ],
+      "shell_argv": [
+        "/bin/zsh",
+        "-lc",
+        "PYTHONPATH=/private/tmp/llm-mojo-engine-baseline-cb2416a/src /Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python -m llm_mojo.validation.model build --binary /private/tmp/engine-baseline-archive-model"
+      ],
+      "cwd": "/private/tmp/llm-mojo-engine-baseline-cb2416a",
+      "execution_receipt_label": "baseline_model_build",
+      "command_scope": "exact recorded execution command"
+    },
+    {
+      "name": "candidate_clean_source_and_engine_build",
+      "source_scope": "candidate",
+      "required": true,
+      "command": "uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build --output /private/tmp/llm-mojo-engine-evidence-20261008/build --prepared build/model-prepared-v1",
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained execution ledger CommandExecution/item_completed, independently matched to custom tool call and output",
+      "result": {
+        "path": "/private/tmp/llm-mojo-engine-evidence-20261008/build/build.json",
+        "sha256": "d7480cb151e45c523410b2e6192ce26c142bbbec3bdb984d8415a0395120f171",
+        "bytes": 29380
+      },
+      "scope": {
+        "commit": "b18563b3a43c389991cd6679bf03892f140f15b0",
+        "source_files": 237,
+        "clean": true,
+        "binary_hash_and_size_checked": true,
+        "assets_hashes_checked": true
+      },
+      "recorded_build_command": [
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo",
+        "build",
+        "-I",
+        "src",
+        "src/llm_mojo/benchmarks/engine_trace.mojo",
+        "-o",
+        "/private/tmp/llm-mojo-engine-evidence-20261008/build/engine"
+      ],
+      "shell_argv": [
+        "/bin/zsh",
+        "-lc",
+        "uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build --output /private/tmp/llm-mojo-engine-evidence-20261008/build --prepared build/model-prepared-v1"
+      ],
+      "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+      "execution_receipt_label": "candidate_clean_source_and_engine_build",
+      "command_scope": "exact recorded execution command"
+    },
+    {
+      "name": "baseline_full_validation",
+      "source_scope": "baseline",
+      "required": true,
+      "command": "PYTHONPATH=/private/tmp/llm-mojo-engine-baseline-cb2416a/src uv run --locked python -m llm_mojo.validation.suite > /private/tmp/llm-mojo-engine-baseline-validation.log 2>&1",
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained execution ledger CommandExecution/item_completed, independently matched to custom tool call and output",
+      "result": {
+        "path": "/private/tmp/llm-mojo-engine-baseline-validation.log",
+        "sha256": "94a78c574dadc57acf43a8aeb54c6d20f455ed4f9849cee4cf11f111fa320081",
+        "bytes": 7200104
+      },
+      "scope": {
+        "python_discovery_tests": 296,
+        "fixture_self_test_counts": [
+          11,
+          10,
+          8
+        ],
+        "native_test_files": 28,
+        "native_invocations": 29,
+        "native_files": [
+          "test_attention.mojo",
+          "test_attention_decode.mojo",
+          "test_attention_decode_benchmark.mojo",
+          "test_attention_precision.mojo",
+          "test_attention_prefill.mojo",
+          "test_attention_primitives.mojo",
+          "test_attention_sublayer.mojo",
+          "test_attention_sublayer_operations.mojo",
+          "test_block_manager.mojo",
+          "test_chat.mojo",
+          "test_consistency.mojo",
+          "test_decode_batch.mojo",
+          "test_decode_route.mojo",
+          "test_decoder_layer.mojo",
+          "test_decoder_selection.mojo",
+          "test_execution_plan.mojo",
+          "test_import.mojo",
+          "test_linear.mojo",
+          "test_mlp.mojo",
+          "test_model.mojo",
+          "test_paged_kv.mojo",
+          "test_residual_norm.mojo",
+          "test_rms_norm.mojo",
+          "test_rope.mojo",
+          "test_serving.mojo",
+          "test_swiglu.mojo",
+          "test_token_selection.mojo",
+          "test_tokenizer.mojo"
+        ],
+        "unicode_tokenizer_extra_invocation": true,
+        "benchmark_smokes_passed": true,
+        "device_mode": "MODULAR_DEBUG=device-sync-mode"
+      },
+      "retained_child_commands": [
+        "uv run --locked --script tests/fixtures/generate.py",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/python3 tests/fixtures/attention/generate_decode.py",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/python3 tests/fixtures/attention/generate_prefill.py",
+        "uv run --locked --script tests/fixtures/generate.py mlp -- --self-test",
+        "uv run --locked --script tests/fixtures/decoder_reference.py --self-test",
+        "uv run --locked --script tests/fixtures/model_calibration.py --self-test",
+        "uv run --locked --script tests/fixtures/tokenizer_reference.py",
+        "uv run --locked --script tests/fixtures/tokenizer_reference.py --unicode",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/python3 tests/fixtures/chat_reference.py --pack",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/python3 -m unittest discover -s tests -p test_*.py",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_attention.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_attention_decode.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_attention_decode_benchmark.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_attention_precision.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_attention_prefill.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_attention_primitives.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_attention_sublayer.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_attention_sublayer_operations.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_block_manager.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_chat.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_consistency.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_decode_batch.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_decode_route.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_decoder_layer.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_decoder_selection.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_execution_plan.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_import.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_linear.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_mlp.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_model.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_paged_kv.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_residual_norm.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_rms_norm.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_rope.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_serving.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_swiglu.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_token_selection.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src -I build -I tests tests/test_tokenizer.mojo",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo run -I src tests/test_tokenizer.mojo build/oracle_data/tokenizer/unicode.bin",
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/python3 -m llm_mojo.benchmarks.smoke"
+      ],
+      "runtime_device_evidence": [
+        {
+          "line": 143,
+          "text": "decode test device: Apple M4 Pro api: metal"
+        },
+        {
+          "line": 217,
+          "text": "local operation gates: Apple M4 Pro metal case_id 0"
+        },
+        {
+          "line": 269,
+          "text": "local operation gates: Apple M4 Pro metal case_id 1"
+        }
+      ],
+      "recorded_build_command": null,
+      "shell_argv": [
+        "/bin/zsh",
+        "-lc",
+        "PYTHONPATH=/private/tmp/llm-mojo-engine-baseline-cb2416a/src uv run --locked python -m llm_mojo.validation.suite > /private/tmp/llm-mojo-engine-baseline-validation.log 2>&1"
+      ],
+      "cwd": "/private/tmp/llm-mojo-engine-baseline-cb2416a",
+      "execution_receipt_label": "baseline_full_validation",
+      "command_scope": "exact recorded execution command"
+    },
+    {
+      "name": "candidate_implementation_suite_full_validation",
+      "source_scope": "candidate_implementation_suite",
+      "required": true,
+      "command": "uv run --locked llm-mojo validate > /private/tmp/engine-validation.log 2>&1",
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained execution ledger CommandExecution/item_completed, independently matched to custom tool call and output",
+      "result": {
+        "path": "/private/tmp/engine-validation.log",
+        "sha256": "a278da9fba951d443608c11daeb9077572cf6a3e034ee68f4d08c0223b68856b",
+        "bytes": 7202772
+      },
+      "scope": {
+        "python_discovery_tests": 302,
+        "fixture_self_test_counts": [
+          11,
+          10,
+          8
+        ],
+        "native_test_files": 31,
+        "native_invocations": 32,
+        "native_files": [
+          "test_attention.mojo",
+          "test_attention_decode.mojo",
+          "test_attention_decode_benchmark.mojo",
+          "test_attention_precision.mojo",
+          "test_attention_prefill.mojo",
+          "test_attention_primitives.mojo",
+          "test_attention_sublayer.mojo",
+          "test_attention_sublayer_operations.mojo",
+          "test_block_manager.mojo",
+          "test_chat.mojo",
+          "test_consistency.mojo",
+          "test_decode_batch.mojo",
+          "test_decode_route.mojo",
+          "test_decoder_layer.mojo",
+          "test_decoder_selection.mojo",
+          "test_engine.mojo",
+          "test_execution_plan.mojo",
+          "test_import.mojo",
+          "test_linear.mojo",
+          "test_mixed_layer.mojo",
+          "test_mixed_model.mojo",
+          "test_mlp.mojo",
+          "test_model.mojo",
+          "test_paged_kv.mojo",
+          "test_residual_norm.mojo",
+          "test_rms_norm.mojo",
+          "test_rope.mojo",
+          "test_serving.mojo",
+          "test_swiglu.mojo",
+          "test_token_selection.mojo",
+          "test_tokenizer.mojo"
+        ],
+        "unicode_tokenizer_extra_invocation": true,
+        "benchmark_smokes_passed": true,
+        "device_mode": "MODULAR_DEBUG=device-sync-mode"
+      },
+      "retained_child_commands": [
+        "uv run --locked --script tests/fixtures/generate.py",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python3 tests/fixtures/attention/generate_decode.py",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python3 tests/fixtures/attention/generate_prefill.py",
+        "uv run --locked --script tests/fixtures/generate.py mlp -- --self-test",
+        "uv run --locked --script tests/fixtures/decoder_reference.py --self-test",
+        "uv run --locked --script tests/fixtures/model_calibration.py --self-test",
+        "uv run --locked --script tests/fixtures/tokenizer_reference.py",
+        "uv run --locked --script tests/fixtures/tokenizer_reference.py --unicode",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python3 tests/fixtures/chat_reference.py --pack",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python3 -m unittest discover -s tests -p test_*.py",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_attention.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_attention_decode.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_attention_decode_benchmark.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_attention_precision.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_attention_prefill.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_attention_primitives.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_attention_sublayer.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_attention_sublayer_operations.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_block_manager.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_chat.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_consistency.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_decode_batch.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_decode_route.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_decoder_layer.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_decoder_selection.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_engine.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_execution_plan.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_import.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_linear.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_mixed_layer.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_mixed_model.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_mlp.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_model.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_paged_kv.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_residual_norm.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_rms_norm.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_rope.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_serving.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_swiglu.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_token_selection.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src -I build -I tests tests/test_tokenizer.mojo",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo run -I src tests/test_tokenizer.mojo build/oracle_data/tokenizer/unicode.bin",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python3 -m llm_mojo.benchmarks.smoke"
+      ],
+      "runtime_device_evidence": [
+        {
+          "line": 139,
+          "text": "decode test device: Apple M4 Pro api: metal"
+        },
+        {
+          "line": 213,
+          "text": "local operation gates: Apple M4 Pro metal case_id 0"
+        },
+        {
+          "line": 265,
+          "text": "local operation gates: Apple M4 Pro metal case_id 1"
+        }
+      ],
+      "recorded_build_command": null,
+      "shell_argv": [
+        "/bin/zsh",
+        "-lc",
+        "uv run --locked llm-mojo validate > /private/tmp/engine-validation.log 2>&1"
+      ],
+      "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+      "execution_receipt_label": "candidate_implementation_suite_full_validation",
+      "command_scope": "exact recorded execution command"
+    },
+    {
+      "name": "candidate_full_python_finalization",
+      "source_scope": "candidate",
+      "required": true,
+      "command": "uv run --locked python -m unittest discover -s tests -p 'test_*.py' > /private/tmp/engine-final-python-complete.log 2>&1",
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained execution ledger CommandExecution/item_completed, independently matched to custom tool call and output",
+      "result": {
+        "path": "/private/tmp/engine-final-python-complete.log",
+        "sha256": "a310e045276cd7b31c33eb719ba04d4405d9a78623b876450c25a9a0a6adfe05",
+        "bytes": 2735
+      },
+      "scope": {
+        "python_discovery_tests": 310,
+        "native_tests_not_repeated_by_this_command": true,
+        "execution_stage": "after complete native suite; before final declaration timing-string and native trace clock-origin adjustments"
+      },
+      "recorded_build_command": null,
+      "shell_argv": [
+        "/bin/zsh",
+        "-lc",
+        "uv run --locked python -m unittest discover -s tests -p 'test_*.py' > /private/tmp/engine-final-python-complete.log 2>&1"
+      ],
+      "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+      "execution_receipt_label": "candidate_full_python_finalization",
+      "command_scope": "exact recorded execution command"
+    },
+    {
+      "name": "baseline_checkpoint_lifecycle",
+      "source_scope": "baseline",
+      "required": true,
+      "command": "PYTHONPATH=/private/tmp/llm-mojo-engine-baseline-cb2416a/src /Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python -m llm_mojo.validation.model lifecycle --binary /private/tmp/engine-baseline-archive-model --output /private/tmp/engine-baseline-archive-lifecycle",
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained execution ledger CommandExecution/item_completed, independently matched to custom tool call and output",
+      "result": {
+        "path": "/private/tmp/engine-baseline-archive-lifecycle",
+        "sha256": "6195beb85b916773aa13d6d1affdd529fef3a268b3d2500c6b3ff1ec0db81070",
+        "bytes": 26777
+      },
+      "scope": {
+        "layout": "32-slot slot-major",
+        "runtime_device": "Apple M4 Pro/metal",
+        "checked_lifecycle": "configurations invalid-input overflow reset replay ties nonfinite invalidation"
+      },
+      "command_scope": "exact recorded execution command",
+      "recorded_build_command": [
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo",
+        "build",
+        "-I",
+        "src",
+        "-I",
+        "tests",
+        "tests/model_driver.mojo",
+        "-o",
+        "/private/tmp/engine-baseline-archive-model"
+      ],
+      "shell_argv": [
+        "/bin/zsh",
+        "-lc",
+        "PYTHONPATH=/private/tmp/llm-mojo-engine-baseline-cb2416a/src /Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python -m llm_mojo.validation.model lifecycle --binary /private/tmp/engine-baseline-archive-model --output /private/tmp/engine-baseline-archive-lifecycle"
+      ],
+      "cwd": "/private/tmp/llm-mojo-engine-baseline-cb2416a",
+      "execution_receipt_label": "baseline_checkpoint_lifecycle"
+    },
+    {
+      "name": "baseline_checkpoint_lifecycle_device_sync",
+      "source_scope": "baseline",
+      "required": true,
+      "command": "MODULAR_DEBUG=device-sync-mode uv run --locked /private/tmp/engine-baseline-archive-model --lifecycle /Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/build/model-prepared-v1 > /private/tmp/engine-baseline-lifecycle-sync.log 2>&1",
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained execution ledger CommandExecution/item_completed, independently matched to custom tool call and output",
+      "result": {
+        "path": "/private/tmp/engine-baseline-lifecycle-sync.log",
+        "sha256": "a34b6b118a88e5f80ba7a1a942bbcc196a2231e50a88659880128e595a250a48",
+        "bytes": 196
+      },
+      "scope": {
+        "runtime_device": "Apple M4 Pro/metal",
+        "environment": {
+          "MODULAR_DEBUG": "device-sync-mode"
+        },
+        "ordinary_lifecycle_binary_sha256": "03be9802f195259bf1013a2336f5c6a84c147da2da7388b3b90d6ce747f23da4"
+      },
+      "command_scope": "exact recorded execution command",
+      "recorded_build_command": [
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo",
+        "build",
+        "-I",
+        "src",
+        "-I",
+        "tests",
+        "tests/model_driver.mojo",
+        "-o",
+        "/private/tmp/engine-baseline-archive-model"
+      ],
+      "shell_argv": [
+        "/bin/zsh",
+        "-lc",
+        "MODULAR_DEBUG=device-sync-mode uv run --locked /private/tmp/engine-baseline-archive-model --lifecycle /Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/build/model-prepared-v1 > /private/tmp/engine-baseline-lifecycle-sync.log 2>&1"
+      ],
+      "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+      "execution_receipt_label": "baseline_checkpoint_lifecycle_device_sync"
+    },
+    {
+      "name": "baseline_checkpoint_batched_decode",
+      "source_scope": "baseline",
+      "required": true,
+      "command": "PYTHONPATH=/private/tmp/llm-mojo-engine-baseline-cb2416a/src uv run --locked python -m llm_mojo.validation.model batch --binary /private/tmp/engine-baseline-archive-model --output /private/tmp/engine-baseline-archive-batch",
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained execution ledger CommandExecution/item_completed, independently matched to custom tool call and output",
+      "result": {
+        "path": "/private/tmp/engine-baseline-archive-batch",
+        "sha256": "44e6c9684bbd3175819ebef38dc304203b7f9864311fb809aac3875c44a20bcc",
+        "bytes": 26955
+      },
+      "scope": {
+        "sequences": 8,
+        "decode_steps": 16,
+        "prompt_lengths": [
+          11,
+          31,
+          66,
+          301,
+          451,
+          901,
+          1801,
+          3301
+        ],
+        "block_size": 32,
+        "order": "slot-major",
+        "runtime_device": "Apple M4 Pro/metal",
+        "exact_gate": "batched versus solo token IDs, logits and K/V"
+      },
+      "command_scope": "exact recorded execution command",
+      "recorded_build_command": [
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo",
+        "build",
+        "-I",
+        "src",
+        "-I",
+        "tests",
+        "tests/model_driver.mojo",
+        "-o",
+        "/private/tmp/engine-baseline-archive-model"
+      ],
+      "shell_argv": [
+        "/bin/zsh",
+        "-lc",
+        "PYTHONPATH=/private/tmp/llm-mojo-engine-baseline-cb2416a/src uv run --locked python -m llm_mojo.validation.model batch --binary /private/tmp/engine-baseline-archive-model --output /private/tmp/engine-baseline-archive-batch"
+      ],
+      "cwd": "/private/tmp/llm-mojo-engine-baseline-cb2416a",
+      "execution_receipt_label": "baseline_checkpoint_batched_decode"
+    },
+    {
+      "name": "baseline_checkpoint_generation",
+      "source_scope": "baseline",
+      "required": true,
+      "command": "PYTHONPATH=/private/tmp/llm-mojo-engine-baseline-cb2416a/src uv run --locked python -m llm_mojo.validation.model generate --binary /private/tmp/engine-baseline-generator --output /private/tmp/engine-baseline-generation",
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained execution ledger CommandExecution/item_completed, independently matched to custom tool call and output",
+      "result": {
+        "path": "/private/tmp/engine-baseline-generation/result.json",
+        "sha256": "2b804cd0397961d02074625711e45d09c050ab7071e0ef46cd2ffc5455a514e0",
+        "bytes": 148159
+      },
+      "scope": {
+        "policy": "fast",
+        "prompts": 3,
+        "chunk_rows": [
+          0,
+          4
+        ],
+        "records": 6,
+        "max_new_tokens": 32,
+        "all_records_delivered_tokens": 32,
+        "reported_and_unobserved_outputs_exact": true,
+        "zero_budget_valid": true,
+        "empty_prompt_rejected": true,
+        "validate_generation_events_and_routes_rechecked": true,
+        "runtime_device": "Apple M4 Pro/metal",
+        "route_configurations": [
+          0,
+          26
+        ]
+      },
+      "command_scope": "exact recorded execution command",
+      "recorded_build_command": [
+        "/private/tmp/llm-mojo-engine-baseline-cb2416a/.venv/bin/mojo",
+        "build",
+        "-I",
+        "src",
+        "-I",
+        "tests",
+        "src/llm_mojo/cli/generate_cli.mojo",
+        "-o",
+        "/private/tmp/engine-baseline-generator"
+      ],
+      "shell_argv": [
+        "/bin/zsh",
+        "-lc",
+        "PYTHONPATH=/private/tmp/llm-mojo-engine-baseline-cb2416a/src uv run --locked python -m llm_mojo.validation.model generate --binary /private/tmp/engine-baseline-generator --output /private/tmp/engine-baseline-generation"
+      ],
+      "cwd": "/private/tmp/llm-mojo-engine-baseline-cb2416a",
+      "execution_receipt_label": "baseline_checkpoint_generation"
+    },
+    {
+      "name": "candidate_checkpoint_lifecycle",
+      "source_scope": "candidate",
+      "required": true,
+      "command": "uv run --locked python -m llm_mojo.validation.model lifecycle --binary /private/tmp/llm-mojo-engine-evidence-20261008/model --output /private/tmp/llm-mojo-engine-evidence-20261008/lifecycle.json",
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained execution ledger CommandExecution/item_completed, independently matched to custom tool call and output",
+      "result": {
+        "path": "/private/tmp/llm-mojo-engine-evidence-20261008/lifecycle.json",
+        "sha256": "a5c4ffc966f665c01060b08dde79fa910491cc20dc44f64ac5a2be1e4959380e",
+        "bytes": 28034
+      },
+      "scope": {
+        "layout": "32-slot slot-major",
+        "runtime_device": "Apple M4 Pro/metal",
+        "checked_lifecycle": "configurations invalid-input overflow reset replay ties nonfinite invalidation"
+      },
+      "command_scope": "exact recorded execution command",
+      "recorded_build_command": [
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo",
+        "build",
+        "-I",
+        "src",
+        "-I",
+        "tests",
+        "tests/model_driver.mojo",
+        "-o",
+        "/private/tmp/llm-mojo-engine-evidence-20261008/model"
+      ],
+      "shell_argv": [
+        "/bin/zsh",
+        "-lc",
+        "uv run --locked python -m llm_mojo.validation.model lifecycle --binary /private/tmp/llm-mojo-engine-evidence-20261008/model --output /private/tmp/llm-mojo-engine-evidence-20261008/lifecycle.json"
+      ],
+      "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+      "execution_receipt_label": "candidate_checkpoint_lifecycle"
+    },
+    {
+      "name": "candidate_checkpoint_lifecycle_device_sync",
+      "source_scope": "candidate",
+      "required": true,
+      "command": "MODULAR_DEBUG=device-sync-mode uv run --locked /private/tmp/llm-mojo-engine-evidence-20261008/model --lifecycle build/model-prepared-v1 > /private/tmp/llm-mojo-engine-evidence-20261008/lifecycle-sync.log 2>&1",
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained execution ledger CommandExecution/item_completed, independently matched to custom tool call and output",
+      "result": {
+        "path": "/private/tmp/llm-mojo-engine-evidence-20261008/lifecycle-sync.log",
+        "sha256": "03f4a16708ced263bfbf12532b622a1edb3c03f0b8e06c5bdc47c710a9b70fec",
+        "bytes": 137
+      },
+      "scope": {
+        "runtime_device": "Apple M4 Pro/metal",
+        "environment": {
+          "MODULAR_DEBUG": "device-sync-mode"
+        },
+        "ordinary_lifecycle_binary_sha256": "1aa6849a414d3c55158746152e25a8f846d5bb52ee8ce30811d75afb864e6ed9"
+      },
+      "command_scope": "exact recorded execution command",
+      "recorded_build_command": [
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo",
+        "build",
+        "-I",
+        "src",
+        "-I",
+        "tests",
+        "tests/model_driver.mojo",
+        "-o",
+        "/private/tmp/llm-mojo-engine-evidence-20261008/model"
+      ],
+      "shell_argv": [
+        "/bin/zsh",
+        "-lc",
+        "MODULAR_DEBUG=device-sync-mode uv run --locked /private/tmp/llm-mojo-engine-evidence-20261008/model --lifecycle build/model-prepared-v1 > /private/tmp/llm-mojo-engine-evidence-20261008/lifecycle-sync.log 2>&1"
+      ],
+      "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+      "execution_receipt_label": "candidate_checkpoint_lifecycle_device_sync"
+    },
+    {
+      "name": "candidate_checkpoint_batched_decode",
+      "source_scope": "candidate",
+      "required": true,
+      "command": "uv run --locked python -m llm_mojo.validation.model batch --binary /private/tmp/llm-mojo-engine-evidence-20261008/model --output /private/tmp/llm-mojo-engine-evidence-20261008/batch.json",
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained execution ledger CommandExecution/item_completed, independently matched to custom tool call and output",
+      "result": {
+        "path": "/private/tmp/llm-mojo-engine-evidence-20261008/batch.json",
+        "sha256": "7095a34ce713fbc09a122eee6c87b708d8339df6c019e6a2b17dd81069676f57",
+        "bytes": 28212
+      },
+      "scope": {
+        "sequences": 8,
+        "decode_steps": 16,
+        "prompt_lengths": [
+          11,
+          31,
+          66,
+          301,
+          451,
+          901,
+          1801,
+          3301
+        ],
+        "block_size": 32,
+        "order": "slot-major",
+        "runtime_device": "Apple M4 Pro/metal",
+        "exact_gate": "batched versus solo token IDs, logits and K/V"
+      },
+      "command_scope": "exact recorded execution command",
+      "recorded_build_command": [
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo",
+        "build",
+        "-I",
+        "src",
+        "-I",
+        "tests",
+        "tests/model_driver.mojo",
+        "-o",
+        "/private/tmp/llm-mojo-engine-evidence-20261008/model"
+      ],
+      "shell_argv": [
+        "/bin/zsh",
+        "-lc",
+        "uv run --locked python -m llm_mojo.validation.model batch --binary /private/tmp/llm-mojo-engine-evidence-20261008/model --output /private/tmp/llm-mojo-engine-evidence-20261008/batch.json"
+      ],
+      "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+      "execution_receipt_label": "candidate_checkpoint_batched_decode"
+    },
+    {
+      "name": "candidate_checkpoint_generation",
+      "source_scope": "candidate",
+      "required": true,
+      "command": "uv run --locked python -m llm_mojo.validation.model generate --binary /private/tmp/llm-mojo-engine-evidence-20261008/generator --output /private/tmp/llm-mojo-engine-evidence-20261008/generation",
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained execution ledger CommandExecution/item_completed, independently matched to custom tool call and output",
+      "result": {
+        "path": "/private/tmp/llm-mojo-engine-evidence-20261008/generation/result.json",
+        "sha256": "7da93d1ba2f40e1cc2298d9a1a5e51436fa8d94c8a5cd3e8b5913a6d22123d61",
+        "bytes": 149467
+      },
+      "scope": {
+        "policy": "fast",
+        "prompts": 3,
+        "chunk_rows": [
+          0,
+          4
+        ],
+        "records": 6,
+        "max_new_tokens": 32,
+        "all_records_delivered_tokens": 32,
+        "reported_and_unobserved_outputs_exact": true,
+        "zero_budget_valid": true,
+        "empty_prompt_rejected": true,
+        "validate_generation_events_and_routes_rechecked": true,
+        "runtime_device": "Apple M4 Pro/metal",
+        "route_configurations": [
+          0,
+          26
+        ]
+      },
+      "command_scope": "exact recorded execution command",
+      "recorded_build_command": [
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/mojo",
+        "build",
+        "-I",
+        "src",
+        "-I",
+        "tests",
+        "src/llm_mojo/cli/generate_cli.mojo",
+        "-o",
+        "/private/tmp/llm-mojo-engine-evidence-20261008/generator"
+      ],
+      "shell_argv": [
+        "/bin/zsh",
+        "-lc",
+        "uv run --locked python -m llm_mojo.validation.model generate --binary /private/tmp/llm-mojo-engine-evidence-20261008/generator --output /private/tmp/llm-mojo-engine-evidence-20261008/generation"
+      ],
+      "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+      "execution_receipt_label": "candidate_checkpoint_generation"
+    },
+    {
+      "name": "candidate_focused_final_engine_tools",
+      "source_scope": "candidate",
+      "required": true,
+      "command": "uv run --locked python -m unittest tests.test_engine_trace tests.test_engine_budget",
+      "shell_argv": [
+        "/bin/zsh",
+        "-lc",
+        "uv run --locked python -m unittest tests.test_engine_trace tests.test_engine_budget"
+      ],
+      "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained execution ledger CommandExecution/item_completed",
+      "result": {
+        "path": "/private/tmp/llm-mojo-engine-evidence-20261008/command-executions.json",
+        "sha256": "313099eac06f5f14339dfa38e151c15fa47eea9c59c06d26e0a9b776710d8054",
+        "bytes": 58182
+      },
+      "execution_receipt_label": "candidate_focused_final_engine_tools",
+      "scope": {
+        "tests": 14,
+        "modules": [
+          "tests.test_engine_trace",
+          "tests.test_engine_budget"
+        ],
+        "execution_stage": "after final timing-description and trace clock-origin adjustments; before clean b18563b builds"
+      }
+    },
+    {
+      "name": "supplemental_engine_core_17",
+      "source_scope": "supplemental test-only dirty source; production Mojo matches b18563b",
+      "required": true,
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "mojo",
+        "run",
+        "-I",
+        "src",
+        "tests/test_engine.mojo"
+      ],
+      "environment": {},
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained supplemental acceptance receipt, with log hashes and source snapshots independently checked",
+      "result": {
+        "path": "/private/tmp/llm-mojo-engine-acceptance-core.log",
+        "sha256": "2029451c9290350dec71379a1810c359b58adee0280c401309130559b88bef1a",
+        "bytes": 1482
+      },
+      "scope": {
+        "run": 17,
+        "passed": 17,
+        "failed": 0
+      }
+    },
+    {
+      "name": "supplemental_checkpoint_fault_driver_build",
+      "source_scope": "supplemental test-only dirty source; production Mojo matches b18563b",
+      "required": true,
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "mojo",
+        "build",
+        "-I",
+        "src",
+        "tests/engine_metal_driver.mojo",
+        "-o",
+        "/private/tmp/llm-mojo-engine-metal-acceptance-check"
+      ],
+      "environment": {},
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained supplemental acceptance receipt, with log hashes and source snapshots independently checked",
+      "result": {
+        "path": "/private/tmp/llm-mojo-engine-acceptance-build.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "scope": {
+        "path": "/private/tmp/llm-mojo-engine-metal-acceptance-check",
+        "sha256": "e3621125ff5e586a130bc04bb5be58c9f96dcf72dc016ea95a29fa0654664eaa"
+      }
+    },
+    {
+      "name": "supplemental_checkpoint_numeric_fault",
+      "source_scope": "supplemental test-only dirty source; production Mojo matches b18563b",
+      "required": true,
+      "command": [
+        "/private/tmp/llm-mojo-engine-metal-acceptance-check",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/build/model-prepared-v1"
+      ],
+      "environment": {},
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained supplemental acceptance receipt, with log hashes and source snapshots independently checked",
+      "result": {
+        "path": "/private/tmp/llm-mojo-engine-acceptance-metal.log",
+        "sha256": "dee87618ec4231ce727437ecf96667b25dfc44bc2446f2b9e38550587d1fc67e",
+        "bytes": 131
+      },
+      "scope": {
+        "modes": [
+          "ordinary",
+          "device-sync-mode"
+        ],
+        "submitted_layer_rows": 264,
+        "failing_step_layer_rows": 192,
+        "terminal_requests": 3,
+        "free_blocks": 4
+      }
+    },
+    {
+      "name": "supplemental_checkpoint_numeric_fault_device_sync",
+      "source_scope": "supplemental test-only dirty source; production Mojo matches b18563b",
+      "required": true,
+      "command": [
+        "/private/tmp/llm-mojo-engine-metal-acceptance-check",
+        "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/build/model-prepared-v1"
+      ],
+      "environment": {
+        "MODULAR_DEBUG": "device-sync-mode"
+      },
+      "status": "passed",
+      "exit_code": 0,
+      "exit_code_evidence": "retained supplemental acceptance receipt, with log hashes and source snapshots independently checked",
+      "result": {
+        "path": "/private/tmp/llm-mojo-engine-acceptance-metal-sync.log",
+        "sha256": "dee87618ec4231ce727437ecf96667b25dfc44bc2446f2b9e38550587d1fc67e",
+        "bytes": 131
+      },
+      "scope": {
+        "modes": [
+          "ordinary",
+          "device-sync-mode"
+        ],
+        "submitted_layer_rows": 264,
+        "failing_step_layer_rows": 192,
+        "terminal_requests": 3,
+        "free_blocks": 4
+      }
+    }
+  ],
+  "scope_notes": [
+    "Full validation logs and checkpoint reports were independently checked; exact execution commands, cwd, completion timestamps and exit codes are now retained in command-executions.json from matching ledger entries.",
+    "Candidate full suite ran during implementation: 302 Python tests and 31 native files. Final complete Python rerun passed 310 tests, followed by a final 14-test focused tool rerun after timing-boundary edits. The 15 native core, two mixed-layer and one reduced three-layer mixed-model tests are included in the full native suite.",
+    "The compiled engine, checkpoint model and generator identities are clean b18563b. Serving/model/layer native implementation and tests were finalized in eca7957/dd6410b; b18563b records tooling, trace/probe drivers and documentation. Later source edits cannot relabel those binaries or results.",
+    "Baseline execution archive commit 9aa2010 is a separate local Git identity whose 226 tracked source hashes were checked exactly against original baseline cb2416a.",
+    "This receipt establishes synchronous study readiness. Supplemental state-specific abort and resident numeric-fault acceptance tests have separate post-study receipts.",
+    "No predictor quality, client SLO or goodput conclusions are established by readiness. Full asynchronous engine execution and retirement gates remain open.",
+    "Supplemental 17-test core and full-checkpoint resident numeric-fault checks ran with test-only dirty source, with all production Mojo hashes matching the clean b18563b measurement binary. Ordinary and device-sync modes terminalized three requests and recovered all four blocks. This establishes numerical-fault cleanup, not hardware-failure recovery."
+  ],
+  "command_execution_receipt": {
+    "path": "/private/tmp/llm-mojo-engine-evidence-20261008/command-executions.json",
+    "sha256": "313099eac06f5f14339dfa38e151c15fa47eea9c59c06d26e0a9b776710d8054",
+    "bytes": 58182
+  },
+  "revised_utc": "2026-10-08T18:39:58.501203+00:00",
+  "supplemental_acceptance": {
+    "receipt": {
+      "path": "/private/tmp/llm-mojo-engine-acceptance-receipt.json",
+      "sha256": "388d40850a0f18cce3d97638a1c0348e2477203e3fe7b438f89865db8535c6a7",
+      "bytes": 3252
+    },
+    "scope": "test-only dirty native source; production Mojo matches b18563b; safe resident numeric fault, no hardware failure or recovery claim",
+    "production_mojo_matches_commit": "b18563b3a43c389991cd6679bf03892f140f15b0",
+    "source_snapshots": [
+      {
+        "path": "/private/tmp/llm-mojo-engine-acceptance-source-before-tests.json",
+        "sha256": "9598338e676273f9c7a07b2e1bdfd9a18ef5d794ca7ab66223338110edfd2495",
+        "bytes": 36465
+      },
+      {
+        "path": "/private/tmp/llm-mojo-engine-acceptance-source-before-build.json",
+        "sha256": "1357fc7d9216e5070c6d93009e9a7bcf5b1bdfdaa5ef01f473a6493fe72f1ffe",
+        "bytes": 36422
+      },
+      {
+        "path": "/private/tmp/llm-mojo-engine-acceptance-source-after.json",
+        "sha256": "9598338e676273f9c7a07b2e1bdfd9a18ef5d794ca7ab66223338110edfd2495",
+        "bytes": 36465
+      }
+    ],
+    "native_source_hashes_unchanged": true,
+    "initial_study_candidate_identity_preserved": true
+  }
+}

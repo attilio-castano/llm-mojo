@@ -6,7 +6,7 @@ inference on Apple M4 Pro / Metal through numerical observations, retained raw
 measurements and explicit timing boundaries. The [model contract](../docs/model.md)
 and [layouts](../docs/layouts.md) define the values, storage and ownership.
 
-## Current Fast route
+## Current runtime and engine
 
 | Study | What it establishes |
 | --- | --- |
@@ -14,6 +14,7 @@ and [layouts](../docs/layouts.md) define the values, storage and ownership.
 | [Combined QKV and activation fusion](model_generation/combined-fusion.md) | Promoted M4 Pro single-token Fast route: 16.9–19.4% lower latency, 86–90 tokens/s streaming medians, exact outputs and cache storage |
 | [Reordered batched projections](model_generation/batch-reordered.md) | Promoted decode projections: four adjacent products per lane cut batched steps by 17–36% from B = 16 and single-sequence steps by about 10%, with arrangement 5's worst-case accuracy and HF agreement; 998 tokens/s for 64 sequences at 1,024 cached tokens |
 | [Paged KV after the one-loop decode kernel](model_generation/paged-kv-loop.md) | Default KV storage: 32-slot blocks, selected and confirmed with decode attention in one loop per SIMD group, cost nothing resolvable in 35 decode and prefill workloads and match phase 1 on one sequence |
+| [Synchronous engine core](model_generation/engine-core.md) | Mixed execution and bounded request lifecycle with load evidence: adequate-capacity gains, pressure regressions and optional fitted-budget latency/throughput tradeoffs; asynchronous stepping remains open |
 | [Native terminal chat](model_generation/chat.md) | Multi-turn cache reuse, exact history and terminal lifecycle, with paired prefill and actual interaction timings |
 | [Fast full-model runtime](model_generation/runtime.md) | All 24 layers, native generation, numerical diagnostics and 11 measured dispatch choices |
 
