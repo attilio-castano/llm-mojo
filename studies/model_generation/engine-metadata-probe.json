@@ -1,0 +1,186 @@
+{
+  "schema": "llm-mojo-metadata-upload-probe-v1",
+  "collected_at_utc": "2026-10-08T17:37:56.238100+00:00",
+  "scope": "Public API metadata staging gate with a synthetic dependent integer Metal workload; no LLM timing claim.",
+  "provenance": {
+    "git_commit": "cb2416abf3c9fbb19c460fa99709d93eeabba97e",
+    "git_branch": "codex/engine-core",
+    "working_tree_dirty": true,
+    "source_path": "src/llm_mojo/benchmarks/metadata_probe.mojo",
+    "source_sha256": "c032cb3095ecef63e5de19bf6c2bb9d75b00134bbcd253dd7179d105ab6c14df",
+    "clock_source_sha256": "a01574476c1dbba683981757da898377296902e58d6fb71b835300d3a4bbf5b2",
+    "uv_lock_sha256": "903ea1a7c05a268cc14d36bc817cee7edb0cd2f278c0c557777ef0d472cfad57",
+    "probe_binary_sha256": "e5fe893d16bcf7b6c9902b2c91acf2b3e7a5908ee92437d0f8cb9986182884c0",
+    "max_version": "26.5.0",
+    "mojo_version": "Mojo 1.0.0 (ed45d567)",
+    "uv_version": "uv 0.12.5 (210d1f678 2026-08-14 aarch64-apple-darwin)",
+    "os": "ProductName:\t\tmacOS\nProductVersion:\t\t26.6.2\nBuildVersion:\t\t25G83",
+    "architecture": "arm64",
+    "physical_memory_bytes": 25769803776,
+    "device": "Apple M4 Pro",
+    "backend": "metal",
+    "MODULAR_DEBUG": null
+  },
+  "commands": {
+    "build": "uv run --locked mojo build -I src src/llm_mojo/benchmarks/metadata_probe.mojo -o /private/tmp/llm-mojo-metadata-probe",
+    "run": "uv run --locked /private/tmp/llm-mojo-metadata-probe 1000000 5"
+  },
+  "geometry": {
+    "dtype": "uint32",
+    "metadata_rows": 2048,
+    "metadata_bytes": 8192,
+    "work_rows": 4096,
+    "work_rounds": 1000000,
+    "block_dim": 128,
+    "work_grid_dim": 32,
+    "observer_grid_dim": 16,
+    "pairs": 5
+  },
+  "measurement": {
+    "clock": "clock_gettime_nsec_np(CLOCK_UPTIME_RAW=8)",
+    "units": "host wall nanoseconds",
+    "boundaries": "After synchronized step1 metadata setup, time first workload enqueue, then stage2 population/upload plus observer enqueue, then final DeviceContext.synchronize. Numerical verification is outside timing.",
+    "order": "map then pinned in even pairs, pinned then map in odd pairs",
+    "source_lifetime": "Distinct first and second HostBuffers preallocated; idle second stage populated after step1 enqueue; both sources held through final synchronization. Same device metadata buffer reused by operations ordered on one context.",
+    "idle_control": {
+      "metadata_submit_ns": 19167,
+      "final_wait_ns": 554042
+    },
+    "warmup_samples": [
+      {
+        "pair": -1,
+        "arm": "mapped",
+        "work_submit_ns": 42269416,
+        "metadata_submit_ns": 5617625,
+        "final_wait_ns": 524042,
+        "total_ns": 48411083
+      },
+      {
+        "pair": -1,
+        "arm": "pinned",
+        "work_submit_ns": 23625,
+        "metadata_submit_ns": 64459,
+        "final_wait_ns": 494333,
+        "total_ns": 582417
+      }
+    ],
+    "samples": [
+      {
+        "pair": 0,
+        "arm": "mapped",
+        "work_submit_ns": 37458,
+        "metadata_submit_ns": 19694542,
+        "final_wait_ns": 123708,
+        "total_ns": 19855708
+      },
+      {
+        "pair": 0,
+        "arm": "pinned",
+        "work_submit_ns": 19667,
+        "metadata_submit_ns": 17375,
+        "final_wait_ns": 18618500,
+        "total_ns": 18655542
+      },
+      {
+        "pair": 1,
+        "arm": "pinned",
+        "work_submit_ns": 20541,
+        "metadata_submit_ns": 14417,
+        "final_wait_ns": 22061625,
+        "total_ns": 22096583
+      },
+      {
+        "pair": 1,
+        "arm": "mapped",
+        "work_submit_ns": 30000,
+        "metadata_submit_ns": 18832208,
+        "final_wait_ns": 117375,
+        "total_ns": 18979583
+      },
+      {
+        "pair": 2,
+        "arm": "mapped",
+        "work_submit_ns": 16375,
+        "metadata_submit_ns": 19086125,
+        "final_wait_ns": 138834,
+        "total_ns": 19241334
+      },
+      {
+        "pair": 2,
+        "arm": "pinned",
+        "work_submit_ns": 42000,
+        "metadata_submit_ns": 19167,
+        "final_wait_ns": 19125958,
+        "total_ns": 19187125
+      },
+      {
+        "pair": 3,
+        "arm": "pinned",
+        "work_submit_ns": 20625,
+        "metadata_submit_ns": 13541,
+        "final_wait_ns": 18689209,
+        "total_ns": 18723375
+      },
+      {
+        "pair": 3,
+        "arm": "mapped",
+        "work_submit_ns": 31917,
+        "metadata_submit_ns": 18731208,
+        "final_wait_ns": 96125,
+        "total_ns": 18859250
+      },
+      {
+        "pair": 4,
+        "arm": "mapped",
+        "work_submit_ns": 26209,
+        "metadata_submit_ns": 29234625,
+        "final_wait_ns": 117208,
+        "total_ns": 29378042
+      },
+      {
+        "pair": 4,
+        "arm": "pinned",
+        "work_submit_ns": 18625,
+        "metadata_submit_ns": 16666,
+        "final_wait_ns": 41588625,
+        "total_ns": 41623916
+      }
+    ],
+    "medians_ns": {
+      "mapped": {
+        "work_submit_ns": 30000,
+        "metadata_submit_ns": 19086125,
+        "final_wait_ns": 117375,
+        "total_ns": 19241334
+      },
+      "pinned": {
+        "work_submit_ns": 20541,
+        "metadata_submit_ns": 16666,
+        "final_wait_ns": 19125958,
+        "total_ns": 19187125
+      }
+    }
+  },
+  "validation": {
+    "exit_code": 0,
+    "step2_uploaded_values_per_sample": 2048,
+    "scalar_recurrence_check_rows_per_sample": 1,
+    "failures": 0,
+    "step1_late_metadata_read_rows_per_sample": 4096,
+    "step1_late_read_contract": "Each row reads first-record metadata after its dependent integer recurrence, at an address derived from its recurrence result; every late read must still equal17+index."
+  },
+  "gates": {
+    "host_submit_next_metadata_while_work_outstanding": "pass for distinct immutable pinned stages with same-context ordered copy",
+    "event_supported": false,
+    "event_error": "At max/mojo/max/gpu/host/device_context.mojo:5780:17: eventCreate is not supported on this device",
+    "safe_async_stage_retirement": "not established: locked Metal public DeviceEvent is unsupported; conservative synchronization still required before source reuse",
+    "engine_async_stepping": "not implemented or established by this probe"
+  },
+  "public_references": [
+    "https://max.modular.com/stable/api/mojo/max/gpu/host/device_context/DeviceContext/",
+    "https://max.modular.com/api/mojo/max/gpu/host/device_context/HostBuffer/",
+    "https://max.modular.com/stable/api/mojo/max/gpu/host/device_context/DeviceBuffer/",
+    "https://max.modular.com/releases/v26.6/"
+  ],
+  "raw_output": "device Apple M4 Pro\napi metal\ngeometry uint32 metadata_rows 2048 work_rows 4096 rounds 1000000 pairs 5\nevent unsupported At max/mojo/max/gpu/host/device_context.mojo:5780:17: eventCreate is not supported on this device\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.\nsample -1 mapped 42269416 5617625 524042 48411083\nsample -1 pinned 23625 64459 494333 582417\nidle pinned 19167 554042\ncolumns sample pair arm work_submit_ns metadata_submit_ns final_wait_ns total_ns\nsample 0 mapped 37458 19694542 123708 19855708\nsample 0 pinned 19667 17375 18618500 18655542\nsample 1 pinned 20541 14417 22061625 22096583\nsample 1 mapped 30000 18832208 117375 18979583\nsample 2 mapped 16375 19086125 138834 19241334\nsample 2 pinned 42000 19167 19125958 19187125\nsample 3 pinned 20625 13541 18689209 18723375\nsample 3 mapped 31917 18731208 96125 18859250\nsample 4 mapped 26209 29234625 117208 29378042\nsample 4 pinned 18625 16666 41588625 41623916\n"
+}

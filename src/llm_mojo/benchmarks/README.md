@@ -581,3 +581,56 @@ uv run --locked python -m llm_mojo.validation.model build --generation --commit 
 uv run --locked python -m llm_mojo.validation.model build --generation --block-size 64 --binary /private/tmp/generator-64
 uv run --locked python -m llm_mojo.benchmarks.model_profile single-sequence --baseline /private/tmp/generator-6422f84 --candidate /private/tmp/generator-64 --prepared /absolute/prepared-v1 --purpose 'what the check decides' --output /private/tmp/single-sequence
 ```
+
+## Engine token traces
+
+The initial phase 3 collector uses reference configuration 27 across serial,
+static, continuous and chunked scheduling. It retains complete request and step
+records in four paired blocks, including a serial/self-serial calibration.
+This is separate from the existing Fast application measurements. The
+[engine declaration](../../../studies/model_generation/engine-core.md) defines
+readiness, exact gates, boundaries and the compact archive schema.
+
+After the readiness checks pass and the source is clean, prepare a frozen
+offline trace, build once and collect into new paths:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-specification --output build/engine-offline.json
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build --prepared build/model-prepared-v1 --output build/engine-core-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect --build build/engine-core-build --trace build/engine-offline.json --blocks 128 --max-sequences 8 --output build/engine-offline-run
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output build/engine-offline-run
+```
+
+`engine-specification --arrival-rate` requires an explicitly chosen positive
+requests-per-second value and retains the seeded arrival offsets; omission
+produces an offline trace. `--seed` defaults to 7. The eight synthetic prompts,
+output limits and exact token arrays are retained in JSON and copied unchanged
+to the native driver's token trace. Pool capacity and maximum sequences are
+recorded rather than inferred from available RAM. An input request must fit
+the pool alone. Queue/abort/preemption rejection cases also have native
+acceptance tests; the initial performance trace has valid requests.
+
+`engine-collect --engine-mode scripted` runs the same engine with its simulated
+token oracle and virtual clock. Its summaries are labeled `virtual-clock` and
+support lifecycle/accounting comparisons, never GPU performance. Greedy mode
+requires actual `Apple M4 Pro/metal` runtime identity. Both modes warm ten steps
+before each trace and retain the final drain receipt. Natural greedy history
+differences are reported; a changed history prevents an offline speed verdict.
+
+Collection writes `engine-core.json.gz`, its hash manifest and a raw-derived
+summary. Replay checks the full paired grid, provenance, device, request order,
+stop/limit/abort accounting, timing/budget constraints and final block release;
+it regenerates the summary without a GPU or weights. It rejects missing records
+and changed summaries even when envelope hashes match. The fixed study sets no
+SLO, goodput target, fitted-budget improvement or asynchronous-stepping claim.
+
+For adaptive budgeting, `python -m llm_mojo.benchmarks.engine_budget` provides
+`fit --calibration --output --target-ms`, `evaluate --build --policy --trace
+--output` and `replay --output`. The target defaults to the provisional 25 ms
+research setting and applies to predicted synchronous execution, not a promised
+client SLO. Fit uses the complete fixed-study Metal calibration archive;
+evaluation requires the calibrated binary and a different frozen workload.
+Its archive retains calibration bytes, policy identity, every prediction and
+all evaluation records so offline replay can recompute the fit and residuals.
+Mandatory decode/progress overruns remain explicit. These tools implement the
+mechanism; a performance conclusion needs the separately retained evaluation.

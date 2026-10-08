@@ -10,6 +10,13 @@ model are merged as `a84ad34` (#32). Its translation-cost study found that
 small blocks made decode attention pay for every block; after a fix to that
 kernel, a rerun selected and confirmed 32-slot blocks, the default since
 2026-10-05. Phase 2 is complete.
+Phase 3 is being implemented from `cb2416a` on `codex/engine-core`, authorized
+on 2026-10-08. Its [readiness and measurement declaration](../studies/model_generation/engine-core.md)
+separates the synchronous core, fitted budgeting and asynchronous stepping.
+The initial runner uses reference configuration 27 in every arm, so scheduling
+has one numerical route. Existing chat and generation remain Fast; a measured
+Fast engine route is a separate optimization decision.
+No phase 3 validation or performance result is claimed by this declaration.
 Each phase is approved separately and records its own validation, like the
 existing plans. The [project direction](project.md) lists this as a follow-up
 track.
@@ -250,8 +257,9 @@ any state → FINISHED(abort) at the next step boundary
 ```
 
 `LOADING_KV` exists only with the SSD tier. A preempted request returns to the
-front of the waiting queue and usually resumes by hitting its own released
-blocks.
+front of the waiting queue. In phase 3 its blocks are released to Reset and its
+retained prompt plus delivered tokens are recomputed; prefix hits require phase
+4. Recomputed rows are charged to execution, never delivered again as output.
 
 ### Step loop
 
@@ -279,14 +287,20 @@ measured extension.
 Start with a fixed budget equal to today's 256-row chunk limit. Then fit
 
 ```text
-step_ns ≈ c0 + c1 · total_tokens + c2 · attended_positions
+execute_ns ≈ c0 + c1 · total_tokens + c2 · attended_positions
+             + c3 · attention_partitions + c4 · sampled_logit_rows
 ```
 
-from step records, and size each prefill chunk so the predicted step stays
-under a declared inter-token target while decodes are running. This is
-Sarathi-Serve's stall-free batching with a calibrated model in place of a
-hand-tuned constant. `predicted_step_ns` records each prediction beside its
-measurement.
+from step records. The first implementation fits five nonnegative coefficients
+and freezes them before evaluating a separate trace; `predicted_ns` records
+each estimate beside measured `execute_ns`. Attention partitions count actual
+singleton/decode and multi-row prefill launches; sampled rows account for the
+vocabulary head. The largest prefill chunk whose prediction fits is selected.
+Mandatory decodes, or one token when otherwise nothing can progress, may exceed
+the target and are reported as such. The provisional 25 ms research target is
+not a promised request-latency SLO. Prediction error and observed latency remain
+separate from the policy's target. This follows Sarathi-Serve's stall-free
+batching question with a measured cost model rather than a hand-tuned constant.
 
 ### Asynchronous stepping
 
@@ -306,6 +320,46 @@ metadata without a synchronizing map; see the open questions.
 - The waiting queue is bounded; a full queue rejects new requests explicitly.
 - A request exceeding the per-request limit is rejected before any state
   changes, as today's chat rejects a full conversation.
+
+The supervisor and frontend above belong to phase 5. Phase 3 exposes the engine
+failure and fails its in-flight requests; it claims no automatic restart or
+client-stream recovery. Retained histories make that later recovery possible.
+
+### Phase 3 acceptance order
+
+1. **Readiness.** Freeze the baseline, assets, toolchain and device. Record the
+   full suite plus separate checkpoint lifecycle, batched equality and generation
+   checks in a readiness receipt. A historical suite result does not substitute
+   for this baseline check. A missing prepared checkpoint is an unavailable
+   check, not a pass.
+2. **Synchronous core.** Implement mixed decode with at most one prefill sequence,
+   a fixed total-token budget of 256, bounded admission, preemption, aborts,
+   scripted simulation and the Metal runner. Check scheduler and allocator
+   invariants after every simulated step and in Metal acceptance runs. Preserve
+   exact request/token accounting, rejection atomicity and write isolation.
+3. **Load evidence.** Compare sequential execution, static batching, continuous
+   batching and chunked prefill on frozen offline and seeded online traces. Keep
+   every request and step record. This is the first phase 3 performance boundary;
+   a working scheduler or faster kernel alone establishes no serving speedup.
+4. **Fitted budget.** Fit the declared step-time model on calibration traces, freeze
+   its coefficients, then evaluate on separate traces. Declare the predicted
+   execution-cost research target before fitting; the initial setting is 25 ms.
+   Declare a client inter-token SLO and goodput formula before corresponding
+   latency or target-capacity claims. No target or goodput threshold is inferred
+   from the observed result. Report predictions and errors as well as request metrics.
+5. **Asynchronous stepping.** First prove that the pinned Metal API permits
+   preparing the next metadata without a synchronizing map. Compare delivered
+   tokens against synchronous execution on an identical frozen step schedule,
+   including stop, limit and abort boundaries and discarded extra tokens. Then
+   measure it as its own arm. If the API cannot support it, retain the probe and
+   report that part of phase 3 as incomplete.
+
+Stages have separate receipts. Phase 3 is complete only after its declared gates
+and retained load study pass; a synchronous milestone does not close the fitted
+budget or asynchronous work. The [declaration](../studies/model_generation/engine-core.md)
+defines schemas, replay requirements and the numerical boundary. Reference-route
+mixed-versus-solo execution, untouched storage and request accounting are exact
+checks. Comparisons against Fast are diagnostics.
 
 ## KV cache manager
 
@@ -448,10 +502,12 @@ Restored bytes equal stored bytes, so a disk hit is as exact as a memory hit.
 
 ### Numerical policy
 
-Serving uses Fast, the only application policy. Correctness follows the split
-in the [model contract](model.md#correctness-and-diagnostic-policy): system
-behavior is checked exactly, and numerical differences that depend on how work
-is scheduled are recorded as diagnostics.
+Fast remains the application policy for chat and generation. Phase 3's initial
+runner instead uses reference configuration 27 for every scheduling arm, with
+an exact same-route mixed-versus-solo gate. This is a correctness and scheduling
+baseline, not a promoted Fast route or a timing comparison against the existing
+Fast application. Comparisons against Fast follow the diagnostic split in the
+[model contract](model.md#correctness-and-diagnostic-policy).
 
 In Fast, a row's arithmetic can depend on its step. A decode row scheduled with
 a prefill chunk may use a different projection kernel. A prefix-cache hit
@@ -461,10 +517,10 @@ these can change logits and occasionally a greedy token.
 
 ### Exact gates
 
-These hold by construction under Fast, so they test data movement and
-ownership rather than arithmetic:
+These test data movement and ownership with the same numerical route:
 
-- S = 1 through StepBatch equals today's forward: logits and all KV bytes.
+- Existing S = 1 Fast execution remains unchanged. Reference configuration 27
+  through StepBatch equals its solo route: logits and all KV bytes.
 - A decode-only batch equals decoding each sequence alone with the
   same kernels. Wrong positions, wrong blocks and
   cross-sequence writes break this equality even when outputs look plausible.
@@ -481,8 +537,9 @@ ownership rather than arithmetic:
 
 ### Diagnostics
 
-These comparisons record token agreement, first-divergence position and logit
-distances, never pass/fail thresholds:
+For Fast, these comparisons record token agreement, first-divergence position
+and logit distances, never pass/fail thresholds. Configuration 27's own-route
+mixed-versus-solo gate remains exact:
 
 - mixed steps against solo execution;
 - prefix-cache hits against recomputation;

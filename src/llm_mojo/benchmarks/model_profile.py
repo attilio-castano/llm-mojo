@@ -17,6 +17,7 @@ import gzip
 import hashlib
 import json
 import os
+import random
 from pathlib import Path
 import statistics as stats
 import subprocess
@@ -2910,6 +2911,427 @@ RETIRED = ['enqueue-build', 'enqueue-collect', 'enqueue-archive', 'scheduling-bu
            'selection-terminal', 'selection-archive', 'fusion-capture', 'fusion-terminal', 'fusion-archive']
 
 
+def engine_specification(output, seed=7, arrival_rate=None):
+    """Freeze a bounded synthetic token trace; no fitted rate or latency target."""
+    if arrival_rate is not None and (not np.isfinite(arrival_rate) or arrival_rate <= 0):
+        raise ValueError('arrival rate must be positive and finite')
+    rng = random.Random(seed)
+    arrival = 0
+    requests = []
+    for i, length in enumerate((32, 128, 64, 512, 96, 1024, 256, 64)):
+        if arrival_rate is not None and i:
+            arrival += max(1, round(rng.expovariate(arrival_rate) * 1e9))
+        requests.append(dict(request_id=i, arrival_offset_ns=arrival,
+                             prompt_ids=[(p * 103 + i * 17 + 42) % 151643 for p in range(length)],
+                             max_new_tokens=32, stop_ids=[151643, 151645], abort_offset_ns=None,
+                             output_script=None))
+    trace = dict(kind='engine-token-trace-v1', schema_version=1,
+                 generator='synthetic-affine-v1', seed=seed,
+                 arrival_rate=arrival_rate, mode='offline' if arrival_rate is None else 'online',
+                 scripted_tokens=[11, 13, 17, 19, 23], requests=requests)
+    validate_engine_trace(trace)
+    if output.exists():
+        raise ValueError('refusing to replace a token trace')
+    write(output, trace)
+    return trace
+
+
+def validate_engine_trace(trace):
+    if (trace.get('kind') != 'engine-token-trace-v1' or trace.get('schema_version') != 1
+            or trace.get('mode') not in ('offline', 'online')):
+        raise ValueError('invalid engine trace declaration')
+    requests = trace.get('requests', [])
+    if not 1 <= len(requests) <= 128:
+        raise ValueError('trace must contain 1..128 requests')
+    seen = set()
+    previous = -1
+    for request in requests:
+        identifier = request.get('request_id')
+        at = request.get('arrival_offset_ns')
+        prompt = request.get('prompt_ids', [])
+        maximum = request.get('max_new_tokens')
+        stops = request.get('stop_ids', [])
+        if (type(identifier) is not int or identifier < 0 or identifier in seen
+                or type(at) is not int or at < previous or at < 0
+                or type(maximum) is not int or maximum < 0 or not prompt
+                or len(prompt) + maximum > 4096):
+            raise ValueError('invalid trace request identity, time or budget')
+        if any(type(t) is not int or not 0 <= t < 151936 for t in [*prompt, *stops]):
+            raise ValueError('invalid trace token')
+        abort = request.get('abort_offset_ns')
+        if abort is not None and (type(abort) is not int or abort < at):
+            raise ValueError('abort precedes arrival')
+        if request.get('output_script') is not None:
+            raise ValueError('per-request teacher forcing is not implemented')
+        if trace['mode'] == 'offline' and at:
+            raise ValueError('offline requests must arrive at zero')
+        seen.add(identifier)
+        previous = at
+    script = trace.get('scripted_tokens', [])
+    if not script or any(type(t) is not int or not 0 <= t < 151936 for t in script):
+        raise ValueError('invalid simulated token oracle')
+    return trace
+
+
+def engine_trace_tsv(trace):
+    validate_engine_trace(trace)
+    def csv(values): return ','.join(map(str, values)) if values else '-'
+    lines = ['script ' + csv(trace['scripted_tokens'])]
+    for request in trace['requests']:
+        lines.append('request {} {} {} {} {} -'.format(
+            request['request_id'], request['arrival_offset_ns'], request['max_new_tokens'],
+            csv(request['stop_ids']), csv(request['prompt_ids'])))
+        if request['abort_offset_ns'] is not None:
+            lines.append(f"abort {request['request_id']} {request['abort_offset_ns']}")
+    return '\n'.join(lines) + '\n'
+
+
+def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy=None):
+    """Reject malformed or incomplete native traces before computing any metric."""
+    validate_engine_trace(trace)
+    if arm not in (*contract.ENGINE_ARMS, 'adaptive') or mode not in ('greedy', 'scripted'):
+        raise ValueError('invalid engine arm or mode')
+    metadata, arrivals, events, steps = {}, {}, [], []
+    for line in stdout.splitlines():
+        fields = line.split()
+        if not fields:
+            continue
+        name = fields[0]
+        if name in ('device', 'mode', 'config', 'drained', 'policy'):
+            if name in metadata:
+                raise ValueError('duplicate engine execution identity')
+            metadata[name] = fields[1:]
+        elif name == 'arrival' and len(fields) == 4:
+            identifier, scheduled, actual = map(int, fields[1:])
+            if identifier in arrivals:
+                raise ValueError('duplicate request arrival')
+            arrivals[identifier] = dict(scheduled_ns=scheduled, actual_ns=actual)
+        elif name in ('token', 'finish') and len(fields) == 7:
+            identifier = int(fields[1])
+            events.append(dict(kind=name, request_id=identifier,
+                               token_id=int(fields[2]) if name == 'token' else None,
+                               reason=fields[2] if name == 'finish' else None,
+                               prompt_tokens=int(fields[3]), generated_tokens=int(fields[4]),
+                               arrival_ns=int(fields[5]), emitted_ns=int(fields[6]),
+                               step_id=steps[-1]['step_id'] if steps else None))
+        elif name == 'step' and len(fields) == len(contract.ENGINE_STEP_FIELDS) + 1:
+            steps.append(dict(zip(contract.ENGINE_STEP_FIELDS, map(int, fields[1:]))))
+        else:
+            raise ValueError('unknown or malformed engine trace line: ' + line[:120])
+    device = 'Apple M4 Pro/metal' if mode == 'greedy' else 'simulated/virtual'
+    budget = 256 if arm in ('chunked', 'adaptive') else 4096
+    sequences = 1 if arm == 'serial' else maximum_sequences
+    if (metadata.get('device') != device.split() or metadata.get('mode') != [mode]
+            or metadata.get('config') != [arm, str(blocks), str(budget), str(sequences)]):
+        raise ValueError('engine device, mode or configuration differs from declaration')
+    if policy is None:
+        if arm == 'adaptive' or 'policy' in metadata:
+            raise ValueError('adaptive run requires a frozen declared policy')
+    elif (arm != 'adaptive' or set(policy) != set(contract.ENGINE_POLICY_FIELDS)
+          or any(type(v) is not int or v < 0 for v in policy.values()) or policy['target_ns'] < 1
+          or metadata.get('policy') != [str(policy[k]) for k in contract.ENGINE_POLICY_FIELDS]):
+        raise ValueError('engine adaptive policy differs from declaration')
+    expected = {r['request_id']: r for r in trace['requests']}
+    if set(arrivals) != set(expected):
+        raise ValueError('incomplete engine arrivals')
+    if [s['step_id'] for s in steps] != list(range(len(steps))):
+        raise ValueError('missing or unordered engine step')
+    previous_end = 0
+    for step in steps:
+        if any(value < 0 for value in step.values()):
+            raise ValueError('negative engine counter or timestamp')
+        if (step['begin_ns'] < previous_end or step['end_ns'] < step['begin_ns']
+                or sum(step[k] for k in ('schedule_ns', 'build_ns', 'execute_ns', 'postprocess_ns'))
+                > step['end_ns'] - step['begin_ns']):
+            raise ValueError('inconsistent synchronous step timing')
+        if (step['prefill_seqs'] > 1 or step['decode_seqs'] + step['prefill_seqs'] > sequences
+                or step['total_tokens'] != step['decode_seqs'] + step['prefill_tokens']
+                or step['total_tokens'] > budget or step['blocks_free'] > blocks
+                or step['aborted'] > step['finished'] or step['budget_limited'] not in (0, 1)):
+            raise ValueError('engine exceeded its declared work or pool budget')
+        if policy is None and (step['predicted_ns'] or step['budget_limited']):
+            raise ValueError('fixed-budget trace unexpectedly used a fitted policy')
+        previous_end = step['end_ns']
+    histories = {identifier: [] for identifier in expected}
+    terminal, last_time = {}, {}
+    for event in events:
+        identifier = event['request_id']
+        if identifier not in expected or identifier in terminal:
+            raise ValueError('unknown request or event after terminal result')
+        request = expected[identifier]
+        arrival = arrivals[identifier]
+        if (arrival['scheduled_ns'] != request['arrival_offset_ns']
+                or arrival['actual_ns'] < arrival['scheduled_ns']
+                or event['arrival_ns'] != arrival['scheduled_ns']
+                or event['emitted_ns'] < max(arrival['actual_ns'], last_time.get(identifier, 0))
+                or event['prompt_tokens'] != len(request['prompt_ids'])):
+            raise ValueError('engine event has invalid time or prompt accounting')
+        if event['step_id'] is None:
+            raise ValueError('engine event is outside a declared step')
+        step = steps[event['step_id']]
+        if not step['begin_ns'] <= event['emitted_ns'] <= step['end_ns']:
+            raise ValueError('engine event time is outside its step')
+        last_time[identifier] = event['emitted_ns']
+        tokens = histories[identifier]
+        if event['kind'] == 'token':
+            token = event['token_id']
+            if (not 0 <= token < 151936 or event['generated_tokens'] != len(tokens) + 1
+                    or len(tokens) >= request['max_new_tokens']
+                    or (tokens and tokens[-1]['token_id'] in request['stop_ids'])):
+                raise ValueError('engine token delivery violates order, stop or budget')
+            tokens.append(event)
+        else:
+            reason = event['reason']
+            if event['generated_tokens'] != len(tokens) or reason not in ('stop', 'length', 'abort', 'error'):
+                raise ValueError('engine terminal token accounting differs')
+            if reason == 'length' and len(tokens) != request['max_new_tokens']:
+                raise ValueError('engine terminated before its output limit')
+            if reason == 'stop' and (not tokens or tokens[-1]['token_id'] not in request['stop_ids']):
+                raise ValueError('engine reported a false stop')
+            if reason == 'abort' and (request['abort_offset_ns'] is None
+                                     or event['emitted_ns'] < request['abort_offset_ns']):
+                raise ValueError('engine reported an undeclared or early abort')
+            if reason == 'length' and tokens and tokens[-1]['token_id'] in request['stop_ids']:
+                raise ValueError('engine ignored its final stop token')
+            terminal[identifier] = event
+    if set(terminal) != set(expected):
+        raise ValueError('missing engine terminal result')
+    for step in steps:
+        local = [e for e in events if e['step_id'] == step['step_id']]
+        if (sum(e['kind'] == 'finish' for e in local) != step['finished']
+                or sum(e['reason'] == 'abort' for e in local) != step['aborted']):
+            raise ValueError('engine per-step terminal accounting differs')
+        if policy is not None and step['total_tokens']:
+            partitions = int(step['decode_seqs'] > 0 or step['prefill_tokens'] == 1) + int(step['prefill_tokens'] > 1)
+            logits = sum(e['kind'] == 'token' for e in local)
+            prediction = (policy['fixed_ns'] + policy['per_row_ns'] * step['total_tokens']
+                          + policy['per_position_ns'] * step['attended_positions']
+                          + policy['per_partition_ns'] * partitions + policy['per_logit_ns'] * logits)
+            if prediction != step['predicted_ns']:
+                raise ValueError('engine prediction differs from frozen coefficients')
+    drained = metadata.get('drained', [])
+    if len(drained) != 4:
+        raise ValueError('missing engine drain receipt')
+    request_count, step_count, free_blocks, end_ns = map(int, drained)
+    if (request_count != len(expected) or step_count != len(steps) or free_blocks != blocks
+            or end_ns < max([s['end_ns'] for s in steps] + [e['emitted_ns'] for e in events] + [0])):
+        raise ValueError('engine drain receipt differs from complete trace')
+    if (sum(s['finished'] for s in steps) != len(terminal)
+            or sum(s['aborted'] for s in steps) != sum(e['reason'] == 'abort' for e in terminal.values())
+            or (steps and (steps[-1]['blocks_free'] != blocks or steps[-1]['waiting']))):
+        raise ValueError('engine did not drain or step/event counts differ')
+    for identifier, request in expected.items():
+        arrival = arrivals[identifier]
+        if (arrival['scheduled_ns'] != request['arrival_offset_ns']
+                or arrival['actual_ns'] < arrival['scheduled_ns']):
+            raise ValueError('request arrival differs from frozen trace')
+    return dict(device=device, mode=mode, arm=arm, blocks=blocks, token_budget=budget,
+                max_sequences=sequences, arrivals={str(k): v for k, v in arrivals.items()}, events=events, steps=steps,
+                drained=dict(requests=request_count, steps=step_count, free_blocks=free_blocks, elapsed_ns=end_ns),
+                policy=policy)
+
+
+def engine_run_summary(run, trace):
+    """Metrics are derived from complete ordered raw events, including the drain."""
+    def distribution(values):
+        return dict(count=len(values), p50_ns=float(np.percentile(values, 50)),
+                    p95_ns=float(np.percentile(values, 95)), p99_ns=float(np.percentile(values, 99))) if values else None
+    requests = []
+    intervals = []
+    for request in trace['requests']:
+        identifier = request['request_id']
+        tokens = [e for e in run['events'] if e['request_id'] == identifier and e['kind'] == 'token']
+        finish = next(e for e in run['events'] if e['request_id'] == identifier and e['kind'] == 'finish')
+        gaps = [b['emitted_ns'] - a['emitted_ns'] for a, b in zip(tokens, tokens[1:])]
+        intervals.extend(gaps)
+        requests.append(dict(request_id=identifier, reason=finish['reason'],
+                             delivered_tokens=len(tokens), token_ids=[t['token_id'] for t in tokens],
+                             ttft_ns=tokens[0]['emitted_ns'] - request['arrival_offset_ns'] if tokens else None,
+                             tpot_ns=stats.mean(gaps) if gaps else None,
+                             end_to_end_ns=finish['emitted_ns'] - request['arrival_offset_ns']))
+    end = run['drained']['elapsed_ns']
+    start = min(r['arrival_offset_ns'] for r in trace['requests'])
+    duration = end - start
+    delivered = sum(r['delivered_tokens'] for r in requests)
+    return dict(duration_ns=duration, delivered_tokens=delivered,
+                tokens_per_second=delivered * 1e9 / duration if duration else None,
+                clock='host-monotonic' if run['mode'] == 'greedy' else 'virtual',
+                arrival_window_ns=max(r['arrival_offset_ns'] for r in trace['requests']) - start,
+                drain_tail_ns=end - max(r['arrival_offset_ns'] for r in trace['requests']),
+                terminal_reasons=dict(Counter(r['reason'] for r in requests)), requests=requests,
+                ttft=distribution([r['ttft_ns'] for r in requests if r['ttft_ns'] is not None]),
+                tpot=distribution([r['tpot_ns'] for r in requests if r['tpot_ns'] is not None]),
+                inter_token=distribution(intervals),
+                end_to_end=distribution([r['end_to_end_ns'] for r in requests]),
+                steps=len(run['steps']), preemptions=sum(s['preempted'] for s in run['steps']),
+                total_tokens=sum(s['total_tokens'] for s in run['steps']),
+                attended_positions=sum(s['attended_positions'] for s in run['steps']))
+
+
+def engine_study_summary(record):
+    trace = validate_engine_trace(record['trace'])
+    if record.get('declaration') != contract.ENGINE_DECLARATION:
+        raise ValueError('engine measurement declaration changed')
+    if (record.get('mode') not in ('greedy', 'scripted')
+            or type(record.get('blocks')) is not int or not 1 <= record['blocks'] <= 8192
+            or type(record.get('max_sequences')) is not int or not 1 <= record['max_sequences'] <= 64
+            or record.get('warmup_steps') != contract.ENGINE_DECLARATION['warmup_steps']):
+        raise ValueError('engine collection configuration changed')
+    runs = record.get('runs', [])
+    keys = [(r['block'], r['arm'], r['calibration']) for r in runs]
+    expected = {(b, arm, False) for b in range(4) for arm in contract.ENGINE_ARMS}
+    expected |= {(b, 'serial', True) for b in range(4)}
+    if len(keys) != len(set(keys)) or set(keys) != expected:
+        raise ValueError('incomplete or duplicate paired engine trace grid')
+    summaries = []
+    for run in runs:
+        for key in ('conditions_before', 'conditions_after'):
+            snapshot = run.get(key, {})
+            try:
+                require_ac(snapshot)
+                require_nominal_thermal_state(snapshot)
+                if snapshot['power_mode_raw'] != '0':
+                    raise ValueError('non-nominal power mode')
+            except (KeyError, RuntimeError) as error:
+                raise ValueError('incomplete or non-nominal engine conditions') from error
+        parsed = parse_engine_run(run['stdout'], trace, run['arm'], record['blocks'],
+                                  record['max_sequences'], record['mode'])
+        if run.get('parsed') != parsed:
+            raise ValueError('engine parsed records differ from native trace')
+        summaries.append(dict(block=run['block'], arm=run['arm'], calibration=run['calibration'],
+                              **engine_run_summary(parsed, trace)))
+    by_key = {(r['block'], r['arm'], r['calibration']): r for r in summaries}
+    if any(r['duration_ns'] <= 0 for r in summaries):
+        raise ValueError('paired engine makespan must be positive')
+    calibrations = [by_key[b, 'serial', True]['duration_ns'] / by_key[b, 'serial', False]['duration_ns'] for b in range(4)]
+    noise = max(.05, max(abs(r - 1) for r in calibrations))
+    comparisons = []
+    for arm in contract.ENGINE_ARMS[1:]:
+        ratios, same_history = [], True
+        for block in range(4):
+            control, candidate = by_key[block, 'serial', False], by_key[block, arm, False]
+            ratios.append(candidate['duration_ns'] / control['duration_ns'])
+            same_history &= all(a['token_ids'] == b['token_ids'] for a, b in zip(control['requests'], candidate['requests']))
+        outcome = ('virtual-clock' if record['mode'] == 'scripted' else
+                   'different-greedy-histories' if not same_history else
+                   'distribution-only' if trace['mode'] == 'online' else _outcome(ratios, noise))
+        comparisons.append(dict(arm=arm, block_ratios=ratios, median_ratio=stats.median(ratios),
+                                same_generated_histories=same_history, outcome=outcome))
+    return dict(runs=summaries, comparisons=comparisons, calibration_ratios=calibrations,
+                noise_floor=noise, target=None, goodput=None, quantile_method='linear')
+
+
+def engine_build(output, prepared):
+    ensure_record_location(output)
+    source = source_identity()
+    if source['repository']['dirty']:
+        raise ValueError('engine build requires clean source')
+    identity = assets(prepared)
+    output.mkdir(parents=True, exist_ok=False)
+    command = [environment_tool('mojo'), 'build', '-I', 'src',
+               'src/llm_mojo/benchmarks/engine_trace.mojo', '-o', output/'engine']
+    execute(command, output/'engine-build.log')
+    if source_identity() != source or assets(prepared) != identity:
+        raise ValueError('engine source or assets changed during build')
+    write(output/'build.json', dict(source=source, assets=identity, environment=stable_environment(),
+                                    declaration=contract.ENGINE_DECLARATION, command=list(map(str, command)),
+                                    binaries={'engine': dict(sha256=sha(output/'engine'), bytes=(output/'engine').stat().st_size)}))
+
+
+def engine_collect(directory, trace_path, output, blocks=128, maximum_sequences=8, mode='greedy', warmup_steps=10):
+    if (type(blocks) is not int or not 1 <= blocks <= 8192
+            or type(maximum_sequences) is not int or not 1 <= maximum_sequences <= 64
+            or mode not in ('greedy', 'scripted') or warmup_steps != contract.ENGINE_DECLARATION['warmup_steps']):
+        raise ValueError('invalid bounded engine collection')
+    receipt = verify_build(directory)
+    if receipt.get('declaration') != contract.ENGINE_DECLARATION or set(receipt['binaries']) != {'engine'}:
+        raise ValueError('not a current engine trace build')
+    trace_document = trace_path.read_text()
+    trace_file_sha256 = hashlib.sha256(trace_document.encode()).hexdigest()
+    trace = validate_engine_trace(json.loads(trace_document))
+    if any((max(len(r['prompt_ids']),len(r['prompt_ids'])+r['max_new_tokens']-1)+31)//32 > blocks
+           for r in trace['requests']):
+        raise ValueError('a declared request cannot fit the pool alone')
+    ensure_record_location(output)
+    output.mkdir(parents=True, exist_ok=False)
+    native_trace = output/'trace.tsv'
+    native_trace.write_text(engine_trace_tsv(trace))
+    runs = []
+    for block in range(4):
+        order = [('serial', False), ('serial', True), *[(a, False) for a in contract.ENGINE_ARMS[1:]]]
+        if block in (1, 2):
+            order.reverse()
+        for arm, calibration in order:
+            before = conditions()
+            budget, sequences = (256 if arm == 'chunked' else 4096), (1 if arm == 'serial' else maximum_sequences)
+            command = [directory/'engine', receipt['assets']['prepared'], native_trace, arm,
+                       blocks, budget, sequences, warmup_steps, mode]
+            log = output/f'block-{block}-{arm}{"-calibration" if calibration else ""}.log'
+            stdout = execute(command, log)
+            parsed = parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode)
+            runs.append(dict(block=block, arm=arm, calibration=calibration, stdout=stdout, parsed=parsed,
+                             conditions_before=before, conditions_after=conditions()))
+    if verify_build(directory) != receipt or sha(trace_path) != trace_file_sha256:
+        raise ValueError('engine build or trace changed during collection')
+    record = dict(kind='qwen-engine-core-v1', declaration=contract.ENGINE_DECLARATION,
+                  build=receipt, trace=trace, trace_document=trace_document, trace_sha256=trace_file_sha256,
+                  blocks=blocks, max_sequences=maximum_sequences, mode=mode,
+                  warmup_steps=warmup_steps, runs=runs)
+    record['summary'] = engine_study_summary(record)
+    payload = json.dumps(record, separators=(',', ':')).encode()
+    compressed = gzip.compress(payload, mtime=0)
+    (output/'engine-core.json.gz').write_bytes(compressed)
+    write(output/'engine-core.json', dict(kind='qwen-engine-core-v1', sha256=hashlib.sha256(compressed).hexdigest(),
+                                         uncompressed_sha256=hashlib.sha256(payload).hexdigest(), bytes=len(compressed)))
+    write(output/'engine-core-summary.json', record['summary'])
+    return engine_replay(output)
+
+
+def validate_engine_record_build(record):
+    """Validate retained provenance without touching current source or assets."""
+    build = record.get('build', {})
+    if (record.get('kind') != 'qwen-engine-core-v1' or build.get('source', {}).get('repository', {}).get('dirty') is not False
+            or not build.get('binaries', {}).get('engine', {}).get('sha256')
+            or build.get('declaration') != contract.ENGINE_DECLARATION
+            or not build.get('assets', {}).get('prepared_sha256')
+            or not build.get('assets', {}).get('tables_sha256')):
+        raise ValueError('incomplete engine source, binary or asset provenance')
+    source = build['source']
+    def digest(value, width=64):
+        return isinstance(value, str) and len(value) == width and all(c in '0123456789abcdef' for c in value)
+    if (not digest(source['repository'].get('commit'), 40)
+            or not source.get('sources') or not digest(source['sources'].get('uv.lock'))
+            or not all(digest(v) for v in source['sources'].values())
+            or not digest(build['binaries']['engine']['sha256'])
+            or type(build['binaries']['engine'].get('bytes')) is not int or build['binaries']['engine']['bytes'] < 1
+            or not digest(build['assets']['prepared_sha256']) or not digest(build['assets']['tables_sha256'])
+            or not build.get('environment', {}).get('hardware')
+            or not build.get('environment', {}).get('software')):
+        raise ValueError('invalid engine provenance identity')
+    return build
+
+
+def engine_replay(directory):
+    manifest = json.loads((directory/'engine-core.json').read_text())
+    compressed = (directory/'engine-core.json.gz').read_bytes()
+    payload = gzip.decompress(compressed)
+    if (manifest.get('kind') != 'qwen-engine-core-v1' or len(compressed) != manifest['bytes']
+            or hashlib.sha256(compressed).hexdigest() != manifest['sha256']
+            or hashlib.sha256(payload).hexdigest() != manifest['uncompressed_sha256']):
+        raise ValueError('engine archive hash mismatch')
+    record = json.loads(payload)
+    document = record.get('trace_document', '')
+    if (hashlib.sha256(document.encode()).hexdigest() != record.get('trace_sha256')
+            or json.loads(document) != record.get('trace')):
+        raise ValueError('engine token trace identity changed')
+    validate_engine_record_build(record)
+    summary = engine_study_summary(record)
+    if summary != record.get('summary'):
+        raise ValueError('engine archived summary changed')
+    write(directory/'engine-core-summary.json', summary)
+    return summary
+
+
 def main():
     # Trace capture and the reused terminal lifecycle helper inherit this process.
     os.environ.pop('MODULAR_DEBUG', None)
@@ -2920,6 +3342,7 @@ def main():
                                             'selection-replay','selection-plot','batch-size-build','batch-size-collect',
                                             'batch-size-confirm','batch-size-diagnose','batch-size-capture','batch-size-archive',
                                             'batch-size-replay','batch-size-plot','single-sequence',
+                                            'engine-specification','engine-build','engine-collect','engine-replay',
                                             *RETIRED])
     parser.add_argument('--projections',action='store_true',help='Replay/plot the projection arrangement study')
     parser.add_argument('--study', choices=['size','projections','reordered','addressing','paged','paged-loop'],
@@ -2944,12 +3367,29 @@ def main():
     parser.add_argument('--timings', type=Path)
     parser.add_argument('--traces', type=Path)
     parser.add_argument('--terminal', type=Path)
+    parser.add_argument('--trace', type=Path, help='engine-collect: frozen token-trace JSON')
+    parser.add_argument('--seed', type=int, default=7, help='engine-specification: trace generator seed')
+    parser.add_argument('--arrival-rate', type=float, help='engine-specification: seeded Poisson requests/s; omission is offline')
+    parser.add_argument('--blocks', type=int, default=128, help='engine-collect: explicit 32-slot KV pool capacity')
+    parser.add_argument('--max-sequences', type=int, default=8, help='engine-collect: maximum concurrent sequences')
+    parser.add_argument('--engine-mode', choices=['greedy', 'scripted'], default='greedy')
+    parser.add_argument('--warmup-steps', type=int, default=10)
     args = parser.parse_args()
     if args.command in RETIRED or (args.command == 'build' and (args.fusion or args.combined or args.selection
                                    or args.copy_free or args.residual_norm or args.projections)):
         parser.error(args.command + ' belongs to a completed experiment; its retained archive replays, and '
                      're-collection needs the commit recorded in that archive (collectors exist through edb610a)')
-    if args.command == 'batch-support': batch_support_collect(args.output.resolve())
+    if args.command == 'engine-specification':
+        engine_specification(args.output.resolve(), args.seed, args.arrival_rate)
+    elif args.command == 'engine-build':
+        if args.prepared is None: parser.error('engine-build needs --prepared')
+        engine_build(args.output.resolve(), args.prepared)
+    elif args.command == 'engine-collect':
+        if args.build is None or args.trace is None: parser.error('engine-collect needs --build and --trace')
+        engine_collect(args.build.resolve(), args.trace.resolve(), args.output.resolve(), args.blocks,
+                       args.max_sequences, args.engine_mode, args.warmup_steps)
+    elif args.command == 'engine-replay': print(json.dumps(engine_replay(args.output.resolve()), indent=2))
+    elif args.command == 'batch-support': batch_support_collect(args.output.resolve())
     elif args.command == 'batch-support-replay': print(json.dumps(batch_support_replay(args.output),indent=2))
     elif args.command == 'enqueue-plot': enqueue_plot(args.output)
     elif args.command == 'enqueue-replay': print(json.dumps(enqueue_replay(args.output),indent=2))

@@ -56,6 +56,59 @@ about where a kernel executed. These checks do not fix GPU clocks or exclude
 all background activity. Do not silently discard a noisy run or repeat until a
 preferred outcome appears.
 
+## Serving measurement contract
+
+Phase 3 extends the model tools, `model_contract.py` and `model_profile.py`, with
+a token-trace driver and replay in the existing `studies/model_generation/`
+topic. Its [frozen declaration](../studies/model_generation/engine-core.md)
+separates scripted simulation, same-history execution diagnostics and load
+measurements. Their clocks and conclusions are distinct.
+The initial Metal engine study fixes reference configuration 27 across every
+arm and requires exact own-route mixed-versus-solo agreement. It does not
+measure the current Fast application's performance.
+
+Offline traces place every request at time zero and measure makespan and token
+throughput. Online traces use recorded arrival offsets from a seeded generator
+and retain request latency distributions. All arms consume the same trace IDs,
+token prompts, arrival offsets, limits and aborts. Native greedy trajectories
+may diverge when scheduling changes Fast arithmetic; record actual work and
+first divergence instead of assuming identical generated histories. A
+teacher-forced replay, if used, declares that mode and its fixed token scripts;
+it supports execution comparisons, not a natural-generation quality claim.
+
+Use four paired blocks, reversing trace and arm order in blocks two and three.
+Run ten representative warmup steps per arm outside timing before each measured
+cell, then reset request/KV state and the measured clock origin. Each online
+block is one independent trace replay; requests and tokens
+within it are dependent observations, not independent repeated experiments.
+Retain the complete warmup count and every measured request, including rejected,
+aborted and slow requests. Pair the control with itself in the same collection.
+Do not delete a loaded or noisy block to obtain a preferred result.
+
+The existing paired gain/regression rule applies to declared offline makespan
+and complete-step latency comparisons. For online runs, show block-level TTFT,
+TPOT, inter-token and end-to-end distributions beside throughput and actual work.
+The fixed study has no latency target. Adaptive cost fitting freezes its
+predicted-execution research target before calibration; the initial setting is
+25 ms, with goodput left null. Freeze client latency targets and the goodput
+definition before collecting evidence for those corresponding claims. Report
+accepted, rejected, aborted and completed request counts and the draining
+boundary; improved throughput alone does not establish improved user latency
+or capacity at a target. Simulation fits and hardware results remain separate.
+
+The run manifest binds the trace and model/asset identity, scheduler configuration,
+source/binary/asset hashes, runtime device/backend, software, timing mode and
+conditions. Initial step records account for host scheduling, building, complete
+synchronous execution and postprocessing. Execution includes upload, submission,
+waiting and selected-token readback; those are not independently measured by
+the initial collector. Request records account for arrival, delivered tokens and
+terminal reason. Offline replay verifies the
+complete trace grid, token accounting, allocator summaries and derived metrics
+from raw records. A missing record, wrong runtime device or invalid request
+history fails replay even if the archive hashes match. Full traces, binaries
+and weights stay outside Git; compact lossless records and their checked
+manifest support report regeneration without a GPU.
+
 ## Boundaries and physical claims
 
 Hot latency is host enqueue through device completion for one operation.

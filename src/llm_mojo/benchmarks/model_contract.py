@@ -407,3 +407,28 @@ def batch_configuration(data):
     if data.get('profile_iterations') != 8 or data.get('profile_warmup_iterations') != 10:
         raise ValueError('Qwen trace capture budget changed')
     return expected
+
+
+# Phase 3 keeps the token-trace declaration beside the existing model matrices.
+ENGINE_ARMS = ('serial', 'static', 'continuous', 'chunked')
+ENGINE_STEP_FIELDS = (
+    'step_id', 'decode_seqs', 'prefill_seqs', 'prefill_tokens', 'total_tokens',
+    'attended_positions', 'admitted', 'preempted', 'finished', 'aborted',
+    'waiting', 'blocks_free', 'begin_ns', 'schedule_ns', 'build_ns',
+    'execute_ns', 'postprocess_ns', 'end_ns', 'predicted_ns', 'budget_limited',
+)
+ENGINE_POLICY_FIELDS = ('target_ns', 'fixed_ns', 'per_row_ns', 'per_position_ns',
+                        'per_partition_ns', 'per_logit_ns')
+ENGINE_DECLARATION = dict(
+    kind='qwen-engine-core-v1', schema_version=1, arms=list(ENGINE_ARMS),
+    model='Qwen2.5-0.5B-Instruct', policy='reference configuration 27; BF16 storage, FP32 reductions',
+    max_context=4096, block_size=32, order='slot-major', paired_blocks=4,
+    warmup_steps=10, timing_boundary='scheduled arrival through completed trace drain; '
+        'resident weights, initialization and warmup outside measured trace',
+    telemetry='schedule/build/execute/postprocess host durations; execute includes '
+        'upload, GPU submission, synchronization and selected-token readback',
+    numerical_policy='mixed, decode-only and replayed execution use the same reference route; '
+        'own-route mixed-versus-solo equality is exact; comparisons against Fast are diagnostics; '
+        'record any natural greedy history divergence',
+    target=None, fitted_budget=False, asynchronous=False,
+)

@@ -135,8 +135,10 @@ research questions, not prerequisites for calling the current milestone complete
 4. **Serving engine.** Serve many concurrent requests with batched decode, a
    paged KV cache, continuous batching and prefix caching, behind a separate
    frontend process that survives engine failures. The [serving plan](serving-plan.md)
-   defines its architecture, exact gates and phases. It serves with Fast and
-   records numerical differences from batching, cache reuse and replay as diagnostics.
+   defines its architecture, exact gates and phases. Chat/generation use Fast;
+   the initial phase 3 engine uses reference configuration 27 to isolate
+   scheduling with one numerical route. A promoted Fast engine route is a
+   separate measured optimization decision.
    Phase 1 is complete: one step decodes up to 64 sequences with the launches of
    one, each row bit-identical to decoding that sequence alone, and 64 sequences
    at 1,024 cached tokens decode 998 tokens/s in aggregate
@@ -146,6 +148,13 @@ research questions, not prerequisites for calling the current milestone complete
    decode attention paid for every block a sequence spans; after a fix, the
    [rerun](../studies/model_generation/paged-kv-loop.md) found no resolvable cost
    and selected 32-slot blocks, the default since 2026-10-05. Phase 2 is complete.
+   Phase 3 is being implemented from `cb2416a`: mixed steps, a synchronous
+   scheduler, bounded admission, aborts and recomputation under KV pressure,
+   followed by measured budgeting and asynchronous stepping. Its
+   [readiness and measurement declaration](../studies/model_generation/engine-core.md)
+   freezes what each stage must establish. Phase 3 has no completed validation
+   or serving-performance claim yet; prefix caching and HTTP/restart recovery
+   remain later phases.
 
 Sampling, quantization, longer contexts, tool-oriented templates and additional
 model families can follow when they answer a concrete need. They are not current
