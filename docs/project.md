@@ -160,7 +160,10 @@ research questions, not prerequisites for calling the current milestone complete
    on the frozen pressure trace. Maximum-output reservations can leave capacity
    unused, and FIFO admission can delay smaller waiters. Its paired measurements
    retain both work reduction and request latency; adequate-capacity timing remains
-   inconclusive. Optional fitted budgeting improves delivered-token gaps at a
+   inconclusive. The [144-run operating-range study](../studies/model_generation/engine-core.md#admission-operating-range-retained-bounded-results)
+   measures the unused capacity and FIFO costs of larger output caps while
+   preserving exact outputs and zero reserved replay. Optional fitted budgeting
+   improves delivered-token gaps at a
    throughput cost and does not establish a latency bound. Asynchronous stepping
    remains open on MAX 26.5;
    prefix caching and HTTP/restart recovery remain later phases.

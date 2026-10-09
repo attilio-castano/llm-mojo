@@ -22,8 +22,12 @@ The original measurements bind clean implementation `b18563b`. The optional
 binds `b81ea6c` and eliminates replay on the frozen pressure trace by delaying
 admission until declared cache growth fits. Incremental admission remains the
 default and its original pressure regression is retained.
-The follow-up records queueing and token-latency tradeoffs separately. Fitted
-budgeting remains optional, without a client latency guarantee. Full asynchronous
+The follow-up records queueing and token-latency tradeoffs separately.
+The [144-run operating-range comparison](../studies/model_generation/engine-core.md#admission-operating-range-retained-bounded-results)
+binds `2af0933`: reservation removes replay at 40 blocks, while larger declared
+output limits tie up more unused capacity and can delay FIFO admission.
+Adequate-capacity paired speed remains inconclusive; incremental stays default.
+Fitted budgeting remains optional, without a client latency guarantee. Full asynchronous
 stepping, a measured Fast engine route and frontend integration remain separate.
 Each phase is approved separately and records its own validation, like the
 existing plans. The [project direction](project.md) lists this as a follow-up

@@ -684,3 +684,8 @@ receipt and a retained log, including partial output on timeout. Replays verify
 those receipts as well as raw occupancy, admission, work, terminal and paired
 history gates. Offline makespan uses the paired verdict; online and occupancy
 metrics remain descriptive.
+
+The [completed operating-range results](../../../studies/model_generation/engine-core.md#admission-operating-range-retained-bounded-results)
+retain all 144 Metal runs, the exact live card and an independently restored
+validation bundle. Canonical raw archives have collection-specific names; use
+an explicit archive path for replay when a directory contains several studies.

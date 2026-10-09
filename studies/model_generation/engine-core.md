@@ -9,6 +9,9 @@ open on the locked runtime. The original study binds clean implementation
 `b18563b`; its final follow-up added acceptance tests and retained evidence.
 The [admission successor](#lifetime-reservation-admission-bounded-successor-study)
 binds `b81ea6c` and removes replay on both frozen pressure traces.
+The [operating-range comparison](#admission-operating-range-retained-bounded-results)
+binds `2af0933` and measures the unused-capacity and queueing cost of larger
+declared output limits across 144 runs.
 The [serving plan](../../docs/serving-plan.md) defines the architecture;
 [experimental method](../../docs/experiments.md#serving-measurement-contract)
 defines retention and paired comparisons.
@@ -625,7 +628,7 @@ excluded from the validation bundle.
 ## Admission operating range: frozen successor contract
 
 Authorized on 2026-10-09 from `005b76c`, on `codex/admission-operating-range`.
-The next admission comparison varies declared output capacity while preserving
+The admission comparison varies declared output capacity while preserving
 prompts, stop rules and expected greedy outputs. It keeps reference configuration
 27, BF16 storage/FP32 reductions, 32-slot slot-major KV, a 256-row step budget,
 eight sequence slots, zero watermark and ten untimed warmup steps fixed.
@@ -675,6 +678,102 @@ distributions and memory occupancy explain tradeoffs; they establish no capacity
 goodput or client SLO. Close with an explicit policy recommendation even if no
 single mode dominates. Automatic admission selection, chunk-budget tuning, Fast
 execution and chat integration remain subsequent milestones.
+
+## Admission operating range: retained bounded results
+
+All 144 measured natural greedy runs completed on Apple M4 Pro/Metal from clean
+`2af093337a8364f6fe540eef313e99674fd6c088`. Both profiles delivered the same 97
+tokens, finished every request by its predeclared application stop, and returned
+every block. All reserved runs computed exactly 2,265 rows with zero preemptions.
+The final `uv run --locked llm-mojo validate` passed 323 Python tests, the native
+suites including 29 engine cases, Unicode tokenizer checks and benchmark smokes,
+with unchanged source. The bounded campaign took 13.51 minutes.
+
+The [result card](engine-admission-range-results.json) retains every request,
+latency distribution, raw-derived occupancy bound, FIFO witness and paired
+comparison. Twelve `engine-admission-range-*.json.gz` archives and their adjacent
+hash manifests retain all measured stdout and completion receipts. The
+[validation archive](engine-admission-range-validation.json.gz) and
+[manifest](engine-admission-range-validation.json) retain 131 text files,
+including the frozen fixtures/oracle, actual final validation, clean-binary
+preflights, build/campaign receipts and exact closeout/reproduction scripts.
+Independent restoration and restored-script replay reproduced every derived
+metric; replay from the canonical copies also passed. No model weights or
+native binaries are committed.
+
+| Profile / arrival / pool | Incremental tokens/s | Reserved tokens/s | Preemptions, incremental / reserved | Computed rows, incremental / reserved | Offline makespan verdict |
+| --- | ---: | ---: | ---: | ---: | --- |
+| tight / offline / 40 | 24.56 | 59.64 | 28 / 0 | 7667 / 2265 | faster |
+| loose / offline / 40 | 24.52 | 51.95 | 28 / 0 | 7667 / 2265 | faster |
+| tight / offline / 128 | 61.66 | 63.90 | 0 / 0 | 2265 / 2265 | inconclusive |
+| loose / offline / 128 | 58.02 | 58.37 | 0 / 0 | 2265 / 2265 | inconclusive |
+| tight / 4 RPS / 40 | 33.53 | 33.33 | 1 / 0 | 2773 / 2265 | distribution-only |
+| loose / 4 RPS / 40 | 33.67 | 33.38 | 1 / 0 | 2773 / 2265 | distribution-only |
+| tight / 4 RPS / 128 | 33.33 | 33.16 | 0 / 0 | 2265 / 2265 | distribution-only |
+| loose / 4 RPS / 128 | 33.32 | 33.28 | 0 / 0 | 2265 / 2265 | distribution-only |
+| tight / 8 RPS / 40 | 20.51 | 50.28 | 28 / 0 | 8821 / 2265 | distribution-only |
+| loose / 8 RPS / 40 | 20.49 | 50.89 | 28 / 0 | 8821 / 2265 | distribution-only |
+| tight / 8 RPS / 128 | 56.77 | 56.52 | 0 / 0 | 2265 / 2265 | distribution-only |
+| loose / 8 RPS / 128 | 55.32 | 55.21 | 0 / 0 | 2265 / 2265 | distribution-only |
+
+Reservation has a useful pressure operating range: its paired offline speed
+gain accompanies a large reduction in actual replay work. With adequate pool
+capacity, both policies do necessary work and their paired speed comparisons
+remain inconclusive. Online throughput is descriptive because a finite trace's
+arrival schedule contributes to its drain time; four or eight requests/s is
+not an established sustainable capacity.
+
+The two limit profiles were collected separately, so their differences are
+descriptive. In the 40-block offline case, reserved admission's median p95 first-
+admission delay was 1,432 ms for tight limits and 1,665 ms for loose limits;
+p95 TTFT was 1,496 and 1,728 ms. The longest request reserves 33 blocks with tight
+limits and all 40 with loose limits. Raw records prove FIFO never bypassed it;
+the loose offline runs each contain 25 steps where a smaller waiter could fit
+available space while the FIFO head could not. These counts explain a mechanism,
+not a queueing-time estimator.
+
+Over covered execute/inter-step intervals, reserved unused whole-block byte-time
+was bounded at 19.9–40.1% in the tight offline 40-block case and 38.3–54.3% with
+loose limits. At 128 blocks the corresponding bounds were 14.8–30.3% and
+36.0–48.1%; mean allocator-owned capacity was 14.43 and 19.20 MiB. The entire
+pool stays resident (15 or 48 MiB), independent of ownership. Bounds reflect
+unobserved GPU write times; scheduling/build/postprocessing are excluded from
+integration and per-run coverage is retained. These are allocator capacity
+measurements, not operating-system memory-pressure or bandwidth results.
+
+Keep incremental admission as the default and expose lifetime reservation as
+an explicit choice when declared growth competes for a small pool. Set honest
+output caps: a larger cap is capacity reserved even when generation stops early.
+The eight-request synthetic traces and custom stops do not justify automatic
+policy selection, a client SLO, or a natural-EOS claim. They establish enough
+correctness and operating-range evidence to proceed to the separately declared
+token-budget comparison.
+
+Replay one raw archive without a GPU or weights:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output studies/model_generation/engine-admission-range-loose-offline-40blocks.json.gz
+```
+
+For full regeneration, verify and restore the validation archive's complete
+UTF-8 `files` entries to `/private/tmp/range-evidence` using the manifest's
+compressed/uncompressed and per-file hashes. The retained
+`acceptance/retention-checklist.md` includes a standard-library bootstrap.
+Then execute the independently restored script against the canonical archives:
+
+```sh
+uv run --locked python /private/tmp/range-evidence/reproduction/range_closeout.py \
+  --root /private/tmp/range-canonical-replay --retained-dir studies/model_generation \
+  --intent /private/tmp/range-evidence/fixtures/intent.json \
+  --expected /private/tmp/range-evidence/fixtures/expected-histories.json \
+  --campaign /private/tmp/range-evidence/commands/campaign-execution.json \
+  --live-receipt studies/model_generation/engine-admission-range-results.json
+```
+
+This verifies original source blobs and reconstructs all 144 records, using the
+original live physical receipt for unavailable binary/asset checks. Keep the
+earlier `engine-admission-offline.json.gz` baseline, whose exact hash is bound by
+the frozen intent. Local retention establishes no remote backup or publication.
 
 ## Metadata preparation gate
 

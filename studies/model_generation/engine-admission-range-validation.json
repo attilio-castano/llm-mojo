@@ -1,0 +1,799 @@
+{
+  "kind": "engine-admission-validation-evidence-v1",
+  "schema_version": 1,
+  "archive": "validation.json.gz",
+  "bytes": 1542375,
+  "sha256": "94faa88f902a15525d6e1e5486672f4ae8bd858061752c0e9a3e4b8f3c37cb82",
+  "uncompressed_bytes": 22856338,
+  "uncompressed_sha256": "cbfed9969d0ddbdd9ca3331325b9238ea8b5f7dd2b97376af0615e0ebb899b4a",
+  "file_count": 131,
+  "files": [
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/build-command.log",
+      "name": "acceptance/build-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/canonical-name-audit.json",
+      "name": "acceptance/canonical-name-audit.json",
+      "bytes": 4382,
+      "sha256": "5eb11e55bdfd5654c911c520d3b79279a834b3d3213e180bc510f0c9778e651b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/checkpoint-preflight-128.json",
+      "name": "acceptance/checkpoint-preflight-128.json",
+      "bytes": 17687,
+      "sha256": "7297c3224ca888a9b59422af792e7fe5292b36f733b7574433d01f1351e9c15e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/checkpoint-preflight-clean-command.log",
+      "name": "acceptance/checkpoint-preflight-clean-command.log",
+      "bytes": 84,
+      "sha256": "598faa70ec0f8a0cc28334ec25388cf9298c2aa48c03b654ebb4d3b5d0543500"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/checkpoint-preflight-clean.json",
+      "name": "acceptance/checkpoint-preflight-clean.json",
+      "bytes": 282824,
+      "sha256": "4c9b5da855b70d5945ce76a31dfbca7a56119ff81406f02d396e9b23ab59e44e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/checkpoint-preflight-command.log",
+      "name": "acceptance/checkpoint-preflight-command.log",
+      "bytes": 124,
+      "sha256": "1eb26d0587d6e59f4575baba5ec4064cf40ac5b09bd19d34e7a2882ed275cf9a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/checkpoint-preflight.json",
+      "name": "acceptance/checkpoint-preflight.json",
+      "bytes": 735257,
+      "sha256": "624856797a73ff5eab41e1baccfac2d23aa32e57e6425a3ae64cd59f0b81d5c8"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/closeout-checkpoint-smoke.json",
+      "name": "acceptance/closeout-checkpoint-smoke.json",
+      "bytes": 24787,
+      "sha256": "953f8d22ddef13a92f5d8f399e37a2b9cadb4bdf046f82e013f460c003231fa4"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/closeout-smoke.json",
+      "name": "acceptance/closeout-smoke.json",
+      "bytes": 259,
+      "sha256": "4155b15a99b042913bdd5112bd1adaf434c7a991796d36fa04fbfec9aaee75ec"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/independent-restoration/independent-restoration.json",
+      "name": "acceptance/independent-restoration-independent-restoration.json",
+      "bytes": 637,
+      "sha256": "9c36d8367c14152f4cf4b9b1129d1d9d09c6dcf65d4aed91645a22aad8240f5f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-engine-tests.log",
+      "name": "acceptance/native-engine-tests.log",
+      "bytes": 2492,
+      "sha256": "9b5915a991302982415eaee06cc546191c5eff9e62a9dc43dfd7224436b6afc1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-independent-parser-review.json",
+      "name": "acceptance/native-independent-parser-review.json",
+      "bytes": 2620,
+      "sha256": "cfa9624c1f98afc7ed635709666cca8193f7a9618a4243e2aca458dc8abd4ccb"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-input-guard-smoke.json",
+      "name": "acceptance/native-input-guard-smoke.json",
+      "bytes": 869,
+      "sha256": "bef62c5d8952ff500de6b2ea252ca3a954a1612378bf03cbc3172b9e722ad8e7"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-python-telemetry-smoke-summary.json",
+      "name": "acceptance/native-python-telemetry-smoke-summary.json",
+      "bytes": 9796,
+      "sha256": "3619741a936539f2b54affe050ff3cc5493cb814251ff057270ff3ffed67d782"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-256-incremental-telemetry.log",
+      "name": "acceptance/native-selector-256-incremental-telemetry.log",
+      "bytes": 16723,
+      "sha256": "b141dd37d565820a9e27c8a5699694e346691532fc08af3db879a04d4d7d62a5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-256-incremental-telemetry.stderr",
+      "name": "acceptance/native-selector-256-incremental-telemetry.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-256-incremental.log",
+      "name": "acceptance/native-selector-256-incremental.log",
+      "bytes": 5865,
+      "sha256": "de236bd6c00b497a9ceec1a0190f31314c2f4bcefbc0c1eb378158959f780198"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-256-incremental.stderr",
+      "name": "acceptance/native-selector-256-incremental.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-256-invalid-admission.log",
+      "name": "acceptance/native-selector-256-invalid-admission.log",
+      "bytes": 200,
+      "sha256": "348c658a8f1abc0490ab75c3fc6ec705d4fabd84c20b9c9917b14360a429565a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-256-invalid-admission.stderr",
+      "name": "acceptance/native-selector-256-invalid-admission.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-256-invalid-telemetry.log",
+      "name": "acceptance/native-selector-256-invalid-telemetry.log",
+      "bytes": 202,
+      "sha256": "b56da1f32b3a04c2fb4cf004c2d7d9b1d6c60ee165e453702348a57f5302c284"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-256-invalid-telemetry.stderr",
+      "name": "acceptance/native-selector-256-invalid-telemetry.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-256-legacy.log",
+      "name": "acceptance/native-selector-256-legacy.log",
+      "bytes": 5843,
+      "sha256": "043d18df7f7c423b88d1fcf7d2f07fc82ceda80a27ce2800c2507f7fb720cfea"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-256-legacy.stderr",
+      "name": "acceptance/native-selector-256-legacy.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-256-reserved-telemetry.log",
+      "name": "acceptance/native-selector-256-reserved-telemetry.log",
+      "bytes": 16322,
+      "sha256": "ab79da2921130d40d46a58267a1713df40b83532a8a7cc0c5714bf1ff93d2358"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-256-reserved-telemetry.stderr",
+      "name": "acceptance/native-selector-256-reserved-telemetry.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-256-reserved.log",
+      "name": "acceptance/native-selector-256-reserved.log",
+      "bytes": 5822,
+      "sha256": "ed808e6a133751ce229799482e3181ee26edfb037c4368081075ffec02246fc2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-256-reserved.stderr",
+      "name": "acceptance/native-selector-256-reserved.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-incremental-telemetry.log",
+      "name": "acceptance/native-selector-incremental-telemetry.log",
+      "bytes": 16657,
+      "sha256": "597eb334ad35ace11557444ca0688b4c426b8bb702d710771e12f9b13fc21a9f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-incremental-telemetry.stderr",
+      "name": "acceptance/native-selector-incremental-telemetry.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-incremental.log",
+      "name": "acceptance/native-selector-incremental.log",
+      "bytes": 5917,
+      "sha256": "0a711f6b14254146a2260b6959bf0b1777ad65f733036426f0761cbfc32b8aa4"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-incremental.stderr",
+      "name": "acceptance/native-selector-incremental.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-invalid-admission.log",
+      "name": "acceptance/native-selector-invalid-admission.log",
+      "bytes": 200,
+      "sha256": "348c658a8f1abc0490ab75c3fc6ec705d4fabd84c20b9c9917b14360a429565a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-invalid-admission.stderr",
+      "name": "acceptance/native-selector-invalid-admission.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-invalid-telemetry.log",
+      "name": "acceptance/native-selector-invalid-telemetry.log",
+      "bytes": 202,
+      "sha256": "b56da1f32b3a04c2fb4cf004c2d7d9b1d6c60ee165e453702348a57f5302c284"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-invalid-telemetry.stderr",
+      "name": "acceptance/native-selector-invalid-telemetry.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-legacy.log",
+      "name": "acceptance/native-selector-legacy.log",
+      "bytes": 5895,
+      "sha256": "ba1444220db4f8ce91b86538bddd22020ce6818364d922c46e3507487e8e5e03"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-legacy.stderr",
+      "name": "acceptance/native-selector-legacy.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-reserved-telemetry.log",
+      "name": "acceptance/native-selector-reserved-telemetry.log",
+      "bytes": 16762,
+      "sha256": "696b02f64bb4e2423f010fac9e54fad693e5857f07b90cca021bca0cea48f43c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-reserved-telemetry.stderr",
+      "name": "acceptance/native-selector-reserved-telemetry.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-reserved.log",
+      "name": "acceptance/native-selector-reserved.log",
+      "bytes": 5944,
+      "sha256": "7e0b0af50b8cc961b0803d07f6965bc69d132b45725500af64d6c62e24c3c804"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-selector-reserved.stderr",
+      "name": "acceptance/native-selector-reserved.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-telemetry-256-smoke-execution.log",
+      "name": "acceptance/native-telemetry-256-smoke-execution.log",
+      "bytes": 351,
+      "sha256": "94a9cd31ca457445de8c1181d2c475375aee9c381de7a875a1eedba458aa09a1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-telemetry-256-smoke-receipt.json",
+      "name": "acceptance/native-telemetry-256-smoke-receipt.json",
+      "bytes": 3999,
+      "sha256": "9019f7c4c3a2d1c96c018ddee8d7b74aaaa2593dca08ab6133dd8db061bd742b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-telemetry-smoke-execution.log",
+      "name": "acceptance/native-telemetry-smoke-execution.log",
+      "bytes": 350,
+      "sha256": "92977bd71d533b3a3f6b63f1352064904b2c7fc053b990cdad9bfef6db060b44"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-telemetry-smoke-receipt.json",
+      "name": "acceptance/native-telemetry-smoke-receipt.json",
+      "bytes": 3934,
+      "sha256": "574767ce90ec8c7a738b720eb0e425e81115ab7c4f733031362219bf124a5c18"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-telemetry-smoke.tsv",
+      "name": "acceptance/native-telemetry-smoke.tsv",
+      "bytes": 262,
+      "sha256": "cddde586ee14ea43967f48479899c32339dbc6c0487c00672170e0990cbfbca4"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native-trace-build.log",
+      "name": "acceptance/native-trace-build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/preflight-clean-loose-reserved-128.log",
+      "name": "acceptance/preflight-clean-loose-reserved-128.log",
+      "bytes": 15375,
+      "sha256": "2367cf85af2ba994981ea8a3ed87d9cb6aa8d4750e7d012ee1a5efd905a32f6a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/preflight-clean-tight-reserved-128.log",
+      "name": "acceptance/preflight-clean-tight-reserved-128.log",
+      "bytes": 15394,
+      "sha256": "8d40eef8ac22c50c268cec1e2bfd7f361b9050c99de55719edaeb2f096793a6c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/preflight-loose-incremental.log",
+      "name": "acceptance/preflight-loose-incremental.log",
+      "bytes": 20874,
+      "sha256": "357e597f4c915db1b5159d12d63539d20f6f8b4263f63f23d77faed1d2a4553a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/preflight-loose-reserved-128.log",
+      "name": "acceptance/preflight-loose-reserved-128.log",
+      "bytes": 15395,
+      "sha256": "c9c9abd276f83c256c063a7d075edd860cf031e175a28712c31120352e14951a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/preflight-loose-reserved.log",
+      "name": "acceptance/preflight-loose-reserved.log",
+      "bytes": 25885,
+      "sha256": "ffb2d1dd747bbfff9608d2f6c73c19af0956e70aaae5f4a74e3e39b2bb69834c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/preflight-tight-incremental.log",
+      "name": "acceptance/preflight-tight-incremental.log",
+      "bytes": 20867,
+      "sha256": "30989a17983d9c2a775340c71ff9a3422c7edf9efc55564cbe4213eba60a99b5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/preflight-tight-reserved-128.log",
+      "name": "acceptance/preflight-tight-reserved-128.log",
+      "bytes": 15362,
+      "sha256": "4d823b32593e12289c4c41f01d340fc034fd71eb43a3f0f075988b72540316e2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/preflight-tight-reserved.log",
+      "name": "acceptance/preflight-tight-reserved.log",
+      "bytes": 20319,
+      "sha256": "fecaba4ab7711ddaf7945633edbb00712fe8befc34c8558486d9d9daa9818300"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/python-collector-tests.log",
+      "name": "acceptance/python-collector-tests.log",
+      "bytes": 3617,
+      "sha256": "e9913f570705b09dc5e0a1866efaff970284b7782a65c5b966acc0af07f794b5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/restore-replay/results-card.json",
+      "name": "acceptance/restore-replay-results-card.json",
+      "bytes": 1899322,
+      "sha256": "42a31424e6ca5c1beb0fbe99ec210761c2e0726b96f416b50463a2b4f997f085"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/restore-replay.log",
+      "name": "acceptance/restore-replay.log",
+      "bytes": 555,
+      "sha256": "a266bec03f22563ba6332bff51b55c8d3dd5a176ae63e7bec24c8f35c0c66a15"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/retention-checklist.md",
+      "name": "acceptance/retention-checklist.md",
+      "bytes": 13407,
+      "sha256": "bae60a15c47e9373e668f71a61caa5107c2bcc0087bdb5e7d0971dd4dac4d56c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/staging-receipt.json",
+      "name": "acceptance/staging-receipt.json",
+      "bytes": 6694,
+      "sha256": "ec6a079f3c7f87ff4ca23e3c896149c2e2ec197f96961aa23060394e3e88dd4e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/validation-wrapper.log",
+      "name": "acceptance/validation-wrapper.log",
+      "bytes": 426,
+      "sha256": "3c7a665c681b201d9722b52ed01c4641f4c1f53b87cbbe8cc6963dbc05879a0f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/build/build.json",
+      "name": "build/build.json",
+      "bytes": 31309,
+      "sha256": "236f2de666c4206898b3989e6d06caf6274d34721c8d70acd586fa3848b20a6b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/build/engine-build.log",
+      "name": "build/engine-build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/closeout.log",
+      "name": "closeout/closeout.log",
+      "bytes": 525,
+      "sha256": "c68ad16c7a76f1758075d6bf24f5d1cda6298066b281ea61948a816210ceeaf5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/docs-snippets.md",
+      "name": "closeout/docs-snippets.md",
+      "bytes": 4479,
+      "sha256": "605f159994c7cd7c8f2727c02cbb79b08ad2c3bd185390cfa6b3088cb9b2f805"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/results-card.json",
+      "name": "closeout/results-card.json",
+      "bytes": 1898033,
+      "sha256": "98a8d22e430edb114a506227dd2edb3fd116cb754f40c6015908efb702ab2822"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/retained-replay/results-card.json",
+      "name": "closeout/retained-replay-results-card.json",
+      "bytes": 1898984,
+      "sha256": "e9796c903b9d094501553da3bc1c3aa6ea55136a74cd11b25a2e249cb2f97e14"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/retained-replay.log",
+      "name": "closeout/retained-replay.log",
+      "bytes": 557,
+      "sha256": "a889a0b1ab1953faf91e8d59dd8a6af218be371b1072cc862c4d7115c96d2521"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/loose-offline-128blocks/engine-admission-range.json",
+      "name": "collections/loose-offline-128blocks-manifest.json",
+      "bytes": 239,
+      "sha256": "b7603ffe4b0ae5f67152d8286b6fbd1d21a9b0eb58f27cb7a43b9639cb57febe"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/loose-offline-40blocks/engine-admission-range.json",
+      "name": "collections/loose-offline-40blocks-manifest.json",
+      "bytes": 239,
+      "sha256": "ffc04a42fcb4b6bf3425866001d2938295ec81ed907bed780ecd40386e7fcdb7"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/loose-online-4rps-128blocks/engine-admission-range.json",
+      "name": "collections/loose-online-4rps-128blocks-manifest.json",
+      "bytes": 239,
+      "sha256": "dc3378ee46aeeaebe82535926ef8045d0263baab7ce22687b32518a0fc8781bb"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/loose-online-4rps-40blocks/engine-admission-range.json",
+      "name": "collections/loose-online-4rps-40blocks-manifest.json",
+      "bytes": 239,
+      "sha256": "63a260526941a10c6bf38a6afdeb9a2ea7b4bdbdb385f6b6f23473f717eac0b9"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/loose-online-8rps-128blocks/engine-admission-range.json",
+      "name": "collections/loose-online-8rps-128blocks-manifest.json",
+      "bytes": 239,
+      "sha256": "216a275a0f44e6177c54cbde724f4872946087a5a174f5d7538dce3b54c5a229"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/loose-online-8rps-40blocks/engine-admission-range.json",
+      "name": "collections/loose-online-8rps-40blocks-manifest.json",
+      "bytes": 239,
+      "sha256": "ac9c33b32e5b7324989fd8f60e6d5b4c66a6c8fd2806fc1f92a268d5c2825a7e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/tight-offline-128blocks/engine-admission-range.json",
+      "name": "collections/tight-offline-128blocks-manifest.json",
+      "bytes": 239,
+      "sha256": "714e49589f17ceaa16e25fa9ccf57640c0bdff0963551dd45336981d80887116"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/tight-offline-40blocks/engine-admission-range.json",
+      "name": "collections/tight-offline-40blocks-manifest.json",
+      "bytes": 239,
+      "sha256": "64402836f704673589acb57d21fcb348908b3ec916693f88cfa044fa73966509"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/tight-online-4rps-128blocks/engine-admission-range.json",
+      "name": "collections/tight-online-4rps-128blocks-manifest.json",
+      "bytes": 239,
+      "sha256": "15eebb5bc59e31afd1553903d61e4b4bbacb3fef69e9e1af2233a5fcf1845f9f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/tight-online-4rps-40blocks/engine-admission-range.json",
+      "name": "collections/tight-online-4rps-40blocks-manifest.json",
+      "bytes": 239,
+      "sha256": "932bbb511e73d7ba3d14d954bb0105eb3125ebf77a331961cadda33f770ab427"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/tight-online-8rps-128blocks/engine-admission-range.json",
+      "name": "collections/tight-online-8rps-128blocks-manifest.json",
+      "bytes": 239,
+      "sha256": "91fa454d394fbe98cc788f3702021ebad2a5719f3417ff6ac58e73fa2775e3e5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/tight-online-8rps-40blocks/engine-admission-range.json",
+      "name": "collections/tight-online-8rps-40blocks-manifest.json",
+      "bytes": 239,
+      "sha256": "8b71597c122d7b974ef18e471383a4c0aa046fb844610649019a8ba8d0969e60"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/campaign-execution.json",
+      "name": "commands/campaign-execution.json",
+      "bytes": 15422,
+      "sha256": "4e4b6857621b7f7f52130849cf17c11ed858c9823a8f0af72b6ad89b7c2ea437"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/full-validation-execution.json",
+      "name": "commands/full-validation-execution.json",
+      "bytes": 426,
+      "sha256": "3c7a665c681b201d9722b52ed01c4641f4c1f53b87cbbe8cc6963dbc05879a0f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/loose-offline-128blocks-command.log",
+      "name": "commands/loose-offline-128blocks-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/loose-offline-40blocks-command.log",
+      "name": "commands/loose-offline-40blocks-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/loose-online-4rps-128blocks-command.log",
+      "name": "commands/loose-online-4rps-128blocks-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/loose-online-4rps-40blocks-command.log",
+      "name": "commands/loose-online-4rps-40blocks-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/loose-online-8rps-128blocks-command.log",
+      "name": "commands/loose-online-8rps-128blocks-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/loose-online-8rps-40blocks-command.log",
+      "name": "commands/loose-online-8rps-40blocks-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/tight-offline-128blocks-command.log",
+      "name": "commands/tight-offline-128blocks-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/tight-offline-40blocks-command.log",
+      "name": "commands/tight-offline-40blocks-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/tight-online-4rps-128blocks-command.log",
+      "name": "commands/tight-online-4rps-128blocks-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/tight-online-4rps-40blocks-command.log",
+      "name": "commands/tight-online-4rps-40blocks-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/tight-online-8rps-128blocks-command.log",
+      "name": "commands/tight-online-8rps-128blocks-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/tight-online-8rps-40blocks-command.log",
+      "name": "commands/tight-online-8rps-40blocks-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/development-validation/full-validation-execution.json",
+      "name": "development-validation/full-validation-execution.json",
+      "bytes": 426,
+      "sha256": "6ddab6e28866983c2ddc402f50a6e6bf66f9dfc234db37a14d5d593e319e1a43"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/development-validation/full-validation.log",
+      "name": "development-validation/full-validation.log",
+      "bytes": 7203937,
+      "sha256": "7ff505ef149ed6f7ac4dcd4d7f651d46f51f0a0fddc28006ed43bbaa1cb8b665"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/development-validation/run_validation.py",
+      "name": "development-validation/run_validation.py",
+      "bytes": 1396,
+      "sha256": "0ab7b6aeaff3c6a9229c44db1696754ef17d874d81e64aab17ec205ba971a78e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/development-validation/validation-source-after.json",
+      "name": "development-validation/validation-source-after.json",
+      "bytes": 26362,
+      "sha256": "69b24adfa455bb735b1894db7f2726fdb6bf9af3ed125d85ba2d2465a24ab949"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/development-validation/validation-source-before.json",
+      "name": "development-validation/validation-source-before.json",
+      "bytes": 26362,
+      "sha256": "69b24adfa455bb735b1894db7f2726fdb6bf9af3ed125d85ba2d2465a24ab949"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/development-validation/validation-wrapper.log",
+      "name": "development-validation/validation-wrapper.log",
+      "bytes": 426,
+      "sha256": "6ddab6e28866983c2ddc402f50a6e6bf66f9dfc234db37a14d5d593e319e1a43"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/fixtures/characterization-proof.json",
+      "name": "fixtures/characterization-proof.json",
+      "bytes": 1857,
+      "sha256": "56e913fcbb8a999eacbd9474af34fd0c3003f193ffd9b4d92570a3624abe3f7c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/fixtures/expected-histories.json",
+      "name": "fixtures/expected-histories.json",
+      "bytes": 1601,
+      "sha256": "633915a7cbe590e7b107860142294d65206ce61231fca14a13b5ac0dd1ba91f1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/fixtures/intent.json",
+      "name": "fixtures/intent.json",
+      "bytes": 15262,
+      "sha256": "bdedf292a36259a5f7592771318caf58e9624988444901f80b4ed6451019a329"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/fixtures/loose-offline.json",
+      "name": "fixtures/loose-offline.json",
+      "bytes": 34563,
+      "sha256": "1093b56f32f63079720902a38f999be470e041b69f92395ca9d7b4e653cf1a6d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/fixtures/loose-offline.tsv",
+      "name": "fixtures/loose-offline.tsv",
+      "bytes": 12697,
+      "sha256": "bb3a890f9ee16a4ba4755f397c6dc8aff4342559d84b8171b4a633d572064daa"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/fixtures/loose-online-4rps.json",
+      "name": "fixtures/loose-online-4rps.json",
+      "bytes": 34621,
+      "sha256": "e8e150217b96989422c7851c598898597963f231e878b288e28c63b2b284959c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/fixtures/loose-online-4rps.tsv",
+      "name": "fixtures/loose-online-4rps.tsv",
+      "bytes": 12757,
+      "sha256": "104e57b7789aca1efd2ed01ba4803c24d76b2aab6c0979322a6323de35d62cef"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/fixtures/loose-online-8rps.json",
+      "name": "fixtures/loose-online-8rps.json",
+      "bytes": 34619,
+      "sha256": "f56ced0670947f6bbac893752c610799b14ee196997e85fd0fec6a4667256947"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/fixtures/loose-online-8rps.tsv",
+      "name": "fixtures/loose-online-8rps.tsv",
+      "bytes": 12755,
+      "sha256": "21f638175e28ca9b61060b4bcf008e95bcc9b18ddf594aea5b13b70a6866ceb6"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/fixtures/tight-offline.json",
+      "name": "fixtures/tight-offline.json",
+      "bytes": 34550,
+      "sha256": "35c8ba5d2d47f3fc14db4b98654d284eb88abcb4f8ea312638650935b21fb46f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/fixtures/tight-offline.tsv",
+      "name": "fixtures/tight-offline.tsv",
+      "bytes": 12684,
+      "sha256": "02bd4021ec6900a0b307fea958040c11ebc7574a34d158c5fa11deb94a45496c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/fixtures/tight-online-4rps.json",
+      "name": "fixtures/tight-online-4rps.json",
+      "bytes": 34608,
+      "sha256": "f27125d2be2e818d3c3bea078c3996938ab437c5f91ac325c348bec29a43d09e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/fixtures/tight-online-4rps.tsv",
+      "name": "fixtures/tight-online-4rps.tsv",
+      "bytes": 12744,
+      "sha256": "df6a676d7092b1bdcdc98def02bb34462aa019261ff468e9a5ce34eb25b59163"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/fixtures/tight-online-8rps.json",
+      "name": "fixtures/tight-online-8rps.json",
+      "bytes": 34606,
+      "sha256": "91db9b2b1b6fb7c3d1c3cb2c2e66fecda7c7e4ad872850d08d29d5cac89a1753"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/fixtures/tight-online-8rps.tsv",
+      "name": "fixtures/tight-online-8rps.tsv",
+      "bytes": 12742,
+      "sha256": "2835eee38b3ccfba3e9c12314bd9f7372a6ec6489a61be3a6543c403455c4595"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/full-validation.log",
+      "name": "full-validation.log",
+      "bytes": 7203944,
+      "sha256": "c3ee32945e4c33d44dd5ea28d13168f779e2334d124d9dd2c4fefff2ef89009d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/admission_closeout_helpers.py",
+      "name": "reproduction/admission_closeout_helpers.py",
+      "bytes": 29193,
+      "sha256": "13b6d9a327deea6700a5d95a41d32233adc7829ebc1cd8fd0ec8326c7b279ac1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/bundle_validation.py",
+      "name": "reproduction/bundle_validation.py",
+      "bytes": 5846,
+      "sha256": "13535e5976e1a9d2f81ff9e6a294cb8c24d6c089e255244e4b8e0db11dab51c2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/checkpoint_preflight.py",
+      "name": "reproduction/checkpoint_preflight.py",
+      "bytes": 2676,
+      "sha256": "049ddbd372134b40c7f3856be2f1aa6b278489cad04b69ddb1204c5736a18b89"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/checkpoint_preflight_clean.py",
+      "name": "reproduction/checkpoint_preflight_clean.py",
+      "bytes": 3120,
+      "sha256": "6fd35e915d0bb63ed1e28e4dbf88b98937cf9ac9b0d1958f175c7e80ac1c3cac"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/collect_campaign.py",
+      "name": "reproduction/collect_campaign.py",
+      "bytes": 3993,
+      "sha256": "47f1e5fb0f3071e2a34adbe10edfbddbc1cb77cc70bcf399bd953390a7e14c03"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native_telemetry_256_smoke.py",
+      "name": "reproduction/native_telemetry_256_smoke.py",
+      "bytes": 5135,
+      "sha256": "a4b1d5d641acf9b2bc82243fbbd3ad47bbe2af23278d240a2b41bb382206de00"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/native_telemetry_smoke.py",
+      "name": "reproduction/native_telemetry_smoke.py",
+      "bytes": 5110,
+      "sha256": "01e8c1c49e823d6ee4f3d617bab274cec95aaa184520cdadce6aadeca212c7f0"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/range_closeout.py",
+      "name": "reproduction/range_closeout.py",
+      "bytes": 34835,
+      "sha256": "cf791b989cf942992dbbccb6879b83c52ffb4364b9de00c644bf946422adf7bc"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/range_retention.py",
+      "name": "reproduction/range_retention.py",
+      "bytes": 15039,
+      "sha256": "91c7038422da4bc85536392062c2df4bf026b6cb296ad05487593ff4ac64bcd9"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/run_validation.py",
+      "name": "reproduction/run_validation.py",
+      "bytes": 1396,
+      "sha256": "0ab7b6aeaff3c6a9229c44db1696754ef17d874d81e64aab17ec205ba971a78e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/validation-inputs.json",
+      "name": "reproduction/validation-inputs.json",
+      "bytes": 24524,
+      "sha256": "68f2652f46e68adce9b4448d58f0347f937adf297868f48450f9f0fa1f54d5d7"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/workload_recipe.py",
+      "name": "reproduction/workload_recipe.py",
+      "bytes": 10884,
+      "sha256": "9908e5498a18acd795351449646d1bda8789813b34ecd6a783783a3236438f2f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/validation-source-after.json",
+      "name": "source/validation-after.json",
+      "bytes": 26362,
+      "sha256": "551e7194b635a0742e71f800f53d5ee49c1b6829289b8fb55ba60c9281c7148f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/validation-source-before.json",
+      "name": "source/validation-before.json",
+      "bytes": 26362,
+      "sha256": "551e7194b635a0742e71f800f53d5ee49c1b6829289b8fb55ba60c9281c7148f"
+    }
+  ],
+  "verification": "gzip envelope and every restored UTF-8 byte count/SHA256 verified independently"
+}
