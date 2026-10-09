@@ -2986,7 +2986,7 @@ def engine_trace_tsv(trace):
     return '\n'.join(lines) + '\n'
 
 
-def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy=None):
+def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy=None, admission=None):
     """Reject malformed or incomplete native traces before computing any metric."""
     validate_engine_trace(trace)
     if arm not in (*contract.ENGINE_ARMS, 'adaptive') or mode not in ('greedy', 'scripted'):
@@ -2997,7 +2997,7 @@ def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy
         if not fields:
             continue
         name = fields[0]
-        if name in ('device', 'mode', 'config', 'drained', 'policy'):
+        if name in ('device', 'mode', 'config', 'drained', 'policy', 'admission'):
             if name in metadata:
                 raise ValueError('duplicate engine execution identity')
             metadata[name] = fields[1:]
@@ -3024,6 +3024,12 @@ def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy
     if (metadata.get('device') != device.split() or metadata.get('mode') != [mode]
             or metadata.get('config') != [arm, str(blocks), str(budget), str(sequences)]):
         raise ValueError('engine device, mode or configuration differs from declaration')
+    if admission is None:
+        if 'admission' in metadata:
+            raise ValueError('engine admission selector was not declared')
+    elif (arm != 'chunked' or admission not in contract.ENGINE_ADMISSION_POLICIES
+          or metadata.get('admission') != [admission]):
+        raise ValueError('engine admission differs from declaration')
     if policy is None:
         if arm == 'adaptive' or 'policy' in metadata:
             raise ValueError('adaptive run requires a frozen declared policy')
@@ -3125,10 +3131,21 @@ def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy
         if (arrival['scheduled_ns'] != request['arrival_offset_ns']
                 or arrival['actual_ns'] < arrival['scheduled_ns']):
             raise ValueError('request arrival differs from frozen trace')
-    return dict(device=device, mode=mode, arm=arm, blocks=blocks, token_budget=budget,
+    if admission == 'reserved':
+        if any(step['preempted'] for step in steps):
+            raise ValueError('reserved admission unexpectedly preempted a request')
+        if all(e['reason'] in ('stop', 'length') for e in terminal.values()):
+            necessary_rows = sum(len(expected[i]['prompt_ids']) + len(tokens) - 1 if tokens else 0
+                                 for i, tokens in histories.items())
+            if sum(step['total_tokens'] for step in steps) != necessary_rows:
+                raise ValueError('reserved execution differs from necessary prompt/output rows')
+    result = dict(device=device, mode=mode, arm=arm, blocks=blocks, token_budget=budget,
                 max_sequences=sequences, arrivals={str(k): v for k, v in arrivals.items()}, events=events, steps=steps,
                 drained=dict(requests=request_count, steps=step_count, free_blocks=free_blocks, elapsed_ns=end_ns),
                 policy=policy)
+    if admission is not None:
+        result['admission'] = admission
+    return result
 
 
 def engine_run_summary(run, trace):
@@ -3168,21 +3185,57 @@ def engine_run_summary(run, trace):
                 attended_positions=sum(s['attended_positions'] for s in run['steps']))
 
 
+def _engine_same_json(value, expected):
+    """The new receipt must not treat integer 1 as a boolean True."""
+    if type(value) is not type(expected):
+        return False
+    if isinstance(expected, dict):
+        return value.keys() == expected.keys() and all(_engine_same_json(value[k], v) for k, v in expected.items())
+    if isinstance(expected, list):
+        return len(value) == len(expected) and all(_engine_same_json(a, b) for a, b in zip(value, expected))
+    return value == expected
+
+
+def _engine_declaration(record):
+    declarations = {d['kind']: d for d in (contract.ENGINE_DECLARATION, contract.ENGINE_ADMISSION_DECLARATION)}
+    declaration = declarations.get(record.get('kind'))
+    if declaration is None or record.get('declaration') != declaration:
+        raise ValueError('engine measurement declaration changed')
+    if declaration == contract.ENGINE_ADMISSION_DECLARATION and not _engine_same_json(record['declaration'], declaration):
+        raise ValueError('engine admission declaration types changed')
+    return declaration
+
+
+def _engine_cells(block, admission_pair=False):
+    order = ([('incremental', False), ('incremental', True), ('reserved', False)] if admission_pair else
+             [('serial', False), ('serial', True), *[(a, False) for a in contract.ENGINE_ARMS[1:]]])
+    return list(reversed(order)) if block in (1, 2) else order
+
+
 def engine_study_summary(record):
     trace = validate_engine_trace(record['trace'])
-    if record.get('declaration') != contract.ENGINE_DECLARATION:
-        raise ValueError('engine measurement declaration changed')
+    declaration = _engine_declaration(record)
+    admission_pair = declaration == contract.ENGINE_ADMISSION_DECLARATION
+    if admission_pair and any(r['abort_offset_ns'] is not None for r in trace['requests']):
+        raise ValueError('paired admission study excludes timed aborts')
     if (record.get('mode') not in ('greedy', 'scripted')
             or type(record.get('blocks')) is not int or not 1 <= record['blocks'] <= 8192
             or type(record.get('max_sequences')) is not int or not 1 <= record['max_sequences'] <= 64
-            or record.get('warmup_steps') != contract.ENGINE_DECLARATION['warmup_steps']):
+            or record.get('warmup_steps') != declaration['warmup_steps']
+            or (admission_pair and record['max_sequences'] != 8)):
         raise ValueError('engine collection configuration changed')
     runs = record.get('runs', [])
-    keys = [(r['block'], r['arm'], r['calibration']) for r in runs]
-    expected = {(b, arm, False) for b in range(4) for arm in contract.ENGINE_ARMS}
-    expected |= {(b, 'serial', True) for b in range(4)}
+    label = 'admission' if admission_pair else 'arm'
+    keys = [(r['block'], r.get(label), r['calibration']) for r in runs]
+    expected_order = [(b, cell, calibration) for b in range(4)
+                      for cell, calibration in _engine_cells(b, admission_pair)]
+    expected = set(expected_order)
     if len(keys) != len(set(keys)) or set(keys) != expected:
         raise ValueError('incomplete or duplicate paired engine trace grid')
+    if admission_pair and (keys != expected_order or any(
+            r['arm'] != 'chunked' or type(r['block']) is not int or type(r['calibration']) is not bool
+            for r in runs)):
+        raise ValueError('admission pair changed its balanced order or chunked arm')
     summaries = []
     for run in runs:
         for key in ('conditions_before', 'conditions_after'):
@@ -3195,33 +3248,50 @@ def engine_study_summary(record):
             except (KeyError, RuntimeError) as error:
                 raise ValueError('incomplete or non-nominal engine conditions') from error
         parsed = parse_engine_run(run['stdout'], trace, run['arm'], record['blocks'],
-                                  record['max_sequences'], record['mode'])
+                                  record['max_sequences'], record['mode'],
+                                  admission=run.get('admission') if admission_pair else None)
         if run.get('parsed') != parsed:
             raise ValueError('engine parsed records differ from native trace')
+        if admission_pair and any(e['reason'] not in ('stop', 'length')
+                                  for e in parsed['events'] if e['kind'] == 'finish'):
+            raise ValueError('paired admission study requires completed finite requests')
         summaries.append(dict(block=run['block'], arm=run['arm'], calibration=run['calibration'],
                               **engine_run_summary(parsed, trace)))
-    by_key = {(r['block'], r['arm'], r['calibration']): r for r in summaries}
+        if admission_pair:
+            summaries[-1]['admission'] = run['admission']
+    by_key = {(r['block'], r[label], r['calibration']): r for r in summaries}
     if any(r['duration_ns'] <= 0 for r in summaries):
         raise ValueError('paired engine makespan must be positive')
-    calibrations = [by_key[b, 'serial', True]['duration_ns'] / by_key[b, 'serial', False]['duration_ns'] for b in range(4)]
+    control_name = 'incremental' if admission_pair else 'serial'
+    calibrations = [by_key[b, control_name, True]['duration_ns'] / by_key[b, control_name, False]['duration_ns'] for b in range(4)]
     noise = max(.05, max(abs(r - 1) for r in calibrations))
+    self_control_histories = [all(a['token_ids'] == b['token_ids'] for a, b in zip(
+        by_key[block, control_name, False]['requests'], by_key[block, control_name, True]['requests']))
+        for block in range(4)]
     comparisons = []
-    for arm in contract.ENGINE_ARMS[1:]:
+    for arm in ('reserved',) if admission_pair else contract.ENGINE_ARMS[1:]:
         ratios, same_history = [], True
         for block in range(4):
-            control, candidate = by_key[block, 'serial', False], by_key[block, arm, False]
+            control, candidate = by_key[block, control_name, False], by_key[block, arm, False]
             ratios.append(candidate['duration_ns'] / control['duration_ns'])
             same_history &= all(a['token_ids'] == b['token_ids'] for a, b in zip(control['requests'], candidate['requests']))
+        if admission_pair and record['mode'] == 'greedy' and (not same_history or not all(self_control_histories)):
+            raise ValueError('paired admission greedy histories differ across control, self-control or reserved')
         outcome = ('virtual-clock' if record['mode'] == 'scripted' else
-                   'different-greedy-histories' if not same_history else
+                   'different-greedy-histories' if not same_history or (admission_pair and not all(self_control_histories)) else
                    'distribution-only' if trace['mode'] == 'online' else _outcome(ratios, noise))
         comparisons.append(dict(arm=arm, block_ratios=ratios, median_ratio=stats.median(ratios),
                                 same_generated_histories=same_history, outcome=outcome))
-    return dict(runs=summaries, comparisons=comparisons, calibration_ratios=calibrations,
-                noise_floor=noise, target=None, goodput=None, quantile_method='linear')
+        if admission_pair:
+            comparisons[-1].update(arm='chunked', admission=arm, control_admission=control_name)
+    summary = dict(runs=summaries, comparisons=comparisons, calibration_ratios=calibrations,
+                   noise_floor=noise, target=None, goodput=None, quantile_method='linear')
+    if admission_pair:
+        summary['self_control_same_generated_histories'] = self_control_histories
+    return summary
 
 
-def engine_build(output, prepared):
+def engine_build(output, prepared, admission_pair=False):
     ensure_record_location(output)
     source = source_identity()
     if source['repository']['dirty']:
@@ -3234,21 +3304,27 @@ def engine_build(output, prepared):
     if source_identity() != source or assets(prepared) != identity:
         raise ValueError('engine source or assets changed during build')
     write(output/'build.json', dict(source=source, assets=identity, environment=stable_environment(),
-                                    declaration=contract.ENGINE_DECLARATION, command=list(map(str, command)),
+                                    declaration=contract.ENGINE_ADMISSION_DECLARATION if admission_pair else contract.ENGINE_DECLARATION,
+                                    command=list(map(str, command)),
                                     binaries={'engine': dict(sha256=sha(output/'engine'), bytes=(output/'engine').stat().st_size)}))
 
 
-def engine_collect(directory, trace_path, output, blocks=128, maximum_sequences=8, mode='greedy', warmup_steps=10):
+def engine_collect(directory, trace_path, output, blocks=128, maximum_sequences=8, mode='greedy', warmup_steps=10,
+                   admission_pair=False):
+    declaration = contract.ENGINE_ADMISSION_DECLARATION if admission_pair else contract.ENGINE_DECLARATION
     if (type(blocks) is not int or not 1 <= blocks <= 8192
             or type(maximum_sequences) is not int or not 1 <= maximum_sequences <= 64
-            or mode not in ('greedy', 'scripted') or warmup_steps != contract.ENGINE_DECLARATION['warmup_steps']):
+            or mode not in ('greedy', 'scripted') or warmup_steps != declaration['warmup_steps']
+            or (admission_pair and maximum_sequences != 8)):
         raise ValueError('invalid bounded engine collection')
     receipt = verify_build(directory)
-    if receipt.get('declaration') != contract.ENGINE_DECLARATION or set(receipt['binaries']) != {'engine'}:
+    if receipt.get('declaration') != declaration or set(receipt['binaries']) != {'engine'}:
         raise ValueError('not a current engine trace build')
     trace_document = trace_path.read_text()
     trace_file_sha256 = hashlib.sha256(trace_document.encode()).hexdigest()
     trace = validate_engine_trace(json.loads(trace_document))
+    if admission_pair and any(r['abort_offset_ns'] is not None for r in trace['requests']):
+        raise ValueError('paired admission study excludes timed aborts')
     if any((max(len(r['prompt_ids']),len(r['prompt_ids'])+r['max_new_tokens']-1)+31)//32 > blocks
            for r in trace['requests']):
         raise ValueError('a declared request cannot fit the pool alone')
@@ -3258,41 +3334,45 @@ def engine_collect(directory, trace_path, output, blocks=128, maximum_sequences=
     native_trace.write_text(engine_trace_tsv(trace))
     runs = []
     for block in range(4):
-        order = [('serial', False), ('serial', True), *[(a, False) for a in contract.ENGINE_ARMS[1:]]]
-        if block in (1, 2):
-            order.reverse()
-        for arm, calibration in order:
+        for cell, calibration in _engine_cells(block, admission_pair):
+            arm, admission = ('chunked', cell) if admission_pair else (cell, None)
             before = conditions()
             budget, sequences = (256 if arm == 'chunked' else 4096), (1 if arm == 'serial' else maximum_sequences)
             command = [directory/'engine', receipt['assets']['prepared'], native_trace, arm,
                        blocks, budget, sequences, warmup_steps, mode]
-            log = output/f'block-{block}-{arm}{"-calibration" if calibration else ""}.log'
+            if admission is not None:
+                command.append(admission)
+            log = output/f'block-{block}-{cell}{"-calibration" if calibration else ""}.log'
             stdout = execute(command, log)
-            parsed = parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode)
+            parsed = parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, admission=admission)
             runs.append(dict(block=block, arm=arm, calibration=calibration, stdout=stdout, parsed=parsed,
                              conditions_before=before, conditions_after=conditions()))
+            if admission is not None:
+                runs[-1]['admission'] = admission
     if verify_build(directory) != receipt or sha(trace_path) != trace_file_sha256:
         raise ValueError('engine build or trace changed during collection')
-    record = dict(kind='qwen-engine-core-v1', declaration=contract.ENGINE_DECLARATION,
+    record = dict(kind=declaration['kind'], declaration=declaration,
                   build=receipt, trace=trace, trace_document=trace_document, trace_sha256=trace_file_sha256,
                   blocks=blocks, max_sequences=maximum_sequences, mode=mode,
                   warmup_steps=warmup_steps, runs=runs)
     record['summary'] = engine_study_summary(record)
     payload = json.dumps(record, separators=(',', ':')).encode()
     compressed = gzip.compress(payload, mtime=0)
-    (output/'engine-core.json.gz').write_bytes(compressed)
-    write(output/'engine-core.json', dict(kind='qwen-engine-core-v1', sha256=hashlib.sha256(compressed).hexdigest(),
+    stem = 'engine-admission' if admission_pair else 'engine-core'
+    (output/(stem+'.json.gz')).write_bytes(compressed)
+    write(output/(stem+'.json'), dict(kind=declaration['kind'], sha256=hashlib.sha256(compressed).hexdigest(),
                                          uncompressed_sha256=hashlib.sha256(payload).hexdigest(), bytes=len(compressed)))
-    write(output/'engine-core-summary.json', record['summary'])
+    write(output/(stem+'-summary.json'), record['summary'])
     return engine_replay(output)
 
 
 def validate_engine_record_build(record):
     """Validate retained provenance without touching current source or assets."""
     build = record.get('build', {})
-    if (record.get('kind') != 'qwen-engine-core-v1' or build.get('source', {}).get('repository', {}).get('dirty') is not False
+    declaration = _engine_declaration(record)
+    if (build.get('source', {}).get('repository', {}).get('dirty') is not False
             or not build.get('binaries', {}).get('engine', {}).get('sha256')
-            or build.get('declaration') != contract.ENGINE_DECLARATION
+            or build.get('declaration') != declaration
             or not build.get('assets', {}).get('prepared_sha256')
             or not build.get('assets', {}).get('tables_sha256')):
         raise ValueError('incomplete engine source, binary or asset provenance')
@@ -3312,24 +3392,35 @@ def validate_engine_record_build(record):
 
 
 def engine_replay(directory):
-    archive = directory if directory.is_file() else directory/'engine-core.json.gz'
+    if directory.is_file():
+        archive = directory
+    else:
+        archives = [directory/(stem+'.json.gz') for stem in ('engine-core', 'engine-admission')
+                    if (directory/(stem+'.json.gz')).is_file()]
+        if len(archives) != 1:
+            raise ValueError('engine replay needs exactly one archive or an explicit file')
+        archive = archives[0]
     manifest_path = archive.with_suffix('')
     summary_path = archive.with_name(archive.name.removesuffix('.json.gz')+'-summary.json')
     manifest = json.loads(manifest_path.read_text())
     compressed = archive.read_bytes()
     payload = gzip.decompress(compressed)
-    if (manifest.get('kind') != 'qwen-engine-core-v1' or len(compressed) != manifest['bytes']
+    if (manifest.get('kind') not in (contract.ENGINE_DECLARATION['kind'], contract.ENGINE_ADMISSION_DECLARATION['kind'])
+            or len(compressed) != manifest['bytes']
             or hashlib.sha256(compressed).hexdigest() != manifest['sha256']
             or hashlib.sha256(payload).hexdigest() != manifest['uncompressed_sha256']):
         raise ValueError('engine archive hash mismatch')
     record = json.loads(payload)
+    if record.get('kind') != manifest['kind']:
+        raise ValueError('engine archive kind differs from manifest')
     document = record.get('trace_document', '')
     if (hashlib.sha256(document.encode()).hexdigest() != record.get('trace_sha256')
             or json.loads(document) != record.get('trace')):
         raise ValueError('engine token trace identity changed')
     validate_engine_record_build(record)
     summary = engine_study_summary(record)
-    if summary != record.get('summary'):
+    if (summary != record.get('summary') or (record['kind'] == contract.ENGINE_ADMISSION_DECLARATION['kind']
+                                            and not _engine_same_json(record.get('summary'), summary))):
         raise ValueError('engine archived summary changed')
     write(summary_path, summary)
     return summary
@@ -3377,6 +3468,8 @@ def main():
     parser.add_argument('--max-sequences', type=int, default=8, help='engine-collect: maximum concurrent sequences')
     parser.add_argument('--engine-mode', choices=['greedy', 'scripted'], default='greedy')
     parser.add_argument('--warmup-steps', type=int, default=10)
+    parser.add_argument('--admission-pair', action='store_true',
+                        help='engine-build/collect: paired chunked incremental/reserved admission, fixed256/eight sequences')
     args = parser.parse_args()
     if args.command in RETIRED or (args.command == 'build' and (args.fusion or args.combined or args.selection
                                    or args.copy_free or args.residual_norm or args.projections)):
@@ -3386,11 +3479,11 @@ def main():
         engine_specification(args.output.resolve(), args.seed, args.arrival_rate)
     elif args.command == 'engine-build':
         if args.prepared is None: parser.error('engine-build needs --prepared')
-        engine_build(args.output.resolve(), args.prepared)
+        engine_build(args.output.resolve(), args.prepared, args.admission_pair)
     elif args.command == 'engine-collect':
         if args.build is None or args.trace is None: parser.error('engine-collect needs --build and --trace')
         engine_collect(args.build.resolve(), args.trace.resolve(), args.output.resolve(), args.blocks,
-                       args.max_sequences, args.engine_mode, args.warmup_steps)
+                       args.max_sequences, args.engine_mode, args.warmup_steps, args.admission_pair)
     elif args.command == 'engine-replay': print(json.dumps(engine_replay(args.output.resolve()), indent=2))
     elif args.command == 'batch-support': batch_support_collect(args.output.resolve())
     elif args.command == 'batch-support-replay': print(json.dumps(batch_support_replay(args.output),indent=2))

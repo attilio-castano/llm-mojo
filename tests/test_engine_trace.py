@@ -6,11 +6,12 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from llm_mojo.benchmarks import model_contract as contract
 from llm_mojo.benchmarks.model_profile import (
     engine_run_summary, engine_study_summary, engine_replay,
-    engine_specification, engine_trace_tsv, parse_engine_run,
+    engine_collect, engine_specification, engine_trace_tsv, parse_engine_run,
     validate_engine_record_build,
 )
 
@@ -70,12 +71,175 @@ def study_fixture(mode='greedy'):
 def write_archive(root, record):
     raw = json.dumps(record).encode()
     compressed = gzip.compress(raw, mtime=0)
-    (root/'engine-core.json.gz').write_bytes(compressed)
-    (root/'engine-core.json').write_text(json.dumps(dict(kind='qwen-engine-core-v1', bytes=len(compressed),
+    stem = 'engine-admission' if record['kind'] == 'qwen-engine-admission-v1' else 'engine-core'
+    (root/(stem+'.json.gz')).write_bytes(compressed)
+    (root/(stem+'.json')).write_text(json.dumps(dict(kind=record['kind'], bytes=len(compressed),
         sha256=hashlib.sha256(compressed).hexdigest(), uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
 
 
+def admission_fixture():
+    record = study_fixture()
+    record.update(kind=contract.ENGINE_ADMISSION_DECLARATION['kind'],
+                  declaration=contract.ENGINE_ADMISSION_DECLARATION, max_sequences=8, runs=[])
+    record['build']['declaration'] = contract.ENGINE_ADMISSION_DECLARATION
+    conditions = dict(battery={'power_source': 'AC Power'}, power_mode_raw='0',
+                      thermal=['No thermal warning level has been recorded',
+                               'No performance warning level has been recorded'])
+    for block in range(4):
+        cells = [('incremental', False), ('incremental', True), ('reserved', False)]
+        if block in (1, 2):
+            cells.reverse()
+        for admission, calibration in cells:
+            stdout = native_fixture('chunked').replace('config chunked 4 256 2', 'config chunked 4 256 8')
+            stdout += '\nadmission ' + admission
+            record['runs'].append(dict(block=block, arm='chunked', admission=admission,
+                                      calibration=calibration, stdout=stdout,
+                                      parsed=parse_engine_run(stdout, record['trace'], 'chunked', 4, 8,
+                                                              'greedy', admission=admission),
+                                      conditions_before=conditions, conditions_after=conditions))
+    record['summary'] = engine_study_summary(record)
+    return record
+
+
 class EngineTraceTests(unittest.TestCase):
+    def test_admission_metadata_is_bound_to_an_explicit_policy(self):
+        stdout = native_fixture('chunked') + '\nadmission reserved'
+        parsed = parse_engine_run(stdout, trace_fixture(), 'chunked', 4, 2, 'greedy', admission='reserved')
+        self.assertEqual(parsed['admission'], 'reserved')
+        cases = [(stdout, None), (stdout, 'incremental'), (native_fixture('chunked'), 'reserved'),
+                 (stdout+'\nadmission reserved', 'reserved'), (stdout, 'unknown')]
+        for value, admission in cases:
+            with self.subTest(admission=admission), self.assertRaises(ValueError):
+                parse_engine_run(value, trace_fixture(), 'chunked', 4, 2, 'greedy', admission=admission)
+        with self.assertRaises(ValueError):
+            parse_engine_run(native_fixture('continuous')+'\nadmission reserved', trace_fixture(),
+                             'continuous', 4, 2, 'greedy', admission='reserved')
+
+    def test_admission_pair_replay_and_corruption_gates(self):
+        record = admission_fixture()
+        self.assertEqual(len(record['summary']['runs']), 12)
+        comparison = record['summary']['comparisons'][0]
+        self.assertEqual(comparison['control_admission'], 'incremental')
+        self.assertEqual(comparison['admission'], 'reserved')
+        self.assertTrue(comparison['same_generated_histories'])
+        self.assertEqual(comparison['block_ratios'], [1.0]*4)
+        self.assertIsNone(record['summary']['target'])
+        self.assertIsNone(record['summary']['goodput'])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_archive(root, record)
+            self.assertEqual(engine_replay(root), record['summary'])
+            self.assertEqual(engine_replay(root/'engine-admission.json.gz'), record['summary'])
+            for corruption in ('grid', 'order', 'cell_type', 'sequences', 'policy', 'build', 'declaration',
+                               'declaration_type', 'summary', 'summary_type'):
+                broken = copy.deepcopy(record)
+                if corruption == 'grid': broken['runs'].pop()
+                if corruption == 'order': broken['runs'][0], broken['runs'][1] = broken['runs'][1], broken['runs'][0]
+                if corruption == 'cell_type': broken['runs'][1]['calibration'] = 1
+                if corruption == 'sequences': broken['max_sequences'] = 7
+                if corruption == 'policy': broken['runs'][0]['stdout'] = broken['runs'][0]['stdout'].replace(
+                    'admission incremental', 'admission reserved')
+                if corruption == 'build': broken['build']['declaration'] = contract.ENGINE_DECLARATION
+                if corruption == 'declaration': broken['declaration']['token_budget'] = 128
+                if corruption == 'declaration_type': broken['declaration']['asynchronous'] = 0
+                if corruption == 'summary': broken['summary']['runs'][0]['duration_ns'] = 1
+                if corruption == 'summary_type': broken['summary']['comparisons'][0]['same_generated_histories'] = 1
+                write_archive(root, broken)
+                with self.subTest(corruption=corruption), self.assertRaises(ValueError):
+                    engine_replay(root)
+
+    def test_admission_collector_uses_one_build_and_balanced_fixed_work(self):
+        record = admission_fixture()
+        receipt = copy.deepcopy(record['build'])
+        receipt['assets']['prepared'] = '/prepared'
+        observed = []
+        def execute(command, log):
+            self.assertEqual(command[3:9], ['chunked', 4, 256, 8, 10, 'greedy'])
+            observed.append(command[9])
+            return native_fixture('chunked').replace('config chunked 4 256 2', 'config chunked 4 256 8') + '\nadmission ' + command[9]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            trace = root/'trace.json'
+            trace.write_text(json.dumps(record['trace']))
+            with mock.patch('llm_mojo.benchmarks.model_profile.verify_build', return_value=receipt), \
+                 mock.patch('llm_mojo.benchmarks.model_profile.conditions', return_value=record['runs'][0]['conditions_before']), \
+                 mock.patch('llm_mojo.benchmarks.model_profile.execute', side_effect=execute):
+                result = engine_collect(root/'build', trace, root/'result', blocks=4, admission_pair=True)
+            self.assertEqual(observed, ['incremental', 'incremental', 'reserved',
+                                       'reserved', 'incremental', 'incremental',
+                                       'reserved', 'incremental', 'incremental',
+                                       'incremental', 'incremental', 'reserved'])
+            self.assertEqual(result, record['summary'])
+            with self.assertRaises(ValueError):
+                engine_collect(root/'build', trace, root/'bad', maximum_sequences=7, admission_pair=True)
+
+    def test_admission_greedy_divergence_fails_and_virtual_clock_cannot_claim_speed(self):
+        record = admission_fixture()
+        run = next(r for r in record['runs'] if r['admission'] == 'reserved')
+        run['stdout'] = run['stdout'].replace('token 0 11', 'token 0 12')
+        run['parsed'] = parse_engine_run(run['stdout'], record['trace'], 'chunked', 4, 8,
+                                         'greedy', admission='reserved')
+        with self.assertRaises(ValueError):
+            engine_study_summary(record)
+        record = admission_fixture()
+        run = next(r for r in record['runs'] if r['calibration'])
+        run['stdout'] = run['stdout'].replace('token 0 11', 'token 0 12')
+        run['parsed'] = parse_engine_run(run['stdout'], record['trace'], 'chunked', 4, 8,
+                                         'greedy', admission='incremental')
+        with self.assertRaises(ValueError):
+            engine_study_summary(record)
+        record = admission_fixture()
+        record['mode'] = 'scripted'
+        for run in record['runs']:
+            run['stdout'] = run['stdout'].replace('Apple M4 Pro/metal', 'simulated/virtual').replace('mode greedy', 'mode scripted')
+            run['parsed'] = parse_engine_run(run['stdout'], record['trace'], 'chunked', 4, 8,
+                                             'scripted', admission=run['admission'])
+        self.assertEqual(engine_study_summary(record)['comparisons'][0]['outcome'], 'virtual-clock')
+
+    def test_reserved_preemptions_and_recomputed_rows_fail(self):
+        stdout = native_fixture('chunked') + '\nadmission reserved'
+        for field, value in [('preempted', 1), ('total_tokens', 2)]:
+            lines = stdout.splitlines()
+            first = next(i for i, line in enumerate(lines) if line.startswith('step 0 '))
+            values = lines[first].split()
+            values[contract.ENGINE_STEP_FIELDS.index(field)+1] = str(value)
+            if field == 'total_tokens':
+                values[contract.ENGINE_STEP_FIELDS.index('prefill_tokens')+1] = '2'
+            lines[first] = ' '.join(values)
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                parse_engine_run('\n'.join(lines), trace_fixture(), 'chunked', 4, 2,
+                                 'greedy', admission='reserved')
+        # Incremental replay can do extra work under pressure; retain its rows.
+        parsed = parse_engine_run('\n'.join(lines).replace('admission reserved', 'admission incremental'),
+                                  trace_fixture(), 'chunked', 4, 2, 'greedy', admission='incremental')
+        self.assertEqual(engine_run_summary(parsed, trace_fixture())['total_tokens'], 3)
+
+    def test_reserved_zero_output_and_no_abort_study_scope(self):
+        trace = trace_fixture()
+        trace['requests'][0]['max_new_tokens'] = 0
+        stdout = (native_fixture('chunked')+'\nadmission reserved').replace(
+            'token 0 11 1 1 0 10\n', '').replace('finish 0 length 1 1 0 10', 'finish 0 length 1 0 0 10')
+        lines = stdout.splitlines()
+        first = next(i for i, line in enumerate(lines) if line.startswith('step 0 '))
+        values = lines[first].split()
+        for field in ('prefill_seqs', 'prefill_tokens', 'total_tokens', 'attended_positions'):
+            values[contract.ENGINE_STEP_FIELDS.index(field)+1] = '0'
+        lines[first] = ' '.join(values)
+        parsed = parse_engine_run('\n'.join(lines), trace, 'chunked', 4, 2, 'greedy', admission='reserved')
+        self.assertEqual(engine_run_summary(parsed, trace)['total_tokens'], 1)
+        self.assertIsNone(engine_run_summary(parsed, trace)['requests'][0]['ttft_ns'])
+        record = admission_fixture()
+        record['trace']['requests'][0]['abort_offset_ns'] = 10
+        with self.assertRaises(ValueError):
+            engine_study_summary(record)
+        record = admission_fixture()
+        run = next(r for r in record['runs'] if r['admission'] == 'incremental')
+        run['stdout'] = run['stdout'].replace('finish 0 length', 'finish 0 error')
+        run['parsed'] = parse_engine_run(run['stdout'], record['trace'], 'chunked', 4, 8,
+                                         'greedy', admission='incremental')
+        with self.assertRaises(ValueError):
+            engine_study_summary(record)
+
     def test_online_arrivals_are_frozen_by_seed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

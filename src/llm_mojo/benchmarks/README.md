@@ -630,6 +630,23 @@ For adaptive budgeting, `python -m llm_mojo.benchmarks.engine_budget` provides
 research setting and applies to predicted synchronous execution, not a promised
 client SLO. Fit uses the complete fixed-study Metal calibration archive;
 evaluation requires the calibrated binary and a different frozen workload.
+
+The optional lifetime-reservation admission comparison uses a separate frozen
+declaration and the same trace driver. Its control, repeated control and reserved
+candidate all use chunked reference execution with 256 rows and eight sequences:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build --admission-pair --prepared build/model-prepared-v1 --output /private/tmp/engine-admission-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect --admission-pair --build /private/tmp/engine-admission-build --trace studies/model_generation/engine-core-offline-trace.json --blocks 40 --max-sequences 8 --output /private/tmp/engine-admission-pressure
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output /private/tmp/engine-admission-pressure
+```
+
+Collection writes `engine-admission.json.gz`, its hash manifest and the derived
+summary. The original `engine-core-v1` archives retain their original declaration
+and replay behavior. The [successor contract](../../../studies/model_generation/engine-core.md#lifetime-reservation-admission-bounded-successor-study)
+fixes the four collections and distinguishes work reduction from measured
+latency and throughput. Reservation remains optional; physical block ownership
+is separate from written KV and from the per-step execution budget.
 Its archive retains calibration bytes, policy identity, every prediction and
 all evaluation records so offline replay can recompute the fit and residuals.
 Mandatory decode/progress overruns remain explicit. These tools implement the

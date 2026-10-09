@@ -512,5 +512,266 @@ def test_abort_after_decode_preserves_delivered_history() raises:
 
 
 
+def test_reserved_impossible_requests_reject_before_mutation() raises:
+    var engine = EngineCore(2, 4, 16, 100, reserve_lifetime=True)
+    for maximum in [9, Int.MAX]:
+        with assert_raises():
+            _ = engine.add(1, [1], maximum, List[Int]())
+    # Preserve the existing prompt-feasibility rule even for zero output.
+    with assert_raises():
+        _ = engine.add(1, List[Int](length=9, fill=1), 0, List[Int]())
+    assert_equal(len(engine.requests), 0)
+    assert_equal(engine.next_ticket, 0)
+    assert_equal(engine.blocks.free_blocks(), 2)
+    assert_equal(engine.add(1, [1], 8, List[Int]()), 0)
+    assert_equal(engine.blocks.free_blocks(), 2)
+    engine.blocks.check()
+
+
+def test_reserved_peak_excludes_the_last_emitted_token() raises:
+    var ctx = DeviceContext()
+    var pool = KVPool(ctx, 2, 4, KVGeometry(1, 1, 1))
+    var engine = EngineCore(2, 4, 8, 100, token_budget=1, reserve_lifetime=True)
+    var runner = SimulatedRunner([10, 11], 100)
+    var slot = engine.add(1, [1], 7, List[Int]())
+    var first = engine.step(runner, pool)
+    var sequence = engine.requests[slot].sequence
+    assert_equal(engine.blocks.reserved[sequence], 7)
+    assert_equal(engine.blocks.length(sequence), 1)
+    assert_equal(len(engine.blocks.tables[sequence]), 2)
+    assert_equal(engine.blocks.free_blocks(), 0)
+    var rows = first.total_tokens
+    while engine.live() > 0:
+        var record = engine.step(runner, pool)
+        assert_equal(record.preempted, 0)
+        rows += record.total_tokens
+    assert_equal(rows, 7)
+    assert_equal(len(engine.requests[slot].tokens), 8)
+    assert_equal(engine.requests[slot].generated, 7)
+    assert_equal(engine.blocks.free_blocks(), 2)
+    engine.check(pool)
+
+
+def test_reserved_fifo_waiter_blocks_younger_requests_without_eviction() raises:
+    var ctx = DeviceContext()
+    var pool = KVPool(ctx, 4, 4, KVGeometry(1, 1, 1))
+    var engine = EngineCore(4, 4, 16, 100, token_budget=4, reserve_lifetime=True)
+    var runner = SimulatedRunner([10], 100)
+    var a = engine.add(1, [1], 5, List[Int]())
+    _ = engine.step(runner, pool)
+    # Two blocks remain. The oldest waiter needs three, the younger one one.
+    var b = engine.add(2, List[Int](length=9, fill=2), 4, List[Int]())
+    var c = engine.add(3, [3], 1, List[Int]())
+    var held_sequence = engine.requests[a].sequence
+    while engine.requests[a].state != FINISHED:
+        var record = engine.step(runner, pool)
+        assert_equal(record.preempted, 0)
+        assert_equal(record.admitted, 0)
+        assert_equal(engine.requests[b].state, WAITING)
+        assert_equal(engine.requests[c].state, WAITING)
+        if engine.requests[a].state != FINISHED:
+            assert_equal(engine.requests[a].sequence, held_sequence)
+    var admitted = engine.step(runner, pool)
+    assert_equal(admitted.admitted, 1)
+    assert_equal(engine.requests[b].state, PREFILL)
+    assert_equal(engine.blocks.reserved[engine.requests[b].sequence], 12)
+    assert_equal(engine.requests[c].state, WAITING)
+    _ = _drain(engine, runner, pool)
+
+
+def test_reserved_watermark_counts_unselected_residents_and_yields_to_solo_work() raises:
+    var ctx = DeviceContext()
+    var pool = KVPool(ctx, 3, 4, KVGeometry(1, 1, 1))
+    var engine = EngineCore(3, 4, 12, 100, token_budget=4,
+        watermark_blocks=2, mixed_prefill=False, reserve_lifetime=True)
+    var runner = SimulatedRunner([10], 100)
+    var a = engine.add(1, [1], 4, List[Int]())
+    _ = engine.step(runner, pool)
+    var b = engine.add(2, [2], 4, List[Int]())
+    # Standalone prefill is considered with no rows selected, but A is resident.
+    var waiting = engine.step(runner, pool)
+    assert_equal(waiting.admitted, 0)
+    assert_equal(waiting.decode_seqs, 1)
+    assert_equal(engine.requests[b].state, WAITING)
+    while engine.requests[a].state != FINISHED:
+        _ = engine.step(runner, pool)
+    var solo = engine.step(runner, pool)
+    assert_equal(solo.admitted, 1)
+    assert_equal(engine.requests[b].generated, 1)
+    _ = _drain(engine, runner, pool)
+
+
+def test_reserved_release_paths_return_unwritten_future_blocks() raises:
+    var ctx = DeviceContext()
+    var pool = KVPool(ctx, 4, 4, KVGeometry(1, 1, 1))
+    var engine = EngineCore(4, 4, 16, 100, token_budget=2,
+        max_requests=1, watermark_blocks=4, reserve_lifetime=True)
+    var runner = SimulatedRunner([10], 100)
+    var slot = engine.add(1, [1, 2, 3, 4, 5], 11, List[Int]())
+    _ = engine.step(runner, pool)
+    assert_equal(engine.blocks.free_blocks(), 0)
+    assert_equal(engine.blocks.length(engine.requests[slot].sequence), 2)
+    assert_equal(engine.blocks.reserved[engine.requests[slot].sequence], 15)
+    engine.abort(1)
+    engine.abort(1)
+    var aborted = engine.step(runner, pool)
+    assert_equal(aborted.finished, 1)
+    assert_equal(aborted.aborted, 1)
+    assert_equal(aborted.total_tokens, 0)
+    assert_equal(engine.blocks.free_blocks(), 4)
+    for written in pool.written:
+        assert_equal(written, 0)
+    # Reuse after prefill abort, then abort in decode after delivered history.
+    assert_equal(engine.add(2, [2], 15, List[Int]()), slot)
+    _ = engine.step(runner, pool)
+    _ = engine.step(runner, pool)
+    var history = engine.requests[slot].tokens.copy()
+    engine.abort(2)
+    var decoded_abort = engine.step(runner, pool)
+    assert_equal(decoded_abort.finished, 1)
+    _assert_list(engine.requests[slot].tokens, history)
+    assert_equal(engine.blocks.free_blocks(), 4)
+    # Early stop returns every reserved block, including those never written.
+    assert_equal(engine.add(3, [3], 15, [10]), slot)
+    var stopped = engine.step(runner, pool)
+    assert_equal(stopped.finished, 1)
+    assert_equal(engine.requests[slot].reason, "stop")
+    assert_equal(engine.requests[slot].generated, 1)
+    assert_equal(engine.blocks.free_blocks(), 4)
+    # Zero output retains existing feasibility validation and executes no rows.
+    assert_equal(engine.add(4, List[Int](length=16, fill=4), 0, List[Int]()), slot)
+    var zero = engine.step(runner, pool)
+    assert_equal(zero.finished, 1)
+    assert_equal(zero.total_tokens, 0)
+    assert_equal(engine.blocks.free_blocks(), 4)
+    engine.check(pool)
+
+
+def test_reserved_failure_releases_residents_and_finishes_waiters_once() raises:
+    var ctx = DeviceContext()
+    var pool = KVPool(ctx, 4, 4, KVGeometry(1, 1, 1))
+    var engine = EngineCore(4, 4, 16, 100, token_budget=4, reserve_lifetime=True)
+    var healthy = SimulatedRunner([10], 100)
+    _ = engine.add(1, [1], 12, List[Int]())
+    _ = engine.step(healthy, pool)
+    var history = engine.requests[0].tokens.copy()
+    _ = engine.add(2, [2], 4, List[Int]())
+    _ = engine.add(3, [3], 1, List[Int]())
+    var broken = BrokenRunner()
+    with assert_raises():
+        _ = engine.step(broken, pool)
+    assert_true(engine.failed)
+    assert_equal(engine.live(), 0)
+    assert_equal(engine.blocks.free_blocks(), 4)
+    assert_equal(len(engine.failure_events), 3)
+    for i in range(3):
+        assert_equal(engine.failure_events[i].request_id, i + 1)
+        assert_equal(engine.failure_events[i].reason, "error")
+    _assert_list(engine.requests[0].tokens, history)
+    with assert_raises():
+        _ = engine.step(broken, pool)
+    with assert_raises():
+        _ = engine.add(4, [4], 1, List[Int]())
+    engine.check(pool)
+
+
+def test_reserved_capacity_does_not_override_fixed_or_fitted_row_limits() raises:
+    var ctx = DeviceContext()
+    var pool = KVPool(ctx, 8, 4, KVGeometry(1, 1, 1))
+    for fitted in [False, True]:
+        var engine = EngineCore(8, 4, 32, 100, token_budget=4, reserve_lifetime=True)
+        var runner = SimulatedRunner([10], 100)
+        if fitted:
+            engine.set_cost_policy(StepCost(0, 10, 0, 0, 0, 25))
+        _ = engine.add(1, List[Int](length=17, fill=1), 5, List[Int]())
+        var first = engine.step(runner, pool)
+        assert_equal(engine.blocks.reserved[engine.requests[0].sequence], 21)
+        assert_equal(first.prefill_tokens, 2 if fitted else 4)
+        while engine.requests[0].generated == 0:
+            var record = engine.step(runner, pool)
+            assert_true(record.prefill_tokens <= (2 if fitted else 4))
+        _ = engine.add(2, [2, 3, 4, 5, 6], 2, List[Int]())
+        if fitted:
+            engine.set_cost_policy(StepCost(0, 0, 0, 100, 0, 150))
+        var mixed = engine.step(runner, pool)
+        assert_equal(mixed.decode_seqs, 1)
+        assert_equal(mixed.prefill_tokens, 1 if fitted else 3)
+        assert_true(mixed.total_tokens <= 4)
+        _ = _drain(engine, runner, pool)
+
+
+def test_reserved_finite_arrivals_drain_across_capacity_and_scheduler_bounds() raises:
+    var ctx = DeviceContext()
+    for blocks in [1, 2, 3, 5]:
+        var pool = KVPool(ctx, blocks, 4, KVGeometry(1, 1, 1))
+        for budget in [1, 2, 4, 8]:
+            for sequences in [1, 3]:
+                for mixed in [False, True]:
+                    for margin in [0, blocks // 2, blocks]:
+                        var engine = EngineCore(blocks, 4, blocks * 4, 100,
+                            token_budget=budget, max_sequences=sequences, max_requests=4,
+                            watermark_blocks=margin, mixed_prefill=mixed, reserve_lifetime=True)
+                        var runner = SimulatedRunner([10, 11, 12], 100)
+                        var next_id = 0
+                        var finished = 0
+                        var tick = 0
+                        while (next_id < 16 or engine.live() > 0) and tick < 500:
+                            if next_id < 16 and engine.live() < 4:
+                                var length = 1 + next_id % min(blocks * 4 - 1, 7)
+                                var maximum = min(3, blocks * 4 - length)
+                                _ = engine.add(next_id, List[Int](length=length, fill=next_id % 10),
+                                    maximum, [10] if next_id % 3 == 0 else List[Int]())
+                                if next_id % 7 == 0:
+                                    engine.abort(next_id)
+                                next_id += 1
+                            var record = engine.step(runner, pool)
+                            assert_equal(record.preempted, 0)
+                            assert_true(record.total_tokens <= budget)
+                            finished += record.finished
+                            engine.check(pool)
+                            tick += 1
+                        assert_equal(next_id, 16)
+                        assert_equal(finished, 16)
+                        assert_equal(engine.live(), 0)
+                        assert_equal(engine.blocks.free_blocks(), blocks)
+
+
+def test_reserved_pressure_removes_replay_and_preserves_histories() raises:
+    var ctx = DeviceContext()
+    var pool = KVPool(ctx, 40, 32, KVGeometry(1, 1, 1))
+    var reference_histories = List[List[Int]]()
+    var lengths = [32, 128, 64, 512, 96, 1024, 256, 64]
+    for reserved in [False, True]:
+        var engine = EngineCore(40, 32, 4096, 100, token_budget=256,
+            max_sequences=8, reserve_lifetime=reserved)
+        var runner = SimulatedRunner([10, 11, 12], 100)
+        for i in range(8):
+            _ = engine.add(i, List[Int](length=lengths[i], fill=i), 32, List[Int]())
+        var rows = 0
+        var preemptions = 0
+        var delivered = List[Int](length=8, fill=0)
+        var steps = 0
+        while engine.live() > 0 and steps < 1000:
+            var record = engine.step(runner, pool)
+            rows += record.total_tokens
+            preemptions += record.preempted
+            for event in record.events:
+                if event.kind == TOKEN_EVENT:
+                    delivered[event.request_id] += 1
+                    assert_equal(event.generated_tokens, delivered[event.request_id])
+            steps += 1
+        assert_equal(engine.live(), 0)
+        assert_equal(engine.blocks.free_blocks(), 40)
+        assert_equal(rows, 2424 if reserved else 16432)
+        assert_equal(preemptions, 0 if reserved else 57)
+        for i in range(8):
+            assert_equal(delivered[i], 32)
+            if reserved:
+                _assert_list(engine.requests[i].tokens, reference_histories[i])
+            else:
+                reference_histories.append(engine.requests[i].tokens.copy())
+        engine.check(pool)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

@@ -16,3 +16,7 @@ dist/
 /studies/model_generation/engine-core-online-summary.json
 /studies/model_generation/engine-core-pressure-summary.json
 /studies/model_generation/engine-core-adaptive-summary.json
+/studies/model_generation/engine-admission-offline-summary.json
+/studies/model_generation/engine-admission-online-summary.json
+/studies/model_generation/engine-admission-pressure-summary.json
+/studies/model_generation/engine-admission-online-pressure-summary.json

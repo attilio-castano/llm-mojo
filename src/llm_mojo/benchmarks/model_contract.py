@@ -432,3 +432,21 @@ ENGINE_DECLARATION = dict(
         'record any natural greedy history divergence',
     target=None, fitted_budget=False, asynchronous=False,
 )
+
+# Keep the original declaration immutable: retained v1 archives still describe
+# their original serial/static/continuous/chunked grid and incremental admission.
+ENGINE_ADMISSION_POLICIES = ('incremental', 'reserved')
+ENGINE_ADMISSION_DECLARATION = dict(
+    ENGINE_DECLARATION, kind='qwen-engine-admission-v1', arms=['chunked'],
+    admission_policies=list(ENGINE_ADMISSION_POLICIES), control='incremental',
+    token_budget=256, max_sequences=8,
+    reservation='zero blocks for zero output budget; otherwise '
+        'ceil(max(prompt_length, prompt_length + max_new_tokens - 1) / block_size); '
+        'reserved admission commits lifetime capacity before prefill',
+    request_scope='bounded traces without aborts; every request terminates by stop or output limit',
+    correctness_gates='greedy histories identical across control, self-control and reserved; '
+        'reserved preemptions zero and executed rows exactly sum(prompt_length + delivered_tokens - 1) '
+        'for positive outputs, zero rows for zero outputs',
+    pairing='same binary and frozen trace; incremental control, incremental self-control, '
+        'reserved candidate; forward/reverse/reverse/forward block order',
+)

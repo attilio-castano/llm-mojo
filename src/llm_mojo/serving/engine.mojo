@@ -1,9 +1,11 @@
 """Bounded synchronous request scheduling over a caller-owned KV pool.
 
 One step takes running decodes first and at most one prompt/replay chunk.
-Preemption drops KV and recomputes retained history; prefix caching is a later
-mechanism. Lists have declared capacities, but this implementation does not
-claim allocation-free host scheduling. The runner must finish before return.
+Incremental admission drops KV under pressure and recomputes retained history.
+Optional lifetime reservation instead admits only requests whose declared peak
+KV demand fits and keeps their blocks until completion. Prefix caching is a
+later mechanism. Lists have declared capacities, but this implementation does
+not claim allocation-free host scheduling. The runner must finish before return.
 """
 from std.math import ceildiv
 from llm_mojo.serving.batch import StepBatch
@@ -168,6 +170,7 @@ struct EngineCore(Movable):
     var max_requests: Int
     var watermark_blocks: Int
     var mixed_prefill: Bool
+    var reserve_lifetime: Bool
     var cost_policy: StepCost
     var cost_policy_enabled: Bool
     var next_ticket: Int
@@ -177,7 +180,8 @@ struct EngineCore(Movable):
 
     def __init__(out self, blocks: Int, block_size: Int, max_context: Int, vocabulary: Int,
                  token_budget: Int = 256, max_sequences: Int = 64, max_requests: Int = 128,
-                 watermark_blocks: Int = 0, mixed_prefill: Bool = True) raises:
+                 watermark_blocks: Int = 0, mixed_prefill: Bool = True,
+                 reserve_lifetime: Bool = False) raises:
         if (blocks < 1 or block_size < 1 or max_context < 1 or max_context > 4096 or vocabulary < 1
                 or token_budget < 1 or token_budget > 4096 or max_sequences < 1 or max_sequences > 64
                 or max_requests < 1 or watermark_blocks < 0 or watermark_blocks > blocks):
@@ -191,6 +195,7 @@ struct EngineCore(Movable):
         self.max_requests = max_requests
         self.watermark_blocks = watermark_blocks
         self.mixed_prefill = mixed_prefill
+        self.reserve_lifetime = reserve_lifetime
         self.cost_policy = StepCost(0, 0, 0, 0, 0)
         self.cost_policy_enabled = False
         self.next_ticket = 0
@@ -256,6 +261,18 @@ struct EngineCore(Movable):
     def _held(self, index: Int) -> Bool:
         return self.requests[index].sequence >= 0
 
+    def _has_resident(self) -> Bool:
+        for i in range(len(self.requests)):
+            if self._held(i):
+                return True
+        return False
+
+    def _peak_extent(self, index: Int) -> Int:
+        # The last emitted token is never processed when the request finishes.
+        if self.requests[index].maximum == 0:
+            return 0
+        return self.requests[index].prompt_length + self.requests[index].maximum - 1
+
     def _release(mut self, index: Int, mut kv: KVPool) raises:
         if self._held(index):
             var sequence = self.requests[index].sequence
@@ -295,6 +312,12 @@ struct EngineCore(Movable):
 
     def _make_room(mut self, index: Int, length: Int, selected: List[Int],
                    mut kv: KVPool, mut record: EngineStep) raises -> Bool:
+        if self.reserve_lifetime:
+            # Admission already owns every future block. Growing the written
+            # extent cannot evict another owner or require a new allocation.
+            if length > self.blocks.reserved[self.requests[index].sequence]:
+                raise Error("a step exceeds its lifetime KV reservation")
+            return True
         var needed = ceildiv(length, self.blocks.block_size) - len(self.blocks.tables[self.requests[index].sequence])
         while needed > self.blocks.free_blocks():
             # Already scheduled holders cannot be invalidated. Among the rest,
@@ -353,9 +376,10 @@ struct EngineCore(Movable):
         if budget < 1 or len(selected) == self.max_sequences:
             return False
         var index = self._oldest(PREFILL, List[Int]())
+        var count = 0
         if index >= 0:
             var past = self.blocks.length(self.requests[index].sequence)
-            var count = self._prefill_count(index, budget, selected, record)
+            count = self._prefill_count(index, budget, selected, record)
             if count == 0:
                 return False
             if not self._make_room(index, past + count, selected, kv, record):
@@ -368,22 +392,35 @@ struct EngineCore(Movable):
             index = self._oldest(WAITING, List[Int]())
             if index >= 0:
                 var free = self.blocks.free_blocks()
-                # With no selected holders, a watermark cannot prohibit work.
-                var watermark = self.watermark_blocks if len(selected) > 0 else 0
+                # The conservative margin applies while any request resides,
+                # even if none was selected. Ignore it when the pool is empty
+                # so every request validated to fit alone can eventually run.
+                var residents = self._has_resident() if self.reserve_lifetime else len(selected) > 0
+                var watermark = self.watermark_blocks if residents else 0
                 var available = max(free - watermark, 0) * self.blocks.block_size
-                var count = min(self._prefill_count(index, budget, selected, record), available)
+                count = self._prefill_count(index, budget, selected, record)
+                var extent: Int
+                if self.reserve_lifetime:
+                    extent = self._peak_extent(index)
+                    # Strict FIFO: do not bypass a larger waiting request.
+                    # Existing residents have bounded work and reserved growth,
+                    # so they finish without replay and eventually free room.
+                    if ceildiv(extent, self.blocks.block_size) > max(free - watermark, 0):
+                        return False
+                else:
+                    count = min(count, available)
+                    extent = count
                 if count > 0:
                     self.requests[index].sequence = self.blocks.add()
                     self.requests[index].state = PREFILL
-                    self.blocks.reserve(self.requests[index].sequence, count)
+                    self.blocks.reserve(self.requests[index].sequence, extent)
                     record.admitted += 1
                 else:
                     return False
         if index < 0:
             return False
-        var past = self.blocks.length(self.requests[index].sequence)
-        var count = min(budget, len(self.requests[index].tokens) - past)
-        count = min(count, self.blocks.reserved[self.requests[index].sequence] - past)
+        # Use the chosen chunk, not the larger lifetime reservation, to retain
+        # both fixed row budgets and fitted-policy limits on execution work.
         selected.append(index)
         counts.append(count)
         record.prefill_seqs = 1
@@ -446,6 +483,11 @@ struct EngineCore(Movable):
                 if self.requests[i].sequence < 0 or not self.blocks.active[self.requests[i].sequence]:
                     raise Error("running request has no live KV owner")
                 var cached = self.blocks.length(self.requests[i].sequence)
+                if self.reserve_lifetime:
+                    var peak = self._peak_extent(i)
+                    if (peak < 1 or self.blocks.reserved[self.requests[i].sequence] != peak
+                            or len(self.blocks.tables[self.requests[i].sequence]) != ceildiv(peak, self.blocks.block_size)):
+                        raise Error("a running request does not own its full lifetime KV reservation")
                 if (cached > len(self.requests[i].tokens)
                         or (self.requests[i].state == DECODE and cached != len(self.requests[i].tokens) - 1)):
                     raise Error("request phase disagrees with its cached history")

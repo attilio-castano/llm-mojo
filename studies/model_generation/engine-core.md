@@ -458,6 +458,59 @@ choosing a universal policy. Multi-prefill steps, a measured Fast runner, prefix
 caching and frontend integration remain separate work. The asynchronous gate
 below is still open for LLM stepping.
 
+## Lifetime reservation admission: bounded successor study
+
+Implementation authorized on 2026-10-09 from clean baseline `d0e3626`.
+The optional `EngineCore(..., reserve_lifetime=True)` policy reserves physical
+KV blocks when admitting a request. The existing incremental admission remains
+the default and the comparison control. This changes ownership and scheduling,
+not model arithmetic, cache layout, GPU kernels or the default 256-row budget.
+
+For a positive output limit, peak cached extent is
+`prompt_length + max_new_tokens - 1`: the last emitted token is returned without
+being processed into KV. Demand is the ceiling of that extent divided by the
+32-slot block size. Reserve the whole demand for the oldest waiting request,
+or leave it waiting. Younger requests cannot bypass that FIFO head. Committed
+length and written KV still grow only when a synchronous step completes.
+Future reserved blocks contain no written tokens. Stop, limit, abort and fatal
+execution error release both resident and unused future blocks.
+
+The watermark is an admission margin whenever any request holds KV, including
+residents not selected in the current step. Ignore it when no residents remain,
+so a request validated to fit alone can run even with a full-pool watermark.
+With finite feasible arrivals, resident work is bounded and its growth already
+has capacity; oldest-first scheduling eventually releases that capacity and
+admits the head waiter. This is a finite-drain argument, not an arrival-rate SLO.
+Accepted zero-output requests finish at the next boundary without reservation;
+their existing prompt-feasibility validation is preserved.
+
+Execution work is independent of reservation size. Retain the chosen fixed or
+fitted prefill row count when constructing a step. Do not infer that count from
+the larger reserved extent. The initial physical-reservation implementation
+uploads complete block tables, including future blocks; measurements include
+that metadata overhead. Logical credit accounting is deferred until evidence
+justifies the extra ownership ledger.
+
+The versioned admission declaration uses reference configuration 27, BF16
+storage with FP32 reductions, context 4,096, 32-slot slot-major KV, 256 rows,
+eight sequence slots, zero watermark and ten warmup steps outside measurement.
+Build one clean binary and compare chunked incremental with itself and with
+chunked reserved in four balanced blocks. Reuse the exact retained offline and
+online trace documents at 128 blocks, then both traces at 40 blocks. These four
+collections contain 48 measured finite trace replays. Adaptive fitting, chunk
+tuning, Fast execution and asynchronous stepping are outside this milestone.
+
+Correctness gates require exact natural greedy histories across the two modes,
+one terminal event per request, complete pool return, and zero conservative
+preemptions. On the retained offline pressure trace, the work gate is 2,424
+computed rows rather than the incremental control's 16,432 rows and 57
+preemptions. Report all four blocks' makespan, throughput, TTFT, end-to-end
+latency and p95/p99 token gaps. Apply the existing paired verdict only to
+declared offline makespan; retain online distributions without a capacity or
+client-SLO claim. Timing gains are hypotheses: reservation can defer admission
+and increase TTFT even when it removes replay. Keep the mode optional unless
+the measured domain supports promotion.
+
 ## Metadata preparation gate
 
 The [metadata probe receipt](engine-metadata-probe.json) records a bounded public

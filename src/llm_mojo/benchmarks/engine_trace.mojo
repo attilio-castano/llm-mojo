@@ -112,6 +112,7 @@ def emit(record: EngineStep):
 def run_trace[Runner: TraceRunner](
     mut runner: Runner, mut kv: KVPool, mut requests: List[TraceRequest], mut aborts: List[TraceAbort],
     arm: String, budget: Int, maximum_sequences: Int, warmup_steps: Int, cost: StepCost,
+    reserve_lifetime: Bool, admission_explicit: Bool,
 ) raises:
     var serial = arm == "serial"
     var static = arm == "static"
@@ -120,17 +121,21 @@ def run_trace[Runner: TraceRunner](
     var effective_budget = budget if chunked else 4096
     # Warm-up is untimed and produces no retained request/step observations.
     if warmup_steps > 0:
-        var warm = EngineCore(kv.blocks,32,4096,VOCABULARY,effective_budget,sequences,128,0,chunked)
+        var warm = EngineCore(kv.blocks,32,4096,VOCABULARY,effective_budget,sequences,128,0,chunked,
+                              reserve_lifetime=reserve_lifetime)
         _ = warm.add(0,[11,13,17,19],warmup_steps,[])
         while warm.live() > 0:
             _ = warm.step(runner,kv)
         warm.check(kv)
-    var engine = EngineCore(kv.blocks,32,4096,VOCABULARY,effective_budget,sequences,128,0,chunked)
+    var engine = EngineCore(kv.blocks,32,4096,VOCABULARY,effective_budget,sequences,128,0,chunked,
+                            reserve_lifetime=reserve_lifetime)
     if arm == "adaptive":
         engine.set_cost_policy(cost)
         print("policy",cost.target_ns,cost.fixed_ns,cost.per_row_ns,cost.per_position_ns,
               cost.per_partition_ns,cost.per_logit_ns)
     print("config",arm,kv.blocks,effective_budget,sequences)
+    if admission_explicit:
+        print("admission","reserved" if reserve_lifetime else "incremental")
     runner.reset_clock()
     var admitted = 0
     var iterations = 0
@@ -195,8 +200,8 @@ def run_trace[Runner: TraceRunner](
 
 def main() raises:
     var args = argv()
-    if len(args) != 9 and len(args) != 10:
-        raise Error("engine_trace prepared trace.tsv arm blocks budget max_sequences warmup_steps greedy|scripted [policy.tsv]")
+    if len(args) < 9 or len(args) > 11:
+        raise Error("engine_trace prepared trace.tsv arm blocks budget max_sequences warmup_steps greedy|scripted [policy.tsv] [incremental|reserved]")
     var arm = args[3]
     var blocks = Int(args[4])
     var budget = Int(args[5])
@@ -209,16 +214,27 @@ def main() raises:
             or warmup < 0 or warmup > 4092 or (mode != "greedy" and mode != "scripted")):
         raise Error("invalid bounded trace configuration")
     var cost = StepCost(0,0,0,0,0)
+    var admission = "incremental"
+    var admission_explicit = False
     if arm == "adaptive":
-        if len(args) != 10 or mode != "greedy":
+        if len(args) < 10 or mode != "greedy":
             raise Error("adaptive trace requires Metal and a frozen cost policy")
         var fields = open(args[9],"r").read().split()
         if len(fields) != 7 or String(fields[0]) != "cost":
             raise Error("invalid cost policy record")
         cost = StepCost(Int(fields[1]),Int(fields[2]),Int(fields[3]),Int(fields[4]),Int(fields[5]),Int(fields[6]))
         cost.validate()
+        if len(args) == 11:
+            admission = args[10]
+            admission_explicit = True
     elif len(args) == 10:
+        admission = args[9]
+        admission_explicit = True
+    elif len(args) == 11:
         raise Error("a cost policy belongs only to the adaptive arm")
+    if admission != "incremental" and admission != "reserved":
+        raise Error("invalid trace admission policy")
+    var reserve_lifetime = admission == "reserved"
     var requests = List[TraceRequest]()
     var aborts = List[TraceAbort]()
     var script: List[Int] = [11,13,17,19,23]
@@ -250,7 +266,8 @@ def main() raises:
     if len(requests) < 1 or len(requests) > 128:
         raise Error("trace requires 1..128 requests")
     # Preflight every request before allocating a model or running any work.
-    var check = EngineCore(blocks,32,4096,VOCABULARY,budget,sequences,128)
+    var check = EngineCore(blocks,32,4096,VOCABULARY,budget,sequences,128,
+                           reserve_lifetime=reserve_lifetime)
     for i in range(len(requests)):
         _ = check.add(requests[i].request_id,requests[i].prompt,requests[i].maximum,requests[i].stops,requests[i].arrival_ns)
     print("mode",mode)
@@ -259,10 +276,10 @@ def main() raises:
         var kv = KVPool(ctx,blocks,32,KVGeometry(1,1,1))
         var runner = TraceSimulation(SimulatedRunner(script,VOCABULARY))
         print("device simulated/virtual")
-        run_trace(runner,kv,requests,aborts,arm,budget,sequences,warmup,cost)
+        run_trace(runner,kv,requests,aborts,arm,budget,sequences,warmup,cost,reserve_lifetime,admission_explicit)
     else:
         var rows = budget if arm == "chunked" or arm == "adaptive" else 4096
         var runner = TraceMetal(QwenRunner(args[1],4096,rows,min(sequences,rows)))
         var kv = KVPool(runner.inner.ctx,blocks,32,runner.inner.model.kv_geometry())
         print("device",runner.inner.ctx.name()+"/"+runner.inner.ctx.api())
-        run_trace(runner,kv,requests,aborts,arm,budget,sequences,warmup,cost)
+        run_trace(runner,kv,requests,aborts,arm,budget,sequences,warmup,cost,reserve_lifetime,admission_explicit)
