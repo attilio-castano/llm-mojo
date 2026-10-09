@@ -73,7 +73,97 @@ def validate(rows, maximum):
     return turns
 
 
-def run(binary,prepared,tables,output):
+"""Stage this function in existing tests/chat_terminal.py; separate contract."""
+
+
+def validate_engine(rows, maximum):
+    if type(maximum) is not int or not 1 <= maximum <= 4096:
+        raise ValueError('invalid engine chat reply maximum')
+    loads=[r for r in rows if r['event']=='load']
+    modes=[r for r in rows if r['event']=='engine_mode']
+    if len(loads)!=1 or loads[0]['value']!='Apple M4 Pro/metal':
+        raise ValueError('missing single actual Metal resident engine load')
+    if len(modes)!=1 or modes[0]['value']!='reference-27/recompute-history':
+        raise ValueError('engine chat mode or KV lifecycle changed')
+    begins=[r for r in rows if r['event']=='begin']
+    if [int(r['turn']) for r in begins]!=list(range(1,len(begins)+1)):
+        raise ValueError('missing or duplicate engine chat turn')
+    previous=None
+    turns=[]
+    for row in rows:
+        if row['event']=='reset':
+            previous=None
+        if row['event']=='rejected' and previous is not None:
+            if int(row['value'])!=len(previous['history']):
+                raise ValueError('engine context rejection changed exact history')
+        if row['event']!='begin':
+            continue
+        turn=row['turn']; group=[r for r in rows if r['turn']==turn]
+        def one(name):
+            found=[r for r in group if r['event']==name]
+            if len(found)!=1:
+                raise ValueError('missing or duplicate engine '+name+' receipt')
+            return found[0]
+        def value(name):
+            return int(one(name)['value'])
+        def ids(name):
+            found=[r for r in group if r['event']==name]
+            if [int(r['index']) for r in found]!=list(range(len(found))):
+                raise ValueError('engine token order is incomplete')
+            result=[int(r['value']) for r in found]
+            if any(not 0<=token<151936 for token in result):
+                raise ValueError('engine token is outside vocabulary')
+            return result
+        prompt,generated,history=ids('prompt'),ids('token'),ids('history')
+        finish=one('finish'); reason=finish['value']
+        if reason not in ('stop','limit','interrupted'):
+            raise ValueError('native engine chat failed or has unknown terminal reason')
+        if (int(row['index'])!=0 or int(finish['index'])!=0 or int(row['value'])!=len(prompt)
+                or not prompt or len(history)>4096 or len(generated)>maximum):
+            raise ValueError('invalid engine chat prompt/cache lengths')
+        if previous is not None and prompt[:len(previous['history'])]!=previous['history']:
+            raise ValueError('engine chat lost exact conversation token prefix')
+        if reason=='stop' and (not generated or generated[-1] not in (151643,151645)):
+            raise ValueError('engine chat reported a false stop')
+        if reason=='limit' and (len(generated)!=maximum or generated[-1] in (151643,151645)):
+            raise ValueError('engine chat limit accounting differs')
+        if any(token in (151643,151645) for token in generated[:-1]):
+            raise ValueError('engine chat generated after its stop token')
+        closure=[] if generated and generated[-1]==151645 else [151645]
+        if history!=prompt+generated+closure+[198]:
+            raise ValueError('engine chat lost or duplicated raw generated tokens/closure')
+        rows_count=value('engine_rows')
+        if generated:
+            if rows_count!=len(prompt)+len(generated)-1:
+                raise ValueError('engine chat normal/decoded turn rows differ from P+G-1')
+        elif reason!='interrupted' or not 0<=rows_count<len(prompt):
+            raise ValueError('engine chat prefill abort executed invalid rows')
+        if value('submitted')!=24*rows_count or value('engine_steps')<1:
+            raise ValueError('engine chat submitted model rows disagree with executed engine rows')
+        if (value('kv_free')!=value('kv_total') or value('kv_total')<1
+                or value('kv_owned')!=0 or value('kv_written')!=0 or value('engine_live')!=0):
+            raise ValueError('engine chat terminal retained valid KV or request ownership')
+        token_events=[r for r in group if r['event']=='token']
+        times=[int(r['nanoseconds']) for r in token_events]
+        if times!=sorted(times) or any(t<0 for t in times) or int(finish['nanoseconds'])<max(times,default=0):
+            raise ValueError('invalid engine streaming timestamps')
+        texts=[r for r in group if r['event']=='text']
+        if any(int(r['value'])<1 or int(r['nanoseconds'])<0 for r in texts):
+            raise ValueError('invalid engine visible-byte receipt')
+        visible=[r for r in token_events if int(r['value']) not in (151643,151645)]
+        span=int(visible[-1]['nanoseconds'])-int(visible[0]['nanoseconds']) if len(visible)>1 else 0
+        rate=(len(visible)-1)*1e9/span if span>0 else None
+        turns.append(dict(turn=int(turn),cached_before=0,cached=0,prompt=prompt,history=history,
+            generated=generated,reason=reason,executed_rows=rows_count,
+            valid_kv_at_terminal=0,engine_live_at_terminal=0,
+            first_visible_ms=int(texts[0]['nanoseconds'])/1e6 if texts else None,
+            first_token_ms=times[0]/1e6 if times else None,
+            request_ms=int(finish['nanoseconds'])/1e6,output_tokens_per_second=rate))
+        previous=turns[-1]
+    return turns
+
+
+def run(binary,prepared,tables,output,engine=False):
     output.mkdir(parents=True,exist_ok=False)
     basic=output/'basic.tsv'
     args=[str(binary),str(prepared),str(tables),'16','256','',str(basic)]
@@ -85,7 +175,8 @@ def run(binary,prepared,tables,output):
     (output/'basic.txt').write_text(text)
     if result.returncode or 'Conversation full:' not in text or 'Input must be valid UTF-8.' not in text:
         raise ValueError('input rejection or execution failed: '+text)
-    turns=validate(events(basic),16)
+    checker=validate_engine if engine else validate
+    turns=checker(events(basic),16)
     if len(turns)!=4 or turns[0]['generated']!=turns[2]['generated']:
         raise ValueError('multi-turn/reset replay mismatch')
     elapsed=time.monotonic()-start
@@ -137,10 +228,10 @@ def run(binary,prepared,tables,output):
         (output/'interrupt.txt').write_bytes(transcript)
     if not os.WIFEXITED(exit_status) or os.WEXITSTATUS(exit_status)!=0:
         raise ValueError('PTY child failed')
-    interrupted=validate(events(pty_report),256)
+    interrupted=checker(events(pty_report),256)
     if len(interrupted)!=3 or interrupted[0]['reason']!='interrupted':
         raise ValueError('missing interrupted/resumed/reset conversation')
-    return dict(kind='native-chat-terminal-v1',binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
+    return dict(kind='native-engine-chat-terminal-v1' if engine else 'native-chat-terminal-v1',binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
                 basic_turns=turns,interrupt_turns=interrupted,basic_wall_seconds=elapsed,
                 report_free_output_exact=True,basic_output=text,pty_output=transcript.decode(),
                 basic_events=events(basic),interrupt_events=events(pty_report))
@@ -152,8 +243,9 @@ def main():
     parser.add_argument('--prepared',required=True,type=Path)
     parser.add_argument('--tables',required=True,type=Path)
     parser.add_argument('--output',required=True,type=Path)
+    parser.add_argument('--engine',action='store_true',help='Validate the separate EngineCore chat lifecycle')
     a=parser.parse_args()
-    result=run(a.binary.resolve(),a.prepared.resolve(),a.tables.resolve(),a.output)
+    result=run(a.binary.resolve(),a.prepared.resolve(),a.tables.resolve(),a.output,engine=a.engine)
     (a.output/'result.json').write_text(json.dumps(result,indent=2,ensure_ascii=False)+'\n')
     print('Native terminal passed: four piped turns, three PTY turns, Ctrl-C, EOF, reset, Unicode, context rejection and report parity.')
 

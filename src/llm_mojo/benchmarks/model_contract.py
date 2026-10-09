@@ -474,3 +474,51 @@ ENGINE_ADMISSION_RANGE_DECLARATION = dict(
     execution_timeout_seconds=180,
     recommendation='descriptive operating range; no latency SLO, goodput target or default promotion',
 )
+
+
+ENGINE_BUDGET_STUDY = 'engine-budget-v1'
+ENGINE_BUDGET_DECLARATION = dict(
+    ENGINE_DECLARATION, kind='qwen-engine-budget-v1', arms=['chunked', 'adaptive'],
+    study=ENGINE_BUDGET_STUDY, fixed_budgets=[32, 64, 128, 256],
+    work_capacity=dict(token_rows=256, max_sequences=8), max_sequences=8,
+    adaptive_ceiling=256, research_target_ns=25_000_000,
+    calibration_grid=['fixed-256', 'self-256', 'fixed-32', 'fixed-64', 'fixed-128'],
+    evaluation_grid=['fixed-256', 'self-256', 'fixed-32', 'fixed-64', 'fixed-128', 'adaptive'],
+    admission='one explicitly selected policy, identical across every cell',
+    observation='complete existing steps/events; KV occupancy observation disabled',
+    request_scope='finite traces without aborts; exact own-route histories and complete pool drain',
+    calibration='fresh same-build calibration on a different canonical native workload; '
+        'embedded archive reproduces NNLS coefficients and residuals',
+    pairing='same binary, assets, trace, workspace and admission; fixed256 control and self-control; '
+        'forward/reverse/reverse/forward block order',
+    numerical_policy='configuration 27 throughout; exact generated histories across budgets and repeats',
+    execution_timeout_seconds=180, fitted_budget=True,
+)
+
+
+ENGINE_FAST_STUDY = 'engine-fast-v1'
+ENGINE_FAST_ROUTES = ('reference', 'fast-decode')
+ENGINE_FAST_CHECKPOINT_CHECKS = ('singleton-partial-zero-head', 'batched-solo-hybrid-kv-logits',
+                                'mixed-fallback', 'terminal-reuse', 'fault-cleanup')
+ENGINE_ROUTE_FIELDS = ('step_id', 'configuration', 'executed_rows', 'sequences', 'selected_logits')
+ENGINE_FAST_DECLARATION = dict(
+    ENGINE_DECLARATION, kind='qwen-engine-fast-v1', arms=['chunked'], study=ENGINE_FAST_STUDY,
+    fixed_budgets=[32, 64, 128, 256], work_capacity=dict(token_rows=256, max_sequences=8),
+    max_sequences=8, runners=list(ENGINE_FAST_ROUTES),
+    grid=['reference', 'self-reference', 'fast-decode'],
+    admission='one explicitly selected policy, identical across every cell',
+    token_budget='one fixed row budget explicitly selected after the reference budget study',
+    observation='actual completed route, rows, sequences and selected head rows per nonempty step',
+    route_selection='reference uses configuration 27; optional runner uses 26 exactly when '
+        'rows == sequences == selected logits, otherwise 27',
+    qualification='exact-build checkpoint qualification and frozen own-route histories for the '
+        'same workload, budget, pool and admission; natural-history invariance is an empirical gate',
+    pairing='same binary, assets, trace, workspace, row budget and admission; reference and self-reference; '
+        'forward/reverse/reverse/forward block order',
+    numerical_policy='record cross-route and own-route history differences; match ordered per-step '
+        'rows, decode/prefill partitions, attended positions and selected request heads, excluding '
+        'route configuration and time; any difference or failed numerical qualification disables '
+        'the speed verdict',
+    request_scope='greedy finite traces without aborts; necessary rows and complete pool drain',
+    execution_timeout_seconds=180, fitted_budget=False, default_promotion=False,
+)

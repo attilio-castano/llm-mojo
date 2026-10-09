@@ -7,9 +7,10 @@ the Fast prefill route or a different prompt-chunk schedule.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
 from std.testing import TestSuite, assert_equal, assert_raises
-from llm_mojo.layers.decoder_layer import DECODER_MIXED
+from llm_mojo.layers.decoder_layer import DECODER_FUSED_DECODE, DECODER_MIXED
 from llm_mojo.models.qwen2.model import QwenModel, VOCABULARY
 from llm_mojo.models.qwen2.plan import configured_plan
+from llm_mojo.models.qwen2.runner import select_engine_configuration
 from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.kv_pool import KVPool
 from decoder_layer_support import decoder_support, load_decoder
@@ -212,6 +213,99 @@ def test_mixed_reference_model_selection_and_isolation() raises:
     assert_equal(ctx.api(), "metal")
     _run[False](ctx)
     _run[True](ctx)
+
+
+def _run_engine_fast_transition[HEAD_MAJOR: Bool](ctx: DeviceContext) raises:
+    """Compare each hybrid step against the same route submitted alone.
+
+    Both executions begin with configuration 27 KV, then use 26 only for
+    complete singleton rows. No assertion compares configurations 26 and 27.
+    """
+    var model = _model(ctx, 3)
+    var solo = _model(ctx, 1)
+    var paged = KVPool(ctx, 12, 32, model.kv_geometry(), HEAD_MAJOR)
+    var single = KVPool(ctx, 3, CONTEXT, solo.kv_geometry())
+    paged.storage.enqueue_fill(bitcast[DType.bfloat16](POISON))
+    single.storage.enqueue_fill(bitcast[DType.bfloat16](POISON))
+    var prefixes: List[Int] = [31, 33, 30]
+    for s in range(3):
+        var a = StepBatch.sequence(_ids(s, 0, prefixes[s]), 0, _table(s), 32)
+        a.logits_rows = List[Int]()
+        assert_equal(select_engine_configuration(a, True), DECODER_MIXED)
+        model.forward(ctx, a, paged, configured_plan(DECODER_MIXED, prefixes[s], prefixes[s]))
+        assert_equal(len(model.greedy_tokens(ctx)), 0)
+        var b = StepBatch.sequence(_ids(s, 0, prefixes[s]), 0, [s], CONTEXT)
+        b.logits_rows = List[Int]()
+        solo.forward(ctx, b, single, configured_plan(DECODER_MIXED, prefixes[s], prefixes[s]))
+        assert_equal(len(solo.greedy_tokens(ctx)), 0)
+    var mixed = _batch([0, 1, 6])
+    var configuration = select_engine_configuration(mixed, True)
+    assert_equal(configuration, DECODER_MIXED)
+    model.forward(ctx, mixed, paged, configured_plan(configuration, 7, 35, 3))
+    var first = model.greedy_tokens(ctx)
+    var first_logits = _snapshot(model.logits, 3 * VOCABULARY)
+    for s in range(3):
+        var count = 1 if s < 2 else 5
+        solo.forward(ctx, StepBatch.sequence(_ids(s, prefixes[s], count), prefixes[s], [s], CONTEXT), single,
+                     configured_plan(DECODER_MIXED, count, prefixes[s] + count))
+        assert_equal(first[s], solo.greedy(ctx))
+        _equals(first_logits, s * VOCABULARY, solo.logits, VOCABULARY, "hybrid mixed logits")
+    _pools_equal_and_guarded(paged, single, [32, 34, 35])
+    var full = StepBatch([32, 47, 61], [32, 34, 35], [0, 1, 2, 3], 3, [33, 35, 36], 3,
+        [8, 4, 0, 7, 3, 11, 6, 2, 10], [4 * 32, 3 * 32 + 2, 2 * 32 + 3], [0, 1, 2])
+    configuration = select_engine_configuration(full, True)
+    assert_equal(configuration, DECODER_FUSED_DECODE)
+    model.forward(ctx, full, paged, configured_plan(configuration, 3, 36, 3))
+    assert_equal(model.last_route.configuration, DECODER_FUSED_DECODE)
+    var selected = model.greedy_tokens(ctx)
+    var logits = _snapshot(model.logits, 3 * VOCABULARY)
+    var before: List[Int] = [32, 34, 35]
+    for s in range(3):
+        solo.forward(ctx, StepBatch.sequence(_ids(s, before[s], 1), before[s], [s], CONTEXT), single,
+                     configured_plan(DECODER_FUSED_DECODE, 1, before[s] + 1))
+        assert_equal(selected[s], solo.greedy(ctx))
+        _equals(logits, s * VOCABULARY, solo.logits, VOCABULARY, "hybrid decode logits")
+    _pools_equal_and_guarded(paged, single, [33, 35, 36])
+    # A one-token partial prompt must remain 27, with no head writes or samples.
+    model.logits.enqueue_fill(bitcast[DType.bfloat16](POISON))
+    model.normalized.enqueue_fill(bitcast[DType.bfloat16](POISON))
+    var partial = StepBatch.sequence(_ids(0, 33, 1), 33, _table(0), 32)
+    partial.logits_rows = List[Int]()
+    configuration = select_engine_configuration(partial, True)
+    assert_equal(configuration, DECODER_MIXED)
+    model.forward(ctx, partial, paged, configured_plan(configuration, 1, 34))
+    assert_equal(model.last_route.configuration, DECODER_MIXED)
+    assert_equal(model.sampled_rows, 0)
+    assert_equal(len(model.greedy_tokens(ctx)), 0)
+    _poisoned(model.logits)
+    _poisoned(model.normalized)
+    var partial_solo = StepBatch.sequence(_ids(0, 33, 1), 33, [0], CONTEXT)
+    partial_solo.logits_rows = List[Int]()
+    solo.forward(ctx, partial_solo, single, configured_plan(DECODER_MIXED, 1, 34))
+    assert_equal(len(solo.greedy_tokens(ctx)), 0)
+    _pools_equal_and_guarded(paged, single, [34, 35, 36])
+    # A singleton final prompt chunk now selects its first output token via 26.
+    var final_prefill = StepBatch.sequence(_ids(0, 34, 1), 34, _table(0), 32)
+    configuration = select_engine_configuration(final_prefill, True)
+    assert_equal(configuration, DECODER_FUSED_DECODE)
+    model.forward(ctx, final_prefill, paged, configured_plan(configuration, 1, 35))
+    assert_equal(model.last_route.configuration, DECODER_FUSED_DECODE)
+    var final_token = model.greedy(ctx)
+    var final_logits = _snapshot(model.logits, VOCABULARY)
+    solo.forward(ctx, StepBatch.sequence(_ids(0, 34, 1), 34, [0], CONTEXT), single,
+                 configured_plan(DECODER_FUSED_DECODE, 1, 35))
+    assert_equal(final_token, solo.greedy(ctx))
+    _equals(final_logits, 0, solo.logits, VOCABULARY, "singleton final-prefill logits")
+    _pools_equal_and_guarded(paged, single, [35, 35, 36])
+
+
+def test_engine_fast_transition_keeps_same_route_logits_and_kv_isolated() raises:
+    var support = decoder_support()
+    support.verify_case(CASE)
+    var ctx = DeviceContext()
+    assert_equal(ctx.api(), "metal")
+    _run_engine_fast_transition[False](ctx)
+    _run_engine_fast_transition[True](ctx)
 
 
 def main() raises:

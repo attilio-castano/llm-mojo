@@ -12,6 +12,7 @@ uv run llm-mojo setup
 uv run llm-mojo setup --check
 uv run llm-mojo models list
 uv run llm-mojo chat
+uv run --locked llm-mojo chat --engine
 uv run llm-mojo generate --prompt "The capital of France is" --preset short
 uv run llm-mojo generate --prompt-file prompt.txt --max-new-tokens 64
 ```
@@ -47,7 +48,12 @@ context capacity. Generation consumes raw text; chat applies Qwen's plain
 system/user/assistant template. Generation requires exactly one prompt source; an
 empty prompt is rejected.
 
-Chat runs the Fast route. `generate --mode` also accepts two reference routes:
+Chat defaults to the direct Fast session. `chat --engine` selects the synchronous
+reference EngineCore adapter, using configuration 27 for every call. It keeps
+weights resident, retains exact conversation token IDs and recomputes the complete
+history each turn. `--mode fast` is rejected with `--engine`; see
+[engine terminal chat](chat.md#optional-engine-terminal-chat).
+`generate --mode` also accepts two reference routes:
 `baseline` runs decoder configuration 0 for every call, and `consistent` runs the
 deterministic research route. Both are slower than `fast`.
 

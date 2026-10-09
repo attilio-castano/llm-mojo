@@ -54,11 +54,12 @@ def setup(offline: Annotated[bool, typer.Option('--offline', help='Never downloa
 
 @app.command()
 def chat(preset: Preset = 'interactive', model: Model = None, mode: Mode = None,
+         engine: Annotated[bool, typer.Option('--engine', help='Use the reference EngineCore adapter; recompute history each turn.')] = False,
          prepared: Path | None = None, max_new_tokens: int | None = None,
          chunk_rows: int | None = None, system_file: Path | None = None,
          report: Path | None = None, show_config: Inspect = False):
-    """Start a native conversation with persistent KV caches."""
-    cfg = configuration('chat', preset=preset, model=model, mode=mode,
+    """Start a native conversation; optionally use the reference request engine."""
+    cfg = configuration('chat', preset=preset, model=model, mode=mode, engine=engine,
                         prepared=prepared, max_new_tokens=max_new_tokens,
                         chunk_rows=chunk_rows, system_file=system_file, report=report)
     if show_config:

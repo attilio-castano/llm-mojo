@@ -19,8 +19,10 @@ defines retention and paired comparisons.
 The native `EngineCore` accepts arrivals and aborts at step boundaries, schedules
 decode rows and one prefill tail, and delivers ordered token/finish events. Its
 Metal runner completes each step before cache ownership changes. The trace driver
-exercises this backend with fixed arrivals; the existing terminal chat still uses
-its direct Fast session. Frontend integration follows this core milestone.
+exercises this backend with fixed arrivals. Terminal chat defaults to its direct
+Fast session; the optional `chat --engine` adapter now uses the synchronous
+reference core with one request at a time and complete-history recomputation.
+Prefix caching and multi-request frontend transport remain separate work.
 
 ```mermaid
 flowchart LR
@@ -460,8 +462,10 @@ Replayed summaries equal the summaries retained inside the archives. Full derive
 request-summary files are generated locally and ignored by Git; the compact
 results card remains readable evidence. The admission successor below addresses
 repeated preemption. Cost-model variability and the cost of reserving maximum
-output capacity remain study questions. Multi-prefill steps, a measured Fast runner, prefix
-caching and frontend integration remain separate work. The asynchronous gate
+output capacity remain study questions. At this original milestone, multi-prefill
+steps, a measured Fast runner, prefix caching and frontend integration remained
+separate work; the implemented successor contracts and terminal adapter are
+recorded below. The asynchronous gate
 below is still open for LLM stepping.
 
 ## Lifetime reservation admission: bounded successor study
@@ -676,8 +680,9 @@ admission delay, preemptions, computed rows, waiting counts and reserved/written
 KV. The existing paired verdict applies only to offline makespan. Online
 distributions and memory occupancy explain tradeoffs; they establish no capacity,
 goodput or client SLO. Close with an explicit policy recommendation even if no
-single mode dominates. Automatic admission selection, chunk-budget tuning, Fast
-execution and chat integration remain subsequent milestones.
+single mode dominates. This operating-range contract leaves automatic admission
+selection, chunk-budget tuning, Fast execution and chat integration to subsequent
+milestones, recorded separately below.
 
 ## Admission operating range: retained bounded results
 
@@ -774,6 +779,59 @@ This verifies original source blobs and reconstructs all 144 records, using the
 original live physical receipt for unavailable binary/asset checks. Keep the
 earlier `engine-admission-offline.json.gz` baseline, whose exact hash is bound by
 the frozen intent. Local retention establishes no remote backup or publication.
+
+## Fixed-workspace budget and optional Fast contracts
+
+The implemented `qwen-engine-budget-v1` successor holds physical workspaces at
+256 rows and eight sequence slots while comparing scheduler budgets 32/64/128/256.
+Calibration includes repeated fixed-256 control in four balanced blocks (20
+runs); a separate held-out evaluation adds one frozen adaptive policy (24 runs
+per trace/pool). One explicitly selected admission policy is shared by every
+cell. `engine-step-cost-v2` fits all positive calibration steps, and replay
+recomputes its nonnegative fit, predictions and residuals from embedded bytes.
+The 25 ms research target concerns synchronous execute cost. Mandatory decodes
+and minimum progress can overrun it; it does not promise client latency.
+
+The optional Fast runner selects configuration 26 exactly when every sequence
+has one query and one selected logit, otherwise configuration 27. An unfinished
+singleton prefill stays on 27. Its fixed-budget reference/self-reference/Fast
+grid requires exact-build checkpoint qualification and untimed own-route natural
+histories before collection. Numerical or history divergence, or different
+ordered per-step work, prevents a speed verdict. Routes are recorded per step.
+The [benchmark commands](../../src/llm_mojo/benchmarks/README.md#fixed-workspace-row-budget-study)
+expose both implemented contracts. No new budget/Fast performance conclusion or
+default promotion follows from their implementation.
+
+## Optional engine terminal chat: accepted lifecycle
+
+[`chat --engine`](../../docs/chat.md#optional-engine-terminal-chat) connects the
+existing terminal streaming decoder to one synchronous reference-27 EngineCore
+request per turn. Weights stay resident and exact token history survives reply
+completion and cancellation; `/reset` restores system-only history. Each new
+turn recomputes its full history with lifetime KV reservation; completed or
+cancelled requests return their blocks. Execution or output failure drains
+logical ownership and requires restarting the process. Prefix caching,
+concurrent terminal requests, asynchronous stepping and device-loss recovery
+remain separate work.
+
+The [acceptance card](engine-chat-acceptance.json) retains exact agreement with
+direct reference full-history execution for 123 generated tokens across seven
+histories and 455 rows, including one interrupted prefix. A private injected
+nonfinite head fault preserves the already delivered token, closes history
+exactly once, returns all blocks and leaves owned/written-valid KV and live
+requests at zero. Its actual native exit remains 1 (`exited_nonzero`); a separate
+semantic checker establishes the expected failure behavior on a healthy device.
+
+The [validation manifest](engine-chat-validation.json) and
+[lossless archive](engine-chat-validation.json.gz) retain final full validation,
+actual commands/logs/source snapshots, terminal observations and the independent
+checkers. A separate fresh restore regenerates the frozen fixture/cases from
+retained raw TSVs and reproduces both semantic checks without native execution.
+The [canonical retrieval receipt](engine-chat-publication.json) records another
+independent retrieval/replay. Model weights, binaries and generated fixture
+arrays are excluded; source JSON/gz fixture files remain hash-only provenance.
+This establishes the optional adapter's bounded lifecycle acceptance, with no
+chat performance or production-serving claim.
 
 ## Metadata preparation gate
 

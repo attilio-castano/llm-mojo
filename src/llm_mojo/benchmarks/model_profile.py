@@ -36,6 +36,14 @@ from .environment import stable_environment, conditions_snapshot, require_ac, re
 from . import model_contract as contract
 
 
+class NativeCommandError(RuntimeError):
+    """A completed subprocess failure with its actual numeric return code."""
+
+    def __init__(self, returncode, log):
+        super().__init__(f'command failed ({returncode}); see {log}')
+        self.returncode = returncode
+
+
 def execute(command, log, timeout=600):
     try:
         result = subprocess.run(list(map(str, command)), cwd=repository_root(), env=environment(),
@@ -48,7 +56,7 @@ def execute(command, log, timeout=600):
         raise RuntimeError(f'command timed out after {timeout}s; partial output retained at {log}') from error
     log.write_text(result.stdout)
     if result.returncode:
-        raise RuntimeError(f'command failed ({result.returncode}); see {log}')
+        raise NativeCommandError(result.returncode, log)
     return result.stdout
 
 
@@ -2995,19 +3003,19 @@ def engine_trace_tsv(trace):
 
 
 def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy=None, admission=None,
-                     observation=None):
+                     observation=None, study=None, token_budget=None, runner=None):
     """Reject malformed or incomplete native traces before computing any metric."""
     validate_engine_trace(trace)
     if arm not in (*contract.ENGINE_ARMS, 'adaptive') or mode not in ('greedy', 'scripted'):
         raise ValueError('invalid engine arm or mode')
     metadata, arrivals, events, steps = {}, {}, [], []
-    kv_observations, admissions, execute_intervals = [], [], []
+    kv_observations, admissions, execute_intervals, routes = [], [], [], []
     for line in stdout.splitlines():
         fields = line.split()
         if not fields:
             continue
         name = fields[0]
-        if name in ('device', 'mode', 'config', 'drained', 'policy', 'admission', 'telemetry', 'kv_geometry'):
+        if name in ('device', 'mode', 'config', 'drained', 'policy', 'admission', 'telemetry', 'kv_geometry', 'study', 'work_capacity', 'runner'):
             if name in metadata:
                 raise ValueError('duplicate engine execution identity')
             metadata[name] = fields[1:]
@@ -3032,6 +3040,8 @@ def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy
         elif name == 'admit' and len(fields) == 4:
             step_id, identifier, timestamp = map(int, fields[1:])
             admissions.append(dict(step_id=step_id, request_id=identifier, timestamp_ns=timestamp))
+        elif name == 'route' and len(fields) == len(contract.ENGINE_ROUTE_FIELDS) + 1:
+            routes.append(dict(zip(contract.ENGINE_ROUTE_FIELDS, map(int, fields[1:]))))
         elif name == 'kv_execute' and len(fields) == 4:
             step_id, begin, end = map(int, fields[1:])
             execute_intervals.append(dict(step_id=step_id, begin_ns=begin, end_ns=end))
@@ -3039,6 +3049,18 @@ def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy
             raise ValueError('unknown or malformed engine trace line: ' + line[:120])
     device = 'Apple M4 Pro/metal' if mode == 'greedy' else 'simulated/virtual'
     budget = 256 if arm in ('chunked', 'adaptive') else 4096
+    if study is None:
+        if token_budget is not None or 'study' in metadata or 'work_capacity' in metadata or runner is not None:
+            raise ValueError('engine scheduling study was not declared')
+    elif (study not in (contract.ENGINE_BUDGET_STUDY, contract.ENGINE_FAST_STUDY) or observation is not None
+          or arm not in ('chunked', 'adaptive') or maximum_sequences != 8
+          or (study == contract.ENGINE_FAST_STUDY and arm != 'chunked')
+          or type(token_budget) is not int or token_budget not in contract.ENGINE_BUDGET_DECLARATION['fixed_budgets']
+          or (arm == 'adaptive' and token_budget != 256)
+          or metadata.get('study') != [study] or metadata.get('work_capacity') != ['256', '8']):
+        raise ValueError('engine scheduling budget or workspace differs from declaration')
+    else:
+        budget = token_budget
     sequences = 1 if arm == 'serial' else maximum_sequences
     if (metadata.get('device') != device.split() or metadata.get('mode') != [mode]
             or metadata.get('config') != [arm, str(blocks), str(budget), str(sequences)]):
@@ -3046,7 +3068,8 @@ def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy
     if admission is None:
         if 'admission' in metadata:
             raise ValueError('engine admission selector was not declared')
-    elif (arm != 'chunked' or admission not in contract.ENGINE_ADMISSION_POLICIES
+    elif ((arm != 'chunked' and not (arm == 'adaptive' and study in (contract.ENGINE_BUDGET_STUDY, contract.ENGINE_FAST_STUDY)))
+          or admission not in contract.ENGINE_ADMISSION_POLICIES
           or metadata.get('admission') != [admission]):
         raise ValueError('engine admission differs from declaration')
     if policy is None:
@@ -3175,6 +3198,29 @@ def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy
                       admissions=admissions, execute_intervals=execute_intervals,
                       kv_geometry=dict(zip(('layers', 'kv_heads', 'head_dim', 'storage_bytes'),
                                            map(int, metadata['kv_geometry']))))
+    if study is not None:
+        result.update(study=study, work_capacity=dict(token_rows=256, max_sequences=8))
+    if runner is None:
+        if 'runner' in metadata or routes or study == contract.ENGINE_FAST_STUDY:
+            raise ValueError('engine runner route observation was not declared')
+    else:
+        if (study != contract.ENGINE_FAST_STUDY or runner not in contract.ENGINE_FAST_ROUTES
+                or mode != 'greedy' or admission is None or metadata.get('runner') != [runner]):
+            raise ValueError('engine Fast runner identity differs from declaration')
+        active_steps = [step for step in steps if step['total_tokens']]
+        if [route['step_id'] for route in routes] != [step['step_id'] for step in active_steps]:
+            raise ValueError('missing, duplicate or misassociated completed engine route')
+        for route, step in zip(routes, active_steps):
+            selected = sum(event['kind'] == 'token' and event['step_id'] == step['step_id'] for event in events)
+            sequence_count = step['decode_seqs'] + step['prefill_seqs']
+            configuration = 26 if runner == 'fast-decode' and step['total_tokens'] == sequence_count == selected else 27
+            if (route['configuration'] != configuration or route['executed_rows'] != step['total_tokens']
+                    or route['sequences'] != sequence_count or route['selected_logits'] != selected
+                    or step['prefill_seqs'] != int(step['prefill_tokens'] > 0)
+                    or not step['decode_seqs'] <= selected <= sequence_count
+                    or not 1 <= sequence_count <= step['total_tokens']):
+                raise ValueError('engine completed route differs from actual rows, sequences or selected heads')
+        result.update(runner=runner, routes=routes)
     return result
 
 
@@ -3423,7 +3469,7 @@ def _engine_same_json(value, expected):
 
 def _engine_declaration(record):
     declarations = {d['kind']: d for d in (contract.ENGINE_DECLARATION, contract.ENGINE_ADMISSION_DECLARATION,
-                                         contract.ENGINE_ADMISSION_RANGE_DECLARATION)}
+                                         contract.ENGINE_ADMISSION_RANGE_DECLARATION, contract.ENGINE_BUDGET_DECLARATION, contract.ENGINE_FAST_DECLARATION)}
     declaration = declarations.get(record.get('kind'))
     if declaration is None or record.get('declaration') != declaration:
         raise ValueError('engine measurement declaration changed')
@@ -3432,10 +3478,11 @@ def _engine_declaration(record):
     return declaration
 
 
-def _engine_collection_declaration(admission_pair, admission_range):
-    if type(admission_pair) is not bool or type(admission_range) is not bool or (admission_pair and admission_range):
+def _engine_collection_declaration(admission_pair, admission_range, budget_study=False, fast_study=False):
+    if any(type(v) is not bool for v in (admission_pair, admission_range, budget_study, fast_study)) or sum((admission_pair, admission_range, budget_study, fast_study)) > 1:
         raise ValueError('select exactly one engine admission study')
-    return (contract.ENGINE_ADMISSION_RANGE_DECLARATION if admission_range else
+    return (contract.ENGINE_FAST_DECLARATION if fast_study else contract.ENGINE_BUDGET_DECLARATION if budget_study else
+            contract.ENGINE_ADMISSION_RANGE_DECLARATION if admission_range else
             contract.ENGINE_ADMISSION_DECLARATION if admission_pair else contract.ENGINE_DECLARATION)
 
 
@@ -3446,6 +3493,12 @@ def _engine_cells(block, admission_pair=False):
 
 
 def engine_study_summary(record):
+    if record.get('kind') == contract.ENGINE_FAST_DECLARATION['kind']:
+        from .engine_budget import fast_summary
+        return fast_summary(record)
+    if record.get('kind') == contract.ENGINE_BUDGET_DECLARATION['kind']:
+        from .engine_budget import scheduling_summary
+        return scheduling_summary(record)
     trace = validate_engine_trace(record['trace'])
     declaration = _engine_declaration(record)
     admission_range = declaration == contract.ENGINE_ADMISSION_RANGE_DECLARATION
@@ -3558,8 +3611,8 @@ def _validate_engine_range_execution(record, run, parsed):
         raise ValueError('operating-range native execution receipt changed or exceeded its bound')
 
 
-def engine_build(output, prepared, admission_pair=False, admission_range=False):
-    declaration = _engine_collection_declaration(admission_pair, admission_range)
+def engine_build(output, prepared, admission_pair=False, admission_range=False, budget_study=False, fast_study=False):
+    declaration = _engine_collection_declaration(admission_pair, admission_range, budget_study, fast_study)
     ensure_record_location(output)
     source = source_identity()
     if source['repository']['dirty']:
@@ -3669,7 +3722,7 @@ def validate_engine_record_build(record):
             or not build.get('assets', {}).get('prepared_sha256')
             or not build.get('assets', {}).get('tables_sha256')):
         raise ValueError('incomplete engine source, binary or asset provenance')
-    if declaration == contract.ENGINE_ADMISSION_RANGE_DECLARATION and not _engine_same_json(build['declaration'], declaration):
+    if declaration != contract.ENGINE_DECLARATION and not _engine_same_json(build['declaration'], declaration):
         raise ValueError('engine operating-range build declaration types changed')
     source = build['source']
     def digest(value, width=64):
@@ -3690,7 +3743,7 @@ def engine_replay(directory):
     if directory.is_file():
         archive = directory
     else:
-        archives = [directory/(stem+'.json.gz') for stem in ('engine-core', 'engine-admission', 'engine-admission-range')
+        archives = [directory/(stem+'.json.gz') for stem in ('engine-core', 'engine-admission', 'engine-admission-range', 'engine-budget', 'engine-fast')
                     if (directory/(stem+'.json.gz')).is_file()]
         if len(archives) != 1:
             raise ValueError('engine replay needs exactly one archive or an explicit file')
@@ -3701,7 +3754,7 @@ def engine_replay(directory):
     compressed = archive.read_bytes()
     payload = gzip.decompress(compressed)
     if (manifest.get('kind') not in (contract.ENGINE_DECLARATION['kind'], contract.ENGINE_ADMISSION_DECLARATION['kind'],
-                                    contract.ENGINE_ADMISSION_RANGE_DECLARATION['kind'])
+                                    contract.ENGINE_ADMISSION_RANGE_DECLARATION['kind'], contract.ENGINE_BUDGET_DECLARATION['kind'], contract.ENGINE_FAST_DECLARATION['kind'])
             or len(compressed) != manifest['bytes']
             or hashlib.sha256(compressed).hexdigest() != manifest['sha256']
             or hashlib.sha256(payload).hexdigest() != manifest['uncompressed_sha256']):
@@ -3769,7 +3822,30 @@ def main():
                         help='engine-build/collect: paired chunked incremental/reserved admission, fixed256/eight sequences')
     admission_study.add_argument('--admission-range', action='store_true',
                         help='engine-build/collect: paired operating-range study with admission and bounded KV occupancy observations')
+    admission_study.add_argument('--budget-study', action='store_true',
+                        help='engine-build/collect: fixed-workspace row-budget and fresh fitted-policy study')
+    admission_study.add_argument('--fast-study', action='store_true',
+                        help='engine-build/collect: fixed-budget reference/self-reference/optional Fast route study')
+    parser.add_argument('--token-budget', type=int, choices=[32, 64, 128, 256],
+                        help='Fast engine-collect only: one fixed scheduler row budget')
+    parser.add_argument('--qualification', type=Path, help='Fast: frozen exact-build checkpoint qualification JSON')
+    parser.add_argument('--budget-stage', choices=['calibration', 'evaluation'])
+    parser.add_argument('--admission-policy', choices=list(contract.ENGINE_ADMISSION_POLICIES))
+    parser.add_argument('--policy', type=Path, help='budget evaluation: frozen same-build fitted policy')
     args = parser.parse_args()
+    if (args.budget_study or args.fast_study) and args.command not in ('engine-build', 'engine-collect'):
+        parser.error('--budget-study and --fast-study belong only to engine-build/collect')
+    fast_collection = args.command == 'engine-collect' and args.fast_study
+    budget_collection = args.command == 'engine-collect' and args.budget_study
+    for option, value, allowed, selector in (
+            ('--token-budget', args.token_budget, fast_collection, '--fast-study'),
+            ('--qualification', args.qualification, fast_collection, '--fast-study'),
+            ('--budget-stage', args.budget_stage, budget_collection, '--budget-study'),
+            ('--policy', args.policy, budget_collection, '--budget-study'),
+            ('--admission-policy', args.admission_policy, fast_collection or budget_collection,
+             '--fast-study or --budget-study')):
+        if value is not None and not allowed:
+            parser.error(option + ' belongs only to engine-collect ' + selector)
     if args.command in RETIRED or (args.command == 'build' and (args.fusion or args.combined or args.selection
                                    or args.copy_free or args.residual_norm or args.projections)):
         parser.error(args.command + ' belongs to a completed experiment; its retained archive replays, and '
@@ -3778,11 +3854,27 @@ def main():
         engine_specification(args.output.resolve(), args.seed, args.arrival_rate)
     elif args.command == 'engine-build':
         if args.prepared is None: parser.error('engine-build needs --prepared')
-        engine_build(args.output.resolve(), args.prepared, args.admission_pair, args.admission_range)
+        engine_build(args.output.resolve(), args.prepared, args.admission_pair, args.admission_range, args.budget_study, args.fast_study)
     elif args.command == 'engine-collect':
         if args.build is None or args.trace is None: parser.error('engine-collect needs --build and --trace')
-        engine_collect(args.build.resolve(), args.trace.resolve(), args.output.resolve(), args.blocks,
-                       args.max_sequences, args.engine_mode, args.warmup_steps, args.admission_pair, args.admission_range)
+        if args.fast_study:
+            if (args.token_budget is None or args.admission_policy is None or args.qualification is None
+                    or args.policy is not None or args.budget_stage is not None or args.engine_mode != 'greedy'):
+                parser.error('Fast collection needs --token-budget, --admission-policy, --qualification and greedy mode')
+            from .engine_budget import fast_collect
+            fast_collect(args.build.resolve(), args.trace.resolve(), args.output.resolve(),
+                         args.qualification.resolve(), args.token_budget, args.admission_policy,
+                         args.blocks, args.max_sequences, args.warmup_steps)
+        elif args.budget_study:
+            if args.budget_stage is None or args.admission_policy is None:
+                parser.error('budget collection needs explicit --budget-stage and --admission-policy')
+            from .engine_budget import scheduling_collect
+            scheduling_collect(args.build.resolve(), args.trace.resolve(), args.output.resolve(),
+                               args.budget_stage, args.admission_policy, args.policy,
+                               args.blocks, args.max_sequences, args.engine_mode, args.warmup_steps)
+        else:
+            engine_collect(args.build.resolve(), args.trace.resolve(), args.output.resolve(), args.blocks,
+                           args.max_sequences, args.engine_mode, args.warmup_steps, args.admission_pair, args.admission_range)
     elif args.command == 'engine-replay': print(json.dumps(engine_replay(args.output.resolve()), indent=2))
     elif args.command == 'batch-support': batch_support_collect(args.output.resolve())
     elif args.command == 'batch-support-replay': print(json.dumps(batch_support_replay(args.output),indent=2))

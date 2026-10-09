@@ -21,6 +21,9 @@ trait TraceRunner(ModelRunner):
     def wait_until(mut self, at_ns: Int) raises:
         ...
 
+    def emit_route(self, step_id: Int, rows: Int):
+        ...
+
 
 @fieldwise_init
 struct TraceMetal(TraceRunner):
@@ -38,6 +41,11 @@ struct TraceMetal(TraceRunner):
     def execute(mut self, batch: StepBatch, mut kv: KVPool) raises -> List[Int]:
         return self.inner.execute(batch,kv)
 
+    def emit_route(self, step_id: Int, rows: Int):
+        # Actual completed dispatch, with no new device observation.
+        print("route",step_id,self.inner.model.last_route.configuration,rows,
+              self.inner.model.last_route.sequences,self.inner.model.sampled_rows)
+
 
 @fieldwise_init
 struct TraceSimulation(TraceRunner):
@@ -54,6 +62,10 @@ struct TraceSimulation(TraceRunner):
 
     def execute(mut self, batch: StepBatch, mut kv: KVPool) raises -> List[Int]:
         return self.inner.execute(batch,kv)
+
+    def emit_route(self, step_id: Int, rows: Int):
+        # engine-fast-v1 is Metal-only; simulation makes no route claim.
+        return
 
 
 struct TraceRequest(Movable):
@@ -126,7 +138,8 @@ def emit(record: EngineStep, observe_kv: Bool = False):
 def run_trace[Runner: TraceRunner](
     mut runner: Runner, mut kv: KVPool, mut requests: List[TraceRequest], mut aborts: List[TraceAbort],
     arm: String, budget: Int, maximum_sequences: Int, warmup_steps: Int, cost: StepCost,
-    reserve_lifetime: Bool, admission_explicit: Bool, observe_kv: Bool,
+    reserve_lifetime: Bool, admission_explicit: Bool, observe_kv: Bool, budget_study: Bool,
+    fast_study: Bool, runner_kind: String,
 ) raises:
     var serial = arm == "serial"
     var static = arm == "static"
@@ -154,6 +167,11 @@ def run_trace[Runner: TraceRunner](
         print("telemetry","admission-range-v1")
         # The pool's actual BF16 geometry binds byte-time even in scripted mode.
         print("kv_geometry",kv.geometry.layers,kv.geometry.kv_heads,kv.geometry.head_dim,2)
+    if budget_study or fast_study:
+        print("study","engine-fast-v1" if fast_study else "engine-budget-v1")
+        print("work_capacity",256,8)
+    if fast_study:
+        print("runner",runner_kind)
     runner.reset_clock()
     var admitted = 0
     var iterations = 0
@@ -197,6 +215,8 @@ def run_trace[Runner: TraceRunner](
         if engine.live() > 0:
             var record = engine.step(runner,kv)
             emit(record,observe_kv)
+            if fast_study and record.total_tokens > 0:
+                runner.emit_route(record.step_id,record.total_tokens)
             iterations += 1
             if iterations > 1000000:
                 raise Error("bounded finite trace did not drain")
@@ -218,8 +238,8 @@ def run_trace[Runner: TraceRunner](
 
 def main() raises:
     var args = argv()
-    if len(args) < 9 or len(args) > 12:
-        raise Error("engine_trace prepared trace.tsv arm blocks budget max_sequences warmup_steps greedy|scripted [policy.tsv] [incremental|reserved [admission-range-v1]]")
+    if len(args) < 9 or len(args) > 13:
+        raise Error("engine_trace prepared trace.tsv arm blocks budget max_sequences warmup_steps greedy|scripted [policy.tsv] [incremental|reserved [admission-range-v1|engine-budget-v1|engine-fast-v1 [reference|fast-decode]]]")
     var arm = args[3]
     var blocks = Int(args[4])
     var budget = Int(args[5])
@@ -235,6 +255,10 @@ def main() raises:
     var admission = "incremental"
     var admission_explicit = False
     var observe_kv = False
+    var selector = ""
+    var selector_explicit = False
+    var runner_kind = "reference"
+    var runner_explicit = False
     if arm == "adaptive":
         if len(args) < 10 or mode != "greedy":
             raise Error("adaptive trace requires Metal and a frozen cost policy")
@@ -246,20 +270,41 @@ def main() raises:
         if len(args) >= 11:
             admission = args[10]
             admission_explicit = True
-        if len(args) == 12:
-            if args[11] != "admission-range-v1":
-                raise Error("invalid trace telemetry selector")
-            observe_kv = True
+        if len(args) >= 12:
+            selector = args[11]
+            selector_explicit = True
+        if len(args) == 13:
+            runner_kind = args[12]
+            runner_explicit = True
     else:
-        if len(args) > 11:
+        if len(args) > 12:
             raise Error("a cost policy belongs only to the adaptive arm")
         if len(args) >= 10:
             admission = args[9]
             admission_explicit = True
-        if len(args) == 11:
-            if args[10] != "admission-range-v1":
-                raise Error("invalid trace telemetry selector")
-            observe_kv = True
+        if len(args) >= 11:
+            selector = args[10]
+            selector_explicit = True
+        if len(args) == 12:
+            runner_kind = args[11]
+            runner_explicit = True
+    if selector_explicit:
+        if (selector != "admission-range-v1" and selector != "engine-budget-v1"
+                and selector != "engine-fast-v1"):
+            raise Error("invalid trace study selector")
+        observe_kv = selector == "admission-range-v1"
+    var budget_study = selector == "engine-budget-v1"
+    var fast_study = selector == "engine-fast-v1"
+    if runner_explicit and (not fast_study or (runner_kind != "reference" and runner_kind != "fast-decode")):
+        raise Error("a reference|fast-decode runner selector belongs only to engine-fast-v1")
+    if fast_study and (mode != "greedy" or not runner_explicit):
+        raise Error("engine-fast-v1 requires greedy execution and an explicit runner selector")
+    if budget_study or fast_study:
+        if (not admission_explicit or sequences != 8
+                or (arm != "chunked" and arm != "adaptive")
+                or (budget != 32 and budget != 64 and budget != 128 and budget != 256)
+                or (arm == "adaptive" and budget != 256)):
+            raise Error("invalid engine study fixed work-capacity configuration")
     if admission != "incremental" and admission != "reserved":
         raise Error("invalid trace admission policy")
     var reserve_lifetime = admission == "reserved"
@@ -304,10 +349,16 @@ def main() raises:
         var kv = KVPool(ctx,blocks,32,KVGeometry(1,1,1))
         var runner = TraceSimulation(SimulatedRunner(script,VOCABULARY))
         print("device simulated/virtual")
-        run_trace(runner,kv,requests,aborts,arm,budget,sequences,warmup,cost,reserve_lifetime,admission_explicit,observe_kv)
+        run_trace(runner,kv,requests,aborts,arm,budget,sequences,warmup,cost,reserve_lifetime,admission_explicit,observe_kv,budget_study,fast_study,runner_kind)
     else:
+        # Budget studies vary scheduler work while holding the model's physical
+        # row/sequence workspace capacity and metadata strides fixed.
         var rows = budget if arm == "chunked" or arm == "adaptive" else 4096
-        var runner = TraceMetal(QwenRunner(args[1],4096,rows,min(sequences,rows)))
+        var runner_sequences = min(sequences,rows)
+        if budget_study or fast_study:
+            rows = 256
+            runner_sequences = 8
+        var runner = TraceMetal(QwenRunner(args[1],4096,rows,runner_sequences,fast_decode=runner_kind == "fast-decode"))
         var kv = KVPool(runner.inner.ctx,blocks,32,runner.inner.model.kv_geometry())
         print("device",runner.inner.ctx.name()+"/"+runner.inner.ctx.api())
-        run_trace(runner,kv,requests,aborts,arm,budget,sequences,warmup,cost,reserve_lifetime,admission_explicit,observe_kv)
+        run_trace(runner,kv,requests,aborts,arm,budget,sequences,warmup,cost,reserve_lifetime,admission_explicit,observe_kv,budget_study,fast_study,runner_kind)

@@ -25,6 +25,7 @@ class ModeConfig:
 
 @dataclass
 class WorkloadConfig:
+    engine: bool = False
     max_new_tokens: int = 256
     chunk_rows: int = 256
     prepared: str | None = None
@@ -66,7 +67,7 @@ def _register():
     store = ConfigStore.instance()
     store.store(name='llm_run', node=RunConfig)
     store.store(group='model', name=MODEL, node=ModelConfig)
-    for name in GENERATION_MODES:
+    for name in (*GENERATION_MODES, 'reference'):
         store.store(group='mode', name=name, node=ModeConfig(name=name))
     for name, node in WORKLOADS.items():
         store.store(group='workload', name=name, node=node)
@@ -77,20 +78,24 @@ def _register():
 _register()
 
 
-def resolve_run(command, *, preset='interactive', model=None, mode=None, **options):
+def resolve_run(command, *, preset='interactive', model=None, mode=None, engine=False, **options):
     if command not in ('chat', 'generate'):
         raise ValueError('unknown application command')
     if preset not in WORKLOADS:
         raise ValueError('unknown workload preset: ' + preset)
     if model is not None and model != MODEL:
         raise ValueError('unsupported model: ' + model)
-    modes = GENERATION_MODES if command == 'generate' else (APPLICATION_MODE,)
+    if type(engine) is not bool or (command != 'chat' and engine):
+        raise ValueError('engine is an optional chat mode')
+    modes = GENERATION_MODES if command == 'generate' else (('reference',) if engine else (APPLICATION_MODE,))
+    default_mode = 'reference' if engine else APPLICATION_MODE
     if mode is not None and mode not in modes:
         raise ValueError(f'unsupported {command} mode: {mode}; supported: ' + ', '.join(modes))
     with initialize(version_base='1.3', config_path=None):
-        cfg = compose(config_name='llm_run', overrides=['workload=' + preset, 'mode=' + (mode or APPLICATION_MODE)])
+        cfg = compose(config_name='llm_run', overrides=['workload=' + preset, 'mode=' + (mode or default_mode)])
     result = OmegaConf.to_object(cfg)
     w = result.workload
+    w.engine = engine
     # Literal CLI text never enters OmegaConf interpolation or override grammar.
     for key, value in options.items():
         if key not in WorkloadConfig.__dataclass_fields__:

@@ -27,8 +27,14 @@ The [144-run operating-range comparison](../studies/model_generation/engine-core
 binds `2af0933`: reservation removes replay at 40 blocks, while larger declared
 output limits tie up more unused capacity and can delay FIFO admission.
 Adequate-capacity paired speed remains inconclusive; incremental stays default.
-Fitted budgeting remains optional, without a client latency guarantee. Full asynchronous
-stepping, a measured Fast engine route and frontend integration remain separate.
+Fitted budgeting remains optional, without a client latency guarantee. The
+[fixed-workspace budget and optional Fast contracts](../studies/model_generation/engine-core.md#fixed-workspace-budget-and-optional-fast-contracts)
+are implemented; their new performance decisions require separate measurements.
+The optional [`chat --engine` adapter](chat.md#optional-engine-terminal-chat) now
+connects one terminal conversation to the synchronous reference core, recomputing
+its full token history each turn. Its checkpoint lifecycle acceptance is retained.
+Full asynchronous stepping, Fast default promotion, prefix caching and the
+multi-request frontend/process transport remain separate work.
 Each phase is approved separately and records its own validation, like the
 existing plans. The [project direction](project.md) lists this as a follow-up
 track.
@@ -539,7 +545,8 @@ Restored bytes equal stored bytes, so a disk hit is as exact as a memory hit.
 
 ### Numerical policy
 
-Fast remains the application policy for chat and generation. Phase 3's initial
+Fast remains the default application policy for chat and generation; optional
+`chat --engine` uses reference 27. Phase 3's initial
 runner instead uses reference configuration 27 for every scheduling arm, with
 an exact same-route mixed-versus-solo gate. This is a correctness and scheduling
 baseline, not a promoted Fast route or a timing comparison against the existing

@@ -916,5 +916,64 @@ def test_kv_observation_opt_in_preserves_decisions_work_and_histories() raises:
             engine.check(pool)
 
 
+def test_fixed_budget_matrix_counts_decode_rows_and_keeps_lifetime_capacity() raises:
+    """Seven decodes consume rows while a long prompt owns nine future blocks."""
+    var ctx = DeviceContext()
+    var pool = KVPool(ctx, 32, 32, KVGeometry(1, 1, 1))
+    var reference_histories = List[List[Int]]()
+    for budget in [32, 64, 128, 256]:
+        var engine = EngineCore(32, 32, 1024, 100, token_budget=budget,
+            max_sequences=8, max_requests=8, reserve_lifetime=True)
+        var runner = SimulatedRunner([10, 11, 12], 100)
+        var rows = 0
+        # Introduce seven one-row prompts on successive boundaries. Each
+        # becomes a decode, and its sixteen-token budget outlasts all arrivals.
+        for i in range(7):
+            _ = engine.add(i, [i + 1], 16, List[Int]())
+            var seeded = engine.step(runner, pool)
+            rows += seeded.total_tokens
+            assert_equal(seeded.preempted, 0)
+        var long_prompt = engine.add(7, List[Int](length=257, fill=17), 2, List[Int]())
+        var mixed = engine.step(runner, pool)
+        rows += mixed.total_tokens
+        assert_equal(mixed.decode_seqs, 7)
+        assert_equal(mixed.prefill_seqs, 1)
+        assert_equal(mixed.total_tokens, budget)
+        assert_equal(mixed.prefill_tokens, budget - 7)
+        assert_equal(mixed.admitted, 1)
+        assert_equal(mixed.preempted, 0)
+        assert_equal(len(mixed.events), 7)
+        for event in mixed.events:
+            assert_equal(event.kind, TOKEN_EVENT)
+            assert_true(event.request_id < 7)
+        var sequence = engine.requests[long_prompt].sequence
+        assert_equal(engine.requests[long_prompt].state, PREFILL)
+        assert_equal(engine.requests[long_prompt].generated, 0)
+        assert_equal(engine.blocks.length(sequence), budget - 7)
+        assert_equal(engine.blocks.reserved[sequence], 258)
+        assert_equal(len(engine.blocks.tables[sequence]), 9)
+        # Seven one-block decodes plus nine prompt blocks are held regardless
+        # of the number of prompt rows selected for the current step.
+        assert_equal(engine.blocks.free_blocks(), 16)
+        engine.check(pool)
+        var steps = 0
+        while engine.live() > 0 and steps < 1000:
+            var record = engine.step(runner, pool)
+            assert_true(record.total_tokens <= budget)
+            assert_equal(record.preempted, 0)
+            rows += record.total_tokens
+            steps += 1
+        assert_equal(engine.live(), 0)
+        assert_equal(rows, 370)  # 7 * (1 + 16 - 1) + (257 + 2 - 1).
+        assert_equal(engine.blocks.free_blocks(), 32)
+        for i in range(8):
+            assert_equal(engine.requests[i].generated, 16 if i < 7 else 2)
+            if budget == 32:
+                reference_histories.append(engine.requests[i].tokens.copy())
+            else:
+                _assert_list(engine.requests[i].tokens, reference_histories[i])
+        engine.check(pool)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

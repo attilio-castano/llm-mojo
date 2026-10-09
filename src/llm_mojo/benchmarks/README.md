@@ -689,3 +689,57 @@ The [completed operating-range results](../../../studies/model_generation/engine
 retain all 144 Metal runs, the exact live card and an independently restored
 validation bundle. Canonical raw archives have collection-specific names; use
 an explicit archive path for replay when a directory contains several studies.
+
+### Fixed-workspace row-budget study
+
+`--budget-study` selects `qwen-engine-budget-v1`, with physical work capacity
+fixed at 256 rows and eight sequence slots. Calibration compares fixed budgets
+32/64/128/256 and repeated fixed-256 control in four balanced blocks (20 runs).
+`scheduling-fit` uses every positive calibration step to fit one nonnegative
+`engine-step-cost-v2` policy. Evaluation adds that frozen adaptive policy to the
+grid (24 runs per held-out trace/pool). The older `fit/evaluate/replay` commands
+above retain their original v1 contract.
+
+Use new external output paths, clean source and independently frozen calibration
+and held-out traces. A different arrival seed alone does not establish a different
+greedy native workload. Keep one explicitly selected admission policy throughout:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build --budget-study --prepared build/model-prepared-v1 --output /private/tmp/engine-budget-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect --budget-study --budget-stage calibration --admission-policy reserved --build /private/tmp/engine-budget-build --trace /private/tmp/calibration-trace.json --blocks 128 --max-sequences 8 --output /private/tmp/engine-budget-calibration
+uv run --locked python -m llm_mojo.benchmarks.engine_budget scheduling-fit --calibration /private/tmp/engine-budget-calibration/engine-budget.json.gz --target-ms 25 --output /private/tmp/engine-budget-policy.json
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect --budget-study --budget-stage evaluation --admission-policy reserved --policy /private/tmp/engine-budget-policy.json --build /private/tmp/engine-budget-build --trace /private/tmp/heldout-trace.json --blocks 40 --max-sequences 8 --output /private/tmp/engine-budget-evaluation
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output /private/tmp/engine-budget-evaluation/engine-budget.json.gz
+```
+
+Replay recomputes the fit and residuals from embedded calibration bytes and
+checks same-build/admission provenance, balanced order, exact histories, rows
+and complete pool drain. The fixed 25 ms research setting predicts synchronous
+execute cost; mandatory decodes and minimum progress may exceed it. It is no
+client latency guarantee. These are implemented collection contracts, with no
+new performance result or default-budget change established here.
+
+### Optional Fast engine study
+
+`--fast-study` uses configuration 26 only when every sequence has one query and
+one selected logit; other steps use 27. An unfinished singleton prefill has no
+selected logit and remains on 27. Select one fixed row budget after the reference
+study, then supply an `engine-fast-qualification-v1` JSON bound to the exact
+clean engine/checkpoint-driver builds, actual numerical checks and untimed
+own-route histories. The collector requires this qualification input.
+
+For an explicitly selected 256-row budget:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build --fast-study --prepared build/model-prepared-v1 --output /private/tmp/engine-fast-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect --fast-study --token-budget 256 --admission-policy reserved --qualification /private/tmp/engine-fast-qualification.json --build /private/tmp/engine-fast-build --trace /private/tmp/heldout-trace.json --blocks 40 --max-sequences 8 --output /private/tmp/engine-fast-evaluation
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output /private/tmp/engine-fast-evaluation/engine-fast.json.gz
+```
+
+Four balanced blocks contain reference, repeated reference and Fast candidate
+(12 runs). Numerical failure, differing own-route/cross-route histories or
+different ordered per-step work disables a speed verdict. Actual route records
+are retained; online results are descriptive. Replay never promotes Fast to a
+default. `--token-budget` and `--qualification` are Fast collection-only;
+`--budget-stage` and `--policy` are budget collection-only. Both studies require
+explicit `--admission-policy` on collection.

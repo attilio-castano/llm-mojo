@@ -13,7 +13,7 @@ from llm_mojo.benchmarks import model_contract as contract
 from llm_mojo.benchmarks.model_profile import (
     engine_run_summary, engine_study_summary, engine_replay,
     engine_collect, engine_specification, engine_trace_tsv, parse_engine_run,
-    validate_engine_record_build, execute,
+    validate_engine_record_build, execute, NativeCommandError,
 )
 
 
@@ -276,6 +276,16 @@ class EngineTraceTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'partial output retained'):
                     execute(['engine'], log, timeout=180)
             self.assertEqual(log.read_text(), 'partial execution\n')
+
+    def test_completed_native_failure_preserves_numeric_return_code_and_stdout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory)/'failed.log'
+            result = subprocess.CompletedProcess(['engine'], 7, stdout='actual failure output\n')
+            with mock.patch('llm_mojo.benchmarks.model_profile.subprocess.run', return_value=result):
+                with self.assertRaises(NativeCommandError) as caught:
+                    execute(['engine'], log, timeout=180)
+            self.assertEqual(caught.exception.returncode, 7)
+            self.assertEqual(log.read_text(), 'actual failure output\n')
 
     def test_admission_metadata_is_bound_to_an_explicit_policy(self):
         stdout = native_fixture('chunked') + '\nadmission reserved'
