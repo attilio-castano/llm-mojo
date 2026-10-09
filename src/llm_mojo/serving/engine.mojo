@@ -113,6 +113,24 @@ struct EngineEvent(Copyable, Movable):
     var emitted_ns: Int
 
 
+@fieldwise_init
+struct EngineKVObservation(ImplicitlyCopyable, Movable):
+    """Opt-in host observations; a written count is not a GPU write timestamp.
+
+    Phases 0..3 are step start, scheduled, runner returned, and step end.
+    Pool written counts after the runner returns include its validated writes,
+    before token sampling can finish a request and release its table.
+    """
+    var phase: Int
+    var at_ns: Int
+    var allocated_blocks: Int
+    var written_blocks: Int
+    var written_tokens: Int
+    var reserved_tokens: Int
+    var waiting_requests: Int
+    var resident_requests: Int
+
+
 struct EngineStep(Movable):
     var step_id: Int
     var decode_seqs: Int
@@ -135,8 +153,13 @@ struct EngineStep(Movable):
     var predicted_ns: Int
     var budget_limited: Int
     var events: List[EngineEvent]
+    var kv_observations: List[EngineKVObservation]
+    var admitted_request_id: Int
+    var admitted_ns: Int
+    var execute_begin_ns: Int
+    var execute_end_ns: Int
 
-    def __init__(out self, step_id: Int, capacity: Int):
+    def __init__(out self, step_id: Int, capacity: Int, observe_kv: Bool = False):
         self.step_id = step_id
         self.decode_seqs = 0
         self.prefill_seqs = 0
@@ -158,6 +181,11 @@ struct EngineStep(Movable):
         self.predicted_ns = 0
         self.budget_limited = 0
         self.events = List[EngineEvent](capacity=capacity)
+        self.kv_observations = List[EngineKVObservation](capacity=4 if observe_kv else 0)
+        self.admitted_request_id = -1
+        self.admitted_ns = -1
+        self.execute_begin_ns = 0
+        self.execute_end_ns = 0
 
 
 struct EngineCore(Movable):
@@ -171,6 +199,7 @@ struct EngineCore(Movable):
     var watermark_blocks: Int
     var mixed_prefill: Bool
     var reserve_lifetime: Bool
+    var observe_kv: Bool
     var cost_policy: StepCost
     var cost_policy_enabled: Bool
     var next_ticket: Int
@@ -181,7 +210,7 @@ struct EngineCore(Movable):
     def __init__(out self, blocks: Int, block_size: Int, max_context: Int, vocabulary: Int,
                  token_budget: Int = 256, max_sequences: Int = 64, max_requests: Int = 128,
                  watermark_blocks: Int = 0, mixed_prefill: Bool = True,
-                 reserve_lifetime: Bool = False) raises:
+                 reserve_lifetime: Bool = False, observe_kv: Bool = False) raises:
         if (blocks < 1 or block_size < 1 or max_context < 1 or max_context > 4096 or vocabulary < 1
                 or token_budget < 1 or token_budget > 4096 or max_sequences < 1 or max_sequences > 64
                 or max_requests < 1 or watermark_blocks < 0 or watermark_blocks > blocks):
@@ -196,6 +225,7 @@ struct EngineCore(Movable):
         self.watermark_blocks = watermark_blocks
         self.mixed_prefill = mixed_prefill
         self.reserve_lifetime = reserve_lifetime
+        self.observe_kv = observe_kv
         self.cost_policy = StepCost(0, 0, 0, 0, 0)
         self.cost_policy_enabled = False
         self.next_ticket = 0
@@ -371,8 +401,8 @@ struct EngineCore(Movable):
         # progress even when fixed cost alone exceeds the research target.
         return max(best, 1) if decodes == 0 else best
 
-    def _schedule_prefill(mut self, budget: Int, mut selected: List[Int], mut counts: List[Int],
-                          mut kv: KVPool, mut record: EngineStep) raises -> Bool:
+    def _schedule_prefill[Runner: ModelRunner](mut self, budget: Int, mut selected: List[Int], mut counts: List[Int],
+                          mut runner: Runner, mut kv: KVPool, mut record: EngineStep) raises -> Bool:
         if budget < 1 or len(selected) == self.max_sequences:
             return False
         var index = self._oldest(PREFILL, List[Int]())
@@ -415,6 +445,11 @@ struct EngineCore(Movable):
                     self.requests[index].state = PREFILL
                     self.blocks.reserve(self.requests[index].sequence, extent)
                     record.admitted += 1
+                    if self.observe_kv:
+                        # Capture the successful ownership transition even if
+                        # this request finishes in the same execution step.
+                        record.admitted_request_id = self.requests[index].request_id
+                        record.admitted_ns = runner.now_ns()
                 else:
                     return False
         if index < 0:
@@ -492,12 +527,35 @@ struct EngineCore(Movable):
                         or (self.requests[i].state == DECODE and cached != len(self.requests[i].tokens) - 1)):
                     raise Error("request phase disagrees with its cached history")
 
+    def _observe_kv(self, kv: KVPool, mut record: EngineStep, phase: Int, at_ns: Int):
+        """Read existing host metadata only; submit and synchronize no work."""
+        if not self.observe_kv:
+            return
+        var written_blocks = 0
+        var written_tokens = 0
+        for written in kv.written:
+            written_blocks += 1 if written > 0 else 0
+            written_tokens += written
+        var reserved_tokens = 0
+        for s in range(len(self.blocks.active)):
+            if self.blocks.active[s]:
+                reserved_tokens += self.blocks.reserved[s]
+        var waiting = 0
+        var residents = 0
+        for i in range(len(self.requests)):
+            waiting += 1 if self.requests[i].state == WAITING else 0
+            residents += 1 if self._held(i) else 0
+        record.kv_observations.append(EngineKVObservation(phase, at_ns,
+            self.blocks.blocks - self.blocks.free_blocks(), written_blocks, written_tokens,
+            reserved_tokens, waiting, residents))
+
     def step[Runner: ModelRunner](mut self, mut runner: Runner, mut kv: KVPool) raises -> EngineStep:
         if self.failed or kv.blocks != self.blocks.blocks or kv.block_size != self.blocks.block_size:
             raise Error("failed engine or incompatible pool")
         self.check(kv)
-        var record = EngineStep(self.step_id, self.max_requests + 2 * self.max_sequences)
+        var record = EngineStep(self.step_id, self.max_requests + 2 * self.max_sequences, self.observe_kv)
         record.begin_ns = runner.now_ns()
+        self._observe_kv(kv, record, 0, record.begin_ns)
         self.step_id += 1
         for i in range(len(self.requests)):
             if self.requests[i].state != FINISHED and self.requests[i].arrival_ns < 0:
@@ -512,7 +570,7 @@ struct EngineCore(Movable):
         var budget = self.token_budget
         var standalone = False
         if not self.mixed_prefill:
-            standalone = self._schedule_prefill(budget, selected, counts, kv, record)
+            standalone = self._schedule_prefill(budget, selected, counts, runner, kv, record)
         while not standalone and budget > 0 and len(selected) < self.max_sequences:
             var index = self._oldest(DECODE, considered)
             if index < 0:
@@ -525,8 +583,9 @@ struct EngineCore(Movable):
                 record.decode_seqs += 1
                 budget -= 1
         if self.mixed_prefill:
-            _ = self._schedule_prefill(budget, selected, counts, kv, record)
+            _ = self._schedule_prefill(budget, selected, counts, runner, kv, record)
         record.schedule_ns = runner.now_ns() - record.begin_ns
+        self._observe_kv(kv, record, 1, record.begin_ns + record.schedule_ns)
         var build_begin = runner.now_ns()
         var postprocess_begin = build_begin
         if len(selected) > 0:
@@ -567,6 +626,10 @@ struct EngineCore(Movable):
                 raise error
             postprocess_begin = runner.now_ns()
             record.execute_ns = postprocess_begin - execute_begin
+            if self.observe_kv:
+                record.execute_begin_ns = execute_begin
+                record.execute_end_ns = postprocess_begin
+            self._observe_kv(kv, record, 2, postprocess_begin)
             var sampled = 0
             for s in range(len(selected)):
                 var index = selected[s]
@@ -588,6 +651,11 @@ struct EngineCore(Movable):
                         self._finish(index, "stop", kv, record, postprocess_begin)
                     elif self.requests[index].generated == self.requests[index].maximum:
                         self._finish(index, "length", kv, record, postprocess_begin)
+        if len(selected) == 0:
+            if self.observe_kv:
+                record.execute_begin_ns = postprocess_begin
+                record.execute_end_ns = postprocess_begin
+            self._observe_kv(kv, record, 2, postprocess_begin)
         record.blocks_free = self.blocks.free_blocks()
         for i in range(len(self.requests)):
             if self.requests[i].state == WAITING:
@@ -595,4 +663,5 @@ struct EngineCore(Movable):
         self.check(kv)
         record.end_ns = runner.now_ns()
         record.postprocess_ns = record.end_ns - postprocess_begin
+        self._observe_kv(kv, record, 3, record.end_ns)
         return record^

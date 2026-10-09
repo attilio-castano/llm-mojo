@@ -94,7 +94,7 @@ def integers(value: String) raises -> List[Int]:
     return result^
 
 
-def emit(record: EngineStep):
+def emit(record: EngineStep, observe_kv: Bool = False):
     print("step",record.step_id,record.decode_seqs,record.prefill_seqs,record.prefill_tokens,
           record.total_tokens,record.attended_positions,record.admitted,record.preempted,
           record.finished,record.aborted,record.waiting,record.blocks_free,record.begin_ns,
@@ -107,12 +107,26 @@ def emit(record: EngineStep):
         else:
             print("finish",event.request_id,event.reason,event.prompt_tokens,event.generated_tokens,
                   event.arrival_ns,event.emitted_ns)
+    if observe_kv:
+        if record.admitted_request_id >= 0:
+            print("admit",record.step_id,record.admitted_request_id,record.admitted_ns)
+        for point in record.kv_observations:
+            var phase = "start"
+            if point.phase == 1:
+                phase = "scheduled"
+            elif point.phase == 2:
+                phase = "executed"
+            elif point.phase == 3:
+                phase = "end"
+            print("kv",record.step_id,phase,point.at_ns,point.allocated_blocks,point.written_blocks,
+                  point.written_tokens,point.reserved_tokens,point.waiting_requests,point.resident_requests)
+        print("kv_execute",record.step_id,record.execute_begin_ns,record.execute_end_ns)
 
 
 def run_trace[Runner: TraceRunner](
     mut runner: Runner, mut kv: KVPool, mut requests: List[TraceRequest], mut aborts: List[TraceAbort],
     arm: String, budget: Int, maximum_sequences: Int, warmup_steps: Int, cost: StepCost,
-    reserve_lifetime: Bool, admission_explicit: Bool,
+    reserve_lifetime: Bool, admission_explicit: Bool, observe_kv: Bool,
 ) raises:
     var serial = arm == "serial"
     var static = arm == "static"
@@ -128,7 +142,7 @@ def run_trace[Runner: TraceRunner](
             _ = warm.step(runner,kv)
         warm.check(kv)
     var engine = EngineCore(kv.blocks,32,4096,VOCABULARY,effective_budget,sequences,128,0,chunked,
-                            reserve_lifetime=reserve_lifetime)
+                            reserve_lifetime=reserve_lifetime,observe_kv=observe_kv)
     if arm == "adaptive":
         engine.set_cost_policy(cost)
         print("policy",cost.target_ns,cost.fixed_ns,cost.per_row_ns,cost.per_position_ns,
@@ -136,6 +150,10 @@ def run_trace[Runner: TraceRunner](
     print("config",arm,kv.blocks,effective_budget,sequences)
     if admission_explicit:
         print("admission","reserved" if reserve_lifetime else "incremental")
+    if observe_kv:
+        print("telemetry","admission-range-v1")
+        # The pool's actual BF16 geometry binds byte-time even in scripted mode.
+        print("kv_geometry",kv.geometry.layers,kv.geometry.kv_heads,kv.geometry.head_dim,2)
     runner.reset_clock()
     var admitted = 0
     var iterations = 0
@@ -178,7 +196,7 @@ def run_trace[Runner: TraceRunner](
                         break
         if engine.live() > 0:
             var record = engine.step(runner,kv)
-            emit(record)
+            emit(record,observe_kv)
             iterations += 1
             if iterations > 1000000:
                 raise Error("bounded finite trace did not drain")
@@ -200,8 +218,8 @@ def run_trace[Runner: TraceRunner](
 
 def main() raises:
     var args = argv()
-    if len(args) < 9 or len(args) > 11:
-        raise Error("engine_trace prepared trace.tsv arm blocks budget max_sequences warmup_steps greedy|scripted [policy.tsv] [incremental|reserved]")
+    if len(args) < 9 or len(args) > 12:
+        raise Error("engine_trace prepared trace.tsv arm blocks budget max_sequences warmup_steps greedy|scripted [policy.tsv] [incremental|reserved [admission-range-v1]]")
     var arm = args[3]
     var blocks = Int(args[4])
     var budget = Int(args[5])
@@ -216,6 +234,7 @@ def main() raises:
     var cost = StepCost(0,0,0,0,0)
     var admission = "incremental"
     var admission_explicit = False
+    var observe_kv = False
     if arm == "adaptive":
         if len(args) < 10 or mode != "greedy":
             raise Error("adaptive trace requires Metal and a frozen cost policy")
@@ -224,14 +243,23 @@ def main() raises:
             raise Error("invalid cost policy record")
         cost = StepCost(Int(fields[1]),Int(fields[2]),Int(fields[3]),Int(fields[4]),Int(fields[5]),Int(fields[6]))
         cost.validate()
-        if len(args) == 11:
+        if len(args) >= 11:
             admission = args[10]
             admission_explicit = True
-    elif len(args) == 10:
-        admission = args[9]
-        admission_explicit = True
-    elif len(args) == 11:
-        raise Error("a cost policy belongs only to the adaptive arm")
+        if len(args) == 12:
+            if args[11] != "admission-range-v1":
+                raise Error("invalid trace telemetry selector")
+            observe_kv = True
+    else:
+        if len(args) > 11:
+            raise Error("a cost policy belongs only to the adaptive arm")
+        if len(args) >= 10:
+            admission = args[9]
+            admission_explicit = True
+        if len(args) == 11:
+            if args[10] != "admission-range-v1":
+                raise Error("invalid trace telemetry selector")
+            observe_kv = True
     if admission != "incremental" and admission != "reserved":
         raise Error("invalid trace admission policy")
     var reserve_lifetime = admission == "reserved"
@@ -276,10 +304,10 @@ def main() raises:
         var kv = KVPool(ctx,blocks,32,KVGeometry(1,1,1))
         var runner = TraceSimulation(SimulatedRunner(script,VOCABULARY))
         print("device simulated/virtual")
-        run_trace(runner,kv,requests,aborts,arm,budget,sequences,warmup,cost,reserve_lifetime,admission_explicit)
+        run_trace(runner,kv,requests,aborts,arm,budget,sequences,warmup,cost,reserve_lifetime,admission_explicit,observe_kv)
     else:
         var rows = budget if arm == "chunked" or arm == "adaptive" else 4096
         var runner = TraceMetal(QwenRunner(args[1],4096,rows,min(sequences,rows)))
         var kv = KVPool(runner.inner.ctx,blocks,32,runner.inner.model.kv_geometry())
         print("device",runner.inner.ctx.name()+"/"+runner.inner.ctx.api())
-        run_trace(runner,kv,requests,aborts,arm,budget,sequences,warmup,cost,reserve_lifetime,admission_explicit)
+        run_trace(runner,kv,requests,aborts,arm,budget,sequences,warmup,cost,reserve_lifetime,admission_explicit,observe_kv)

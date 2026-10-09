@@ -4,6 +4,7 @@ import gzip
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -12,7 +13,7 @@ from llm_mojo.benchmarks import model_contract as contract
 from llm_mojo.benchmarks.model_profile import (
     engine_run_summary, engine_study_summary, engine_replay,
     engine_collect, engine_specification, engine_trace_tsv, parse_engine_run,
-    validate_engine_record_build,
+    validate_engine_record_build, execute,
 )
 
 
@@ -71,7 +72,8 @@ def study_fixture(mode='greedy'):
 def write_archive(root, record):
     raw = json.dumps(record).encode()
     compressed = gzip.compress(raw, mtime=0)
-    stem = 'engine-admission' if record['kind'] == 'qwen-engine-admission-v1' else 'engine-core'
+    stem = {'qwen-engine-admission-v1': 'engine-admission',
+            'qwen-engine-admission-range-v1': 'engine-admission-range'}.get(record['kind'], 'engine-core')
     (root/(stem+'.json.gz')).write_bytes(compressed)
     (root/(stem+'.json')).write_text(json.dumps(dict(kind=record['kind'], bytes=len(compressed),
         sha256=hashlib.sha256(compressed).hexdigest(), uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
@@ -101,7 +103,180 @@ def admission_fixture():
     return record
 
 
+def range_native_fixture(admission='reserved'):
+    """Both requests stop naturally after one token despite their three-token caps."""
+    stdout = native_fixture('chunked').replace('config chunked 4 256 2', 'config chunked 4 256 8')
+    stdout = stdout.replace('finish 0 length', 'finish 0 stop').replace('finish 1 length', 'finish 1 stop')
+    stdout = stdout.replace('1 1 0 10', '1 1 0 8').replace('1 1 0 20', '1 1 0 18')
+    lines = [stdout, 'admission '+admission, 'telemetry admission-range-v1', 'kv_geometry 24 2 64 2']
+    extent = 3 if admission == 'reserved' else 1
+    for i in range(2):
+        begin = i*10
+        lines += [f'kv {i} start {begin} 0 0 0 0 {2-i} 0',
+                  f'kv {i} scheduled {begin+1} 1 0 0 {extent} {1-i} 1',
+                  f'kv {i} executed {begin+8} 1 1 1 {extent} {1-i} 1',
+                  f'kv {i} end {begin+10} 0 0 0 0 {1-i} 0',
+                  f'kv_execute {i} {begin+2} {begin+8}',
+                  f'admit {i} {i} {begin+1}']
+    return '\n'.join(lines)
+
+
+def range_fixture():
+    record = admission_fixture()
+    record.update(kind=contract.ENGINE_ADMISSION_RANGE_DECLARATION['kind'],
+                  declaration=contract.ENGINE_ADMISSION_RANGE_DECLARATION,
+                  native_trace_path='/collection/trace.tsv')
+    record['build']['declaration'] = contract.ENGINE_ADMISSION_RANGE_DECLARATION
+    record['build']['assets']['prepared'] = '/prepared'
+    record['build']['command'] = ['mojo', 'build', '-I', 'src',
+                                  'src/llm_mojo/benchmarks/engine_trace.mojo', '-o', '/build/engine']
+    for request in record['trace']['requests']:
+        request.update(max_new_tokens=3, stop_ids=[11])
+    record['trace_document'] = json.dumps(record['trace'])
+    record['trace_sha256'] = hashlib.sha256(record['trace_document'].encode()).hexdigest()
+    for run in record['runs']:
+        run['stdout'] = range_native_fixture(run['admission'])
+        run['parsed'] = parse_engine_run(run['stdout'], record['trace'], 'chunked', 4, 8, 'greedy',
+                                         admission=run['admission'], observation='admission-range-v1')
+        run['execution'] = dict(command=['/build/engine', '/prepared', '/collection/trace.tsv',
+                                         'chunked', '4', '256', '8', '10', 'greedy', run['admission'],
+                                         'admission-range-v1'], timeout_seconds=180, exit_code=0,
+                                wall_elapsed_ns=100)
+    record['summary'] = engine_study_summary(record)
+    return record
+
+
 class EngineTraceTests(unittest.TestCase):
+    def test_range_early_stops_admission_delay_and_bounded_byte_time(self):
+        record = range_fixture()
+        run = next(r for r in record['summary']['runs'] if r['admission'] == 'reserved')
+        self.assertEqual(run['delivered_tokens'], 2)
+        self.assertEqual(run['total_tokens'], 2)
+        self.assertEqual(run['terminal_reasons'], {'stop': 2})
+        self.assertEqual(run['admission_delay']['p50_ns'], 6)
+        self.assertEqual([r['admissions'] for r in run['requests']], [1, 1])
+        occupancy = run['kv_occupancy']
+        token_bytes, block_bytes = 24*2*2*64*2, 32*24*2*2*64*2
+        self.assertEqual(occupancy['allocated_byte_ns'], 12*block_bytes)
+        self.assertEqual(occupancy['unused_block_byte_ns_bounds'], {'lower': 0, 'upper': 12*block_bytes})
+        self.assertEqual(occupancy['unused_slot_byte_ns_bounds'],
+                         {'lower': 12*31*token_bytes, 'upper': 12*32*token_bytes})
+        self.assertEqual(occupancy['unwritten_reserved_extent_byte_ns_bounds'],
+                         {'lower': 12*2*token_bytes, 'upper': 12*3*token_bytes})
+        self.assertEqual(occupancy['covered_ns'], 12)
+        self.assertEqual(occupancy['excluded_ns'], 8)
+        self.assertEqual(occupancy['peak_allocated_blocks'], 1)
+
+    def test_range_replay_validates_observer_contract_and_raw_boundaries(self):
+        record = range_fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_archive(root, record)
+            self.assertEqual(engine_replay(root), record['summary'])
+            self.assertEqual(engine_replay(root/'engine-admission-range.json.gz'), record['summary'])
+            mutations = [
+                lambda r: r['runs'][0].update(stdout=r['runs'][0]['stdout'].replace('telemetry admission-range-v1', 'telemetry unknown')),
+                lambda r: r['runs'][0].update(stdout=r['runs'][0]['stdout'].replace('kv_geometry 24 2 64 2', 'kv_geometry 1 1 1 2')),
+                lambda r: r['runs'][0].update(stdout=r['runs'][0]['stdout'].replace('kv 0 scheduled 1 1 0 0 1 1 1\n', '')),
+                lambda r: r['runs'][0].update(stdout=r['runs'][0]['stdout'].replace('kv 0 executed 8 1 1 1', 'kv 0 executed 8 2 1 1')),
+                lambda r: r['runs'][0].update(stdout=r['runs'][0]['stdout'].replace('kv 0 executed 8 1 1 1', 'kv 0 executed 8 1 1 33')),
+                lambda r: r['runs'][0].update(stdout=r['runs'][0]['stdout'].replace('kv_execute 0 2 8', 'kv_execute 0 2 9')),
+                lambda r: r['runs'][0].update(stdout=r['runs'][0]['stdout'].replace('kv 0 executed 8', 'kv 0 executed 9')),
+                lambda r: r['runs'][0].update(stdout=r['runs'][0]['stdout'].replace('admit 0 0 1', 'admit 0 0 2')),
+                lambda r: r['runs'][0].update(stdout=r['runs'][0]['stdout'].replace('admit 1 1 11', 'admit 1 0 11')),
+                lambda r: r['runs'][0].update(stdout=r['runs'][0]['stdout'].replace(
+                    'admit 0 0 1', 'admit 0 1 1').replace('admit 1 1 11', 'admit 1 0 11')),
+                lambda r: r['runs'][0].update(stdout=r['runs'][0]['stdout'].replace('kv 1 start 10 0 0 0 0', 'kv 1 start 10 1 0 0 3')),
+                lambda r: r['summary']['runs'][0]['kv_occupancy'].update(allocated_byte_ns=1),
+                lambda r: r['runs'][0]['parsed']['admissions'][0].update(timestamp_ns=True),
+                lambda r: r['build']['declaration'].update(execution_timeout_seconds=181),
+                lambda r: r['runs'][0]['execution'].update(exit_code=True),
+                lambda r: r['runs'][0]['execution'].update(wall_elapsed_ns=180_000_000_001),
+                lambda r: r['runs'][0]['execution']['command'].__setitem__(9, 'reserved'),
+            ]
+            for index, mutate in enumerate(mutations):
+                broken = copy.deepcopy(record)
+                mutate(broken)
+                write_archive(root, broken)
+                with self.subTest(index=index), self.assertRaises(ValueError):
+                    engine_replay(root)
+
+    def test_range_collector_selector_timeout_and_immutable_legacy_declarations(self):
+        record = range_fixture()
+        receipt = copy.deepcopy(record['build'])
+        receipt['assets']['prepared'] = '/prepared'
+        observed = []
+        def run(command, log, timeout):
+            self.assertEqual(command[3:9], ['chunked', 4, 256, 8, 10, 'greedy'])
+            self.assertEqual(command[10], 'admission-range-v1')
+            self.assertEqual(timeout, 180)
+            observed.append(command[9])
+            return range_native_fixture(command[9])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            receipt['command'][-1] = str(root/'build'/'engine')
+            trace = root/'trace.json'
+            trace.write_text(record['trace_document'])
+            with mock.patch('llm_mojo.benchmarks.model_profile.verify_build', return_value=receipt), \
+                 mock.patch('llm_mojo.benchmarks.model_profile.conditions', return_value=record['runs'][0]['conditions_before']), \
+                 mock.patch('llm_mojo.benchmarks.model_profile.execute', side_effect=run):
+                result = engine_collect(root/'build', trace, root/'result', blocks=4, admission_range=True)
+            self.assertEqual(result, record['summary'])
+            self.assertEqual(len(observed), 12)
+            with self.assertRaises(ValueError):
+                engine_collect(root/'build', trace, root/'bad', admission_pair=True, admission_range=True)
+        self.assertNotIn('observation', contract.ENGINE_ADMISSION_DECLARATION)
+        self.assertNotIn('execution_timeout_seconds', contract.ENGINE_DECLARATION)
+
+    def test_range_telemetry_must_be_explicit_and_virtual_clock_has_no_speed_claim(self):
+        record = range_fixture()
+        run = record['runs'][0]
+        with self.assertRaises(ValueError):
+            parse_engine_run(run['stdout'], record['trace'], 'chunked', 4, 8, 'greedy', admission='incremental')
+        record['mode'] = 'scripted'
+        for run in record['runs']:
+            run['stdout'] = run['stdout'].replace('Apple M4 Pro/metal', 'simulated/virtual').replace(
+                'mode greedy', 'mode scripted').replace('kv_geometry 24 2 64 2', 'kv_geometry 1 1 1 2')
+            run['execution']['command'][8] = 'scripted'
+            # Virtual elapsed time need not fit within actual process wall time.
+            run['execution']['wall_elapsed_ns'] = 1
+            run['parsed'] = parse_engine_run(run['stdout'], record['trace'], 'chunked', 4, 8, 'scripted',
+                                             admission=run['admission'], observation='admission-range-v1')
+        summary = engine_study_summary(record)
+        self.assertEqual(summary['comparisons'][0]['outcome'], 'virtual-clock')
+        self.assertEqual(summary['runs'][0]['kv_occupancy']['token_bytes'], 4)
+
+    def test_range_greedy_execution_wall_covers_the_complete_native_drain(self):
+        record = range_fixture()
+        execution = record['runs'][0]['execution']
+        elapsed = record['runs'][0]['parsed']['drained']['elapsed_ns']
+        execution['wall_elapsed_ns'] = elapsed - 1
+        with self.assertRaisesRegex(ValueError, 'native execution receipt'):
+            engine_study_summary(record)
+        execution['wall_elapsed_ns'] = elapsed
+        self.assertEqual(engine_study_summary(record), record['summary'])
+
+    def test_range_reservation_must_match_lifetime_extent_even_with_early_stop(self):
+        record = range_fixture()
+        trace = copy.deepcopy(record['trace'])
+        trace['requests'][0]['max_new_tokens'] = 64
+        # A natural one-token stop cannot retroactively reduce its admission reservation.
+        with self.assertRaisesRegex(ValueError, 'lifetime extents'):
+            parse_engine_run(range_native_fixture('reserved'), trace, 'chunked', 4, 8, 'greedy',
+                             admission='reserved', observation='admission-range-v1')
+        self.assertEqual(parse_engine_run(range_native_fixture('incremental'), trace, 'chunked', 4, 8,
+                                          'greedy', admission='incremental', observation='admission-range-v1')['admission'],
+                         'incremental')
+
+    def test_timeout_retains_partial_stdout_and_reports_the_log(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory)/'failed.log'
+            failure = subprocess.TimeoutExpired(['engine'], 180, output=b'partial execution\n')
+            with mock.patch('llm_mojo.benchmarks.model_profile.subprocess.run', side_effect=failure):
+                with self.assertRaisesRegex(RuntimeError, 'partial output retained'):
+                    execute(['engine'], log, timeout=180)
+            self.assertEqual(log.read_text(), 'partial execution\n')
+
     def test_admission_metadata_is_bound_to_an_explicit_policy(self):
         stdout = native_fixture('chunked') + '\nadmission reserved'
         parsed = parse_engine_run(stdout, trace_fixture(), 'chunked', 4, 2, 'greedy', admission='reserved')

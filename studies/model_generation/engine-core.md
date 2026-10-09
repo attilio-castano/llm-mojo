@@ -622,6 +622,60 @@ live receipt for physical file checks, without requiring the original binary
 or checkpoint to remain installed. Binaries, weights and oracle arrays are
 excluded from the validation bundle.
 
+## Admission operating range: frozen successor contract
+
+Authorized on 2026-10-09 from `005b76c`, on `codex/admission-operating-range`.
+The next admission comparison varies declared output capacity while preserving
+prompts, stop rules and expected greedy outputs. It keeps reference configuration
+27, BF16 storage/FP32 reductions, 32-slot slot-major KV, a 256-row step budget,
+eight sequence slots, zero watermark and ten untimed warmup steps fixed.
+
+Two profiles reuse the eight affine prompts from the retained admission study.
+For each request, freeze an application stop ID at its first occurrence in
+the retained real-greedy history. These are custom application stops, not EOS
+behavior or teacher-forced outputs. Expected output counts are
+`[32, 3, 4, 5, 5, 29, 15, 4]`. Tight declared limits equal those counts; loose
+limits are 128 except the 1,024-token prompt's limit of 256. Both profiles
+therefore have the same expected 97 delivered tokens and 2,265 necessary rows.
+Full lifetime block demands sum to 76 for tight limits and 104 for loose limits.
+Each request fits the 40-block pool alone. Request 5, with the 1,024-token prompt,
+is followed by smaller waiters, exposing FIFO admission when capacity is scarce.
+
+Each profile has an offline trace and online traces at declared rates of four
+and eight requests/s. Reuse the seed-19 four-requests/s offsets exactly;
+derive the eight-requests/s offsets by integer division by two, preserving the
+coupled arrival order. Run all six traces at 40 and 128 blocks: 12 collections
+and 144 measured runs. Every collection has four balanced blocks containing
+incremental control, repeated control and reserved admission, using one clean
+binary. Freeze all fixtures before collecting timings; do not replace cases
+after observing their outcome.
+Bound each native invocation, including initialization and warmup, to 180 seconds
+and the complete collection campaign to two hours. Retain incomplete logs and
+report the failed gate rather than replacing a workload or resampling a block.
+
+The optional observation mode records exact admission timestamps and KV counts
+at existing synchronized boundaries. Allocated blocks include both written
+storage and reserved future storage. Written-token counts describe committed KV;
+they do not timestamp GPU writes. Allocation is stable during execute and between
+steps. Report allocated byte-time over those intervals and lower/upper unused
+byte-time bounds from their endpoint written counts; exclude unobserved allocation
+transitions during scheduling and release. Keep the coverage fraction explicit.
+Observation overhead remains inside the measured trace for every arm.
+
+Required gates are exact expected/paired greedy histories, one terminal finish
+per request, complete pool return, zero reserved preemptions and exact necessary
+row accounting for reserved execution. Broader scripted cases test finite drain
+and ownership; their virtual timing is not Metal performance. A failed history,
+ownership or drain gate stops optimization work until understood.
+
+Report throughput, TTFT, end-to-end latency, p95/p99 token gaps, arrival-to-first-
+admission delay, preemptions, computed rows, waiting counts and reserved/written
+KV. The existing paired verdict applies only to offline makespan. Online
+distributions and memory occupancy explain tradeoffs; they establish no capacity,
+goodput or client SLO. Close with an explicit policy recommendation even if no
+single mode dominates. Automatic admission selection, chunk-budget tuning, Fast
+execution and chat integration remain subsequent milestones.
+
 ## Metadata preparation gate
 
 The [metadata probe receipt](engine-metadata-probe.json) records a bounded public

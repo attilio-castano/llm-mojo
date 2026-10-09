@@ -20,3 +20,4 @@ dist/
 /studies/model_generation/engine-admission-online-summary.json
 /studies/model_generation/engine-admission-pressure-summary.json
 /studies/model_generation/engine-admission-online-pressure-summary.json
+/studies/model_generation/engine-admission-range-*-summary.json

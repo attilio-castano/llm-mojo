@@ -22,6 +22,7 @@ from pathlib import Path
 import statistics as stats
 import subprocess
 import sys
+import time
 from types import SimpleNamespace
 
 import numpy as np
@@ -36,8 +37,15 @@ from . import model_contract as contract
 
 
 def execute(command, log, timeout=600):
-    result = subprocess.run(list(map(str, command)), cwd=repository_root(), env=environment(),
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=timeout)
+    try:
+        result = subprocess.run(list(map(str, command)), cwd=repository_root(), env=environment(),
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        partial = error.stdout or ''
+        if isinstance(partial, bytes):
+            partial = partial.decode(errors='replace')
+        log.write_text(partial)
+        raise RuntimeError(f'command timed out after {timeout}s; partial output retained at {log}') from error
     log.write_text(result.stdout)
     if result.returncode:
         raise RuntimeError(f'command failed ({result.returncode}); see {log}')
@@ -2986,18 +2994,20 @@ def engine_trace_tsv(trace):
     return '\n'.join(lines) + '\n'
 
 
-def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy=None, admission=None):
+def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy=None, admission=None,
+                     observation=None):
     """Reject malformed or incomplete native traces before computing any metric."""
     validate_engine_trace(trace)
     if arm not in (*contract.ENGINE_ARMS, 'adaptive') or mode not in ('greedy', 'scripted'):
         raise ValueError('invalid engine arm or mode')
     metadata, arrivals, events, steps = {}, {}, [], []
+    kv_observations, admissions, execute_intervals = [], [], []
     for line in stdout.splitlines():
         fields = line.split()
         if not fields:
             continue
         name = fields[0]
-        if name in ('device', 'mode', 'config', 'drained', 'policy', 'admission'):
+        if name in ('device', 'mode', 'config', 'drained', 'policy', 'admission', 'telemetry', 'kv_geometry'):
             if name in metadata:
                 raise ValueError('duplicate engine execution identity')
             metadata[name] = fields[1:]
@@ -3016,6 +3026,15 @@ def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy
                                step_id=steps[-1]['step_id'] if steps else None))
         elif name == 'step' and len(fields) == len(contract.ENGINE_STEP_FIELDS) + 1:
             steps.append(dict(zip(contract.ENGINE_STEP_FIELDS, map(int, fields[1:]))))
+        elif name == 'kv' and len(fields) == len(contract.ENGINE_KV_FIELDS) + 1:
+            values = [int(fields[1]), fields[2], *map(int, fields[3:])]
+            kv_observations.append(dict(zip(contract.ENGINE_KV_FIELDS, values)))
+        elif name == 'admit' and len(fields) == 4:
+            step_id, identifier, timestamp = map(int, fields[1:])
+            admissions.append(dict(step_id=step_id, request_id=identifier, timestamp_ns=timestamp))
+        elif name == 'kv_execute' and len(fields) == 4:
+            step_id, begin, end = map(int, fields[1:])
+            execute_intervals.append(dict(step_id=step_id, begin_ns=begin, end_ns=end))
         else:
             raise ValueError('unknown or malformed engine trace line: ' + line[:120])
     device = 'Apple M4 Pro/metal' if mode == 'greedy' else 'simulated/virtual'
@@ -3145,7 +3164,145 @@ def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy
                 policy=policy)
     if admission is not None:
         result['admission'] = admission
+    if observation is None:
+        if ('telemetry' in metadata or 'kv_geometry' in metadata or kv_observations
+                or admissions or execute_intervals):
+            raise ValueError('engine occupancy observation was not declared')
+    else:
+        _validate_engine_observation(metadata, result, trace, observation,
+                                     kv_observations, admissions, execute_intervals)
+        result.update(observation=observation, kv_observations=kv_observations,
+                      admissions=admissions, execute_intervals=execute_intervals,
+                      kv_geometry=dict(zip(('layers', 'kv_heads', 'head_dim', 'storage_bytes'),
+                                           map(int, metadata['kv_geometry']))))
     return result
+
+
+def _validate_engine_observation(metadata, run, trace, observation, observations, admissions, intervals):
+    """Boundary counts prove allocator occupancy, not GPU write timestamps."""
+    expected_geometry = ['24', '2', '64', '2'] if run['mode'] == 'greedy' else ['1', '1', '1', '2']
+    if (observation != contract.ENGINE_ADMISSION_RANGE_TELEMETRY
+            or run.get('admission') not in contract.ENGINE_ADMISSION_POLICIES or run['arm'] != 'chunked'
+            or metadata.get('telemetry') != [observation]
+            or metadata.get('kv_geometry') != expected_geometry):
+        raise ValueError('engine occupancy observation or geometry differs from declaration')
+    steps = run['steps']
+    expected = [(s['step_id'], phase) for s in steps for phase in contract.ENGINE_KV_PHASES]
+    if [(o['step_id'], o['phase']) for o in observations] != expected:
+        raise ValueError('incomplete or unordered engine occupancy boundaries')
+    if [i['step_id'] for i in intervals] != [s['step_id'] for s in steps]:
+        raise ValueError('incomplete or unordered engine execute intervals')
+    requests = {r['request_id']: r for r in trace['requests']}
+    finishes = {e['request_id']: e for e in run['events'] if e['kind'] == 'finish'}
+    first_tokens = {}
+    for event in run['events']:
+        if event['kind'] == 'token':
+            first_tokens.setdefault(event['request_id'], event)
+    if [(a['step_id'], a['timestamp_ns']) for a in admissions] != sorted(
+            (a['step_id'], a['timestamp_ns']) for a in admissions):
+        raise ValueError('unordered engine admission observations')
+    by_step = {}
+    first_admissions = set()
+    for admission in admissions:
+        identifier, step_id, timestamp = (admission[k] for k in ('request_id', 'step_id', 'timestamp_ns'))
+        if (identifier not in requests or not 0 <= step_id < len(steps)
+                or requests[identifier]['max_new_tokens'] == 0):
+            raise ValueError('unknown or zero-output admission observation')
+        step = steps[step_id]
+        if not max(step['begin_ns'], run['arrivals'][str(identifier)]['actual_ns']) <= timestamp <= step['begin_ns'] + step['schedule_ns']:
+            raise ValueError('admission timestamp is outside its scheduling boundary')
+        finish = finishes[identifier]
+        if step_id > finish['step_id'] or timestamp > finish['emitted_ns']:
+            raise ValueError('request admission follows its terminal event')
+        if identifier not in first_admissions:
+            first_token = first_tokens.get(identifier)
+            if first_token is None or step_id > first_token['step_id'] or timestamp > first_token['emitted_ns']:
+                raise ValueError('request emitted a token before its first admission')
+            first_admissions.add(identifier)
+        by_step.setdefault(step_id, []).append(identifier)
+    previous = None
+    residents = set()
+    def check_reservation(snapshot):
+        extents = [len(requests[i]['prompt_ids']) + requests[i]['max_new_tokens'] - 1 for i in residents]
+        if (snapshot['reserved_tokens'] != sum(extents)
+                or snapshot['allocated_blocks'] != sum((n+31)//32 for n in extents)
+                or snapshot['resident_requests'] != len(residents)):
+            raise ValueError('reserved occupancy differs from admitted lifetime extents')
+    for index, step in enumerate(steps):
+        start, scheduled, executed, end = observations[index*4:index*4+4]
+        interval = intervals[index]
+        if (start['timestamp_ns'] != step['begin_ns'] or end['timestamp_ns'] != step['end_ns']
+                or not start['timestamp_ns'] <= scheduled['timestamp_ns'] <= interval['begin_ns']
+                <= interval['end_ns'] == executed['timestamp_ns'] <= end['timestamp_ns']
+                or interval['end_ns'] - interval['begin_ns'] != step['execute_ns']
+                or scheduled['timestamp_ns'] != step['begin_ns'] + step['schedule_ns']):
+            raise ValueError('engine occupancy timestamp differs from synchronous step')
+        identifiers = by_step.get(index, [])
+        if (len(identifiers) != step['admitted'] or len(set(identifiers)) != len(identifiers)
+                or step['admitted'] not in (0, 1) or step['admitted'] > step['prefill_seqs']):
+            raise ValueError('engine admission observations differ from step count')
+        arrived = sum(a['actual_ns'] <= step['begin_ns'] for a in run['arrivals'].values())
+        finished_before = sum(e['step_id'] < index for e in finishes.values())
+        finished_here = sum(e['step_id'] == index for e in finishes.values())
+        zero_here = sum(e['step_id'] == index and e['generated_tokens'] == 0 for e in finishes.values())
+        live_counts = [arrived-finished_before, arrived-finished_before-zero_here,
+                       arrived-finished_before-zero_here, arrived-finished_before-finished_here]
+        if any(o['waiting_requests'] + o['resident_requests'] != live
+               for o, live in zip((start, scheduled, executed, end), live_counts)):
+            raise ValueError('engine occupancy request counts differ from ingress and terminal events')
+        for snapshot in (start, scheduled, executed, end):
+            allocated, written, tokens, reserved, waiting, resident = (snapshot[k] for k in
+                ('allocated_blocks', 'written_blocks', 'written_tokens', 'reserved_tokens',
+                 'waiting_requests', 'resident_requests'))
+            if (any(v < 0 for k, v in snapshot.items() if k != 'phase')
+                    or allocated > run['blocks'] or resident > run['max_sequences']
+                    or resident > allocated or (allocated == 0) != (resident == 0)
+                    or (written == 0) != (tokens == 0) or not written <= tokens <= written*32
+                    or written > allocated or not tokens <= reserved <= allocated*32
+                    or reserved < allocated*32 - resident*31
+                    or waiting + resident > len(requests)):
+                raise ValueError('impossible engine KV occupancy snapshot')
+        if previous is None:
+            if any(start[k] for k in ('allocated_blocks', 'written_blocks', 'written_tokens', 'reserved_tokens', 'resident_requests')):
+                raise ValueError('engine occupancy did not start with an empty pool')
+        elif any(start[k] != previous[k] for k in
+                 ('allocated_blocks', 'written_blocks', 'written_tokens', 'reserved_tokens', 'resident_requests')):
+            raise ValueError('engine occupancy changed between step boundaries')
+        if (any(scheduled[k] != executed[k] for k in
+                ('allocated_blocks', 'reserved_tokens', 'waiting_requests', 'resident_requests'))
+                or executed['written_blocks'] < scheduled['written_blocks']
+                or executed['written_tokens'] < scheduled['written_tokens']
+                or executed['written_tokens'] - scheduled['written_tokens'] != step['total_tokens']
+                or any(end[k] > executed[k] for k in
+                       ('allocated_blocks', 'written_blocks', 'written_tokens', 'reserved_tokens', 'resident_requests'))
+                or end['allocated_blocks'] != run['blocks'] - step['blocks_free']
+                or end['waiting_requests'] != step['waiting']):
+            raise ValueError('engine KV ownership or writes differ across step phases')
+        if run['admission'] == 'reserved':
+            check_reservation(start)
+            residents.update(identifiers)
+            check_reservation(scheduled)
+            check_reservation(executed)
+            residents.difference_update(e['request_id'] for e in run['events']
+                                        if e['kind'] == 'finish' and e['step_id'] == index)
+            check_reservation(end)
+        elif (start['reserved_tokens'] != start['written_tokens']
+              or end['reserved_tokens'] != end['written_tokens']
+              or scheduled['reserved_tokens'] != executed['written_tokens']):
+            raise ValueError('incremental extent differs from scheduled or committed KV writes')
+        previous = end
+    admitted_ids = [a['request_id'] for a in admissions]
+    expected_ids = [r['request_id'] for r in trace['requests'] if r['max_new_tokens']]
+    if (set(admitted_ids) != set(expected_ids)
+            or len(admitted_ids) != len(expected_ids) + sum(s['preempted'] for s in steps)
+            or (run['admission'] == 'reserved' and admitted_ids != expected_ids)):
+        raise ValueError('missing, repeated or reordered request admission')
+    necessary = sum(e['prompt_tokens'] + e['generated_tokens'] - 1 if e['generated_tokens'] else 0
+                    for e in run['events'] if e['kind'] == 'finish')
+    if any(e['reason'] not in ('stop', 'length') for e in run['events'] if e['kind'] == 'finish'):
+        raise ValueError('operating-range observation requires completed finite requests')
+    if sum(s['total_tokens'] for s in steps) < necessary:
+        raise ValueError('engine execution omitted necessary prompt/output rows')
 
 
 def engine_run_summary(run, trace):
@@ -3170,7 +3327,7 @@ def engine_run_summary(run, trace):
     start = min(r['arrival_offset_ns'] for r in trace['requests'])
     duration = end - start
     delivered = sum(r['delivered_tokens'] for r in requests)
-    return dict(duration_ns=duration, delivered_tokens=delivered,
+    result = dict(duration_ns=duration, delivered_tokens=delivered,
                 tokens_per_second=delivered * 1e9 / duration if duration else None,
                 clock='host-monotonic' if run['mode'] == 'greedy' else 'virtual',
                 arrival_window_ns=max(r['arrival_offset_ns'] for r in trace['requests']) - start,
@@ -3183,6 +3340,74 @@ def engine_run_summary(run, trace):
                 steps=len(run['steps']), preemptions=sum(s['preempted'] for s in run['steps']),
                 total_tokens=sum(s['total_tokens'] for s in run['steps']),
                 attended_positions=sum(s['attended_positions'] for s in run['steps']))
+    if run.get('observation') == contract.ENGINE_ADMISSION_RANGE_TELEMETRY:
+        first_admissions = {}
+        for admission in run['admissions']:
+            first_admissions.setdefault(admission['request_id'], admission['timestamp_ns'])
+        for request in requests:
+            identifier = request['request_id']
+            admitted = first_admissions.get(identifier)
+            arrival = run['arrivals'][str(identifier)]
+            request.update(first_admission_ns=admitted,
+                           admission_delay_ns=admitted-arrival['scheduled_ns'] if admitted is not None else None,
+                           ingress_to_admission_ns=admitted-arrival['actual_ns'] if admitted is not None else None,
+                           admissions=sum(a['request_id'] == identifier for a in run['admissions']))
+        result.update(admission_delay=distribution([r['admission_delay_ns'] for r in requests
+                                                   if r['admission_delay_ns'] is not None]),
+                      ingress_to_admission=distribution([r['ingress_to_admission_ns'] for r in requests
+                                                        if r['ingress_to_admission_ns'] is not None]),
+                      kv_occupancy=_engine_occupancy_summary(run, duration))
+    return result
+
+
+def _engine_occupancy_summary(run, duration):
+    """Integrate stable block ownership; bound writes within each execute call."""
+    geometry = run['kv_geometry']
+    token_bytes = geometry['layers'] * 2 * geometry['kv_heads'] * geometry['head_dim'] * geometry['storage_bytes']
+    block_bytes = 32 * token_bytes
+    allocated_byte_ns = 0
+    unused_block_lower = unused_block_upper = 0
+    unused_slot_lower = unused_slot_upper = 0
+    unwritten_extent_lower = unwritten_extent_upper = 0
+    execute_ns = idle_ns = 0
+    observations = run['kv_observations']
+    def integrate(before, after, elapsed):
+        nonlocal allocated_byte_ns, unused_block_lower, unused_block_upper
+        nonlocal unused_slot_lower, unused_slot_upper, unwritten_extent_lower, unwritten_extent_upper
+        blocks = before['allocated_blocks']
+        allocated_byte_ns += blocks * block_bytes * elapsed
+        unused_block_lower += (blocks-after['written_blocks']) * block_bytes * elapsed
+        unused_block_upper += (blocks-before['written_blocks']) * block_bytes * elapsed
+        unused_slot_lower += (blocks*32-after['written_tokens']) * token_bytes * elapsed
+        unused_slot_upper += (blocks*32-before['written_tokens']) * token_bytes * elapsed
+        unwritten_extent_lower += (before['reserved_tokens']-after['written_tokens']) * token_bytes * elapsed
+        unwritten_extent_upper += (before['reserved_tokens']-before['written_tokens']) * token_bytes * elapsed
+    for index, interval in enumerate(run['execute_intervals']):
+        start, scheduled, executed, end = observations[index*4:index*4+4]
+        elapsed = interval['end_ns'] - interval['begin_ns']
+        execute_ns += elapsed
+        integrate(scheduled, executed, elapsed)
+        if index:
+            previous = observations[index*4-1]
+            elapsed = start['timestamp_ns'] - previous['timestamp_ns']
+            idle_ns += elapsed
+            integrate(previous, previous, elapsed)
+    covered = execute_ns + idle_ns
+    return dict(geometry=geometry, token_bytes=token_bytes, block_bytes=block_bytes,
+                scope='allocator-owned physical KV blocks during execute and inter-step idle; '
+                    'schedule/build/postprocess excluded; entire pool allocation stays resident',
+                write_time='unobserved within execute; before/after written counts bound unused capacity',
+                covered_ns=covered, execute_ns=execute_ns, inter_step_idle_ns=idle_ns,
+                excluded_ns=duration-covered,
+                allocated_byte_ns=allocated_byte_ns,
+                unused_block_byte_ns_bounds=dict(lower=unused_block_lower, upper=unused_block_upper),
+                unused_slot_byte_ns_bounds=dict(lower=unused_slot_lower, upper=unused_slot_upper),
+                unwritten_reserved_extent_byte_ns_bounds=dict(lower=unwritten_extent_lower,
+                                                              upper=unwritten_extent_upper),
+                peak_allocated_blocks=max((o['allocated_blocks'] for o in observations), default=0),
+                peak_written_blocks=max((o['written_blocks'] for o in observations), default=0),
+                peak_reserved_tokens=max((o['reserved_tokens'] for o in observations), default=0),
+                peak_written_tokens=max((o['written_tokens'] for o in observations), default=0))
 
 
 def _engine_same_json(value, expected):
@@ -3197,13 +3422,21 @@ def _engine_same_json(value, expected):
 
 
 def _engine_declaration(record):
-    declarations = {d['kind']: d for d in (contract.ENGINE_DECLARATION, contract.ENGINE_ADMISSION_DECLARATION)}
+    declarations = {d['kind']: d for d in (contract.ENGINE_DECLARATION, contract.ENGINE_ADMISSION_DECLARATION,
+                                         contract.ENGINE_ADMISSION_RANGE_DECLARATION)}
     declaration = declarations.get(record.get('kind'))
     if declaration is None or record.get('declaration') != declaration:
         raise ValueError('engine measurement declaration changed')
-    if declaration == contract.ENGINE_ADMISSION_DECLARATION and not _engine_same_json(record['declaration'], declaration):
+    if declaration != contract.ENGINE_DECLARATION and not _engine_same_json(record['declaration'], declaration):
         raise ValueError('engine admission declaration types changed')
     return declaration
+
+
+def _engine_collection_declaration(admission_pair, admission_range):
+    if type(admission_pair) is not bool or type(admission_range) is not bool or (admission_pair and admission_range):
+        raise ValueError('select exactly one engine admission study')
+    return (contract.ENGINE_ADMISSION_RANGE_DECLARATION if admission_range else
+            contract.ENGINE_ADMISSION_DECLARATION if admission_pair else contract.ENGINE_DECLARATION)
 
 
 def _engine_cells(block, admission_pair=False):
@@ -3215,13 +3448,15 @@ def _engine_cells(block, admission_pair=False):
 def engine_study_summary(record):
     trace = validate_engine_trace(record['trace'])
     declaration = _engine_declaration(record)
-    admission_pair = declaration == contract.ENGINE_ADMISSION_DECLARATION
+    admission_range = declaration == contract.ENGINE_ADMISSION_RANGE_DECLARATION
+    admission_pair = declaration != contract.ENGINE_DECLARATION
     if admission_pair and any(r['abort_offset_ns'] is not None for r in trace['requests']):
         raise ValueError('paired admission study excludes timed aborts')
     if (record.get('mode') not in ('greedy', 'scripted')
             or type(record.get('blocks')) is not int or not 1 <= record['blocks'] <= 8192
             or type(record.get('max_sequences')) is not int or not 1 <= record['max_sequences'] <= 64
             or record.get('warmup_steps') != declaration['warmup_steps']
+            or (admission_range and type(record.get('warmup_steps')) is not int)
             or (admission_pair and record['max_sequences'] != 8)):
         raise ValueError('engine collection configuration changed')
     runs = record.get('runs', [])
@@ -3249,9 +3484,12 @@ def engine_study_summary(record):
                 raise ValueError('incomplete or non-nominal engine conditions') from error
         parsed = parse_engine_run(run['stdout'], trace, run['arm'], record['blocks'],
                                   record['max_sequences'], record['mode'],
-                                  admission=run.get('admission') if admission_pair else None)
-        if run.get('parsed') != parsed:
+                                  admission=run.get('admission') if admission_pair else None,
+                                  observation=declaration['observation'] if admission_range else None)
+        if run.get('parsed') != parsed or (admission_range and not _engine_same_json(run.get('parsed'), parsed)):
             raise ValueError('engine parsed records differ from native trace')
+        if admission_range:
+            _validate_engine_range_execution(record, run, parsed)
         if admission_pair and any(e['reason'] not in ('stop', 'length')
                                   for e in parsed['events'] if e['kind'] == 'finish'):
             raise ValueError('paired admission study requires completed finite requests')
@@ -3288,10 +3526,40 @@ def engine_study_summary(record):
                    noise_floor=noise, target=None, goodput=None, quantile_method='linear')
     if admission_pair:
         summary['self_control_same_generated_histories'] = self_control_histories
+    if admission_range:
+        reference = [r['token_ids'] for r in summaries[0]['requests']]
+        if record['mode'] == 'greedy' and any([r['token_ids'] for r in s['requests']] != reference for s in summaries):
+            raise ValueError('operating-range greedy histories differ across collection blocks')
+        summary['observation'] = declaration['observation']
     return summary
 
 
-def engine_build(output, prepared, admission_pair=False):
+def _validate_engine_range_execution(record, run, parsed):
+    execution = run.get('execution', {})
+    build_command = record.get('build', {}).get('command', [])
+    native_trace = record.get('native_trace_path')
+    prepared = record.get('build', {}).get('assets', {}).get('prepared')
+    if (not isinstance(build_command, list) or not build_command
+            or any(type(v) is not str for v in build_command)
+            or build_command[-2:-1] != ['-o'] or Path(build_command[-1]).name != 'engine'
+            or type(native_trace) is not str or not Path(native_trace).is_absolute()
+            or Path(native_trace).name != 'trace.tsv' or type(prepared) is not str):
+        raise ValueError('missing operating-range native command provenance')
+    expected = [build_command[-1], prepared, native_trace, 'chunked', str(record['blocks']),
+                '256', '8', '10', record['mode'], run['admission'],
+                contract.ENGINE_ADMISSION_RANGE_TELEMETRY]
+    if (not _engine_same_json(execution.get('command'), expected)
+            or type(execution.get('timeout_seconds')) is not int or execution['timeout_seconds'] != 180
+            or type(execution.get('exit_code')) is not int or execution['exit_code'] != 0
+            or type(execution.get('wall_elapsed_ns')) is not int
+            or not 0 < execution['wall_elapsed_ns'] <= execution['timeout_seconds']*1_000_000_000
+            or (record['mode'] == 'greedy'
+                and execution['wall_elapsed_ns'] < parsed['drained']['elapsed_ns'])):
+        raise ValueError('operating-range native execution receipt changed or exceeded its bound')
+
+
+def engine_build(output, prepared, admission_pair=False, admission_range=False):
+    declaration = _engine_collection_declaration(admission_pair, admission_range)
     ensure_record_location(output)
     source = source_identity()
     if source['repository']['dirty']:
@@ -3304,22 +3572,26 @@ def engine_build(output, prepared, admission_pair=False):
     if source_identity() != source or assets(prepared) != identity:
         raise ValueError('engine source or assets changed during build')
     write(output/'build.json', dict(source=source, assets=identity, environment=stable_environment(),
-                                    declaration=contract.ENGINE_ADMISSION_DECLARATION if admission_pair else contract.ENGINE_DECLARATION,
+                                    declaration=declaration,
                                     command=list(map(str, command)),
                                     binaries={'engine': dict(sha256=sha(output/'engine'), bytes=(output/'engine').stat().st_size)}))
 
 
 def engine_collect(directory, trace_path, output, blocks=128, maximum_sequences=8, mode='greedy', warmup_steps=10,
-                   admission_pair=False):
-    declaration = contract.ENGINE_ADMISSION_DECLARATION if admission_pair else contract.ENGINE_DECLARATION
+                   admission_pair=False, admission_range=False):
+    declaration = _engine_collection_declaration(admission_pair, admission_range)
+    admission_pair = admission_pair or admission_range
     if (type(blocks) is not int or not 1 <= blocks <= 8192
             or type(maximum_sequences) is not int or not 1 <= maximum_sequences <= 64
             or mode not in ('greedy', 'scripted') or warmup_steps != declaration['warmup_steps']
+            or (admission_range and type(warmup_steps) is not int)
             or (admission_pair and maximum_sequences != 8)):
         raise ValueError('invalid bounded engine collection')
     receipt = verify_build(directory)
     if receipt.get('declaration') != declaration or set(receipt['binaries']) != {'engine'}:
         raise ValueError('not a current engine trace build')
+    if admission_range and not _engine_same_json(receipt['declaration'], declaration):
+        raise ValueError('engine operating-range build declaration types changed')
     trace_document = trace_path.read_text()
     trace_file_sha256 = hashlib.sha256(trace_document.encode()).hexdigest()
     trace = validate_engine_trace(json.loads(trace_document))
@@ -3342,23 +3614,44 @@ def engine_collect(directory, trace_path, output, blocks=128, maximum_sequences=
                        blocks, budget, sequences, warmup_steps, mode]
             if admission is not None:
                 command.append(admission)
+            if admission_range:
+                command.append(declaration['observation'])
             log = output/f'block-{block}-{cell}{"-calibration" if calibration else ""}.log'
-            stdout = execute(command, log)
-            parsed = parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, admission=admission)
+            if admission_range:
+                started = time.monotonic_ns()
+                execution = dict(command=list(map(str, command)),
+                                 timeout_seconds=declaration['execution_timeout_seconds'])
+                try:
+                    stdout = execute(command, log, timeout=execution['timeout_seconds'])
+                except Exception as error:
+                    execution.update(wall_elapsed_ns=time.monotonic_ns()-started,
+                                     exit_code=None, error=str(error))
+                    write(log.with_suffix('.execution.json'), execution)
+                    raise
+                execution.update(wall_elapsed_ns=time.monotonic_ns()-started, exit_code=0)
+                write(log.with_suffix('.execution.json'), execution)
+            else:
+                stdout = execute(command, log)
+            parsed = parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, admission=admission,
+                                      observation=declaration['observation'] if admission_range else None)
             runs.append(dict(block=block, arm=arm, calibration=calibration, stdout=stdout, parsed=parsed,
                              conditions_before=before, conditions_after=conditions()))
             if admission is not None:
                 runs[-1]['admission'] = admission
+            if admission_range:
+                runs[-1]['execution'] = execution
     if verify_build(directory) != receipt or sha(trace_path) != trace_file_sha256:
         raise ValueError('engine build or trace changed during collection')
     record = dict(kind=declaration['kind'], declaration=declaration,
                   build=receipt, trace=trace, trace_document=trace_document, trace_sha256=trace_file_sha256,
                   blocks=blocks, max_sequences=maximum_sequences, mode=mode,
                   warmup_steps=warmup_steps, runs=runs)
+    if admission_range:
+        record['native_trace_path'] = str(native_trace)
     record['summary'] = engine_study_summary(record)
     payload = json.dumps(record, separators=(',', ':')).encode()
     compressed = gzip.compress(payload, mtime=0)
-    stem = 'engine-admission' if admission_pair else 'engine-core'
+    stem = 'engine-admission-range' if admission_range else 'engine-admission' if admission_pair else 'engine-core'
     (output/(stem+'.json.gz')).write_bytes(compressed)
     write(output/(stem+'.json'), dict(kind=declaration['kind'], sha256=hashlib.sha256(compressed).hexdigest(),
                                          uncompressed_sha256=hashlib.sha256(payload).hexdigest(), bytes=len(compressed)))
@@ -3376,6 +3669,8 @@ def validate_engine_record_build(record):
             or not build.get('assets', {}).get('prepared_sha256')
             or not build.get('assets', {}).get('tables_sha256')):
         raise ValueError('incomplete engine source, binary or asset provenance')
+    if declaration == contract.ENGINE_ADMISSION_RANGE_DECLARATION and not _engine_same_json(build['declaration'], declaration):
+        raise ValueError('engine operating-range build declaration types changed')
     source = build['source']
     def digest(value, width=64):
         return isinstance(value, str) and len(value) == width and all(c in '0123456789abcdef' for c in value)
@@ -3395,7 +3690,7 @@ def engine_replay(directory):
     if directory.is_file():
         archive = directory
     else:
-        archives = [directory/(stem+'.json.gz') for stem in ('engine-core', 'engine-admission')
+        archives = [directory/(stem+'.json.gz') for stem in ('engine-core', 'engine-admission', 'engine-admission-range')
                     if (directory/(stem+'.json.gz')).is_file()]
         if len(archives) != 1:
             raise ValueError('engine replay needs exactly one archive or an explicit file')
@@ -3405,7 +3700,8 @@ def engine_replay(directory):
     manifest = json.loads(manifest_path.read_text())
     compressed = archive.read_bytes()
     payload = gzip.decompress(compressed)
-    if (manifest.get('kind') not in (contract.ENGINE_DECLARATION['kind'], contract.ENGINE_ADMISSION_DECLARATION['kind'])
+    if (manifest.get('kind') not in (contract.ENGINE_DECLARATION['kind'], contract.ENGINE_ADMISSION_DECLARATION['kind'],
+                                    contract.ENGINE_ADMISSION_RANGE_DECLARATION['kind'])
             or len(compressed) != manifest['bytes']
             or hashlib.sha256(compressed).hexdigest() != manifest['sha256']
             or hashlib.sha256(payload).hexdigest() != manifest['uncompressed_sha256']):
@@ -3419,7 +3715,7 @@ def engine_replay(directory):
         raise ValueError('engine token trace identity changed')
     validate_engine_record_build(record)
     summary = engine_study_summary(record)
-    if (summary != record.get('summary') or (record['kind'] == contract.ENGINE_ADMISSION_DECLARATION['kind']
+    if (summary != record.get('summary') or (record['kind'] != contract.ENGINE_DECLARATION['kind']
                                             and not _engine_same_json(record.get('summary'), summary))):
         raise ValueError('engine archived summary changed')
     write(summary_path, summary)
@@ -3468,8 +3764,11 @@ def main():
     parser.add_argument('--max-sequences', type=int, default=8, help='engine-collect: maximum concurrent sequences')
     parser.add_argument('--engine-mode', choices=['greedy', 'scripted'], default='greedy')
     parser.add_argument('--warmup-steps', type=int, default=10)
-    parser.add_argument('--admission-pair', action='store_true',
+    admission_study = parser.add_mutually_exclusive_group()
+    admission_study.add_argument('--admission-pair', action='store_true',
                         help='engine-build/collect: paired chunked incremental/reserved admission, fixed256/eight sequences')
+    admission_study.add_argument('--admission-range', action='store_true',
+                        help='engine-build/collect: paired operating-range study with admission and bounded KV occupancy observations')
     args = parser.parse_args()
     if args.command in RETIRED or (args.command == 'build' and (args.fusion or args.combined or args.selection
                                    or args.copy_free or args.residual_norm or args.projections)):
@@ -3479,11 +3778,11 @@ def main():
         engine_specification(args.output.resolve(), args.seed, args.arrival_rate)
     elif args.command == 'engine-build':
         if args.prepared is None: parser.error('engine-build needs --prepared')
-        engine_build(args.output.resolve(), args.prepared, args.admission_pair)
+        engine_build(args.output.resolve(), args.prepared, args.admission_pair, args.admission_range)
     elif args.command == 'engine-collect':
         if args.build is None or args.trace is None: parser.error('engine-collect needs --build and --trace')
         engine_collect(args.build.resolve(), args.trace.resolve(), args.output.resolve(), args.blocks,
-                       args.max_sequences, args.engine_mode, args.warmup_steps, args.admission_pair)
+                       args.max_sequences, args.engine_mode, args.warmup_steps, args.admission_pair, args.admission_range)
     elif args.command == 'engine-replay': print(json.dumps(engine_replay(args.output.resolve()), indent=2))
     elif args.command == 'batch-support': batch_support_collect(args.output.resolve())
     elif args.command == 'batch-support-replay': print(json.dumps(batch_support_replay(args.output),indent=2))

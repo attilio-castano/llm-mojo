@@ -450,3 +450,27 @@ ENGINE_ADMISSION_DECLARATION = dict(
     pairing='same binary and frozen trace; incremental control, incremental self-control, '
         'reserved candidate; forward/reverse/reverse/forward block order',
 )
+
+# The operating-range study adds observations; the earlier paired study's raw
+# records, declaration and summaries remain byte-for-byte replay compatible.
+ENGINE_ADMISSION_RANGE_TELEMETRY = 'admission-range-v1'
+ENGINE_KV_FIELDS = ('step_id', 'phase', 'timestamp_ns', 'allocated_blocks',
+                    'written_blocks', 'written_tokens', 'reserved_tokens',
+                    'waiting_requests', 'resident_requests')
+ENGINE_KV_PHASES = ('start', 'scheduled', 'executed', 'end')
+ENGINE_ADMISSION_RANGE_DECLARATION = dict(
+    ENGINE_ADMISSION_DECLARATION, kind='qwen-engine-admission-range-v1',
+    observation=ENGINE_ADMISSION_RANGE_TELEMETRY,
+    workload_scope='frozen varied output limits and natural greedy stop tokens; no teacher forcing',
+    kv_observation='host-only snapshots at start, scheduled, executed and end boundaries; '
+        'no GPU readback or additional synchronization',
+    byte_time='physical allocated byte-time during execute and between steps; '
+        'unused block/slot byte-time bounded by pre/post execute written occupancy; '
+        'schedule/build/postprocess excluded from occupancy integration; '
+        'the time of writes within execution is unobserved',
+    kv_geometry=dict(layers=24, kv_heads=2, head_dim=64, storage_bytes=2),
+    admission_delay='scheduled arrival and observed ingress to first positive-output admission; '
+        'zero-output requests have no admission and release at a step boundary',
+    execution_timeout_seconds=180,
+    recommendation='descriptive operating range; no latency SLO, goodput target or default promotion',
+)

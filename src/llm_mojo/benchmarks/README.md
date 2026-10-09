@@ -630,6 +630,10 @@ For adaptive budgeting, `python -m llm_mojo.benchmarks.engine_budget` provides
 research setting and applies to predicted synchronous execution, not a promised
 client SLO. Fit uses the complete fixed-study Metal calibration archive;
 evaluation requires the calibrated binary and a different frozen workload.
+Its archive retains calibration bytes, policy identity, every prediction and
+all evaluation records so offline replay can recompute the fit and residuals.
+Mandatory decode/progress overruns remain explicit. These tools implement the
+mechanism; a performance conclusion needs the separately retained evaluation.
 
 The optional lifetime-reservation admission comparison uses a separate frozen
 declaration and the same trace driver. Its control, repeated control and reserved
@@ -647,7 +651,36 @@ and replay behavior. The [successor contract](../../../studies/model_generation/
 fixes the four collections and distinguishes work reduction from measured
 latency and throughput. Reservation remains optional; physical block ownership
 is separate from written KV and from the per-step execution budget.
-Its archive retains calibration bytes, policy identity, every prediction and
-all evaluation records so offline replay can recompute the fit and residuals.
-Mandatory decode/progress overruns remain explicit. These tools implement the
-mechanism; a performance conclusion needs the separately retained evaluation.
+
+The operating-range extension uses `--admission-range` on both build and collect,
+with the same fixed 256-row/eight-slot pair. Its separate
+`qwen-engine-admission-range-v1` declaration preserves both earlier archive
+formats and adds optional host observations:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build --admission-range --prepared build/model-prepared-v1 --output /private/tmp/engine-admission-range-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect --admission-range --build /private/tmp/engine-admission-range-build --trace /private/tmp/admission-fixtures/loose-offline.json --blocks 40 --max-sequences 8 --output /private/tmp/engine-admission-range-loose
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output /private/tmp/engine-admission-range-loose
+```
+
+Collection writes `engine-admission-range.json.gz`, its readable hash manifest
+and derived summary. The [frozen study contract](../../../studies/model_generation/engine-core.md#admission-operating-range-frozen-successor-contract)
+defines the two output-limit profiles, application stops and arrival/pool matrix.
+Traces supply actual stop IDs and output limits; the runner never teacher-forces
+request outputs. Scripted mode remains a virtual lifecycle oracle.
+
+The observation selector adds `admit`, `kv` and `kv_execute` records at existing
+synchronous boundaries. Geometry binds block-byte accounting. Summaries retain
+scheduled-arrival/observed-ingress delays to first admission and allocated
+byte-time over execute and inter-step idle intervals. Before/after written counts
+bound unused capacity within execution; scheduling, build and release transitions
+are excluded from occupancy integration and coverage is explicit. The entire
+pool buffer remains resident even when blocks are free. Observation mode adds
+no GPU submission, readback or synchronization; its host work and output remain
+inside measured trace duration for all arms.
+
+Each native range run has a 180-second timeout, complete invocation/elapsed/exit
+receipt and a retained log, including partial output on timeout. Replays verify
+those receipts as well as raw occupancy, admission, work, terminal and paired
+history gates. Offline makespan uses the paired verdict; online and occupancy
+metrics remain descriptive.

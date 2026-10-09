@@ -773,5 +773,148 @@ def test_reserved_pressure_removes_replay_and_preserves_histories() raises:
         engine.check(pool)
 
 
+def test_kv_observations_capture_same_step_admission_stop_and_future_blocks() raises:
+    var ctx = DeviceContext()
+    var pool = KVPool(ctx, 4, 4, KVGeometry(1, 1, 1))
+    var engine = EngineCore(4, 4, 16, 100, token_budget=2,
+        reserve_lifetime=True, observe_kv=True)
+    var runner = SimulatedRunner([10], 100)
+    _ = engine.add(7, [1], 15, [10], 0)
+    var record = engine.step(runner, pool)
+    assert_equal(record.admitted, 1)
+    assert_equal(record.finished, 1)
+    assert_equal(record.admitted_request_id, 7)
+    assert_equal(record.admitted_ns, record.begin_ns)
+    assert_equal(len(record.kv_observations), 4)
+    for phase in range(4):
+        assert_equal(record.kv_observations[phase].phase, phase)
+    var start = record.kv_observations[0]
+    var scheduled = record.kv_observations[1]
+    var executed = record.kv_observations[2]
+    var end = record.kv_observations[3]
+    assert_equal(start.allocated_blocks, 0)
+    assert_equal(start.waiting_requests, 1)
+    assert_equal(scheduled.allocated_blocks, 4)
+    assert_equal(scheduled.reserved_tokens, 15)
+    assert_equal(scheduled.written_blocks, 0)
+    assert_equal(scheduled.written_tokens, 0)
+    assert_equal(scheduled.waiting_requests, 0)
+    assert_equal(scheduled.resident_requests, 1)
+    # The early stop frees three completely unwritten future blocks. Before
+    # postprocessing the pool retains one written row in its held capacity.
+    assert_equal(executed.allocated_blocks, 4)
+    assert_equal(executed.reserved_tokens, 15)
+    assert_equal(executed.written_blocks, 1)
+    assert_equal(executed.written_tokens, 1)
+    assert_equal(end.allocated_blocks, 0)
+    assert_equal(end.written_blocks, 0)
+    assert_equal(end.written_tokens, 0)
+    assert_equal(end.reserved_tokens, 0)
+    assert_equal(end.resident_requests, 0)
+    assert_equal(record.execute_end_ns - record.execute_begin_ns, record.execute_ns)
+    assert_equal(executed.at_ns, record.execute_end_ns)
+    assert_equal(end.at_ns, record.end_ns)
+    engine.check(pool)
+
+
+def test_kv_observations_count_waiting_abort_reuse_and_zero_output() raises:
+    var ctx = DeviceContext()
+    var pool = KVPool(ctx, 4, 4, KVGeometry(1, 1, 1))
+    var engine = EngineCore(4, 4, 16, 100, token_budget=2,
+        reserve_lifetime=True, observe_kv=True)
+    var runner = SimulatedRunner([10], 100)
+    _ = engine.add(1, [1, 2, 3, 4, 5], 11, List[Int]())
+    var first = engine.step(runner, pool)
+    assert_equal(first.kv_observations[2].written_tokens, 2)
+    assert_equal(first.kv_observations[3].allocated_blocks, 4)
+    _ = engine.add(2, [2], 1, List[Int]())
+    var waiting = engine.step(runner, pool)
+    assert_equal(waiting.admitted_request_id, -1)
+    assert_equal(waiting.admitted_ns, -1)
+    assert_equal(waiting.kv_observations[3].waiting_requests, 1)
+    assert_equal(waiting.kv_observations[3].resident_requests, 1)
+    assert_equal(waiting.kv_observations[3].written_tokens, 4)
+    engine.abort(1)
+    var aborted = engine.step(runner, pool)
+    assert_equal(aborted.aborted, 1)
+    assert_equal(aborted.finished, 2)
+    assert_equal(aborted.admitted_request_id, 2)
+    assert_equal(aborted.kv_observations[0].allocated_blocks, 4)
+    assert_equal(aborted.kv_observations[0].written_tokens, 4)
+    assert_equal(aborted.kv_observations[1].allocated_blocks, 1)
+    assert_equal(aborted.kv_observations[1].written_tokens, 0)
+    assert_equal(aborted.kv_observations[2].written_tokens, 1)
+    assert_equal(aborted.kv_observations[3].allocated_blocks, 0)
+    _ = engine.add(3, [3], 0, List[Int]())
+    var zero = engine.step(runner, pool)
+    assert_equal(zero.finished, 1)
+    assert_equal(zero.admitted, 0)
+    assert_equal(zero.admitted_request_id, -1)
+    assert_equal(zero.admitted_ns, -1)
+    assert_equal(zero.execute_begin_ns, zero.execute_end_ns)
+    assert_equal(zero.execute_ns, 0)
+    for point in zero.kv_observations:
+        assert_equal(point.allocated_blocks, 0)
+        assert_equal(point.written_tokens, 0)
+        assert_equal(point.resident_requests, 0)
+    engine.check(pool)
+
+
+def test_kv_observation_opt_in_preserves_decisions_work_and_histories() raises:
+    var ctx = DeviceContext()
+    var pool = KVPool(ctx, 3, 4, KVGeometry(1, 1, 1))
+    for reserved in [False, True]:
+        var records = List[EngineStep]()
+        var histories = List[List[Int]]()
+        for observed in [False, True]:
+            var engine = EngineCore(3, 4, 16, 100, token_budget=4,
+                reserve_lifetime=reserved, observe_kv=observed)
+            var runner = SimulatedRunner([10, 11, 12], 100)
+            _ = engine.add(1, [1, 2, 3, 4], 8, List[Int]())
+            _ = engine.add(2, [5, 6, 7, 8], 8, List[Int]())
+            var step = 0
+            var admissions = 0
+            while engine.live() > 0 and step < 100:
+                var record = engine.step(runner, pool)
+                admissions += record.admitted
+                if observed:
+                    assert_equal(record.total_tokens, records[step].total_tokens)
+                    assert_equal(record.prefill_tokens, records[step].prefill_tokens)
+                    assert_equal(record.decode_seqs, records[step].decode_seqs)
+                    assert_equal(record.admitted, records[step].admitted)
+                    assert_equal(record.preempted, records[step].preempted)
+                    assert_equal(record.finished, records[step].finished)
+                    assert_equal(record.waiting, records[step].waiting)
+                    assert_equal(record.blocks_free, records[step].blocks_free)
+                    assert_equal(record.begin_ns, records[step].begin_ns)
+                    assert_equal(record.end_ns, records[step].end_ns)
+                    assert_equal(len(record.events), len(records[step].events))
+                    assert_equal(len(record.kv_observations), 4)
+                    assert_equal(record.admitted_request_id >= 0, record.admitted == 1)
+                    for i in range(len(record.events)):
+                        assert_equal(record.events[i].kind, records[step].events[i].kind)
+                        assert_equal(record.events[i].request_id, records[step].events[i].request_id)
+                        assert_equal(record.events[i].token_id, records[step].events[i].token_id)
+                        assert_equal(record.events[i].reason, records[step].events[i].reason)
+                        assert_equal(record.events[i].generated_tokens, records[step].events[i].generated_tokens)
+                        assert_equal(record.events[i].emitted_ns, records[step].events[i].emitted_ns)
+                else:
+                    assert_equal(len(record.kv_observations), 0)
+                    assert_equal(record.admitted_request_id, -1)
+                    records.append(record^)
+                step += 1
+            assert_equal(engine.live(), 0)
+            assert_equal(engine.blocks.free_blocks(), 3)
+            assert_true(admissions == 2 if reserved else admissions > 2)
+            if observed:
+                assert_equal(step, len(records))
+                for i in range(2):
+                    _assert_list(engine.requests[i].tokens, histories[i])
+            else:
+                for i in range(2):
+                    histories.append(engine.requests[i].tokens.copy())
+            engine.check(pool)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
