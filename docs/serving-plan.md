@@ -29,7 +29,14 @@ output limits tie up more unused capacity and can delay FIFO admission.
 Adequate-capacity paired speed remains inconclusive; incremental stays default.
 Fitted budgeting remains optional, without a client latency guarantee. The
 [fixed-workspace budget and optional Fast contracts](../studies/model_generation/engine-core.md#fixed-workspace-budget-and-optional-fast-contracts)
-are implemented; their new performance decisions require separate measurements.
+now have separate retained measurements from clean `01d8be4`. The
+[116-run budget comparison](../studies/model_generation/engine-core.md#fixed-workspace-budget-retained-bounded-results)
+retains fixed-256: smaller chunks reduced long offline gaps but added steps and
+TTFT, and the 25 ms prediction target was exceeded by measured executes. The
+[qualified 12-run Fast comparison](../studies/model_generation/engine-core.md#optional-fast-engine-retained-bounded-results)
+matched full histories and ordered work, but its speed verdict is inconclusive
+within the 5% noise floor. Reference-27 remains the engine default. Both studies
+retain independent local canonical retrieval/CPU replay and preserved originals.
 The optional [`chat --engine` adapter](chat.md#optional-engine-terminal-chat) now
 connects one terminal conversation to the synchronous reference core, recomputing
 its full token history each turn. Its checkpoint lifecycle acceptance is retained.
@@ -220,7 +227,8 @@ leading decode sequences and one prefill launch for the remaining chunk. Launch
 count depends on the layer count and on whether a step contains decode or
 prefill work, never on S. The vocabulary projection reads only `logits_rows`.
 
-GPU workspaces are sized once from the token budget and maximum sequence count.
+GPU workspaces are sized once from declared physical capacity and maximum
+sequence count; the scheduler budget can use fewer rows within that capacity.
 The synchronous core currently allocates host metadata and event lists per step;
 its measurements include that bookkeeping. Avoiding those allocations is a
 later optimization. A mixed call contains singleton decode sequences and at
@@ -233,7 +241,9 @@ and `now_ns()`. Execution returns tokens in `logits_rows` order and completes
 before cache ownership can change. `EngineCore` records timings in `EngineStep`.
 Two implementations share this interface:
 
-- `QwenRunner` executes synchronously on Metal with reference configuration 27.
+- `QwenRunner` executes synchronously on Metal with reference configuration 27
+  by default. The optional Fast study selects 26 for eligible steps and 27
+  otherwise; its measured result leaves the default unchanged.
 - `SimulatedRunner` advances a virtual clock using configured synthetic fixed,
   per-token and per-position costs, and returns a deterministic token script.
   It does not consume the fitted hardware policy.
@@ -344,6 +354,13 @@ the target and are reported as such. The provisional 25 ms research target is
 not a promised request-latency SLO. Prediction error and observed latency remain
 separate from the policy's target. This follows Sarathi-Serve's stall-free
 batching question with a measured cost model rather than a hand-tuned constant.
+The completed fixed-workspace comparison retains 256: offline at 128 blocks,
+fixed-32, fixed-64 and adaptive were slower by the paired noise rule, while
+fixed-128 was inconclusive; at 40 blocks all candidates were inconclusive.
+Online distributions remain descriptive. Thirty of 2,019 positive adaptive
+evaluation steps exceeded the 25 ms setting, despite predictions within it.
+The [retained results](../studies/model_generation/engine-core.md#fixed-workspace-budget-retained-bounded-results)
+report prediction errors and first-token/gap tradeoffs separately.
 
 ### Asynchronous stepping
 

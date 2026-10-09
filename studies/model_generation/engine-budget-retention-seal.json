@@ -1,0 +1,77 @@
+{
+  "kind": "engine-budget-retention-seal-v1",
+  "status": "sealed-and-verified",
+  "live_card_sha256": "61b309212ee51dc0db128fe87cab614a303bd3ea31acacdf30dacae90548a024",
+  "retained_replay_card_sha256": "0aed1e004fd540ed6182bb5725b6a0ffbe89e8948f1aa1c1c1e926ec17fbc1d0",
+  "validation_archive": {
+    "path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/engine-budget-validation.json.gz",
+    "bytes": 1132331,
+    "sha256": "e174247d970c8a64996cac929fafa2dc80aa92289d8707ff4d73973bf8dc4710"
+  },
+  "validation_manifest": {
+    "path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/engine-budget-validation.json",
+    "bytes": 23881,
+    "sha256": "39ca3d67e8d279b96a919a41b05ca2440e47bb950602dafd6171877e5c5ebf51"
+  },
+  "measurement_files": [
+    {
+      "path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/measurements/engine-budget-calibration.json",
+      "bytes": 230,
+      "sha256": "4426813b57edb8ff90e59ee2825aea7ab273ad87664c09dff8880acdf7950ffc"
+    },
+    {
+      "path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/measurements/engine-budget-calibration.json.gz",
+      "bytes": 238558,
+      "sha256": "fc53833bd4f9adc76d305577c5df6c8e18190acbeefa09f617083a9f2a145395"
+    },
+    {
+      "path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/measurements/engine-budget-loose-offline-blocks-128.json",
+      "bytes": 230,
+      "sha256": "ad68eec9bba5c032212694ebb175cfd22337da406f90880f5c1626996c94f644"
+    },
+    {
+      "path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/measurements/engine-budget-loose-offline-blocks-128.json.gz",
+      "bytes": 526299,
+      "sha256": "d160cb832ac012764b0cc739eb242763d6677d0ae2bf2e5399ba51c2d78a1401"
+    },
+    {
+      "path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/measurements/engine-budget-loose-offline-blocks-40.json",
+      "bytes": 230,
+      "sha256": "b49d2078eca3ec7723c53fb999361d9376875d66928afdb2f240511078974116"
+    },
+    {
+      "path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/measurements/engine-budget-loose-offline-blocks-40.json.gz",
+      "bytes": 582095,
+      "sha256": "4757a23049a96b3b57ff7a484dc73dc9f0b9bd89c9a3f0995f0ea554e7610e64"
+    },
+    {
+      "path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/measurements/engine-budget-loose-online-8rps-blocks-128.json",
+      "bytes": 230,
+      "sha256": "dcddffd1dd98cd77ca7b278c32a274091e36837bd930144c582418248f3eebe7"
+    },
+    {
+      "path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/measurements/engine-budget-loose-online-8rps-blocks-128.json.gz",
+      "bytes": 579288,
+      "sha256": "fe7b0ebde4a17defd3f04d343a4b43ced8bc0153488516525bda3eee03a71da4"
+    },
+    {
+      "path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/measurements/engine-budget-loose-online-8rps-blocks-40.json",
+      "bytes": 230,
+      "sha256": "a3dd8e912bbc21e478a507b7e96c50c70893c24fa18b451bdf0ab5df2c577b98"
+    },
+    {
+      "path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/measurements/engine-budget-loose-online-8rps-blocks-40.json.gz",
+      "bytes": 609184,
+      "sha256": "8aa6340e1f870dbc04a6e94794e0cadf497f568838f4bb9a00122ea1ad25fe9b"
+    },
+    {
+      "path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/measurements/engine-budget-results.json",
+      "bytes": 2151275,
+      "sha256": "61b309212ee51dc0db128fe87cab614a303bd3ea31acacdf30dacae90548a024"
+    }
+  ],
+  "validation_file_count": 85,
+  "binaries_retained": false,
+  "weights_retained": false,
+  "durability_scope": "local sealed files only; durable publication and independent retrieval are separate gates"
+}

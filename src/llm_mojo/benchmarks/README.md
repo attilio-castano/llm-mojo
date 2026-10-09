@@ -716,8 +716,17 @@ Replay recomputes the fit and residuals from embedded calibration bytes and
 checks same-build/admission provenance, balanced order, exact histories, rows
 and complete pool drain. The fixed 25 ms research setting predicts synchronous
 execute cost; mandatory decodes and minimum progress may exceed it. It is no
-client latency guarantee. These are implemented collection contracts, with no
-new performance result or default-budget change established here.
+client latency guarantee. The
+[completed 116-run comparison](../../../studies/model_generation/engine-core.md#fixed-workspace-budget-retained-bounded-results)
+retains fixed-256. At 128 blocks offline, fixed-32, fixed-64 and adaptive were
+slower by the paired noise rule; fixed-128 was inconclusive. All candidates at
+40 blocks were inconclusive. Smaller chunks reduced long offline gaps while
+adding steps and TTFT; online distributions remain descriptive. Actual executes
+exceeded the 25 ms prediction target. Replay a canonical held-out collection:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output studies/model_generation/engine-budget-loose-offline-blocks-128.json.gz
+```
 
 ### Optional Fast engine study
 
@@ -743,3 +752,22 @@ are retained; online results are descriptive. Replay never promotes Fast to a
 default. `--token-budget` and `--qualification` are Fast collection-only;
 `--budget-stage` and `--policy` are budget collection-only. Both studies require
 explicit `--admission-policy` on collection.
+
+The [completed optional Fast comparison](../../../studies/model_generation/engine-core.md#optional-fast-engine-retained-bounded-results)
+passed four untimed qualification calls and one 12-call loose offline40,
+fixed-256/reserved collection. Full histories and ordered work matched in all
+four comparisons, configuration 26 was exercised, and the speed verdict was
+inconclusive within a 5% noise floor (median raw duration ratio 0.987555).
+Reference-27 remains the engine default. Replay the canonical measured archive:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output studies/model_generation/engine-fast-loose-offline40.json.gz
+```
+
+The study links both publication inventories and validation bundles, whose
+independent local canonical retrieval/CPU replay passed with originals preserved.
+Full Fast restoration uses retained source/helpers and the compact
+`decoder_policies.json` import declaration; other source JSON/gz fixture contents
+remain hash-only provenance. Assets, executables and generated numerical arrays
+are excluded. Those receipts establish local replay, without a remote backup
+or new device-execution claim.

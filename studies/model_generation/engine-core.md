@@ -12,6 +12,9 @@ binds `b81ea6c` and removes replay on both frozen pressure traces.
 The [operating-range comparison](#admission-operating-range-retained-bounded-results)
 binds `2af0933` and measures the unused-capacity and queueing cost of larger
 declared output limits across 144 runs.
+The [fixed-workspace budget results](#fixed-workspace-budget-retained-bounded-results)
+and [optional Fast comparison](#optional-fast-engine-retained-bounded-results)
+bind clean `01d8be4`: fixed-256 and reference-27 remain the defaults.
 The [serving plan](../../docs/serving-plan.md) defines the architecture;
 [experimental method](../../docs/experiments.md#serving-measurement-contract)
 defines retention and paired comparisons.
@@ -799,8 +802,145 @@ grid requires exact-build checkpoint qualification and untimed own-route natural
 histories before collection. Numerical or history divergence, or different
 ordered per-step work, prevents a speed verdict. Routes are recorded per step.
 The [benchmark commands](../../src/llm_mojo/benchmarks/README.md#fixed-workspace-row-budget-study)
-expose both implemented contracts. No new budget/Fast performance conclusion or
-default promotion follows from their implementation.
+expose both contracts. Their separately collected results follow below.
+
+## Fixed-workspace budget: retained bounded results
+
+Keep fixed-256 as the default. All 16 untimed preflights and 116 measured runs
+completed with actual exit zero from clean
+`01d8be4fc2e6d329aa93784eea9acb2bb455b392` on Apple M4 Pro/Metal,
+Mojo 1.0.0 and MAX 26.5.0. Physical work capacity stayed 256 rows/eight sequence
+slots, with BF16 storage, FP32 reductions, 32-slot slot-major KV blocks,
+reference configuration 27 and lifetime reservation. A different native
+workload supplied 20 calibration runs;
+four held-out collections reused the unchanged loose output-limit traces at
+40/128 blocks, offline and eight requests/s. Each evaluation run preserved full
+frozen histories totaling 97 tokens, performed 2,265 necessary rows, avoided preemption and
+returned the complete pool.
+
+The offline comparisons use four balanced blocks and repeated fixed-256
+controls. Ratios below are median paired makespan ratios to fixed-256:
+
+| Scheduler budget | 128 blocks, 5% noise floor | 40 blocks, 12.77% noise floor |
+| --- | --- | --- |
+| Fixed 32 | 1.12770, slower | 1.03235, inconclusive |
+| Fixed 64 | 1.07021, slower | 1.02031, inconclusive |
+| Fixed 128 | 1.01023, inconclusive | 1.03212, inconclusive |
+| Fitted adaptive | 1.17390, slower | 1.09338, inconclusive |
+
+Smaller chunks reduced long token gaps but required more synchronous steps and
+increased host preparation and TTFT. At 128 blocks offline, the median of
+per-run p95 token gaps fell from 173.13 ms at fixed-256 to 24.68 ms at fixed-32
+and 23.89 ms with adaptive scheduling. Median per-run p95 TTFT rose from
+1,387.50 ms to 1,702.30 and 1,788.47 ms. Median step counts rose from 40 to 91
+and 101; total host schedule/build time rose from 0.254 ms to 0.453 and
+0.489 ms. More frequent steps give waiting decodes opportunities between prefill
+chunks, while repeating launch and synchronization overhead. Online
+distributions remain descriptive; at 40 blocks, fixed-256 already had a smaller
+p95 gap than fixed-32/adaptive. These traces establish a tradeoff, without a
+universal tail-latency or sustainable-capacity result.
+
+The fresh nonnegative fit used all 1,312 positive calibration steps: 36
+prefill-only, 620 decode-only and 656 mixed. Its integer coefficients are
+7,593,153 ns fixed, 500,130 ns per row, 343 ns per attended position, zero per
+partition and 248,858 ns per selected logit. Calibration absolute-error
+MAE/p95/maximum were 2.354/5.983/44.927 ms. A fitted zero partition coefficient
+does not establish free partition work. Across all 2,019 positive adaptive
+evaluation steps, none was predicted above 25 ms, but 30 measured executes
+exceeded it; the largest was 35.237 ms. Pooled adaptive absolute-error
+MAE/p95/maximum were 2.400/4.497/11.210 ms. These pooled step statistics differ
+from medians of four per-run request quantiles. The 25 ms setting remains a
+prediction target, without an execution bound or client latency guarantee.
+
+The [results card](engine-budget-results.json),
+[calibration archive](engine-budget-calibration.json.gz), held-out
+[offline 40](engine-budget-loose-offline-blocks-40.json.gz) /
+[128](engine-budget-loose-offline-blocks-128.json.gz) and
+[online 40](engine-budget-loose-online-8rps-blocks-40.json.gz) /
+[128](engine-budget-loose-online-8rps-blocks-128.json.gz) archives retain the
+fit, work/history checks, per-run metrics and prediction errors. The
+[validation archive](engine-budget-validation.json.gz) /
+[manifest](engine-budget-validation.json) and
+[seal](engine-budget-retention-seal.json) retain commands, receipts and replay
+sources. Live closeout, staged replay, sealing and fresh restored replay passed.
+The [canonical retrieval receipt](engine-budget-publication.json) records
+another independent CPU restoration/replay from local repository files;
+originals are preserved. This establishes local canonical custody, with no
+remote backup claim. Queue data samples step-boundary waiting/free blocks;
+it does not integrate admission delay or unused-memory byte-time. Goodput,
+hard SLOs and asynchronous serving remain outside this result.
+
+Replay a raw collection without a GPU or weights:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output studies/model_generation/engine-budget-loose-offline-blocks-128.json.gz
+```
+
+For complete regeneration, verify the seal SHA against the separate publication
+inventory, then copy canonical files into a fresh external sealed layout:
+`engine-budget-retention-seal.json` becomes `retention-seal.json`, validation
+archive/manifest stay at the layout root, and the five raw archive/manifest
+pairs plus `engine-budget-results.json` go under `measurements/`. Check each
+listed SHA and byte count before copying, preserving embedded original paths.
+Run the retained `budget_retention.py restore` with that seal, its intended SHA,
+the recorded package/Git objects and a distinct fresh output directory. Execute
+the command emitted in `restore-receipt.json` and retain its actual exit, wall,
+log and source receipt separately from the seal being replayed.
+
+## Optional Fast engine: retained bounded results
+
+Keep reference configuration 27 as the engine default. The exact optional Fast
+engine/checkpoint-driver binaries passed two untimed numerical checkpoint runs
+and two untimed natural runs on the same clean source, toolchain, device and
+arithmetic above. Both routes passed all five numerical/lifecycle groups with
+zero mismatches or unexpected nonfinite values. The unchanged loose offline
+workload used 40 KV blocks, reserved admission and token budget 256. Both routes
+produced full frozen histories totaling 97 tokens, executed 2,265 necessary rows,
+matched ordered step work, preempted no requests and drained the pool.
+Configuration 26 was exercised before timings were permitted.
+
+One four-block collection then made exactly 12 calls: reference, Fast and
+repeated-reference calibration in each block. All four comparisons matched
+full histories, work totals and ordered step work; diagnostics were empty.
+Fast/reference raw duration ratios were 0.992571, 0.980929, 0.982538 and
+1.014491, with median 0.987555. The approximately 1.24% median paired reduction is
+within the declared 5% noise floor: the speed verdict is **inconclusive** and
+promotion remains false. Median raw durations were 2.097799 s for reference
+and 2.088672 s for Fast; these are descriptive, while paired ratios determine
+the verdict. Each run had 79 steps. Fast used configuration 26 for 66 steps /
+76 rows / 76 selected logits and configuration 27 for 13 steps / 2,189 rows /
+21 selected logits. This qualifies the optional route for this exact case;
+it establishes no universal speedup or serving-capacity improvement.
+
+The [isolation card](engine-fast-isolation.json),
+[raw archive](engine-fast-loose-offline40.json.gz) /
+[manifest](engine-fast-loose-offline40.json), and
+[validation archive](engine-fast-validation.json.gz) /
+[manifest](engine-fast-validation.json) retain numerical qualification, native
+device/physical-input receipts, the pre-timing gate and all measured output.
+Fresh restored-source replay passed, followed by independent retrieval/replay
+from local canonical files, recorded in
+[the publication receipt](engine-fast-publication.json). Originals are
+preserved; remote backup and fresh device execution are separate claims.
+Executables, weights and generated numerical arrays are excluded. The compact
+`tests/fixtures/decoder_policies.json` declaration is retained to support package
+imports, along with explicitly selected workload/oracle documents. Other
+source JSON/gz fixture contents remain hash-only provenance. Logical source
+lockfile aliases retain their distinct names and byte identities.
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output studies/model_generation/engine-fast-loose-offline40.json.gz
+```
+
+For full independent verification, check canonical hashes against the separate
+publication inventory and restore the validation bundle's verified UTF-8 files.
+Run retained `root_fast_retention.py restore-check` against the canonical
+validation archive/manifest and measurement archive, selecting a distinct fresh
+restore directory. Retained source/helpers regenerate the exact TSV, reparse
+numerical qualification and eligibility, reconstruct original physical receipt
+identities without reading assets or binaries, check the four-plus-12 census
+and replay the measured archive. Keep the actual replay receipt separate from
+the archive it verifies.
 
 ## Optional engine terminal chat: accepted lifecycle
 

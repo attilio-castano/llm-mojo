@@ -1,0 +1,78 @@
+{
+  "kind": "qwen-engine-fast-isolation-closeout-v1",
+  "schema_version": 1,
+  "status": "passed",
+  "outcome": "matched-twelve-call-study",
+  "qualification_calls": 4,
+  "measured_runs": 12,
+  "source_scope": {
+    "validation_git": {
+      "commit": "1b0960b96f10391ccebf91a05c469f0600a510fa",
+      "branch": "codex/admission-operating-range",
+      "dirty": true
+    },
+    "build_git": {
+      "commit": "01d8be4fc2e6d329aa93784eea9acb2bb455b392",
+      "branch": "codex/admission-operating-range",
+      "dirty": false
+    },
+    "actual_outer_exit": 0,
+    "actual_inner_exit": null
+  },
+  "numerical_checks_passed": true,
+  "configuration_26_exercised": true,
+  "performance_eligible": true,
+  "comparison": {
+    "runner": "fast-decode",
+    "control": "reference",
+    "raw_duration_ratios": [
+      0.9925710346763645,
+      0.9809289870687886,
+      0.9825383813853408,
+      1.0144907792399553
+    ],
+    "median_raw_duration_ratio": 0.9875547080308527,
+    "matched_histories": [
+      true,
+      true,
+      true,
+      true
+    ],
+    "matched_work": [
+      true,
+      true,
+      true,
+      true
+    ],
+    "matched_step_work": [
+      true,
+      true,
+      true,
+      true
+    ],
+    "speed_verdict": "inconclusive"
+  },
+  "promotion": false,
+  "qualification_sha256": "e3a139a3634a47b563788941e86f25ce337adc060e98b20b09fc1e19f48f8790",
+  "validation_archive": {
+    "file": "engine-fast-validation.json.gz",
+    "sha256": "7b70f5bf29d190461b9694705fbc77e112f5b6cfd3b9ef5b49dc1d2ffa310e4a"
+  },
+  "validation_manifest": {
+    "file": "engine-fast-validation.json",
+    "sha256": "8d70c3481ce87b810b13ec2471ddd7c185c0e92dfebd8023fd93ee09e071b7b8"
+  },
+  "measurement_archive": {
+    "file": "engine-fast-loose-offline40.json.gz",
+    "sha256": "fb65527d380e525356f4ecc5dbdd626e8792317b151e3e9ecc3c5b4427f8a15a"
+  },
+  "independent_restore": {
+    "result_sha256": "2ea0c70cf1eaf775f588134798731d51cad1f32d35ddf4e01afa95e5307866a0",
+    "execution_sha256": "8310c5e17ad9763637c70b747cf9186c98f053bebfc7d6b9dcc0723bd6d081c9",
+    "actual_exit": 0
+  },
+  "scope": "Actual Fast qualification and at most one declared loose offline40 fixed256/reserved collection; offline receipt reconstruction only",
+  "local_restore_only": true,
+  "durable_publication_proven": false,
+  "source_json_gz_scope": "compact decoder_policies.json retained for imports; other source JSON/gz fixture contents are hash-only provenance; generated arrays, weights and binaries excluded"
+}

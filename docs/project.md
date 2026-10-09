@@ -162,10 +162,18 @@ research questions, not prerequisites for calling the current milestone complete
    retain both work reduction and request latency; adequate-capacity timing remains
    inconclusive. The [144-run operating-range study](../studies/model_generation/engine-core.md#admission-operating-range-retained-bounded-results)
    measures the unused capacity and FIFO costs of larger output caps while
-   preserving exact outputs and zero reserved replay. Optional fitted budgeting
-   improves delivered-token gaps at a
-   throughput cost and does not establish a latency bound. Asynchronous stepping
-   remains open on MAX 26.5;
+   preserving exact outputs and zero reserved replay. The
+   [116-run fixed-workspace budget comparison](../studies/model_generation/engine-core.md#fixed-workspace-budget-retained-bounded-results)
+   retains fixed-256: smaller chunks reduced long offline token gaps but added
+   steps and TTFT, and the 25 ms fit target is no execution or client-latency
+   bound. The [qualified optional Fast comparison](../studies/model_generation/engine-core.md#optional-fast-engine-retained-bounded-results)
+   matched full histories and ordered work across four comparisons; speed was
+   inconclusive within the declared noise floor, so reference-27 stays the
+   engine default. Both studies retain independent local canonical CPU replay.
+   The accepted [`chat --engine` adapter](chat.md#optional-engine-terminal-chat)
+   connects one terminal conversation to the synchronous reference core,
+   recomputing complete history each turn. Asynchronous stepping remains open on
+   MAX 26.5;
    prefix caching and HTTP/restart recovery remain later phases.
 
 Sampling, quantization, longer contexts, tool-oriented templates and additional
