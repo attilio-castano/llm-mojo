@@ -152,10 +152,17 @@ research questions, not prerequisites for calling the current milestone complete
    admission, aborts and recomputation under KV pressure. Its
    [engine study](../studies/model_generation/engine-core.md) retains readiness,
    numerical diagnostics and offline/online/pressure measurements. Concurrent
-   scheduling reduces offline makespan with adequate KV capacity, but heavy replay
-   makes it slower than serial under the tested memory limit. Optional fitted
-   budgeting improves delivered-token gaps at a throughput cost and does not
-   establish a latency bound. Asynchronous stepping remains open on MAX 26.5;
+   scheduling reduces offline makespan with adequate KV capacity. The original
+   incremental study regresses under KV pressure because of repeated replay.
+   Incremental admission remains the default; optional
+   [lifetime reservation](../studies/model_generation/engine-core.md#lifetime-reservation-admission-bounded-successor-study)
+   admits a request only when its declared cache growth fits and eliminates replay
+   on the frozen pressure trace. Maximum-output reservations can leave capacity
+   unused, and FIFO admission can delay smaller waiters. Its paired measurements
+   retain both work reduction and request latency; adequate-capacity timing remains
+   inconclusive. Optional fitted budgeting improves delivered-token gaps at a
+   throughput cost and does not establish a latency bound. Asynchronous stepping
+   remains open on MAX 26.5;
    prefix caching and HTTP/restart recovery remain later phases.
 
 Sampling, quantization, longer contexts, tool-oriented templates and additional

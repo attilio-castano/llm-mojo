@@ -33,8 +33,11 @@ pay off stay in the record alongside the ones that did, with the reason.
 - **The synchronous serving core works.** Paged KV storage, mixed prefill/decode,
   continuous admission, aborts and recomputation under memory pressure are native
   Mojo. The [engine study](studies/model_generation/engine-core.md) retains
-  correctness checks and load measurements, including regressions under pressure.
-  Asynchronous stepping and frontend integration remain in the
+  correctness checks and load measurements. Incremental admission remains the
+  default; optional [lifetime reservation](studies/model_generation/engine-core.md#lifetime-reservation-admission-bounded-successor-study)
+  removes repeated replay on the frozen pressure trace by waiting until a request's
+  declared cache growth fits.
+  Asynchronous stepping, a Fast engine route and frontend integration remain in the
   [serving plan](docs/serving-plan.md).
 - **Open questions.** For one conversation, submitting GPU work limits speed
   more than arithmetic does. Long prompts are slow to start. And whether building

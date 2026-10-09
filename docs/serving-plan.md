@@ -17,10 +17,14 @@ correctness, fitted-budget evaluation and the separate asynchronous API probe.
 The initial runner uses reference configuration 27 in every arm, so scheduling
 has one numerical route. Existing chat and generation remain Fast; a measured
 Fast engine route is a separate optimization decision.
-The measurements bind clean implementation `b18563b`; full asynchronous stepping
-remains open. Concurrent scheduling helps with adequate KV capacity and regresses
-under the tested memory pressure. Fitted budgeting remains optional and establishes
-a measured tradeoff, without a client latency guarantee.
+The original measurements bind clean implementation `b18563b`. The optional
+[lifetime reservation follow-up](../studies/model_generation/engine-core.md#lifetime-reservation-admission-bounded-successor-study)
+binds `b81ea6c` and eliminates replay on the frozen pressure trace by delaying
+admission until declared cache growth fits. Incremental admission remains the
+default and its original pressure regression is retained.
+The follow-up records queueing and token-latency tradeoffs separately. Fitted
+budgeting remains optional, without a client latency guarantee. Full asynchronous
+stepping, a measured Fast engine route and frontend integration remain separate.
 Each phase is approved separately and records its own validation, like the
 existing plans. The [project direction](project.md) lists this as a follow-up
 track.
@@ -275,14 +279,16 @@ retained prompt plus delivered tokens are recomputed; prefix hits require phase
 
 1. Drain the inbox: adds and aborts.
 2. Schedule within the token budget and maximum sequence count:
-   - running decodes first, one token each, allocating a block at each
-     boundary;
+   - running decodes first, one token each; incremental allocation extends KV
+     at block boundaries;
    - then one continuing prefill chunk;
-   - then first-come, first-served admission when free blocks cover the next
-     chunk plus a watermark.
+   - then first-come, first-served admission. The default incremental policy
+     requires space for the next chunk plus a watermark. Optional lifetime
+     reservation instead requires the request's full declared cache demand.
 
-   If a decode needs a block and none is free, preempt the most recently
-   admitted running request.
+   Incremental allocation preempts the newest eligible unscheduled holder when
+   a running request needs more blocks. Lifetime reservation keeps admitted
+   requests' blocks until completion and waits instead of evicting.
 3. Build the StepBatch and upload its metadata once.
 4. Execute: forward, token selection and one readback for all sequences.
 5. Append tokens, apply stop IDs and limits, release finished requests' blocks
@@ -291,6 +297,23 @@ retained prompt plus delivered tokens are recomputed; prefix hits require phase
 Initially at most one sequence prefills per step, so the prefill kernel still
 handles one sequence with a cached prefix. Multi-sequence prefill is a separate
 measured extension.
+
+For positive output, lifetime reservation owns enough blocks for
+`prompt_length + max_new_tokens - 1` cached positions before prefill begins;
+the final emitted token need not enter KV. Zero-output requests finish without
+holding blocks. Reserved capacity stays distinct from committed cache length
+and from the row budget: execution still uses the chosen fixed or fitted chunk.
+The oldest waiting request cannot be bypassed. The watermark applies while any
+request is resident, even if none is selected this step, and is ignored when
+the pool has no residents so a request that fits alone can progress. Every
+terminal path releases written and unused reserved blocks.
+
+Capacity reserved for maximum output can sit unused until completion; early stop
+makes actual demand lower than the reserved peak. FIFO can delay a smaller
+request behind an older request that needs more blocks.
+The admission study measures those choices with the same fixed row budget and
+numerical route. It does not promote reservation to the default or establish a
+client latency guarantee.
 
 ### Token budget
 
@@ -595,7 +618,7 @@ configuration and trace identity.
 | --- | --- | --- | --- |
 | 1. Batched decode | StepBatch; multi-row configuration-26 decode kernels; one maximum-context block per sequence; a batch axis in the existing model benchmark | S = 1 equals today; batched rows equal solo rows | How do throughput and per-token latency scale for B = 1–64 at contexts 64, 1024 and 3968? |
 | 2. Paged KV | small blocks in the block-major pool, a block manager with the Reset, Partial and Complete states, paged decode and prefill attention | paged equals one block per sequence; allocation invariants; no writes outside a sequence's blocks | What does translation cost at each block size, and does head-major order help? |
-| 3. Engine core | EngineCore, Scheduler, both runners, chunked prefill, preemption, aborts, step records, trace driver, fitted budget, asynchronous stepping | scheduler and allocator invariants in simulation and on Metal; exact token accounting; asynchronous equals synchronous | How do latency percentiles respond to arrival rate across the scheduling arms, and where does the simulator disagree? |
+| 3. Engine core | EngineCore, Scheduler, both runners, chunked prefill, incremental and optional lifetime admission, preemption, aborts, step records, trace driver, fitted budget, asynchronous stepping | scheduler and allocator invariants in simulation and on Metal; exact token accounting; reserved requests drain without replay; asynchronous equals synchronous | How do latency percentiles respond to arrival rate and memory admission across the scheduling arms, and where does the simulator disagree? |
 | 4. Prefix caching | block keys, Registered blocks, KV events, prefix index, eviction, pinning, chat as an engine client | reused blocks keep their bytes and token IDs; only the uncached suffix is computed; logical event replay; existing chat checks pass | How does time to first token depend on shared-prefix length, hit rate and pool size? |
 | 5. Frontend and API | frontend process, token protocol, model card, HTTP/SSE, supervisor, replay, backpressure, HTTP load generator | replay loses and duplicates nothing and preserves delivered tokens | What do the edge and recovery cost end to end? |
 | 6. SSD tier | store entries keyed by engine identity, publication by rename, asynchronous loading, verification, eviction | restored bytes equal stored bytes; disk and memory hits agree; a changed engine identity never hits older entries | At what prefix length does restoring beat recomputing? |

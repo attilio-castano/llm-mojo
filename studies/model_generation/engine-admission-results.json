@@ -1,0 +1,4795 @@
+{
+  "kind": "qwen-engine-admission-closeout-v1",
+  "schema_version": 1,
+  "verification_mode": "live_closeout",
+  "physical_checks": "current engine binary and asset files independently checked",
+  "original_physical_receipt": null,
+  "frozen_intent": {
+    "path": "/private/tmp/llm-mojo-admission-20261009/intent.json",
+    "bytes": 1178,
+    "sha256": "7aac1722de29cfd9ac8810eac25c374ed2aac2229055ba60eaa8f8b757148456"
+  },
+  "scope": "bounded synchronous lifetime-reservation admission; natural greedy same-build chunked pairs",
+  "measured_runs": 48,
+  "paired_blocks_per_collection": 4,
+  "collections": [
+    {
+      "name": "offline",
+      "mode": "offline",
+      "blocks": 128,
+      "measured_runs": 12,
+      "archive": {
+        "path": "/private/tmp/llm-mojo-admission-20261009/offline/engine-admission.json.gz",
+        "bytes": 131482,
+        "sha256": "3f521e98d47f9ed6b8dafcb70a53b967b5914ef937b7cf221d3985a62c64e844"
+      },
+      "manifest": {
+        "path": "/private/tmp/llm-mojo-admission-20261009/offline/engine-admission.json",
+        "bytes": 233,
+        "sha256": "18171c01d730de88cdf3bd6b86f21ec28c7e3827fb78017d8909ebc27209227b"
+      },
+      "trace_sha256": "aa049dea1465e9e0fe542e5f8789aa70f11e3d294501984657e47ed825cdecd7",
+      "canonical_native_trace_sha256": "d812babb5eb12cdab1cc48e4f8d2338b0f3b34497924cf3757595d84d20afcec",
+      "all_histories_identical": true,
+      "all_pools_returned": true,
+      "all_delivered_tokens": 256,
+      "reserved_preemptions": 0,
+      "reserved_computed_rows": 2424,
+      "runs": [
+        {
+          "block": 0,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 1575829792,
+          "tokens_per_second": 162.45409326542293,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 1575829792,
+          "delivered_tokens": 256,
+          "steps": 46,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 409233000.0,
+          "ttft_p95_ns": 1235246560.3,
+          "ttft_p99_ns": 1245510112.06,
+          "end_to_end_p50_ns": 1502206916.5,
+          "end_to_end_p95_ns": 1572434297.8,
+          "end_to_end_p99_ns": 1575128959.56,
+          "tpot_p50_ns": 35257223.11290322,
+          "token_gap_p95_ns": 141807916.0,
+          "token_gap_p99_ns": 190810334.0,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 145541,
+              "median": 2146.0,
+              "p95": 12208.25
+            },
+            "build_ns": {
+              "total": 607916,
+              "median": 4208.5,
+              "p95": 15854.25
+            },
+            "execute_ns": {
+              "total": 1574279377,
+              "median": 11335208.0,
+              "p95": 140240104.25
+            },
+            "postprocess_ns": {
+              "total": 301871,
+              "median": 6416.5,
+              "p95": 8698.25
+            },
+            "host_schedule_build_total_ns": 753457,
+            "host_schedule_build_fraction_of_makespan": 0.00047813349120892873,
+            "unassigned_within_steps_total_ns": 1499
+          }
+        },
+        {
+          "block": 0,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 1541905083,
+          "tokens_per_second": 166.0283780256531,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 1541905083,
+          "delivered_tokens": 256,
+          "steps": 46,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 409207979.0,
+          "ttft_p95_ns": 1198001543.65,
+          "ttft_p99_ns": 1208262575.1299999,
+          "end_to_end_p50_ns": 1466584541.5,
+          "end_to_end_p95_ns": 1538299702.2,
+          "end_to_end_p99_ns": 1541166540.44,
+          "tpot_p50_ns": 34108921.370967746,
+          "token_gap_p95_ns": 136973292.0,
+          "token_gap_p99_ns": 172214875.0,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 104462,
+              "median": 1625.5,
+              "p95": 7156.25
+            },
+            "build_ns": {
+              "total": 193750,
+              "median": 3770.5,
+              "p95": 9104.25
+            },
+            "execute_ns": {
+              "total": 1540988208,
+              "median": 11450562.5,
+              "p95": 136567042.0
+            },
+            "postprocess_ns": {
+              "total": 218124,
+              "median": 4416.5,
+              "p95": 7125.0
+            },
+            "host_schedule_build_total_ns": 298212,
+            "host_schedule_build_fraction_of_makespan": 0.0001934049010460393,
+            "unassigned_within_steps_total_ns": 1124
+          }
+        },
+        {
+          "block": 0,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 1518363459,
+          "tokens_per_second": 168.60258226222237,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 1518363459,
+          "delivered_tokens": 256,
+          "steps": 46,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 408439000.5,
+          "ttft_p95_ns": 1195291469.2,
+          "ttft_p99_ns": 1205457627.44,
+          "end_to_end_p50_ns": 1450179417.0,
+          "end_to_end_p95_ns": 1514748531.25,
+          "end_to_end_p99_ns": 1517625706.25,
+          "tpot_p50_ns": 33604529.56451613,
+          "token_gap_p95_ns": 136540875.0,
+          "token_gap_p99_ns": 171976958.0,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 79625,
+              "median": 1208.0,
+              "p95": 5364.5
+            },
+            "build_ns": {
+              "total": 176287,
+              "median": 3603.5,
+              "p95": 6583.5
+            },
+            "execute_ns": {
+              "total": 1517497839,
+              "median": 10600042.0,
+              "p95": 136250448.0
+            },
+            "postprocess_ns": {
+              "total": 217664,
+              "median": 4521.0,
+              "p95": 7489.5
+            },
+            "host_schedule_build_total_ns": 255912,
+            "host_schedule_build_fraction_of_makespan": 0.00016854462512456972,
+            "unassigned_within_steps_total_ns": 1084
+          }
+        },
+        {
+          "block": 1,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 1528570209,
+          "tokens_per_second": 167.4767691354372,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 1528570209,
+          "delivered_tokens": 256,
+          "steps": 46,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 407633209.0,
+          "ttft_p95_ns": 1195489392.1,
+          "ttft_p99_ns": 1205715645.62,
+          "end_to_end_p50_ns": 1456828229.5,
+          "end_to_end_p95_ns": 1525862967.1,
+          "end_to_end_p99_ns": 1528014860.62,
+          "tpot_p50_ns": 33845000.661290325,
+          "token_gap_p95_ns": 136645792.0,
+          "token_gap_p99_ns": 172158500.0,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 75831,
+              "median": 1021.0,
+              "p95": 5416.5
+            },
+            "build_ns": {
+              "total": 178043,
+              "median": 3917.0,
+              "p95": 6385.25
+            },
+            "execute_ns": {
+              "total": 1527705167,
+              "median": 10550875.5,
+              "p95": 136273531.25
+            },
+            "postprocess_ns": {
+              "total": 212876,
+              "median": 4375.0,
+              "p95": 7176.75
+            },
+            "host_schedule_build_total_ns": 253874,
+            "host_schedule_build_fraction_of_makespan": 0.00016608592690425775,
+            "unassigned_within_steps_total_ns": 1250
+          }
+        },
+        {
+          "block": 1,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 1521976292,
+          "tokens_per_second": 168.20235725458988,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 1521976292,
+          "delivered_tokens": 256,
+          "steps": 46,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 405976833.5,
+          "ttft_p95_ns": 1194470395.95,
+          "ttft_p99_ns": 1204662279.19,
+          "end_to_end_p50_ns": 1450714958.0,
+          "end_to_end_p95_ns": 1519247995.5,
+          "end_to_end_p99_ns": 1521415965.5,
+          "tpot_p50_ns": 33701229.82258064,
+          "token_gap_p95_ns": 136782625.0,
+          "token_gap_p99_ns": 172179041.0,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 94708,
+              "median": 1458.5,
+              "p95": 5593.75
+            },
+            "build_ns": {
+              "total": 175168,
+              "median": 3604.5,
+              "p95": 7562.5
+            },
+            "execute_ns": {
+              "total": 1521077168,
+              "median": 10588292.0,
+              "p95": 136452937.25
+            },
+            "postprocess_ns": {
+              "total": 212206,
+              "median": 4396.0,
+              "p95": 7260.75
+            },
+            "host_schedule_build_total_ns": 269876,
+            "host_schedule_build_fraction_of_makespan": 0.00017731945065015508,
+            "unassigned_within_steps_total_ns": 1457
+          }
+        },
+        {
+          "block": 1,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 1529144667,
+          "tokens_per_second": 167.41385267506544,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 1529144667,
+          "delivered_tokens": 256,
+          "steps": 46,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 408163333.5,
+          "ttft_p95_ns": 1197631689.8,
+          "ttft_p99_ns": 1208220671.56,
+          "end_to_end_p50_ns": 1455835292.0,
+          "end_to_end_p95_ns": 1526275137.6,
+          "end_to_end_p99_ns": 1528553661.12,
+          "tpot_p50_ns": 33795869.629032254,
+          "token_gap_p95_ns": 136759916.0,
+          "token_gap_p99_ns": 172066334.0,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 140583,
+              "median": 1645.5,
+              "p95": 7832.75
+            },
+            "build_ns": {
+              "total": 183917,
+              "median": 3750.0,
+              "p95": 8021.0
+            },
+            "execute_ns": {
+              "total": 1528131836,
+              "median": 10757729.0,
+              "p95": 136408905.75
+            },
+            "postprocess_ns": {
+              "total": 249371,
+              "median": 5187.5,
+              "p95": 8708.5
+            },
+            "host_schedule_build_total_ns": 324500,
+            "host_schedule_build_fraction_of_makespan": 0.00021221013747288567,
+            "unassigned_within_steps_total_ns": 1208
+          }
+        },
+        {
+          "block": 2,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 1540713375,
+          "tokens_per_second": 166.1567973342219,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 1540713375,
+          "delivered_tokens": 256,
+          "steps": 46,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 406614563.0,
+          "ttft_p95_ns": 1194824823.15,
+          "ttft_p99_ns": 1205003464.6299999,
+          "end_to_end_p50_ns": 1463972583.5,
+          "end_to_end_p95_ns": 1537969610.75,
+          "end_to_end_p99_ns": 1540150355.75,
+          "tpot_p50_ns": 34108323.241935484,
+          "token_gap_p95_ns": 136669833.0,
+          "token_gap_p99_ns": 172065084.0,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 77921,
+              "median": 1188.0,
+              "p95": 5364.0
+            },
+            "build_ns": {
+              "total": 177294,
+              "median": 3770.5,
+              "p95": 6208.5
+            },
+            "execute_ns": {
+              "total": 1539865250,
+              "median": 11383021.0,
+              "p95": 136339271.0
+            },
+            "postprocess_ns": {
+              "total": 216792,
+              "median": 4209.0,
+              "p95": 7156.0
+            },
+            "host_schedule_build_total_ns": 255215,
+            "host_schedule_build_fraction_of_makespan": 0.00016564729309239624,
+            "unassigned_within_steps_total_ns": 954
+          }
+        },
+        {
+          "block": 2,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 1530750583,
+          "tokens_per_second": 167.2382181937735,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 1530750583,
+          "delivered_tokens": 256,
+          "steps": 46,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 407195541.5,
+          "ttft_p95_ns": 1196691206.35,
+          "ttft_p99_ns": 1206925474.87,
+          "end_to_end_p50_ns": 1459307916.5,
+          "end_to_end_p95_ns": 1527816058.45,
+          "end_to_end_p99_ns": 1530149811.69,
+          "tpot_p50_ns": 33939108.870967746,
+          "token_gap_p95_ns": 136797166.0,
+          "token_gap_p99_ns": 172381458.0,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 97329,
+              "median": 1458.5,
+              "p95": 5844.25
+            },
+            "build_ns": {
+              "total": 178547,
+              "median": 3729.5,
+              "p95": 7843.5
+            },
+            "execute_ns": {
+              "total": 1529869000,
+              "median": 10876583.5,
+              "p95": 136420677.0
+            },
+            "postprocess_ns": {
+              "total": 210333,
+              "median": 4125.0,
+              "p95": 7812.0
+            },
+            "host_schedule_build_total_ns": 275876,
+            "host_schedule_build_fraction_of_makespan": 0.00018022269797822446,
+            "unassigned_within_steps_total_ns": 1333
+          }
+        },
+        {
+          "block": 2,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 1538163958,
+          "tokens_per_second": 166.43219252963408,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 1538163958,
+          "delivered_tokens": 256,
+          "steps": 46,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 409765249.5,
+          "ttft_p95_ns": 1198255908.0,
+          "ttft_p99_ns": 1208462048.0,
+          "end_to_end_p50_ns": 1461062624.5,
+          "end_to_end_p95_ns": 1535128134.75,
+          "end_to_end_p99_ns": 1537541559.75,
+          "tpot_p50_ns": 33912818.548387095,
+          "token_gap_p95_ns": 136804250.0,
+          "token_gap_p99_ns": 172222875.0,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 102248,
+              "median": 1583.0,
+              "p95": 5854.25
+            },
+            "build_ns": {
+              "total": 180918,
+              "median": 3625.0,
+              "p95": 7072.75
+            },
+            "execute_ns": {
+              "total": 1537255664,
+              "median": 11065750.0,
+              "p95": 136464698.0
+            },
+            "postprocess_ns": {
+              "total": 216375,
+              "median": 4167.0,
+              "p95": 8072.75
+            },
+            "host_schedule_build_total_ns": 283166,
+            "host_schedule_build_fraction_of_makespan": 0.00018409350871033736,
+            "unassigned_within_steps_total_ns": 1251
+          }
+        },
+        {
+          "block": 3,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 1540009666,
+          "tokens_per_second": 166.232722853572,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 1540009666,
+          "delivered_tokens": 256,
+          "steps": 46,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 409664062.0,
+          "ttft_p95_ns": 1198696291.45,
+          "ttft_p99_ns": 1208914424.69,
+          "end_to_end_p50_ns": 1459301124.5,
+          "end_to_end_p95_ns": 1537323816.55,
+          "end_to_end_p99_ns": 1539457463.31,
+          "tpot_p50_ns": 33859260.08064516,
+          "token_gap_p95_ns": 136708334.0,
+          "token_gap_p99_ns": 172161958.0,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 102463,
+              "median": 1646.0,
+              "p95": 4864.75
+            },
+            "build_ns": {
+              "total": 184291,
+              "median": 3791.5,
+              "p95": 7802.0
+            },
+            "execute_ns": {
+              "total": 1539095421,
+              "median": 11055917.0,
+              "p95": 136380615.0
+            },
+            "postprocess_ns": {
+              "total": 222374,
+              "median": 4458.0,
+              "p95": 7958.75
+            },
+            "host_schedule_build_total_ns": 286754,
+            "host_schedule_build_fraction_of_makespan": 0.00018620272737950464,
+            "unassigned_within_steps_total_ns": 1120
+          }
+        },
+        {
+          "block": 3,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 1533898459,
+          "tokens_per_second": 166.89501087763983,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 1533898459,
+          "delivered_tokens": 256,
+          "steps": 46,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 408619021.5,
+          "ttft_p95_ns": 1197727745.95,
+          "ttft_p99_ns": 1207991449.19,
+          "end_to_end_p50_ns": 1459066208.5,
+          "end_to_end_p95_ns": 1530621246.5,
+          "end_to_end_p99_ns": 1533228816.5,
+          "tpot_p50_ns": 33885393.129032254,
+          "token_gap_p95_ns": 136728458.0,
+          "token_gap_p99_ns": 172177458.0,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 98747,
+              "median": 1645.5,
+              "p95": 5625.0
+            },
+            "build_ns": {
+              "total": 176245,
+              "median": 3624.5,
+              "p95": 8145.5
+            },
+            "execute_ns": {
+              "total": 1532988751,
+              "median": 10902000.0,
+              "p95": 136381572.75
+            },
+            "postprocess_ns": {
+              "total": 217372,
+              "median": 4604.0,
+              "p95": 7416.75
+            },
+            "host_schedule_build_total_ns": 274992,
+            "host_schedule_build_fraction_of_makespan": 0.00017927653449712475,
+            "unassigned_within_steps_total_ns": 1131
+          }
+        },
+        {
+          "block": 3,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 1538107542,
+          "tokens_per_second": 166.43829706934758,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 1538107542,
+          "delivered_tokens": 256,
+          "steps": 46,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 407174000.5,
+          "ttft_p95_ns": 1195600438.05,
+          "ttft_p99_ns": 1205850654.81,
+          "end_to_end_p50_ns": 1457911375.5,
+          "end_to_end_p95_ns": 1534624835.65,
+          "end_to_end_p99_ns": 1537396567.13,
+          "tpot_p50_ns": 33894754.03225806,
+          "token_gap_p95_ns": 136789375.0,
+          "token_gap_p99_ns": 172051333.0,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 75458,
+              "median": 1042.0,
+              "p95": 5448.0
+            },
+            "build_ns": {
+              "total": 174379,
+              "median": 3520.5,
+              "p95": 6364.25
+            },
+            "execute_ns": {
+              "total": 1537263797,
+              "median": 10988854.5,
+              "p95": 136438250.0
+            },
+            "postprocess_ns": {
+              "total": 211119,
+              "median": 4479.0,
+              "p95": 7125.25
+            },
+            "host_schedule_build_total_ns": 249837,
+            "host_schedule_build_fraction_of_makespan": 0.00016243142509732262,
+            "unassigned_within_steps_total_ns": 1080
+          }
+        }
+      ],
+      "medians": {
+        "incremental_control": {
+          "duration_ns": 1539086812.0,
+          "tokens_per_second": 166.33245769160305,
+          "arrival_window_ns": 0.0,
+          "drain_tail_ns": 1539086812.0,
+          "ttft_p50_ns": 409448531.0,
+          "ttft_p95_ns": 1198476099.725,
+          "ttft_p99_ns": 1208688236.345,
+          "end_to_end_p50_ns": 1460181874.5,
+          "end_to_end_p95_ns": 1536225975.65,
+          "end_to_end_p99_ns": 1538499511.53,
+          "tpot_p50_ns": 33886039.31451613,
+          "token_gap_p95_ns": 136782083.0,
+          "token_gap_p99_ns": 172192416.5,
+          "steps": 46.0,
+          "preemptions": 0.0,
+          "total_tokens": 2424.0,
+          "schedule_total_ns": 121523.0,
+          "build_total_ns": 184104.0,
+          "schedule_step_p95_ns": 6843.5,
+          "build_step_p95_ns": 7911.5,
+          "execute_total_ns": 1538175542.5,
+          "host_schedule_build_total_ns": 305627.0
+        },
+        "incremental_self_control": {
+          "duration_ns": 1532324521.0,
+          "tokens_per_second": 167.06661453570666,
+          "arrival_window_ns": 0.0,
+          "drain_tail_ns": 1532324521.0,
+          "ttft_p50_ns": 407907281.5,
+          "ttft_p95_ns": 1197209476.15,
+          "ttft_p99_ns": 1207458462.03,
+          "end_to_end_p50_ns": 1459187062.5,
+          "end_to_end_p95_ns": 1529218652.475,
+          "end_to_end_p99_ns": 1531689314.095,
+          "tpot_p50_ns": 33912251.0,
+          "token_gap_p95_ns": 136789895.5,
+          "token_gap_p99_ns": 172196958.0,
+          "steps": 46.0,
+          "preemptions": 0.0,
+          "total_tokens": 2424.0,
+          "schedule_total_ns": 98038.0,
+          "build_total_ns": 177396.0,
+          "schedule_step_p95_ns": 5734.625,
+          "build_step_p95_ns": 7994.5,
+          "execute_total_ns": 1531428875.5,
+          "host_schedule_build_total_ns": 275434.0
+        },
+        "reserved": {
+          "duration_ns": 1533338875.5,
+          "tokens_per_second": 166.9575331023924,
+          "arrival_window_ns": 0.0,
+          "drain_tail_ns": 1533338875.5,
+          "ttft_p50_ns": 407403604.75,
+          "ttft_p95_ns": 1195390430.65,
+          "ttft_p99_ns": 1205586636.53,
+          "end_to_end_p50_ns": 1457369802.5,
+          "end_to_end_p95_ns": 1530243901.375,
+          "end_to_end_p99_ns": 1532705713.875,
+          "tpot_p50_ns": 33869877.34677419,
+          "token_gap_p95_ns": 136657812.5,
+          "token_gap_p99_ns": 172058208.5,
+          "steps": 46.0,
+          "preemptions": 0.0,
+          "total_tokens": 2424.0,
+          "schedule_total_ns": 76876.0,
+          "build_total_ns": 176790.5,
+          "schedule_step_p95_ns": 5390.5,
+          "build_step_p95_ns": 6374.75,
+          "execute_total_ns": 1532484482.0,
+          "host_schedule_build_total_ns": 254544.5
+        }
+      },
+      "paired_comparisons": [
+        {
+          "block": 0,
+          "duration": {
+            "control": 1575829792,
+            "candidate": 1518363459,
+            "delta": -57466333,
+            "candidate_over_control": 0.963532652262485,
+            "direction": "lower"
+          },
+          "throughput": {
+            "control": 162.45409326542293,
+            "candidate": 168.60258226222237,
+            "delta": 6.148488996799443,
+            "candidate_over_control": 1.037847547409925,
+            "direction": "higher"
+          },
+          "self_control_over_control_duration": 0.9784718443754362,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 409233000.0,
+              "candidate": 408439000.5,
+              "delta": -793999.5,
+              "candidate_over_control": 0.998059786234248,
+              "direction": "lower"
+            },
+            "ttft_p95_ns": {
+              "control": 1235246560.3,
+              "candidate": 1195291469.2,
+              "delta": -39955091.099999905,
+              "candidate_over_control": 0.9676541571665691,
+              "direction": "lower"
+            },
+            "ttft_p99_ns": {
+              "control": 1245510112.06,
+              "candidate": 1205457627.44,
+              "delta": -40052484.619999886,
+              "candidate_over_control": 0.9678425054664908,
+              "direction": "lower"
+            },
+            "end_to_end_p50_ns": {
+              "control": 1502206916.5,
+              "candidate": 1450179417.0,
+              "delta": -52027499.5,
+              "candidate_over_control": 0.9653659566278532,
+              "direction": "lower"
+            },
+            "end_to_end_p95_ns": {
+              "control": 1572434297.8,
+              "candidate": 1514748531.25,
+              "delta": -57685766.54999995,
+              "candidate_over_control": 0.9633143549268111,
+              "direction": "lower"
+            },
+            "end_to_end_p99_ns": {
+              "control": 1575128959.56,
+              "candidate": 1517625706.25,
+              "delta": -57503253.30999994,
+              "candidate_over_control": 0.9634929870592545,
+              "direction": "lower"
+            },
+            "tpot_p50_ns": {
+              "control": 35257223.11290322,
+              "candidate": 33604529.56451613,
+              "delta": -1652693.5483870953,
+              "candidate_over_control": 0.9531246819100098,
+              "direction": "lower"
+            },
+            "token_gap_p95_ns": {
+              "control": 141807916.0,
+              "candidate": 136540875.0,
+              "delta": -5267041.0,
+              "candidate_over_control": 0.9628579197229018,
+              "direction": "lower"
+            },
+            "token_gap_p99_ns": {
+              "control": 190810334.0,
+              "candidate": 171976958.0,
+              "delta": -18833376.0,
+              "candidate_over_control": 0.9012979244614707,
+              "direction": "lower"
+            }
+          },
+          "host_schedule_build": {
+            "control": 753457,
+            "candidate": 255912,
+            "delta": -497545,
+            "candidate_over_control": 0.3396504379148379,
+            "direction": "lower"
+          }
+        },
+        {
+          "block": 1,
+          "duration": {
+            "control": 1529144667,
+            "candidate": 1528570209,
+            "delta": -574458,
+            "candidate_over_control": 0.9996243272383594,
+            "direction": "lower"
+          },
+          "throughput": {
+            "control": 167.41385267506544,
+            "candidate": 167.4767691354372,
+            "delta": 0.06291646037175269,
+            "candidate_over_control": 1.000375813944703,
+            "direction": "higher"
+          },
+          "self_control_over_control_duration": 0.9953121668899624,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 408163333.5,
+              "candidate": 407633209.0,
+              "delta": -530124.5,
+              "candidate_over_control": 0.9987011951919978,
+              "direction": "lower"
+            },
+            "ttft_p95_ns": {
+              "control": 1197631689.8,
+              "candidate": 1195489392.1,
+              "delta": -2142297.7000000477,
+              "candidate_over_control": 0.9982112215982213,
+              "direction": "lower"
+            },
+            "ttft_p99_ns": {
+              "control": 1208220671.56,
+              "candidate": 1205715645.62,
+              "delta": -2505025.940000057,
+              "candidate_over_control": 0.9979266817734829,
+              "direction": "lower"
+            },
+            "end_to_end_p50_ns": {
+              "control": 1455835292.0,
+              "candidate": 1456828229.5,
+              "delta": 992937.5,
+              "candidate_over_control": 1.0006820397234881,
+              "direction": "higher"
+            },
+            "end_to_end_p95_ns": {
+              "control": 1526275137.6,
+              "candidate": 1525862967.1,
+              "delta": -412170.5,
+              "candidate_over_control": 0.9997299500661144,
+              "direction": "lower"
+            },
+            "end_to_end_p99_ns": {
+              "control": 1528553661.12,
+              "candidate": 1528014860.62,
+              "delta": -538800.5,
+              "candidate_over_control": 0.9996475095943932,
+              "direction": "lower"
+            },
+            "tpot_p50_ns": {
+              "control": 33795869.629032254,
+              "candidate": 33845000.661290325,
+              "delta": 49131.032258071005,
+              "candidate_over_control": 1.0014537584857963,
+              "direction": "higher"
+            },
+            "token_gap_p95_ns": {
+              "control": 136759916.0,
+              "candidate": 136645792.0,
+              "delta": -114124.0,
+              "candidate_over_control": 0.9991655157202641,
+              "direction": "lower"
+            },
+            "token_gap_p99_ns": {
+              "control": 172066334.0,
+              "candidate": 172158500.0,
+              "delta": 92166.0,
+              "candidate_over_control": 1.0005356422599205,
+              "direction": "higher"
+            }
+          },
+          "host_schedule_build": {
+            "control": 324500,
+            "candidate": 253874,
+            "delta": -70626,
+            "candidate_over_control": 0.7823543913713406,
+            "direction": "lower"
+          }
+        },
+        {
+          "block": 2,
+          "duration": {
+            "control": 1538163958,
+            "candidate": 1540713375,
+            "delta": 2549417,
+            "candidate_over_control": 1.0016574416444621,
+            "direction": "higher"
+          },
+          "throughput": {
+            "control": 166.43219252963408,
+            "candidate": 166.1567973342219,
+            "delta": -0.2753951954121874,
+            "candidate_over_control": 0.9983453009226977,
+            "direction": "lower"
+          },
+          "self_control_over_control_duration": 0.9951803740027564,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 409765249.5,
+              "candidate": 406614563.0,
+              "delta": -3150686.5,
+              "candidate_over_control": 0.9923109963476783,
+              "direction": "lower"
+            },
+            "ttft_p95_ns": {
+              "control": 1198255908.0,
+              "candidate": 1194824823.15,
+              "delta": -3431084.8499999046,
+              "candidate_over_control": 0.9971366009321609,
+              "direction": "lower"
+            },
+            "ttft_p99_ns": {
+              "control": 1208462048.0,
+              "candidate": 1205003464.6299999,
+              "delta": -3458583.370000124,
+              "candidate_over_control": 0.9971380289718456,
+              "direction": "lower"
+            },
+            "end_to_end_p50_ns": {
+              "control": 1461062624.5,
+              "candidate": 1463972583.5,
+              "delta": 2909959.0,
+              "candidate_over_control": 1.0019916730133287,
+              "direction": "higher"
+            },
+            "end_to_end_p95_ns": {
+              "control": 1535128134.75,
+              "candidate": 1537969610.75,
+              "delta": 2841476.0,
+              "candidate_over_control": 1.0018509699194997,
+              "direction": "higher"
+            },
+            "end_to_end_p99_ns": {
+              "control": 1537541559.75,
+              "candidate": 1540150355.75,
+              "delta": 2608796.0,
+              "candidate_over_control": 1.0016967320222707,
+              "direction": "higher"
+            },
+            "tpot_p50_ns": {
+              "control": 33912818.548387095,
+              "candidate": 34108323.241935484,
+              "delta": 195504.69354838878,
+              "candidate_over_control": 1.005764920225355,
+              "direction": "higher"
+            },
+            "token_gap_p95_ns": {
+              "control": 136804250.0,
+              "candidate": 136669833.0,
+              "delta": -134417.0,
+              "candidate_over_control": 0.9990174501157676,
+              "direction": "lower"
+            },
+            "token_gap_p99_ns": {
+              "control": 172222875.0,
+              "candidate": 172065084.0,
+              "delta": -157791.0,
+              "candidate_over_control": 0.9990837976662508,
+              "direction": "lower"
+            }
+          },
+          "host_schedule_build": {
+            "control": 283166,
+            "candidate": 255215,
+            "delta": -27951,
+            "candidate_over_control": 0.9012911154587768,
+            "direction": "lower"
+          }
+        },
+        {
+          "block": 3,
+          "duration": {
+            "control": 1540009666,
+            "candidate": 1538107542,
+            "delta": -1902124,
+            "candidate_over_control": 0.9987648622979487,
+            "direction": "lower"
+          },
+          "throughput": {
+            "control": 166.232722853572,
+            "candidate": 166.43829706934758,
+            "delta": 0.20557421577558443,
+            "candidate_over_control": 1.0012366651538076,
+            "direction": "higher"
+          },
+          "self_control_over_control_duration": 0.9960317086737038,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 409664062.0,
+              "candidate": 407174000.5,
+              "delta": -2490061.5,
+              "candidate_over_control": 0.9939216989456107,
+              "direction": "lower"
+            },
+            "ttft_p95_ns": {
+              "control": 1198696291.45,
+              "candidate": 1195600438.05,
+              "delta": -3095853.4000000954,
+              "candidate_over_control": 0.9974173162776242,
+              "direction": "lower"
+            },
+            "ttft_p99_ns": {
+              "control": 1208914424.69,
+              "candidate": 1205850654.81,
+              "delta": -3063769.8800001144,
+              "candidate_over_control": 0.9974656850663473,
+              "direction": "lower"
+            },
+            "end_to_end_p50_ns": {
+              "control": 1459301124.5,
+              "candidate": 1457911375.5,
+              "delta": -1389749.0,
+              "candidate_over_control": 0.9990476612560165,
+              "direction": "lower"
+            },
+            "end_to_end_p95_ns": {
+              "control": 1537323816.55,
+              "candidate": 1534624835.65,
+              "delta": -2698980.899999857,
+              "candidate_over_control": 0.9982443640884607,
+              "direction": "lower"
+            },
+            "end_to_end_p99_ns": {
+              "control": 1539457463.31,
+              "candidate": 1537396567.13,
+              "delta": -2060896.1799998283,
+              "candidate_over_control": 0.9986612841022781,
+              "direction": "lower"
+            },
+            "tpot_p50_ns": {
+              "control": 33859260.08064516,
+              "candidate": 33894754.03225806,
+              "delta": 35493.95161290467,
+              "candidate_over_control": 1.001048279009298,
+              "direction": "higher"
+            },
+            "token_gap_p95_ns": {
+              "control": 136708334.0,
+              "candidate": 136789375.0,
+              "delta": 81041.0,
+              "candidate_over_control": 1.000592802191562,
+              "direction": "higher"
+            },
+            "token_gap_p99_ns": {
+              "control": 172161958.0,
+              "candidate": 172051333.0,
+              "delta": -110625.0,
+              "candidate_over_control": 0.9993574364436538,
+              "direction": "lower"
+            }
+          },
+          "host_schedule_build": {
+            "control": 286754,
+            "candidate": 249837,
+            "delta": -36917,
+            "candidate_over_control": 0.8712589885407004,
+            "direction": "lower"
+          }
+        }
+      ],
+      "calibration_ratios": [
+        0.9784718443754362,
+        0.9953121668899624,
+        0.9951803740027564,
+        0.9960317086737038
+      ],
+      "noise_floor": 0.05,
+      "declared_makespan_comparison": {
+        "arm": "chunked",
+        "block_ratios": [
+          0.963532652262485,
+          0.9996243272383594,
+          1.0016574416444621,
+          0.9987648622979487
+        ],
+        "median_ratio": 0.999194594768154,
+        "same_generated_histories": true,
+        "outcome": "inconclusive",
+        "admission": "reserved",
+        "control_admission": "incremental"
+      },
+      "latency_classification": "descriptive; no latency gain threshold declared"
+    },
+    {
+      "name": "online",
+      "mode": "online",
+      "blocks": 128,
+      "measured_runs": 12,
+      "archive": {
+        "path": "/private/tmp/llm-mojo-admission-20261009/online/engine-admission.json.gz",
+        "bytes": 223779,
+        "sha256": "cb92d68dcbe05688bebdc144a94db0cc7438db2434e60840e10daba465124c5e"
+      },
+      "manifest": {
+        "path": "/private/tmp/llm-mojo-admission-20261009/online/engine-admission.json",
+        "bytes": 233,
+        "sha256": "11eaa42733a642fdc7acfa8ff074465330c9d184546f34fad63c506a253f240f"
+      },
+      "trace_sha256": "87a4274184eb3ca2b241091c2b698887a4dd47e7524eb8da045cf6b787486d38",
+      "canonical_native_trace_sha256": "5508dcb2adff8c0d1904f9366ad0958b15926705bbcbb37eb97cc9b50f37a28f",
+      "all_histories_identical": true,
+      "all_pools_returned": true,
+      "all_delivered_tokens": 256,
+      "reserved_preemptions": 0,
+      "reserved_computed_rows": 2424,
+      "runs": [
+        {
+          "block": 0,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 3082580250,
+          "tokens_per_second": 83.0473107715525,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 405042101,
+          "delivered_tokens": 256,
+          "steps": 156,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 119125539.5,
+          "ttft_p95_ns": 489428466.5999998,
+          "ttft_p99_ns": 583973334.92,
+          "end_to_end_p50_ns": 686967818.5,
+          "end_to_end_p95_ns": 1142835257.75,
+          "end_to_end_p99_ns": 1144469397.95,
+          "tpot_p50_ns": 10224027.564516129,
+          "token_gap_p95_ns": 117596708.45,
+          "token_gap_p99_ns": 163314862.02,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 123118,
+              "median": 417.0,
+              "p95": 1979.25
+            },
+            "build_ns": {
+              "total": 215127,
+              "median": 750.0,
+              "p95": 4416.75
+            },
+            "execute_ns": {
+              "total": 2457429790,
+              "median": 8631437.5,
+              "p95": 51240500.0
+            },
+            "postprocess_ns": {
+              "total": 502055,
+              "median": 2875.0,
+              "p95": 5073.25
+            },
+            "host_schedule_build_total_ns": 338245,
+            "host_schedule_build_fraction_of_makespan": 0.00010972788137470225,
+            "unassigned_within_steps_total_ns": 4000
+          }
+        },
+        {
+          "block": 0,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 3061710292,
+          "tokens_per_second": 83.61339760620304,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 384172143,
+          "delivered_tokens": 256,
+          "steps": 154,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 114023269.0,
+          "ttft_p95_ns": 486884962.0999998,
+          "ttft_p99_ns": 581373900.42,
+          "end_to_end_p50_ns": 678929527.0,
+          "end_to_end_p95_ns": 1148112735.05,
+          "end_to_end_p99_ns": 1148204927.01,
+          "tpot_p50_ns": 10370370.967741935,
+          "token_gap_p95_ns": 117847394.19999999,
+          "token_gap_p99_ns": 163240432.50000003,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 146497,
+              "median": 500.0,
+              "p95": 2697.799999999999
+            },
+            "build_ns": {
+              "total": 228795,
+              "median": 834.0,
+              "p95": 5033.549999999998
+            },
+            "execute_ns": {
+              "total": 2472564495,
+              "median": 9055853.5,
+              "p95": 51846997.89999992
+            },
+            "postprocess_ns": {
+              "total": 552743,
+              "median": 3104.5,
+              "p95": 5629.149999999999
+            },
+            "host_schedule_build_total_ns": 375292,
+            "host_schedule_build_fraction_of_makespan": 0.00012257593443135606,
+            "unassigned_within_steps_total_ns": 3711
+          }
+        },
+        {
+          "block": 0,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 3063909458,
+          "tokens_per_second": 83.55338286239919,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 386371309,
+          "delivered_tokens": 256,
+          "steps": 152,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 121127872.5,
+          "ttft_p95_ns": 491522264.39999986,
+          "ttft_p99_ns": 585940794.4799999,
+          "end_to_end_p50_ns": 677469839.0,
+          "end_to_end_p95_ns": 1150010374.05,
+          "end_to_end_p99_ns": 1153252515.61,
+          "tpot_p50_ns": 10561538.983870968,
+          "token_gap_p95_ns": 117663579.39999999,
+          "token_gap_p99_ns": 163233404.96,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 131296,
+              "median": 375.0,
+              "p95": 1987.4999999999973
+            },
+            "build_ns": {
+              "total": 234047,
+              "median": 833.5,
+              "p95": 4724.9999999999945
+            },
+            "execute_ns": {
+              "total": 2464427703,
+              "median": 8968166.5,
+              "p95": 54675303.799999796
+            },
+            "postprocess_ns": {
+              "total": 526631,
+              "median": 2834.0,
+              "p95": 5729.649999999995
+            },
+            "host_schedule_build_total_ns": 365343,
+            "host_schedule_build_fraction_of_makespan": 0.00011924079513709964,
+            "unassigned_within_steps_total_ns": 4038
+          }
+        },
+        {
+          "block": 1,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 3062193583,
+          "tokens_per_second": 83.60020131359539,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 384655434,
+          "delivered_tokens": 256,
+          "steps": 154,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 116719060.5,
+          "ttft_p95_ns": 492770722.39999986,
+          "ttft_p99_ns": 587340452.4799999,
+          "end_to_end_p50_ns": 679262568.5,
+          "end_to_end_p95_ns": 1148052759.8,
+          "end_to_end_p99_ns": 1148301526.36,
+          "tpot_p50_ns": 10413484.548387095,
+          "token_gap_p95_ns": 117768012.39999999,
+          "token_gap_p99_ns": 163383596.25000003,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 108215,
+              "median": 334.0,
+              "p95": 1654.0499999999995
+            },
+            "build_ns": {
+              "total": 209745,
+              "median": 708.0,
+              "p95": 3892.099999999999
+            },
+            "execute_ns": {
+              "total": 2456585330,
+              "median": 8764708.5,
+              "p95": 52618954.4999999
+            },
+            "postprocess_ns": {
+              "total": 519419,
+              "median": 2750.0,
+              "p95": 5072.799999999999
+            },
+            "host_schedule_build_total_ns": 317960,
+            "host_schedule_build_fraction_of_makespan": 0.00010383406253777653,
+            "unassigned_within_steps_total_ns": 3792
+          }
+        },
+        {
+          "block": 1,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 3091242458,
+          "tokens_per_second": 82.8145975212922,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 413704309,
+          "delivered_tokens": 256,
+          "steps": 151,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 120872352.0,
+          "ttft_p95_ns": 488888193.4499998,
+          "ttft_p99_ns": 583496680.29,
+          "end_to_end_p50_ns": 695766318.0,
+          "end_to_end_p95_ns": 1156874522.4,
+          "end_to_end_p99_ns": 1158568112.48,
+          "tpot_p50_ns": 10950964.387096774,
+          "token_gap_p95_ns": 117676289.69999999,
+          "token_gap_p99_ns": 163436706.51000002,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 131966,
+              "median": 417,
+              "p95": 2416.5
+            },
+            "build_ns": {
+              "total": 240086,
+              "median": 750,
+              "p95": 6291.5
+            },
+            "execute_ns": {
+              "total": 2509259749,
+              "median": 9436208,
+              "p95": 56306312.5
+            },
+            "postprocess_ns": {
+              "total": 488464,
+              "median": 2792,
+              "p95": 5395.5
+            },
+            "host_schedule_build_total_ns": 372052,
+            "host_schedule_build_fraction_of_makespan": 0.00012035678373824924,
+            "unassigned_within_steps_total_ns": 4203
+          }
+        },
+        {
+          "block": 1,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 3066084375,
+          "tokens_per_second": 83.49411454144996,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 388546226,
+          "delivered_tokens": 256,
+          "steps": 152,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 118827102.0,
+          "ttft_p95_ns": 493338986.9999998,
+          "ttft_p99_ns": 587866471.8,
+          "end_to_end_p50_ns": 674879110.0,
+          "end_to_end_p95_ns": 1154863730.85,
+          "end_to_end_p99_ns": 1160481754.17,
+          "tpot_p50_ns": 10554082.0,
+          "token_gap_p95_ns": 117750247.8,
+          "token_gap_p99_ns": 163291543.77,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 122295,
+              "median": 417.0,
+              "p95": 2120.7999999999993
+            },
+            "build_ns": {
+              "total": 233252,
+              "median": 875.0,
+              "p95": 6460.749999999995
+            },
+            "execute_ns": {
+              "total": 2460011031,
+              "median": 9229375.0,
+              "p95": 54229145.64999981
+            },
+            "postprocess_ns": {
+              "total": 488299,
+              "median": 2792.0,
+              "p95": 5453.799999999999
+            },
+            "host_schedule_build_total_ns": 355547,
+            "host_schedule_build_fraction_of_makespan": 0.00011596125758933167,
+            "unassigned_within_steps_total_ns": 4965
+          }
+        },
+        {
+          "block": 2,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 3084057875,
+          "tokens_per_second": 83.0075213812257,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 406519726,
+          "delivered_tokens": 256,
+          "steps": 152,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 119799164.5,
+          "ttft_p95_ns": 490901122.9499998,
+          "ttft_p99_ns": 585548599.79,
+          "end_to_end_p50_ns": 679119256.0,
+          "end_to_end_p95_ns": 1146568778.55,
+          "end_to_end_p99_ns": 1153349630.11,
+          "tpot_p50_ns": 10816430.112903226,
+          "token_gap_p95_ns": 117701900.0,
+          "token_gap_p99_ns": 163344312.74,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 107576,
+              "median": 333.5,
+              "p95": 1839.3999999999967
+            },
+            "build_ns": {
+              "total": 201131,
+              "median": 750.0,
+              "p95": 3956.5499999999947
+            },
+            "execute_ns": {
+              "total": 2481148954,
+              "median": 9396792.0,
+              "p95": 55380772.69999978
+            },
+            "postprocess_ns": {
+              "total": 482336,
+              "median": 2854.5,
+              "p95": 5074.699999999998
+            },
+            "host_schedule_build_total_ns": 308707,
+            "host_schedule_build_fraction_of_makespan": 0.00010009766758997672,
+            "unassigned_within_steps_total_ns": 3582
+          }
+        },
+        {
+          "block": 2,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 3080105625,
+          "tokens_per_second": 83.11403281827388,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 402567476,
+          "delivered_tokens": 256,
+          "steps": 154,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 116098935.0,
+          "ttft_p95_ns": 487140009.89999986,
+          "ttft_p99_ns": 581746909.9799999,
+          "end_to_end_p50_ns": 684371193.0,
+          "end_to_end_p95_ns": 1150297655.3,
+          "end_to_end_p99_ns": 1154366671.86,
+          "tpot_p50_ns": 10263732.516129032,
+          "token_gap_p95_ns": 117695319.19999999,
+          "token_gap_p99_ns": 163484388.77,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 127845,
+              "median": 417.0,
+              "p95": 2238.0499999999997
+            },
+            "build_ns": {
+              "total": 220250,
+              "median": 708.0,
+              "p95": 5539.149999999996
+            },
+            "execute_ns": {
+              "total": 2473993208,
+              "median": 8870083.0,
+              "p95": 52033482.89999992
+            },
+            "postprocess_ns": {
+              "total": 510333,
+              "median": 2708.0,
+              "p95": 5793.749999999999
+            },
+            "host_schedule_build_total_ns": 348095,
+            "host_schedule_build_fraction_of_makespan": 0.00011301398146045721,
+            "unassigned_within_steps_total_ns": 3953
+          }
+        },
+        {
+          "block": 2,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 3073933500,
+          "tokens_per_second": 83.28091677975468,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 396395351,
+          "delivered_tokens": 256,
+          "steps": 155,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 121192268.0,
+          "ttft_p95_ns": 490152138.8499998,
+          "ttft_p99_ns": 584988802.17,
+          "end_to_end_p50_ns": 677917276.0,
+          "end_to_end_p95_ns": 1141752441.05,
+          "end_to_end_p99_ns": 1144632962.61,
+          "tpot_p50_ns": 9813479.85483871,
+          "token_gap_p95_ns": 117990007.99999999,
+          "token_gap_p99_ns": 163729552.00000003,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 110543,
+              "median": 375,
+              "p95": 1995.499999999998
+            },
+            "build_ns": {
+              "total": 199579,
+              "median": 750,
+              "p95": 4453.799999999997
+            },
+            "execute_ns": {
+              "total": 2433415714,
+              "median": 8284084,
+              "p95": 51021079.499999754
+            },
+            "postprocess_ns": {
+              "total": 494663,
+              "median": 2750,
+              "p95": 5824.999999999995
+            },
+            "host_schedule_build_total_ns": 310122,
+            "host_schedule_build_fraction_of_makespan": 0.00010088767372488702,
+            "unassigned_within_steps_total_ns": 3834
+          }
+        },
+        {
+          "block": 3,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 3081779875,
+          "tokens_per_second": 83.06887914893662,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 404241726,
+          "delivered_tokens": 256,
+          "steps": 155,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 116219331.0,
+          "ttft_p95_ns": 487831566.14999986,
+          "ttft_p99_ns": 582378021.2299999,
+          "end_to_end_p50_ns": 683711818.5,
+          "end_to_end_p95_ns": 1140777515.95,
+          "end_to_end_p99_ns": 1144156343.99,
+          "tpot_p50_ns": 10346240.580645163,
+          "token_gap_p95_ns": 117698841.64999999,
+          "token_gap_p99_ns": 163310070.24,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 117418,
+              "median": 417,
+              "p95": 2358.5999999999985
+            },
+            "build_ns": {
+              "total": 209419,
+              "median": 792,
+              "p95": 4437.499999999989
+            },
+            "execute_ns": {
+              "total": 2451508497,
+              "median": 8563625,
+              "p95": 50998082.99999976
+            },
+            "postprocess_ns": {
+              "total": 498423,
+              "median": 2750,
+              "p95": 5595.399999999992
+            },
+            "host_schedule_build_total_ns": 326837,
+            "host_schedule_build_fraction_of_makespan": 0.0001060546220875039,
+            "unassigned_within_steps_total_ns": 3785
+          }
+        },
+        {
+          "block": 3,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 3062573625,
+          "tokens_per_second": 83.58982716701219,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 385035476,
+          "delivered_tokens": 256,
+          "steps": 152,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 112749331.0,
+          "ttft_p95_ns": 488464963.8499998,
+          "ttft_p99_ns": 582862867.17,
+          "end_to_end_p50_ns": 670841359.5,
+          "end_to_end_p95_ns": 1145289173.95,
+          "end_to_end_p99_ns": 1151412141.99,
+          "tpot_p50_ns": 10624483.193548387,
+          "token_gap_p95_ns": 117686322.69999999,
+          "token_gap_p99_ns": 163230110.28000003,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 124924,
+              "median": 417.0,
+              "p95": 2589.9499999999966
+            },
+            "build_ns": {
+              "total": 226370,
+              "median": 750.0,
+              "p95": 5184.9
+            },
+            "execute_ns": {
+              "total": 2460713882,
+              "median": 9031416.5,
+              "p95": 56022296.34999976
+            },
+            "postprocess_ns": {
+              "total": 491621,
+              "median": 2792.0,
+              "p95": 5260.599999999998
+            },
+            "host_schedule_build_total_ns": 351294,
+            "host_schedule_build_fraction_of_makespan": 0.00011470548728440774,
+            "unassigned_within_steps_total_ns": 3623
+          }
+        },
+        {
+          "block": 3,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 3070634292,
+          "tokens_per_second": 83.3703970111202,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 393096143,
+          "delivered_tokens": 256,
+          "steps": 150,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 112370935.0,
+          "ttft_p95_ns": 489728818.2499998,
+          "ttft_p99_ns": 584252838.05,
+          "end_to_end_p50_ns": 688434714.0,
+          "end_to_end_p95_ns": 1156585384.9,
+          "end_to_end_p99_ns": 1158108384.98,
+          "tpot_p50_ns": 11311475.79032258,
+          "token_gap_p95_ns": 117641989.89999999,
+          "token_gap_p99_ns": 163270022.74,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 108081,
+              "median": 375.0,
+              "p95": 1647.5499999999993
+            },
+            "build_ns": {
+              "total": 203957,
+              "median": 750.0,
+              "p95": 4052.2999999999893
+            },
+            "execute_ns": {
+              "total": 2516912128,
+              "median": 9624083.5,
+              "p95": 61209764.79999955
+            },
+            "postprocess_ns": {
+              "total": 485831,
+              "median": 2833.5,
+              "p95": 5125.0
+            },
+            "host_schedule_build_total_ns": 312038,
+            "host_schedule_build_fraction_of_makespan": 0.00010162004665060908,
+            "unassigned_within_steps_total_ns": 3294
+          }
+        }
+      ],
+      "medians": {
+        "incremental_control": {
+          "duration_ns": 3077856687.5,
+          "tokens_per_second": 83.17489796434565,
+          "arrival_window_ns": 2677538149.0,
+          "drain_tail_ns": 400318538.5,
+          "ttft_p50_ns": 118976320.75,
+          "ttft_p95_ns": 489790302.7249998,
+          "ttft_p99_ns": 584481068.545,
+          "end_to_end_p50_ns": 680814547.25,
+          "end_to_end_p95_ns": 1142293849.4,
+          "end_to_end_p99_ns": 1144551180.28,
+          "tpot_p50_ns": 10285134.072580647,
+          "token_gap_p95_ns": 117724544.725,
+          "token_gap_p99_ns": 163312466.13,
+          "steps": 155.0,
+          "preemptions": 0.0,
+          "total_tokens": 2424.0,
+          "schedule_total_ns": 119856.5,
+          "build_total_ns": 212273.0,
+          "schedule_step_p95_ns": 2058.1499999999987,
+          "build_step_p95_ns": 4445.649999999993,
+          "execute_total_ns": 2454469143.5,
+          "host_schedule_build_total_ns": 332541.0
+        },
+        "incremental_self_control": {
+          "duration_ns": 3071339625.0,
+          "tokens_per_second": 83.35192999264304,
+          "arrival_window_ns": 2677538149.0,
+          "drain_tail_ns": 393801476.0,
+          "ttft_p50_ns": 115061102.0,
+          "ttft_p95_ns": 487802486.8749998,
+          "ttft_p99_ns": 582304888.5749999,
+          "end_to_end_p50_ns": 681650360.0,
+          "end_to_end_p95_ns": 1149205195.175,
+          "end_to_end_p99_ns": 1152889406.925,
+          "tpot_p50_ns": 10497427.08064516,
+          "token_gap_p95_ns": 117690820.94999999,
+          "token_gap_p99_ns": 163338569.50500003,
+          "steps": 153.0,
+          "preemptions": 0.0,
+          "total_tokens": 2424.0,
+          "schedule_total_ns": 129905.5,
+          "build_total_ns": 227582.5,
+          "schedule_step_p95_ns": 2503.2249999999985,
+          "build_step_p95_ns": 5362.024999999998,
+          "execute_total_ns": 2473278851.5,
+          "host_schedule_build_total_ns": 361673.0
+        },
+        "reserved": {
+          "duration_ns": 3067271875.0,
+          "tokens_per_second": 83.46188993675969,
+          "arrival_window_ns": 2677538149.0,
+          "drain_tail_ns": 389733726.0,
+          "ttft_p50_ns": 118259112.5,
+          "ttft_p95_ns": 491211693.67499983,
+          "ttft_p99_ns": 585744697.135,
+          "end_to_end_p50_ns": 679190912.25,
+          "end_to_end_p95_ns": 1149031566.925,
+          "end_to_end_p99_ns": 1153301072.86,
+          "tpot_p50_ns": 10688984.548387097,
+          "token_gap_p95_ns": 117682739.69999999,
+          "token_gap_p99_ns": 163307167.74,
+          "steps": 152.0,
+          "preemptions": 0.0,
+          "total_tokens": 2424.0,
+          "schedule_total_ns": 108148.0,
+          "build_total_ns": 206851.0,
+          "schedule_step_p95_ns": 1746.724999999998,
+          "build_step_p95_ns": 4004.424999999992,
+          "execute_total_ns": 2472788328.5,
+          "host_schedule_build_total_ns": 314999.0
+        }
+      },
+      "paired_comparisons": [
+        {
+          "block": 0,
+          "duration": {
+            "control": 3082580250,
+            "candidate": 3063909458,
+            "delta": -18670792,
+            "candidate_over_control": 0.9939431286500976,
+            "direction": "lower"
+          },
+          "throughput": {
+            "control": 83.0473107715525,
+            "candidate": 83.55338286239919,
+            "delta": 0.5060720908466863,
+            "candidate_over_control": 1.0060937805950008,
+            "direction": "higher"
+          },
+          "self_control_over_control_duration": 0.9932297113757217,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 119125539.5,
+              "candidate": 121127872.5,
+              "delta": 2002333.0,
+              "candidate_over_control": 1.0168085954397714,
+              "direction": "higher"
+            },
+            "ttft_p95_ns": {
+              "control": 489428466.5999998,
+              "candidate": 491522264.39999986,
+              "delta": 2093797.8000000715,
+              "candidate_over_control": 1.0042780466255783,
+              "direction": "higher"
+            },
+            "ttft_p99_ns": {
+              "control": 583973334.92,
+              "candidate": 585940794.4799999,
+              "delta": 1967459.5599999428,
+              "candidate_over_control": 1.0033690914333777,
+              "direction": "higher"
+            },
+            "end_to_end_p50_ns": {
+              "control": 686967818.5,
+              "candidate": 677469839.0,
+              "delta": -9497979.5,
+              "candidate_over_control": 0.9861740546729847,
+              "direction": "lower"
+            },
+            "end_to_end_p95_ns": {
+              "control": 1142835257.75,
+              "candidate": 1150010374.05,
+              "delta": 7175116.299999952,
+              "candidate_over_control": 1.0062783469895094,
+              "direction": "higher"
+            },
+            "end_to_end_p99_ns": {
+              "control": 1144469397.95,
+              "candidate": 1153252515.61,
+              "delta": 8783117.659999847,
+              "candidate_over_control": 1.0076744014962151,
+              "direction": "higher"
+            },
+            "tpot_p50_ns": {
+              "control": 10224027.564516129,
+              "candidate": 10561538.983870968,
+              "delta": 337511.41935483925,
+              "candidate_over_control": 1.0330115912956082,
+              "direction": "higher"
+            },
+            "token_gap_p95_ns": {
+              "control": 117596708.45,
+              "candidate": 117663579.39999999,
+              "delta": 66870.94999998808,
+              "candidate_over_control": 1.0005686464432668,
+              "direction": "higher"
+            },
+            "token_gap_p99_ns": {
+              "control": 163314862.02,
+              "candidate": 163233404.96,
+              "delta": -81457.06000000238,
+              "candidate_over_control": 0.9995012269000354,
+              "direction": "lower"
+            }
+          },
+          "host_schedule_build": {
+            "control": 338245,
+            "candidate": 365343,
+            "delta": 27098,
+            "candidate_over_control": 1.0801135271770461,
+            "direction": "higher"
+          }
+        },
+        {
+          "block": 1,
+          "duration": {
+            "control": 3066084375,
+            "candidate": 3062193583,
+            "delta": -3890792,
+            "candidate_over_control": 0.9987310225277151,
+            "direction": "lower"
+          },
+          "throughput": {
+            "control": 83.49411454144996,
+            "candidate": 83.60020131359539,
+            "delta": 0.1060867721454315,
+            "candidate_over_control": 1.0012705898221457,
+            "direction": "higher"
+          },
+          "self_control_over_control_duration": 1.0082052807173645,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 118827102.0,
+              "candidate": 116719060.5,
+              "delta": -2108041.5,
+              "candidate_over_control": 0.9822595900723052,
+              "direction": "lower"
+            },
+            "ttft_p95_ns": {
+              "control": 493338986.9999998,
+              "candidate": 492770722.39999986,
+              "delta": -568264.5999999642,
+              "candidate_over_control": 0.9988481254979348,
+              "direction": "lower"
+            },
+            "ttft_p99_ns": {
+              "control": 587866471.8,
+              "candidate": 587340452.4799999,
+              "delta": -526019.3200000525,
+              "candidate_over_control": 0.9991052061220818,
+              "direction": "lower"
+            },
+            "end_to_end_p50_ns": {
+              "control": 674879110.0,
+              "candidate": 679262568.5,
+              "delta": 4383458.5,
+              "candidate_over_control": 1.006495175854532,
+              "direction": "higher"
+            },
+            "end_to_end_p95_ns": {
+              "control": 1154863730.85,
+              "candidate": 1148052759.8,
+              "delta": -6810971.049999952,
+              "candidate_over_control": 0.9941023595528565,
+              "direction": "lower"
+            },
+            "end_to_end_p99_ns": {
+              "control": 1160481754.17,
+              "candidate": 1148301526.36,
+              "delta": -12180227.810000181,
+              "candidate_over_control": 0.9895041625891725,
+              "direction": "lower"
+            },
+            "tpot_p50_ns": {
+              "control": 10554082.0,
+              "candidate": 10413484.548387095,
+              "delta": -140597.45161290467,
+              "candidate_over_control": 0.9866783817282352,
+              "direction": "lower"
+            },
+            "token_gap_p95_ns": {
+              "control": 117750247.8,
+              "candidate": 117768012.39999999,
+              "delta": 17764.59999999404,
+              "candidate_over_control": 1.0001508667738022,
+              "direction": "higher"
+            },
+            "token_gap_p99_ns": {
+              "control": 163291543.77,
+              "candidate": 163383596.25000003,
+              "delta": 92052.48000001907,
+              "candidate_over_control": 1.0005637308453013,
+              "direction": "higher"
+            }
+          },
+          "host_schedule_build": {
+            "control": 355547,
+            "candidate": 317960,
+            "delta": -37587,
+            "candidate_over_control": 0.8942840187092002,
+            "direction": "lower"
+          }
+        },
+        {
+          "block": 2,
+          "duration": {
+            "control": 3073933500,
+            "candidate": 3084057875,
+            "delta": 10124375,
+            "candidate_over_control": 1.0032936219993047,
+            "direction": "higher"
+          },
+          "throughput": {
+            "control": 83.28091677975468,
+            "candidate": 83.0075213812257,
+            "delta": -0.2733953985289759,
+            "candidate_over_control": 0.9967171903348279,
+            "direction": "lower"
+          },
+          "self_control_over_control_duration": 1.002007891517497,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 121192268.0,
+              "candidate": 119799164.5,
+              "delta": -1393103.5,
+              "candidate_over_control": 0.9885050133726353,
+              "direction": "lower"
+            },
+            "ttft_p95_ns": {
+              "control": 490152138.8499998,
+              "candidate": 490901122.9499998,
+              "delta": 748984.1000000238,
+              "candidate_over_control": 1.0015280645347326,
+              "direction": "higher"
+            },
+            "ttft_p99_ns": {
+              "control": 584988802.17,
+              "candidate": 585548599.79,
+              "delta": 559797.6200000048,
+              "candidate_over_control": 1.0009569373258487,
+              "direction": "higher"
+            },
+            "end_to_end_p50_ns": {
+              "control": 677917276.0,
+              "candidate": 679119256.0,
+              "delta": 1201980.0,
+              "candidate_over_control": 1.0017730481912073,
+              "direction": "higher"
+            },
+            "end_to_end_p95_ns": {
+              "control": 1141752441.05,
+              "candidate": 1146568778.55,
+              "delta": 4816337.5,
+              "candidate_over_control": 1.0042183728510978,
+              "direction": "higher"
+            },
+            "end_to_end_p99_ns": {
+              "control": 1144632962.61,
+              "candidate": 1153349630.11,
+              "delta": 8716667.5,
+              "candidate_over_control": 1.0076152511632412,
+              "direction": "higher"
+            },
+            "tpot_p50_ns": {
+              "control": 9813479.85483871,
+              "candidate": 10816430.112903226,
+              "delta": 1002950.2580645159,
+              "candidate_over_control": 1.1022012856703418,
+              "direction": "higher"
+            },
+            "token_gap_p95_ns": {
+              "control": 117990007.99999999,
+              "candidate": 117701900.0,
+              "delta": -288107.9999999851,
+              "candidate_over_control": 0.9975582000130047,
+              "direction": "lower"
+            },
+            "token_gap_p99_ns": {
+              "control": 163729552.00000003,
+              "candidate": 163344312.74,
+              "delta": -385239.26000002027,
+              "candidate_over_control": 0.997647100017717,
+              "direction": "lower"
+            }
+          },
+          "host_schedule_build": {
+            "control": 310122,
+            "candidate": 308707,
+            "delta": -1415,
+            "candidate_over_control": 0.9954372795222526,
+            "direction": "lower"
+          }
+        },
+        {
+          "block": 3,
+          "duration": {
+            "control": 3081779875,
+            "candidate": 3070634292,
+            "delta": -11145583,
+            "candidate_over_control": 0.9963833941903459,
+            "direction": "lower"
+          },
+          "throughput": {
+            "control": 83.06887914893662,
+            "candidate": 83.3703970111202,
+            "delta": 0.3015178621835872,
+            "candidate_over_control": 1.0036297331235562,
+            "direction": "higher"
+          },
+          "self_control_over_control_duration": 0.9937678060150225,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 116219331.0,
+              "candidate": 112370935.0,
+              "delta": -3848396.0,
+              "candidate_over_control": 0.9668867823718587,
+              "direction": "lower"
+            },
+            "ttft_p95_ns": {
+              "control": 487831566.14999986,
+              "candidate": 489728818.2499998,
+              "delta": 1897252.0999999642,
+              "candidate_over_control": 1.0038891540270205,
+              "direction": "higher"
+            },
+            "ttft_p99_ns": {
+              "control": 582378021.2299999,
+              "candidate": 584252838.05,
+              "delta": 1874816.8200000525,
+              "candidate_over_control": 1.0032192437757874,
+              "direction": "higher"
+            },
+            "end_to_end_p50_ns": {
+              "control": 683711818.5,
+              "candidate": 688434714.0,
+              "delta": 4722895.5,
+              "candidate_over_control": 1.0069077283326207,
+              "direction": "higher"
+            },
+            "end_to_end_p95_ns": {
+              "control": 1140777515.95,
+              "candidate": 1156585384.9,
+              "delta": 15807868.950000048,
+              "candidate_over_control": 1.013857100730843,
+              "direction": "higher"
+            },
+            "end_to_end_p99_ns": {
+              "control": 1144156343.99,
+              "candidate": 1158108384.98,
+              "delta": 13952040.99000001,
+              "candidate_over_control": 1.0121941735177076,
+              "direction": "higher"
+            },
+            "tpot_p50_ns": {
+              "control": 10346240.580645163,
+              "candidate": 11311475.79032258,
+              "delta": 965235.2096774168,
+              "candidate_over_control": 1.0932933273833874,
+              "direction": "higher"
+            },
+            "token_gap_p95_ns": {
+              "control": 117698841.64999999,
+              "candidate": 117641989.89999999,
+              "delta": -56851.75,
+              "candidate_over_control": 0.9995169727313965,
+              "direction": "lower"
+            },
+            "token_gap_p99_ns": {
+              "control": 163310070.24,
+              "candidate": 163270022.74,
+              "delta": -40047.5,
+              "candidate_over_control": 0.9997547762979886,
+              "direction": "lower"
+            }
+          },
+          "host_schedule_build": {
+            "control": 326837,
+            "candidate": 312038,
+            "delta": -14799,
+            "candidate_over_control": 0.9547205487750775,
+            "direction": "lower"
+          }
+        }
+      ],
+      "calibration_ratios": [
+        0.9932297113757217,
+        1.0082052807173645,
+        1.002007891517497,
+        0.9937678060150225
+      ],
+      "noise_floor": 0.05,
+      "declared_makespan_comparison": {
+        "arm": "chunked",
+        "block_ratios": [
+          0.9939431286500976,
+          0.9987310225277151,
+          1.0032936219993047,
+          0.9963833941903459
+        ],
+        "median_ratio": 0.9975572083590305,
+        "same_generated_histories": true,
+        "outcome": "distribution-only",
+        "admission": "reserved",
+        "control_admission": "incremental"
+      },
+      "latency_classification": "descriptive; no latency gain threshold declared"
+    },
+    {
+      "name": "pressure",
+      "mode": "offline",
+      "blocks": 40,
+      "measured_runs": 12,
+      "archive": {
+        "path": "/private/tmp/llm-mojo-admission-20261009/pressure/engine-admission.json.gz",
+        "bytes": 182475,
+        "sha256": "31e208dd4ac2e988560e6003dfcdee1ee80758550aad1ee3d557f9042b1949e0"
+      },
+      "manifest": {
+        "path": "/private/tmp/llm-mojo-admission-20261009/pressure/engine-admission.json",
+        "bytes": 233,
+        "sha256": "8b62acc0c05744ec73bbb0ed2c0c8a8535cb02e8d080cb7538f0bb6d2a198069"
+      },
+      "trace_sha256": "aa049dea1465e9e0fe542e5f8789aa70f11e3d294501984657e47ed825cdecd7",
+      "canonical_native_trace_sha256": "d812babb5eb12cdab1cc48e4f8d2338b0f3b34497924cf3757595d84d20afcec",
+      "all_histories_identical": true,
+      "all_pools_returned": true,
+      "all_delivered_tokens": 256,
+      "reserved_preemptions": 0,
+      "reserved_computed_rows": 2424,
+      "runs": [
+        {
+          "block": 0,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 8062491875,
+          "tokens_per_second": 31.75196998260541,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 8062491875,
+          "delivered_tokens": 256,
+          "steps": 105,
+          "preemptions": 57,
+          "total_tokens": 16432,
+          "attended_positions": 2581749,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 407064104.0,
+          "ttft_p95_ns": 7774441645.5,
+          "ttft_p99_ns": 7783604995.5,
+          "end_to_end_p50_ns": 4102390666.5,
+          "end_to_end_p95_ns": 8058606656.25,
+          "end_to_end_p99_ns": 8061703631.25,
+          "tpot_p50_ns": 110110994.61290324,
+          "token_gap_p95_ns": 119228625.0,
+          "token_gap_p99_ns": 136007214.24,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 272040,
+              "median": 2791,
+              "p95": 4566.799999999999
+            },
+            "build_ns": {
+              "total": 383795,
+              "median": 3542,
+              "p95": 5583.0
+            },
+            "execute_ns": {
+              "total": 8060646336,
+              "median": 104072917,
+              "p95": 132168266.39999995
+            },
+            "postprocess_ns": {
+              "total": 441538,
+              "median": 4666,
+              "p95": 6308.0
+            },
+            "host_schedule_build_total_ns": 655835,
+            "host_schedule_build_fraction_of_makespan": 8.13439579435235e-05,
+            "unassigned_within_steps_total_ns": 2543
+          }
+        },
+        {
+          "block": 0,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 8078122417,
+          "tokens_per_second": 31.69053237683808,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 8078122417,
+          "delivered_tokens": 256,
+          "steps": 105,
+          "preemptions": 57,
+          "total_tokens": 16432,
+          "attended_positions": 2581749,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 406411041.5,
+          "ttft_p95_ns": 7773339904.5,
+          "ttft_p99_ns": 7782502414.5,
+          "end_to_end_p50_ns": 4100765062.5,
+          "end_to_end_p95_ns": 8075399462.4,
+          "end_to_end_p99_ns": 8077570558.88,
+          "tpot_p50_ns": 110089077.95161289,
+          "token_gap_p95_ns": 119272458.0,
+          "token_gap_p99_ns": 135833049.74,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 278083,
+              "median": 2959,
+              "p95": 4308.0
+            },
+            "build_ns": {
+              "total": 340000,
+              "median": 3542,
+              "p95": 5791.8
+            },
+            "execute_ns": {
+              "total": 8076235955,
+              "median": 104126292,
+              "p95": 132255266.59999995
+            },
+            "postprocess_ns": {
+              "total": 479043,
+              "median": 4875,
+              "p95": 6900.4
+            },
+            "host_schedule_build_total_ns": 618083,
+            "host_schedule_build_fraction_of_makespan": 7.651320048075474e-05,
+            "unassigned_within_steps_total_ns": 2792
+          }
+        },
+        {
+          "block": 0,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 2028957209,
+          "tokens_per_second": 126.17318830798466,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 2028957209,
+          "delivered_tokens": 256,
+          "steps": 106,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 408131229.5,
+          "ttft_p95_ns": 1743988917.0,
+          "ttft_p99_ns": 1753113417.0,
+          "end_to_end_p50_ns": 795689438.0,
+          "end_to_end_p95_ns": 2025701119.3,
+          "end_to_end_p99_ns": 2028297991.06,
+          "tpot_p50_ns": 12501877.693548387,
+          "token_gap_p95_ns": 32716417.0,
+          "token_gap_p99_ns": 127125465.22000003,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 111702,
+              "median": 625.0,
+              "p95": 2687.25
+            },
+            "build_ns": {
+              "total": 182255,
+              "median": 1167.0,
+              "p95": 4115.0
+            },
+            "execute_ns": {
+              "total": 2027723128,
+              "median": 9558291.5,
+              "p95": 117270823.25
+            },
+            "postprocess_ns": {
+              "total": 296997,
+              "median": 2250.0,
+              "p95": 5864.0
+            },
+            "host_schedule_build_total_ns": 293957,
+            "host_schedule_build_fraction_of_makespan": 0.00014488082779472752,
+            "unassigned_within_steps_total_ns": 2374
+          }
+        },
+        {
+          "block": 1,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 2067429500,
+          "tokens_per_second": 123.82526223989741,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 2067429500,
+          "delivered_tokens": 256,
+          "steps": 106,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 409267188.0,
+          "ttft_p95_ns": 1768695335.85,
+          "ttft_p99_ns": 1777817934.37,
+          "end_to_end_p50_ns": 819718417.0,
+          "end_to_end_p95_ns": 2063315721.5,
+          "end_to_end_p99_ns": 2066599211.5,
+          "tpot_p50_ns": 13240362.225806452,
+          "token_gap_p95_ns": 32690375.0,
+          "token_gap_p99_ns": 127223313.51000002,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 105627,
+              "median": 666.0,
+              "p95": 2219.0
+            },
+            "build_ns": {
+              "total": 170999,
+              "median": 1167.0,
+              "p95": 3781.25
+            },
+            "execute_ns": {
+              "total": 2066265909,
+              "median": 9966896.0,
+              "p95": 117201385.0
+            },
+            "postprocess_ns": {
+              "total": 296627,
+              "median": 2333.5,
+              "p95": 5531.5
+            },
+            "host_schedule_build_total_ns": 276626,
+            "host_schedule_build_fraction_of_makespan": 0.0001338019023139604,
+            "unassigned_within_steps_total_ns": 7546
+          }
+        },
+        {
+          "block": 1,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 8088826750,
+          "tokens_per_second": 31.648594773030588,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 8088826750,
+          "delivered_tokens": 256,
+          "steps": 105,
+          "preemptions": 57,
+          "total_tokens": 16432,
+          "attended_positions": 2581749,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 406852958.0,
+          "ttft_p95_ns": 7774715697.7,
+          "ttft_p99_ns": 7783870705.94,
+          "end_to_end_p50_ns": 4101808166.0,
+          "end_to_end_p95_ns": 8085685651.65,
+          "end_to_end_p99_ns": 8088189563.13,
+          "tpot_p50_ns": 110120983.8548387,
+          "token_gap_p95_ns": 119297417.0,
+          "token_gap_p99_ns": 135905917.0,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 277959,
+              "median": 3041,
+              "p95": 4392.199999999999
+            },
+            "build_ns": {
+              "total": 336746,
+              "median": 3417,
+              "p95": 5667.0
+            },
+            "execute_ns": {
+              "total": 8086986113,
+              "median": 104070792,
+              "p95": 132093549.79999995
+            },
+            "postprocess_ns": {
+              "total": 491720,
+              "median": 5292,
+              "p95": 6741.8
+            },
+            "host_schedule_build_total_ns": 614705,
+            "host_schedule_build_fraction_of_makespan": 7.599433378888972e-05,
+            "unassigned_within_steps_total_ns": 2128
+          }
+        },
+        {
+          "block": 1,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 8071459541,
+          "tokens_per_second": 31.7166924643078,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 8071459541,
+          "delivered_tokens": 256,
+          "steps": 105,
+          "preemptions": 57,
+          "total_tokens": 16432,
+          "attended_positions": 2581749,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 402070125.0,
+          "ttft_p95_ns": 7766569553.5,
+          "ttft_p99_ns": 7775712043.5,
+          "end_to_end_p50_ns": 4095545541.5,
+          "end_to_end_p95_ns": 8068248995.4,
+          "end_to_end_p99_ns": 8070810131.88,
+          "tpot_p50_ns": 109992630.37096775,
+          "token_gap_p95_ns": 119196291.0,
+          "token_gap_p99_ns": 135816961.27,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 250872,
+              "median": 2584,
+              "p95": 4050.5999999999995
+            },
+            "build_ns": {
+              "total": 292583,
+              "median": 3000,
+              "p95": 4616.599999999999
+            },
+            "execute_ns": {
+              "total": 8069753095,
+              "median": 104055834,
+              "p95": 131873775.19999996
+            },
+            "postprocess_ns": {
+              "total": 460990,
+              "median": 4833,
+              "p95": 6516.0
+            },
+            "host_schedule_build_total_ns": 543455,
+            "host_schedule_build_fraction_of_makespan": 6.733044962183748e-05,
+            "unassigned_within_steps_total_ns": 2375
+          }
+        },
+        {
+          "block": 2,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 2070905708,
+          "tokens_per_second": 123.61741001102114,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 2070905708,
+          "delivered_tokens": 256,
+          "steps": 106,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 404561604.0,
+          "ttft_p95_ns": 1775557920.5,
+          "ttft_p99_ns": 1784708250.5,
+          "end_to_end_p50_ns": 812642854.5,
+          "end_to_end_p95_ns": 2067123787.4,
+          "end_to_end_p99_ns": 2070142023.88,
+          "tpot_p50_ns": 13163911.306451613,
+          "token_gap_p95_ns": 32848083.0,
+          "token_gap_p99_ns": 126988645.48000002,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 103584,
+              "median": 542.0,
+              "p95": 1979.25
+            },
+            "build_ns": {
+              "total": 157046,
+              "median": 1084.0,
+              "p95": 3313.0
+            },
+            "execute_ns": {
+              "total": 2069809583,
+              "median": 10071167.0,
+              "p95": 117174583.25
+            },
+            "postprocess_ns": {
+              "total": 275876,
+              "median": 2270.5,
+              "p95": 4573.25
+            },
+            "host_schedule_build_total_ns": 260630,
+            "host_schedule_build_fraction_of_makespan": 0.00012585314676239232,
+            "unassigned_within_steps_total_ns": 2536
+          }
+        },
+        {
+          "block": 2,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 8049902666,
+          "tokens_per_second": 31.801626755222184,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 8049902666,
+          "delivered_tokens": 256,
+          "steps": 105,
+          "preemptions": 57,
+          "total_tokens": 16432,
+          "attended_positions": 2581749,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 405063937.5,
+          "ttft_p95_ns": 7766230822.7,
+          "ttft_p99_ns": 7775351530.94,
+          "end_to_end_p50_ns": 4096095895.5,
+          "end_to_end_p95_ns": 8047159395.5,
+          "end_to_end_p99_ns": 8049345845.5,
+          "tpot_p50_ns": 109978416.66129032,
+          "token_gap_p95_ns": 119078625.0,
+          "token_gap_p99_ns": 135814994.96,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 266538,
+              "median": 2667,
+              "p95": 4483.2
+            },
+            "build_ns": {
+              "total": 302003,
+              "median": 3042,
+              "p95": 5391.399999999999
+            },
+            "execute_ns": {
+              "total": 8048148795,
+              "median": 104003541,
+              "p95": 132039241.19999996
+            },
+            "postprocess_ns": {
+              "total": 458747,
+              "median": 4666,
+              "p95": 6449.8
+            },
+            "host_schedule_build_total_ns": 568541,
+            "host_schedule_build_fraction_of_makespan": 7.062706514469053e-05,
+            "unassigned_within_steps_total_ns": 2040
+          }
+        },
+        {
+          "block": 2,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 8084484375,
+          "tokens_per_second": 31.66559401013129,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 8084484375,
+          "delivered_tokens": 256,
+          "steps": 105,
+          "preemptions": 57,
+          "total_tokens": 16432,
+          "attended_positions": 2581749,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 409870771.0,
+          "ttft_p95_ns": 7778702146.05,
+          "ttft_p99_ns": 7787859662.81,
+          "end_to_end_p50_ns": 4105552396.0,
+          "end_to_end_p95_ns": 8080846158.45,
+          "end_to_end_p99_ns": 8083746631.69,
+          "tpot_p50_ns": 110193844.74193549,
+          "token_gap_p95_ns": 119317583.0,
+          "token_gap_p99_ns": 135939167.0,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 252415,
+              "median": 2625,
+              "p95": 4225.0
+            },
+            "build_ns": {
+              "total": 303997,
+              "median": 3000,
+              "p95": 4908.599999999999
+            },
+            "execute_ns": {
+              "total": 8082765376,
+              "median": 104094416,
+              "p95": 132333424.59999995
+            },
+            "postprocess_ns": {
+              "total": 463749,
+              "median": 4667,
+              "p95": 6407.8
+            },
+            "host_schedule_build_total_ns": 556412,
+            "host_schedule_build_fraction_of_makespan": 6.882467380611395e-05,
+            "unassigned_within_steps_total_ns": 2669
+          }
+        },
+        {
+          "block": 3,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 8091052458,
+          "tokens_per_second": 31.639888794303996,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 8091052458,
+          "delivered_tokens": 256,
+          "steps": 105,
+          "preemptions": 57,
+          "total_tokens": 16432,
+          "attended_positions": 2581749,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 407445187.5,
+          "ttft_p95_ns": 7776886504.5,
+          "ttft_p99_ns": 7786036834.5,
+          "end_to_end_p50_ns": 4103323479.0,
+          "end_to_end_p95_ns": 8087800796.05,
+          "end_to_end_p99_ns": 8090393992.81,
+          "tpot_p50_ns": 110152804.43548387,
+          "token_gap_p95_ns": 119574791.0,
+          "token_gap_p99_ns": 135990915.49,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 246462,
+              "median": 2500,
+              "p95": 5066.799999999999
+            },
+            "build_ns": {
+              "total": 299416,
+              "median": 3000,
+              "p95": 5074.999999999999
+            },
+            "execute_ns": {
+              "total": 8089289749,
+              "median": 104100125,
+              "p95": 132269308.19999996
+            },
+            "postprocess_ns": {
+              "total": 446458,
+              "median": 4625,
+              "p95": 6341.599999999999
+            },
+            "host_schedule_build_total_ns": 545878,
+            "host_schedule_build_fraction_of_makespan": 6.746687193459795e-05,
+            "unassigned_within_steps_total_ns": 2539
+          }
+        },
+        {
+          "block": 3,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 8068934084,
+          "tokens_per_second": 31.72661931984621,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 8068934084,
+          "delivered_tokens": 256,
+          "steps": 105,
+          "preemptions": 57,
+          "total_tokens": 16432,
+          "attended_positions": 2581749,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 406335292.0,
+          "ttft_p95_ns": 7773663639.8,
+          "ttft_p99_ns": 7782835961.56,
+          "end_to_end_p50_ns": 4101895625.0,
+          "end_to_end_p95_ns": 8066204427.75,
+          "end_to_end_p99_ns": 8068380552.75,
+          "tpot_p50_ns": 110134859.5483871,
+          "token_gap_p95_ns": 119286333.0,
+          "token_gap_p99_ns": 135957181.75,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 240534,
+              "median": 2583,
+              "p95": 3991.6
+            },
+            "build_ns": {
+              "total": 300292,
+              "median": 3125,
+              "p95": 4983.4
+            },
+            "execute_ns": {
+              "total": 8067237832,
+              "median": 104052166,
+              "p95": 132155758.19999996
+            },
+            "postprocess_ns": {
+              "total": 457586,
+              "median": 4875,
+              "p95": 6200.599999999999
+            },
+            "host_schedule_build_total_ns": 540826,
+            "host_schedule_build_fraction_of_makespan": 6.702570554794979e-05,
+            "unassigned_within_steps_total_ns": 2296
+          }
+        },
+        {
+          "block": 3,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 2073264417,
+          "tokens_per_second": 123.47677310279136,
+          "arrival_window_ns": 0,
+          "drain_tail_ns": 2073264417,
+          "delivered_tokens": 256,
+          "steps": 106,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 406540208.5,
+          "ttft_p95_ns": 1776918233.45,
+          "ttft_p99_ns": 1786064246.69,
+          "end_to_end_p50_ns": 814732521.0,
+          "end_to_end_p95_ns": 2069454673.25,
+          "end_to_end_p99_ns": 2072493968.25,
+          "tpot_p50_ns": 13167493.951612903,
+          "token_gap_p95_ns": 32727875.0,
+          "token_gap_p99_ns": 127122015.26000002,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 93128,
+              "median": 541.5,
+              "p95": 1822.75
+            },
+            "build_ns": {
+              "total": 170535,
+              "median": 1166.5,
+              "p95": 3364.5
+            },
+            "execute_ns": {
+              "total": 2072101254,
+              "median": 10021041.5,
+              "p95": 117257635.75
+            },
+            "postprocess_ns": {
+              "total": 291875,
+              "median": 2312.5,
+              "p95": 5572.5
+            },
+            "host_schedule_build_total_ns": 263663,
+            "host_schedule_build_fraction_of_makespan": 0.00012717287666641123,
+            "unassigned_within_steps_total_ns": 3125
+          }
+        }
+      ],
+      "medians": {
+        "incremental_control": {
+          "duration_ns": 8077971958.0,
+          "tokens_per_second": 31.691143237219546,
+          "arrival_window_ns": 0.0,
+          "drain_tail_ns": 8077971958.0,
+          "ttft_p50_ns": 407254645.75,
+          "ttft_p95_ns": 7775664075.0,
+          "ttft_p99_ns": 7784820915.0,
+          "end_to_end_p50_ns": 4102857072.75,
+          "end_to_end_p95_ns": 8074547576.924999,
+          "end_to_end_p99_ns": 8077278381.785,
+          "tpot_p50_ns": 110131899.52419356,
+          "token_gap_p95_ns": 119273104.0,
+          "token_gap_p99_ns": 135965041.245,
+          "steps": 105.0,
+          "preemptions": 57.0,
+          "total_tokens": 16432.0,
+          "schedule_total_ns": 251643.5,
+          "build_total_ns": 301706.5,
+          "schedule_step_p95_ns": 4395.9,
+          "build_step_p95_ns": 4991.799999999999,
+          "execute_total_ns": 8076259235.5,
+          "host_schedule_build_total_ns": 551145.0
+        },
+        "incremental_self_control": {
+          "duration_ns": 8073528250.5,
+          "tokens_per_second": 31.708575848342146,
+          "arrival_window_ns": 0.0,
+          "drain_tail_ns": 8073528250.5,
+          "ttft_p50_ns": 406373166.75,
+          "ttft_p95_ns": 7773501772.15,
+          "ttft_p99_ns": 7782669188.030001,
+          "end_to_end_p50_ns": 4101286614.25,
+          "end_to_end_p95_ns": 8070801945.075,
+          "end_to_end_p99_ns": 8072975555.815001,
+          "tpot_p50_ns": 110105030.9032258,
+          "token_gap_p95_ns": 119279395.5,
+          "token_gap_p99_ns": 135869483.37,
+          "steps": 105.0,
+          "preemptions": 57.0,
+          "total_tokens": 16432.0,
+          "schedule_total_ns": 272248.5,
+          "build_total_ns": 319374.5,
+          "schedule_step_p95_ns": 4350.099999999999,
+          "build_step_p95_ns": 5529.199999999999,
+          "execute_total_ns": 8071736893.5,
+          "host_schedule_build_total_ns": 591623.0
+        },
+        "reserved": {
+          "duration_ns": 2069167604.0,
+          "tokens_per_second": 123.72133612545927,
+          "arrival_window_ns": 0.0,
+          "drain_tail_ns": 2069167604.0,
+          "ttft_p50_ns": 407335719.0,
+          "ttft_p95_ns": 1772126628.175,
+          "ttft_p99_ns": 1781263092.435,
+          "end_to_end_p50_ns": 813687687.75,
+          "end_to_end_p95_ns": 2065219754.45,
+          "end_to_end_p99_ns": 2068370617.69,
+          "tpot_p50_ns": 13165702.629032258,
+          "token_gap_p95_ns": 32722146.0,
+          "token_gap_p99_ns": 127123740.24000002,
+          "steps": 106.0,
+          "preemptions": 0.0,
+          "total_tokens": 2424.0,
+          "schedule_total_ns": 104605.5,
+          "build_total_ns": 170767.0,
+          "schedule_step_p95_ns": 2099.125,
+          "build_step_p95_ns": 3572.875,
+          "execute_total_ns": 2068037746.0,
+          "host_schedule_build_total_ns": 270144.5
+        }
+      },
+      "paired_comparisons": [
+        {
+          "block": 0,
+          "duration": {
+            "control": 8062491875,
+            "candidate": 2028957209,
+            "delta": -6033534666,
+            "candidate_over_control": 0.2516538609224955,
+            "direction": "lower"
+          },
+          "throughput": {
+            "control": 31.75196998260541,
+            "candidate": 126.17318830798466,
+            "delta": 94.42121832537924,
+            "candidate_over_control": 3.973712131156138,
+            "direction": "higher"
+          },
+          "self_control_over_control_duration": 1.0019386738296714,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 407064104.0,
+              "candidate": 408131229.5,
+              "delta": 1067125.5,
+              "candidate_over_control": 1.0026215170768287,
+              "direction": "higher"
+            },
+            "ttft_p95_ns": {
+              "control": 7774441645.5,
+              "candidate": 1743988917.0,
+              "delta": -6030452728.5,
+              "candidate_over_control": 0.22432336578273182,
+              "direction": "lower"
+            },
+            "ttft_p99_ns": {
+              "control": 7783604995.5,
+              "candidate": 1753113417.0,
+              "delta": -6030491578.5,
+              "candidate_over_control": 0.22523154990695726,
+              "direction": "lower"
+            },
+            "end_to_end_p50_ns": {
+              "control": 4102390666.5,
+              "candidate": 795689438.0,
+              "delta": -3306701228.5,
+              "candidate_over_control": 0.19395750007369514,
+              "direction": "lower"
+            },
+            "end_to_end_p95_ns": {
+              "control": 8058606656.25,
+              "candidate": 2025701119.3,
+              "delta": -6032905536.95,
+              "candidate_over_control": 0.2513711371839858,
+              "direction": "lower"
+            },
+            "end_to_end_p99_ns": {
+              "control": 8061703631.25,
+              "candidate": 2028297991.06,
+              "delta": -6033405640.190001,
+              "candidate_over_control": 0.25159669516969135,
+              "direction": "lower"
+            },
+            "tpot_p50_ns": {
+              "control": 110110994.61290324,
+              "candidate": 12501877.693548387,
+              "delta": -97609116.91935486,
+              "candidate_over_control": 0.11353886809849384,
+              "direction": "lower"
+            },
+            "token_gap_p95_ns": {
+              "control": 119228625.0,
+              "candidate": 32716417.0,
+              "delta": -86512208.0,
+              "candidate_over_control": 0.27440069027047825,
+              "direction": "lower"
+            },
+            "token_gap_p99_ns": {
+              "control": 136007214.24,
+              "candidate": 127125465.22000003,
+              "delta": -8881749.01999998,
+              "candidate_over_control": 0.934696485994286,
+              "direction": "lower"
+            }
+          },
+          "host_schedule_build": {
+            "control": 655835,
+            "candidate": 293957,
+            "delta": -361878,
+            "candidate_over_control": 0.4482179206660212,
+            "direction": "lower"
+          }
+        },
+        {
+          "block": 1,
+          "duration": {
+            "control": 8071459541,
+            "candidate": 2067429500,
+            "delta": -6004030041,
+            "candidate_over_control": 0.25614072516850644,
+            "direction": "lower"
+          },
+          "throughput": {
+            "control": 31.7166924643078,
+            "candidate": 123.82526223989741,
+            "delta": 92.10856977558961,
+            "candidate_over_control": 3.9041038840744022,
+            "direction": "higher"
+          },
+          "self_control_over_control_duration": 1.0021516813547513,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 402070125.0,
+              "candidate": 409267188.0,
+              "delta": 7197063.0,
+              "candidate_over_control": 1.0179000193063337,
+              "direction": "higher"
+            },
+            "ttft_p95_ns": {
+              "control": 7766569553.5,
+              "candidate": 1768695335.85,
+              "delta": -5997874217.65,
+              "candidate_over_control": 0.22773186072259385,
+              "direction": "lower"
+            },
+            "ttft_p99_ns": {
+              "control": 7775712043.5,
+              "candidate": 1777817934.37,
+              "delta": -5997894109.13,
+              "candidate_over_control": 0.228637316354345,
+              "direction": "lower"
+            },
+            "end_to_end_p50_ns": {
+              "control": 4095545541.5,
+              "candidate": 819718417.0,
+              "delta": -3275827124.5,
+              "candidate_over_control": 0.20014877351352242,
+              "direction": "lower"
+            },
+            "end_to_end_p95_ns": {
+              "control": 8068248995.4,
+              "candidate": 2063315721.5,
+              "delta": -6004933273.9,
+              "candidate_over_control": 0.2557327770469616,
+              "direction": "lower"
+            },
+            "end_to_end_p99_ns": {
+              "control": 8070810131.88,
+              "candidate": 2066599211.5,
+              "delta": -6004210920.38,
+              "candidate_over_control": 0.25605845977429903,
+              "direction": "lower"
+            },
+            "tpot_p50_ns": {
+              "control": 109992630.37096775,
+              "candidate": 13240362.225806452,
+              "delta": -96752268.1451613,
+              "candidate_over_control": 0.12037499404415743,
+              "direction": "lower"
+            },
+            "token_gap_p95_ns": {
+              "control": 119196291.0,
+              "candidate": 32690375.0,
+              "delta": -86505916.0,
+              "candidate_over_control": 0.2742566461233261,
+              "direction": "lower"
+            },
+            "token_gap_p99_ns": {
+              "control": 135816961.27,
+              "candidate": 127223313.51000002,
+              "delta": -8593647.75999999,
+              "candidate_over_control": 0.9367262551036164,
+              "direction": "lower"
+            }
+          },
+          "host_schedule_build": {
+            "control": 543455,
+            "candidate": 276626,
+            "delta": -266829,
+            "candidate_over_control": 0.5090136257831835,
+            "direction": "lower"
+          }
+        },
+        {
+          "block": 2,
+          "duration": {
+            "control": 8084484375,
+            "candidate": 2070905708,
+            "delta": -6013578667,
+            "candidate_over_control": 0.2561580444640293,
+            "direction": "lower"
+          },
+          "throughput": {
+            "control": 31.66559401013129,
+            "candidate": 123.61741001102114,
+            "delta": 91.95181600088985,
+            "candidate_over_control": 3.9038399207502694,
+            "direction": "higher"
+          },
+          "self_control_over_control_duration": 0.9957224595415215,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 409870771.0,
+              "candidate": 404561604.0,
+              "delta": -5309167.0,
+              "candidate_over_control": 0.9870467294190148,
+              "direction": "lower"
+            },
+            "ttft_p95_ns": {
+              "control": 7778702146.05,
+              "candidate": 1775557920.5,
+              "delta": -6003144225.55,
+              "candidate_over_control": 0.22825889038592673,
+              "direction": "lower"
+            },
+            "ttft_p99_ns": {
+              "control": 7787859662.81,
+              "candidate": 1784708250.5,
+              "delta": -6003151412.31,
+              "candidate_over_control": 0.22916543540488568,
+              "direction": "lower"
+            },
+            "end_to_end_p50_ns": {
+              "control": 4105552396.0,
+              "candidate": 812642854.5,
+              "delta": -3292909541.5,
+              "candidate_over_control": 0.19793751878352595,
+              "direction": "lower"
+            },
+            "end_to_end_p95_ns": {
+              "control": 8080846158.45,
+              "candidate": 2067123787.4,
+              "delta": -6013722371.049999,
+              "candidate_over_control": 0.2558053633082032,
+              "direction": "lower"
+            },
+            "end_to_end_p99_ns": {
+              "control": 8083746631.69,
+              "candidate": 2070142023.88,
+              "delta": -6013604607.809999,
+              "candidate_over_control": 0.25608695054402186,
+              "direction": "lower"
+            },
+            "tpot_p50_ns": {
+              "control": 110193844.74193549,
+              "candidate": 13163911.306451613,
+              "delta": -97029933.43548387,
+              "candidate_over_control": 0.11946140310541266,
+              "direction": "lower"
+            },
+            "token_gap_p95_ns": {
+              "control": 119317583.0,
+              "candidate": 32848083.0,
+              "delta": -86469500.0,
+              "candidate_over_control": 0.27529960106550266,
+              "direction": "lower"
+            },
+            "token_gap_p99_ns": {
+              "control": 135939167.0,
+              "candidate": 126988645.48000002,
+              "delta": -8950521.51999998,
+              "candidate_over_control": 0.9341578904922966,
+              "direction": "lower"
+            }
+          },
+          "host_schedule_build": {
+            "control": 556412,
+            "candidate": 260630,
+            "delta": -295782,
+            "candidate_over_control": 0.46841189622078605,
+            "direction": "lower"
+          }
+        },
+        {
+          "block": 3,
+          "duration": {
+            "control": 8091052458,
+            "candidate": 2073264417,
+            "delta": -6017788041,
+            "candidate_over_control": 0.2562416234182324,
+            "direction": "lower"
+          },
+          "throughput": {
+            "control": 31.639888794303996,
+            "candidate": 123.47677310279136,
+            "delta": 91.83688430848736,
+            "candidate_over_control": 3.9025665957783136,
+            "direction": "higher"
+          },
+          "self_control_over_control_duration": 0.9972663168215984,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 407445187.5,
+              "candidate": 406540208.5,
+              "delta": -904979.0,
+              "candidate_over_control": 0.9977788938788239,
+              "direction": "lower"
+            },
+            "ttft_p95_ns": {
+              "control": 7776886504.5,
+              "candidate": 1776918233.45,
+              "delta": -5999968271.05,
+              "candidate_over_control": 0.22848709858653693,
+              "direction": "lower"
+            },
+            "ttft_p99_ns": {
+              "control": 7786036834.5,
+              "candidate": 1786064246.69,
+              "delta": -5999972587.809999,
+              "candidate_over_control": 0.2293932439127353,
+              "direction": "lower"
+            },
+            "end_to_end_p50_ns": {
+              "control": 4103323479.0,
+              "candidate": 814732521.0,
+              "delta": -3288590958.0,
+              "candidate_over_control": 0.19855429998868973,
+              "direction": "lower"
+            },
+            "end_to_end_p95_ns": {
+              "control": 8087800796.05,
+              "candidate": 2069454673.25,
+              "delta": -6018346122.8,
+              "candidate_over_control": 0.25587359597935455,
+              "direction": "lower"
+            },
+            "end_to_end_p99_ns": {
+              "control": 8090393992.81,
+              "candidate": 2072493968.25,
+              "delta": -6017900024.56,
+              "candidate_over_control": 0.25616724847910277,
+              "direction": "lower"
+            },
+            "tpot_p50_ns": {
+              "control": 110152804.43548387,
+              "candidate": 13167493.951612903,
+              "delta": -96985310.48387097,
+              "candidate_over_control": 0.11953843589452195,
+              "direction": "lower"
+            },
+            "token_gap_p95_ns": {
+              "control": 119574791.0,
+              "candidate": 32727875.0,
+              "delta": -86846916.0,
+              "candidate_over_control": 0.2737021300752263,
+              "direction": "lower"
+            },
+            "token_gap_p99_ns": {
+              "control": 135990915.49,
+              "candidate": 127122015.26000002,
+              "delta": -8868900.22999999,
+              "candidate_over_control": 0.934783141961772,
+              "direction": "lower"
+            }
+          },
+          "host_schedule_build": {
+            "control": 545878,
+            "candidate": 263663,
+            "delta": -282215,
+            "candidate_over_control": 0.48300719208321274,
+            "direction": "lower"
+          }
+        }
+      ],
+      "calibration_ratios": [
+        1.0019386738296714,
+        1.0021516813547513,
+        0.9957224595415215,
+        0.9972663168215984
+      ],
+      "noise_floor": 0.05,
+      "declared_makespan_comparison": {
+        "arm": "chunked",
+        "block_ratios": [
+          0.2516538609224955,
+          0.25614072516850644,
+          0.2561580444640293,
+          0.2562416234182324
+        ],
+        "median_ratio": 0.25614938481626787,
+        "same_generated_histories": true,
+        "outcome": "faster",
+        "admission": "reserved",
+        "control_admission": "incremental"
+      },
+      "latency_classification": "descriptive; no latency gain threshold declared"
+    },
+    {
+      "name": "online-pressure",
+      "mode": "online",
+      "blocks": 40,
+      "measured_runs": 12,
+      "archive": {
+        "path": "/private/tmp/llm-mojo-admission-20261009/online-pressure/engine-admission.json.gz",
+        "bytes": 248845,
+        "sha256": "7b6df6f112da186a97488949a5656029dba90ca498f444d43ca8873ffd52ae07"
+      },
+      "manifest": {
+        "path": "/private/tmp/llm-mojo-admission-20261009/online-pressure/engine-admission.json",
+        "bytes": 233,
+        "sha256": "274bc4633407395fd2a21156f937704efb5696bbf3e79a9d13fba5dc0d6ed881"
+      },
+      "trace_sha256": "87a4274184eb3ca2b241091c2b698887a4dd47e7524eb8da045cf6b787486d38",
+      "canonical_native_trace_sha256": "5508dcb2adff8c0d1904f9366ad0958b15926705bbcbb37eb97cc9b50f37a28f",
+      "all_histories_identical": true,
+      "all_pools_returned": true,
+      "all_delivered_tokens": 256,
+      "reserved_preemptions": 0,
+      "reserved_computed_rows": 2424,
+      "runs": [
+        {
+          "block": 0,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 8878508084,
+          "tokens_per_second": 28.8336731326898,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 6200969935,
+          "delivered_tokens": 256,
+          "steps": 180,
+          "preemptions": 44,
+          "total_tokens": 16245,
+          "attended_positions": 3338469,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 206297413.5,
+          "ttft_p95_ns": 5950431905.3,
+          "ttft_p99_ns": 5965191949.06,
+          "end_to_end_p50_ns": 4114379643.0,
+          "end_to_end_p95_ns": 6998537930.099999,
+          "end_to_end_p99_ns": 7308786927.62,
+          "tpot_p50_ns": 35371001.33870968,
+          "token_gap_p95_ns": 136136570.85,
+          "token_gap_p99_ns": 136259974.48,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 263961,
+              "median": 563.0,
+              "p95": 3500.0
+            },
+            "build_ns": {
+              "total": 376633,
+              "median": 875.0,
+              "p95": 4542.0
+            },
+            "execute_ns": {
+              "total": 8857668168,
+              "median": 10536104.0,
+              "p95": 136099541.05
+            },
+            "postprocess_ns": {
+              "total": 545874,
+              "median": 2083.5,
+              "p95": 5466.349999999997
+            },
+            "host_schedule_build_total_ns": 640594,
+            "host_schedule_build_fraction_of_makespan": 7.215108596391519e-05,
+            "unassigned_within_steps_total_ns": 3701
+          }
+        },
+        {
+          "block": 0,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 8879330209,
+          "tokens_per_second": 28.831003462459474,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 6201792060,
+          "delivered_tokens": 256,
+          "steps": 183,
+          "preemptions": 44,
+          "total_tokens": 16247,
+          "attended_positions": 3339484,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 203402893.0,
+          "ttft_p95_ns": 5952372524.05,
+          "ttft_p99_ns": 5967141072.81,
+          "end_to_end_p50_ns": 4113697247.5,
+          "end_to_end_p95_ns": 6999260509.599999,
+          "end_to_end_p99_ns": 7310411877.12,
+          "tpot_p50_ns": 31145108.85483871,
+          "token_gap_p95_ns": 136180196.15,
+          "token_gap_p99_ns": 136279274.5,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 251342,
+              "median": 542,
+              "p95": 3458.0
+            },
+            "build_ns": {
+              "total": 347161,
+              "median": 834,
+              "p95": 4328.900000000001
+            },
+            "execute_ns": {
+              "total": 8851724588,
+              "median": 10236583,
+              "p95": 136063992.3
+            },
+            "postprocess_ns": {
+              "total": 520425,
+              "median": 2000,
+              "p95": 5370.900000000001
+            },
+            "host_schedule_build_total_ns": 598503,
+            "host_schedule_build_fraction_of_makespan": 6.740407056754837e-05,
+            "unassigned_within_steps_total_ns": 3583
+          }
+        },
+        {
+          "block": 0,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 3079628959,
+          "tokens_per_second": 83.12689723606408,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 402090810,
+          "delivered_tokens": 256,
+          "steps": 184,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 117174540.0,
+          "ttft_p95_ns": 660634941.5999997,
+          "ttft_p99_ns": 830413429.9199998,
+          "end_to_end_p50_ns": 503639198.0,
+          "end_to_end_p95_ns": 962474906.0499997,
+          "end_to_end_p99_ns": 1121923122.81,
+          "tpot_p50_ns": 10484174.725806452,
+          "token_gap_p95_ns": 12957266.549999993,
+          "token_gap_p99_ns": 93156650.48000006,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 137756,
+              "median": 458.0,
+              "p95": 1958.85
+            },
+            "build_ns": {
+              "total": 211746,
+              "median": 875.0,
+              "p95": 2799.9999999999973
+            },
+            "execute_ns": {
+              "total": 2764654171,
+              "median": 9203583.5,
+              "p95": 33336596.29999999
+            },
+            "postprocess_ns": {
+              "total": 449252,
+              "median": 1979.0,
+              "p95": 5073.249999999996
+            },
+            "host_schedule_build_total_ns": 349502,
+            "host_schedule_build_fraction_of_makespan": 0.00011348834702265183,
+            "unassigned_within_steps_total_ns": 4999
+          }
+        },
+        {
+          "block": 1,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 3072532916,
+          "tokens_per_second": 83.31887956900248,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 394994767,
+          "delivered_tokens": 256,
+          "steps": 186,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 119447622.5,
+          "ttft_p95_ns": 652733696.8499997,
+          "ttft_p99_ns": 815239080.1699998,
+          "end_to_end_p50_ns": 491950302.0,
+          "end_to_end_p95_ns": 944131886.2999997,
+          "end_to_end_p99_ns": 1098336718.06,
+          "tpot_p50_ns": 9625590.048387095,
+          "token_gap_p95_ns": 12395583.0,
+          "token_gap_p99_ns": 84293871.23000008,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 122449,
+              "median": 334.0,
+              "p95": 1625.0
+            },
+            "build_ns": {
+              "total": 227205,
+              "median": 792.0,
+              "p95": 2906.75
+            },
+            "execute_ns": {
+              "total": 2718224626,
+              "median": 8564396.0,
+              "p95": 33481354.25
+            },
+            "postprocess_ns": {
+              "total": 394751,
+              "median": 1729.0,
+              "p95": 3874.5
+            },
+            "host_schedule_build_total_ns": 349654,
+            "host_schedule_build_fraction_of_makespan": 0.00011379991998757809,
+            "unassigned_within_steps_total_ns": 5046
+          }
+        },
+        {
+          "block": 1,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 8899217500,
+          "tokens_per_second": 28.766574139804987,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 6221679351,
+          "delivered_tokens": 256,
+          "steps": 180,
+          "preemptions": 44,
+          "total_tokens": 16246,
+          "attended_positions": 3338977,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 203208747.0,
+          "ttft_p95_ns": 5955112696.75,
+          "ttft_p99_ns": 5969891873.75,
+          "end_to_end_p50_ns": 4113807038.5,
+          "end_to_end_p95_ns": 7008063057.4,
+          "end_to_end_p99_ns": 7314430286.679999,
+          "tpot_p50_ns": 33530155.258064516,
+          "token_gap_p95_ns": 136166858.0,
+          "token_gap_p99_ns": 136471930.24,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 274253,
+              "median": 1020.5,
+              "p95": 3294.0999999999995
+            },
+            "build_ns": {
+              "total": 387921,
+              "median": 1166.5,
+              "p95": 4916.05
+            },
+            "execute_ns": {
+              "total": 8854973707,
+              "median": 10866729.5,
+              "p95": 136062866.05
+            },
+            "postprocess_ns": {
+              "total": 579120,
+              "median": 3125.0,
+              "p95": 5375.0
+            },
+            "host_schedule_build_total_ns": 662174,
+            "host_schedule_build_fraction_of_makespan": 7.440811509551261e-05,
+            "unassigned_within_steps_total_ns": 4499
+          }
+        },
+        {
+          "block": 1,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 8860175833,
+          "tokens_per_second": 28.893331783159432,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 6182637684,
+          "delivered_tokens": 256,
+          "steps": 182,
+          "preemptions": 44,
+          "total_tokens": 16246,
+          "attended_positions": 3338977,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 206200642.5,
+          "ttft_p95_ns": 5950241803.0,
+          "ttft_p99_ns": 5964986295.0,
+          "end_to_end_p50_ns": 4113965684.0,
+          "end_to_end_p95_ns": 6992133527.7,
+          "end_to_end_p99_ns": 7307226979.94,
+          "tpot_p50_ns": 33270766.129032258,
+          "token_gap_p95_ns": 136064760.1,
+          "token_gap_p99_ns": 136195100.26,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 256615,
+              "median": 666.5,
+              "p95": 3372.8999999999996
+            },
+            "build_ns": {
+              "total": 340091,
+              "median": 979.0,
+              "p95": 4417.0
+            },
+            "execute_ns": {
+              "total": 8824880122,
+              "median": 10054666.5,
+              "p95": 136020797.25
+            },
+            "postprocess_ns": {
+              "total": 564328,
+              "median": 2479.5,
+              "p95": 5372.9
+            },
+            "host_schedule_build_total_ns": 596706,
+            "host_schedule_build_fraction_of_makespan": 6.73469704492263e-05,
+            "unassigned_within_steps_total_ns": 4666
+          }
+        },
+        {
+          "block": 2,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 3075113208,
+          "tokens_per_second": 83.24896765881928,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 397575059,
+          "delivered_tokens": 256,
+          "steps": 185,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 119361768.0,
+          "ttft_p95_ns": 658899278.6499996,
+          "ttft_p99_ns": 825561063.7299998,
+          "end_to_end_p50_ns": 497911885.0,
+          "end_to_end_p95_ns": 949595068.0999997,
+          "end_to_end_p99_ns": 1105958921.62,
+          "tpot_p50_ns": 10229601.467741936,
+          "token_gap_p95_ns": 13226498.14999998,
+          "token_gap_p99_ns": 92081396.01000006,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 120753,
+              "median": 375,
+              "p95": 1682.999999999998
+            },
+            "build_ns": {
+              "total": 195667,
+              "median": 792,
+              "p95": 2825.3999999999924
+            },
+            "execute_ns": {
+              "total": 2725292756,
+              "median": 8678125,
+              "p95": 33001733.39999997
+            },
+            "postprocess_ns": {
+              "total": 429990,
+              "median": 1917,
+              "p95": 4433.199999999998
+            },
+            "host_schedule_build_total_ns": 316420,
+            "host_schedule_build_fraction_of_makespan": 0.0001028970247914203,
+            "unassigned_within_steps_total_ns": 4328
+          }
+        },
+        {
+          "block": 2,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 8853870667,
+          "tokens_per_second": 28.913907784327474,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 6176332518,
+          "delivered_tokens": 256,
+          "steps": 183,
+          "preemptions": 44,
+          "total_tokens": 16246,
+          "attended_positions": 3338977,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 203700851.0,
+          "ttft_p95_ns": 5947553867.8,
+          "ttft_p99_ns": 5962348841.56,
+          "end_to_end_p50_ns": 4112122330.0,
+          "end_to_end_p95_ns": 6988051201.049999,
+          "end_to_end_p99_ns": 7304399181.809999,
+          "tpot_p50_ns": 32599752.01612903,
+          "token_gap_p95_ns": 136069916.65,
+          "token_gap_p99_ns": 136117353.25,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 277043,
+              "median": 500,
+              "p95": 3375.0
+            },
+            "build_ns": {
+              "total": 319380,
+              "median": 833,
+              "p95": 4241.700000000001
+            },
+            "execute_ns": {
+              "total": 8771714118,
+              "median": 9256208,
+              "p95": 135984671.4
+            },
+            "postprocess_ns": {
+              "total": 560257,
+              "median": 2167,
+              "p95": 5579.8
+            },
+            "host_schedule_build_total_ns": 596423,
+            "host_schedule_build_fraction_of_makespan": 6.736296727520291e-05,
+            "unassigned_within_steps_total_ns": 5041
+          }
+        },
+        {
+          "block": 2,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 8895975458,
+          "tokens_per_second": 28.777057806491985,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 6218437309,
+          "delivered_tokens": 256,
+          "steps": 184,
+          "preemptions": 44,
+          "total_tokens": 16248,
+          "attended_positions": 3339992,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 210253600.5,
+          "ttft_p95_ns": 5957107239.95,
+          "ttft_p99_ns": 5971874015.19,
+          "end_to_end_p50_ns": 4119046809.0,
+          "end_to_end_p95_ns": 7009110235.9,
+          "end_to_end_p99_ns": 7316159755.179999,
+          "tpot_p50_ns": 29329606.177419357,
+          "token_gap_p95_ns": 136093558.45,
+          "token_gap_p99_ns": 136177651.73,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 258244,
+              "median": 583.0,
+              "p95": 3462.4999999999986
+            },
+            "build_ns": {
+              "total": 327292,
+              "median": 875.0,
+              "p95": 3975.099999999999
+            },
+            "execute_ns": {
+              "total": 8842518382,
+              "median": 10349687.5,
+              "p95": 136049879.45
+            },
+            "postprocess_ns": {
+              "total": 597292,
+              "median": 2229.5,
+              "p95": 6028.549999999999
+            },
+            "host_schedule_build_total_ns": 585536,
+            "host_schedule_build_fraction_of_makespan": 6.582032546789878e-05,
+            "unassigned_within_steps_total_ns": 4041
+          }
+        },
+        {
+          "block": 3,
+          "admission": "incremental",
+          "calibration": false,
+          "duration_ns": 8863830917,
+          "tokens_per_second": 28.88141734619688,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 6186292768,
+          "delivered_tokens": 256,
+          "steps": 182,
+          "preemptions": 44,
+          "total_tokens": 16246,
+          "attended_positions": 3338977,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 204257413.5,
+          "ttft_p95_ns": 5949647711.0,
+          "ttft_p99_ns": 5964401443.0,
+          "end_to_end_p50_ns": 4113156434.0,
+          "end_to_end_p95_ns": 6992300071.45,
+          "end_to_end_p99_ns": 7306830688.69,
+          "tpot_p50_ns": 33296651.20967742,
+          "token_gap_p95_ns": 136105781.25,
+          "token_gap_p99_ns": 136245354.74,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 243797,
+              "median": 520.5,
+              "p95": 3247.9499999999994
+            },
+            "build_ns": {
+              "total": 315789,
+              "median": 875.0,
+              "p95": 3997.9499999999994
+            },
+            "execute_ns": {
+              "total": 8802293546,
+              "median": 10043979.0,
+              "p95": 135991597.25
+            },
+            "postprocess_ns": {
+              "total": 562155,
+              "median": 2250.0,
+              "p95": 5333.0
+            },
+            "host_schedule_build_total_ns": 559586,
+            "host_schedule_build_fraction_of_makespan": 6.313139377769112e-05,
+            "unassigned_within_steps_total_ns": 4666
+          }
+        },
+        {
+          "block": 3,
+          "admission": "incremental",
+          "calibration": true,
+          "duration_ns": 8906461167,
+          "tokens_per_second": 28.743178148974014,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 6228923018,
+          "delivered_tokens": 256,
+          "steps": 179,
+          "preemptions": 44,
+          "total_tokens": 16245,
+          "attended_positions": 3338469,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 208952705.5,
+          "ttft_p95_ns": 5962468908.8,
+          "ttft_p99_ns": 5977240782.56,
+          "end_to_end_p50_ns": 4121703913.5,
+          "end_to_end_p95_ns": 7015450521.65,
+          "end_to_end_p99_ns": 7321708445.929999,
+          "tpot_p50_ns": 35489937.5,
+          "token_gap_p95_ns": 136307375.0,
+          "token_gap_p99_ns": 136462222.54,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 261340,
+              "median": 625,
+              "p95": 3550.2999999999997
+            },
+            "build_ns": {
+              "total": 319664,
+              "median": 1000,
+              "p95": 4117.299999999998
+            },
+            "execute_ns": {
+              "total": 8867112000,
+              "median": 10934833,
+              "p95": 136210500.6
+            },
+            "postprocess_ns": {
+              "total": 567583,
+              "median": 2500,
+              "p95": 5333.0
+            },
+            "host_schedule_build_total_ns": 581004,
+            "host_schedule_build_fraction_of_makespan": 6.523399014557225e-05,
+            "unassigned_within_steps_total_ns": 4750
+          }
+        },
+        {
+          "block": 3,
+          "admission": "reserved",
+          "calibration": false,
+          "duration_ns": 3077002542,
+          "tokens_per_second": 83.19785131981213,
+          "arrival_window_ns": 2677538149,
+          "drain_tail_ns": 399464393,
+          "delivered_tokens": 256,
+          "steps": 182,
+          "preemptions": 0,
+          "total_tokens": 2424,
+          "attended_positions": 778048,
+          "terminal_reasons": {
+            "length": 8
+          },
+          "ttft_p50_ns": 120979706.5,
+          "ttft_p95_ns": 655425941.4999998,
+          "ttft_p99_ns": 819539796.2999998,
+          "end_to_end_p50_ns": 496731531.5,
+          "end_to_end_p95_ns": 948851343.4499997,
+          "end_to_end_p99_ns": 1101798076.6899998,
+          "tpot_p50_ns": 10149034.274193548,
+          "token_gap_p95_ns": 13445875.0,
+          "token_gap_p99_ns": 93849863.99000005,
+          "latency_sample_counts": {
+            "ttft": 8,
+            "end_to_end": 8,
+            "tpot": 8,
+            "inter_token": 248
+          },
+          "phase_telemetry_ns": {
+            "schedule_ns": {
+              "total": 129633,
+              "median": 416.0,
+              "p95": 1743.7499999999986
+            },
+            "build_ns": {
+              "total": 210249,
+              "median": 792.0,
+              "p95": 2868.7499999999986
+            },
+            "execute_ns": {
+              "total": 2728139220,
+              "median": 9081020.5,
+              "p95": 33880018.74999997
+            },
+            "postprocess_ns": {
+              "total": 467864,
+              "median": 2000.0,
+              "p95": 5033.649999999998
+            },
+            "host_schedule_build_total_ns": 339882,
+            "host_schedule_build_fraction_of_makespan": 0.00011045879727453276,
+            "unassigned_within_steps_total_ns": 4368
+          }
+        }
+      ],
+      "medians": {
+        "incremental_control": {
+          "duration_ns": 8871169500.5,
+          "tokens_per_second": 28.85754523944334,
+          "arrival_window_ns": 2677538149.0,
+          "drain_tail_ns": 6193631351.5,
+          "ttft_p50_ns": 206249028.0,
+          "ttft_p95_ns": 5950336854.15,
+          "ttft_p99_ns": 5965089122.030001,
+          "end_to_end_p50_ns": 4114172663.5,
+          "end_to_end_p95_ns": 6995419000.775,
+          "end_to_end_p99_ns": 7308006953.78,
+          "tpot_p50_ns": 33283708.66935484,
+          "token_gap_p95_ns": 136099669.85,
+          "token_gap_p99_ns": 136220227.5,
+          "steps": 182.0,
+          "preemptions": 44.0,
+          "total_tokens": 16246.0,
+          "schedule_total_ns": 257429.5,
+          "build_total_ns": 333691.5,
+          "schedule_step_p95_ns": 3417.699999999999,
+          "build_step_p95_ns": 4207.474999999999,
+          "execute_total_ns": 8833699252.0,
+          "host_schedule_build_total_ns": 591121.0
+        },
+        "incremental_self_control": {
+          "duration_ns": 8889273854.5,
+          "tokens_per_second": 28.798788801132233,
+          "arrival_window_ns": 2677538149.0,
+          "drain_tail_ns": 6211735705.5,
+          "ttft_p50_ns": 203551872.0,
+          "ttft_p95_ns": 5953742610.4,
+          "ttft_p99_ns": 5968516473.280001,
+          "end_to_end_p50_ns": 4113752143.0,
+          "end_to_end_p95_ns": 7003661783.5,
+          "end_to_end_p99_ns": 7312421081.9,
+          "tpot_p50_ns": 33064953.637096774,
+          "token_gap_p95_ns": 136173527.075,
+          "token_gap_p99_ns": 136370748.51999998,
+          "steps": 181.5,
+          "preemptions": 44.0,
+          "total_tokens": 16246.0,
+          "schedule_total_ns": 267796.5,
+          "build_total_ns": 333412.5,
+          "schedule_step_p95_ns": 3416.5,
+          "build_step_p95_ns": 4285.300000000001,
+          "execute_total_ns": 8853349147.5,
+          "host_schedule_build_total_ns": 597463.0
+        },
+        "reserved": {
+          "duration_ns": 3076057875.0,
+          "tokens_per_second": 83.22340948931571,
+          "arrival_window_ns": 2677538149.0,
+          "drain_tail_ns": 398519726.0,
+          "ttft_p50_ns": 119404695.25,
+          "ttft_p95_ns": 657162610.0749997,
+          "ttft_p99_ns": 822550430.0149999,
+          "end_to_end_p50_ns": 497321708.25,
+          "end_to_end_p95_ns": 949223205.7749996,
+          "end_to_end_p99_ns": 1103878499.1549997,
+          "tpot_p50_ns": 10189317.870967742,
+          "token_gap_p95_ns": 13091882.349999987,
+          "token_gap_p99_ns": 92619023.24500006,
+          "steps": 184.5,
+          "preemptions": 0.0,
+          "total_tokens": 2424.0,
+          "schedule_total_ns": 126041.0,
+          "build_total_ns": 210997.5,
+          "schedule_step_p95_ns": 1713.3749999999982,
+          "build_step_p95_ns": 2847.0749999999953,
+          "execute_total_ns": 2726715988.0,
+          "host_schedule_build_total_ns": 344692.0
+        }
+      },
+      "paired_comparisons": [
+        {
+          "block": 0,
+          "duration": {
+            "control": 8878508084,
+            "candidate": 3079628959,
+            "delta": -5798879125,
+            "candidate_over_control": 0.34686333896004595,
+            "direction": "lower"
+          },
+          "throughput": {
+            "control": 28.8336731326898,
+            "candidate": 83.12689723606408,
+            "delta": 54.293224103374286,
+            "candidate_over_control": 2.882979801204032,
+            "direction": "higher"
+          },
+          "self_control_over_control_duration": 1.0000925972012664,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 206297413.5,
+              "candidate": 117174540.0,
+              "delta": -89122873.5,
+              "candidate_over_control": 0.5679884105769459,
+              "direction": "lower"
+            },
+            "ttft_p95_ns": {
+              "control": 5950431905.3,
+              "candidate": 660634941.5999997,
+              "delta": -5289796963.700001,
+              "candidate_over_control": 0.11102302355759716,
+              "direction": "lower"
+            },
+            "ttft_p99_ns": {
+              "control": 5965191949.06,
+              "candidate": 830413429.9199998,
+              "delta": -5134778519.14,
+              "candidate_over_control": 0.13920984219977314,
+              "direction": "lower"
+            },
+            "end_to_end_p50_ns": {
+              "control": 4114379643.0,
+              "candidate": 503639198.0,
+              "delta": -3610740445.0,
+              "candidate_over_control": 0.12240951047307133,
+              "direction": "lower"
+            },
+            "end_to_end_p95_ns": {
+              "control": 6998537930.099999,
+              "candidate": 962474906.0499997,
+              "delta": -6036063024.049999,
+              "candidate_over_control": 0.1375251396310211,
+              "direction": "lower"
+            },
+            "end_to_end_p99_ns": {
+              "control": 7308786927.62,
+              "candidate": 1121923122.81,
+              "delta": -6186863804.809999,
+              "candidate_over_control": 0.15350332879047793,
+              "direction": "lower"
+            },
+            "tpot_p50_ns": {
+              "control": 35371001.33870968,
+              "candidate": 10484174.725806452,
+              "delta": -24886826.61290323,
+              "candidate_over_control": 0.2964059350599349,
+              "direction": "lower"
+            },
+            "token_gap_p95_ns": {
+              "control": 136136570.85,
+              "candidate": 12957266.549999993,
+              "delta": -123179304.3,
+              "candidate_over_control": 0.0951784408046884,
+              "direction": "lower"
+            },
+            "token_gap_p99_ns": {
+              "control": 136259974.48,
+              "candidate": 93156650.48000006,
+              "delta": -43103323.999999925,
+              "candidate_over_control": 0.6836684861824441,
+              "direction": "lower"
+            }
+          },
+          "host_schedule_build": {
+            "control": 640594,
+            "candidate": 349502,
+            "delta": -291092,
+            "candidate_over_control": 0.5455904988182843,
+            "direction": "lower"
+          }
+        },
+        {
+          "block": 1,
+          "duration": {
+            "control": 8860175833,
+            "candidate": 3072532916,
+            "delta": -5787642917,
+            "candidate_over_control": 0.34678012873697783,
+            "direction": "lower"
+          },
+          "throughput": {
+            "control": 28.893331783159432,
+            "candidate": 83.31887956900248,
+            "delta": 54.425547785843044,
+            "candidate_over_control": 2.8836715749605983,
+            "direction": "higher"
+          },
+          "self_control_over_control_duration": 1.0044064212421822,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 206200642.5,
+              "candidate": 119447622.5,
+              "delta": -86753020.0,
+              "candidate_over_control": 0.5792786145174111,
+              "direction": "lower"
+            },
+            "ttft_p95_ns": {
+              "control": 5950241803.0,
+              "candidate": 652733696.8499997,
+              "delta": -5297508106.150001,
+              "candidate_over_control": 0.10969868426538626,
+              "direction": "lower"
+            },
+            "ttft_p99_ns": {
+              "control": 5964986295.0,
+              "candidate": 815239080.1699998,
+              "delta": -5149747214.83,
+              "candidate_over_control": 0.13667073817979322,
+              "direction": "lower"
+            },
+            "end_to_end_p50_ns": {
+              "control": 4113965684.0,
+              "candidate": 491950302.0,
+              "delta": -3622015382.0,
+              "candidate_over_control": 0.11958055554845508,
+              "direction": "lower"
+            },
+            "end_to_end_p95_ns": {
+              "control": 6992133527.7,
+              "candidate": 944131886.2999997,
+              "delta": -6048001641.4,
+              "candidate_over_control": 0.13502772545171396,
+              "direction": "lower"
+            },
+            "end_to_end_p99_ns": {
+              "control": 7307226979.94,
+              "candidate": 1098336718.06,
+              "delta": -6208890261.879999,
+              "candidate_over_control": 0.15030827988170944,
+              "direction": "lower"
+            },
+            "tpot_p50_ns": {
+              "control": 33270766.129032258,
+              "candidate": 9625590.048387095,
+              "delta": -23645176.080645163,
+              "candidate_over_control": 0.289310742381365,
+              "direction": "lower"
+            },
+            "token_gap_p95_ns": {
+              "control": 136064760.1,
+              "candidate": 12395583.0,
+              "delta": -123669177.1,
+              "candidate_over_control": 0.09110061261189113,
+              "direction": "lower"
+            },
+            "token_gap_p99_ns": {
+              "control": 136195100.26,
+              "candidate": 84293871.23000008,
+              "delta": -51901229.02999991,
+              "candidate_over_control": 0.6189199983632369,
+              "direction": "lower"
+            }
+          },
+          "host_schedule_build": {
+            "control": 596706,
+            "candidate": 349654,
+            "delta": -247052,
+            "candidate_over_control": 0.5859736620714389,
+            "direction": "lower"
+          }
+        },
+        {
+          "block": 2,
+          "duration": {
+            "control": 8895975458,
+            "candidate": 3075113208,
+            "delta": -5820862250,
+            "candidate_over_control": 0.3456746505786055,
+            "direction": "lower"
+          },
+          "throughput": {
+            "control": 28.777057806491985,
+            "candidate": 83.24896765881928,
+            "delta": 54.4719098523273,
+            "candidate_over_control": 2.892893645299578,
+            "direction": "higher"
+          },
+          "self_control_over_control_duration": 0.9952669843572763,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 210253600.5,
+              "candidate": 119361768.0,
+              "delta": -90891832.5,
+              "candidate_over_control": 0.5677038001544236,
+              "direction": "lower"
+            },
+            "ttft_p95_ns": {
+              "control": 5957107239.95,
+              "candidate": 658899278.6499996,
+              "delta": -5298207961.3,
+              "candidate_over_control": 0.1106072548486688,
+              "direction": "lower"
+            },
+            "ttft_p99_ns": {
+              "control": 5971874015.19,
+              "candidate": 825561063.7299998,
+              "delta": -5146312951.46,
+              "candidate_over_control": 0.13824154053319124,
+              "direction": "lower"
+            },
+            "end_to_end_p50_ns": {
+              "control": 4119046809.0,
+              "candidate": 497911885.0,
+              "delta": -3621134924.0,
+              "candidate_over_control": 0.12088036579532835,
+              "direction": "lower"
+            },
+            "end_to_end_p95_ns": {
+              "control": 7009110235.9,
+              "candidate": 949595068.0999997,
+              "delta": -6059515167.8,
+              "candidate_over_control": 0.13548011604044455,
+              "direction": "lower"
+            },
+            "end_to_end_p99_ns": {
+              "control": 7316159755.179999,
+              "candidate": 1105958921.62,
+              "delta": -6210200833.559999,
+              "candidate_over_control": 0.15116658993633333,
+              "direction": "lower"
+            },
+            "tpot_p50_ns": {
+              "control": 29329606.177419357,
+              "candidate": 10229601.467741936,
+              "delta": -19100004.70967742,
+              "candidate_over_control": 0.3487807304967371,
+              "direction": "lower"
+            },
+            "token_gap_p95_ns": {
+              "control": 136093558.45,
+              "candidate": 13226498.14999998,
+              "delta": -122867060.30000001,
+              "candidate_over_control": 0.09718680517020445,
+              "direction": "lower"
+            },
+            "token_gap_p99_ns": {
+              "control": 136177651.73,
+              "candidate": 92081396.01000006,
+              "delta": -44096255.719999924,
+              "candidate_over_control": 0.6761858119904303,
+              "direction": "lower"
+            }
+          },
+          "host_schedule_build": {
+            "control": 585536,
+            "candidate": 316420,
+            "delta": -269116,
+            "candidate_over_control": 0.540393758880752,
+            "direction": "lower"
+          }
+        },
+        {
+          "block": 3,
+          "duration": {
+            "control": 8863830917,
+            "candidate": 3077002542,
+            "delta": -5786828375,
+            "candidate_over_control": 0.34714138512035425,
+            "direction": "lower"
+          },
+          "throughput": {
+            "control": 28.88141734619688,
+            "candidate": 83.19785131981213,
+            "delta": 54.31643397361525,
+            "candidate_over_control": 2.8806706513926565,
+            "direction": "higher"
+          },
+          "self_control_over_control_duration": 1.00480946110087,
+          "latency_descriptive": {
+            "ttft_p50_ns": {
+              "control": 204257413.5,
+              "candidate": 120979706.5,
+              "delta": -83277707.0,
+              "candidate_over_control": 0.5922904066343717,
+              "direction": "lower"
+            },
+            "ttft_p95_ns": {
+              "control": 5949647711.0,
+              "candidate": 655425941.4999998,
+              "delta": -5294221769.5,
+              "candidate_over_control": 0.1101621429262469,
+              "direction": "lower"
+            },
+            "ttft_p99_ns": {
+              "control": 5964401443.0,
+              "candidate": 819539796.2999998,
+              "delta": -5144861646.7,
+              "candidate_over_control": 0.1374052038804055,
+              "direction": "lower"
+            },
+            "end_to_end_p50_ns": {
+              "control": 4113156434.0,
+              "candidate": 496731531.5,
+              "delta": -3616424902.5,
+              "candidate_over_control": 0.12076650608130018,
+              "direction": "lower"
+            },
+            "end_to_end_p95_ns": {
+              "control": 6992300071.45,
+              "candidate": 948851343.4499997,
+              "delta": -6043448728.0,
+              "candidate_over_control": 0.13569945994226124,
+              "direction": "lower"
+            },
+            "end_to_end_p99_ns": {
+              "control": 7306830688.69,
+              "candidate": 1101798076.6899998,
+              "delta": -6205032612.0,
+              "candidate_over_control": 0.15079014741581961,
+              "direction": "lower"
+            },
+            "tpot_p50_ns": {
+              "control": 33296651.20967742,
+              "candidate": 10149034.274193548,
+              "delta": -23147616.935483873,
+              "candidate_over_control": 0.30480645666984696,
+              "direction": "lower"
+            },
+            "token_gap_p95_ns": {
+              "control": 136105781.25,
+              "candidate": 13445875.0,
+              "delta": -122659906.25,
+              "candidate_over_control": 0.09878988883875937,
+              "direction": "lower"
+            },
+            "token_gap_p99_ns": {
+              "control": 136245354.74,
+              "candidate": 93849863.99000005,
+              "delta": -42395490.749999955,
+              "candidate_over_control": 0.6888298259349525,
+              "direction": "lower"
+            }
+          },
+          "host_schedule_build": {
+            "control": 559586,
+            "candidate": 339882,
+            "delta": -219704,
+            "candidate_over_control": 0.6073811710800484,
+            "direction": "lower"
+          }
+        }
+      ],
+      "calibration_ratios": [
+        1.0000925972012664,
+        1.0044064212421822,
+        0.9952669843572763,
+        1.00480946110087
+      ],
+      "noise_floor": 0.05,
+      "declared_makespan_comparison": {
+        "arm": "chunked",
+        "block_ratios": [
+          0.34686333896004595,
+          0.34678012873697783,
+          0.3456746505786055,
+          0.34714138512035425
+        ],
+        "median_ratio": 0.3468217338485119,
+        "same_generated_histories": true,
+        "outcome": "distribution-only",
+        "admission": "reserved",
+        "control_admission": "incremental"
+      },
+      "latency_classification": "descriptive; no latency gain threshold declared"
+    }
+  ],
+  "build": {
+    "source_commit": "b81ea6c7e5a052d73ef3ee51c9d0cbd531672e5d",
+    "receipt": {
+      "path": "/private/tmp/llm-mojo-admission-20261009/build/build.json",
+      "bytes": 30305,
+      "sha256": "2d945d8187acae8e1350670e16950d6299a7f3f65dd7a95c77be5543692f512d"
+    },
+    "receipt_content_sha256": "76653eeba6ca3a1c0d70f0037cf5dc5cf2f5b787d0283b45393f108a1db07a34",
+    "source_blob_verification": {
+      "command": [
+        "git",
+        "cat-file",
+        "--batch"
+      ],
+      "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+      "commit": "b81ea6c7e5a052d73ef3ee51c9d0cbd531672e5d",
+      "tree_command": [
+        "git",
+        "ls-tree",
+        "-rz",
+        "b81ea6c7e5a052d73ef3ee51c9d0cbd531672e5d"
+      ],
+      "checked_source_files": 238,
+      "dereferenced_symlinks": 9,
+      "source_manifest_sha256": "0e2564342c7e668cf6a74b034dfb7cac86f287ef983fd34eda1cfd7b782a52a3"
+    },
+    "binary_and_asset_verification": {
+      "binary": {
+        "path": "/private/tmp/llm-mojo-admission-20261009/build/engine",
+        "bytes": 1131608,
+        "sha256": "556161e0440584c946df91e5c842bcbe1ffd8f6e446fe70b08516348af5e4658"
+      },
+      "prepared_manifest": {
+        "path": "/Users/attiliocastano/.cache/llm-mojo/qwen2.5-0.5b-instruct/7ae557604adf67be50417f59c2c2f167def9a775/model-prepared-v1/manifest.json",
+        "bytes": 62387,
+        "sha256": "b950f5f16efab9cf7813fa2b8e0455032ad210ebdb19cbe851ab3156e8176192"
+      },
+      "tables": {
+        "path": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/build/checkpoints/qwen2.5-0.5b-instruct/7ae557604adf67be50417f59c2c2f167def9a775/prepared-v1/tables.bin",
+        "bytes": 8050212,
+        "sha256": "28bce5aedb018845f4886852133a8ccbe7b1505324e6422d2cd019749fc1f900"
+      }
+    },
+    "environment": {
+      "hardware": {
+        "model": "Mac16,7",
+        "chip": "Apple M4 Pro",
+        "logical_cpu_count": "14",
+        "gpu_api": "metal",
+        "gpu_target": "metal:4-metal4",
+        "physical_memory_bytes": 25769803776
+      },
+      "software": {
+        "macos": "26.6.2",
+        "macos_build": "25G83",
+        "darwin": "25.6.0",
+        "xcode": [
+          "Xcode 26.6",
+          "Build version 17F113"
+        ],
+        "metal": [
+          "Apple metal version 32023.883 (metalfe-32023.883)",
+          "Target: air64-apple-darwin25.6.0",
+          "Thread model: posix"
+        ],
+        "uv": "uv 0.12.5 (210d1f678 2026-08-14 aarch64-apple-darwin)",
+        "mojo": "1.0.0",
+        "max": "26.5.0"
+      }
+    },
+    "lock_sha256": "903ea1a7c05a268cc14d36bc817cee7edb0cd2f278c0c557777ef0d472cfad57"
+  },
+  "numerical_route": "reference configuration 27; BF16 storage, FP32 reductions",
+  "layout": "32-slot slot-major BF16 KV; FP32 reductions",
+  "fixed_token_budget": 256,
+  "watermark": 0,
+  "max_sequences": 8,
+  "warmup_steps": 10,
+  "statistic_scope": "per-block latency quantiles, then four-block medians; linear quantiles",
+  "units": {
+    "durations_and_latencies": "nanoseconds; host wall durations",
+    "throughput": "delivered tokens per second",
+    "ratios_and_fractions": "dimensionless",
+    "counters": "counts; token rows and attended positions count scheduled work"
+  },
+  "metadata_overhead_scope": "schedule/build measure host preparation; upload is not isolated and remains in execute_ns",
+  "claims": {
+    "capacity": false,
+    "client_slo": false,
+    "goodput": false,
+    "asynchronous": false,
+    "fast_route_speedup": false,
+    "latency_gain_verdict": false
+  },
+  "closeout_script": {
+    "path": "/private/tmp/llm-mojo-admission-20261009/admission_closeout.py",
+    "bytes": 29193,
+    "sha256": "13b6d9a327deea6700a5d95a41d32233adc7829ebc1cd8fd0ec8326c7b279ac1"
+  },
+  "replay_helper_sha256": "6f19251f122cf49ffb787ac83e55edb30171956b86d82eb154256ef3a934eee7",
+  "command": [
+    "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python3",
+    "/private/tmp/llm-mojo-admission-20261009/admission_closeout.py",
+    "--repo",
+    "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+    "--build",
+    "/private/tmp/llm-mojo-admission-20261009/build",
+    "--source-commit",
+    "b81ea6c7e5a052d73ef3ee51c9d0cbd531672e5d"
+  ]
+}

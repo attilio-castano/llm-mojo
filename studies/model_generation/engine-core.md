@@ -3,10 +3,12 @@
 Implementation authorized on 2026-10-08 from baseline
 `cb2416abf3c9fbb19c460fa99709d93eeabba97e` on `codex/engine-core`.
 **Status: synchronous core and bounded load studies validated.** Mixed execution,
-request lifecycle, KV-pressure replay and optional fitted budgeting are implemented.
-Asynchronous LLM stepping remains open on the locked runtime. Measurements below
-bind clean implementation commit `b18563b`; the final follow-up adds acceptance
-tests, archive-file replay and retained evidence without changing production Mojo.
+request lifecycle, KV-pressure replay, optional fitted budgeting and optional
+lifetime-reservation admission are implemented. Asynchronous LLM stepping remains
+open on the locked runtime. The original study binds clean implementation
+`b18563b`; its final follow-up added acceptance tests and retained evidence.
+The [admission successor](#lifetime-reservation-admission-bounded-successor-study)
+binds `b81ea6c` and removes replay on both frozen pressure traces.
 The [serving plan](../../docs/serving-plan.md) defines the architecture;
 [experimental method](../../docs/experiments.md#serving-measurement-contract)
 defines retention and paired comparisons.
@@ -369,9 +371,10 @@ with 40 blocks. Every request fits alone; their combined working set does not.
 All four blocks have the same preemption and work counts. Concurrent arms are
 slower under the 5% noise floor. History retention and replay establish finite
 progress and exactly-once delivery, but repeated admission/eviction creates
-thrashing. Chunked replay computes 6.78 times the serial token work. Memory-aware
-admission and reducing repeated preemption are concrete follow-up questions;
-pressure correctness is not a throughput result.
+thrashing. Chunked replay computes 6.78 times the serial token work. This result
+motivated the [lifetime-reservation successor](#lifetime-reservation-admission-bounded-successor-study)
+below. These historical measurements remain unchanged; the successor uses a
+fresh same-build incremental control.
 
 ### Fitted execution budget
 
@@ -452,9 +455,9 @@ uv run --locked python -m llm_mojo.benchmarks.engine_budget replay \
 
 Replayed summaries equal the summaries retained inside the archives. Full derived
 request-summary files are generated locally and ignored by Git; the compact
-results card remains readable evidence. The results favor studying
-memory-aware admission, repeated preemption and cost-model variability before
-choosing a universal policy. Multi-prefill steps, a measured Fast runner, prefix
+results card remains readable evidence. The admission successor below addresses
+repeated preemption. Cost-model variability and the cost of reserving maximum
+output capacity remain study questions. Multi-prefill steps, a measured Fast runner, prefix
 caching and frontend integration remain separate work. The asynchronous gate
 below is still open for LLM stepping.
 
@@ -508,8 +511,116 @@ preemptions. Report all four blocks' makespan, throughput, TTFT, end-to-end
 latency and p95/p99 token gaps. Apply the existing paired verdict only to
 declared offline makespan; retain online distributions without a capacity or
 client-SLO claim. Timing gains are hypotheses: reservation can defer admission
-and increase TTFT even when it removes replay. Keep the mode optional unless
-the measured domain supports promotion.
+and increase TTFT even when it removes replay. The results below retain the
+mode as an optional policy.
+
+### Validation and retained results
+
+All four collections use one clean `b81ea6c` binary on Apple M4 Pro/Metal,
+Mojo 1.0.0 and MAX 26.5.0. The [result card](engine-admission-results.json)
+binds source blobs, locked dependencies, binary and asset hashes, device,
+conditions and every block's metrics. All 48 natural-greedy runs finish eight
+requests, deliver 256 tokens and return the complete pool. Control, self-control
+and reserved histories agree exactly within every collection. All 16 reserved
+runs compute the necessary 2,424 rows with zero preemptions. Every offline
+pressure control and self-control computes 16,432 rows with 57 preemptions.
+
+The [validation manifest](engine-admission-validation.json) and
+[lossless archive](engine-admission-validation.json.gz) retain the completed
+`uv run --locked llm-mojo validate` invocation: 316 Python tests, 31 native test
+files in 32 invocations, frozen oracle anchors and route smokes. Its 26 native
+engine tests cover reservation arithmetic, FIFO blocking, watermarks, rejection
+atomicity, unused-block cleanup, all terminal paths and 192 finite-arrival cases.
+Source hashes before and after validation match the clean measurement build.
+Separate full-checkpoint ordinary and device-sync acceptance runs preserve
+natural greedy histories, release future blocks after partial-prefill abort,
+and release all requests after an injected nonfinite head fault. Prepared assets
+remain unchanged. Omitted and explicit incremental selectors produce identical
+records after the explicit selector header is removed.
+
+The tables report medians of four block-level metrics. Each block's TTFT,
+end-to-end and TPOT quantiles use eight requests; token-gap quantiles use 248
+intervals with linear interpolation. Online results and latency differences
+are descriptive. Offline makespan uses the declared paired rule and a 5% noise
+floor; adequate-capacity timing is inconclusive, while pressure passes faster
+in all four blocks.
+
+| Trace and pool | Incremental tokens/s | Reserved tokens/s | Incremental / reserved preemptions | Incremental / reserved computed rows | Reserved/control makespan, median | Verdict |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| [Offline, 128 blocks](engine-admission-offline.json.gz) | 166.3 | 167.0 | 0 / 0 | 2,424 / 2,424 | 0.99919 | Inconclusive |
+| [Online, 128 blocks](engine-admission-online.json.gz) | 83.2 | 83.5 | 0 / 0 | 2,424 / 2,424 | 0.99756 | Distribution only |
+| [Offline, 40 blocks](engine-admission-pressure.json.gz) | 31.7 | 123.7 | 57 / 0 | 16,432 / 2,424 | 0.25615 | Faster |
+| [Online, 40 blocks](engine-admission-online-pressure.json.gz) | 28.9 | 83.2 | 44 / 0 | 16,246 / 2,424 | 0.34682 | Distribution only |
+
+Online pressure has 44 incremental preemptions in every run. Computed rows
+vary from 16,245 to 16,248 across controls and self-controls because arrivals
+are applied at measured step boundaries; the table shows the control median.
+
+Offline pressure makespan ratios by block are 0.25165, 0.25614, 0.25616 and
+0.25624: a 74.4% median reduction. Removing replay reduces computed rows by
+85.2% and raises aggregate throughput about 3.9 times. This comparison uses
+the fresh incremental control, rather than the older 27.9 tokens/s measurement.
+
+| Trace and admission | TTFT p50/p95/p99, ms | End-to-end p50/p95/p99, ms | TPOT p50, ms | Token gap p95/p99, ms |
+| --- | ---: | ---: | ---: | ---: |
+| Offline 128, incremental | 409.4 / 1,198.5 / 1,208.7 | 1,460.2 / 1,536.2 / 1,538.5 | 33.9 | 136.8 / 172.2 |
+| Offline 128, reserved | 407.4 / 1,195.4 / 1,205.6 | 1,457.4 / 1,530.2 / 1,532.7 | 33.9 | 136.7 / 172.1 |
+| Online 128, incremental | 119.0 / 489.8 / 584.5 | 680.8 / 1,142.3 / 1,144.6 | 10.3 | 117.7 / 163.3 |
+| Online 128, reserved | 118.3 / 491.2 / 585.7 | 679.2 / 1,149.0 / 1,153.3 | 10.7 | 117.7 / 163.3 |
+| Offline 40, incremental | 407.3 / 7,775.7 / 7,784.8 | 4,102.9 / 8,074.5 / 8,077.3 | 110.1 | 119.3 / 136.0 |
+| Offline 40, reserved | 407.3 / 1,772.1 / 1,781.3 | 813.7 / 2,065.2 / 2,068.4 | 13.2 | 32.7 / 127.1 |
+| Online 40, incremental | 206.2 / 5,950.3 / 5,965.1 | 4,114.2 / 6,995.4 / 7,308.0 | 33.3 | 136.1 / 136.2 |
+| Online 40, reserved | 119.4 / 657.2 / 822.6 | 497.3 / 949.2 / 1,103.9 | 10.2 | 13.1 / 92.6 |
+
+Schedule/build telemetry measures host preparation. Median total preparation
+falls from 0.551 to 0.270 ms in offline pressure and from 0.591 to 0.345 ms in
+online pressure; the result card retains per-step p95 and every block. Upload
+of complete reserved tables remains inside `execute_ns`, together with GPU
+submission, synchronization and selected-token readback. These measurements do
+not isolate metadata upload or GPU stage time.
+
+Reservation solves replay thrashing for these traces, but it reserves declared
+maximum output capacity even when a request later stops early. FIFO also delays
+younger requests behind a large waiter. Adequate-capacity online tail TTFT and
+end-to-end metrics are slightly higher in this sample, without a declared
+latency verdict. Incremental admission therefore remains the default; reservation
+is an explicit choice for bounded workloads under pressure. A wider sweep of
+output limits, early stops and arrival rates is the next evidence boundary.
+No client SLO, goodput, target capacity, Fast-route improvement or asynchronous
+stepping claim follows from this study.
+
+### Reproduce the admission evidence
+
+The [benchmark commands](../../src/llm_mojo/benchmarks/README.md#engine-token-traces)
+build and collect the optional same-binary pair. Regenerate each retained
+summary without weights or a GPU:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output studies/model_generation/engine-admission-offline.json.gz
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output studies/model_generation/engine-admission-online.json.gz
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output studies/model_generation/engine-admission-pressure.json.gz
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output studies/model_generation/engine-admission-online-pressure.json.gz
+```
+
+The validation archive's `files` entries retain complete UTF-8 text with byte
+counts and SHA256 hashes, including `intent.json`, the closeout script and its
+successful command log. Restore those files to an external directory after
+checking the compressed/uncompressed hashes in the validation manifest and
+each entry's bytes/hash. With the bundle restored to `/private/tmp/admission-evidence`,
+regenerate the card and tables independently:
+
+```sh
+uv run --locked python /private/tmp/admission-evidence/reproduction/admission_closeout.py \
+  --root /private/tmp/admission-replay --retained-dir studies/model_generation \
+  --intent /private/tmp/admission-evidence/intent.json \
+  --live-receipt studies/model_generation/engine-admission-results.json
+```
+
+Retained replay verifies committed source blobs, archive identities, raw records,
+all work/history/drain gates and exact derived metrics. It uses the original
+live receipt for physical file checks, without requiring the original binary
+or checkpoint to remain installed. Binaries, weights and oracle arrays are
+excluded from the validation bundle.
 
 ## Metadata preparation gate
 
