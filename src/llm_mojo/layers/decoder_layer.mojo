@@ -8,12 +8,13 @@ depend on S.
 """
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.collections import InlineArray
+from std.collections import Array
 from llm_mojo.layers.attention_sublayer import (
     AttentionWeights, AttentionCache, AttentionWorkspace,
     _validate_sublayer, enqueue_attention_sublayer,
     enqueue_attention_sublayer_integrated, enqueue_attention_sublayer_integrated_paged,
     enqueue_fused_decode_qkv_paged,
+    enqueue_step_qkv_paged,
 )
 from llm_mojo.kernels.attention_decode import enqueue_paged_attention_g32_apple_gpu
 from llm_mojo.kernels.paged_kv import validate_paged_pool
@@ -32,6 +33,7 @@ comptime DECODER_CONSISTENT = 20  # FP32 G32 attention and rowwise projections a
 comptime DECODER_CONSISTENT_MMA = 21  # G32 attention with 8x16 projections and MLP mapping 7 at every row count
 comptime DECODER_CONSISTENT_REUSE4 = 22  # G32 attention; each weight reused across four rowwise reductions
 comptime DECODER_FUSED_DECODE = 26  # decode composition: enqueue_decode_batch_layer, one row per sequence
+comptime DECODER_MIXED = 27  # reference step: leading singletons and at most one multi-row tail
 
 
 def decoder_mappings(configuration: Int, rows: Int) raises -> SIMD[DType.int64, 4]:
@@ -125,7 +127,7 @@ def _decoder_checks[XL: TensorLayout](
     var n = a.max_rows
     var k = aw.kv_heads * aw.head_dim
     # Fixed stack storage. Entries 0..22 are writable; 23..33 are read-only.
-    var regions = InlineArray[SIMD[DType.uint64, 2], 34](uninitialized=True)
+    var regions = Array[SIMD[DType.uint64, 2], 34](uninitialized=True)
     regions[0] = key_region
     regions[1] = value_region
     regions[2] = _region(a.normalized, n * h)
@@ -255,7 +257,7 @@ def _decode_batch_preflight[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, SL: 
     storage: DeviceBuffer[DType.bfloat16],
     positions: TileTensor[DType.int32, SL, MutAnyOrigin],
     tables: TileTensor[DType.int32, TL, MutAnyOrigin],
-    layer: Int, layers: Int, block_size: Int,
+    layer: Int, layers: Int, block_size: Int, table_sequences: Int = 0,
 ) raises:
     comptime assert positions.flat_rank == 1 and tables.flat_rank == 2
     comptime HIDDEN = QUERY_HEADS * HEAD_DIM
@@ -269,11 +271,12 @@ def _decode_batch_preflight[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, SL: 
             or attention.kv_heads != KV_HEADS or attention.head_dim != HEAD_DIM
             or mlp.hidden != HIDDEN or mlp.intermediate != i):
         raise Error("decode composition dimensions disagree with the layer")
-    if s < 1 or Int(tables.dim[0]()) != s or s > attention.max_rows or s > mlp.max_rows:
+    var sequences = s if table_sequences == 0 else table_sequences
+    if s < 1 or Int(tables.dim[0]()) != sequences or s > attention.max_rows or s > mlp.max_rows:
         raise Error("invalid decode composition rows, layer or pool geometry")
     validate_paged_pool[KV_HEADS, HEAD_DIM](len(storage), layer, layers, block_size, Int(tables.dim[1]()))
     # Fixed stack storage. Entries 0..11 are writable; 12..22 are read-only.
-    var regions = InlineArray[SIMD[DType.uint64, 2], 23](uninitialized=True)
+    var regions = Array[SIMD[DType.uint64, 2], 23](uninitialized=True)
     regions[0] = _region(storage, len(storage))
     regions[1] = _region(attention.normalized, s * HIDDEN)
     regions[2] = _region(attention.packed, s * (HIDDEN + 2 * WIDTH))
@@ -375,4 +378,112 @@ def enqueue_decode_batch_layer[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, P
         TileTensor(mlp.gated, row_major(s, i)))
     enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, TileTensor(mlp.gated, row_major(s, i)),
         TileTensor(mw.down, row_major(HIDDEN, i)), TileTensor(mlp.down, row_major(s, HIDDEN)))
+    return launches
+
+
+def validate_mixed_layer[
+    QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int,
+    SL: TensorLayout, WL: TensorLayout, TL: TensorLayout,
+](
+    ctx: DeviceContext, aw: AttentionWeights, attention: AttentionWorkspace,
+    mw: MLPWeights, mlp: MLPWorkspace, x: DeviceBuffer[DType.bfloat16],
+    storage: DeviceBuffer[DType.bfloat16],
+    positions: TileTensor[DType.int32, SL, MutAnyOrigin],
+    slot_mapping: TileTensor[DType.int32, WL, MutAnyOrigin],
+    tables: TileTensor[DType.int32, TL, MutAnyOrigin],
+    decode_count: Int, layer: Int, layers: Int, block_size: Int,
+) raises:
+    """Preflight N rows: D leading singletons and at most one multi-row tail.
+
+    D describes row shape, including a one-token prefill remainder. The caller
+    validates every position, physical slot and table entry against StepBatch
+    and the pool's written counts before this geometry-only check.
+    """
+    comptime assert positions.flat_rank == 1 and slot_mapping.flat_rank == 1 and tables.flat_rank == 2
+    var rows = Int(positions.dim[0]())
+    var sequences = Int(tables.dim[0]())
+    var tail = rows - decode_count
+    if (rows < 1 or decode_count < 0 or decode_count > rows or tail == 1
+            or sequences != decode_count + (1 if tail > 0 else 0)
+            or Int(slot_mapping.dim[0]()) != rows):
+        raise Error("a mixed layer needs leading singleton sequences and at most one multi-row tail")
+    var width = Int(tables.dim[1]())
+    if (Int(positions.layout.stride[0]().product()) != 1
+            or Int(slot_mapping.layout.stride[0]().product()) != 1
+            or Int(tables.layout.stride[0]().product()) != width
+            or Int(tables.layout.stride[1]().product()) != 1):
+        raise Error("mixed step metadata must be contiguous")
+    _decode_batch_preflight[QUERY_HEADS, KV_HEADS, HEAD_DIM](ctx, aw, attention, mw, mlp, x, storage,
+        positions, tables, layer, layers, block_size, sequences)
+
+
+def enqueue_mixed_layer[
+    QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, PROJECTION: Int, HEAD_MAJOR: Bool,
+    SL: TensorLayout, WL: TensorLayout, TL: TensorLayout,
+](
+    ctx: DeviceContext, mut aw: AttentionWeights, mut attention: AttentionWorkspace,
+    mut mw: MLPWeights, mut mlp: MLPWorkspace, mut x: DeviceBuffer[DType.bfloat16],
+    mut storage: DeviceBuffer[DType.bfloat16],
+    positions: TileTensor[DType.int32, SL, MutAnyOrigin],
+    slot_mapping: TileTensor[DType.int32, WL, MutAnyOrigin],
+    tables: TileTensor[DType.int32, TL, MutAnyOrigin],
+    decode_count: Int, layer: Int, layers: Int, block_size: Int, input_normalized: Bool,
+) raises -> Int:
+    """Reference mixed step with shared token operations and G32 attention.
+
+    Every N-row projection uses PROJECTION. QKV postprocessing scatters every
+    row through slot_mapping. Attention runs once for D singleton rows and once
+    for the optional P-row tail, each with the existing G32 arithmetic. The
+    caller adds mlp.down to attention.output with the next or final norm, just
+    as for the decode composition. No allocation, upload or synchronization.
+    """
+    validate_mixed_layer[QUERY_HEADS, KV_HEADS, HEAD_DIM](ctx, aw, attention, mw, mlp, x, storage,
+        positions, slot_mapping, tables, decode_count, layer, layers, block_size)
+    comptime HIDDEN = QUERY_HEADS * HEAD_DIM
+    comptime WIDTH = KV_HEADS * HEAD_DIM
+    comptime PACKED = HIDDEN + 2 * WIDTH
+    var rows = Int(positions.dim[0]())
+    var tail = rows - decode_count
+    var width = Int(tables.dim[1]())
+    var i = mw.intermediate
+    var launches = 8
+    var normal = TileTensor(attention.normalized, row_major(rows, HIDDEN))
+    if not input_normalized:
+        enqueue_rms_norm_apple_gpu(ctx, TileTensor(x, row_major(rows, HIDDEN)), TileTensor(aw.norm, row_major(HIDDEN)), normal)
+        launches += 1
+    enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, normal, TileTensor(aw.qkv, row_major(PACKED, HIDDEN)),
+        TileTensor(aw.bias, row_major(PACKED)), TileTensor(attention.packed, row_major(rows, PACKED)))
+    enqueue_step_qkv_paged[QUERY_HEADS, KV_HEADS, HEAD_DIM, HEAD_MAJOR](ctx, attention, storage,
+        positions, slot_mapping, layer, layers, block_size)
+    var pool = TileTensor(storage, row_major(len(storage)))
+    if decode_count > 0:
+        enqueue_paged_attention_g32_apple_gpu[QUERY_HEADS, KV_HEADS, HEAD_DIM, HEAD_MAJOR](ctx,
+            TileTensor(attention.query, row_major(decode_count, QUERY_HEADS, HEAD_DIM)), pool,
+            TileTensor(attention.attention, row_major(decode_count, QUERY_HEADS, HEAD_DIM)),
+            TileTensor(positions.ptr, row_major(decode_count)), TileTensor(tables.ptr, row_major(decode_count, width)),
+            1, layer, layers, block_size)
+        launches += 1
+    if tail > 0:
+        enqueue_paged_attention_g32_apple_gpu[QUERY_HEADS, KV_HEADS, HEAD_DIM, HEAD_MAJOR](ctx,
+            TileTensor(attention.query.unsafe_ptr().unsafe_offset(decode_count * HIDDEN), row_major(tail, QUERY_HEADS, HEAD_DIM)),
+            pool,
+            TileTensor(attention.attention.unsafe_ptr().unsafe_offset(decode_count * HIDDEN), row_major(tail, QUERY_HEADS, HEAD_DIM)),
+            TileTensor(positions.ptr.unsafe_offset(decode_count), row_major(tail)),
+            TileTensor(tables.ptr.unsafe_offset(decode_count * width), row_major(1, width)),
+            tail, layer, layers, block_size)
+        launches += 1
+    enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, TileTensor(attention.attention, row_major(rows, HIDDEN)),
+        TileTensor(aw.output, row_major(HIDDEN, HIDDEN)), TileTensor(attention.projected, row_major(rows, HIDDEN)))
+    enqueue_residual_norm[HIDDEN](ctx, TileTensor(x, row_major(rows, HIDDEN)),
+        TileTensor(attention.projected, row_major(rows, HIDDEN)), TileTensor(mw.norm, row_major(HIDDEN)),
+        TileTensor(attention.output, row_major(rows, HIDDEN)), TileTensor(mlp.normalized, row_major(rows, HIDDEN)))
+    var mlp_normal = TileTensor(mlp.normalized, row_major(rows, HIDDEN))
+    enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, mlp_normal, TileTensor(mw.gate, row_major(i, HIDDEN)),
+        TileTensor(mlp.gate, row_major(rows, i)))
+    enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, mlp_normal, TileTensor(mw.up, row_major(i, HIDDEN)),
+        TileTensor(mlp.up, row_major(rows, i)))
+    enqueue_silu_multiply_apple_gpu(ctx, TileTensor(mlp.gate, row_major(rows, i)), TileTensor(mlp.up, row_major(rows, i)),
+        TileTensor(mlp.gated, row_major(rows, i)))
+    enqueue_linear_decode_rows_apple_gpu[PROJECTION](ctx, TileTensor(mlp.gated, row_major(rows, i)),
+        TileTensor(mw.down, row_major(HIDDEN, i)), TileTensor(mlp.down, row_major(rows, HIDDEN)))
     return launches

@@ -21,14 +21,15 @@ def report_paths(report):
     return sidecar
 
 
-def prepare_launch(config, command):
+def prepare_launch(config, command, native_command=None):
     w = config.workload
     sidecar = report_paths(w.report)
     if w.system_file is not None:
         Path(w.system_file).read_text(encoding='utf-8')
     prepared, _ = verify_prepared(Path(w.prepared))
     tables = ensure_prepared(download=False)
-    binary = ensure_binary(command, f'src/llm_mojo/cli/{command}_cli.mojo')
+    entry = native_command or command
+    binary = ensure_binary(entry, f'src/llm_mojo/cli/{entry}_cli.mojo')
     if sidecar is not None:
         from llm_mojo.configuration import resolved_dict
         with sidecar.open('x') as output:
@@ -38,11 +39,11 @@ def prepare_launch(config, command):
 
 
 def launch_chat(config):
-    binary, prepared, tables = prepare_launch(config, 'chat')
+    binary, prepared, tables = prepare_launch(config, 'chat', 'chat_engine' if config.workload.engine else None)
     w = config.workload
     # Preserve the foreground process group; Mojo consumes SIGINT synchronously.
     os.execv(binary, [str(binary), prepared, tables, str(w.max_new_tokens), str(w.chunk_rows),
-                     w.system_file or '', w.report or ''])
+                     w.system_file or '', w.report or '', *(['async'] if w.async_steps else [])])
 
 
 def launch_generate(config):

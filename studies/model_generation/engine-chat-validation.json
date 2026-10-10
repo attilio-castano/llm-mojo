@@ -1,0 +1,2077 @@
+{
+  "kind": "engine-chat-validation-evidence-v1",
+  "schema_version": 1,
+  "archive": "engine-chat-validation.json.gz",
+  "bytes": 2405212,
+  "sha256": "0051dbee3fe14001dbbfb2b25aece6474ed5ec6d8c21b950536f6960031e7d4b",
+  "uncompressed_bytes": 27934762,
+  "uncompressed_sha256": "27f637c7bf91a78d62d18ff7c0a5d8daa259276250fa7be6ecd89cdbb8afcf53",
+  "file_count": 344,
+  "files": [
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/campaign-after.json",
+      "name": "acceptance/campaign-after.json",
+      "bytes": 220388,
+      "sha256": "0750f93dc8fef36456d14e2aebe0e67f16054ca307f2e3c218ab7a3cc5ef555b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/campaign-before.json",
+      "name": "acceptance/campaign-before.json",
+      "bytes": 219958,
+      "sha256": "204cb28b817ef852155d0e1f01dcb08e41398651b422a1e08b35592f01128b4e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/campaign.json",
+      "name": "acceptance/campaign.json",
+      "bytes": 5907,
+      "sha256": "e9077bc67f37dd40435c6ed610bc8f2344d46c42160d2059becc117050727162"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/fault-semantic-check-after.json",
+      "name": "acceptance/fault-semantic-check-after.json",
+      "bytes": 220388,
+      "sha256": "0750f93dc8fef36456d14e2aebe0e67f16054ca307f2e3c218ab7a3cc5ef555b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/fault-semantic-check-before.json",
+      "name": "acceptance/fault-semantic-check-before.json",
+      "bytes": 220388,
+      "sha256": "0750f93dc8fef36456d14e2aebe0e67f16054ca307f2e3c218ab7a3cc5ef555b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/fault-semantic-check-execution.json",
+      "name": "acceptance/fault-semantic-check-execution.json",
+      "bytes": 3150,
+      "sha256": "5586a9c6adf6929ff1f5e494f6197a4d894f472b6765b5a805be04b213d2350b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/fault-semantic-check.log",
+      "name": "acceptance/fault-semantic-check.log",
+      "bytes": 380,
+      "sha256": "7bacf97f97c25c3057c9a383482ddb16e6b307dd640d234200187bf5c60f9ba1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/final-observation.json",
+      "name": "acceptance/final-observation.json",
+      "bytes": 219496,
+      "sha256": "24c962ff8f3fc57ea19e753aef999ff6ec47debb5bd8c1c0c1a862aa19a862b6"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/private-fault-build-after.json",
+      "name": "acceptance/private-fault-build-after.json",
+      "bytes": 220388,
+      "sha256": "0750f93dc8fef36456d14e2aebe0e67f16054ca307f2e3c218ab7a3cc5ef555b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/private-fault-build-before.json",
+      "name": "acceptance/private-fault-build-before.json",
+      "bytes": 220171,
+      "sha256": "7a8a88298106aab5b91e2c618d9658a7b5f03a44a4d3d987da951b2a7df680d1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/private-fault-build-execution.json",
+      "name": "acceptance/private-fault-build-execution.json",
+      "bytes": 2476,
+      "sha256": "7a37c3a70083a47f054c8c3eaa27fb33a88bd7e8bd13a0af0508b58b54b1adbd"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/private-fault-build.log",
+      "name": "acceptance/private-fault-build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/private-fault-native-after.json",
+      "name": "acceptance/private-fault-native-after.json",
+      "bytes": 220388,
+      "sha256": "0750f93dc8fef36456d14e2aebe0e67f16054ca307f2e3c218ab7a3cc5ef555b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/private-fault-native-before.json",
+      "name": "acceptance/private-fault-native-before.json",
+      "bytes": 220388,
+      "sha256": "0750f93dc8fef36456d14e2aebe0e67f16054ca307f2e3c218ab7a3cc5ef555b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/private-fault-native-execution.json",
+      "name": "acceptance/private-fault-native-execution.json",
+      "bytes": 2926,
+      "sha256": "6deff3a3537561c8eabb5c901f34ed59bc00067c0cb355c9c11393855a876656"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/private-fault-native.log",
+      "name": "acceptance/private-fault-native.log",
+      "bytes": 471,
+      "sha256": "ae64999d7771e5cf52514453b0d51fa532df85e857ce1b3c83b867ff2960f16a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/private-fault.tsv",
+      "name": "acceptance/private-fault.tsv",
+      "bytes": 1918,
+      "sha256": "8a827c78ae09d3700d0c14500da797e635440ef62456f041ff12686b485b49aa"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/reference-build-after.json",
+      "name": "acceptance/reference-build-after.json",
+      "bytes": 220171,
+      "sha256": "7a8a88298106aab5b91e2c618d9658a7b5f03a44a4d3d987da951b2a7df680d1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/reference-build-before.json",
+      "name": "acceptance/reference-build-before.json",
+      "bytes": 219958,
+      "sha256": "204cb28b817ef852155d0e1f01dcb08e41398651b422a1e08b35592f01128b4e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/reference-build-execution.json",
+      "name": "acceptance/reference-build-execution.json",
+      "bytes": 2431,
+      "sha256": "fe13da59bb6c91d7e73d4924855171dedb5ed1e37c3f1535670847d1c6c41a74"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/reference-build.log",
+      "name": "acceptance/reference-build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/reference-native-after.json",
+      "name": "acceptance/reference-native-after.json",
+      "bytes": 220388,
+      "sha256": "0750f93dc8fef36456d14e2aebe0e67f16054ca307f2e3c218ab7a3cc5ef555b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/reference-native-before.json",
+      "name": "acceptance/reference-native-before.json",
+      "bytes": 220388,
+      "sha256": "0750f93dc8fef36456d14e2aebe0e67f16054ca307f2e3c218ab7a3cc5ef555b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/reference-native-execution.json",
+      "name": "acceptance/reference-native-execution.json",
+      "bytes": 2527,
+      "sha256": "9565ae93fe537f679ed4091ec0f13b909d59dfa09b1f3f9c19413a7ea11627bb"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/reference-native.log",
+      "name": "acceptance/reference-native.log",
+      "bytes": 680,
+      "sha256": "9ca6e1228ce18a675f2c85139d9ee45a18982d26cb4ebc90585917549d18d850"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/reference-semantic-check-after.json",
+      "name": "acceptance/reference-semantic-check-after.json",
+      "bytes": 220388,
+      "sha256": "0750f93dc8fef36456d14e2aebe0e67f16054ca307f2e3c218ab7a3cc5ef555b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/reference-semantic-check-before.json",
+      "name": "acceptance/reference-semantic-check-before.json",
+      "bytes": 220388,
+      "sha256": "0750f93dc8fef36456d14e2aebe0e67f16054ca307f2e3c218ab7a3cc5ef555b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/reference-semantic-check-execution.json",
+      "name": "acceptance/reference-semantic-check-execution.json",
+      "bytes": 3222,
+      "sha256": "8962ebfb8a6052e3b8047b7e2b060a7d3f9181abc895142ac4474746e3641ec2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/reference-semantic-check.log",
+      "name": "acceptance/reference-semantic-check.log",
+      "bytes": 176,
+      "sha256": "7905a3ce860f056c820757da291d691189dfb5549c33eaba230df7d3522575ad"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/reference-token-comparisons.tsv",
+      "name": "acceptance/reference-token-comparisons.tsv",
+      "bytes": 5870,
+      "sha256": "9da9024f97bce9b1d64142f9d807bb367baf516ab6c4e473408820cbfa3b1d4a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/asset-manifests/0/manifest.json",
+      "name": "asset-manifests/0/manifest.json",
+      "bytes": 62387,
+      "sha256": "b950f5f16efab9cf7813fa2b8e0455032ad210ebdb19cbe851ab3156e8176192"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/asset-manifests/1/manifest.json",
+      "name": "asset-manifests/1/manifest.json",
+      "bytes": 3061,
+      "sha256": "5ecbe5babb4515f6466454b739e36b9f3e67fbcdf77b6af13f1d33b5dbbb44d5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/full-validation-final.log",
+      "name": "final-validation/command.log",
+      "bytes": 7205366,
+      "sha256": "bf1d78d002c9ceefb4814185c82d45348fb8997d857f2cdb4b916795fd6d8446"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/full-validation-final-execution.json",
+      "name": "final-validation/execution.json",
+      "bytes": 851,
+      "sha256": "423fc4518e20945c1a1a0edf0f4e2b1067b7e2e8dd9b9d18ff8e67250742bfa8"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/full-validation-final-source-after.json",
+      "name": "final-validation/source-after.json",
+      "bytes": 26917,
+      "sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/full-validation-final-source-before.json",
+      "name": "final-validation/source-before.json",
+      "bytes": 26917,
+      "sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/README.md",
+      "name": "helpers/README.md",
+      "bytes": 4125,
+      "sha256": "7d8b185a163f3f39c57f27b99c2a8f1ed6d890e470adc29176662ebc5ba126de"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/RETENTION.md",
+      "name": "helpers/RETENTION.md",
+      "bytes": 5670,
+      "sha256": "5c0e2c2241f573101a5b21f2283800bd9918d9bb0d0bf13cba4af8f72f65a328"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/acceptance-preparation-receipt.json",
+      "name": "helpers/acceptance-preparation-receipt.json",
+      "bytes": 5081,
+      "sha256": "86c9c0b41f4b52e45e96712a3056671a9ce7b97948c7e14cc12767a241baf45d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/chat-private-fault.diff",
+      "name": "helpers/chat-private-fault.diff",
+      "bytes": 3781,
+      "sha256": "7e773c1b77bc1ec91c0e5af37bff1fc4890ee72a22944ed7e40c9bf520a9356a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/chat_engine_cli_private_fault.mojo",
+      "name": "helpers/chat_engine_cli_private_fault.mojo",
+      "bytes": 10198,
+      "sha256": "205e029a570d10259678dd880922ba9f530b61658d5762e4464b0ba3a16d2292"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/chat_engine_cli_private_fault.mojo.before",
+      "name": "helpers/chat_engine_cli_private_fault.mojo.before",
+      "bytes": 7905,
+      "sha256": "ac93994bf45c77e353ff8e2c2b13b079ccb12a47866d0ab50d44c835ecd1d4c8"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/chat_reference_history_driver.mojo",
+      "name": "helpers/chat_reference_history_driver.mojo",
+      "bytes": 6395,
+      "sha256": "d81f6d57f5c9c27736d7bdecc3afb7cc384801d4de60894b1d7f1ee267e0d132"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/cpu-checks/checker-self-test.json",
+      "name": "helpers/cpu-checks/checker-self-test.json",
+      "bytes": 166,
+      "sha256": "1594c7f5da53cee6e1959da19e8ee6b68779d007f77b707890a879ffb87f71c8"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/cpu-checks/wrapper-mock-tests-locked-2-execution.json",
+      "name": "helpers/cpu-checks/wrapper-mock-tests-locked-2-execution.json",
+      "bytes": 1403,
+      "sha256": "742b553c5a04018d4b87bb1ccaf63a33b74c97fa013549472131b3fb915e70c4"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/cpu-checks/wrapper-mock-tests-locked-2.log",
+      "name": "helpers/cpu-checks/wrapper-mock-tests-locked-2.log",
+      "bytes": 2417,
+      "sha256": "fedf17b3ac1e29206d0f5a4e7b9baedbccbfc2212980268d0f9e17c34b9e764e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/cpu-checks/wrapper-mock-tests-locked-execution.json",
+      "name": "helpers/cpu-checks/wrapper-mock-tests-locked-execution.json",
+      "bytes": 1199,
+      "sha256": "ba818a59de62404f4f1a6ad819bb9d1291a1476cfbab7f97846941de9cf49f98"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/cpu-checks/wrapper-mock-tests-locked.log",
+      "name": "helpers/cpu-checks/wrapper-mock-tests-locked.log",
+      "bytes": 191,
+      "sha256": "6af56ce48a3f7a3369a52ea58e66bf32d5ad674fb34dcd6de032a7460ef272b9"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/cpu-checks/wrapper-mock-tests.log",
+      "name": "helpers/cpu-checks/wrapper-mock-tests.log",
+      "bytes": 2417,
+      "sha256": "fba8567a96db4cd215e357778b98ccc93d18b25ee1dc9a1d1eae71adf4251cf7"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/execution-wrapper-preparation.json",
+      "name": "helpers/execution-wrapper-preparation.json",
+      "bytes": 7388,
+      "sha256": "4ca24f6ef3526890227c45d6ac880960031cefd54870443fdd861bb8e0d1508e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/independent-wrapper-review.json",
+      "name": "helpers/independent-wrapper-review.json",
+      "bytes": 3488,
+      "sha256": "18aaa97bb36baafec10960e9a6d483ce2c602fade07ebac92a46a2e647c847b7"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/prepare_acceptance.py",
+      "name": "helpers/prepare_acceptance.py",
+      "bytes": 11775,
+      "sha256": "2d038b6d789a71020a864b6cb1863adcc8ae8e97cc0ee1e1cdf313ab10f85fde"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/private-fault-input.txt",
+      "name": "helpers/private-fault-input.txt",
+      "bytes": 51,
+      "sha256": "0cab10575b2fb5a7fba7799e4d16a96d3eea8e51709e2ee4090a61cc98661453"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/reference-history-cases.tsv",
+      "name": "helpers/reference-history-cases.tsv",
+      "bytes": 357,
+      "sha256": "1b61ac06f3ff77626dc945b8170dcfb57843aea96494956083ae295f30fcccfb"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/reference-regeneration-recipe.json",
+      "name": "helpers/reference-regeneration-recipe.json",
+      "bytes": 772,
+      "sha256": "cadc2acb9176b9f39b1c6155a55af676a70cff37479924175954ee1ebf4fa94d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/regenerate_reference_fixture.py",
+      "name": "helpers/regenerate_reference_fixture.py",
+      "bytes": 6029,
+      "sha256": "a7137d7397c4bb04c495988f5f2ef2bae893a4d2abf755ca532142f7d6116002"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/run_acceptance.py",
+      "name": "helpers/run_acceptance.py",
+      "bytes": 26407,
+      "sha256": "a0802adcd35228c72316c58b793e82209d8aa4611a4eecc854c0b4ec7dd2d6e2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/test_run_acceptance.py",
+      "name": "helpers/test_run_acceptance.py",
+      "bytes": 14094,
+      "sha256": "05c9562c02190b599d5f43c7c0614787d349cd146d8b8087701842d3c1d36dc0"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/helpers/validate_acceptance.py",
+      "name": "helpers/validate_acceptance.py",
+      "bytes": 7489,
+      "sha256": "a52dfb2a5cd67c16a691406bc7816cff114ce9e7ae480dfa4fbe987cd0e2d373"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/chat-terminal/basic.tsv",
+      "name": "provenance/chat-terminal/basic.tsv",
+      "bytes": 10949,
+      "sha256": "046739b16de6059f0573ac5f8cc544cf4710b6c9d80fdc578c474934aeacae78"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/chat-terminal/basic.txt",
+      "name": "provenance/chat-terminal/basic.txt",
+      "bytes": 473,
+      "sha256": "156b9fba9ca123236de0e6890538c9d7de847c233feff850e8400b4b655e72f1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/chat-terminal/interrupt.tsv",
+      "name": "provenance/chat-terminal/interrupt.tsv",
+      "bytes": 11842,
+      "sha256": "3e65eda76342d3488af563a59061bea2cb7bb1fdd9ca4732416526906a947a8f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/chat-terminal/interrupt.txt",
+      "name": "provenance/chat-terminal/interrupt.txt",
+      "bytes": 840,
+      "sha256": "089f79ed4a387ae107843e62d09c2f7177786c95dfba01426c608d7138ba912e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-chat-cli-build-command.log",
+      "name": "provenance/development-chat-cli-build-command.log",
+      "bytes": 631,
+      "sha256": "aeae545e3f7821a625bfdee9310dc7ef5a9098fb56fc310bce3b551eda9fa913"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-chat-cli-build-execution.json",
+      "name": "provenance/development-chat-cli-build-execution.json",
+      "bytes": 631,
+      "sha256": "aeae545e3f7821a625bfdee9310dc7ef5a9098fb56fc310bce3b551eda9fa913"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-chat-cli-build-source-after.json",
+      "name": "provenance/development-chat-cli-build-source-after.json",
+      "bytes": 26806,
+      "sha256": "b59bf7985f319c7495caf9c0e17126314a6e844c51cdde4e72348980a92a263e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-chat-cli-build-source-before.json",
+      "name": "provenance/development-chat-cli-build-source-before.json",
+      "bytes": 26806,
+      "sha256": "b59bf7985f319c7495caf9c0e17126314a6e844c51cdde4e72348980a92a263e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-chat-cli-build.log",
+      "name": "provenance/development-chat-cli-build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-chat-cpu-command.log",
+      "name": "provenance/development-chat-cpu-command.log",
+      "bytes": 558,
+      "sha256": "6e6109d21b5c4167c2c7f0b73ec077f3609b3cfa5603a42edaecc3181d2bfecd"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-chat-cpu-execution.json",
+      "name": "provenance/development-chat-cpu-execution.json",
+      "bytes": 558,
+      "sha256": "6e6109d21b5c4167c2c7f0b73ec077f3609b3cfa5603a42edaecc3181d2bfecd"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-chat-cpu-source-after.json",
+      "name": "provenance/development-chat-cpu-source-after.json",
+      "bytes": 26806,
+      "sha256": "b59bf7985f319c7495caf9c0e17126314a6e844c51cdde4e72348980a92a263e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-chat-cpu-source-before.json",
+      "name": "provenance/development-chat-cpu-source-before.json",
+      "bytes": 26806,
+      "sha256": "b59bf7985f319c7495caf9c0e17126314a6e844c51cdde4e72348980a92a263e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-chat-cpu.log",
+      "name": "provenance/development-chat-cpu.log",
+      "bytes": 104,
+      "sha256": "8c25c8ab96ad2abf095b7f6189cd884d00b4fc0c5d2980b871dfae7ac8b35178"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-chat-terminal-command.log",
+      "name": "provenance/development-chat-terminal-command.log",
+      "bytes": 841,
+      "sha256": "bda6c0282f4c6622334e2eba2aebd3ac68fd84e12ab771bf85c7033963e49df5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-chat-terminal-execution.json",
+      "name": "provenance/development-chat-terminal-execution.json",
+      "bytes": 841,
+      "sha256": "bda6c0282f4c6622334e2eba2aebd3ac68fd84e12ab771bf85c7033963e49df5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-chat-terminal-source-after.json",
+      "name": "provenance/development-chat-terminal-source-after.json",
+      "bytes": 26806,
+      "sha256": "b59bf7985f319c7495caf9c0e17126314a6e844c51cdde4e72348980a92a263e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-chat-terminal-source-before.json",
+      "name": "provenance/development-chat-terminal-source-before.json",
+      "bytes": 26806,
+      "sha256": "b59bf7985f319c7495caf9c0e17126314a6e844c51cdde4e72348980a92a263e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-chat-terminal.log",
+      "name": "provenance/development-chat-terminal.log",
+      "bytes": 125,
+      "sha256": "562756825e6c6830fb6b22025f76d378789e8e5fb7c25307c4a0188a76631f4b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-2-command.log",
+      "name": "provenance/development-engine-chat-2-command.log",
+      "bytes": 561,
+      "sha256": "69361c6993d31c26682d8baf19561b5c9848b441530b3c9a6a572703a63d51fd"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-2-execution.json",
+      "name": "provenance/development-engine-chat-2-execution.json",
+      "bytes": 561,
+      "sha256": "69361c6993d31c26682d8baf19561b5c9848b441530b3c9a6a572703a63d51fd"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-2-source-after.json",
+      "name": "provenance/development-engine-chat-2-source-after.json",
+      "bytes": 26806,
+      "sha256": "61839453957644f4ab499476205c215a1b4defc963a3ebe5614481a152353a3b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-2-source-before.json",
+      "name": "provenance/development-engine-chat-2-source-before.json",
+      "bytes": 26806,
+      "sha256": "61839453957644f4ab499476205c215a1b4defc963a3ebe5614481a152353a3b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-2.log",
+      "name": "provenance/development-engine-chat-2.log",
+      "bytes": 813,
+      "sha256": "09bccd5a4ef27e1ff04636a7a5ee47b851af74ec692f8ef766f5e791020abff2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-3-command.log",
+      "name": "provenance/development-engine-chat-3-command.log",
+      "bytes": 561,
+      "sha256": "f714aca787ad8fb4399e3a1700c274a585d1689162005f515b9d7b3748c831d0"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-3-execution.json",
+      "name": "provenance/development-engine-chat-3-execution.json",
+      "bytes": 561,
+      "sha256": "f714aca787ad8fb4399e3a1700c274a585d1689162005f515b9d7b3748c831d0"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-3-source-after.json",
+      "name": "provenance/development-engine-chat-3-source-after.json",
+      "bytes": 26806,
+      "sha256": "1502906e5ad74a3ddb7a55b81e63c6a3c34a9e189bf78948296da90d7870dc43"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-3-source-before.json",
+      "name": "provenance/development-engine-chat-3-source-before.json",
+      "bytes": 26806,
+      "sha256": "1502906e5ad74a3ddb7a55b81e63c6a3c34a9e189bf78948296da90d7870dc43"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-3.log",
+      "name": "provenance/development-engine-chat-3.log",
+      "bytes": 2315,
+      "sha256": "6f01303a60d11582db16abec7f8f81190c89870714dc0c3124d1a1e65a983e21"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-4-command.log",
+      "name": "provenance/development-engine-chat-4-command.log",
+      "bytes": 561,
+      "sha256": "f40c95f88d324381b470056252c3cc6517e5399569523d6945a2942ae9d5bfe1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-4-execution.json",
+      "name": "provenance/development-engine-chat-4-execution.json",
+      "bytes": 561,
+      "sha256": "f40c95f88d324381b470056252c3cc6517e5399569523d6945a2942ae9d5bfe1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-4-source-after.json",
+      "name": "provenance/development-engine-chat-4-source-after.json",
+      "bytes": 26806,
+      "sha256": "a6ec904816752cdd288a0d70ed1541f35d4a1f9b45b9b31ba3ce0c7889359395"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-4-source-before.json",
+      "name": "provenance/development-engine-chat-4-source-before.json",
+      "bytes": 26806,
+      "sha256": "a6ec904816752cdd288a0d70ed1541f35d4a1f9b45b9b31ba3ce0c7889359395"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-4.log",
+      "name": "provenance/development-engine-chat-4.log",
+      "bytes": 890,
+      "sha256": "2255f3e9ec36e89d4ecb89faac531457848c85c6f0dcf93fdf508f86d891aaed"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-5-command.log",
+      "name": "provenance/development-engine-chat-5-command.log",
+      "bytes": 564,
+      "sha256": "850dec6c749e57a3349b7edf9ff59ce9647b2a710f210964db249b688e2181ac"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-5-execution.json",
+      "name": "provenance/development-engine-chat-5-execution.json",
+      "bytes": 564,
+      "sha256": "850dec6c749e57a3349b7edf9ff59ce9647b2a710f210964db249b688e2181ac"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-5-source-after.json",
+      "name": "provenance/development-engine-chat-5-source-after.json",
+      "bytes": 26806,
+      "sha256": "1046a4dad4b2daa52658e35d29b6bf9dec16f07783ab3112cc737cd0f758bedf"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-5-source-before.json",
+      "name": "provenance/development-engine-chat-5-source-before.json",
+      "bytes": 26806,
+      "sha256": "1046a4dad4b2daa52658e35d29b6bf9dec16f07783ab3112cc737cd0f758bedf"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-5.log",
+      "name": "provenance/development-engine-chat-5.log",
+      "bytes": 902,
+      "sha256": "501427e6bb4be265afca5ec8b209dc5cffeb24fc89451ea0fd9e5e915e532d41"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-command.log",
+      "name": "provenance/development-engine-chat-command.log",
+      "bytes": 558,
+      "sha256": "a625b64d4542fc2ec1a2c451a835f8588eaa88c7c48ed5a7e5eda68801f3dcd1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-execution.json",
+      "name": "provenance/development-engine-chat-execution.json",
+      "bytes": 558,
+      "sha256": "a625b64d4542fc2ec1a2c451a835f8588eaa88c7c48ed5a7e5eda68801f3dcd1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-source-after.json",
+      "name": "provenance/development-engine-chat-source-after.json",
+      "bytes": 26806,
+      "sha256": "23599f7c55b32531560f9dbe43cdaf390d2d9f113740d83efb95b9f4bbb18d7e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat-source-before.json",
+      "name": "provenance/development-engine-chat-source-before.json",
+      "bytes": 26806,
+      "sha256": "23599f7c55b32531560f9dbe43cdaf390d2d9f113740d83efb95b9f4bbb18d7e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/development-engine-chat.log",
+      "name": "provenance/development-engine-chat.log",
+      "bytes": 363,
+      "sha256": "7e0addbdef8545c3c50d3e21650c147c3e03de07e4212c43e5ae5d78652c2727"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/full-validation-command.log",
+      "name": "provenance/full-validation-command.log",
+      "bytes": 838,
+      "sha256": "17b86470b653cf80ee23b225068ec265cf071ea59e43dcfef842a5a117d8dd70"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/full-validation-execution.json",
+      "name": "provenance/full-validation-execution.json",
+      "bytes": 838,
+      "sha256": "17b86470b653cf80ee23b225068ec265cf071ea59e43dcfef842a5a117d8dd70"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/full-validation-final-command.log",
+      "name": "provenance/full-validation-final-command.log",
+      "bytes": 851,
+      "sha256": "423fc4518e20945c1a1a0edf0f4e2b1067b7e2e8dd9b9d18ff8e67250742bfa8"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/full-validation-final-execution.json",
+      "name": "provenance/full-validation-final-execution.json",
+      "bytes": 851,
+      "sha256": "423fc4518e20945c1a1a0edf0f4e2b1067b7e2e8dd9b9d18ff8e67250742bfa8"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/full-validation-final-source-after.json",
+      "name": "provenance/full-validation-final-source-after.json",
+      "bytes": 26917,
+      "sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/full-validation-final-source-before.json",
+      "name": "provenance/full-validation-final-source-before.json",
+      "bytes": 26917,
+      "sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/full-validation-final.log",
+      "name": "provenance/full-validation-final.log",
+      "bytes": 7205366,
+      "sha256": "bf1d78d002c9ceefb4814185c82d45348fb8997d857f2cdb4b916795fd6d8446"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/full-validation-source-after.json",
+      "name": "provenance/full-validation-source-after.json",
+      "bytes": 26806,
+      "sha256": "b59bf7985f319c7495caf9c0e17126314a6e844c51cdde4e72348980a92a263e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/full-validation-source-before.json",
+      "name": "provenance/full-validation-source-before.json",
+      "bytes": 26806,
+      "sha256": "b59bf7985f319c7495caf9c0e17126314a6e844c51cdde4e72348980a92a263e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/full-validation.log",
+      "name": "provenance/full-validation.log",
+      "bytes": 4946503,
+      "sha256": "5cafb6584a38db8b399dc94be2585e33e3e30ed74d08484cd5ab280b24bbfc70"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/provenance/run_check.py",
+      "name": "provenance/run_check.py",
+      "bytes": 2616,
+      "sha256": "a1a63548c4ca122b94b104e89251551809fc16d8fc5955514b3179101773bdc1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/README.md",
+      "name": "retention-helpers/README.md",
+      "bytes": 3861,
+      "sha256": "cbe4199cacaeb52709949089d275ea54708d01ad638636e6183de40b508a94cb"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/bundle_validation.py",
+      "name": "retention-helpers/bundle_validation.py",
+      "bytes": 5846,
+      "sha256": "13535e5976e1a9d2f81ff9e6a294cb8c24d6c089e255244e4b8e0db11dab51c2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/independent-retention-review.json",
+      "name": "retention-helpers/independent-retention-review.json",
+      "bytes": 3318,
+      "sha256": "3eee0ea511e91a2d01cf44a9aeda5271e207b306b6b251bd3aadac51d2f6b967"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/retain_chat.py",
+      "name": "retention-helpers/retain_chat.py",
+      "bytes": 32493,
+      "sha256": "45c67f96d85b61c0bcab56d42ff3ba2c235c48cb65ddfddefbb97c9c0d6da1fb"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/retention-cpu-tests-execution.json",
+      "name": "retention-helpers/retention-cpu-tests-execution.json",
+      "bytes": 1929,
+      "sha256": "cd2fa5bd325502202e0168f907bb44b50f7bbe2f51d08a104bbe9fdc6edf9407"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/retention-cpu-tests-source-after.json",
+      "name": "retention-helpers/retention-cpu-tests-source-after.json",
+      "bytes": 26917,
+      "sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/retention-cpu-tests-source-before.json",
+      "name": "retention-helpers/retention-cpu-tests-source-before.json",
+      "bytes": 26917,
+      "sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/retention-cpu-tests.log",
+      "name": "retention-helpers/retention-cpu-tests.log",
+      "bytes": 1691,
+      "sha256": "5d8cc72e8cab6c121f04e14132b377d26668baae2503c4f44cda5acb62e3be59"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/retention-preparation.json",
+      "name": "retention-helpers/retention-preparation.json",
+      "bytes": 4094,
+      "sha256": "f0de0767d48683339da57deb6d027142093f802519ba6904f2a18dbfb4bd1d88"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/test_retain_chat.py",
+      "name": "retention-helpers/test_retain_chat.py",
+      "bytes": 19553,
+      "sha256": "80a4e0b9569ebb7a1db17943c06542750f71d9eff7650f3669f53f2c60705850"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/pyproject.toml",
+      "name": "source/pyproject.toml",
+      "bytes": 711,
+      "sha256": "a427ded05afd0cd285e214945d6acfbfe46e4c40436c38e6565152714794db7b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/__init__.mojo",
+      "name": "source/src/llm_mojo/__init__.mojo",
+      "bytes": 35,
+      "sha256": "54ca844ca97d5f13084dae07021cbe9535b95cf3414d5133daec18787507d905"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/__init__.py",
+      "name": "source/src/llm_mojo/__init__.py",
+      "bytes": 73,
+      "sha256": "d45f08c560f8a501262a3c17663244a1a74fb76658d746e99a430dbc1f9935b7"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/_repository.py",
+      "name": "source/src/llm_mojo/_repository.py",
+      "bytes": 801,
+      "sha256": "4f202ce0ef30d29f58240d1b089ee8331827b6403daf5e1f48d1f56da6d39cab"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/__init__.mojo",
+      "name": "source/src/llm_mojo/benchmarks/__init__.mojo",
+      "bytes": 68,
+      "sha256": "b8a8f32ace824dd687bc6b2f87afeb3180f7b5ac78684ecefd669201a1e9801c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/__init__.py",
+      "name": "source/src/llm_mojo/benchmarks/__init__.py",
+      "bytes": 72,
+      "sha256": "11fddc93cafb04100810b633bfea5b41fb2ba60a48383c9fecb3fdd1ae9cd00c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/analyze_trace.py",
+      "name": "source/src/llm_mojo/benchmarks/analyze_trace.py",
+      "bytes": 40643,
+      "sha256": "00ac0b73b851052c3fa791c36dcc918a08eed73a6975a54c1fff984f194e7c1b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/attention_contract.py",
+      "name": "source/src/llm_mojo/benchmarks/attention_contract.py",
+      "bytes": 1553,
+      "sha256": "31663c78f909fcd83506e69d495b2b13c4662055a9a76afc4dcfffa440dbd938"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/attention_decode.mojo",
+      "name": "source/src/llm_mojo/benchmarks/attention_decode.mojo",
+      "bytes": 10706,
+      "sha256": "91004ab06ae1e92b508fac5709e1fa2f90256a6709125518421319dcafe335dd"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/attention_decode_contract.py",
+      "name": "source/src/llm_mojo/benchmarks/attention_decode_contract.py",
+      "bytes": 2769,
+      "sha256": "36b34c75a5186931331d6ae9bab8da6e493e55f6c8a612614c26a6c613dbd201"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/attention_decode_support.mojo",
+      "name": "source/src/llm_mojo/benchmarks/attention_decode_support.mojo",
+      "bytes": 2542,
+      "sha256": "55ad60c4cbf1379adfb0575e840db8726d8d64103d6d973c20d71366c32a9968"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/attention_prefill.mojo",
+      "name": "source/src/llm_mojo/benchmarks/attention_prefill.mojo",
+      "bytes": 7959,
+      "sha256": "293de23d51dfc7d1b8b35095c6225aca0361f26325934dde76c8e5069c636672"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/attention_prefill_contract.py",
+      "name": "source/src/llm_mojo/benchmarks/attention_prefill_contract.py",
+      "bytes": 2294,
+      "sha256": "8cd0df325ea4cbab884b3205e50832a0dc289d1d18194375bdd9f90ef8ac2578"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/attention_prefill_ir.mojo",
+      "name": "source/src/llm_mojo/benchmarks/attention_prefill_ir.mojo",
+      "bytes": 1564,
+      "sha256": "5b33ebf3957b68fc960b0a45f1b5b60d67d72537b839b40fea7e8f4da5f1073e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/attention_prefill_support.mojo",
+      "name": "source/src/llm_mojo/benchmarks/attention_prefill_support.mojo",
+      "bytes": 5991,
+      "sha256": "fdc70fa268f740dde80534a3eaac3c09d09614deceaec504b12b8c5a9d2c54ca"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/attention_sublayer.mojo",
+      "name": "source/src/llm_mojo/benchmarks/attention_sublayer.mojo",
+      "bytes": 14170,
+      "sha256": "c38ce4c2320afed884d1c95f33b41b341c100b3bed7a463a7bd8b4b3ef34f3d6"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/attention_sublayer_contract.py",
+      "name": "source/src/llm_mojo/benchmarks/attention_sublayer_contract.py",
+      "bytes": 7582,
+      "sha256": "a0bca7364c6de60ea2a726d223c7f50b3ffe9613390f83329018a5bb73e4dc40"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/capture_trace.py",
+      "name": "source/src/llm_mojo/benchmarks/capture_trace.py",
+      "bytes": 25548,
+      "sha256": "38c69e2b85358e97999e5cf9de204353c10d7d50da3f0e9f2524448a5da7aad8"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/decoder_layer.mojo",
+      "name": "source/src/llm_mojo/benchmarks/decoder_layer.mojo",
+      "bytes": 8922,
+      "sha256": "76657a8201f470e95359dbb60063374225d207cb889fe82a23506087116d793b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/decoder_layer_contract.py",
+      "name": "source/src/llm_mojo/benchmarks/decoder_layer_contract.py",
+      "bytes": 46452,
+      "sha256": "9b9795fdd9b9323f0cca8433a091d00f3c7c721edeff6f2ba620a1facb8a3957"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/engine_budget.py",
+      "name": "source/src/llm_mojo/benchmarks/engine_budget.py",
+      "bytes": 60658,
+      "sha256": "68445c2fb36797c57b3ff02c0a22fd4370e018bbc1fc2efb1ad2c2e919e6cd4d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/engine_trace.mojo",
+      "name": "source/src/llm_mojo/benchmarks/engine_trace.mojo",
+      "bytes": 16586,
+      "sha256": "52ede6d32e491cc43d084d8de75e4a7aec3c4b9f607b693c2568e2ae90a3a97d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/environment.py",
+      "name": "source/src/llm_mojo/benchmarks/environment.py",
+      "bytes": 6211,
+      "sha256": "815e2f79a5189a7dcf5b97fc2c159fb38e5924e3d388ec2c37650b9a92beb48c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/metadata_probe.mojo",
+      "name": "source/src/llm_mojo/benchmarks/metadata_probe.mojo",
+      "bytes": 8188,
+      "sha256": "c032cb3095ecef63e5de19bf6c2bb9d75b00134bbcd253dd7179d105ab6c14df"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/mlp.mojo",
+      "name": "source/src/llm_mojo/benchmarks/mlp.mojo",
+      "bytes": 8860,
+      "sha256": "dc0690af5f73e6f5b876b8f5cd9dacca90f7d95bfc87c4e3c64e9d46f0754145"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/mlp_contract.py",
+      "name": "source/src/llm_mojo/benchmarks/mlp_contract.py",
+      "bytes": 5670,
+      "sha256": "d6d628df468484dd41f890ed0c27bc44df8b3971ce9e91ed0e9fa9a717822a3f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/model.mojo",
+      "name": "source/src/llm_mojo/benchmarks/model.mojo",
+      "bytes": 44892,
+      "sha256": "9f5511584e7535abb9d4e1c6ece824b84ed535b3fe1ec35967368999c75569aa"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/model_contract.py",
+      "name": "source/src/llm_mojo/benchmarks/model_contract.py",
+      "bytes": 36788,
+      "sha256": "1577fcb96317e73ab79c8868ca361adde572bca2c22da84202bb0a090aa8a1e5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/model_profile.py",
+      "name": "source/src/llm_mojo/benchmarks/model_profile.py",
+      "bytes": 258822,
+      "sha256": "036c62fbcf7228806bf037d0a0afcc780109c9027902737b5a756f1571832dcc"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/operations.mojo",
+      "name": "source/src/llm_mojo/benchmarks/operations.mojo",
+      "bytes": 11435,
+      "sha256": "2519d5fe757cda7076e474f9aba677dbe16a7137df7ba0cf68830eb8ecc2a9dd"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/plot.py",
+      "name": "source/src/llm_mojo/benchmarks/plot.py",
+      "bytes": 74249,
+      "sha256": "431447bf9beaa40cdea49aee0665520314549504370a819e839dafd801ec3b22"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/profile.py",
+      "name": "source/src/llm_mojo/benchmarks/profile.py",
+      "bytes": 8367,
+      "sha256": "db4a59b94cadaafd56cbbb495de18fb125616d8646e17506e2b3c5ac1b9341c1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/profile_summary.py",
+      "name": "source/src/llm_mojo/benchmarks/profile_summary.py",
+      "bytes": 13894,
+      "sha256": "76015047382bf017d5d767dede798da7dab61e5b222995ea7bf75170b6950a36"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/run.py",
+      "name": "source/src/llm_mojo/benchmarks/run.py",
+      "bytes": 17765,
+      "sha256": "4d270d1ff11f38dd33616b06e729d32b4333a89001d78af753ae4086be144dc5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/smoke.py",
+      "name": "source/src/llm_mojo/benchmarks/smoke.py",
+      "bytes": 13337,
+      "sha256": "111f6422e0e852fd11e8ac960ae4d0bd192c2435483af6c289c18c4cbdc56d08"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/study.py",
+      "name": "source/src/llm_mojo/benchmarks/study.py",
+      "bytes": 42398,
+      "sha256": "1b3c21f9dd4bafd8f9ca4f2751e2225a9cf0db32b72d7cbe2a7fa5556689b804"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/tokenizer.mojo",
+      "name": "source/src/llm_mojo/benchmarks/tokenizer.mojo",
+      "bytes": 5297,
+      "sha256": "cc80098f020652151d6f868344e117c5c79a79aed7fa74e2fe7e2d560270f1ea"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/benchmarks/tokenizer_contract.py",
+      "name": "source/src/llm_mojo/benchmarks/tokenizer_contract.py",
+      "bytes": 16172,
+      "sha256": "317d6386ed1e3df6d9aef66284432d6b157ba3dd91ba66759bd28ba9f07e57cc"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/cli/__init__.mojo",
+      "name": "source/src/llm_mojo/cli/__init__.mojo",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/cli/__init__.py",
+      "name": "source/src/llm_mojo/cli/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/cli/app.py",
+      "name": "source/src/llm_mojo/cli/app.py",
+      "bytes": 10889,
+      "sha256": "ce2c2f58aa7032867996a4db952e381675e537a0c249eef5775ddefe8552f004"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/cli/chat_cli.mojo",
+      "name": "source/src/llm_mojo/cli/chat_cli.mojo",
+      "bytes": 5981,
+      "sha256": "ce259e116ac9fb72befa1384bb37d5290a4aefa9a775f6b981e7dad6ef5e96bf"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/cli/chat_engine_cli.mojo",
+      "name": "source/src/llm_mojo/cli/chat_engine_cli.mojo",
+      "bytes": 7905,
+      "sha256": "ac93994bf45c77e353ff8e2c2b13b079ccb12a47866d0ab50d44c835ecd1d4c8"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/cli/generate_cli.mojo",
+      "name": "source/src/llm_mojo/cli/generate_cli.mojo",
+      "bytes": 5198,
+      "sha256": "2ed994666a49d428ed996287d5dce5fcd3ad17d06cb2131ff35b1d24c8001d1c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/cli/launch.py",
+      "name": "source/src/llm_mojo/cli/launch.py",
+      "bytes": 2676,
+      "sha256": "8980923e661297066d6435a869a677c0aa2665f2d0fb9e36b4e6df84d9b4733e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/cli/tokenizer_cli.mojo",
+      "name": "source/src/llm_mojo/cli/tokenizer_cli.mojo",
+      "bytes": 1254,
+      "sha256": "a9b5404bed33e2fb577c3d9cfc8bc1952fcee1d64c056d3cfa195526fb4480bc"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/configuration.py",
+      "name": "source/src/llm_mojo/configuration.py",
+      "bytes": 6731,
+      "sha256": "124c585d0a915ae682b38c412ef74d18c46f46a16443a67253b09c75c42a9579"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/decoder_validation.py",
+      "name": "source/src/llm_mojo/decoder_validation.py",
+      "bytes": 155,
+      "sha256": "61db7eb6252f99b5cba35eb63e8c807c378b1637dd9cdbd08d61fa562f104ce0"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/kernels/__init__.mojo",
+      "name": "source/src/llm_mojo/kernels/__init__.mojo",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/kernels/__init__.py",
+      "name": "source/src/llm_mojo/kernels/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/kernels/attention.mojo",
+      "name": "source/src/llm_mojo/kernels/attention.mojo",
+      "bytes": 19679,
+      "sha256": "3210f50d6850db60a6cacf4c30d860ca0b72177ad1c9b313c7ae7d92b79be973"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/kernels/attention_decode.mojo",
+      "name": "source/src/llm_mojo/kernels/attention_decode.mojo",
+      "bytes": 20434,
+      "sha256": "6b05604ca3a979a5f2d3bfdb30a14f9f107d8996a83a3139e90a9286104c820c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/kernels/attention_prefill.mojo",
+      "name": "source/src/llm_mojo/kernels/attention_prefill.mojo",
+      "bytes": 43854,
+      "sha256": "c320a4b45586d7766c60ba1c03b2cc70a292a2c13c6ed06a685cad5f75308e13"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/kernels/bf16_arithmetic.mojo",
+      "name": "source/src/llm_mojo/kernels/bf16_arithmetic.mojo",
+      "bytes": 3717,
+      "sha256": "e41319b3ea6239d3928ee49e2ec85944a9d328f983806e9dc44356cd757591be"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/kernels/linear.mojo",
+      "name": "source/src/llm_mojo/kernels/linear.mojo",
+      "bytes": 73758,
+      "sha256": "576ca76ac4df8192205fabfe0729ac22d9af204ce60a2a30d91f78a10442a320"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/kernels/paged_kv.mojo",
+      "name": "source/src/llm_mojo/kernels/paged_kv.mojo",
+      "bytes": 2393,
+      "sha256": "607d3fe8fb03460ea74aaf1f767fe34ac66ff954b76deb4ed57d0faedc91c7d1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/kernels/residual.mojo",
+      "name": "source/src/llm_mojo/kernels/residual.mojo",
+      "bytes": 3060,
+      "sha256": "c23ef599682d1d6f698c7fef4ba8f8c969dd815716a4160e8fcc774e0acc02da"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/kernels/residual_norm.mojo",
+      "name": "source/src/llm_mojo/kernels/residual_norm.mojo",
+      "bytes": 5949,
+      "sha256": "311531f0558eedd906f5e78ea85a93e5965c0b8da20f0591466ff1c6b8715534"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/kernels/rms_norm.mojo",
+      "name": "source/src/llm_mojo/kernels/rms_norm.mojo",
+      "bytes": 10690,
+      "sha256": "a555c33f86c6f893b780beab8033a9495ad62e502d0670753e7639850fba0f56"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/kernels/rope.mojo",
+      "name": "source/src/llm_mojo/kernels/rope.mojo",
+      "bytes": 9878,
+      "sha256": "12add6e982c6d1b500c1f346bf3733a9306acd1d15994fbaed8eb610904b289e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/kernels/swiglu.mojo",
+      "name": "source/src/llm_mojo/kernels/swiglu.mojo",
+      "bytes": 6880,
+      "sha256": "1cb48dde45aa91addab073b530cb1b0db309d118d03b5880cbeb98a2a54bcf01"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/kernels/token_selection.mojo",
+      "name": "source/src/llm_mojo/kernels/token_selection.mojo",
+      "bytes": 5558,
+      "sha256": "cac022c72d356a27c39515c0b23b4bbcde1fad59e3926bfd5a6922a57e48ce00"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/layers/__init__.mojo",
+      "name": "source/src/llm_mojo/layers/__init__.mojo",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/layers/__init__.py",
+      "name": "source/src/llm_mojo/layers/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/layers/attention_sublayer.mojo",
+      "name": "source/src/llm_mojo/layers/attention_sublayer.mojo",
+      "bytes": 46314,
+      "sha256": "e9954079c4744f93683174a58f6abbe61494572bf3d2d4be207499b2c321f938"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/layers/decoder_layer.mojo",
+      "name": "source/src/llm_mojo/layers/decoder_layer.mojo",
+      "bytes": 28923,
+      "sha256": "5a5a94b6221897e3a9164cbd836bd2df7960fbdab61acd085c7b5e5a3faaeae8"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/layers/decoder_policy.mojo",
+      "name": "source/src/llm_mojo/layers/decoder_policy.mojo",
+      "bytes": 3799,
+      "sha256": "7046baa0b2bfb372cb5beb8d1a503377a641ffdc200eb153c74d9496e9505ca8"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/layers/mlp.mojo",
+      "name": "source/src/llm_mojo/layers/mlp.mojo",
+      "bytes": 11348,
+      "sha256": "2976546a15ea87a2c6aec46458104cf44d113156c3786b74fbe03254677a23b5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/mlp_validation.py",
+      "name": "source/src/llm_mojo/mlp_validation.py",
+      "bytes": 147,
+      "sha256": "6aa7e9ebef5f8253dc0bd91abdaa08a79ffae759653a97a3d15f3202fc96ee89"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/model_validation.py",
+      "name": "source/src/llm_mojo/model_validation.py",
+      "bytes": 151,
+      "sha256": "0fa33d99e383d04f4bce0658af48249c1aede0cfaa60b72d2dfbac2ecb60d069"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/models/__init__.mojo",
+      "name": "source/src/llm_mojo/models/__init__.mojo",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/models/__init__.py",
+      "name": "source/src/llm_mojo/models/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/models/qwen2/__init__.mojo",
+      "name": "source/src/llm_mojo/models/qwen2/__init__.mojo",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/models/qwen2/__init__.py",
+      "name": "source/src/llm_mojo/models/qwen2/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/models/qwen2/assets.py",
+      "name": "source/src/llm_mojo/models/qwen2/assets.py",
+      "bytes": 18797,
+      "sha256": "3cb46aaefc7bc957dca8ff6c75693116ff42c06a63b0c95f2c896f017d2efffb"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/models/qwen2/chat.mojo",
+      "name": "source/src/llm_mojo/models/qwen2/chat.mojo",
+      "bytes": 6576,
+      "sha256": "c3ee1fc26772c301e1f7d081cba0c863bfd7be692439d41cdbc759f0aacd6691"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/models/qwen2/engine_chat.mojo",
+      "name": "source/src/llm_mojo/models/qwen2/engine_chat.mojo",
+      "bytes": 5486,
+      "sha256": "df0068d1a455e64eaec55df81ecf5f7f63fdd7ded5d411042a4c04cdc81fd798"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/models/qwen2/model.mojo",
+      "name": "source/src/llm_mojo/models/qwen2/model.mojo",
+      "bytes": 42614,
+      "sha256": "77c6e14b2a6b828f4bbd147e943e1b720afff462b3f3c5deb91b006e4347c8f5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/models/qwen2/plan.mojo",
+      "name": "source/src/llm_mojo/models/qwen2/plan.mojo",
+      "bytes": 7357,
+      "sha256": "44db03b890f88a26526b860a6d53287ed8d83d53c9509063cf5f738c56f6d44d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/models/qwen2/runner.mojo",
+      "name": "source/src/llm_mojo/models/qwen2/runner.mojo",
+      "bytes": 3629,
+      "sha256": "4463a3f3dd5d2eb189b3b12b140b5467eaf18c2119b07d8207111b10fa781ce1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/models/qwen2/tokenizer.mojo",
+      "name": "source/src/llm_mojo/models/qwen2/tokenizer.mojo",
+      "bytes": 22747,
+      "sha256": "50dfaebcc034e2dd584ac8b02fd3907504de5aa7b0150d869c5e4586b67b3a13"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/models/qwen2/tokenizer_assets.py",
+      "name": "source/src/llm_mojo/models/qwen2/tokenizer_assets.py",
+      "bytes": 10511,
+      "sha256": "4dc28615b0dcd9071a8524cd32653dc16d6d7762afe6e1705e4970580ecc38b0"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/models/qwen2/tokens.mojo",
+      "name": "source/src/llm_mojo/models/qwen2/tokens.mojo",
+      "bytes": 197,
+      "sha256": "57b2aec1ad3f09a15812127221c811cc3e016dea5cd05e82b3d476b4ccc580ce"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/runtime/__init__.mojo",
+      "name": "source/src/llm_mojo/runtime/__init__.mojo",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/runtime/__init__.py",
+      "name": "source/src/llm_mojo/runtime/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/runtime/artifacts.py",
+      "name": "source/src/llm_mojo/runtime/artifacts.py",
+      "bytes": 926,
+      "sha256": "045491ab88f59b354940bc641329fefa406f1e2cd805d5e37205a27a1c04cb4d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/runtime/build.py",
+      "name": "source/src/llm_mojo/runtime/build.py",
+      "bytes": 4981,
+      "sha256": "fd440c4e2b8e0c64e79ea7b5cc287694a6035e9518685df0b4851176db9aa0c3"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/runtime/clock.mojo",
+      "name": "source/src/llm_mojo/runtime/clock.mojo",
+      "bytes": 188,
+      "sha256": "a01574476c1dbba683981757da898377296902e58d6fb71b835300d3a4bbf5b2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/runtime/store.py",
+      "name": "source/src/llm_mojo/runtime/store.py",
+      "bytes": 6833,
+      "sha256": "ba5a0d8ceecd7d6b69b3e02b928262201a0fe2eb601c14fb2857238936676a4e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/runtime/terminal.mojo",
+      "name": "source/src/llm_mojo/runtime/terminal.mojo",
+      "bytes": 2362,
+      "sha256": "21d4ce77748ae6e2b67810565e7324030debd04392e2f59391e649c9aa128e01"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/runtime/toolchain.py",
+      "name": "source/src/llm_mojo/runtime/toolchain.py",
+      "bytes": 4733,
+      "sha256": "d6b28fa02fadd95bd2c6216eead5000b30282e5433fea05aac50418e9250c82f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/serving/__init__.mojo",
+      "name": "source/src/llm_mojo/serving/__init__.mojo",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/serving/__init__.py",
+      "name": "source/src/llm_mojo/serving/__init__.py",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/serving/batch.mojo",
+      "name": "source/src/llm_mojo/serving/batch.mojo",
+      "bytes": 6572,
+      "sha256": "1a96a4e6902d0b87d29fb393fe84232162b8855e22945c4a7d70ee1cdc609a1f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/serving/blocks.mojo",
+      "name": "source/src/llm_mojo/serving/blocks.mojo",
+      "bytes": 9923,
+      "sha256": "cb1d4661ca2fd6df1c5c643d55c0574af584d7870571e9b0c02935fa47a234ab"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/serving/engine.mojo",
+      "name": "source/src/llm_mojo/serving/engine.mojo",
+      "bytes": 31234,
+      "sha256": "19f9c6026ed51a404ecb3b2245ec2d5a13da2442219e6d3895561a176bda1daa"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/serving/kv_pool.mojo",
+      "name": "source/src/llm_mojo/serving/kv_pool.mojo",
+      "bytes": 5593,
+      "sha256": "c4233fffd2baeb52b836ba20423f204431f4fffbe3d5752c838f3440bdcf147d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/serving/runner.mojo",
+      "name": "source/src/llm_mojo/serving/runner.mojo",
+      "bytes": 3276,
+      "sha256": "e584fda815c38541843d71d4a4aec73d4377a87bef3c4b61bcdc6b106d7cc5bf"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/validate.py",
+      "name": "source/src/llm_mojo/validate.py",
+      "bytes": 151,
+      "sha256": "36824098dfc50761b9ed7fad3c04091467d960de1c31b63064a8c6d1c89e0a00"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/validation/__init__.py",
+      "name": "source/src/llm_mojo/validation/__init__.py",
+      "bytes": 77,
+      "sha256": "38d0c60ff93189ad715142cdff8711fcbdca29c10c85211a3f7895401eb5d7b0"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/validation/decoder.py",
+      "name": "source/src/llm_mojo/validation/decoder.py",
+      "bytes": 32358,
+      "sha256": "de0da9bcaf645ad0c30164e5a01d0c96cef57dbbd7083577f1c365e2fed6814e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/validation/evidence.py",
+      "name": "source/src/llm_mojo/validation/evidence.py",
+      "bytes": 1061,
+      "sha256": "237b9be32602d8e0e1d7d4c4d796d0c70df4a7e4929f71c684308319aaf81606"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/validation/fixtures.py",
+      "name": "source/src/llm_mojo/validation/fixtures.py",
+      "bytes": 29405,
+      "sha256": "adc34ecf1a72bc74c71268b69a5581d779d3393ac4c880ffc5a654726841d753"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/validation/mlp.py",
+      "name": "source/src/llm_mojo/validation/mlp.py",
+      "bytes": 10464,
+      "sha256": "3ed4418b328eb3934d32d2e46ae94527fcbe230ce0e83781bdee990f3ac2f4fe"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/validation/model.py",
+      "name": "source/src/llm_mojo/validation/model.py",
+      "bytes": 63652,
+      "sha256": "c199d52206667ac08e661c5636a263779af53b3764f0386278035cb085ae4388"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/src/llm_mojo/validation/suite.py",
+      "name": "source/src/llm_mojo/validation/suite.py",
+      "bytes": 4442,
+      "sha256": "55bedbc772117c38433848aec01c8a5a767f737f7d708e7e6cf4ee3cb69ff0b5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/attention_sublayer_support.mojo",
+      "name": "source/tests/attention_sublayer_support.mojo",
+      "bytes": 4900,
+      "sha256": "83354628e5fd7bf669545a0eed2ed4e5dffa773bd7feb7b87437492f0811e2bd"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/chat_driver.mojo",
+      "name": "source/tests/chat_driver.mojo",
+      "bytes": 7641,
+      "sha256": "eb287c3c2d6b22e4e239565fd31deae10dda6d96f0b8417f61e58494ae64ba69"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/chat_study.py",
+      "name": "source/tests/chat_study.py",
+      "bytes": 6370,
+      "sha256": "15153e60705745b68a0729b1baf36f2dcc77fc7f570942c7dce6db4c066ed731"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/chat_terminal.py",
+      "name": "source/tests/chat_terminal.py",
+      "bytes": 14166,
+      "sha256": "a4a72b2e2f3eaaff25e31e4f9e572b95d545377570163107a04a95c2eeda588f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/decoder_layer_support.mojo",
+      "name": "source/tests/decoder_layer_support.mojo",
+      "bytes": 3008,
+      "sha256": "20bc6d05723638af6086ec4e87b2342566044ab1d3ea589b1623f372d87a0b8e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/decoder_layer_support.py",
+      "name": "source/tests/decoder_layer_support.py",
+      "bytes": 13034,
+      "sha256": "f04e237bd75b29d2b7dc8f5f3ec867525ca62e081cb8d5888a38d2185439cf07"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/engine_metal_driver.mojo",
+      "name": "source/tests/engine_metal_driver.mojo",
+      "bytes": 40135,
+      "sha256": "74dad05c4f8417634c769741eb5373a80be328917257652924bf2fc4f5e11ade"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/attention/generate.py",
+      "name": "source/tests/fixtures/attention/generate.py",
+      "bytes": 12533,
+      "sha256": "587eb5ed0c63e2a05f3026c2dde839c7fd92c37ec9e7c8bdab22cb37bccf3ea4"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/attention/generate_decode.py",
+      "name": "source/tests/fixtures/attention/generate_decode.py",
+      "bytes": 3917,
+      "sha256": "dd82f833f9507cd54edfaf95c5b2ade7381fefb6f612547b8849711be503861a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/attention/generate_prefill.py",
+      "name": "source/tests/fixtures/attention/generate_prefill.py",
+      "bytes": 3648,
+      "sha256": "35193674d82c1b5ca18a642b452de298ad58dcc2a609396c895f8b2819a3f54e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/attention_sublayer/checkpoint.py",
+      "name": "source/tests/fixtures/attention_sublayer/checkpoint.py",
+      "bytes": 11539,
+      "sha256": "03485aaed630e273c89fcf5b8bfd8c51a32aca4d764202702f82b158a6e7367c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/attention_sublayer/generate.py",
+      "name": "source/tests/fixtures/attention_sublayer/generate.py",
+      "bytes": 9440,
+      "sha256": "bb48bf3b84ae87944685071d269f85690e81488fa3cebe5a055c9dd205235ec2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/attention_sublayer/precision.py",
+      "name": "source/tests/fixtures/attention_sublayer/precision.py",
+      "bytes": 7766,
+      "sha256": "5a33b83d6bef9c3ff4824e1007591a3cca305225c3297667129f8d700280b5a2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/attention_sublayer/upstream.py",
+      "name": "source/tests/fixtures/attention_sublayer/upstream.py",
+      "bytes": 11204,
+      "sha256": "e6228d7ecfa07976479372758d28fc10a99cf9391a1b3cf18955be419dcac02b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/chat_reference.py",
+      "name": "source/tests/fixtures/chat_reference.py",
+      "bytes": 3638,
+      "sha256": "59a8b1eb154dc94107e2ddfd7196c75deac97424b0f46bc93327c0377be793f1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/chat_reference.py.lock",
+      "name": "source/tests/fixtures/chat_reference.py.lock",
+      "bytes": 62567,
+      "sha256": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/decoder_acceptance.py",
+      "name": "source/tests/fixtures/decoder_acceptance.py",
+      "bytes": 6661,
+      "sha256": "f1a21f7ad82e00465032c337422d054eeb906e11f4f4d6c46d8c9e2bcf1068c3"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/decoder_acceptance.py.lock",
+      "name": "source/tests/fixtures/decoder_acceptance.py.lock",
+      "bytes": 62567,
+      "sha256": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/decoder_layer/contract.py",
+      "name": "source/tests/fixtures/decoder_layer/contract.py",
+      "bytes": 2596,
+      "sha256": "2646e775d0063c1fef450f604911cf7aa427b22b236921e3e78511678284819f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/decoder_layer/generate.py",
+      "name": "source/tests/fixtures/decoder_layer/generate.py",
+      "bytes": 9274,
+      "sha256": "08915679cf8464c7b57c552a2f4254be769cd68b1ee1e6db3a7f99d4744ff06c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/decoder_layer/reference.py",
+      "name": "source/tests/fixtures/decoder_layer/reference.py",
+      "bytes": 13399,
+      "sha256": "e3dfa596a4823de3f8b874aa788d56826382fae67db448cde422552b992d14e6"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/decoder_layer/test_reference.py",
+      "name": "source/tests/fixtures/decoder_layer/test_reference.py",
+      "bytes": 6856,
+      "sha256": "813e4de124dbe71cbe040c697ddbc7e3902ecf0768ea8464927fdadecb6f3878"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/decoder_reference.py",
+      "name": "source/tests/fixtures/decoder_reference.py",
+      "bytes": 2800,
+      "sha256": "b76370e78cea0a62bb8b75eae4cdfd67d408a47cffab0730add3dd2190b16bb6"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/decoder_reference.py.lock",
+      "name": "source/tests/fixtures/decoder_reference.py.lock",
+      "bytes": 62567,
+      "sha256": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/generate.py",
+      "name": "source/tests/fixtures/generate.py",
+      "bytes": 1737,
+      "sha256": "4638cd68d5b5cc54f94c68581e6be3f0bfbb3abf71d81160930794dcfccb4047"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/generate.py.lock",
+      "name": "source/tests/fixtures/generate.py.lock",
+      "bytes": 62567,
+      "sha256": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/linear/generate.py",
+      "name": "source/tests/fixtures/linear/generate.py",
+      "bytes": 8085,
+      "sha256": "f84abf1d3d798e9c5c798059c1cbb6f235e54e7b54b8a4f9b9a9dc426d67c348"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/mlp/contract.py",
+      "name": "source/tests/fixtures/mlp/contract.py",
+      "bytes": 2379,
+      "sha256": "439686ec0dfd22d6cc3d4427f5b6f622c4b20bdb5ff609cc04bf762b6c0cc155"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/mlp/generate.py",
+      "name": "source/tests/fixtures/mlp/generate.py",
+      "bytes": 15538,
+      "sha256": "f9f8e2fe4031929922891090c5ed99c4f20ab52567729e93d011cf76afc95459"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/mlp/numerics.py",
+      "name": "source/tests/fixtures/mlp/numerics.py",
+      "bytes": 4400,
+      "sha256": "ae713d7ec1754884524bac9bbd59b902b7fcc3edc012a72156ef7f1d41fd7f7d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/mlp/reference.py",
+      "name": "source/tests/fixtures/mlp/reference.py",
+      "bytes": 9631,
+      "sha256": "c02a4ab733ad6702b663aecc3593b72a68c6d419797a6fc06f1e60d6a995851f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/mlp/test_reference.py",
+      "name": "source/tests/fixtures/mlp/test_reference.py",
+      "bytes": 5756,
+      "sha256": "c1b759ce27855d955e1662781ecdd100423c25168d3dbe36c7ed83b4d262ed1f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/mlp_acceptance.py",
+      "name": "source/tests/fixtures/mlp_acceptance.py",
+      "bytes": 12499,
+      "sha256": "985d5a031abc3238c0a9d12e9d844db73223fc5b56dd7b1891fbdc66f9086727"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/mlp_acceptance.py.lock",
+      "name": "source/tests/fixtures/mlp_acceptance.py.lock",
+      "bytes": 62567,
+      "sha256": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/model_attention_diagnosis.py",
+      "name": "source/tests/fixtures/model_attention_diagnosis.py",
+      "bytes": 14820,
+      "sha256": "d5679a799703fa3e11289a8ab72512cfb219f92df319b0b22e6f0645cd133582"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/model_calibration.py",
+      "name": "source/tests/fixtures/model_calibration.py",
+      "bytes": 30844,
+      "sha256": "17af95705616c71999607b2b4a991499e2a54a015c18ec3e9b964beddbcc6541"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/model_calibration.py.lock",
+      "name": "source/tests/fixtures/model_calibration.py.lock",
+      "bytes": 62567,
+      "sha256": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/model_consistency.py",
+      "name": "source/tests/fixtures/model_consistency.py",
+      "bytes": 10445,
+      "sha256": "94de9081dba758a58dfb99c8c24497914dd1863035eec16136325260ff385ce8"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/model_consistency.py.lock",
+      "name": "source/tests/fixtures/model_consistency.py.lock",
+      "bytes": 62567,
+      "sha256": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/model_reference.py",
+      "name": "source/tests/fixtures/model_reference.py",
+      "bytes": 17010,
+      "sha256": "77abb97113d46d0bb41de06eb0cc15afa3433f432f78e49acea84b404e80186d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/model_reference.py.lock",
+      "name": "source/tests/fixtures/model_reference.py.lock",
+      "bytes": 62567,
+      "sha256": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/model_reference_diagnosis.py",
+      "name": "source/tests/fixtures/model_reference_diagnosis.py",
+      "bytes": 35712,
+      "sha256": "048bc04b2d8e49114c90e33c8db97ebdf1a3929fce0ccc69312aea16856e1c14"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/model_reference_diagnosis.py.lock",
+      "name": "source/tests/fixtures/model_reference_diagnosis.py.lock",
+      "bytes": 62567,
+      "sha256": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/rms_norm/generate.py",
+      "name": "source/tests/fixtures/rms_norm/generate.py",
+      "bytes": 7049,
+      "sha256": "3c2f8125fcb42e3002d8e2bf1863dfcb32c8148bf3e7f8ec7c99e5f227e2233f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/rope/generate.py",
+      "name": "source/tests/fixtures/rope/generate.py",
+      "bytes": 9301,
+      "sha256": "d774a3f319657349f82b415162cfadebc2be15ee7b905f08621ced785b92b708"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/tokenizer/generate.py",
+      "name": "source/tests/fixtures/tokenizer/generate.py",
+      "bytes": 12435,
+      "sha256": "caacb80a537036e075e3c0161fc42ec99bf9f96f7309cb4d40862def39ca3d34"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/tokenizer_reference.py",
+      "name": "source/tests/fixtures/tokenizer_reference.py",
+      "bytes": 479,
+      "sha256": "10e78df36c0a2b3a1ce072a8b9bf67ec076f76cc882fa5d4ce55434a37a88eff"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/fixtures/tokenizer_reference.py.lock",
+      "name": "source/tests/fixtures/tokenizer_reference.py.lock",
+      "bytes": 62567,
+      "sha256": "f18af19e90d53184f23808d101ee496c9302b8d442330f4e993da66e1d41b453"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/mlp_support.mojo",
+      "name": "source/tests/mlp_support.mojo",
+      "bytes": 2517,
+      "sha256": "3b8c232d8411d98781ef3e97653c8541a358a6c76550c4becbb9192cac3b927d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/mlp_support.py",
+      "name": "source/tests/mlp_support.py",
+      "bytes": 11184,
+      "sha256": "8f3381c858b21b9d0558c23470bcf832fd86b9a3c22b0aa7878a5e58e5769dba"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/model_driver.mojo",
+      "name": "source/tests/model_driver.mojo",
+      "bytes": 19785,
+      "sha256": "50bc10f9a2a16b1b90ac873a7efdb9fc81e35b3a7d78de20ed1318c9c19c4633"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/model_operation_support.mojo",
+      "name": "source/tests/model_operation_support.mojo",
+      "bytes": 3761,
+      "sha256": "788de9473c18654934b4d239c27880bd359af2f7ea9087dcdfefc7cdde9a8d09"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_attention.mojo",
+      "name": "source/tests/test_attention.mojo",
+      "bytes": 21043,
+      "sha256": "f3a510430c01e225a6306c57c8d4a01524970a282f8c460ca06306e0d3081a8a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_attention_decode.mojo",
+      "name": "source/tests/test_attention_decode.mojo",
+      "bytes": 8911,
+      "sha256": "50efb3d406cd0d541c60c8dbeed97b43a18c0bf793a29cfb9c811b50f3573f18"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_attention_decode_benchmark.mojo",
+      "name": "source/tests/test_attention_decode_benchmark.mojo",
+      "bytes": 1462,
+      "sha256": "f81e767fc538945ef2137b24dc670fb30702496a2b812849c8762081b61de191"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_attention_precision.mojo",
+      "name": "source/tests/test_attention_precision.mojo",
+      "bytes": 4389,
+      "sha256": "83465dd237e6e95fb6b38052b4eb7bbea8bb84cb86be477e88ab48aafbe906f4"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_attention_prefill.mojo",
+      "name": "source/tests/test_attention_prefill.mojo",
+      "bytes": 19759,
+      "sha256": "334f99acb6be1fb8289cbe5d1313ffa6fc8b9df9c245f47ff98fe50effead9a2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_attention_primitives.mojo",
+      "name": "source/tests/test_attention_primitives.mojo",
+      "bytes": 5053,
+      "sha256": "e0ec35182b15a8ff17a573e1bddf1c1f49ab245a6fbf5af2799f0631594d938f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_attention_profile.py",
+      "name": "source/tests/test_attention_profile.py",
+      "bytes": 16003,
+      "sha256": "8df6f0a09b150a531bb30372b29fc96749c166951a8709a61445472c25f628b9"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_attention_sublayer.mojo",
+      "name": "source/tests/test_attention_sublayer.mojo",
+      "bytes": 17183,
+      "sha256": "2059182ffeac6caeb349ee4f065fb240539a4ed5b5b4cf270c3fb681d19b89b4"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_attention_sublayer_operations.mojo",
+      "name": "source/tests/test_attention_sublayer_operations.mojo",
+      "bytes": 14829,
+      "sha256": "4016e604b1a0ad0527174f5db05e566908005f3805fcbc2856619ae473f2c1fc"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_block_manager.mojo",
+      "name": "source/tests/test_block_manager.mojo",
+      "bytes": 9410,
+      "sha256": "ada0981a20e016dad7dbdca7198e0a5a49ca0c629c06f46b96db3774581ccc0e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_chat.mojo",
+      "name": "source/tests/test_chat.mojo",
+      "bytes": 2994,
+      "sha256": "d2ab8990c431bfd64961971b498c0a03e7357c58296e9fb92a10bf1019d6dc01"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_chat_launcher.py",
+      "name": "source/tests/test_chat_launcher.py",
+      "bytes": 3999,
+      "sha256": "db9af78d2e2e32a8b47fcacdf8752707822fb3b76609750b3e80610304d4d402"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_cli.py",
+      "name": "source/tests/test_cli.py",
+      "bytes": 10600,
+      "sha256": "8e636132e96f553278c968df655878b0792f044ddd5d84f7d434c8127aabfbfa"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_consistency.mojo",
+      "name": "source/tests/test_consistency.mojo",
+      "bytes": 8626,
+      "sha256": "22ecad487efcd473f4c85e3a736458a3eda2cc1bc262f380f1a64b7ce9dffcf6"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_decode_batch.mojo",
+      "name": "source/tests/test_decode_batch.mojo",
+      "bytes": 36774,
+      "sha256": "a4a769fb684049165c0fe7d33b4e862c79322925dac778cc598147c7f4524fbf"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_decode_route.mojo",
+      "name": "source/tests/test_decode_route.mojo",
+      "bytes": 10632,
+      "sha256": "59cd040a80dad0d3632729e186def8c9c7278097362d97494ee848e7366cb791"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_decoder_layer.mojo",
+      "name": "source/tests/test_decoder_layer.mojo",
+      "bytes": 30920,
+      "sha256": "73eada74807e850b6998dbadfe65750acbdd276e635a4cf048e176a74b6b2644"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_decoder_selection.mojo",
+      "name": "source/tests/test_decoder_selection.mojo",
+      "bytes": 7354,
+      "sha256": "e8feeda43caff8ed478b03c884a3e2cc6caf54c8b5f8d58637bfc42da40034cb"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_decoder_selection.py",
+      "name": "source/tests/test_decoder_selection.py",
+      "bytes": 12036,
+      "sha256": "913042be985cc082812903d83ad52fd346a0edfffa529395890aed5666698bad"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_decoder_tooling.py",
+      "name": "source/tests/test_decoder_tooling.py",
+      "bytes": 32106,
+      "sha256": "a9bd8a4a0376798bc69c8ee679c30c6c165784608ffac5f181cc37c9b7b953d7"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_decoder_validation.py",
+      "name": "source/tests/test_decoder_validation.py",
+      "bytes": 8911,
+      "sha256": "b8c9ffb11e744bd220b6fdc7040add2dfe46353f55e7817bad02b806fc0a01e1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_docs_links.py",
+      "name": "source/tests/test_docs_links.py",
+      "bytes": 4584,
+      "sha256": "f8d3235534bee4586be28684ac9198a721f26a27a5139a79c715752d101daa1b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_engine.mojo",
+      "name": "source/tests/test_engine.mojo",
+      "bytes": 44644,
+      "sha256": "c4970042b04198b578ded2260ab3203c3eb0467ab6f5eb7daa039d916e79f33c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_engine_budget.py",
+      "name": "source/tests/test_engine_budget.py",
+      "bytes": 46606,
+      "sha256": "639ea5a44cd5f1c905f74f6d6f7d6d5bc1b3dbc436354d43c079b592aa27d9ff"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_engine_chat.mojo",
+      "name": "source/tests/test_engine_chat.mojo",
+      "bytes": 19218,
+      "sha256": "7793aac8ec1f19b25d0f7920e9e59e06c7b5474a5f7156935e6d5245f0a57d9a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_engine_chat_launcher.py",
+      "name": "source/tests/test_engine_chat_launcher.py",
+      "bytes": 5212,
+      "sha256": "81614d446023a3c5152e8bac38cc0361645c2b881f8019aac3451aaef51c8c4b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_engine_study_dispatch.py",
+      "name": "source/tests/test_engine_study_dispatch.py",
+      "bytes": 7768,
+      "sha256": "690b070a6ba824dfbc15fd8bf91744df13d047d6f2377e295614de3d5e1f9595"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_engine_trace.py",
+      "name": "source/tests/test_engine_trace.py",
+      "bytes": 33602,
+      "sha256": "f68dd7d817375cfc44b11be84e712554ec709a6cf96cf7d25ed42fe956ea4dd0"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_environment_tool.py",
+      "name": "source/tests/test_environment_tool.py",
+      "bytes": 3596,
+      "sha256": "5304e747872ddcc41916e9df975e7095284aac058daaf523193c36b9343d7f6e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_execution_plan.mojo",
+      "name": "source/tests/test_execution_plan.mojo",
+      "bytes": 7243,
+      "sha256": "67e9c0a663c921744108da76a58ecec615014ec09834e30e7944c7f5458f6504"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_fixture_cache.py",
+      "name": "source/tests/test_fixture_cache.py",
+      "bytes": 34408,
+      "sha256": "cfe754ec3730ff0383cf142ddb2481bb948c4758dd206d620d4eeb29ed670eca"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_import.mojo",
+      "name": "source/tests/test_import.mojo",
+      "bytes": 244,
+      "sha256": "d82ead4423a78c5f518b5820997212ac8ad8dd2d068ed57953479ee2322a4aeb"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_linear.mojo",
+      "name": "source/tests/test_linear.mojo",
+      "bytes": 41695,
+      "sha256": "99e4476307cdbf58356b254b0b6ebc5623f9025aaa00b65067dc4f59ae7b1c93"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_mixed_layer.mojo",
+      "name": "source/tests/test_mixed_layer.mojo",
+      "bytes": 10245,
+      "sha256": "03c1f9680cdc729ed8dc8eed44359fe28b28cfb13d7e4227831bcba38869ff65"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_mixed_model.mojo",
+      "name": "source/tests/test_mixed_model.mojo",
+      "bytes": 15989,
+      "sha256": "197e5c77bdf69a8e98d3c3201cbd70c40ca5142985c0a064bafe846a8b6952a0"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_mlp.mojo",
+      "name": "source/tests/test_mlp.mojo",
+      "bytes": 7480,
+      "sha256": "dcebd60f0f4bd17d0da635e79950bb240e255922548423aeebe963af0b57571b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_mlp_tooling.py",
+      "name": "source/tests/test_mlp_tooling.py",
+      "bytes": 10665,
+      "sha256": "30bb81a9c9109b3393660c4ac4d3fafec781aa2b3da34c2fe6e9d5f33be46834"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_mlp_validation.py",
+      "name": "source/tests/test_mlp_validation.py",
+      "bytes": 9728,
+      "sha256": "6d2433af6b690be9b90347f31ecdeb64e33f36296f66fff07d819b3055332615"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_model.mojo",
+      "name": "source/tests/test_model.mojo",
+      "bytes": 5505,
+      "sha256": "d66e554f2bc9973ced4c7a753d99353220464901e57d8de4705a553e74def4e9"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_model_assets.py",
+      "name": "source/tests/test_model_assets.py",
+      "bytes": 6948,
+      "sha256": "e02cf687bf85f0256f4825f807aa1ce3f1321d90c4aa841b6a45c76092e4acee"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_model_profile.py",
+      "name": "source/tests/test_model_profile.py",
+      "bytes": 95242,
+      "sha256": "f528f1b731b3761fa0840e85b2aea577bf0048e6671cda85b5b1d394132f18be"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_model_study.py",
+      "name": "source/tests/test_model_study.py",
+      "bytes": 10823,
+      "sha256": "8cad8710f29c860c9c9ca5aa0e19ea2698f1efb721b98dd939ed646fedb142fd"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_model_validation.py",
+      "name": "source/tests/test_model_validation.py",
+      "bytes": 11397,
+      "sha256": "9c1aa26312699df1b5887a93c55d28530dced81e79cfffac4221618a28058238"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_native_build.py",
+      "name": "source/tests/test_native_build.py",
+      "bytes": 4108,
+      "sha256": "0089835f71b33b2e2d02897f55058e7caaf445baa7e02f4d6b6e84bbb241e77e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_package_boundaries.py",
+      "name": "source/tests/test_package_boundaries.py",
+      "bytes": 5995,
+      "sha256": "ce06f15506fdab5931ca925bffa4192101e904fa6f3b242e10b61ca90cfe4039"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_paged_kv.mojo",
+      "name": "source/tests/test_paged_kv.mojo",
+      "bytes": 27047,
+      "sha256": "fd21fe5b9df730bae8ccbdf4b7fcbfe5639fd80c5acee7946d264ba087a945ae"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_plot_selection.py",
+      "name": "source/tests/test_plot_selection.py",
+      "bytes": 1269,
+      "sha256": "c449a6a6acf70174af07d4fe10968dad59292538aa24c4cba66501657aaeeeb5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_residual_norm.mojo",
+      "name": "source/tests/test_residual_norm.mojo",
+      "bytes": 7611,
+      "sha256": "7074bbca41bc6d0ded2181b6c0f7103b785ae80a5a882733e9ad596c059081bd"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_rms_norm.mojo",
+      "name": "source/tests/test_rms_norm.mojo",
+      "bytes": 9021,
+      "sha256": "0deb0398026312be1811329baf5b8f379f5ae37b474adf89a7438ce2ca5aae0f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_rope.mojo",
+      "name": "source/tests/test_rope.mojo",
+      "bytes": 15719,
+      "sha256": "73bee783ba18cc4c431e493de3189f0f67d315b8aa3a3c19e2fb33aa758a1496"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_serving.mojo",
+      "name": "source/tests/test_serving.mojo",
+      "bytes": 12111,
+      "sha256": "f21ac99b0562d3eac456c5c47ccca04ed7d9f1bf1cf05e7fdb6b152b6a252cd3"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_setup.py",
+      "name": "source/tests/test_setup.py",
+      "bytes": 28842,
+      "sha256": "71e0d1613f291c22db9b13b6bda9fe72a656ac48c8fc5dc7ff1a872d9cc04179"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_study.py",
+      "name": "source/tests/test_study.py",
+      "bytes": 11600,
+      "sha256": "aa0f3c5b8b4c66dab252df6d8a40bbfeeaad8336439d707f2f90ebb107a1eb01"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_study_evidence.py",
+      "name": "source/tests/test_study_evidence.py",
+      "bytes": 37155,
+      "sha256": "0d151aeee9c82a3e0e31fe4afa51831f2be200ed88731e7d06c3ee9ffd83d151"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_swiglu.mojo",
+      "name": "source/tests/test_swiglu.mojo",
+      "bytes": 11047,
+      "sha256": "cedd280552c4e5e0917f2c87ee7a7121679a8a27ed099c35fa94ee3393e2e344"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_token_selection.mojo",
+      "name": "source/tests/test_token_selection.mojo",
+      "bytes": 5445,
+      "sha256": "65c626eceb486327e9a3a25cfb9362ccd97ef462d3a27fd5f411aa4cf074444c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_tokenizer.mojo",
+      "name": "source/tests/test_tokenizer.mojo",
+      "bytes": 6117,
+      "sha256": "4757252c5050dbf7981edb4886c7560820767835807553b182cbc163e84141c5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_tokenizer_assets.py",
+      "name": "source/tests/test_tokenizer_assets.py",
+      "bytes": 6848,
+      "sha256": "6d8a44d0b404d164584fa33906a5c87392cb5b6c084f1900f96878ca32c0d62c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_tokenizer_benchmark.py",
+      "name": "source/tests/test_tokenizer_benchmark.py",
+      "bytes": 6334,
+      "sha256": "e0bc165b0db058b60531310b910857c6ff9542417e7bc27a385899929ae44ca1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_trace_analyzer.py",
+      "name": "source/tests/test_trace_analyzer.py",
+      "bytes": 14115,
+      "sha256": "a4a83479bee9567f06cb5cc282de72c09dde4714969dba04c3e668fa19d684ef"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/tests/test_trace_capture.py",
+      "name": "source/tests/test_trace_capture.py",
+      "bytes": 15317,
+      "sha256": "384cb922565a35f350eb2fddd200a658ed4bf355e6e5692a6e7fa3c817dcae99"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/bound-inputs/source/uv.lock",
+      "name": "source/uv.lock",
+      "bytes": 67608,
+      "sha256": "903ea1a7c05a268cc14d36bc817cee7edb0cd2f278c0c557777ef0d472cfad57"
+    }
+  ],
+  "verification": "lossless gzip envelope plus every restored UTF-8 file hash/byte count"
+}

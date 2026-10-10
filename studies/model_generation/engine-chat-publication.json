@@ -1,0 +1,316 @@
+{
+  "kind": "engine-chat-canonical-publication-v1",
+  "scope": "Local repository publication and independent retrieval; no remote custody claim",
+  "files": [
+    {
+      "sha256": "809ea3d89d4262a914308d9f57276f9a431a0dd52ad58be396df5b73ec42aebe",
+      "bytes": 21803,
+      "canonical_path": "studies/model_generation/engine-chat-acceptance.json",
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/sealed/engine-chat-acceptance.json"
+    },
+    {
+      "sha256": "0051dbee3fe14001dbbfb2b25aece6474ed5ec6d8c21b950536f6960031e7d4b",
+      "bytes": 2405212,
+      "canonical_path": "studies/model_generation/engine-chat-validation.json.gz",
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/sealed/engine-chat-validation.json.gz"
+    },
+    {
+      "sha256": "fab23a1e2483f0d4e9661499ef856e0ec21cdb663e769560e1a63383376ac31b",
+      "bytes": 111740,
+      "canonical_path": "studies/model_generation/engine-chat-validation.json",
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/sealed/engine-chat-validation.json"
+    }
+  ],
+  "retention_execution": {
+    "kind": "engine-followup-check-v1",
+    "name": "chat-retention",
+    "status": "completed",
+    "command": [
+      "uv",
+      "run",
+      "--locked",
+      "python",
+      "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/retain_chat.py",
+      "seal",
+      "--campaign",
+      "/private/tmp/llm-mojo-engine-followup-20261009/chat-acceptance/actual/campaign.json",
+      "--final-validation",
+      "/private/tmp/llm-mojo-engine-followup-20261009/full-validation-final-execution.json",
+      "--output",
+      "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/sealed",
+      "--restore-output",
+      "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/independent-restore",
+      "--prefinal-script-sha256",
+      "45c67f96d85b61c0bcab56d42ff3ba2c235c48cb65ddfddefbb97c9c0d6da1fb"
+    ],
+    "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+    "timeout_seconds": 180,
+    "started_utc": "2026-10-09T19:34:10.991746+00:00",
+    "exit_code": 0,
+    "source_unchanged": true,
+    "wall_elapsed_ns": 1495066333,
+    "completed_utc": "2026-10-09T19:34:12.487210+00:00",
+    "command_log": {
+      "path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention.log",
+      "sha256": "72bd5e5776eb04080aaecd1d4d01de1bb7d5e2045aead74494a707595d39f343"
+    },
+    "source_before_sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34",
+    "source_after_sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+  },
+  "canonical_restore_execution": {
+    "kind": "engine-followup-check-v1",
+    "name": "chat-canonical-restore",
+    "status": "completed",
+    "command": [
+      "uv",
+      "run",
+      "--locked",
+      "python",
+      "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/sealed/restore-executor/retain_chat.py",
+      "restore",
+      "--archive",
+      "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-retrieval/engine-chat-validation.json.gz",
+      "--manifest",
+      "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-retrieval/engine-chat-validation.json",
+      "--archive-sha256",
+      "0051dbee3fe14001dbbfb2b25aece6474ed5ec6d8c21b950536f6960031e7d4b",
+      "--manifest-sha256",
+      "fab23a1e2483f0d4e9661499ef856e0ec21cdb663e769560e1a63383376ac31b",
+      "--output",
+      "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored"
+    ],
+    "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+    "timeout_seconds": 180,
+    "started_utc": "2026-10-09T19:38:07.547296+00:00",
+    "exit_code": 0,
+    "source_unchanged": true,
+    "wall_elapsed_ns": 480500958,
+    "completed_utc": "2026-10-09T19:38:08.028053+00:00",
+    "command_log": {
+      "path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-canonical-restore.log",
+      "sha256": "8dc17058f5397e60d4633c2be870fc420252cb02604ddb9ec0094acd2bf647d8"
+    },
+    "source_before_sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34",
+    "source_after_sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+  },
+  "canonical_restore_report": {
+    "kind": "engine-chat-independent-restore-v1",
+    "status": "restored-and-replayed",
+    "created_utc": "2026-10-09T19:38:07.970222+00:00",
+    "archive_sha256": "0051dbee3fe14001dbbfb2b25aece6474ed5ec6d8c21b950536f6960031e7d4b",
+    "manifest_sha256": "fab23a1e2483f0d4e9661499ef856e0ec21cdb663e769560e1a63383376ac31b",
+    "restored_file_count": 344,
+    "native_or_gpu_calls": false,
+    "original_inputs_read": false,
+    "regeneration": {
+      "kind": "engine-chat-reference-regeneration-v1",
+      "status": "regenerated-byte-identical",
+      "cases": 7,
+      "tokens": 123,
+      "rows": 455,
+      "historical_result_sha256": "32866f083aea38dcdb6059cf879064e21ae36b69611ee157b309bb1fa3a6a3be",
+      "regenerated_output_sha256": {
+        "reference-history-fixture.bin": "1c0729b4e8b27dae9e1874df22a94616556e94a1c3d7b539e7f973d9090607e6",
+        "reference-history-cases.json": "3d8561971c8c772aa68d98623e1dce61e1f5f10ec70c9dc5c0ad24460f80fd39",
+        "reference-history-cases.tsv": "1b61ac06f3ff77626dc945b8170dcfb57843aea96494956083ae295f30fcccfb"
+      },
+      "original_result_read": false,
+      "native_or_gpu_calls": false
+    },
+    "semantic_checks": {
+      "reference": {
+        "kind": "engine-chat-reference-history-output-check-v1",
+        "cases": 7,
+        "tokens": 123,
+        "rows": 455,
+        "interrupted_prefixes": 1,
+        "skipped_empty": 0,
+        "exact": true
+      },
+      "fault": {
+        "kind": "engine-chat-private-numerical-fault-output-check-v1",
+        "exit_nonzero": true,
+        "delivered_tokens": 1,
+        "pending_input": 9707,
+        "poisoned_head_row": 0,
+        "error": "nonfinite",
+        "free_equals_total": true,
+        "owned": 0,
+        "written_valid": 0,
+        "live": 0,
+        "closed_history_exact": true,
+        "scope": "healthy-device numerical failure; no device-loss recovery claim"
+      }
+    },
+    "private_fault_native_exit_code": 1,
+    "private_fault_native_outcome": "exited_nonzero",
+    "private_fault_semantic_outcome": "qualified_expected_failure",
+    "cpu_processes": [
+      {
+        "kind": "engine-chat-retention-cpu-process-v1",
+        "name": "regenerate",
+        "command": [
+          "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python3",
+          "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/helpers/regenerate_reference_fixture.py",
+          "--raw-directory",
+          "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/provenance/chat-terminal",
+          "--recipe",
+          "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/helpers/reference-regeneration-recipe.json",
+          "--output",
+          "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/regenerated"
+        ],
+        "started_utc": "2026-10-09T19:38:07.826171+00:00",
+        "timeout_seconds": 180,
+        "exit_code": 0,
+        "native_or_gpu_calls": false,
+        "status": "completed",
+        "pid": 70473,
+        "completed_utc": "2026-10-09T19:38:07.868614+00:00",
+        "wall_elapsed_ns": 42216417,
+        "log": {
+          "path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/restore-checks/regenerate.log",
+          "bytes": 654,
+          "sha256": "8ad16c886d828b4cf42ac53dbe27b51265c704879467f97a2828bf5979270597"
+        }
+      },
+      {
+        "kind": "engine-chat-retention-cpu-process-v1",
+        "name": "reference-semantic-check",
+        "command": [
+          "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python3",
+          "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/helpers/validate_acceptance.py",
+          "reference",
+          "--stdout",
+          "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/acceptance/reference-native.log",
+          "--tsv",
+          "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/acceptance/reference-token-comparisons.tsv",
+          "--cases",
+          "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/regenerated/reference-history-cases.json",
+          "--exit-code",
+          "0"
+        ],
+        "started_utc": "2026-10-09T19:38:07.869061+00:00",
+        "timeout_seconds": 180,
+        "exit_code": 0,
+        "native_or_gpu_calls": false,
+        "status": "completed",
+        "pid": 70474,
+        "completed_utc": "2026-10-09T19:38:07.907162+00:00",
+        "wall_elapsed_ns": 38010875,
+        "log": {
+          "path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/restore-checks/reference-semantic-check.log",
+          "bytes": 176,
+          "sha256": "7905a3ce860f056c820757da291d691189dfb5549c33eaba230df7d3522575ad"
+        }
+      },
+      {
+        "kind": "engine-chat-retention-cpu-process-v1",
+        "name": "fault-semantic-check",
+        "command": [
+          "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python3",
+          "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/helpers/validate_acceptance.py",
+          "fault",
+          "--stdout",
+          "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/acceptance/private-fault-native.log",
+          "--tsv",
+          "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/acceptance/private-fault.tsv",
+          "--cases",
+          "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/regenerated/reference-history-cases.json",
+          "--exit-code",
+          "1"
+        ],
+        "started_utc": "2026-10-09T19:38:07.907614+00:00",
+        "timeout_seconds": 180,
+        "exit_code": 0,
+        "native_or_gpu_calls": false,
+        "status": "completed",
+        "pid": 70475,
+        "completed_utc": "2026-10-09T19:38:07.948195+00:00",
+        "wall_elapsed_ns": 40495333,
+        "log": {
+          "path": "/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/restore-checks/fault-semantic-check.log",
+          "bytes": 380,
+          "sha256": "7bacf97f97c25c3057c9a383482ddb16e6b307dd640d234200187bf5c60f9ba1"
+        }
+      }
+    ],
+    "full_cpu_logs": {
+      "regenerate": "{\n  \"kind\": \"engine-chat-reference-regeneration-v1\",\n  \"status\": \"regenerated-byte-identical\",\n  \"cases\": 7,\n  \"tokens\": 123,\n  \"rows\": 455,\n  \"historical_result_sha256\": \"32866f083aea38dcdb6059cf879064e21ae36b69611ee157b309bb1fa3a6a3be\",\n  \"regenerated_output_sha256\": {\n    \"reference-history-fixture.bin\": \"1c0729b4e8b27dae9e1874df22a94616556e94a1c3d7b539e7f973d9090607e6\",\n    \"reference-history-cases.json\": \"3d8561971c8c772aa68d98623e1dce61e1f5f10ec70c9dc5c0ad24460f80fd39\",\n    \"reference-history-cases.tsv\": \"1b61ac06f3ff77626dc945b8170dcfb57843aea96494956083ae295f30fcccfb\"\n  },\n  \"original_result_read\": false,\n  \"native_or_gpu_calls\": false\n}\n",
+      "reference-semantic-check": "{\n  \"kind\": \"engine-chat-reference-history-output-check-v1\",\n  \"cases\": 7,\n  \"tokens\": 123,\n  \"rows\": 455,\n  \"interrupted_prefixes\": 1,\n  \"skipped_empty\": 0,\n  \"exact\": true\n}\n",
+      "fault-semantic-check": "{\n  \"kind\": \"engine-chat-private-numerical-fault-output-check-v1\",\n  \"exit_nonzero\": true,\n  \"delivered_tokens\": 1,\n  \"pending_input\": 9707,\n  \"poisoned_head_row\": 0,\n  \"error\": \"nonfinite\",\n  \"free_equals_total\": true,\n  \"owned\": 0,\n  \"written_valid\": 0,\n  \"live\": 0,\n  \"closed_history_exact\": true,\n  \"scope\": \"healthy-device numerical failure; no device-loss recovery claim\"\n}\n"
+    }
+  },
+  "canonical_restore_log": "{\n  \"kind\": \"engine-chat-independent-restore-v1\",\n  \"status\": \"restored-and-replayed\",\n  \"created_utc\": \"2026-10-09T19:38:07.970222+00:00\",\n  \"archive_sha256\": \"0051dbee3fe14001dbbfb2b25aece6474ed5ec6d8c21b950536f6960031e7d4b\",\n  \"manifest_sha256\": \"fab23a1e2483f0d4e9661499ef856e0ec21cdb663e769560e1a63383376ac31b\",\n  \"restored_file_count\": 344,\n  \"native_or_gpu_calls\": false,\n  \"original_inputs_read\": false,\n  \"regeneration\": {\n    \"kind\": \"engine-chat-reference-regeneration-v1\",\n    \"status\": \"regenerated-byte-identical\",\n    \"cases\": 7,\n    \"tokens\": 123,\n    \"rows\": 455,\n    \"historical_result_sha256\": \"32866f083aea38dcdb6059cf879064e21ae36b69611ee157b309bb1fa3a6a3be\",\n    \"regenerated_output_sha256\": {\n      \"reference-history-fixture.bin\": \"1c0729b4e8b27dae9e1874df22a94616556e94a1c3d7b539e7f973d9090607e6\",\n      \"reference-history-cases.json\": \"3d8561971c8c772aa68d98623e1dce61e1f5f10ec70c9dc5c0ad24460f80fd39\",\n      \"reference-history-cases.tsv\": \"1b61ac06f3ff77626dc945b8170dcfb57843aea96494956083ae295f30fcccfb\"\n    },\n    \"original_result_read\": false,\n    \"native_or_gpu_calls\": false\n  },\n  \"semantic_checks\": {\n    \"reference\": {\n      \"kind\": \"engine-chat-reference-history-output-check-v1\",\n      \"cases\": 7,\n      \"tokens\": 123,\n      \"rows\": 455,\n      \"interrupted_prefixes\": 1,\n      \"skipped_empty\": 0,\n      \"exact\": true\n    },\n    \"fault\": {\n      \"kind\": \"engine-chat-private-numerical-fault-output-check-v1\",\n      \"exit_nonzero\": true,\n      \"delivered_tokens\": 1,\n      \"pending_input\": 9707,\n      \"poisoned_head_row\": 0,\n      \"error\": \"nonfinite\",\n      \"free_equals_total\": true,\n      \"owned\": 0,\n      \"written_valid\": 0,\n      \"live\": 0,\n      \"closed_history_exact\": true,\n      \"scope\": \"healthy-device numerical failure; no device-loss recovery claim\"\n    }\n  },\n  \"private_fault_native_exit_code\": 1,\n  \"private_fault_native_outcome\": \"exited_nonzero\",\n  \"private_fault_semantic_outcome\": \"qualified_expected_failure\",\n  \"cpu_processes\": [\n    {\n      \"kind\": \"engine-chat-retention-cpu-process-v1\",\n      \"name\": \"regenerate\",\n      \"command\": [\n        \"/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python3\",\n        \"/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/helpers/regenerate_reference_fixture.py\",\n        \"--raw-directory\",\n        \"/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/provenance/chat-terminal\",\n        \"--recipe\",\n        \"/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/helpers/reference-regeneration-recipe.json\",\n        \"--output\",\n        \"/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/regenerated\"\n      ],\n      \"started_utc\": \"2026-10-09T19:38:07.826171+00:00\",\n      \"timeout_seconds\": 180,\n      \"exit_code\": 0,\n      \"native_or_gpu_calls\": false,\n      \"status\": \"completed\",\n      \"pid\": 70473,\n      \"completed_utc\": \"2026-10-09T19:38:07.868614+00:00\",\n      \"wall_elapsed_ns\": 42216417,\n      \"log\": {\n        \"path\": \"/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/restore-checks/regenerate.log\",\n        \"bytes\": 654,\n        \"sha256\": \"8ad16c886d828b4cf42ac53dbe27b51265c704879467f97a2828bf5979270597\"\n      }\n    },\n    {\n      \"kind\": \"engine-chat-retention-cpu-process-v1\",\n      \"name\": \"reference-semantic-check\",\n      \"command\": [\n        \"/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python3\",\n        \"/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/helpers/validate_acceptance.py\",\n        \"reference\",\n        \"--stdout\",\n        \"/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/acceptance/reference-native.log\",\n        \"--tsv\",\n        \"/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/acceptance/reference-token-comparisons.tsv\",\n        \"--cases\",\n        \"/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/regenerated/reference-history-cases.json\",\n        \"--exit-code\",\n        \"0\"\n      ],\n      \"started_utc\": \"2026-10-09T19:38:07.869061+00:00\",\n      \"timeout_seconds\": 180,\n      \"exit_code\": 0,\n      \"native_or_gpu_calls\": false,\n      \"status\": \"completed\",\n      \"pid\": 70474,\n      \"completed_utc\": \"2026-10-09T19:38:07.907162+00:00\",\n      \"wall_elapsed_ns\": 38010875,\n      \"log\": {\n        \"path\": \"/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/restore-checks/reference-semantic-check.log\",\n        \"bytes\": 176,\n        \"sha256\": \"7905a3ce860f056c820757da291d691189dfb5549c33eaba230df7d3522575ad\"\n      }\n    },\n    {\n      \"kind\": \"engine-chat-retention-cpu-process-v1\",\n      \"name\": \"fault-semantic-check\",\n      \"command\": [\n        \"/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python3\",\n        \"/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/helpers/validate_acceptance.py\",\n        \"fault\",\n        \"--stdout\",\n        \"/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/acceptance/private-fault-native.log\",\n        \"--tsv\",\n        \"/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/acceptance/private-fault.tsv\",\n        \"--cases\",\n        \"/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/regenerated/reference-history-cases.json\",\n        \"--exit-code\",\n        \"1\"\n      ],\n      \"started_utc\": \"2026-10-09T19:38:07.907614+00:00\",\n      \"timeout_seconds\": 180,\n      \"exit_code\": 0,\n      \"native_or_gpu_calls\": false,\n      \"status\": \"completed\",\n      \"pid\": 70475,\n      \"completed_utc\": \"2026-10-09T19:38:07.948195+00:00\",\n      \"wall_elapsed_ns\": 40495333,\n      \"log\": {\n        \"path\": \"/private/tmp/llm-mojo-engine-followup-20261009/chat-retention/canonical-restored/restore-checks/fault-semantic-check.log\",\n        \"bytes\": 380,\n        \"sha256\": \"7bacf97f97c25c3057c9a383482ddb16e6b307dd640d234200187bf5c60f9ba1\"\n      }\n    }\n  ],\n  \"full_cpu_logs\": {\n    \"regenerate\": \"{\\n  \\\"kind\\\": \\\"engine-chat-reference-regeneration-v1\\\",\\n  \\\"status\\\": \\\"regenerated-byte-identical\\\",\\n  \\\"cases\\\": 7,\\n  \\\"tokens\\\": 123,\\n  \\\"rows\\\": 455,\\n  \\\"historical_result_sha256\\\": \\\"32866f083aea38dcdb6059cf879064e21ae36b69611ee157b309bb1fa3a6a3be\\\",\\n  \\\"regenerated_output_sha256\\\": {\\n    \\\"reference-history-fixture.bin\\\": \\\"1c0729b4e8b27dae9e1874df22a94616556e94a1c3d7b539e7f973d9090607e6\\\",\\n    \\\"reference-history-cases.json\\\": \\\"3d8561971c8c772aa68d98623e1dce61e1f5f10ec70c9dc5c0ad24460f80fd39\\\",\\n    \\\"reference-history-cases.tsv\\\": \\\"1b61ac06f3ff77626dc945b8170dcfb57843aea96494956083ae295f30fcccfb\\\"\\n  },\\n  \\\"original_result_read\\\": false,\\n  \\\"native_or_gpu_calls\\\": false\\n}\\n\",\n    \"reference-semantic-check\": \"{\\n  \\\"kind\\\": \\\"engine-chat-reference-history-output-check-v1\\\",\\n  \\\"cases\\\": 7,\\n  \\\"tokens\\\": 123,\\n  \\\"rows\\\": 455,\\n  \\\"interrupted_prefixes\\\": 1,\\n  \\\"skipped_empty\\\": 0,\\n  \\\"exact\\\": true\\n}\\n\",\n    \"fault-semantic-check\": \"{\\n  \\\"kind\\\": \\\"engine-chat-private-numerical-fault-output-check-v1\\\",\\n  \\\"exit_nonzero\\\": true,\\n  \\\"delivered_tokens\\\": 1,\\n  \\\"pending_input\\\": 9707,\\n  \\\"poisoned_head_row\\\": 0,\\n  \\\"error\\\": \\\"nonfinite\\\",\\n  \\\"free_equals_total\\\": true,\\n  \\\"owned\\\": 0,\\n  \\\"written_valid\\\": 0,\\n  \\\"live\\\": 0,\\n  \\\"closed_history_exact\\\": true,\\n  \\\"scope\\\": \\\"healthy-device numerical failure; no device-loss recovery claim\\\"\\n}\\n\"\n  }\n}\n",
+  "originals_preserved": true,
+  "documentation_checks": [
+    {
+      "execution": {
+        "kind": "engine-followup-check-v1",
+        "name": "followup-doc-links",
+        "status": "failed",
+        "command": [
+          "uv",
+          "run",
+          "--locked",
+          "python",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests",
+          "-p",
+          "test_docs_links.py"
+        ],
+        "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+        "timeout_seconds": 180,
+        "started_utc": "2026-10-09T19:41:05.701591+00:00",
+        "exit_code": 1,
+        "source_unchanged": true,
+        "wall_elapsed_ns": 324067458,
+        "completed_utc": "2026-10-09T19:41:06.025918+00:00",
+        "command_log": {
+          "path": "/private/tmp/llm-mojo-engine-followup-20261009/followup-doc-links.log",
+          "sha256": "ead0de07934ba0b50918f633eb4775b4cdbe69e3014cceb7a8a97d3eb911b3a0"
+        },
+        "source_before_sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34",
+        "source_after_sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+      },
+      "log": "..F..\n======================================================================\nFAIL: test_relative_links_and_anchors_resolve (test_docs_links.DocumentationLinkTests.test_relative_links_and_anchors_resolve)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/tests/test_docs_links.py\", line 65, in test_relative_links_and_anchors_resolve\n    self.assertEqual(broken, [])\nAssertionError: Lists differ: ['docs/model.md: no #ownership-and-turn-boundaries in docs/chat.md'] != []\n\nFirst list contains 1 additional elements.\nFirst extra element 0:\n'docs/model.md: no #ownership-and-turn-boundaries in docs/chat.md'\n\n- ['docs/model.md: no #ownership-and-turn-boundaries in docs/chat.md']\n+ []\n\n----------------------------------------------------------------------\nRan 5 tests in 0.228s\n\nFAILED (failures=1)\n"
+    },
+    {
+      "execution": {
+        "kind": "engine-followup-check-v1",
+        "name": "followup-doc-links-final",
+        "status": "completed",
+        "command": [
+          "uv",
+          "run",
+          "--locked",
+          "python",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests",
+          "-p",
+          "test_docs_links.py"
+        ],
+        "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+        "timeout_seconds": 180,
+        "started_utc": "2026-10-09T19:41:18.813405+00:00",
+        "exit_code": 0,
+        "source_unchanged": true,
+        "wall_elapsed_ns": 219047917,
+        "completed_utc": "2026-10-09T19:41:19.032740+00:00",
+        "command_log": {
+          "path": "/private/tmp/llm-mojo-engine-followup-20261009/followup-doc-links-final.log",
+          "sha256": "25d388628014dc0bf5df30f63decd38a1fc8a3c04bc2794f5d921845150ade49"
+        },
+        "source_before_sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34",
+        "source_after_sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+      },
+      "log": ".....\n----------------------------------------------------------------------\nRan 5 tests in 0.125s\n\nOK\n"
+    }
+  ],
+  "documentation_failure_note": "First documentation check found a renamed anchor; preserved existing anchor and rerun passed."
+}

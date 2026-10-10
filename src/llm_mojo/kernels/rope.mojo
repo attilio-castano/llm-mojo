@@ -2,8 +2,8 @@
 
 from layout import TensorLayout, TileTensor
 from max.gpu.host import DeviceContext
-from std.builtin.simd import FastMathFlag
-from std.gpu import global_idx
+from std.simd import FastMathFlag
+from max.gpu import global_idx
 from std.math import ceildiv
 from std.sys.info import is_apple_gpu
 

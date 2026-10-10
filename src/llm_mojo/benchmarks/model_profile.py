@@ -17,10 +17,12 @@ import gzip
 import hashlib
 import json
 import os
+import random
 from pathlib import Path
 import statistics as stats
 import subprocess
 import sys
+import time
 from types import SimpleNamespace
 
 import numpy as np
@@ -34,13 +36,44 @@ from .environment import stable_environment, conditions_snapshot, require_ac, re
 from . import model_contract as contract
 
 
+class NativeCommandError(RuntimeError):
+    """A completed subprocess failure with its actual numeric return code."""
+
+    def __init__(self, returncode, log):
+        super().__init__(f'command failed ({returncode}); see {log}')
+        self.returncode = returncode
+
+
 def execute(command, log, timeout=600):
-    result = subprocess.run(list(map(str, command)), cwd=repository_root(), env=environment(),
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=timeout)
+    try:
+        result = subprocess.run(list(map(str, command)), cwd=repository_root(), env=environment(),
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        partial = error.stdout or ''
+        if isinstance(partial, bytes):
+            partial = partial.decode(errors='replace')
+        log.write_text(partial)
+        raise RuntimeError(f'command timed out after {timeout}s; partial output retained at {log}') from error
     log.write_text(result.stdout)
     if result.returncode:
-        raise RuntimeError(f'command failed ({result.returncode}); see {log}')
+        raise NativeCommandError(result.returncode, log)
     return result.stdout
+
+
+def checked_execution(command, log, timeout):
+    """Retain the actual exit and elapsed time, including failed native calls."""
+    started = time.monotonic_ns()
+    receipt = dict(command=list(map(str, command)), timeout_seconds=timeout, exit_code=None)
+    try:
+        stdout = execute(command, log, timeout=timeout)
+        receipt['exit_code'] = 0
+        return stdout, receipt
+    except Exception as error:
+        receipt.update(exit_code=getattr(error, 'returncode', None), error=str(error))
+        raise
+    finally:
+        receipt['wall_elapsed_ns'] = time.monotonic_ns()-started
+        write(log.with_suffix('.execution.json'), receipt)
 
 
 def conditions():
@@ -112,6 +145,27 @@ def verify_build(directory):
         raise ValueError('prepared assets changed')
     if stable_environment() != receipt['environment']:
         raise ValueError('hardware/software differs from build')
+    return receipt
+
+
+def verify_engine_build(directory, declaration):
+    """Bind the recorded command to the live engine binary verify_build hashed.
+
+    Archived replay keeps its historical absolute paths. Live collection must
+    execute the verified build in place, rather than a copied receipt's origin.
+    """
+    directory = Path(directory).resolve()
+    receipt = verify_build(directory)
+    command = receipt.get('command', [])
+    expected = [str(environment_tool('mojo')), 'build', '-I', 'src',
+                'src/llm_mojo/benchmarks/engine_trace.mojo', '-o']
+    if (not _engine_same_json(receipt.get('declaration'), declaration)
+            or set(receipt.get('binaries', {})) != {'engine'}
+            or not isinstance(command, list) or len(command) != 7
+            or not _engine_same_json(command[:-1], expected)
+            or type(command[-1]) is not str or not Path(command[-1]).is_absolute()
+            or Path(command[-1]).resolve() != (directory/'engine').resolve()):
+        raise ValueError('engine command differs from its verified live build binary')
     return receipt
 
 
@@ -2910,6 +2964,852 @@ RETIRED = ['enqueue-build', 'enqueue-collect', 'enqueue-archive', 'scheduling-bu
            'selection-terminal', 'selection-archive', 'fusion-capture', 'fusion-terminal', 'fusion-archive']
 
 
+def engine_specification(output, seed=7, arrival_rate=None):
+    """Freeze a bounded synthetic token trace; no fitted rate or latency target."""
+    if arrival_rate is not None and (not np.isfinite(arrival_rate) or arrival_rate <= 0):
+        raise ValueError('arrival rate must be positive and finite')
+    rng = random.Random(seed)
+    arrival = 0
+    requests = []
+    for i, length in enumerate((32, 128, 64, 512, 96, 1024, 256, 64)):
+        if arrival_rate is not None and i:
+            arrival += max(1, round(rng.expovariate(arrival_rate) * 1e9))
+        requests.append(dict(request_id=i, arrival_offset_ns=arrival,
+                             prompt_ids=[(p * 103 + i * 17 + 42) % 151643 for p in range(length)],
+                             max_new_tokens=32, stop_ids=[151643, 151645], abort_offset_ns=None,
+                             output_script=None))
+    trace = dict(kind='engine-token-trace-v1', schema_version=1,
+                 generator='synthetic-affine-v1', seed=seed,
+                 arrival_rate=arrival_rate, mode='offline' if arrival_rate is None else 'online',
+                 scripted_tokens=[11, 13, 17, 19, 23], requests=requests)
+    validate_engine_trace(trace)
+    if output.exists():
+        raise ValueError('refusing to replace a token trace')
+    write(output, trace)
+    return trace
+
+
+def validate_engine_trace(trace):
+    if (trace.get('kind') != 'engine-token-trace-v1' or trace.get('schema_version') != 1
+            or trace.get('mode') not in ('offline', 'online')):
+        raise ValueError('invalid engine trace declaration')
+    requests = trace.get('requests', [])
+    if not 1 <= len(requests) <= 128:
+        raise ValueError('trace must contain 1..128 requests')
+    seen = set()
+    previous = -1
+    for request in requests:
+        identifier = request.get('request_id')
+        at = request.get('arrival_offset_ns')
+        prompt = request.get('prompt_ids', [])
+        maximum = request.get('max_new_tokens')
+        stops = request.get('stop_ids', [])
+        if (type(identifier) is not int or identifier < 0 or identifier in seen
+                or type(at) is not int or at < previous or at < 0
+                or type(maximum) is not int or maximum < 0 or not prompt
+                or len(prompt) + maximum > 4096):
+            raise ValueError('invalid trace request identity, time or budget')
+        if any(type(t) is not int or not 0 <= t < 151936 for t in [*prompt, *stops]):
+            raise ValueError('invalid trace token')
+        abort = request.get('abort_offset_ns')
+        if abort is not None and (type(abort) is not int or abort < at):
+            raise ValueError('abort precedes arrival')
+        if request.get('output_script') is not None:
+            raise ValueError('per-request teacher forcing is not implemented')
+        if trace['mode'] == 'offline' and at:
+            raise ValueError('offline requests must arrive at zero')
+        seen.add(identifier)
+        previous = at
+    script = trace.get('scripted_tokens', [])
+    if not script or any(type(t) is not int or not 0 <= t < 151936 for t in script):
+        raise ValueError('invalid simulated token oracle')
+    return trace
+
+
+def engine_trace_tsv(trace):
+    validate_engine_trace(trace)
+    def csv(values): return ','.join(map(str, values)) if values else '-'
+    lines = ['script ' + csv(trace['scripted_tokens'])]
+    for request in trace['requests']:
+        lines.append('request {} {} {} {} {} -'.format(
+            request['request_id'], request['arrival_offset_ns'], request['max_new_tokens'],
+            csv(request['stop_ids']), csv(request['prompt_ids'])))
+        if request['abort_offset_ns'] is not None:
+            lines.append(f"abort {request['request_id']} {request['abort_offset_ns']}")
+    return '\n'.join(lines) + '\n'
+
+
+def engine_peak_cached_tokens(request):
+    """Validated request KV extent: zero-output uses none; final output is uncached."""
+    maximum = request['max_new_tokens']
+    return len(request['prompt_ids']) + maximum - 1 if maximum else 0
+
+
+def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy=None, admission=None,
+                     observation=None, study=None, token_budget=None, runner=None):
+    """Reject malformed or incomplete native traces before computing any metric."""
+    validate_engine_trace(trace)
+    if arm not in (*contract.ENGINE_ARMS, 'adaptive') or mode not in ('greedy', 'scripted'):
+        raise ValueError('invalid engine arm or mode')
+    metadata, arrivals, events, steps = {}, {}, [], []
+    kv_observations, admissions, execute_intervals, routes = [], [], [], []
+    for line in stdout.splitlines():
+        fields = line.split()
+        if not fields:
+            continue
+        name = fields[0]
+        if name in ('device', 'mode', 'config', 'drained', 'policy', 'admission', 'telemetry', 'kv_geometry', 'study', 'work_capacity', 'runner'):
+            if name in metadata:
+                raise ValueError('duplicate engine execution identity')
+            metadata[name] = fields[1:]
+        elif name == 'arrival' and len(fields) == 4:
+            identifier, scheduled, actual = map(int, fields[1:])
+            if identifier in arrivals:
+                raise ValueError('duplicate request arrival')
+            arrivals[identifier] = dict(scheduled_ns=scheduled, actual_ns=actual)
+        elif name in ('token', 'finish') and len(fields) == 7:
+            identifier = int(fields[1])
+            events.append(dict(kind=name, request_id=identifier,
+                               token_id=int(fields[2]) if name == 'token' else None,
+                               reason=fields[2] if name == 'finish' else None,
+                               prompt_tokens=int(fields[3]), generated_tokens=int(fields[4]),
+                               arrival_ns=int(fields[5]), emitted_ns=int(fields[6]),
+                               step_id=steps[-1]['step_id'] if steps else None))
+        elif name == 'step' and len(fields) == len(contract.ENGINE_STEP_FIELDS) + 1:
+            steps.append(dict(zip(contract.ENGINE_STEP_FIELDS, map(int, fields[1:]))))
+        elif name == 'kv' and len(fields) == len(contract.ENGINE_KV_FIELDS) + 1:
+            values = [int(fields[1]), fields[2], *map(int, fields[3:])]
+            kv_observations.append(dict(zip(contract.ENGINE_KV_FIELDS, values)))
+        elif name == 'admit' and len(fields) == 4:
+            step_id, identifier, timestamp = map(int, fields[1:])
+            admissions.append(dict(step_id=step_id, request_id=identifier, timestamp_ns=timestamp))
+        elif name == 'route' and len(fields) == len(contract.ENGINE_ROUTE_FIELDS) + 1:
+            routes.append(dict(zip(contract.ENGINE_ROUTE_FIELDS, map(int, fields[1:]))))
+        elif name == 'kv_execute' and len(fields) == 4:
+            step_id, begin, end = map(int, fields[1:])
+            execute_intervals.append(dict(step_id=step_id, begin_ns=begin, end_ns=end))
+        else:
+            raise ValueError('unknown or malformed engine trace line: ' + line[:120])
+    device = 'Apple M4 Pro/metal' if mode == 'greedy' else 'simulated/virtual'
+    budget = 256 if arm in ('chunked', 'adaptive') else 4096
+    if study is None:
+        if token_budget is not None or 'study' in metadata or 'work_capacity' in metadata or runner is not None:
+            raise ValueError('engine scheduling study was not declared')
+    elif (study not in (contract.ENGINE_BUDGET_STUDY, contract.ENGINE_FAST_STUDY) or observation is not None
+          or arm not in ('chunked', 'adaptive') or maximum_sequences != 8
+          or (study == contract.ENGINE_FAST_STUDY and arm != 'chunked')
+          or type(token_budget) is not int or token_budget not in contract.ENGINE_BUDGET_DECLARATION['fixed_budgets']
+          or (arm == 'adaptive' and token_budget != 256)
+          or metadata.get('study') != [study] or metadata.get('work_capacity') != ['256', '8']):
+        raise ValueError('engine scheduling budget or workspace differs from declaration')
+    else:
+        budget = token_budget
+    sequences = 1 if arm == 'serial' else maximum_sequences
+    if (metadata.get('device') != device.split() or metadata.get('mode') != [mode]
+            or metadata.get('config') != [arm, str(blocks), str(budget), str(sequences)]):
+        raise ValueError('engine device, mode or configuration differs from declaration')
+    if admission is None:
+        if 'admission' in metadata:
+            raise ValueError('engine admission selector was not declared')
+    elif ((arm != 'chunked' and not (arm == 'adaptive' and study in (contract.ENGINE_BUDGET_STUDY, contract.ENGINE_FAST_STUDY)))
+          or admission not in contract.ENGINE_ADMISSION_POLICIES
+          or metadata.get('admission') != [admission]):
+        raise ValueError('engine admission differs from declaration')
+    if policy is None:
+        if arm == 'adaptive' or 'policy' in metadata:
+            raise ValueError('adaptive run requires a frozen declared policy')
+    elif (arm != 'adaptive' or set(policy) != set(contract.ENGINE_POLICY_FIELDS)
+          or any(type(v) is not int or v < 0 for v in policy.values()) or policy['target_ns'] < 1
+          or metadata.get('policy') != [str(policy[k]) for k in contract.ENGINE_POLICY_FIELDS]):
+        raise ValueError('engine adaptive policy differs from declaration')
+    expected = {r['request_id']: r for r in trace['requests']}
+    if set(arrivals) != set(expected):
+        raise ValueError('incomplete engine arrivals')
+    if [s['step_id'] for s in steps] != list(range(len(steps))):
+        raise ValueError('missing or unordered engine step')
+    previous_end = 0
+    for step in steps:
+        if any(value < 0 for value in step.values()):
+            raise ValueError('negative engine counter or timestamp')
+        if (step['begin_ns'] < previous_end or step['end_ns'] < step['begin_ns']
+                or sum(step[k] for k in ('schedule_ns', 'build_ns', 'execute_ns', 'postprocess_ns'))
+                > step['end_ns'] - step['begin_ns']):
+            raise ValueError('inconsistent synchronous step timing')
+        if (step['prefill_seqs'] > 1 or step['decode_seqs'] + step['prefill_seqs'] > sequences
+                or step['total_tokens'] != step['decode_seqs'] + step['prefill_tokens']
+                or step['total_tokens'] > budget or step['blocks_free'] > blocks
+                or step['aborted'] > step['finished'] or step['budget_limited'] not in (0, 1)):
+            raise ValueError('engine exceeded its declared work or pool budget')
+        if policy is None and (step['predicted_ns'] or step['budget_limited']):
+            raise ValueError('fixed-budget trace unexpectedly used a fitted policy')
+        previous_end = step['end_ns']
+    histories = {identifier: [] for identifier in expected}
+    terminal, last_time = {}, {}
+    for event in events:
+        identifier = event['request_id']
+        if identifier not in expected or identifier in terminal:
+            raise ValueError('unknown request or event after terminal result')
+        request = expected[identifier]
+        arrival = arrivals[identifier]
+        if (arrival['scheduled_ns'] != request['arrival_offset_ns']
+                or arrival['actual_ns'] < arrival['scheduled_ns']
+                or event['arrival_ns'] != arrival['scheduled_ns']
+                or event['emitted_ns'] < max(arrival['actual_ns'], last_time.get(identifier, 0))
+                or event['prompt_tokens'] != len(request['prompt_ids'])):
+            raise ValueError('engine event has invalid time or prompt accounting')
+        if event['step_id'] is None:
+            raise ValueError('engine event is outside a declared step')
+        step = steps[event['step_id']]
+        if not step['begin_ns'] <= event['emitted_ns'] <= step['end_ns']:
+            raise ValueError('engine event time is outside its step')
+        last_time[identifier] = event['emitted_ns']
+        tokens = histories[identifier]
+        if event['kind'] == 'token':
+            token = event['token_id']
+            if (not 0 <= token < 151936 or event['generated_tokens'] != len(tokens) + 1
+                    or len(tokens) >= request['max_new_tokens']
+                    or (tokens and tokens[-1]['token_id'] in request['stop_ids'])):
+                raise ValueError('engine token delivery violates order, stop or budget')
+            tokens.append(event)
+        else:
+            reason = event['reason']
+            if event['generated_tokens'] != len(tokens) or reason not in ('stop', 'length', 'abort', 'error'):
+                raise ValueError('engine terminal token accounting differs')
+            if reason == 'length' and len(tokens) != request['max_new_tokens']:
+                raise ValueError('engine terminated before its output limit')
+            if reason == 'stop' and (not tokens or tokens[-1]['token_id'] not in request['stop_ids']):
+                raise ValueError('engine reported a false stop')
+            if reason == 'abort' and (request['abort_offset_ns'] is None
+                                     or event['emitted_ns'] < request['abort_offset_ns']):
+                raise ValueError('engine reported an undeclared or early abort')
+            if reason == 'length' and tokens and tokens[-1]['token_id'] in request['stop_ids']:
+                raise ValueError('engine ignored its final stop token')
+            terminal[identifier] = event
+    if set(terminal) != set(expected):
+        raise ValueError('missing engine terminal result')
+    for step in steps:
+        local = [e for e in events if e['step_id'] == step['step_id']]
+        if (sum(e['kind'] == 'finish' for e in local) != step['finished']
+                or sum(e['reason'] == 'abort' for e in local) != step['aborted']):
+            raise ValueError('engine per-step terminal accounting differs')
+        if policy is not None and step['total_tokens']:
+            partitions = int(step['decode_seqs'] > 0 or step['prefill_tokens'] == 1) + int(step['prefill_tokens'] > 1)
+            logits = sum(e['kind'] == 'token' for e in local)
+            prediction = (policy['fixed_ns'] + policy['per_row_ns'] * step['total_tokens']
+                          + policy['per_position_ns'] * step['attended_positions']
+                          + policy['per_partition_ns'] * partitions + policy['per_logit_ns'] * logits)
+            if prediction != step['predicted_ns']:
+                raise ValueError('engine prediction differs from frozen coefficients')
+    drained = metadata.get('drained', [])
+    if len(drained) != 4:
+        raise ValueError('missing engine drain receipt')
+    request_count, step_count, free_blocks, end_ns = map(int, drained)
+    if (request_count != len(expected) or step_count != len(steps) or free_blocks != blocks
+            or end_ns < max([s['end_ns'] for s in steps] + [e['emitted_ns'] for e in events] + [0])):
+        raise ValueError('engine drain receipt differs from complete trace')
+    if (sum(s['finished'] for s in steps) != len(terminal)
+            or sum(s['aborted'] for s in steps) != sum(e['reason'] == 'abort' for e in terminal.values())
+            or (steps and (steps[-1]['blocks_free'] != blocks or steps[-1]['waiting']))):
+        raise ValueError('engine did not drain or step/event counts differ')
+    for identifier, request in expected.items():
+        arrival = arrivals[identifier]
+        if (arrival['scheduled_ns'] != request['arrival_offset_ns']
+                or arrival['actual_ns'] < arrival['scheduled_ns']):
+            raise ValueError('request arrival differs from frozen trace')
+    if admission == 'reserved':
+        if any(step['preempted'] for step in steps):
+            raise ValueError('reserved admission unexpectedly preempted a request')
+        if all(e['reason'] in ('stop', 'length') for e in terminal.values()):
+            necessary_rows = sum(len(expected[i]['prompt_ids']) + len(tokens) - 1 if tokens else 0
+                                 for i, tokens in histories.items())
+            if sum(step['total_tokens'] for step in steps) != necessary_rows:
+                raise ValueError('reserved execution differs from necessary prompt/output rows')
+    result = dict(device=device, mode=mode, arm=arm, blocks=blocks, token_budget=budget,
+                max_sequences=sequences, arrivals={str(k): v for k, v in arrivals.items()}, events=events, steps=steps,
+                drained=dict(requests=request_count, steps=step_count, free_blocks=free_blocks, elapsed_ns=end_ns),
+                policy=policy)
+    if admission is not None:
+        result['admission'] = admission
+    if observation is None:
+        if ('telemetry' in metadata or 'kv_geometry' in metadata or kv_observations
+                or admissions or execute_intervals):
+            raise ValueError('engine occupancy observation was not declared')
+    else:
+        _validate_engine_observation(metadata, result, trace, observation,
+                                     kv_observations, admissions, execute_intervals)
+        result.update(observation=observation, kv_observations=kv_observations,
+                      admissions=admissions, execute_intervals=execute_intervals,
+                      kv_geometry=dict(zip(('layers', 'kv_heads', 'head_dim', 'storage_bytes'),
+                                           map(int, metadata['kv_geometry']))))
+    if study is not None:
+        result.update(study=study, work_capacity=dict(token_rows=256, max_sequences=8))
+    if runner is None:
+        if 'runner' in metadata or routes or study == contract.ENGINE_FAST_STUDY:
+            raise ValueError('engine runner route observation was not declared')
+    else:
+        if (study != contract.ENGINE_FAST_STUDY or runner not in contract.ENGINE_FAST_ROUTES
+                or mode != 'greedy' or admission is None or metadata.get('runner') != [runner]):
+            raise ValueError('engine Fast runner identity differs from declaration')
+        active_steps = [step for step in steps if step['total_tokens']]
+        if [route['step_id'] for route in routes] != [step['step_id'] for step in active_steps]:
+            raise ValueError('missing, duplicate or misassociated completed engine route')
+        for route, step in zip(routes, active_steps):
+            selected = sum(event['kind'] == 'token' and event['step_id'] == step['step_id'] for event in events)
+            sequence_count = step['decode_seqs'] + step['prefill_seqs']
+            configuration = 26 if runner == 'fast-decode' and step['total_tokens'] == sequence_count == selected else 27
+            if (route['configuration'] != configuration or route['executed_rows'] != step['total_tokens']
+                    or route['sequences'] != sequence_count or route['selected_logits'] != selected
+                    or step['prefill_seqs'] != int(step['prefill_tokens'] > 0)
+                    or not step['decode_seqs'] <= selected <= sequence_count
+                    or not 1 <= sequence_count <= step['total_tokens']):
+                raise ValueError('engine completed route differs from actual rows, sequences or selected heads')
+        result.update(runner=runner, routes=routes)
+    return result
+
+
+def _validate_engine_observation(metadata, run, trace, observation, observations, admissions, intervals):
+    """Boundary counts prove allocator occupancy, not GPU write timestamps."""
+    expected_geometry = ['24', '2', '64', '2'] if run['mode'] == 'greedy' else ['1', '1', '1', '2']
+    if (observation != contract.ENGINE_ADMISSION_RANGE_TELEMETRY
+            or run.get('admission') not in contract.ENGINE_ADMISSION_POLICIES or run['arm'] != 'chunked'
+            or metadata.get('telemetry') != [observation]
+            or metadata.get('kv_geometry') != expected_geometry):
+        raise ValueError('engine occupancy observation or geometry differs from declaration')
+    steps = run['steps']
+    expected = [(s['step_id'], phase) for s in steps for phase in contract.ENGINE_KV_PHASES]
+    if [(o['step_id'], o['phase']) for o in observations] != expected:
+        raise ValueError('incomplete or unordered engine occupancy boundaries')
+    if [i['step_id'] for i in intervals] != [s['step_id'] for s in steps]:
+        raise ValueError('incomplete or unordered engine execute intervals')
+    requests = {r['request_id']: r for r in trace['requests']}
+    finishes = {e['request_id']: e for e in run['events'] if e['kind'] == 'finish'}
+    first_tokens = {}
+    for event in run['events']:
+        if event['kind'] == 'token':
+            first_tokens.setdefault(event['request_id'], event)
+    if [(a['step_id'], a['timestamp_ns']) for a in admissions] != sorted(
+            (a['step_id'], a['timestamp_ns']) for a in admissions):
+        raise ValueError('unordered engine admission observations')
+    by_step = {}
+    first_admissions = set()
+    for admission in admissions:
+        identifier, step_id, timestamp = (admission[k] for k in ('request_id', 'step_id', 'timestamp_ns'))
+        if (identifier not in requests or not 0 <= step_id < len(steps)
+                or requests[identifier]['max_new_tokens'] == 0):
+            raise ValueError('unknown or zero-output admission observation')
+        step = steps[step_id]
+        if not max(step['begin_ns'], run['arrivals'][str(identifier)]['actual_ns']) <= timestamp <= step['begin_ns'] + step['schedule_ns']:
+            raise ValueError('admission timestamp is outside its scheduling boundary')
+        finish = finishes[identifier]
+        if step_id > finish['step_id'] or timestamp > finish['emitted_ns']:
+            raise ValueError('request admission follows its terminal event')
+        if identifier not in first_admissions:
+            first_token = first_tokens.get(identifier)
+            if first_token is None or step_id > first_token['step_id'] or timestamp > first_token['emitted_ns']:
+                raise ValueError('request emitted a token before its first admission')
+            first_admissions.add(identifier)
+        by_step.setdefault(step_id, []).append(identifier)
+    previous = None
+    residents = set()
+    def check_reservation(snapshot):
+        extents = [len(requests[i]['prompt_ids']) + requests[i]['max_new_tokens'] - 1 for i in residents]
+        if (snapshot['reserved_tokens'] != sum(extents)
+                or snapshot['allocated_blocks'] != sum((n+31)//32 for n in extents)
+                or snapshot['resident_requests'] != len(residents)):
+            raise ValueError('reserved occupancy differs from admitted lifetime extents')
+    for index, step in enumerate(steps):
+        start, scheduled, executed, end = observations[index*4:index*4+4]
+        interval = intervals[index]
+        if (start['timestamp_ns'] != step['begin_ns'] or end['timestamp_ns'] != step['end_ns']
+                or not start['timestamp_ns'] <= scheduled['timestamp_ns'] <= interval['begin_ns']
+                <= interval['end_ns'] == executed['timestamp_ns'] <= end['timestamp_ns']
+                or interval['end_ns'] - interval['begin_ns'] != step['execute_ns']
+                or scheduled['timestamp_ns'] != step['begin_ns'] + step['schedule_ns']):
+            raise ValueError('engine occupancy timestamp differs from synchronous step')
+        identifiers = by_step.get(index, [])
+        if (len(identifiers) != step['admitted'] or len(set(identifiers)) != len(identifiers)
+                or step['admitted'] not in (0, 1) or step['admitted'] > step['prefill_seqs']):
+            raise ValueError('engine admission observations differ from step count')
+        arrived = sum(a['actual_ns'] <= step['begin_ns'] for a in run['arrivals'].values())
+        finished_before = sum(e['step_id'] < index for e in finishes.values())
+        finished_here = sum(e['step_id'] == index for e in finishes.values())
+        zero_here = sum(e['step_id'] == index and e['generated_tokens'] == 0 for e in finishes.values())
+        live_counts = [arrived-finished_before, arrived-finished_before-zero_here,
+                       arrived-finished_before-zero_here, arrived-finished_before-finished_here]
+        if any(o['waiting_requests'] + o['resident_requests'] != live
+               for o, live in zip((start, scheduled, executed, end), live_counts)):
+            raise ValueError('engine occupancy request counts differ from ingress and terminal events')
+        for snapshot in (start, scheduled, executed, end):
+            allocated, written, tokens, reserved, waiting, resident = (snapshot[k] for k in
+                ('allocated_blocks', 'written_blocks', 'written_tokens', 'reserved_tokens',
+                 'waiting_requests', 'resident_requests'))
+            if (any(v < 0 for k, v in snapshot.items() if k != 'phase')
+                    or allocated > run['blocks'] or resident > run['max_sequences']
+                    or resident > allocated or (allocated == 0) != (resident == 0)
+                    or (written == 0) != (tokens == 0) or not written <= tokens <= written*32
+                    or written > allocated or not tokens <= reserved <= allocated*32
+                    or reserved < allocated*32 - resident*31
+                    or waiting + resident > len(requests)):
+                raise ValueError('impossible engine KV occupancy snapshot')
+        if previous is None:
+            if any(start[k] for k in ('allocated_blocks', 'written_blocks', 'written_tokens', 'reserved_tokens', 'resident_requests')):
+                raise ValueError('engine occupancy did not start with an empty pool')
+        elif any(start[k] != previous[k] for k in
+                 ('allocated_blocks', 'written_blocks', 'written_tokens', 'reserved_tokens', 'resident_requests')):
+            raise ValueError('engine occupancy changed between step boundaries')
+        if (any(scheduled[k] != executed[k] for k in
+                ('allocated_blocks', 'reserved_tokens', 'waiting_requests', 'resident_requests'))
+                or executed['written_blocks'] < scheduled['written_blocks']
+                or executed['written_tokens'] < scheduled['written_tokens']
+                or executed['written_tokens'] - scheduled['written_tokens'] != step['total_tokens']
+                or any(end[k] > executed[k] for k in
+                       ('allocated_blocks', 'written_blocks', 'written_tokens', 'reserved_tokens', 'resident_requests'))
+                or end['allocated_blocks'] != run['blocks'] - step['blocks_free']
+                or end['waiting_requests'] != step['waiting']):
+            raise ValueError('engine KV ownership or writes differ across step phases')
+        if run['admission'] == 'reserved':
+            check_reservation(start)
+            residents.update(identifiers)
+            check_reservation(scheduled)
+            check_reservation(executed)
+            residents.difference_update(e['request_id'] for e in run['events']
+                                        if e['kind'] == 'finish' and e['step_id'] == index)
+            check_reservation(end)
+        elif (start['reserved_tokens'] != start['written_tokens']
+              or end['reserved_tokens'] != end['written_tokens']
+              or scheduled['reserved_tokens'] != executed['written_tokens']):
+            raise ValueError('incremental extent differs from scheduled or committed KV writes')
+        previous = end
+    admitted_ids = [a['request_id'] for a in admissions]
+    expected_ids = [r['request_id'] for r in trace['requests'] if r['max_new_tokens']]
+    if (set(admitted_ids) != set(expected_ids)
+            or len(admitted_ids) != len(expected_ids) + sum(s['preempted'] for s in steps)
+            or (run['admission'] == 'reserved' and admitted_ids != expected_ids)):
+        raise ValueError('missing, repeated or reordered request admission')
+    necessary = sum(e['prompt_tokens'] + e['generated_tokens'] - 1 if e['generated_tokens'] else 0
+                    for e in run['events'] if e['kind'] == 'finish')
+    if any(e['reason'] not in ('stop', 'length') for e in run['events'] if e['kind'] == 'finish'):
+        raise ValueError('operating-range observation requires completed finite requests')
+    if sum(s['total_tokens'] for s in steps) < necessary:
+        raise ValueError('engine execution omitted necessary prompt/output rows')
+
+
+def engine_run_summary(run, trace):
+    """Metrics are derived from complete ordered raw events, including the drain."""
+    def distribution(values):
+        return dict(count=len(values), p50_ns=float(np.percentile(values, 50)),
+                    p95_ns=float(np.percentile(values, 95)), p99_ns=float(np.percentile(values, 99))) if values else None
+    requests = []
+    intervals = []
+    for request in trace['requests']:
+        identifier = request['request_id']
+        tokens = [e for e in run['events'] if e['request_id'] == identifier and e['kind'] == 'token']
+        finish = next(e for e in run['events'] if e['request_id'] == identifier and e['kind'] == 'finish')
+        gaps = [b['emitted_ns'] - a['emitted_ns'] for a, b in zip(tokens, tokens[1:])]
+        intervals.extend(gaps)
+        requests.append(dict(request_id=identifier, reason=finish['reason'],
+                             delivered_tokens=len(tokens), token_ids=[t['token_id'] for t in tokens],
+                             ttft_ns=tokens[0]['emitted_ns'] - request['arrival_offset_ns'] if tokens else None,
+                             tpot_ns=stats.mean(gaps) if gaps else None,
+                             end_to_end_ns=finish['emitted_ns'] - request['arrival_offset_ns']))
+    end = run['drained']['elapsed_ns']
+    start = min(r['arrival_offset_ns'] for r in trace['requests'])
+    duration = end - start
+    delivered = sum(r['delivered_tokens'] for r in requests)
+    result = dict(duration_ns=duration, delivered_tokens=delivered,
+                tokens_per_second=delivered * 1e9 / duration if duration else None,
+                clock='host-monotonic' if run['mode'] == 'greedy' else 'virtual',
+                arrival_window_ns=max(r['arrival_offset_ns'] for r in trace['requests']) - start,
+                drain_tail_ns=end - max(r['arrival_offset_ns'] for r in trace['requests']),
+                terminal_reasons=dict(Counter(r['reason'] for r in requests)), requests=requests,
+                ttft=distribution([r['ttft_ns'] for r in requests if r['ttft_ns'] is not None]),
+                tpot=distribution([r['tpot_ns'] for r in requests if r['tpot_ns'] is not None]),
+                inter_token=distribution(intervals),
+                end_to_end=distribution([r['end_to_end_ns'] for r in requests]),
+                steps=len(run['steps']), preemptions=sum(s['preempted'] for s in run['steps']),
+                total_tokens=sum(s['total_tokens'] for s in run['steps']),
+                attended_positions=sum(s['attended_positions'] for s in run['steps']))
+    if run.get('observation') == contract.ENGINE_ADMISSION_RANGE_TELEMETRY:
+        first_admissions = {}
+        for admission in run['admissions']:
+            first_admissions.setdefault(admission['request_id'], admission['timestamp_ns'])
+        for request in requests:
+            identifier = request['request_id']
+            admitted = first_admissions.get(identifier)
+            arrival = run['arrivals'][str(identifier)]
+            request.update(first_admission_ns=admitted,
+                           admission_delay_ns=admitted-arrival['scheduled_ns'] if admitted is not None else None,
+                           ingress_to_admission_ns=admitted-arrival['actual_ns'] if admitted is not None else None,
+                           admissions=sum(a['request_id'] == identifier for a in run['admissions']))
+        result.update(admission_delay=distribution([r['admission_delay_ns'] for r in requests
+                                                   if r['admission_delay_ns'] is not None]),
+                      ingress_to_admission=distribution([r['ingress_to_admission_ns'] for r in requests
+                                                        if r['ingress_to_admission_ns'] is not None]),
+                      kv_occupancy=_engine_occupancy_summary(run, duration))
+    return result
+
+
+def _engine_occupancy_summary(run, duration):
+    """Integrate stable block ownership; bound writes within each execute call."""
+    geometry = run['kv_geometry']
+    token_bytes = geometry['layers'] * 2 * geometry['kv_heads'] * geometry['head_dim'] * geometry['storage_bytes']
+    block_bytes = 32 * token_bytes
+    allocated_byte_ns = 0
+    unused_block_lower = unused_block_upper = 0
+    unused_slot_lower = unused_slot_upper = 0
+    unwritten_extent_lower = unwritten_extent_upper = 0
+    execute_ns = idle_ns = 0
+    observations = run['kv_observations']
+    def integrate(before, after, elapsed):
+        nonlocal allocated_byte_ns, unused_block_lower, unused_block_upper
+        nonlocal unused_slot_lower, unused_slot_upper, unwritten_extent_lower, unwritten_extent_upper
+        blocks = before['allocated_blocks']
+        allocated_byte_ns += blocks * block_bytes * elapsed
+        unused_block_lower += (blocks-after['written_blocks']) * block_bytes * elapsed
+        unused_block_upper += (blocks-before['written_blocks']) * block_bytes * elapsed
+        unused_slot_lower += (blocks*32-after['written_tokens']) * token_bytes * elapsed
+        unused_slot_upper += (blocks*32-before['written_tokens']) * token_bytes * elapsed
+        unwritten_extent_lower += (before['reserved_tokens']-after['written_tokens']) * token_bytes * elapsed
+        unwritten_extent_upper += (before['reserved_tokens']-before['written_tokens']) * token_bytes * elapsed
+    for index, interval in enumerate(run['execute_intervals']):
+        start, scheduled, executed, end = observations[index*4:index*4+4]
+        elapsed = interval['end_ns'] - interval['begin_ns']
+        execute_ns += elapsed
+        integrate(scheduled, executed, elapsed)
+        if index:
+            previous = observations[index*4-1]
+            elapsed = start['timestamp_ns'] - previous['timestamp_ns']
+            idle_ns += elapsed
+            integrate(previous, previous, elapsed)
+    covered = execute_ns + idle_ns
+    return dict(geometry=geometry, token_bytes=token_bytes, block_bytes=block_bytes,
+                scope='allocator-owned physical KV blocks during execute and inter-step idle; '
+                    'schedule/build/postprocess excluded; entire pool allocation stays resident',
+                write_time='unobserved within execute; before/after written counts bound unused capacity',
+                covered_ns=covered, execute_ns=execute_ns, inter_step_idle_ns=idle_ns,
+                excluded_ns=duration-covered,
+                allocated_byte_ns=allocated_byte_ns,
+                unused_block_byte_ns_bounds=dict(lower=unused_block_lower, upper=unused_block_upper),
+                unused_slot_byte_ns_bounds=dict(lower=unused_slot_lower, upper=unused_slot_upper),
+                unwritten_reserved_extent_byte_ns_bounds=dict(lower=unwritten_extent_lower,
+                                                              upper=unwritten_extent_upper),
+                peak_allocated_blocks=max((o['allocated_blocks'] for o in observations), default=0),
+                peak_written_blocks=max((o['written_blocks'] for o in observations), default=0),
+                peak_reserved_tokens=max((o['reserved_tokens'] for o in observations), default=0),
+                peak_written_tokens=max((o['written_tokens'] for o in observations), default=0))
+
+
+def _engine_same_json(value, expected):
+    """The new receipt must not treat integer 1 as a boolean True."""
+    if type(value) is not type(expected):
+        return False
+    if isinstance(expected, dict):
+        return value.keys() == expected.keys() and all(_engine_same_json(value[k], v) for k, v in expected.items())
+    if isinstance(expected, list):
+        return len(value) == len(expected) and all(_engine_same_json(a, b) for a, b in zip(value, expected))
+    return value == expected
+
+
+def _engine_declaration(record):
+    declarations = {d['kind']: d for d in (contract.ENGINE_DECLARATION, contract.ENGINE_ADMISSION_DECLARATION,
+                                         contract.ENGINE_ADMISSION_RANGE_DECLARATION, contract.ENGINE_BUDGET_DECLARATION, contract.ENGINE_FAST_DECLARATION, contract.ENGINE_ASYNC_DECLARATION)}
+    declaration = declarations.get(record.get('kind'))
+    if declaration is None or record.get('declaration') != declaration:
+        raise ValueError('engine measurement declaration changed')
+    if declaration != contract.ENGINE_DECLARATION and not _engine_same_json(record['declaration'], declaration):
+        raise ValueError('engine admission declaration types changed')
+    return declaration
+
+
+def _engine_collection_declaration(admission_pair, admission_range, budget_study=False, fast_study=False, async_study=False):
+    if any(type(v) is not bool for v in (admission_pair, admission_range, budget_study, fast_study, async_study)) or sum((admission_pair, admission_range, budget_study, fast_study, async_study)) > 1:
+        raise ValueError('select exactly one engine admission study')
+    return (contract.ENGINE_ASYNC_DECLARATION if async_study else contract.ENGINE_FAST_DECLARATION if fast_study else contract.ENGINE_BUDGET_DECLARATION if budget_study else
+            contract.ENGINE_ADMISSION_RANGE_DECLARATION if admission_range else
+            contract.ENGINE_ADMISSION_DECLARATION if admission_pair else contract.ENGINE_DECLARATION)
+
+
+def _engine_cells(block, admission_pair=False):
+    order = ([('incremental', False), ('incremental', True), ('reserved', False)] if admission_pair else
+             [('serial', False), ('serial', True), *[(a, False) for a in contract.ENGINE_ARMS[1:]]])
+    return list(reversed(order)) if block in (1, 2) else order
+
+
+def engine_study_summary(record):
+    if record.get('kind') == contract.ENGINE_ASYNC_DECLARATION['kind']:
+        from .engine_async import summary
+        return summary(record)
+    if record.get('kind') == contract.ENGINE_FAST_DECLARATION['kind']:
+        from .engine_budget import fast_summary
+        return fast_summary(record)
+    if record.get('kind') == contract.ENGINE_BUDGET_DECLARATION['kind']:
+        from .engine_budget import scheduling_summary
+        return scheduling_summary(record)
+    trace = validate_engine_trace(record['trace'])
+    declaration = _engine_declaration(record)
+    admission_range = declaration == contract.ENGINE_ADMISSION_RANGE_DECLARATION
+    admission_pair = declaration != contract.ENGINE_DECLARATION
+    if admission_pair and any(r['abort_offset_ns'] is not None for r in trace['requests']):
+        raise ValueError('paired admission study excludes timed aborts')
+    if (record.get('mode') not in ('greedy', 'scripted')
+            or type(record.get('blocks')) is not int or not 1 <= record['blocks'] <= 8192
+            or type(record.get('max_sequences')) is not int or not 1 <= record['max_sequences'] <= 64
+            or record.get('warmup_steps') != declaration['warmup_steps']
+            or (admission_range and type(record.get('warmup_steps')) is not int)
+            or (admission_pair and record['max_sequences'] != 8)):
+        raise ValueError('engine collection configuration changed')
+    runs = record.get('runs', [])
+    label = 'admission' if admission_pair else 'arm'
+    keys = [(r['block'], r.get(label), r['calibration']) for r in runs]
+    expected_order = [(b, cell, calibration) for b in range(4)
+                      for cell, calibration in _engine_cells(b, admission_pair)]
+    expected = set(expected_order)
+    if len(keys) != len(set(keys)) or set(keys) != expected:
+        raise ValueError('incomplete or duplicate paired engine trace grid')
+    if admission_pair and (keys != expected_order or any(
+            r['arm'] != 'chunked' or type(r['block']) is not int or type(r['calibration']) is not bool
+            for r in runs)):
+        raise ValueError('admission pair changed its balanced order or chunked arm')
+    summaries = []
+    for run in runs:
+        for key in ('conditions_before', 'conditions_after'):
+            snapshot = run.get(key, {})
+            try:
+                require_ac(snapshot)
+                require_nominal_thermal_state(snapshot)
+                if snapshot['power_mode_raw'] != '0':
+                    raise ValueError('non-nominal power mode')
+            except (KeyError, RuntimeError) as error:
+                raise ValueError('incomplete or non-nominal engine conditions') from error
+        parsed = parse_engine_run(run['stdout'], trace, run['arm'], record['blocks'],
+                                  record['max_sequences'], record['mode'],
+                                  admission=run.get('admission') if admission_pair else None,
+                                  observation=declaration['observation'] if admission_range else None)
+        if run.get('parsed') != parsed or (admission_range and not _engine_same_json(run.get('parsed'), parsed)):
+            raise ValueError('engine parsed records differ from native trace')
+        if admission_range:
+            _validate_engine_range_execution(record, run, parsed)
+        if admission_pair and any(e['reason'] not in ('stop', 'length')
+                                  for e in parsed['events'] if e['kind'] == 'finish'):
+            raise ValueError('paired admission study requires completed finite requests')
+        summaries.append(dict(block=run['block'], arm=run['arm'], calibration=run['calibration'],
+                              **engine_run_summary(parsed, trace)))
+        if admission_pair:
+            summaries[-1]['admission'] = run['admission']
+    by_key = {(r['block'], r[label], r['calibration']): r for r in summaries}
+    if any(r['duration_ns'] <= 0 for r in summaries):
+        raise ValueError('paired engine makespan must be positive')
+    control_name = 'incremental' if admission_pair else 'serial'
+    calibrations = [by_key[b, control_name, True]['duration_ns'] / by_key[b, control_name, False]['duration_ns'] for b in range(4)]
+    noise = max(.05, max(abs(r - 1) for r in calibrations))
+    self_control_histories = [all(a['token_ids'] == b['token_ids'] for a, b in zip(
+        by_key[block, control_name, False]['requests'], by_key[block, control_name, True]['requests']))
+        for block in range(4)]
+    comparisons = []
+    for arm in ('reserved',) if admission_pair else contract.ENGINE_ARMS[1:]:
+        ratios, same_history = [], True
+        for block in range(4):
+            control, candidate = by_key[block, control_name, False], by_key[block, arm, False]
+            ratios.append(candidate['duration_ns'] / control['duration_ns'])
+            same_history &= all(a['token_ids'] == b['token_ids'] for a, b in zip(control['requests'], candidate['requests']))
+        if admission_pair and record['mode'] == 'greedy' and (not same_history or not all(self_control_histories)):
+            raise ValueError('paired admission greedy histories differ across control, self-control or reserved')
+        outcome = ('virtual-clock' if record['mode'] == 'scripted' else
+                   'different-greedy-histories' if not same_history or (admission_pair and not all(self_control_histories)) else
+                   'distribution-only' if trace['mode'] == 'online' else _outcome(ratios, noise))
+        comparisons.append(dict(arm=arm, block_ratios=ratios, median_ratio=stats.median(ratios),
+                                same_generated_histories=same_history, outcome=outcome))
+        if admission_pair:
+            comparisons[-1].update(arm='chunked', admission=arm, control_admission=control_name)
+    summary = dict(runs=summaries, comparisons=comparisons, calibration_ratios=calibrations,
+                   noise_floor=noise, target=None, goodput=None, quantile_method='linear')
+    if admission_pair:
+        summary['self_control_same_generated_histories'] = self_control_histories
+    if admission_range:
+        reference = [r['token_ids'] for r in summaries[0]['requests']]
+        if record['mode'] == 'greedy' and any([r['token_ids'] for r in s['requests']] != reference for s in summaries):
+            raise ValueError('operating-range greedy histories differ across collection blocks')
+        summary['observation'] = declaration['observation']
+    return summary
+
+
+def _validate_engine_range_execution(record, run, parsed):
+    execution = run.get('execution', {})
+    build_command = record.get('build', {}).get('command', [])
+    native_trace = record.get('native_trace_path')
+    prepared = record.get('build', {}).get('assets', {}).get('prepared')
+    if (not isinstance(build_command, list) or not build_command
+            or any(type(v) is not str for v in build_command)
+            or build_command[-2:-1] != ['-o'] or Path(build_command[-1]).name != 'engine'
+            or type(native_trace) is not str or not Path(native_trace).is_absolute()
+            or Path(native_trace).name != 'trace.tsv' or type(prepared) is not str):
+        raise ValueError('missing operating-range native command provenance')
+    expected = [build_command[-1], prepared, native_trace, 'chunked', str(record['blocks']),
+                '256', '8', '10', record['mode'], run['admission'],
+                contract.ENGINE_ADMISSION_RANGE_TELEMETRY]
+    if (not _engine_same_json(execution.get('command'), expected)
+            or type(execution.get('timeout_seconds')) is not int or execution['timeout_seconds'] != 180
+            or type(execution.get('exit_code')) is not int or execution['exit_code'] != 0
+            or type(execution.get('wall_elapsed_ns')) is not int
+            or not 0 < execution['wall_elapsed_ns'] <= execution['timeout_seconds']*1_000_000_000
+            or (record['mode'] == 'greedy'
+                and execution['wall_elapsed_ns'] < parsed['drained']['elapsed_ns'])):
+        raise ValueError('operating-range native execution receipt changed or exceeded its bound')
+
+
+def engine_build(output, prepared, admission_pair=False, admission_range=False, budget_study=False, fast_study=False, async_study=False):
+    declaration = _engine_collection_declaration(admission_pair, admission_range, budget_study, fast_study, async_study)
+    ensure_record_location(output)
+    source = source_identity()
+    if source['repository']['dirty']:
+        raise ValueError('engine build requires clean source')
+    identity = assets(prepared)
+    output.mkdir(parents=True, exist_ok=False)
+    command = [environment_tool('mojo'), 'build', '-I', 'src',
+               'src/llm_mojo/benchmarks/engine_trace.mojo', '-o', output/'engine']
+    execute(command, output/'engine-build.log')
+    if source_identity() != source or assets(prepared) != identity:
+        raise ValueError('engine source or assets changed during build')
+    write(output/'build.json', dict(source=source, assets=identity, environment=stable_environment(),
+                                    declaration=declaration,
+                                    command=list(map(str, command)),
+                                    binaries={'engine': dict(sha256=sha(output/'engine'), bytes=(output/'engine').stat().st_size)}))
+
+
+def engine_collect(directory, trace_path, output, blocks=128, maximum_sequences=8, mode='greedy', warmup_steps=10,
+                   admission_pair=False, admission_range=False):
+    declaration = _engine_collection_declaration(admission_pair, admission_range)
+    admission_pair = admission_pair or admission_range
+    if (type(blocks) is not int or not 1 <= blocks <= 8192
+            or type(maximum_sequences) is not int or not 1 <= maximum_sequences <= 64
+            or mode not in ('greedy', 'scripted') or warmup_steps != declaration['warmup_steps']
+            or (admission_range and type(warmup_steps) is not int)
+            or (admission_pair and maximum_sequences != 8)):
+        raise ValueError('invalid bounded engine collection')
+    receipt = verify_build(directory)
+    if receipt.get('declaration') != declaration or set(receipt['binaries']) != {'engine'}:
+        raise ValueError('not a current engine trace build')
+    if admission_range and not _engine_same_json(receipt['declaration'], declaration):
+        raise ValueError('engine operating-range build declaration types changed')
+    trace_document = trace_path.read_text()
+    trace_file_sha256 = hashlib.sha256(trace_document.encode()).hexdigest()
+    trace = validate_engine_trace(json.loads(trace_document))
+    if admission_pair and any(r['abort_offset_ns'] is not None for r in trace['requests']):
+        raise ValueError('paired admission study excludes timed aborts')
+    if any((engine_peak_cached_tokens(r)+31)//32 > blocks
+           for r in trace['requests']):
+        raise ValueError('a declared request cannot fit the pool alone')
+    ensure_record_location(output)
+    output.mkdir(parents=True, exist_ok=False)
+    native_trace = output/'trace.tsv'
+    native_trace.write_text(engine_trace_tsv(trace))
+    runs = []
+    for block in range(4):
+        for cell, calibration in _engine_cells(block, admission_pair):
+            arm, admission = ('chunked', cell) if admission_pair else (cell, None)
+            before = conditions()
+            budget, sequences = (256 if arm == 'chunked' else 4096), (1 if arm == 'serial' else maximum_sequences)
+            command = [directory/'engine', receipt['assets']['prepared'], native_trace, arm,
+                       blocks, budget, sequences, warmup_steps, mode]
+            if admission is not None:
+                command.append(admission)
+            if admission_range:
+                command.append(declaration['observation'])
+            log = output/f'block-{block}-{cell}{"-calibration" if calibration else ""}.log'
+            if admission_range:
+                stdout, execution = checked_execution(command, log, declaration['execution_timeout_seconds'])
+            else:
+                stdout = execute(command, log)
+            parsed = parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, admission=admission,
+                                      observation=declaration['observation'] if admission_range else None)
+            runs.append(dict(block=block, arm=arm, calibration=calibration, stdout=stdout, parsed=parsed,
+                             conditions_before=before, conditions_after=conditions()))
+            if admission is not None:
+                runs[-1]['admission'] = admission
+            if admission_range:
+                runs[-1]['execution'] = execution
+    if verify_build(directory) != receipt or sha(trace_path) != trace_file_sha256:
+        raise ValueError('engine build or trace changed during collection')
+    record = dict(kind=declaration['kind'], declaration=declaration,
+                  build=receipt, trace=trace, trace_document=trace_document, trace_sha256=trace_file_sha256,
+                  blocks=blocks, max_sequences=maximum_sequences, mode=mode,
+                  warmup_steps=warmup_steps, runs=runs)
+    if admission_range:
+        record['native_trace_path'] = str(native_trace)
+    record['summary'] = engine_study_summary(record)
+    payload = json.dumps(record, separators=(',', ':')).encode()
+    compressed = gzip.compress(payload, mtime=0)
+    stem = 'engine-admission-range' if admission_range else 'engine-admission' if admission_pair else 'engine-core'
+    (output/(stem+'.json.gz')).write_bytes(compressed)
+    write(output/(stem+'.json'), dict(kind=declaration['kind'], sha256=hashlib.sha256(compressed).hexdigest(),
+                                         uncompressed_sha256=hashlib.sha256(payload).hexdigest(), bytes=len(compressed)))
+    write(output/(stem+'-summary.json'), record['summary'])
+    return engine_replay(output)
+
+
+def validate_engine_record_build(record):
+    """Validate retained provenance without touching current source or assets."""
+    build = record.get('build', {})
+    declaration = _engine_declaration(record)
+    if (build.get('source', {}).get('repository', {}).get('dirty') is not False
+            or not build.get('binaries', {}).get('engine', {}).get('sha256')
+            or build.get('declaration') != declaration
+            or not build.get('assets', {}).get('prepared_sha256')
+            or not build.get('assets', {}).get('tables_sha256')):
+        raise ValueError('incomplete engine source, binary or asset provenance')
+    if declaration != contract.ENGINE_DECLARATION and not _engine_same_json(build['declaration'], declaration):
+        raise ValueError('engine operating-range build declaration types changed')
+    source = build['source']
+    def digest(value, width=64):
+        return isinstance(value, str) and len(value) == width and all(c in '0123456789abcdef' for c in value)
+    if (not digest(source['repository'].get('commit'), 40)
+            or not source.get('sources') or not digest(source['sources'].get('uv.lock'))
+            or not all(digest(v) for v in source['sources'].values())
+            or not digest(build['binaries']['engine']['sha256'])
+            or type(build['binaries']['engine'].get('bytes')) is not int or build['binaries']['engine']['bytes'] < 1
+            or not digest(build['assets']['prepared_sha256']) or not digest(build['assets']['tables_sha256'])
+            or not build.get('environment', {}).get('hardware')
+            or not build.get('environment', {}).get('software')):
+        raise ValueError('invalid engine provenance identity')
+    return build
+
+
+def engine_replay(directory):
+    if directory.is_file():
+        archive = directory
+    else:
+        archives = [directory/(stem+'.json.gz') for stem in ('engine-core', 'engine-admission', 'engine-admission-range', 'engine-budget', 'engine-fast', 'engine-async')
+                    if (directory/(stem+'.json.gz')).is_file()]
+        if len(archives) != 1:
+            raise ValueError('engine replay needs exactly one archive or an explicit file')
+        archive = archives[0]
+    manifest_path = archive.with_suffix('')
+    summary_path = archive.with_name(archive.name.removesuffix('.json.gz')+'-summary.json')
+    manifest = json.loads(manifest_path.read_text())
+    compressed = archive.read_bytes()
+    payload = gzip.decompress(compressed)
+    if (manifest.get('kind') not in (contract.ENGINE_DECLARATION['kind'], contract.ENGINE_ADMISSION_DECLARATION['kind'],
+                                    contract.ENGINE_ADMISSION_RANGE_DECLARATION['kind'], contract.ENGINE_BUDGET_DECLARATION['kind'], contract.ENGINE_FAST_DECLARATION['kind'], contract.ENGINE_ASYNC_DECLARATION['kind'])
+            or len(compressed) != manifest['bytes']
+            or hashlib.sha256(compressed).hexdigest() != manifest['sha256']
+            or hashlib.sha256(payload).hexdigest() != manifest['uncompressed_sha256']):
+        raise ValueError('engine archive hash mismatch')
+    record = json.loads(payload)
+    if record.get('kind') != manifest['kind']:
+        raise ValueError('engine archive kind differs from manifest')
+    document = record.get('trace_document', '')
+    if (hashlib.sha256(document.encode()).hexdigest() != record.get('trace_sha256')
+            or json.loads(document) != record.get('trace')):
+        raise ValueError('engine token trace identity changed')
+    validate_engine_record_build(record)
+    summary = engine_study_summary(record)
+    if (summary != record.get('summary') or (record['kind'] != contract.ENGINE_DECLARATION['kind']
+                                            and not _engine_same_json(record.get('summary'), summary))):
+        raise ValueError('engine archived summary changed')
+    write(summary_path, summary)
+    return summary
+
+
 def main():
     # Trace capture and the reused terminal lifecycle helper inherit this process.
     os.environ.pop('MODULAR_DEBUG', None)
@@ -2920,6 +3820,7 @@ def main():
                                             'selection-replay','selection-plot','batch-size-build','batch-size-collect',
                                             'batch-size-confirm','batch-size-diagnose','batch-size-capture','batch-size-archive',
                                             'batch-size-replay','batch-size-plot','single-sequence',
+                                            'engine-specification','engine-build','engine-qualify','engine-collect','engine-replay',
                                             *RETIRED])
     parser.add_argument('--projections',action='store_true',help='Replay/plot the projection arrangement study')
     parser.add_argument('--study', choices=['size','projections','reordered','addressing','paged','paged-loop'],
@@ -2944,12 +3845,90 @@ def main():
     parser.add_argument('--timings', type=Path)
     parser.add_argument('--traces', type=Path)
     parser.add_argument('--terminal', type=Path)
+    parser.add_argument('--trace', type=Path, help='engine-collect: frozen token-trace JSON')
+    parser.add_argument('--seed', type=int, default=7, help='engine-specification: trace generator seed')
+    parser.add_argument('--arrival-rate', type=float, help='engine-specification: seeded Poisson requests/s; omission is offline')
+    parser.add_argument('--blocks', type=int, default=128, help='engine-collect: explicit 32-slot KV pool capacity')
+    parser.add_argument('--max-sequences', type=int, default=8, help='engine-collect: maximum concurrent sequences')
+    parser.add_argument('--engine-mode', choices=['greedy', 'scripted'], default='greedy')
+    parser.add_argument('--warmup-steps', type=int, default=10)
+    admission_study = parser.add_mutually_exclusive_group()
+    admission_study.add_argument('--admission-pair', action='store_true',
+                        help='engine-build/collect: paired chunked incremental/reserved admission, fixed256/eight sequences')
+    admission_study.add_argument('--admission-range', action='store_true',
+                        help='engine-build/collect: paired operating-range study with admission and bounded KV occupancy observations')
+    admission_study.add_argument('--budget-study', action='store_true',
+                        help='engine-build/collect: fixed-workspace row-budget and fresh fitted-policy study')
+    admission_study.add_argument('--fast-study', action='store_true',
+                        help='engine-build/collect: fixed-budget reference/self-reference/optional Fast route study')
+    admission_study.add_argument('--async-study', action='store_true',
+                        help='engine-build/collect: fixed256 reserved sync/self-sync/async reference stepping study')
+    parser.add_argument('--token-budget', type=int, choices=[32, 64, 128, 256],
+                        help='Fast engine-collect only: one fixed scheduler row budget')
+    parser.add_argument('--qualification', type=Path, help='Fast/async: frozen exact-build checkpoint qualification JSON')
+    parser.add_argument('--budget-stage', choices=['calibration', 'evaluation'])
+    parser.add_argument('--admission-policy', choices=list(contract.ENGINE_ADMISSION_POLICIES))
+    parser.add_argument('--policy', type=Path, help='budget evaluation: frozen same-build fitted policy')
     args = parser.parse_args()
+    if (args.budget_study or args.fast_study or args.async_study) and args.command not in ('engine-build', 'engine-collect'):
+        parser.error('--budget-study, --fast-study and --async-study belong only to engine-build/collect')
+    fast_collection = args.command == 'engine-collect' and args.fast_study
+    budget_collection = args.command == 'engine-collect' and args.budget_study
+    async_collection = args.command == 'engine-collect' and args.async_study
+    for option, value, allowed, selector in (
+            ('--token-budget', args.token_budget, fast_collection, '--fast-study'),
+            ('--qualification', args.qualification, fast_collection or async_collection, '--fast-study or --async-study'),
+            ('--budget-stage', args.budget_stage, budget_collection, '--budget-study'),
+            ('--policy', args.policy, budget_collection, '--budget-study'),
+            ('--admission-policy', args.admission_policy, fast_collection or budget_collection or async_collection,
+             '--fast-study, --budget-study or --async-study')):
+        if value is not None and not allowed:
+            parser.error(option + ' belongs only to engine-collect ' + selector)
     if args.command in RETIRED or (args.command == 'build' and (args.fusion or args.combined or args.selection
                                    or args.copy_free or args.residual_norm or args.projections)):
         parser.error(args.command + ' belongs to a completed experiment; its retained archive replays, and '
                      're-collection needs the commit recorded in that archive (collectors exist through edb610a)')
-    if args.command == 'batch-support': batch_support_collect(args.output.resolve())
+    if args.command == 'engine-specification':
+        engine_specification(args.output.resolve(), args.seed, args.arrival_rate)
+    elif args.command == 'engine-build':
+        if args.prepared is None: parser.error('engine-build needs --prepared')
+        if args.async_study:
+            engine_build(args.output.resolve(), args.prepared, async_study=True)
+        else:
+            engine_build(args.output.resolve(), args.prepared, args.admission_pair, args.admission_range, args.budget_study, args.fast_study)
+    elif args.command == 'engine-qualify':
+        if args.build is None: parser.error('engine-qualify needs --build')
+        from .engine_async import qualify
+        qualify(args.build.resolve(), args.output.resolve())
+    elif args.command == 'engine-collect':
+        if args.build is None or args.trace is None: parser.error('engine-collect needs --build and --trace')
+        if args.async_study:
+            if (args.qualification is None or args.admission_policy != 'reserved' or args.engine_mode != 'greedy'
+                    or args.token_budget is not None or args.policy is not None or args.budget_stage is not None):
+                parser.error('async collection needs --qualification, --admission-policy reserved and greedy mode; budget is fixed256')
+            from .engine_async import collect
+            collect(args.build.resolve(), args.trace.resolve(), args.output.resolve(),
+                    args.qualification.resolve(), args.blocks, args.max_sequences, args.warmup_steps)
+        elif args.fast_study:
+            if (args.token_budget is None or args.admission_policy is None or args.qualification is None
+                    or args.policy is not None or args.budget_stage is not None or args.engine_mode != 'greedy'):
+                parser.error('Fast collection needs --token-budget, --admission-policy, --qualification and greedy mode')
+            from .engine_budget import fast_collect
+            fast_collect(args.build.resolve(), args.trace.resolve(), args.output.resolve(),
+                         args.qualification.resolve(), args.token_budget, args.admission_policy,
+                         args.blocks, args.max_sequences, args.warmup_steps)
+        elif args.budget_study:
+            if args.budget_stage is None or args.admission_policy is None:
+                parser.error('budget collection needs explicit --budget-stage and --admission-policy')
+            from .engine_budget import scheduling_collect
+            scheduling_collect(args.build.resolve(), args.trace.resolve(), args.output.resolve(),
+                               args.budget_stage, args.admission_policy, args.policy,
+                               args.blocks, args.max_sequences, args.engine_mode, args.warmup_steps)
+        else:
+            engine_collect(args.build.resolve(), args.trace.resolve(), args.output.resolve(), args.blocks,
+                           args.max_sequences, args.engine_mode, args.warmup_steps, args.admission_pair, args.admission_range)
+    elif args.command == 'engine-replay': print(json.dumps(engine_replay(args.output.resolve()), indent=2))
+    elif args.command == 'batch-support': batch_support_collect(args.output.resolve())
     elif args.command == 'batch-support-replay': print(json.dumps(batch_support_replay(args.output),indent=2))
     elif args.command == 'enqueue-plot': enqueue_plot(args.output)
     elif args.command == 'enqueue-replay': print(json.dumps(enqueue_replay(args.output),indent=2))

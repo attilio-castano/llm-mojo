@@ -1,0 +1,30 @@
+{
+  "kind": "engine-async-check-v1",
+  "name": "retention-restore-frozen-histories-v1",
+  "status": "completed",
+  "command": [
+    "uv",
+    "run",
+    "--locked",
+    "python",
+    "-B",
+    "/private/tmp/llm-mojo-async-20261009/retention/canonical-fresh-restore-v1/frozen-workload/compare_restored.py",
+    "/private/tmp/llm-mojo-async-20261009/retention/canonical-replay-result-v1.json",
+    "/private/tmp/llm-mojo-async-20261009/retention/canonical-fresh-restore-v1/frozen-workload/expected-histories.json",
+    "/private/tmp/llm-mojo-async-20261009/retention/canonical-frozen-history-comparison-v1.json"
+  ],
+  "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+  "timeout_seconds": 180,
+  "started_utc": "2026-10-10T00:09:47.136330+00:00",
+  "exit_code": 0,
+  "compiler_process_group_id": 17036,
+  "source_unchanged": true,
+  "wall_elapsed_ns": 78365917,
+  "completed_utc": "2026-10-10T00:09:47.215047+00:00",
+  "command_log": {
+    "path": "/private/tmp/llm-mojo-async-20261009/checks/retention-restore-frozen-histories-v1.log",
+    "sha256": "c3fdc973b5e18199e15e1271eb855d5443e76f27fa0cfc85438cadf10eb9ee0f"
+  },
+  "source_before_sha256": "1f98d902d0b9d8a9b7c49e2883cdce0805d25959e3f4c25c76a8f9304f06068b",
+  "source_after_sha256": "1f98d902d0b9d8a9b7c49e2883cdce0805d25959e3f4c25c76a8f9304f06068b"
+}

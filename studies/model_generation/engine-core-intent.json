@@ -1,0 +1,16 @@
+{
+  "kind": "engine-collection-intent-v1",
+  "target_ns": 25000000,
+  "target_scope": "predicted synchronous execute cost; no client SLO or goodput claim",
+  "offline_trace": "aa049dea1465e9e0fe542e5f8789aa70f11e3d294501984657e47ed825cdecd7",
+  "online_trace": "87a4274184eb3ca2b241091c2b698887a4dd47e7524eb8da045cf6b787486d38",
+  "online_requests_per_second": 4,
+  "pressure_pool_blocks": 40,
+  "default_pool_blocks": 128,
+  "max_sequences": 8,
+  "evaluation_trace": "b95c867b94a35ac19f6205c3be55be9d0ec94d3c8ab36c45cbcbe4122ba93f38",
+  "evaluation_requests_per_second": 16,
+  "calibration": "offline fixed-arm grid",
+  "evaluation": "distinct held-out prompts, lengths and arrivals",
+  "asynchronous": false
+}

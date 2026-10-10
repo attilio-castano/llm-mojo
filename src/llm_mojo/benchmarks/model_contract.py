@@ -407,3 +407,157 @@ def batch_configuration(data):
     if data.get('profile_iterations') != 8 or data.get('profile_warmup_iterations') != 10:
         raise ValueError('Qwen trace capture budget changed')
     return expected
+
+
+# Phase 3 keeps the token-trace declaration beside the existing model matrices.
+ENGINE_ARMS = ('serial', 'static', 'continuous', 'chunked')
+ENGINE_STEP_FIELDS = (
+    'step_id', 'decode_seqs', 'prefill_seqs', 'prefill_tokens', 'total_tokens',
+    'attended_positions', 'admitted', 'preempted', 'finished', 'aborted',
+    'waiting', 'blocks_free', 'begin_ns', 'schedule_ns', 'build_ns',
+    'execute_ns', 'postprocess_ns', 'end_ns', 'predicted_ns', 'budget_limited',
+)
+ENGINE_POLICY_FIELDS = ('target_ns', 'fixed_ns', 'per_row_ns', 'per_position_ns',
+                        'per_partition_ns', 'per_logit_ns')
+ENGINE_DECLARATION = dict(
+    kind='qwen-engine-core-v1', schema_version=1, arms=list(ENGINE_ARMS),
+    model='Qwen2.5-0.5B-Instruct', policy='reference configuration 27; BF16 storage, FP32 reductions',
+    max_context=4096, block_size=32, order='slot-major', paired_blocks=4,
+    warmup_steps=10, timing_boundary='scheduled arrival through completed trace drain; '
+        'resident weights, initialization and warmup outside measured trace',
+    telemetry='schedule/build/execute/postprocess host durations; execute includes '
+        'upload, GPU submission, synchronization and selected-token readback',
+    numerical_policy='mixed, decode-only and replayed execution use the same reference route; '
+        'own-route mixed-versus-solo equality is exact; comparisons against Fast are diagnostics; '
+        'record any natural greedy history divergence',
+    target=None, fitted_budget=False, asynchronous=False,
+)
+
+# Keep the original declaration immutable: retained v1 archives still describe
+# their original serial/static/continuous/chunked grid and incremental admission.
+ENGINE_ADMISSION_POLICIES = ('incremental', 'reserved')
+ENGINE_ADMISSION_DECLARATION = dict(
+    ENGINE_DECLARATION, kind='qwen-engine-admission-v1', arms=['chunked'],
+    admission_policies=list(ENGINE_ADMISSION_POLICIES), control='incremental',
+    token_budget=256, max_sequences=8,
+    reservation='zero blocks for zero output budget; otherwise '
+        'ceil(max(prompt_length, prompt_length + max_new_tokens - 1) / block_size); '
+        'reserved admission commits lifetime capacity before prefill',
+    request_scope='bounded traces without aborts; every request terminates by stop or output limit',
+    correctness_gates='greedy histories identical across control, self-control and reserved; '
+        'reserved preemptions zero and executed rows exactly sum(prompt_length + delivered_tokens - 1) '
+        'for positive outputs, zero rows for zero outputs',
+    pairing='same binary and frozen trace; incremental control, incremental self-control, '
+        'reserved candidate; forward/reverse/reverse/forward block order',
+)
+
+# The operating-range study adds observations; the earlier paired study's raw
+# records, declaration and summaries remain byte-for-byte replay compatible.
+ENGINE_ADMISSION_RANGE_TELEMETRY = 'admission-range-v1'
+ENGINE_KV_FIELDS = ('step_id', 'phase', 'timestamp_ns', 'allocated_blocks',
+                    'written_blocks', 'written_tokens', 'reserved_tokens',
+                    'waiting_requests', 'resident_requests')
+ENGINE_KV_PHASES = ('start', 'scheduled', 'executed', 'end')
+ENGINE_ADMISSION_RANGE_DECLARATION = dict(
+    ENGINE_ADMISSION_DECLARATION, kind='qwen-engine-admission-range-v1',
+    observation=ENGINE_ADMISSION_RANGE_TELEMETRY,
+    workload_scope='frozen varied output limits and natural greedy stop tokens; no teacher forcing',
+    kv_observation='host-only snapshots at start, scheduled, executed and end boundaries; '
+        'no GPU readback or additional synchronization',
+    byte_time='physical allocated byte-time during execute and between steps; '
+        'unused block/slot byte-time bounded by pre/post execute written occupancy; '
+        'schedule/build/postprocess excluded from occupancy integration; '
+        'the time of writes within execution is unobserved',
+    kv_geometry=dict(layers=24, kv_heads=2, head_dim=64, storage_bytes=2),
+    admission_delay='scheduled arrival and observed ingress to first positive-output admission; '
+        'zero-output requests have no admission and release at a step boundary',
+    execution_timeout_seconds=180,
+    recommendation='descriptive operating range; no latency SLO, goodput target or default promotion',
+)
+
+
+ENGINE_BUDGET_STUDY = 'engine-budget-v1'
+ENGINE_BUDGET_DECLARATION = dict(
+    ENGINE_DECLARATION, kind='qwen-engine-budget-v1', arms=['chunked', 'adaptive'],
+    study=ENGINE_BUDGET_STUDY, fixed_budgets=[32, 64, 128, 256],
+    work_capacity=dict(token_rows=256, max_sequences=8), max_sequences=8,
+    adaptive_ceiling=256, research_target_ns=25_000_000,
+    calibration_grid=['fixed-256', 'self-256', 'fixed-32', 'fixed-64', 'fixed-128'],
+    evaluation_grid=['fixed-256', 'self-256', 'fixed-32', 'fixed-64', 'fixed-128', 'adaptive'],
+    admission='one explicitly selected policy, identical across every cell',
+    observation='complete existing steps/events; KV occupancy observation disabled',
+    request_scope='finite traces without aborts; exact own-route histories and complete pool drain',
+    calibration='fresh same-build calibration on a different canonical native workload; '
+        'embedded archive reproduces NNLS coefficients and residuals',
+    pairing='same binary, assets, trace, workspace and admission; fixed256 control and self-control; '
+        'forward/reverse/reverse/forward block order',
+    numerical_policy='configuration 27 throughout; exact generated histories across budgets and repeats',
+    execution_timeout_seconds=180, fitted_budget=True,
+)
+
+
+ENGINE_FAST_STUDY = 'engine-fast-v1'
+ENGINE_FAST_ROUTES = ('reference', 'fast-decode')
+ENGINE_FAST_CHECKPOINT_CHECKS = ('singleton-partial-zero-head', 'batched-solo-hybrid-kv-logits',
+                                'mixed-fallback', 'terminal-reuse', 'fault-cleanup')
+ENGINE_ROUTE_FIELDS = ('step_id', 'configuration', 'executed_rows', 'sequences', 'selected_logits')
+ENGINE_FAST_DECLARATION = dict(
+    ENGINE_DECLARATION, kind='qwen-engine-fast-v1', arms=['chunked'], study=ENGINE_FAST_STUDY,
+    fixed_budgets=[32, 64, 128, 256], work_capacity=dict(token_rows=256, max_sequences=8),
+    max_sequences=8, runners=list(ENGINE_FAST_ROUTES),
+    grid=['reference', 'self-reference', 'fast-decode'],
+    admission='one explicitly selected policy, identical across every cell',
+    token_budget='one fixed row budget explicitly selected after the reference budget study',
+    observation='actual completed route, rows, sequences and selected head rows per nonempty step',
+    route_selection='reference uses configuration 27; optional runner uses 26 exactly when '
+        'rows == sequences == selected logits, otherwise 27',
+    qualification='exact-build checkpoint qualification and frozen own-route histories for the '
+        'same workload, budget, pool and admission; natural-history invariance is an empirical gate',
+    pairing='same binary, assets, trace, workspace, row budget and admission; reference and self-reference; '
+        'forward/reverse/reverse/forward block order',
+    numerical_policy='record cross-route and own-route history differences; match ordered per-step '
+        'rows, decode/prefill partitions, attended positions and selected request heads, excluding '
+        'route configuration and time; any difference or failed numerical qualification disables '
+        'the speed verdict',
+    request_scope='greedy finite traces without aborts; necessary rows and complete pool drain',
+    execution_timeout_seconds=180, fitted_budget=False, default_promotion=False,
+)
+
+
+# Async has separate timestamps and result ownership. The synchronous step
+# grammar and historical declarations remain unchanged.
+ENGINE_ASYNC_STUDY = 'engine-async-v1'
+ENGINE_ASYNC_EXECUTIONS = ('sync', 'async')
+ENGINE_ASYNC_SUBMIT_FIELDS = ('ticket', 'buffer_slot', 'decode_seqs', 'prefill_seqs',
+    'prefill_tokens', 'total_tokens', 'attended_positions', 'selected_logits',
+    'begin_ns', 'submitted_ns', 'pending')
+ENGINE_ASYNC_HEAD_FIELDS = ('ticket', 'head', 'request_id', 'generated_tokens')
+ENGINE_ASYNC_COMPLETE_FIELDS = ('ticket', 'begin_ns', 'completed_ns', 'pending')
+ENGINE_ASYNC_RESULT_FIELDS = ('ticket', 'head', 'request_id', 'token_id',
+    'generated_tokens', 'disposition', 'observed_ns')
+ENGINE_ASYNC_DISPOSITIONS = ('delivered', 'discarded-stop', 'discarded-length',
+                            'discarded-abort', 'discarded-error')
+ENGINE_ASYNC_CHECKPOINT_CHECKS = ('frozen-submitted-schedule', 'partial-prefill-zero-head',
+    'batched-mixed-chaining', 'ring-reuse', 'stop-limit-discard', 'abort-release-reuse',
+    'fault-cleanup')
+ENGINE_ASYNC_DECLARATION = dict(
+    ENGINE_DECLARATION, kind='qwen-engine-async-v1', arms=['chunked'], study=ENGINE_ASYNC_STUDY,
+    executions=list(ENGINE_ASYNC_EXECUTIONS), token_budget=256, max_sequences=8,
+    work_capacity=dict(token_rows=256, max_sequences=8), admission='reserved',
+    pending_capacity=2, grid=['sync', 'self-sync', 'async'],
+    completion_modes={'sync': 'synchronous-readback', 'async': 'two-context-prefix-wait'},
+    observation='separate submitted tickets, immutable head ownership, host-observed completion/readback, '
+        'delivered and explicitly discarded selected tokens; no GPU-stage timestamp claim',
+    numerical_policy='identical frozen submitted schedule equality before collection; natural greedy '
+        'delivered histories and terminal reasons exact across sync, self-sync and async; '
+        'all speculative rows and discarded selected tokens charged to actual work',
+    qualification='same clean build, source, assets and environment; checkpoint checks include '
+        'zero-head prefill, mixed/batched chaining, buffer reuse, stop/limit/abort and fault cleanup',
+    request_scope='bounded natural greedy traces without timed aborts; stop and length completions; '
+        'abort and fault boundaries are separate checkpoint acceptance checks',
+    pairing='same binary, assets, trace, physical workspace, fixed256 budget and reserved admission; '
+        'sync control and self-control; forward/reverse/reverse/forward block order',
+    accounting='submitted and completed tickets match exactly; every selected head is delivered once '
+        'or explicitly discarded once; pending buffers and KV blocks stay owned until drain',
+    execution_timeout_seconds=180, fitted_budget=False, asynchronous=True, default_promotion=False,
+)

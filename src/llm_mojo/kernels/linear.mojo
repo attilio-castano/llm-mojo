@@ -5,8 +5,8 @@ from max.gpu.compute.arch.mma_apple import _mma_apple_8x8
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.gpu import WARP_SIZE, block_idx, lane_id, thread_idx
-from std.gpu.primitives import warp
+from max.gpu import WARP_SIZE, block_idx, lane_id, thread_idx
+from max.gpu.primitives import warp
 from std.math import ceildiv
 from std.sys.info import is_apple_gpu
 

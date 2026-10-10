@@ -1,0 +1,58 @@
+{
+  "kind": "engine-evidence-curation-verification-v1",
+  "status": "passed",
+  "completed_utc": "2026-10-10T13:28:15.377650+00:00",
+  "basis_commit": "e3cd31fded2558dc0eaebcd00ce88927a7852f60",
+  "catalog_sha256": "42a80f2cdb7346f34668d4bc42fd4436eaf73976d55148ca755c628f76a66867",
+  "original_files": 104,
+  "original_bytes": 25324968,
+  "all_original_bytes_equal_basis_commit": true,
+  "expanded_reports_curated": 8,
+  "expanded_lines_removed": 164837,
+  "archive": {
+    "path": "engine-evidence-verification.json.gz",
+    "bytes": 68930,
+    "sha256": "4fd42be9389bebcf860417375e21735accdcb3dde3009d46a380e357e66f9b30",
+    "uncompressed_bytes": 337238,
+    "uncompressed_sha256": "d0a2b0318147f178cccbc84735582e9aaf6a4e37ab3bd8fe9c4ee6febe877d0d",
+    "files": 60
+  },
+  "historical_closeouts": {
+    "admission_runs": 48,
+    "admission_range_runs": 144,
+    "budget_runs": 116,
+    "fast_runs": 12,
+    "async_runs": 24,
+    "total_measured_runs": 344,
+    "chat_cases": 7,
+    "chat_reference_tokens": 123,
+    "chat_necessary_rows": 455,
+    "async_histories_and_finish_reasons_equal": true,
+    "all_successful_outer_exit_codes_zero": true
+  },
+  "current_parser_replay": {
+    "measurement_archives": 28,
+    "measured_runs": 416,
+    "legacy_policy_refit": true,
+    "actual_exit_code": 0
+  },
+  "python_tests": {
+    "tests": 400,
+    "actual_exit_code": 0
+  },
+  "preserved_invocation_failures": [
+    {
+      "name": "chat-restore-v1",
+      "actual_exit_code": 1,
+      "reason": "Incorrect manifest SHA argument rejected before restoration; corrected invocation passed."
+    }
+  ],
+  "boundaries": {
+    "native_gpu_execution": false,
+    "model_asset_reads": false,
+    "remote_backup": false,
+    "historical_helpers_modified": false,
+    "historical_git_objects_required": true,
+    "working_tree_dirty": true
+  }
+}

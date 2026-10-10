@@ -44,10 +44,10 @@ our optimized configuration 0 on M4 Pro / Metal. Other shapes retain that
 baseline; the result does not establish a universal best kernel or an HF speedup.
 The [composed decode study](../studies/model_generation/residual-norm.md) then
 promoted the single-row route that every generated token uses: configuration 26
-with GPU argmax, buffer swapping and residual/RMSNorm fusion. It lowers
-complete-token latency by 17.1–24.5% against the previous Fast route and
-streams 107–115 tokens/s after the first token. Serving phase 1 later changed
-the order in which decode projections sum, which shortened a single-sequence
+with GPU argmax, buffer swapping and residual/RMSNorm fusion. Retained MAX 26.5 /
+Mojo 1.0 measurements found 17.1–24.5% lower complete-token latency against the
+previous Fast route and 107–115 tokens/s after the first token. Serving phase 1
+later changed the order in which decode projections sum, which shortened a single-sequence
 decode step by about 10% in a generation check and changes Fast's results in
 their last bits ([decode projection order](model.md#decode-projection-order)).
 
@@ -93,7 +93,7 @@ question concerns prefill and KV-cache schedules for a single sequence.
 Preserving an existing cache byte for byte is already a required invariant.
 Producing identical cache values when building it under different schedules is
 the additional research question. Here, scheduling means how one sequence is
-divided into model calls; multi-request scheduling remains outside current scope.
+divided into model calls; those earlier studies do not cover multi-request scheduling.
 
 The [decoder policy study](../studies/decoder_layer/policies.md) establishes exact
 schedule agreement for the tested single-layer configurations and measures its
@@ -122,30 +122,52 @@ research questions, not prerequisites for calling the current milestone complete
 2. **Matched HF comparison.** Numerical comparisons already exist. A performance
    study must name the HF backend/device, precision, identical token workload,
    cache behavior and timing boundary before comparing prefill or decode.
-3. **Further Fast optimization.** Decode is now limited by host submission.
-   About 98% of each token's launch-submission interval is inside MAX's enqueue
-   runtime, and reusing compiled kernel handles gave no qualifying speedup
+3. **Further Fast optimization.** The retained MAX 26.5 / Mojo 1.0 observations
+   found host submission limiting decode. About 98% of each token's
+   launch-submission interval was inside MAX's enqueue runtime, and reusing
+   compiled kernel handles gave no qualifying speedup
    ([runtime enqueue](../studies/model_generation/runtime-enqueue.md)). The
-   pinned Metal backend cannot record command graphs, so batching launches is
-   unavailable ([batching feasibility](../studies/model_generation/batch-support.md)).
+   recorded MAX 26.5 Metal backend could not record command graphs, so that
+   batching route was unavailable
+   ([batching feasibility](../studies/model_generation/batch-support.md)).
    What remains is fewer launches per token, or batching below MAX's public API.
-   Prefill is now the largest cost a user sees: the first token of a
-   3,839-token prompt takes about 2.1 s. Keep current measurements as the
-   baseline and retain new numerical diagnostics.
+   Those runs found about 2.1 s to the first token of a 3,839-token prompt,
+   making prefill the largest observed wait. Further comparisons must record
+   the current runtime and retain new numerical diagnostics.
 4. **Serving engine.** Serve many concurrent requests with batched decode, a
    paged KV cache, continuous batching and prefix caching, behind a separate
    frontend process that survives engine failures. The [serving plan](serving-plan.md)
-   defines its architecture, exact gates and phases. It serves with Fast and
-   records numerical differences from batching, cache reuse and replay as diagnostics.
+   defines its architecture, exact gates and phases. Chat/generation use Fast;
+   the initial phase 3 engine uses reference configuration 27 to isolate
+   scheduling with one numerical route. A promoted Fast engine route is a
+   separate measured optimization decision.
    Phase 1 is complete: one step decodes up to 64 sequences with the launches of
-   one, each row bit-identical to decoding that sequence alone, and 64 sequences
-   at 1,024 cached tokens decode 998 tokens/s in aggregate
+   one, each row bit-identical to decoding that sequence alone. Its retained
+   MAX 26.5 / Mojo 1.0 measurements found 998 aggregate tokens/s for 64 sequences
+   at 1,024 cached tokens
    ([reordered projections](../studies/model_generation/batch-reordered.md)).
    Phase 2 added a paged KV cache. Its
    [translation-cost study](../studies/model_generation/paged-kv.md) found that
    decode attention paid for every block a sequence spans; after a fix, the
    [rerun](../studies/model_generation/paged-kv-loop.md) found no resolvable cost
    and selected 32-slot blocks, the default since 2026-10-05. Phase 2 is complete.
+   Phase 3 has validated mixed steps, bounded request lifecycle, KV-pressure
+   replay and optional asynchronous stepping. Reference-27, fixed-256,
+   incremental admission and synchronous stepping remain the engine defaults.
+   Lifetime reservation removes replay on the frozen pressure workloads but
+   trades unused capacity and FIFO waiting against that work reduction. The
+   measured Fast and async speed verdicts are inconclusive; fitted budgeting
+   establishes no client latency bound. The
+   [engine study](../studies/model_generation/engine-core.md) retains those
+   separate comparisons and their numerical, work and latency evidence.
+   Optional [`chat --engine`](chat.md#optional-engine-terminal-chat) connects a
+   terminal conversation to the core, recomputing complete history each turn;
+   [`--async-stepping`](chat.md#optional-asynchronous-stepping) selects the
+   qualified two-context runner. The current lock resolves Mojo 1.1.0 /
+   MAX 26.6.0; earlier measurements retain their original runtime. The
+   [review and measured-commit map](serving-plan.md#phase-3-review-map) links
+   each implementation responsibility to its checks and evidence. Prefix
+   caching and HTTP/restart recovery remain phases 4 and 5.
 
 Sampling, quantization, longer contexts, tool-oriented templates and additional
 model families can follow when they answer a concrete need. They are not current

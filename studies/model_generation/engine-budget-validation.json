@@ -1,0 +1,523 @@
+{
+  "kind": "engine-admission-validation-evidence-v1",
+  "schema_version": 1,
+  "archive": "engine-budget-validation.json.gz",
+  "bytes": 1132331,
+  "sha256": "e174247d970c8a64996cac929fafa2dc80aa92289d8707ff4d73973bf8dc4710",
+  "uncompressed_bytes": 15849610,
+  "uncompressed_sha256": "34ad46f25ead45eebbc2e7c13a98fc3a9d0f082e5bf96857c3aa9a51b4167a79",
+  "file_count": 85,
+  "files": [
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/full-validation-final.log",
+      "name": "commands/full-validation.log",
+      "bytes": 7205366,
+      "sha256": "bf1d78d002c9ceefb4814185c82d45348fb8997d857f2cdb4b916795fd6d8446"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/full-validation-final-execution.json",
+      "name": "commands/full-validation-execution.json",
+      "bytes": 851,
+      "sha256": "423fc4518e20945c1a1a0edf0f4e2b1067b7e2e8dd9b9d18ff8e67250742bfa8"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/full-validation-final-source-before.json",
+      "name": "source/full-validation-before.json",
+      "bytes": 26917,
+      "sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/full-validation-final-source-after.json",
+      "name": "source/full-validation-after.json",
+      "bytes": 26917,
+      "sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-engine-build.log",
+      "name": "commands/engine-build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-engine-build-execution.json",
+      "name": "commands/engine-build-execution.json",
+      "bytes": 1167,
+      "sha256": "2a607fa3e3a74b64fc6dfeaf74de6a25892d946fa9d2cb7a4ad263d97eb38c4b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-engine-build-source-before.json",
+      "name": "source/engine-build-before.json",
+      "bytes": 26918,
+      "sha256": "eae49220da029afb272df5b0d0ceffc5b74c15713b8f714cbda455237176e576"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-engine-build-source-after.json",
+      "name": "source/engine-build-after.json",
+      "bytes": 26918,
+      "sha256": "eae49220da029afb272df5b0d0ceffc5b74c15713b8f714cbda455237176e576"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-cpu-tests.log",
+      "name": "commands/budget-cpu-tests.log",
+      "bytes": 163,
+      "sha256": "a921d459378ce9bb7b1099db81b98742b91b63494992f209e0c18978ef7de3d2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-cpu-tests-execution.json",
+      "name": "commands/budget-cpu-tests-execution.json",
+      "bytes": 917,
+      "sha256": "a02e0cbc9636f131c77dbfaba0e1f999c7f2865177df9e0e39f56a62d9400a4f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-cpu-tests-source-before.json",
+      "name": "source/budget-cpu-tests-before.json",
+      "bytes": 26917,
+      "sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-cpu-tests-source-after.json",
+      "name": "source/budget-cpu-tests-after.json",
+      "bytes": 26917,
+      "sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-campaign.log",
+      "name": "commands/budget-campaign.log",
+      "bytes": 248,
+      "sha256": "1ac9e29dda9bee02abf62d5875bf54bc1fa1146ceb9e852a9194adf8a2162a12"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-campaign-execution.json",
+      "name": "commands/budget-campaign-execution.json",
+      "bytes": 1263,
+      "sha256": "614716fa7bae7b403feddd741d0058f07c3acb4bb091224706d942030645fce2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-campaign-source-before.json",
+      "name": "source/budget-campaign-before.json",
+      "bytes": 26918,
+      "sha256": "eae49220da029afb272df5b0d0ceffc5b74c15713b8f714cbda455237176e576"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-campaign-source-after.json",
+      "name": "source/budget-campaign-after.json",
+      "bytes": 26918,
+      "sha256": "eae49220da029afb272df5b0d0ceffc5b74c15713b8f714cbda455237176e576"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-live-closeout.log",
+      "name": "commands/budget-live-closeout.log",
+      "bytes": 181,
+      "sha256": "0913c61cad1c4d46fc63f3ee7a0fbcd8bff68063bc8de2f3b4526499023dc0d9"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-live-closeout-execution.json",
+      "name": "commands/budget-live-closeout-execution.json",
+      "bytes": 1394,
+      "sha256": "8f25890260c58de728be4eb4a9ce42658c545ddbed1f98b951e083f781573ba4"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-live-closeout-source-before.json",
+      "name": "source/budget-live-closeout-before.json",
+      "bytes": 26918,
+      "sha256": "eae49220da029afb272df5b0d0ceffc5b74c15713b8f714cbda455237176e576"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-live-closeout-source-after.json",
+      "name": "source/budget-live-closeout-after.json",
+      "bytes": 26918,
+      "sha256": "eae49220da029afb272df5b0d0ceffc5b74c15713b8f714cbda455237176e576"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-stage.log",
+      "name": "commands/budget-stage.log",
+      "bytes": 2773,
+      "sha256": "bb613b0f0a1ce26dc46a7764299349462389a38d6b6b25c2239b1a4af4af9332"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-stage-execution.json",
+      "name": "commands/budget-stage-execution.json",
+      "bytes": 1251,
+      "sha256": "fbd23685b4181f2f1d66eddfa65d0e4d33c4e5adb80f1b1b3d48b39ac9b73b54"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-stage-source-before.json",
+      "name": "source/budget-stage-before.json",
+      "bytes": 26918,
+      "sha256": "eae49220da029afb272df5b0d0ceffc5b74c15713b8f714cbda455237176e576"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-stage-source-after.json",
+      "name": "source/budget-stage-after.json",
+      "bytes": 26918,
+      "sha256": "eae49220da029afb272df5b0d0ceffc5b74c15713b8f714cbda455237176e576"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-staged-replay.log",
+      "name": "commands/budget-staged-replay.log",
+      "bytes": 183,
+      "sha256": "8e69b0cf93f65859dd8827ba8caa93261cc6f91da745e81a349e875920b6bbc0"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-staged-replay-execution.json",
+      "name": "commands/budget-staged-replay-execution.json",
+      "bytes": 1544,
+      "sha256": "f0087ee40622cf97d2b6ddf3952a4b147262b633464562f6ec8edaa05a11e9fd"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-staged-replay-source-before.json",
+      "name": "source/budget-staged-replay-before.json",
+      "bytes": 26918,
+      "sha256": "eae49220da029afb272df5b0d0ceffc5b74c15713b8f714cbda455237176e576"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/budget-staged-replay-source-after.json",
+      "name": "source/budget-staged-replay-after.json",
+      "bytes": 26918,
+      "sha256": "eae49220da029afb272df5b0d0ceffc5b74c15713b8f714cbda455237176e576"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/final-helper-hashes.json",
+      "name": "helpers/final-helper-hashes.json",
+      "bytes": 6295,
+      "sha256": "8b491b13d0d9fcf6516fe7e7a0fc43d9bcc80671158129b36002568e955bf7da"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/root-commands.md",
+      "name": "helpers/root-commands.md",
+      "bytes": 8142,
+      "sha256": "af476748ccc47aea950c702a1641777b361b337956974dff60a7b83fafadd84d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/budget-fast-independent-helper-review.json",
+      "name": "helpers/independent-review.json",
+      "bytes": 3080,
+      "sha256": "4005481e60d6c2f95457ad0040dce1f8f26d6ccb33d41dc9a02ea0d78e831b67"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/budget-fast-cancellation-independent-review-20261009.json",
+      "name": "helpers/cancellation-independent-review.json",
+      "bytes": 5028,
+      "sha256": "592c74a89a4d90b78f92cb12dc03d2c1c4a05e61315b9231c4618163c6f3f2d6"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/closeout_pipeline.py",
+      "name": "helpers/root-closeout-pipeline.py",
+      "bytes": 4891,
+      "sha256": "dbba641c22e33ca34398b93eec5c4728bb48cb50a60735a793186375dde53c8c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/milestone3-root-run/run_check.py",
+      "name": "helpers/actual-supervisor.py",
+      "bytes": 4246,
+      "sha256": "f5db518114ea9cf203cceff0d8e109204423848d6b8f551d6cee89944943009a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/build/engine-build.log",
+      "name": "commands/engine-native-build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/milestone2-helpers/cpu-check.json",
+      "name": "helpers/cpu-check.json",
+      "bytes": 1175,
+      "sha256": "6b5f51414c6ab3291531906c4ebda0f99ff405ae842da06c032081a137d79ca7"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/milestone2-helpers/cpu-tests.log",
+      "name": "commands/budget-helper-cpu-tests.log",
+      "bytes": 126,
+      "sha256": "f562682910958127163111043f1d667788f7b070ec2ee995ad357a45b15a583c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/milestone2-helpers/cpu-tests-execution.json",
+      "name": "commands/budget-helper-cpu-tests-execution.json",
+      "bytes": 2529,
+      "sha256": "d7c31698f89878f2a3620ea13ca4ba4c58ee312c4e1580e872e1d23ad94aaae4"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/milestone2-helpers/cpu-tests-source-before.json",
+      "name": "source/budget-helper-cpu-tests-before.json",
+      "bytes": 26918,
+      "sha256": "eae49220da029afb272df5b0d0ceffc5b74c15713b8f714cbda455237176e576"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/milestone2-helpers/cpu-tests-source-after.json",
+      "name": "source/budget-helper-cpu-tests-after.json",
+      "bytes": 26918,
+      "sha256": "eae49220da029afb272df5b0d0ceffc5b74c15713b8f714cbda455237176e576"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/frozen/calibration-intent.json",
+      "name": "frozen/calibration_intent.json",
+      "bytes": 3080,
+      "sha256": "eb3d1ed6ec9e6ed3431f5ddf4539561c1a8344132880424a685e71cdab0914f3"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/frozen/evaluation-intent.json",
+      "name": "frozen/evaluation_intent.json",
+      "bytes": 7867,
+      "sha256": "f206cefd25544d32c20c052624bd716689d903ce6c960de9d0f7c890e1e46e77"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/frozen/calibration-oracle.json",
+      "name": "frozen/calibration_oracle.json",
+      "bytes": 3278,
+      "sha256": "2a9a88e2faf4965067b80d24d092a875c7e2126e312c59ae24423f26fe569d76"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/frozen/range_oracle.json",
+      "name": "frozen/range_oracle.json",
+      "bytes": 1601,
+      "sha256": "633915a7cbe590e7b107860142294d65206ce61231fca14a13b5ac0dd1ba91f1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/frozen/policy.json",
+      "name": "frozen/policy.json",
+      "bytes": 438614,
+      "sha256": "855e12237d8604f9c34f85c44b5126f79f2aa1ae0fb33d66b771aa704c083197"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/frozen/range_intent.json",
+      "name": "frozen/range_intent.json",
+      "bytes": 15262,
+      "sha256": "bdedf292a36259a5f7592771318caf58e9624988444901f80b4ed6451019a329"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/frozen/range_card.json",
+      "name": "frozen/range_card.json",
+      "bytes": 1898033,
+      "sha256": "98a8d22e430edb114a506227dd2edb3fd116cb754f40c6015908efb702ab2822"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/frozen/selection.json",
+      "name": "frozen/selection.json",
+      "bytes": 872,
+      "sha256": "2900024ee073d781787542e77ca634e1f9b30021e4e4cd78ba87b791185aa92e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/campaign-execution.json",
+      "name": "frozen/campaign.json",
+      "bytes": 36680,
+      "sha256": "380339adb2e34f9b54116deaec3f6928c397e02ef7b092321785caf2bea43c94"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/preflights.json",
+      "name": "frozen/preflights.json",
+      "bytes": 275257,
+      "sha256": "52805d975a85d06c6bfa9002ebba5a8c24cb2aec2022f15ca252d2cab44c814b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/live-closeout/results-card.json",
+      "name": "results/live-card.json",
+      "bytes": 2151275,
+      "sha256": "61b309212ee51dc0db128fe87cab614a303bd3ea31acacdf30dacae90548a024"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/staged-replay/results-card.json",
+      "name": "results/retained-replay-card.json",
+      "bytes": 2151737,
+      "sha256": "0aed1e004fd540ed6182bb5725b6a0ffbe89e8948f1aa1c1c1e926ec17fbc1d0"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/closeout-inputs.json",
+      "name": "inputs/original-closeout-inputs.json",
+      "bytes": 3493,
+      "sha256": "89356b02cdfb9e1f63cb88a9c3cae3d9a415d6ec76b8f002d69a066939aaec2c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/validation-config.json",
+      "name": "inputs/original-validation-config.json",
+      "bytes": 6479,
+      "sha256": "d0df97774c706b4ccee9631b90016c800948c9c7ea8ec237efaae0dc4516f123"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/generated/calibration.json",
+      "name": "traces/calibration.json",
+      "bytes": 34107,
+      "sha256": "ff3f7522774d1945087e549bd6f3d4f33bb602b71ad62173f7c543a55498d222"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/generated/calibration.tsv",
+      "name": "traces/calibration.tsv",
+      "bytes": 12657,
+      "sha256": "5dcb72c76d2113e46ff02d0ab1ea24ae823416c92308b578522e1f6d59a875f9"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/generated/loose-offline-blocks-40.json",
+      "name": "traces/loose-offline-blocks-40.json",
+      "bytes": 34563,
+      "sha256": "1093b56f32f63079720902a38f999be470e041b69f92395ca9d7b4e653cf1a6d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/generated/loose-offline-blocks-40.tsv",
+      "name": "traces/loose-offline-blocks-40.tsv",
+      "bytes": 12697,
+      "sha256": "bb3a890f9ee16a4ba4755f397c6dc8aff4342559d84b8171b4a633d572064daa"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/generated/loose-offline-blocks-40-policy.tsv",
+      "name": "traces/loose-offline-blocks-40-policy.tsv",
+      "bytes": 42,
+      "sha256": "e48a1b285c59df2dff778a69c1adcb5cc23ecae5400dfba916fd8bec1be8901c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/generated/loose-offline-blocks-128.json",
+      "name": "traces/loose-offline-blocks-128.json",
+      "bytes": 34563,
+      "sha256": "1093b56f32f63079720902a38f999be470e041b69f92395ca9d7b4e653cf1a6d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/generated/loose-offline-blocks-128.tsv",
+      "name": "traces/loose-offline-blocks-128.tsv",
+      "bytes": 12697,
+      "sha256": "bb3a890f9ee16a4ba4755f397c6dc8aff4342559d84b8171b4a633d572064daa"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/generated/loose-offline-blocks-128-policy.tsv",
+      "name": "traces/loose-offline-blocks-128-policy.tsv",
+      "bytes": 42,
+      "sha256": "e48a1b285c59df2dff778a69c1adcb5cc23ecae5400dfba916fd8bec1be8901c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/generated/loose-online-8rps-blocks-40.json",
+      "name": "traces/loose-online-8rps-blocks-40.json",
+      "bytes": 34619,
+      "sha256": "f56ced0670947f6bbac893752c610799b14ee196997e85fd0fec6a4667256947"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/generated/loose-online-8rps-blocks-40.tsv",
+      "name": "traces/loose-online-8rps-blocks-40.tsv",
+      "bytes": 12755,
+      "sha256": "21f638175e28ca9b61060b4bcf008e95bcc9b18ddf594aea5b13b70a6866ceb6"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/generated/loose-online-8rps-blocks-40-policy.tsv",
+      "name": "traces/loose-online-8rps-blocks-40-policy.tsv",
+      "bytes": 42,
+      "sha256": "e48a1b285c59df2dff778a69c1adcb5cc23ecae5400dfba916fd8bec1be8901c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/generated/loose-online-8rps-blocks-128.json",
+      "name": "traces/loose-online-8rps-blocks-128.json",
+      "bytes": 34619,
+      "sha256": "f56ced0670947f6bbac893752c610799b14ee196997e85fd0fec6a4667256947"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/generated/loose-online-8rps-blocks-128.tsv",
+      "name": "traces/loose-online-8rps-blocks-128.tsv",
+      "bytes": 12755,
+      "sha256": "21f638175e28ca9b61060b4bcf008e95bcc9b18ddf594aea5b13b70a6866ceb6"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/sealed/generated/loose-online-8rps-blocks-128-policy.tsv",
+      "name": "traces/loose-online-8rps-blocks-128-policy.tsv",
+      "bytes": 42,
+      "sha256": "e48a1b285c59df2dff778a69c1adcb5cc23ecae5400dfba916fd8bec1be8901c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/workload-plan.json",
+      "name": "frozen/workload-plan.json",
+      "bytes": 10094,
+      "sha256": "16d6fab26461667a77ab160652b01a72672a552580df2a194e3c867109b898ad"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/calibration-command.log",
+      "name": "commands/calibration-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/loose-offline-blocks-40-command.log",
+      "name": "commands/loose-offline-blocks-40-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/loose-offline-blocks-128-command.log",
+      "name": "commands/loose-offline-blocks-128-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/loose-online-8rps-blocks-40-command.log",
+      "name": "commands/loose-online-8rps-blocks-40-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/loose-online-8rps-blocks-128-command.log",
+      "name": "commands/loose-online-8rps-blocks-128-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/campaign/fit-command.log",
+      "name": "commands/fit-command.log",
+      "bytes": 307,
+      "sha256": "e5bb6d7513efa3cfe2d18b443f93d185d1f379a9f844d0473bdd6ad89d756758"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/milestone2-helpers/budget_closeout.py",
+      "name": "helpers/budget_closeout.py",
+      "bytes": 42184,
+      "sha256": "00c727d8f15f6d6e5d2db75b7033af2a2fee3285ea71b9cd56f435b2341ffcdf"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/milestone2-helpers/budget_retention.py",
+      "name": "helpers/budget_retention.py",
+      "bytes": 21040,
+      "sha256": "f5d5272028c5c327a90bd82ac0a4d8ee69fed26c9f64b2ef0d79f8269583658a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/milestone2-helpers/admission_closeout_helpers.py",
+      "name": "helpers/admission_closeout_helpers.py",
+      "bytes": 29193,
+      "sha256": "13b6d9a327deea6700a5d95a41d32233adc7829ebc1cd8fd0ec8326c7b279ac1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/milestone2-helpers/bundle_validation.py",
+      "name": "helpers/bundle_validation.py",
+      "bytes": 5846,
+      "sha256": "13535e5976e1a9d2f81ff9e6a294cb8c24d6c089e255244e4b8e0db11dab51c2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/milestone2-helpers/budget_campaign.py",
+      "name": "helpers/budget_campaign.py",
+      "bytes": 22581,
+      "sha256": "6629ed0895a237904a93a193dba7a9b1475f2778f0de2b11a0e8d6dc29ac0e49"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/milestone2-helpers/protocol.md",
+      "name": "helpers/protocol.md",
+      "bytes": 19028,
+      "sha256": "8afc28829664ee24d600341bb14fec18e483df179fa0b1f40ff3037bdbc01b96"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-range-20261009/milestone2-helpers/test_budget_helpers.py",
+      "name": "helpers/test_budget_helpers.py",
+      "bytes": 30205,
+      "sha256": "e058fbb9e8f6f14b5871b5a3a989aaff26e04475e533df50452878bf3a5ccd3a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/full-validation-final-source-before.json",
+      "name": "source/validation-before.json",
+      "bytes": 26917,
+      "sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-followup-20261009/full-validation-final-source-after.json",
+      "name": "source/validation-after.json",
+      "bytes": 26917,
+      "sha256": "42a03ffc17b980a39f80bbb1d8142bec97b95edaec2091b1155aa68844f52f34"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-budget-20261009/build/build.json",
+      "name": "source/build.json",
+      "bytes": 31052,
+      "sha256": "1e59a43833968b91358fb37678e7866694411250d347ecfe28d73d6adabecd0a"
+    }
+  ],
+  "verification": "gzip envelope and every restored UTF-8 byte count/SHA256 verified independently"
+}

@@ -1,0 +1,247 @@
+{
+  "kind": "engine-admission-validation-evidence-v1",
+  "schema_version": 1,
+  "archive": "validation.json.gz",
+  "bytes": 459102,
+  "sha256": "40738da2357bc47f85ff023a226461f21e7bc81838d2f9f3be5184cbbc35a8d3",
+  "uncompressed_bytes": 7926613,
+  "uncompressed_sha256": "24ce1bf2b5076a576249e002ade439c299f03582ad797ab3958014ef3e08d2f0",
+  "file_count": 39,
+  "files": [
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-validation.log",
+      "name": "full-validation.log",
+      "bytes": 7203672,
+      "sha256": "fc608549c5dfb46b282b79e8287a381de16b3a42c0e7e657cc65acabbd2ff818"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-validation-source.json",
+      "name": "source/validation-before.json",
+      "bytes": 26359,
+      "sha256": "9330c54174ff1b2a2736513f7fd3e857897ea6d44b6efc630ea78f01a82fa1e9"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/validation-source-after.json",
+      "name": "source/validation-after.json",
+      "bytes": 26359,
+      "sha256": "9330c54174ff1b2a2736513f7fd3e857897ea6d44b6efc630ea78f01a82fa1e9"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-core.log",
+      "name": "scoped/core-normal-25.log",
+      "bytes": 2429,
+      "sha256": "0d5b2d3230413e4e07aa61d76a69267507fa66d84dca5c20b1b785e0147e60aa"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-python-focused.log",
+      "name": "scoped/python-focused-23.log",
+      "bytes": 122,
+      "sha256": "84cccfb407e3ad0b608db707da0e9de2deb9659d53e8907d562f1af91019452a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-admission-acceptance-receipt.json",
+      "name": "acceptance/receipt.json",
+      "bytes": 12683,
+      "sha256": "911d97582697159dc27d618dd862e19b100f48f5ee534282871a191604779b93"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-admission-acceptance-build-v2.log",
+      "name": "acceptance/build-v2.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-admission-acceptance-metal-v2.log",
+      "name": "acceptance/metal-v2.log",
+      "bytes": 575,
+      "sha256": "45adac5ee77f9e8709d93381ecf1a8f22ae565fd75db29ae8e5cb5ffd9a8f186"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-admission-acceptance-metal-sync-v2.log",
+      "name": "acceptance/metal-sync-v2.log",
+      "bytes": 575,
+      "sha256": "45adac5ee77f9e8709d93381ecf1a8f22ae565fd75db29ae8e5cb5ffd9a8f186"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-source-before-build-v2.json",
+      "name": "source/acceptance-build-before.json",
+      "bytes": 26359,
+      "sha256": "b9190f938f89022fa78104a94d6334e078e128dbeb4084ab6b36a7cafc27cf5d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-source-after-checks.json",
+      "name": "source/acceptance-after-checks.json",
+      "bytes": 26359,
+      "sha256": "9330c54174ff1b2a2736513f7fd3e857897ea6d44b6efc630ea78f01a82fa1e9"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-source-before-build.json",
+      "name": "source/trace-build-before.json",
+      "bytes": 26348,
+      "sha256": "c7c01bab4a2a2cc800f4630963f3065d3026d253642fb14d0f6c4041984c3a8d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-admission-trace-build.log",
+      "name": "acceptance/trace-build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-selector-smoke.json",
+      "name": "smoke/trace.json",
+      "bytes": 1597,
+      "sha256": "58c119637733a697913f0b11717fe60b459abf21cbfbbb3ede7f3f6569a9cc2c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-selector-smoke.tsv",
+      "name": "smoke/trace.tsv",
+      "bytes": 280,
+      "sha256": "9bb486a0ad825ce75eb6b014c4574b103522498caef84ba8387a779adff14b6c"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-selector-smoke-summary.json",
+      "name": "smoke/parser-summary.json",
+      "bytes": 1023,
+      "sha256": "8465ea48e7f0df6f7049ffba5d27229bca573c2134ad714dd188b5e451dc8bda"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-selector-legacy.log",
+      "name": "smoke/legacy.log",
+      "bytes": 619,
+      "sha256": "126bdfe5f55a6fda27ebc93e3f91019bb5ec74cadbde17c3691b74c0b03634cb"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-selector-incremental.log",
+      "name": "smoke/incremental.log",
+      "bytes": 641,
+      "sha256": "ea7f8640096fa1e732edd9e464e34b8feea94d9f2808b39ff651681a8162543f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-selector-reserved.log",
+      "name": "smoke/reserved.log",
+      "bytes": 638,
+      "sha256": "6dfd7fbdc8fd556d78b95b0543f6bbaa4054c1560660204e2de83da60937f562"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-selector-invalid.log",
+      "name": "smoke/invalid.log",
+      "bytes": 200,
+      "sha256": "348c658a8f1abc0490ab75c3fc6ec705d4fabd84c20b9c9917b14360a429565a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/intent.json",
+      "name": "intent.json",
+      "bytes": 1178,
+      "sha256": "7aac1722de29cfd9ac8810eac25c374ed2aac2229055ba60eaa8f8b757148456"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/build/build.json",
+      "name": "build/build.json",
+      "bytes": 30305,
+      "sha256": "2d945d8187acae8e1350670e16950d6299a7f3f65dd7a95c77be5543692f512d"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/build/engine-build.log",
+      "name": "build/engine-build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/admission_closeout.py",
+      "name": "reproduction/admission_closeout.py",
+      "bytes": 29193,
+      "sha256": "13b6d9a327deea6700a5d95a41d32233adc7829ebc1cd8fd0ec8326c7b279ac1"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/bundle_validation.py",
+      "name": "reproduction/bundle_validation.py",
+      "bytes": 5846,
+      "sha256": "13535e5976e1a9d2f81ff9e6a294cb8c24d6c089e255244e4b8e0db11dab51c2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/validation-inputs.json",
+      "name": "reproduction/validation-inputs.json",
+      "bytes": 6253,
+      "sha256": "36982524848b7d267f614be7902621df8e4d3ee4193a609e212c2afee682b156"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/command-executions.json",
+      "name": "commands/command-executions.json",
+      "bytes": 1763,
+      "sha256": "b6cab8f52185a149c4543afe98baa0f702e2f1b895a6a221e9a25d3d4bdad6b4"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/collection-command-executions.json",
+      "name": "commands/collection-command-executions.json",
+      "bytes": 11087,
+      "sha256": "4299f3af8cb05a8d1c2c6eea24c35be71591532bf5a2e571c5f53cbf4eb6cf23"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/build-command.log",
+      "name": "commands/build-command.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/offline/engine-admission.json",
+      "name": "collections/offline-manifest.json",
+      "bytes": 233,
+      "sha256": "18171c01d730de88cdf3bd6b86f21ec28c7e3827fb78017d8909ebc27209227b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/online/engine-admission.json",
+      "name": "collections/online-manifest.json",
+      "bytes": 233,
+      "sha256": "11eaa42733a642fdc7acfa8ff074465330c9d184546f34fad63c506a253f240f"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/pressure/engine-admission.json",
+      "name": "collections/pressure-manifest.json",
+      "bytes": 233,
+      "sha256": "8b62acc0c05744ec73bbb0ed2c0c8a8535cb02e8d080cb7538f0bb6d2a198069"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/online-pressure/engine-admission.json",
+      "name": "collections/online-pressure-manifest.json",
+      "bytes": 233,
+      "sha256": "274bc4633407395fd2a21156f937704efb5696bbf3e79a9d13fba5dc0d6ed881"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/results-card.json",
+      "name": "closeout/results-card.json",
+      "bytes": 164231,
+      "sha256": "7649353a0bd713239597ec1f5f1e2ca900f85010cc5f8fa2dd48d00a8bcea872"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/closeout.log",
+      "name": "closeout/closeout.log",
+      "bytes": 511,
+      "sha256": "c517f6120fd6ae0e4706c936041492148c7f00e215201845738fd9de4e6637ae"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/docs-snippets.md",
+      "name": "closeout/docs-snippets.md",
+      "bytes": 5470,
+      "sha256": "6e9ce7ea1d48f61086926e01dff7a1e92f9b59db76eb161f6dea0ad601032ae2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/retained-replay/results-card.json",
+      "name": "closeout/retained-replay-results-card.json",
+      "bytes": 165091,
+      "sha256": "fcd7df01d4de48f3b1575f87197be901f3ee68172f9471117dfee564b2e4e804"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/retained-replay.log",
+      "name": "closeout/retained-replay.log",
+      "bytes": 543,
+      "sha256": "c3464b31bceb7963922fc1cf3cce4ae7d972ecdbd88700704f3cd2ee586c03bc"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-admission-20261009/full-validation-execution.json",
+      "name": "commands/full-validation-execution.json",
+      "bytes": 653,
+      "sha256": "ab08d52e8da0c761e785866d2aa970a14ed8e115e4365042ddb6b571a59d4942"
+    }
+  ],
+  "verification": "gzip envelope and every restored UTF-8 byte count/SHA256 verified independently"
+}

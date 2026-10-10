@@ -1,7 +1,7 @@
 """BF16 residual addition, with explicit input and output storage."""
 from layout import TensorLayout, TileTensor
 from max.gpu.host import DeviceContext
-from std.gpu import global_idx
+from max.gpu import global_idx
 from std.math import ceildiv
 from llm_mojo.kernels.bf16_arithmetic import add_bits
 

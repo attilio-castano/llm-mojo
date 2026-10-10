@@ -1,0 +1,36 @@
+{
+  "kind": "engine-async-check-v1",
+  "name": "retention-restore-canonical-v1",
+  "status": "completed",
+  "command": [
+    "uv",
+    "run",
+    "--locked",
+    "python",
+    "-B",
+    "/private/tmp/llm-mojo-async-20261009/retention/canonical-replay-program.py",
+    "restore",
+    "--archive",
+    "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/studies/model_generation/engine-async-evidence/engine-async-validation.json.gz",
+    "--manifest",
+    "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/studies/model_generation/engine-async-evidence/engine-async-validation.json",
+    "--directory",
+    "/private/tmp/llm-mojo-async-20261009/retention/canonical-fresh-restore-v1",
+    "--result",
+    "/private/tmp/llm-mojo-async-20261009/retention/canonical-replay-result-v1.json"
+  ],
+  "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+  "timeout_seconds": 180,
+  "started_utc": "2026-10-10T00:09:38.448016+00:00",
+  "exit_code": 0,
+  "compiler_process_group_id": 17010,
+  "source_unchanged": true,
+  "wall_elapsed_ns": 411324292,
+  "completed_utc": "2026-10-10T00:09:38.859694+00:00",
+  "command_log": {
+    "path": "/private/tmp/llm-mojo-async-20261009/checks/retention-restore-canonical-v1.log",
+    "sha256": "bb3d6f329305b1b4513f4b79d9e694d98150cb2fe7999414182de651a7828751"
+  },
+  "source_before_sha256": "1f98d902d0b9d8a9b7c49e2883cdce0805d25959e3f4c25c76a8f9304f06068b",
+  "source_after_sha256": "1f98d902d0b9d8a9b7c49e2883cdce0805d25959e3f4c25c76a8f9304f06068b"
+}

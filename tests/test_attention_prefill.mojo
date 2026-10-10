@@ -3,7 +3,7 @@ from max.gpu.host import DeviceContext, DeviceBuffer
 from std.testing import TestSuite, assert_equal, assert_raises, assert_true
 from std.math import isfinite, ceildiv, exp
 from std.utils.numerics import neg_inf
-from std.gpu import lane_id
+from max.gpu import lane_id
 from std.sys.info import is_apple_gpu
 from max.gpu.compute.arch.mma_apple import _mma_apple_8x8
 from llm_mojo.kernels.attention import enqueue_grouped_query_attention_apple_gpu

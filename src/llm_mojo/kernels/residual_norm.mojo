@@ -7,9 +7,9 @@ from layout import TensorLayout, TileTensor, row_major, stack_allocation
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.collections import InlineArray
-from std.gpu import WARP_SIZE, block_idx, thread_idx, lane_id
-from std.gpu.primitives import warp
+from std.collections import Array
+from max.gpu import WARP_SIZE, block_idx, thread_idx, lane_id
+from max.gpu.primitives import warp
 from std.math import rsqrt
 from std.memory import bitcast
 from std.sys.info import is_apple_gpu
@@ -93,13 +93,13 @@ def enqueue_residual_norm[HIDDEN: Int, XL: TensorLayout, BL: TensorLayout, WL: T
         or Int(weight.layout.stride[0]().product()) != 1):
         # The overlap check below spans rows * HIDDEN elements of every [rows, hidden] view.
         raise Error("residual RMSNorm requires contiguous rows")
-    var pointers = InlineArray[Int, 5](uninitialized=True)
+    var pointers = Array[Int, 5](uninitialized=True)
     pointers[0] = Int(residual.ptr)
     pointers[1] = Int(normal.ptr)
     pointers[2] = Int(x.ptr)
     pointers[3] = Int(branch.ptr)
     pointers[4] = Int(weight.ptr)
-    var extents = InlineArray[Int, 5](uninitialized=True)
+    var extents = Array[Int, 5](uninitialized=True)
     for i in range(4):
         extents[i] = rows * HIDDEN * 2
     extents[4] = HIDDEN * 2

@@ -8,7 +8,7 @@ table (kernels/paged_kv.mojo).
 """
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_idx, global_idx
+from max.gpu import block_idx, global_idx
 from std.math import ceildiv
 from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.kernels.linear import (
@@ -18,7 +18,7 @@ from llm_mojo.kernels.linear import (
     enqueue_linear_prefill_mma_tile_apple_gpu,
 )
 from llm_mojo.kernels.rope import enqueue_rope_apple_gpu
-from std.builtin.simd import FastMathFlag
+from std.simd import FastMathFlag
 from std.sys.info import is_apple_gpu
 from llm_mojo.kernels.attention import enqueue_grouped_query_attention_apple_gpu
 from llm_mojo.kernels.attention_decode import (
@@ -383,6 +383,105 @@ def enqueue_fused_decode_qkv_paged[
     ctx.enqueue_function[kernel](packed, cosine, sine, query, pool, positions, tables,
         Int32(layer), Int32(layers), Int32(block_size),
         grid_dim=(ceildiv(THREADS, 128), sequences), block_dim=128)
+
+
+def _step_qkv_paged[
+    QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, HEAD_MAJOR: Bool,
+    PL: TensorLayout, TL: TensorLayout, QL: TensorLayout, CL: TensorLayout,
+    SL: TensorLayout, WL: TensorLayout,
+](
+    packed: TileTensor[DType.bfloat16, PL, MutAnyOrigin],
+    cosine: TileTensor[DType.bfloat16, TL, MutAnyOrigin],
+    sine: TileTensor[DType.bfloat16, TL, MutAnyOrigin],
+    query: TileTensor[DType.bfloat16, QL, MutAnyOrigin],
+    pool: TileTensor[DType.bfloat16, CL, MutAnyOrigin],
+    positions: TileTensor[DType.int32, SL, MutAnyOrigin],
+    slot_mapping: TileTensor[DType.int32, WL, MutAnyOrigin],
+    layer: Int32, layers: Int32, block_size: Int32,
+):
+    """Rotate token row r at positions[r], and append at its checked physical slot.
+
+    A token's arithmetic is the fused decode kernel's, including the BF16
+    product roundings. Only the address source changes: slot_mapping holds
+    block * block_size + slot, independent of sequence boundaries.
+    """
+    comptime assert is_apple_gpu()
+    comptime assert HEAD_DIM % 2 == 0
+    comptime assert packed.flat_rank == 2 and cosine.flat_rank == 2 and sine.flat_rank == 2
+    comptime assert query.flat_rank == 3 and pool.flat_rank == 1
+    comptime assert positions.flat_rank == 1 and slot_mapping.flat_rank == 1
+    comptime HALF = HEAD_DIM // 2
+    comptime WIDTH = KV_HEADS * HEAD_DIM
+    comptime QUERY_WIDTH = QUERY_HEADS * HEAD_DIM
+    var i = global_idx.x
+    var r = block_idx.y
+    var p = Int(positions[r])
+    var size = Int(block_size)
+    var physical = Int(slot_mapping[r])
+    var block = physical // size
+    var slot = physical % size
+    if i < (QUERY_HEADS + KV_HEADS) * HALF:
+        var head = i // HALF
+        var pair = i % HALF
+        var first_column = head * HEAD_DIM + pair
+        var first = rebind[Scalar[DType.bfloat16]](packed[r, first_column])
+        var second = rebind[Scalar[DType.bfloat16]](packed[r, first_column + HALF])
+        var c0 = rebind[Scalar[DType.bfloat16]](cosine[p, pair])
+        var c1 = rebind[Scalar[DType.bfloat16]](cosine[p, pair + HALF])
+        var s0 = rebind[Scalar[DType.bfloat16]](sine[p, pair])
+        var s1 = rebind[Scalar[DType.bfloat16]](sine[p, pair + HALF])
+        var ac: Scalar[DType.bfloat16] = first.fma[FastMathFlag.NONE](c0, 0)
+        var bs: Scalar[DType.bfloat16] = second.fma[FastMathFlag.NONE](s0, 0)
+        var bc: Scalar[DType.bfloat16] = second.fma[FastMathFlag.NONE](c1, 0)
+        var ass: Scalar[DType.bfloat16] = first.fma[FastMathFlag.NONE](s1, 0)
+        var low: Scalar[DType.bfloat16] = ac - bs
+        var high: Scalar[DType.bfloat16] = bc + ass
+        if head < QUERY_HEADS:
+            query[r, head, pair] = rebind[query.ElementType](low)
+            query[r, head, pair + HALF] = rebind[query.ElementType](high)
+        else:
+            var key = kv_row[KV_HEADS, HEAD_DIM, HEAD_MAJOR](block, Int(layer), Int(layers), 0, slot,
+                                                            Int(head) - QUERY_HEADS, size)
+            pool[key + Int(pair)] = rebind[pool.ElementType](low)
+            pool[key + Int(pair) + HALF] = rebind[pool.ElementType](high)
+    if i < WIDTH:
+        var value = kv_row[KV_HEADS, HEAD_DIM, HEAD_MAJOR](block, Int(layer), Int(layers), 1, slot,
+                                                      Int(i) // HEAD_DIM, size)
+        pool[value + Int(i) % HEAD_DIM] = rebind[pool.ElementType](packed[r, QUERY_WIDTH + WIDTH + i])
+
+
+def enqueue_step_qkv_paged[
+    QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, HEAD_MAJOR: Bool, SL: TensorLayout, WL: TensorLayout,
+](
+    ctx: DeviceContext, mut work: AttentionWorkspace, mut storage: DeviceBuffer[DType.bfloat16],
+    positions: TileTensor[DType.int32, SL, MutAnyOrigin],
+    slot_mapping: TileTensor[DType.int32, WL, MutAnyOrigin],
+    layer: Int, layers: Int, block_size: Int,
+) raises:
+    """Unpack, rotate and append every token of a step in one launch.
+
+    The caller validates positions against rotary capacity and slot_mapping
+    against its block tables and pool before submission, and retains storage
+    through completion. This entry point checks geometry without readback.
+    """
+    comptime WIDTH = KV_HEADS * HEAD_DIM
+    comptime THREADS = (QUERY_HEADS + KV_HEADS) * (HEAD_DIM // 2)
+    comptime assert positions.flat_rank == 1 and slot_mapping.flat_rank == 1
+    var rows = Int(positions.dim[0]())
+    if (ctx.api() != "metal" or rows < 1 or rows > work.max_rows or Int(slot_mapping.dim[0]()) != rows
+            or work.query_heads != QUERY_HEADS or work.kv_heads != KV_HEADS or work.head_dim != HEAD_DIM):
+        raise Error("invalid step QKV geometry")
+    validate_paged_pool[KV_HEADS, HEAD_DIM](len(storage), layer, layers, block_size, 1)
+    var packed = TileTensor(work.packed, row_major(rows, QUERY_HEADS * HEAD_DIM + 2 * WIDTH))
+    var cosine = TileTensor(work.cosine, row_major(work.capacity, HEAD_DIM))
+    var sine = TileTensor(work.sine, row_major(work.capacity, HEAD_DIM))
+    var query = TileTensor(work.query, row_major(rows, QUERY_HEADS, HEAD_DIM))
+    var pool = TileTensor(storage, row_major(len(storage)))
+    comptime kernel = _step_qkv_paged[QUERY_HEADS, KV_HEADS, HEAD_DIM, HEAD_MAJOR, type_of(packed.layout),
+        type_of(cosine.layout), type_of(query.layout), type_of(pool.layout), SL, WL]
+    ctx.enqueue_function[kernel](packed, cosine, sine, query, pool, positions, slot_mapping,
+        Int32(layer), Int32(layers), Int32(block_size),
+        grid_dim=(ceildiv(THREADS, 128), rows), block_dim=128)
 
 
 def _append_paged[

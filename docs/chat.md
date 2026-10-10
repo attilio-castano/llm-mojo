@@ -1,7 +1,7 @@
 # Native terminal chat
 
-The terminal uses Qwen2.5-0.5B-Instruct, batch-one BF16 on Metal, greedy decoding
-and the existing Fast dispatcher. Model weights, tokenizer and all 24 KV caches
+The default terminal uses Qwen2.5-0.5B-Instruct, batch-one BF16 on Metal, greedy
+decoding and the existing Fast dispatcher. Model weights, tokenizer and all 24 KV caches
 stay resident between turns. The native session submits only tokens after the
 cached prefix. Python verifies assets and builds the executable when needed,
 then replaces itself with the Mojo process; there is no Python inference loop.
@@ -43,11 +43,84 @@ fit within 4096 tokens. A rejected message leaves the existing history and cache
 unchanged. Use `/reset`, a shorter message, or a smaller reply limit. Old messages
 are not silently removed. Input lines are limited to 65536 bytes; a terminal may
 have a smaller canonical input-line limit. Invalid UTF-8 input is rejected.
-An execution failure invalidates the session; `/reset` is required before reuse.
+An execution failure invalidates the default direct session; `/reset` is required
+before reuse.
+
+## Optional engine terminal chat
+
+```sh
+uv run --locked llm-mojo chat --engine
+uv run --locked llm-mojo chat --engine --async-stepping
+uv run --locked llm-mojo chat --engine --preset short --report /private/tmp/engine-chat.tsv
+uv run --locked llm-mojo chat --engine --show-config
+```
+
+Without `--async-stepping`, the synchronous EngineCore adapter uses reference
+configuration 27 and admits one request at a time with lifetime KV reservation.
+Weights stay resident and conversation history remains in exact token IDs.
+Each turn recomputes that whole
+history; completed or cancelled replies release request ownership and valid KV
+extents. This adapter has no conversation prefix cache. `--mode fast` is rejected.
+
+The existing streaming decoder displays tokens. `/reset` restores system-only
+history without reloading weights. Without `--async-stepping`, Ctrl-C takes effect
+at a synchronous step boundary and closes the partial assistant turn. Execution
+or output failure invalidates the process, drains logical request ownership and
+requires restarting the chat process. Device-loss recovery remains open.
+
+Synchronous reports identify `reference-27/recompute-history`, retain exact
+prompt/history tokens and executed rows/steps, and record free/owned/written KV and live requests
+at each terminal. The [historical synchronous checkpoint evidence](../studies/model_generation/engine-chat-acceptance.json)
+checks 123 generated tokens across seven histories and 455 reference rows,
+including an interrupted prefix. Its injected nonfinite failure preserves the
+delivered token and closed history and returns all logical KV ownership.
+See the [engine study](../studies/model_generation/engine-core.md#optional-engine-terminal-chat-accepted-lifecycle)
+for the retained execution and restore scope.
+
+### Optional asynchronous stepping
+
+Add `--async-stepping` to `--engine` to select the two-context reference-27
+runner. The flag requires `--engine`; the direct Fast chat remains the default.
+Weights stay resident, and each turn still recomputes its exact token history.
+
+The CPU can schedule and submit the next step while the GPU finishes the earlier
+step. Each ticket has its own pinned metadata source, device metadata and token
+result, and pinned readback destination. The next decode token is taken directly
+from the preceding GPU result. Two Metal contexts order the shared model and KV
+work: each new context waits for the already submitted prefix of its predecessor.
+Collecting the older ticket waits only for its context. The two steps use the
+same model buffers and cache in order; this does not run them concurrently on
+the GPU.
+
+There are at most two submitted, uncollected tickets inside an engine call, and
+at most one when the call returns. An unknown stop may leave one additional
+decode already submitted. Cancellation suppresses any undelivered result;
+completion drains that work before releasing blocks or starting the next turn.
+A known reply limit prevents submission beyond the limit. Incremental memory
+pressure drains pending work before preemption and replay; terminal chat uses
+lifetime reservation.
+
+Async reports identify
+`reference-27/async-two-context/recompute-history`, prove the actual device and
+backend, and count submissions, completions, chained rows, selected and discarded
+tokens, extra rows and peak pending tickets separately. Their timestamps are
+host observations of submission, readback and delivery. They are not GPU kernel
+durations. The current implementation uses the deliberately upgraded locked
+Mojo 1.1.0 / MAX 26.6.0 runtime; older synchronous acceptance and timing records
+retain their original runtime identity.
+
+The [accepted async evidence](../studies/model_generation/engine-async-evidence/engine-async-acceptance.json)
+matches all 123 natural reference tokens across seven terminal turns, with 455
+necessary rows and 462 async executed rows: seven additional submitted rows
+across the seven turns. Four normal synchronous/async terminal histories also match exactly.
+The separate [24-run engine comparison](../studies/model_generation/engine-evidence.md#asynchronous-stepping)
+has an inconclusive offline speed verdict and descriptive online distributions;
+it establishes no chat-speed or production-serving result. See the
+[evidence and restore scope](../studies/model_generation/engine-async-evidence/README.md).
 
 ## Ownership and turn boundaries
 
-`ChatHistory` owns exact token IDs. `ChatSession.length()`, the length the
+In the default direct session, `ChatHistory` owns exact token IDs. `ChatSession.length()`, the length the
 session's block manager has committed, identifies the prefix already submitted
 to all 24 layer caches; the session holds the conversation in 32-slot blocks,
 which its block manager hands out as the conversation grows

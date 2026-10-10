@@ -581,3 +581,271 @@ uv run --locked python -m llm_mojo.validation.model build --generation --commit 
 uv run --locked python -m llm_mojo.validation.model build --generation --block-size 64 --binary /private/tmp/generator-64
 uv run --locked python -m llm_mojo.benchmarks.model_profile single-sequence --baseline /private/tmp/generator-6422f84 --candidate /private/tmp/generator-64 --prepared /absolute/prepared-v1 --purpose 'what the check decides' --output /private/tmp/single-sequence
 ```
+
+## Engine token traces
+
+The initial phase 3 collector uses reference configuration 27 across serial,
+static, continuous and chunked scheduling. It retains complete request and step
+records in four paired blocks, including a serial/self-serial calibration.
+This is separate from the existing Fast application measurements. The
+[engine declaration](../../../studies/model_generation/engine-core.md) defines
+readiness, exact gates, boundaries and the compact archive schema.
+
+The [Phase 3 evidence catalog](../../../studies/model_generation/engine-evidence.md)
+keeps raw archives and historical receipts intact while storing expanded reports
+losslessly. Verify the catalog, or reconstruct the original layout in a fresh
+external directory before historical acceptance replay:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.engine_evidence verify
+uv run --locked python -m llm_mojo.benchmarks.engine_evidence restore --directory /private/tmp/engine-evidence-original
+```
+
+Live budget, Fast and async collection bind the executed binary to the exact
+build directory verified by its receipt; copied build receipts are rejected.
+Shared execution receipts retain actual exits on both success and failure.
+Historical replay keeps original absolute paths and does not execute binaries.
+
+After the readiness checks pass and the source is clean, prepare a frozen
+offline trace, build once and collect into new paths:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-specification --output build/engine-offline.json
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build --prepared build/model-prepared-v1 --output build/engine-core-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect --build build/engine-core-build --trace build/engine-offline.json --blocks 128 --max-sequences 8 --output build/engine-offline-run
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output build/engine-offline-run
+```
+
+`engine-specification --arrival-rate` requires an explicitly chosen positive
+requests-per-second value and retains the seeded arrival offsets; omission
+produces an offline trace. `--seed` defaults to 7. The eight synthetic prompts,
+output limits and exact token arrays are retained in JSON and copied unchanged
+to the native driver's token trace. Pool capacity and maximum sequences are
+recorded rather than inferred from available RAM. An input request must fit
+the pool alone. Queue/abort/preemption rejection cases also have native
+acceptance tests; the initial performance trace has valid requests.
+
+`engine-collect --engine-mode scripted` runs the same engine with its simulated
+token oracle and virtual clock. Its summaries are labeled `virtual-clock` and
+support lifecycle/accounting comparisons, never GPU performance. Greedy mode
+requires actual `Apple M4 Pro/metal` runtime identity. Both modes warm ten steps
+before each trace and retain the final drain receipt. Natural greedy history
+differences are reported; a changed history prevents an offline speed verdict.
+
+Collection writes `engine-core.json.gz`, its hash manifest and a raw-derived
+summary. Replay checks the full paired grid, provenance, device, request order,
+stop/limit/abort accounting, timing/budget constraints and final block release;
+it regenerates the summary without a GPU or weights. It rejects missing records
+and changed summaries even when envelope hashes match. The fixed study sets no
+SLO, goodput target, fitted-budget improvement or asynchronous-stepping claim.
+
+For adaptive budgeting, `python -m llm_mojo.benchmarks.engine_budget` provides
+`fit --calibration --output --target-ms`, `evaluate --build --policy --trace
+--output` and `replay --output`. The target defaults to the provisional 25 ms
+research setting and applies to predicted synchronous execution, not a promised
+client SLO. Fit uses the complete fixed-study Metal calibration archive;
+evaluation requires the calibrated binary and a different frozen workload.
+Its archive retains calibration bytes, policy identity, every prediction and
+all evaluation records so offline replay can recompute the fit and residuals.
+Mandatory decode/progress overruns remain explicit. These tools implement the
+mechanism; a performance conclusion needs the separately retained evaluation.
+
+The optional lifetime-reservation admission comparison uses a separate frozen
+declaration and the same trace driver. Its control, repeated control and reserved
+candidate all use chunked reference execution with 256 rows and eight sequences:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build --admission-pair --prepared build/model-prepared-v1 --output /private/tmp/engine-admission-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect --admission-pair --build /private/tmp/engine-admission-build --trace studies/model_generation/engine-core-offline-trace.json --blocks 40 --max-sequences 8 --output /private/tmp/engine-admission-pressure
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output /private/tmp/engine-admission-pressure
+```
+
+Collection writes `engine-admission.json.gz`, its hash manifest and the derived
+summary. The original `engine-core-v1` archives retain their original declaration
+and replay behavior. The [successor contract](../../../studies/model_generation/engine-core.md#lifetime-reservation-admission-bounded-successor-study)
+fixes the four collections and distinguishes work reduction from measured
+latency and throughput. Reservation remains optional; physical block ownership
+is separate from written KV and from the per-step execution budget.
+
+The operating-range extension uses `--admission-range` on both build and collect,
+with the same fixed 256-row/eight-slot pair. Its separate
+`qwen-engine-admission-range-v1` declaration preserves both earlier archive
+formats and adds optional host observations:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build --admission-range --prepared build/model-prepared-v1 --output /private/tmp/engine-admission-range-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect --admission-range --build /private/tmp/engine-admission-range-build --trace /private/tmp/admission-fixtures/loose-offline.json --blocks 40 --max-sequences 8 --output /private/tmp/engine-admission-range-loose
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output /private/tmp/engine-admission-range-loose
+```
+
+Collection writes `engine-admission-range.json.gz`, its readable hash manifest
+and derived summary. The [frozen study contract](../../../studies/model_generation/engine-core.md#admission-operating-range-frozen-successor-contract)
+defines the two output-limit profiles, application stops and arrival/pool matrix.
+Traces supply actual stop IDs and output limits; the runner never teacher-forces
+request outputs. Scripted mode remains a virtual lifecycle oracle.
+
+The observation selector adds `admit`, `kv` and `kv_execute` records at existing
+synchronous boundaries. Geometry binds block-byte accounting. Summaries retain
+scheduled-arrival/observed-ingress delays to first admission and allocated
+byte-time over execute and inter-step idle intervals. Before/after written counts
+bound unused capacity within execution; scheduling, build and release transitions
+are excluded from occupancy integration and coverage is explicit. The entire
+pool buffer remains resident even when blocks are free. Observation mode adds
+no GPU submission, readback or synchronization; its host work and output remain
+inside measured trace duration for all arms.
+
+Each native range run has a 180-second timeout, complete invocation/elapsed/exit
+receipt and a retained log, including partial output on timeout. Replays verify
+those receipts as well as raw occupancy, admission, work, terminal and paired
+history gates. Offline makespan uses the paired verdict; online and occupancy
+metrics remain descriptive.
+
+The [completed operating-range results](../../../studies/model_generation/engine-core.md#admission-operating-range-retained-bounded-results)
+retain all 144 Metal runs, the exact live card and an independently restored
+validation bundle. Canonical raw archives have collection-specific names; use
+an explicit archive path for replay when a directory contains several studies.
+
+### Fixed-workspace row-budget study
+
+`--budget-study` selects `qwen-engine-budget-v1`, with physical work capacity
+fixed at 256 rows and eight sequence slots. Calibration compares fixed budgets
+32/64/128/256 and repeated fixed-256 control in four balanced blocks (20 runs).
+`scheduling-fit` uses every positive calibration step to fit one nonnegative
+`engine-step-cost-v2` policy. Evaluation adds that frozen adaptive policy to the
+grid (24 runs per held-out trace/pool). The older `fit/evaluate/replay` commands
+above retain their original v1 contract.
+
+Use new external output paths, clean source and independently frozen calibration
+and held-out traces. A different arrival seed alone does not establish a different
+greedy native workload. Keep one explicitly selected admission policy throughout:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build --budget-study --prepared build/model-prepared-v1 --output /private/tmp/engine-budget-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect --budget-study --budget-stage calibration --admission-policy reserved --build /private/tmp/engine-budget-build --trace /private/tmp/calibration-trace.json --blocks 128 --max-sequences 8 --output /private/tmp/engine-budget-calibration
+uv run --locked python -m llm_mojo.benchmarks.engine_budget scheduling-fit --calibration /private/tmp/engine-budget-calibration/engine-budget.json.gz --target-ms 25 --output /private/tmp/engine-budget-policy.json
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect --budget-study --budget-stage evaluation --admission-policy reserved --policy /private/tmp/engine-budget-policy.json --build /private/tmp/engine-budget-build --trace /private/tmp/heldout-trace.json --blocks 40 --max-sequences 8 --output /private/tmp/engine-budget-evaluation
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output /private/tmp/engine-budget-evaluation/engine-budget.json.gz
+```
+
+Replay recomputes the fit and residuals from embedded calibration bytes and
+checks same-build/admission provenance, balanced order, exact histories, rows
+and complete pool drain. The fixed 25 ms research setting predicts synchronous
+execute cost; mandatory decodes and minimum progress may exceed it. It is no
+client latency guarantee. The
+[completed 116-run comparison](../../../studies/model_generation/engine-core.md#fixed-workspace-budget-retained-bounded-results)
+retains fixed-256. At 128 blocks offline, fixed-32, fixed-64 and adaptive were
+slower by the paired noise rule; fixed-128 was inconclusive. All candidates at
+40 blocks were inconclusive. Smaller chunks reduced long offline gaps while
+adding steps and TTFT; online distributions remain descriptive. Actual executes
+exceeded the 25 ms prediction target. Replay a canonical held-out collection:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output studies/model_generation/engine-budget-loose-offline-blocks-128.json.gz
+```
+
+### Optional Fast engine study
+
+`--fast-study` uses configuration 26 only when every sequence has one query and
+one selected logit; other steps use 27. An unfinished singleton prefill has no
+selected logit and remains on 27. Select one fixed row budget after the reference
+study, then supply an `engine-fast-qualification-v1` JSON bound to the exact
+clean engine/checkpoint-driver builds, actual numerical checks and untimed
+own-route histories. The collector requires this qualification input.
+
+For an explicitly selected 256-row budget:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build --fast-study --prepared build/model-prepared-v1 --output /private/tmp/engine-fast-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect --fast-study --token-budget 256 --admission-policy reserved --qualification /private/tmp/engine-fast-qualification.json --build /private/tmp/engine-fast-build --trace /private/tmp/heldout-trace.json --blocks 40 --max-sequences 8 --output /private/tmp/engine-fast-evaluation
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output /private/tmp/engine-fast-evaluation/engine-fast.json.gz
+```
+
+Four balanced blocks contain reference, repeated reference and Fast candidate
+(12 runs). Numerical failure, differing own-route/cross-route histories or
+different ordered per-step work disables a speed verdict. Actual route records
+are retained; online results are descriptive. Replay never promotes Fast to a
+default. `--token-budget` is Fast collection-only; `--qualification` belongs to
+Fast or async collection. `--budget-stage` and `--policy` are budget
+collection-only. These studies require explicit `--admission-policy` on
+collection.
+
+The [completed optional Fast comparison](../../../studies/model_generation/engine-core.md#optional-fast-engine-retained-bounded-results)
+passed four untimed qualification calls and one 12-call loose offline40,
+fixed-256/reserved collection. Full histories and ordered work matched in all
+four comparisons, configuration 26 was exercised, and the speed verdict was
+inconclusive within a 5% noise floor (median raw duration ratio 0.987555).
+Reference-27 remains the engine default. Replay the canonical measured archive:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output studies/model_generation/engine-fast-loose-offline40.json.gz
+```
+
+The Fast study links both publication inventories and validation bundles, whose
+independent local canonical retrieval/CPU replay passed with originals preserved.
+Full Fast restoration uses retained source/helpers and the compact
+`decoder_policies.json` import declaration; other source JSON/gz fixture contents
+remain hash-only provenance. Assets, executables and generated numerical arrays
+are excluded. Those receipts establish local replay, without a remote backup
+or new device-execution claim.
+
+### Asynchronous engine stepping
+
+`--async-study` compares synchronous reference-27 stepping, repeated sync and
+the optional two-context async runner. It fixes the scheduler budget and model
+workspace at 256 rows/eight sequences, with reserved admission, BF16 storage and
+32-slot slot-major KV. The locked runtime is Mojo 1.1.0 / MAX 26.6.0; historical
+26.5/1.0 collections keep their recorded identity and results.
+
+After full repository validation, use new external directories from a clean
+commit. Build the exact engine, qualify its checkpoint/lifecycle driver, then
+collect using that qualification:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build --async-study --prepared build/model-prepared-v1 --output /private/tmp/engine-async-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-qualify --build /private/tmp/engine-async-build --output /private/tmp/engine-async-qualification
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect --async-study --admission-policy reserved --qualification /private/tmp/engine-async-qualification/qualification.json --build /private/tmp/engine-async-build --trace studies/model_generation/engine-core-offline-trace.json --blocks 40 --max-sequences 8 --output /private/tmp/engine-async-evaluation
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output /private/tmp/engine-async-evaluation/engine-async.json.gz
+```
+
+The qualification checks exact final active logits and all guarded KV elements
+in both layouts under an identical frozen submitted schedule. It checks finite
+active outputs, device token chaining, zero-head prefill, bank reuse, natural
+request histories, stop/limit, abort/release/reuse and fault cleanup. Source,
+assets, toolchain and device must match the engine build; receipts retain actual
+numeric exits and complete native output. Qualification failure prevents
+collection.
+
+Four balanced blocks contain sync, repeated sync and async (12 measured runs).
+All arms must deliver exact natural histories and terminal reasons. The parser
+requires contiguous FIFO tickets, immutable request/head ownership, collection
+before bank reuse, one disposition per selected head and full terminal drain.
+It records submitted rows and explicitly discarded tokens/extra rows, including
+the one successor that may already exist when an unknown stop is observed.
+Known output limits prevent extra submission. The async engine has two tickets
+at most inside a call and one at a public boundary; incremental pressure drains
+before physical KV reuse. The measured study uses lifetime reservation.
+
+The two contexts order GPU work on shared model/cache storage. The overlap is
+CPU batch preparation and submission with GPU execution. Submit/complete marks
+are host observations of enqueue/readback, not GPU stage durations. Every async
+arm must reach two pending tickets for performance eligibility. Offline
+makespan uses the existing paired noise rule; online metrics are descriptive.
+The implementation and qualification contract alone establish no speedup or
+default promotion. See the
+[engine explanation](../../../studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract)
+and [terminal usage](../../../docs/chat.md#optional-asynchronous-stepping).
+
+The [accepted bounded comparison](../../../studies/model_generation/engine-async-evidence/README.md)
+binds clean source `adae54c095a747f8f69e283177420f71059421de`, Mojo 1.1.0 / MAX
+26.6.0 and Apple M4 Pro / Metal. Two complete 12-run grids retain 24 measured
+runs. Every run matches the frozen 97-token histories, 2,265 necessary rows and
+finish reasons. Each async run reaches two pending tickets, executes eight
+additional rows, and releases all request/KV ownership. The offline median
+async/sync makespan ratio is 0.956292, about 4.37% lower; it misses the declared
+5% floor, so the verdict is **inconclusive**. The online ratio is 0.974500 and
+remains distribution-only, with no capacity, SLO or default-promotion verdict.
+The [results](../../../studies/model_generation/engine-evidence.md#asynchronous-stepping)
+retain each arm and full histories. A fresh canonical CPU restore and independent
+comparison of all 24 histories passed; the
+[retrieval receipt](../../../studies/model_generation/engine-async-evidence/canonical-retrieval.json)
+establishes local archive replay, without a new GPU run or remote backup.

@@ -1,0 +1,37 @@
+{
+  "kind": "engine-async-acceptance-v1",
+  "status": "accepted-local-evidence",
+  "source_map_sha256": "b980299b04a56f63e332e37cbacff2fd0242085e85dca7412054a97eed054b27",
+  "validation_archive_sha256": "66eaabd4d03ad05d5211b5c1158b67f1491641f5901e10c0c1026f0ca92f14aa",
+  "full_validation": [
+    {
+      "name": "full-validation-v2",
+      "receipt": "checks/full-validation-v2/execution.json",
+      "actual_exit_code": 0,
+      "current_source": true,
+      "full_validation": true,
+      "prefix_probe": null
+    }
+  ],
+  "independent_replay": {
+    "path": "/private/tmp/llm-mojo-async-20261009/retention/sealed-v1/independent-replay.json",
+    "bytes": 203595,
+    "sha256": "acf720d9008e3c3d32206c79147ba7afd6c68af310aa28060d3a3143ba367587"
+  },
+  "retained_numerical_qualification": true,
+  "terminal_turns_per_mode": 7,
+  "normal_terminal_histories_equal": true,
+  "reference": {
+    "cases": 7,
+    "tokens": 123,
+    "necessary_rows": 455,
+    "interrupted_prefixes": 1,
+    "mismatches": 0,
+    "configuration": 27,
+    "natural_decode": true,
+    "regenerated_fixture_sha256": "1c0729b4e8b27dae9e1874df22a94616556e94a1c3d7b539e7f973d9090607e6"
+  },
+  "custody": "local-only; no remote backup",
+  "production_serving": false,
+  "performance_promotion": false
+}

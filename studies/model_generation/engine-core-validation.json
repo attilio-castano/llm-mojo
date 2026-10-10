@@ -1,0 +1,206 @@
+{
+  "kind": "engine-core-validation-evidence-v1",
+  "schema_version": 1,
+  "archive": "validation.json.gz",
+  "bytes": 829444,
+  "sha256": "41148d8a462cc097ffa91b213a775c8229273645807d8204a721e6230ce16410",
+  "uncompressed_bytes": 15565015,
+  "uncompressed_sha256": "be9be13bbeeee19597da7e6a1bf93139899336f9f722210eb4a34311df94cef6",
+  "readiness_sha256": "571a956e8c149ff7db2ed85909adb59e40d14bd11fa250ae2bb98bd947edce51",
+  "file_count": 32,
+  "files": [
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-evidence-20261008/readiness.json",
+      "name": "readiness.json",
+      "bytes": 104368,
+      "sha256": "571a956e8c149ff7db2ed85909adb59e40d14bd11fa250ae2bb98bd947edce51"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-evidence-20261008/command-executions.json",
+      "name": "commands/command-executions.json",
+      "bytes": 58182,
+      "sha256": "313099eac06f5f14339dfa38e151c15fa47eea9c59c06d26e0a9b776710d8054"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-baseline-validation.log",
+      "name": "baseline/full-validation.log",
+      "bytes": 7200104,
+      "sha256": "94a78c574dadc57acf43a8aeb54c6d20f455ed4f9849cee4cf11f111fa320081"
+    },
+    {
+      "original_path": "/private/tmp/engine-validation.log",
+      "name": "candidate/full-validation.log",
+      "bytes": 7202772,
+      "sha256": "a278da9fba951d443608c11daeb9077572cf6a3e034ee68f4d08c0223b68856b"
+    },
+    {
+      "original_path": "/private/tmp/engine-final-python-complete.log",
+      "name": "candidate/final-python-310.log",
+      "bytes": 2735,
+      "sha256": "a310e045276cd7b31c33eb719ba04d4405d9a78623b876450c25a9a0a6adfe05"
+    },
+    {
+      "original_path": "/private/tmp/engine-baseline-archive-lifecycle",
+      "name": "baseline/lifecycle.json",
+      "bytes": 26777,
+      "sha256": "6195beb85b916773aa13d6d1affdd529fef3a268b3d2500c6b3ff1ec0db81070"
+    },
+    {
+      "original_path": "/private/tmp/engine-baseline-archive-batch",
+      "name": "baseline/batch.json",
+      "bytes": 26955,
+      "sha256": "44e6c9684bbd3175819ebef38dc304203b7f9864311fb809aac3875c44a20bcc"
+    },
+    {
+      "original_path": "/private/tmp/engine-baseline-generation/result.json",
+      "name": "baseline/generation.json",
+      "bytes": 148159,
+      "sha256": "2b804cd0397961d02074625711e45d09c050ab7071e0ef46cd2ffc5455a514e0"
+    },
+    {
+      "original_path": "/private/tmp/engine-baseline-lifecycle-sync.log",
+      "name": "baseline/lifecycle-device-sync.log",
+      "bytes": 196,
+      "sha256": "a34b6b118a88e5f80ba7a1a942bbcc196a2231e50a88659880128e595a250a48"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-evidence-20261008/lifecycle.json",
+      "name": "candidate/lifecycle.json",
+      "bytes": 28034,
+      "sha256": "a5c4ffc966f665c01060b08dde79fa910491cc20dc44f64ac5a2be1e4959380e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-evidence-20261008/batch.json",
+      "name": "candidate/batch.json",
+      "bytes": 28212,
+      "sha256": "7095a34ce713fbc09a122eee6c87b708d8339df6c019e6a2b17dd81069676f57"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-evidence-20261008/generation/result.json",
+      "name": "candidate/generation.json",
+      "bytes": 149467,
+      "sha256": "7da93d1ba2f40e1cc2298d9a1a5e51436fa8d94c8a5cd3e8b5913a6d22123d61"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-evidence-20261008/lifecycle-sync.log",
+      "name": "candidate/lifecycle-device-sync.log",
+      "bytes": 137,
+      "sha256": "03f4a16708ced263bfbf12532b622a1edb3c03f0b8e06c5bdc47c710a9b70fec"
+    },
+    {
+      "original_path": "/private/tmp/engine-baseline-archive-model.provenance.json",
+      "name": "baseline/model.provenance.json",
+      "bytes": 25965,
+      "sha256": "38b5d0c2a5be74bca0e424ae519a120ae410cacc47c45b0f7c9e7135aafbdd65"
+    },
+    {
+      "original_path": "/private/tmp/engine-baseline-generator.provenance.json",
+      "name": "baseline/generator.provenance.json",
+      "bytes": 25965,
+      "sha256": "c753d05d9b53e6089a94fcad2bdab9e1f8bfe59f548c349afed2be8a6055269b"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-evidence-20261008/model.provenance.json",
+      "name": "candidate/model.provenance.json",
+      "bytes": 27200,
+      "sha256": "b3c40e315c2c0ca7d08fbda01f0fad804e55acd9a358816d83e9ecce0dd51a83"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-evidence-20261008/generator.provenance.json",
+      "name": "candidate/generator.provenance.json",
+      "bytes": 27215,
+      "sha256": "41af33b2e8120850f2861ba71c4a61ae919104e0812b6c410559072043de01a2"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-evidence-20261008/build/build.json",
+      "name": "candidate/engine-build.json",
+      "bytes": 29380,
+      "sha256": "d7480cb151e45c523410b2e6192ce26c142bbbec3bdb984d8415a0395120f171"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-evidence-20261008/build/engine-build.log",
+      "name": "candidate/engine-build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/Users/attiliocastano/.cache/llm-mojo/qwen2.5-0.5b-instruct/7ae557604adf67be50417f59c2c2f167def9a775/model-prepared-v1/manifest.json",
+      "name": "assets/prepared-model-manifest.json",
+      "bytes": 62387,
+      "sha256": "b950f5f16efab9cf7813fa2b8e0455032ad210ebdb19cbe851ab3156e8176192"
+    },
+    {
+      "original_path": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/build/checkpoints/qwen2.5-0.5b-instruct/7ae557604adf67be50417f59c2c2f167def9a775/prepared-v1/manifest.json",
+      "name": "assets/prepared-tokenizer-manifest.json",
+      "bytes": 3061,
+      "sha256": "5ecbe5babb4515f6466454b739e36b9f3e67fbcdf77b6af13f1d33b5dbbb44d5"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-evidence-20261008/command-executions.json#candidate_focused_final_engine_tools.stdout",
+      "name": "candidate/focused-engine-tools-14.log",
+      "bytes": 113,
+      "sha256": "32f8926cea2c6f6e1231b4d6933eb45048f6ff206270f49ad18c248b65513660"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-acceptance-receipt.json",
+      "name": "supplemental/acceptance-receipt.json",
+      "bytes": 3252,
+      "sha256": "388d40850a0f18cce3d97638a1c0348e2477203e3fe7b438f89865db8535c6a7"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-acceptance-core.log",
+      "name": "supplemental/acceptance-core.log",
+      "bytes": 1482,
+      "sha256": "2029451c9290350dec71379a1810c359b58adee0280c401309130559b88bef1a"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-acceptance-build.log",
+      "name": "supplemental/acceptance-build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-acceptance-metal.log",
+      "name": "supplemental/acceptance-metal.log",
+      "bytes": 131,
+      "sha256": "dee87618ec4231ce727437ecf96667b25dfc44bc2446f2b9e38550587d1fc67e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-acceptance-metal-sync.log",
+      "name": "supplemental/acceptance-metal-sync.log",
+      "bytes": 131,
+      "sha256": "dee87618ec4231ce727437ecf96667b25dfc44bc2446f2b9e38550587d1fc67e"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-acceptance-source-before-tests.json",
+      "name": "supplemental/source-before-tests.json",
+      "bytes": 36465,
+      "sha256": "9598338e676273f9c7a07b2e1bdfd9a18ef5d794ca7ab66223338110edfd2495"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-acceptance-source-before-build.json",
+      "name": "supplemental/source-before-build.json",
+      "bytes": 36422,
+      "sha256": "1357fc7d9216e5070c6d93009e9a7bcf5b1bdfdaa5ef01f473a6493fe72f1ffe"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-acceptance-source-after.json",
+      "name": "supplemental/source-after.json",
+      "bytes": 36465,
+      "sha256": "9598338e676273f9c7a07b2e1bdfd9a18ef5d794ca7ab66223338110edfd2495"
+    },
+    {
+      "original_path": "/private/tmp/engine-final-scope-tests.log",
+      "name": "candidate/final-scoped-python-17.log",
+      "bytes": 116,
+      "sha256": "5f14075e66f3b64224042833891130a387a397d75f649104056fc8cfc98b6906"
+    },
+    {
+      "original_path": "/private/tmp/llm-mojo-engine-evidence-20261008/scope-test-execution.json",
+      "name": "commands/scope-test-execution.json",
+      "bytes": 1748,
+      "sha256": "1ad83b368fe617c86ac7681e0f8ab8ec2b767adfcdbdebc5756b744c243a8f34"
+    }
+  ],
+  "verification": "gzip and raw hashes, every restored UTF-8 file length/hash, embedded readiness identity and supplemental source/log/binary hashes checked"
+}

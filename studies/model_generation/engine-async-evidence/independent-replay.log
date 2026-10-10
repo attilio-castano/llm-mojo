@@ -1,0 +1,21 @@
+{
+  "kind": "async-chat-natural-reference-fixture-v1",
+  "raw_sha256": {
+    "basic.tsv": "972bbe443b13551db4526f17b0dec438aa870031d6c62dd879e95f0990279c4e",
+    "interrupt.tsv": "d4212ff4f20bc01c44ecd75af4f4b7abcb298525eb3b83a01802a914785226a7"
+  },
+  "tokens": 123,
+  "necessary_rows": 455,
+  "fixture_sha256": "1c0729b4e8b27dae9e1874df22a94616556e94a1c3d7b539e7f973d9090607e6"
+}
+{
+  "status": "passed",
+  "result": "/private/tmp/llm-mojo-async-20261009/retention/sealed-v1/independent-replay.json",
+  "source_files": 249,
+  "measurement_runs": [
+    12,
+    12
+  ],
+  "reference_tokens": 123,
+  "reference_rows": 455
+}

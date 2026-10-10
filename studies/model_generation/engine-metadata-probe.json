@@ -1,0 +1,274 @@
+{
+  "schema": "llm-mojo-metadata-upload-probe-v1",
+  "collected_at_utc": "2026-10-08T18:15:19.299000+00:00",
+  "scope": "Clean-source public API metadata staging gate with a synthetic dependent integer Metal workload. Establishes nonblocking next-metadata submission with sources retained through synchronize; no asynchronous LLM stepping or LLM performance claim.",
+  "provenance": {
+    "git_commit": "b18563b3a43c389991cd6679bf03892f140f15b0",
+    "git_branch": "codex/engine-core",
+    "working_tree_dirty": false,
+    "source_path": "src/llm_mojo/benchmarks/metadata_probe.mojo",
+    "source_sha256": "c032cb3095ecef63e5de19bf6c2bb9d75b00134bbcd253dd7179d105ab6c14df",
+    "clock_source_sha256": "a01574476c1dbba683981757da898377296902e58d6fb71b835300d3a4bbf5b2",
+    "uv_lock_sha256": "903ea1a7c05a268cc14d36bc817cee7edb0cd2f278c0c557777ef0d472cfad57",
+    "probe_binary_sha256": "de093326ec69bf38b94fd5b59fd166232496c811da1c473ab0d7aed5797b54a1",
+    "probe_binary_bytes": 124128,
+    "probe_binary_path": "/private/tmp/llm-mojo-engine-evidence-20261008/metadata-probe",
+    "raw_stdout_path": "/private/tmp/llm-mojo-engine-evidence-20261008/metadata-probe.log",
+    "raw_stdout_sha256": "895386b30e0d855b6be1f46c1dae48f497e120f57ca8aa93aca99a5b64d3fa63",
+    "raw_stdout_bytes": 955,
+    "shader_sha256": "a8c99ea2f77c3f7e3e7ba66bedf8070e99ddfafc2c83fc089161c9d827a7d528",
+    "shader_digest_definition": "SHA256 of the complete embedded MTLB payloads concatenated in increasing file-offset order.",
+    "shader_extraction": "Find MTLB magic in retained binary; read little-endian UInt64 total length at header offset16; validate NAME kernel and terminal ENDT marker; hash that exact byte range.",
+    "shaders": [
+      {
+        "kernel": "busy",
+        "name": "metadata_probe__busy_TensorLa6A6AcB6A6A_c7f01910a4cf6176",
+        "file_offset": 38512,
+        "bytes": 6228,
+        "sha256": "c66aa3f97daa221386a74b4306dbc724ae0f0fb3e77c696a196c570019251b44"
+      },
+      {
+        "kernel": "observe",
+        "name": "metadata_probe__observe_Tenso6A6AcB6A6A_9178b3959a9519b7",
+        "file_offset": 46000,
+        "bytes": 5832,
+        "sha256": "5284e79b1f8d409d4f406ffebae919e01f3bfbf7f59d9d81a73ec7c5f2851f3f"
+      }
+    ],
+    "max_version": "26.5.0",
+    "mojo_version": "1.0.0",
+    "uv_version": "uv 0.12.5 (210d1f678 2026-08-14 aarch64-apple-darwin)",
+    "os": {
+      "macos": "26.6.2",
+      "macos_build": "25G83",
+      "darwin": "25.6.0"
+    },
+    "architecture": "arm64",
+    "physical_memory_bytes": 25769803776,
+    "device": "Apple M4 Pro",
+    "backend": "metal",
+    "environment": {
+      "hardware": {
+        "model": "Mac16,7",
+        "chip": "Apple M4 Pro",
+        "logical_cpu_count": "14",
+        "gpu_api": "metal",
+        "gpu_target": "metal:4-metal4",
+        "physical_memory_bytes": 25769803776
+      },
+      "software": {
+        "macos": "26.6.2",
+        "macos_build": "25G83",
+        "darwin": "25.6.0",
+        "xcode": [
+          "Xcode 26.6",
+          "Build version 17F113"
+        ],
+        "metal": [
+          "Apple metal version 32023.883 (metalfe-32023.883)",
+          "Target: air64-apple-darwin25.6.0",
+          "Thread model: posix"
+        ],
+        "uv": "uv 0.12.5 (210d1f678 2026-08-14 aarch64-apple-darwin)",
+        "mojo": "1.0.0",
+        "max": "26.5.0"
+      }
+    },
+    "environment_source": {
+      "path": "/private/tmp/llm-mojo-engine-evidence-20261008/build/build.json",
+      "sha256": "d7480cb151e45c523410b2e6192ce26c142bbbec3bdb984d8415a0395120f171",
+      "scope": "Companion engine build receipt from the same clean source and pinned environment; actual probe device/backend independently printed in stdout."
+    },
+    "source_identity_basis": "Current clean checkpoint independently inspected during assembly; source hashes matched companion clean build receipt. Exact successful metadata build/run execution records retained separately.",
+    "run_environment_not_recorded": [
+      "MODULAR_DEBUG",
+      "AC power",
+      "thermal state",
+      "power mode"
+    ]
+  },
+  "commands": {
+    "build": "uv run --locked mojo build -I src src/llm_mojo/benchmarks/metadata_probe.mojo -o /private/tmp/llm-mojo-engine-evidence-20261008/metadata-probe",
+    "run": "uv run --locked /private/tmp/llm-mojo-engine-evidence-20261008/metadata-probe 1000000 5 > /private/tmp/llm-mojo-engine-evidence-20261008/metadata-probe.log 2>&1",
+    "cwd": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo",
+    "build_execution_id": "exec-6843f741-0c28-4827-8144-b7f6d903418f",
+    "run_execution_id": "exec-c2ec0374-3687-4bd6-888d-0bccdfab9305",
+    "build_exit_code": 0,
+    "run_exit_code": 0,
+    "execution_receipt_path": "/private/tmp/llm-mojo-engine-evidence-20261008/command-executions.json",
+    "execution_receipt_sha256": "313099eac06f5f14339dfa38e151c15fa47eea9c59c06d26e0a9b776710d8054",
+    "retained_execution_labels": [
+      "metadata_probe_build",
+      "metadata_probe_run"
+    ],
+    "build_started_at_ms": 1791483297940,
+    "build_completed_at_ms": 1791483298433,
+    "run_started_at_ms": 1791483318844,
+    "run_completed_at_ms": 1791483319299,
+    "command_evidence": "Exact completed CommandExecution records retained in companion command-executions.json, with original tool-call/output and ledger-line references."
+  },
+  "geometry": {
+    "dtype": "uint32",
+    "metadata_rows": 2048,
+    "metadata_bytes": 8192,
+    "work_rows": 4096,
+    "work_rounds": 1000000,
+    "block_dim": 128,
+    "work_grid_dim": 32,
+    "observer_grid_dim": 16,
+    "pairs": 5
+  },
+  "measurement": {
+    "clock": "clock_gettime_nsec_np(CLOCK_UPTIME_RAW=8)",
+    "units": "host wall nanoseconds",
+    "boundaries": "After synchronized step1 metadata setup, time first workload enqueue, then stage2 population/upload plus observer enqueue, then final DeviceContext.synchronize. Numerical verification is outside timing.",
+    "order": "map then pinned in even pairs, pinned then map in odd pairs",
+    "source_lifetime": "Distinct first and second HostBuffers preallocated; idle second stage populated after step1 enqueue; both sources held through final synchronization. Same device metadata buffer reused by operations ordered on one context.",
+    "idle_control": {
+      "metadata_submit_ns": 24625,
+      "final_wait_ns": 109959
+    },
+    "warmup_samples": [
+      {
+        "pair": -1,
+        "arm": "mapped",
+        "work_submit_ns": 844541,
+        "metadata_submit_ns": 1030334,
+        "final_wait_ns": 133000,
+        "total_ns": 2007875
+      },
+      {
+        "pair": -1,
+        "arm": "pinned",
+        "work_submit_ns": 21833,
+        "metadata_submit_ns": 69917,
+        "final_wait_ns": 129667,
+        "total_ns": 221417
+      }
+    ],
+    "samples": [
+      {
+        "pair": 0,
+        "arm": "mapped",
+        "work_submit_ns": 12125,
+        "metadata_submit_ns": 43209708,
+        "final_wait_ns": 108125,
+        "total_ns": 43329958
+      },
+      {
+        "pair": 0,
+        "arm": "pinned",
+        "work_submit_ns": 40583,
+        "metadata_submit_ns": 23375,
+        "final_wait_ns": 18520292,
+        "total_ns": 18584250
+      },
+      {
+        "pair": 1,
+        "arm": "pinned",
+        "work_submit_ns": 41292,
+        "metadata_submit_ns": 27625,
+        "final_wait_ns": 22018958,
+        "total_ns": 22087875
+      },
+      {
+        "pair": 1,
+        "arm": "mapped",
+        "work_submit_ns": 30542,
+        "metadata_submit_ns": 21555041,
+        "final_wait_ns": 123500,
+        "total_ns": 21709083
+      },
+      {
+        "pair": 2,
+        "arm": "mapped",
+        "work_submit_ns": 70292,
+        "metadata_submit_ns": 18916833,
+        "final_wait_ns": 92042,
+        "total_ns": 19079167
+      },
+      {
+        "pair": 2,
+        "arm": "pinned",
+        "work_submit_ns": 28375,
+        "metadata_submit_ns": 16625,
+        "final_wait_ns": 19198500,
+        "total_ns": 19243500
+      },
+      {
+        "pair": 3,
+        "arm": "pinned",
+        "work_submit_ns": 24958,
+        "metadata_submit_ns": 14417,
+        "final_wait_ns": 19337500,
+        "total_ns": 19376875
+      },
+      {
+        "pair": 3,
+        "arm": "mapped",
+        "work_submit_ns": 24875,
+        "metadata_submit_ns": 18737375,
+        "final_wait_ns": 147250,
+        "total_ns": 18909500
+      },
+      {
+        "pair": 4,
+        "arm": "mapped",
+        "work_submit_ns": 16833,
+        "metadata_submit_ns": 22301583,
+        "final_wait_ns": 136417,
+        "total_ns": 22454833
+      },
+      {
+        "pair": 4,
+        "arm": "pinned",
+        "work_submit_ns": 31834,
+        "metadata_submit_ns": 18625,
+        "final_wait_ns": 22795125,
+        "total_ns": 22845584
+      }
+    ],
+    "medians_ns": {
+      "mapped": {
+        "work_submit_ns": 24875,
+        "metadata_submit_ns": 21555041,
+        "final_wait_ns": 123500,
+        "total_ns": 21709083
+      },
+      "pinned": {
+        "work_submit_ns": 31834,
+        "metadata_submit_ns": 18625,
+        "final_wait_ns": 19337500,
+        "total_ns": 19376875
+      }
+    },
+    "aggregate_definition": "Per-arm component medians over all five measured samples; warmups and idle control excluded. Component medians need not sum to median total."
+  },
+  "validation": {
+    "exit_code": 0,
+    "step2_uploaded_values_per_sample": 2048,
+    "scalar_recurrence_check_rows_per_sample": 1,
+    "failures": 0,
+    "step1_late_metadata_read_rows_per_sample": 4096,
+    "step1_late_read_contract": "Each row reads first-record metadata after its dependent integer recurrence, at an address derived from its recurrence result; every late read must still equal17+index.",
+    "exit_code_basis": "Exact retained completed metadata_probe_run CommandExecution record; exit_code0.",
+    "checked_sample_count": 10,
+    "checked_warmup_sample_count": 2
+  },
+  "gates": {
+    "host_submit_next_metadata_while_work_outstanding": "pass for distinct immutable pinned stages with same-context ordered copy",
+    "event_supported": false,
+    "event_error": "At max/mojo/max/gpu/host/device_context.mojo:5780:17: eventCreate is not supported on this device",
+    "safe_async_stage_retirement": "not established: locked Metal public DeviceEvent is unsupported; conservative synchronization still required before source reuse",
+    "engine_async_stepping": "not implemented or established by this probe"
+  },
+  "public_references": [
+    "https://max.modular.com/stable/api/mojo/max/gpu/host/device_context/DeviceContext/",
+    "https://max.modular.com/api/mojo/max/gpu/host/device_context/HostBuffer/",
+    "https://max.modular.com/stable/api/mojo/max/gpu/host/device_context/DeviceBuffer/",
+    "https://max.modular.com/releases/v26.6/"
+  ],
+  "raw_output": "device Apple M4 Pro\napi metal\ngeometry uint32 metadata_rows 2048 work_rows 4096 rounds 1000000 pairs 5\nevent unsupported At max/mojo/max/gpu/host/device_context.mojo:5780:17: eventCreate is not supported on this device\nTo get more accurate error information, set MODULAR_DEBUG=device-sync-mode.\nsample -1 mapped 844541 1030334 133000 2007875\nsample -1 pinned 21833 69917 129667 221417\nidle pinned 24625 109959\ncolumns sample pair arm work_submit_ns metadata_submit_ns final_wait_ns total_ns\nsample 0 mapped 12125 43209708 108125 43329958\nsample 0 pinned 40583 23375 18520292 18584250\nsample 1 pinned 41292 27625 22018958 22087875\nsample 1 mapped 30542 21555041 123500 21709083\nsample 2 mapped 70292 18916833 92042 19079167\nsample 2 pinned 28375 16625 19198500 19243500\nsample 3 pinned 24958 14417 19337500 19376875\nsample 3 mapped 24875 18737375 147250 18909500\nsample 4 mapped 16833 22301583 136417 22454833\nsample 4 pinned 31834 18625 22795125 22845584\n",
+  "assembled_at_utc": "2026-10-08T18:33:37.244442+00:00",
+  "collection_timestamp_source": "Retained CommandExecution completion timestamp for metadata_probe_run."
+}

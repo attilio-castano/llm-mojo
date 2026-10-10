@@ -27,13 +27,25 @@ pay off stay in the record alongside the ones that did, with the reason.
 ## Where things stand
 
 - **Chat works.** One conversation runs on the GPU, with the weights and cache
-  kept loaded between turns. On the reference Apple M4 Pro, replies stream at
-  107–115 tokens per second after the first token
+  kept loaded between turns. In retained MAX 26.5 / Mojo 1.0 measurements on
+  Apple M4 Pro, replies streamed at 107–115 tokens per second after the first token
   ([how this was measured](studies/model_generation/residual-norm.md)).
-- **Serving has started.** The engine can decode many sequences in one step,
-  and each row is bit-identical to decoding that sequence alone
-  ([generation guide](docs/generation.md)). A paged KV cache, continuous
-  batching and an HTTP frontend are [planned](docs/serving-plan.md).
+- **The serving core works.** Paged KV storage, mixed prefill/decode,
+  continuous admission, aborts and recomputation under memory pressure are native
+  Mojo. The [engine study](studies/model_generation/engine-core.md) retains
+  correctness checks and load measurements. Incremental admission remains the
+  default; optional [lifetime reservation](studies/model_generation/engine-core.md#lifetime-reservation-admission-bounded-successor-study)
+  removes repeated replay on the frozen pressure trace by waiting until a request's
+  declared cache growth fits.
+  The optional Fast engine route is qualified, with an inconclusive speed verdict;
+  reference configuration 27 remains the default. Optional
+  [asynchronous stepping](studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract)
+  now chains token IDs on the GPU and overlaps host submission with ordered GPU
+  work using two Metal contexts. Its [accepted evidence](studies/model_generation/engine-async-evidence/README.md)
+  retains numerical/lifecycle qualification, full validation and 24 measured
+  runs. The bounded offline speed comparison is inconclusive, so async remains opt-in.
+  Prefix caching and the multi-request frontend remain in the
+  [serving plan](docs/serving-plan.md).
 - **Open questions.** For one conversation, submitting GPU work limits speed
   more than arithmetic does. Long prompts are slow to start. And whether building
   the same cache in different chunk sizes can give identical results is not yet
@@ -51,6 +63,17 @@ lists the exact prerequisites. From the repository root:
 uv run llm-mojo setup
 uv run llm-mojo chat
 ```
+
+The optional engine adapter recomputes complete history each turn. Select its
+asynchronous reference runner with:
+
+```sh
+uv run --locked llm-mojo chat --engine --async-stepping
+```
+
+This implementation uses stable Mojo 1.1.0 / MAX 26.6.0 resolved in `uv.lock`.
+Historical measurements retain their recorded runtime. The accepted async study
+does not establish a qualifying speed gain. The direct Fast chat remains the default.
 
 `setup` checks the toolchain and prints the fix for anything missing. It
 downloads the pinned model once per Mac, about 1 GB, into a shared store that
@@ -76,7 +99,7 @@ research modes, benchmarks and validation.
 - **Python prepares, Mojo runs.** Python verifies the model files and then hands
   over to a native Mojo program. Tokenization, the conversation, the model and
   streaming all run in Mojo.
-- **Nothing is computed twice.** The model's 24 layers run on the GPU in BF16. A
+- **The direct chat reuses its cache.** The model's 24 layers run on the GPU in BF16. A
   key-value cache keeps every processed token, so a new message computes only its
   own tokens, and each reply token after the first costs one model pass.
 - **Speed comes from launching less.** For one conversation, generating a token

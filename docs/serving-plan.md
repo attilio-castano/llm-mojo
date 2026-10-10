@@ -10,15 +10,65 @@ model are merged as `a84ad34` (#32). Its translation-cost study found that
 small blocks made decode attention pay for every block; after a fix to that
 kernel, a rerun selected and confirmed 32-slot blocks, the default since
 2026-10-05. Phase 2 is complete.
-Each phase is approved separately and records its own validation, like the
-existing plans. The [project direction](project.md) lists this as a follow-up
-track.
+Phase 3, authorized from `cb2416a` on 2026-10-08, now has a validated request
+engine: mixed prefill/decode, bounded admission, aborts, KV-pressure replay and
+optional asynchronous stepping. The [engine study](../studies/model_generation/engine-core.md)
+holds the numerical gates, mechanisms, measured tradeoffs and replay commands.
+The current defaults are reference configuration 27, a fixed 256-row budget,
+incremental admission and synchronous stepping. Lifetime reservation, fitted
+budgeting, Fast execution and async stepping are explicit options. The measured
+Fast and async speed verdicts are inconclusive; online distributions are descriptive.
+
+Direct chat and generation remain Fast. Optional [`chat --engine`](chat.md#optional-engine-terminal-chat)
+uses one request per turn and recomputes complete history; `--async-stepping`
+selects the qualified two-context runner. The current lock resolves stable Mojo
+1.1.0 / MAX 26.6.0. Historical measurements keep their original runtime identities.
+Prefix caching is phase 4; HTTP transport, process supervision and restart/replay
+are phase 5. Each phase retains its own acceptance evidence.
+
+## Phase 3 review map
+
+Review the implementation by responsibility, then follow the measured-commit
+table to the corresponding evidence. Source changes and retained experimental
+records have separate purposes.
+
+| Responsibility | Implementation entry point | Focused checks |
+| --- | --- | --- |
+| Mixed token execution and request isolation | [Qwen model](../src/llm_mojo/models/qwen2/model.mojo), [decoder layer](../src/llm_mojo/layers/decoder_layer.mojo) | [mixed layer](../tests/test_mixed_layer.mojo), [mixed model](../tests/test_mixed_model.mojo) |
+| Request lifecycle, admission, budgeting and memory pressure | [EngineCore](../src/llm_mojo/serving/engine.mojo), [runner interface](../src/llm_mojo/serving/runner.mojo) | [engine](../tests/test_engine.mojo), [serving](../tests/test_serving.mojo) |
+| Two-context execution, token chaining and pending ownership | [QwenAsyncRunner](../src/llm_mojo/models/qwen2/runner.mojo) | [async engine](../tests/test_async_engine.mojo), [async model](../tests/test_async_model.mojo), [checkpoint driver](../tests/engine_async_metal_driver.mojo) |
+| Terminal integration and cancellation | [engine session](../src/llm_mojo/models/qwen2/engine_chat.mojo), [native CLI](../src/llm_mojo/cli/chat_engine_cli.mojo) | [engine chat](../tests/test_engine_chat.mojo), [launcher](../tests/test_engine_chat_launcher.py), [async reports](../tests/test_async_chat_terminal.py) |
+| Collection, provenance and independent replay | [model tools](../src/llm_mojo/benchmarks/model_profile.py), [budget study](../src/llm_mojo/benchmarks/engine_budget.py), [async study](../src/llm_mojo/benchmarks/engine_async.py) | [trace](../tests/test_engine_trace.py), [budget](../tests/test_engine_budget.py), [async evidence](../tests/test_engine_async.py) |
+| Stable runtime migration | [dependency constraints](../pyproject.toml), [resolved lock](../uv.lock), `max.gpu` imports and fixed-array compatibility | Full repository validation and exact-build checkpoint qualification below |
+
+### Measured source commits
+
+| Source commit | MAX / Mojo | Retained comparison and reproduction entry point |
+| --- | --- | --- |
+| `b18563b` | 26.5.0 / 1.0.0 | [Original mixed/core load studies](../studies/model_generation/engine-core.md#completed-load-studies) and [replay](../studies/model_generation/engine-core.md#replay-and-next-work) |
+| `b81ea6c` | 26.5.0 / 1.0.0 | [Lifetime reservation](../studies/model_generation/engine-core.md#lifetime-reservation-admission-bounded-successor-study) and [reproduction](../studies/model_generation/engine-core.md#reproduce-the-admission-evidence) |
+| `2af0933` | 26.5.0 / 1.0.0 | [Admission operating range](../studies/model_generation/engine-core.md#admission-operating-range-retained-bounded-results), including restoration and replay |
+| `01d8be4` | 26.5.0 / 1.0.0 | [Fixed-workspace budgeting](../studies/model_generation/engine-core.md#fixed-workspace-budget-retained-bounded-results) and [optional Fast](../studies/model_generation/engine-core.md#optional-fast-engine-retained-bounded-results) |
+| `adae54c` | 26.6.0 / 1.1.0 | [Async qualification and matched loads](../studies/model_generation/engine-core.md#asynchronous-stepping-retained-bounded-results), with [independent CPU restoration](../studies/model_generation/engine-async-evidence/README.md#independent-cpu-replay) |
+
+These measured commits are retained by [PR #35](https://github.com/attilio-castano/llm-mojo/pull/35).
+After squash merge, `git fetch origin pull/35/head` recovers the original
+implementation, evidence and curation history without changing these identities.
+
+The final full validation passed 392 Python tests, every native suite and every
+smoke before `adae54c` was committed. Its original dirty Git header is retained;
+the source-file map matches that commit and the later clean build. That clean
+build passed all seven checkpoint qualification groups on Apple M4 Pro / Metal.
+The [accepted evidence](../studies/model_generation/engine-async-evidence/README.md)
+preserves both scopes. Measured commit identities remain unchanged through
+curation; the eventual PR records their recovery reference under the
+[evidence-commit contract](experiments.md#evidence-commits).
 
 ## Why this track
 
-The completed milestone serves one conversation at a time: one token history,
-one set of 24 KV caches and greedy decoding in a persistent session. Its
-kernels, numerics and measurements are the foundation for everything below.
+This track builds on the direct chat's persistent conversation and resident
+weights. Phase 3 now schedules multiple independent token histories against a
+shared KV pool; the terminal adapter uses that engine for one conversation.
 
 Production inference engines spend most of their design effort elsewhere:
 deciding which requests share each GPU step, who owns KV memory, what happens
@@ -44,15 +94,17 @@ models, multiple GPUs and disaggregated prefill/decode are out of scope.
 
 ## Measured constraints
 
-Existing results shape the design:
+Retained MAX 26.5 / Mojo 1.0 measurements shaped the original design. They
+describe their recorded routes and timing boundaries; the MAX 26.6 / Mojo 1.1
+upgrade does not renew those measurements:
 
-1. **Step cost is mostly per launch.** A decode token issues about 245 compute
-   launches, each in its own Metal command buffer, and spends about 7 ms inside
+1. **Step cost is mostly per launch.** A decode token issued about 245 compute
+   launches, each in its own Metal command buffer, and spent about 7 ms inside
    MAX's enqueue calls ([runtime enqueue](../studies/model_generation/runtime-enqueue.md),
    [batching feasibility](../studies/model_generation/batch-support.md)).
    Adding sequences to a step adds GPU work but not launches. Launches per step
    must therefore scale with layers, never with sequences.
-2. **The host waits at the end of every step.** Greedy readback waited about
+2. **Synchronous readback adds a host wait.** Greedy readback waited about
    1.4–2.4 ms per token with the default projections
    ([projection scheduling](../studies/model_generation/projection-scheduling.md)).
 3. **KV memory is plentiful for this model.** BF16 KV costs 12,288 bytes per
@@ -69,6 +121,11 @@ Existing results shape the design:
    time goes.
 
 ## Architecture
+
+This is the target architecture across phases 3–6. The request engine, model
+runner and caller-owned KV storage are implemented. Prefix indexing, the
+frontend/engine process split, transport, supervision and SSD tier belong to
+later phases.
 
 ```text
 client ── HTTP/SSE ──► frontend process (Mojo)
@@ -88,11 +145,11 @@ client ── HTTP/SSE ──► frontend process (Mojo)
                          weights and workspaces, no sequence state between steps
                                │
                                ▼
-                       Metal, one ordered stream
+                       Metal, ordered GPU work
 ```
 
-The Python launcher starts and supervises both processes, as it already
-prepares assets and launches native executables.
+In phase 5, the Python launcher will start and supervise both processes,
+extending its current asset preparation and native executable launch duties.
 
 | Component | Owns | Does not own |
 | --- | --- | --- |
@@ -104,20 +161,21 @@ prepares assets and launches native executables.
 | ModelRunner | StepBatch upload, forward, token selection, readback, step timing | policy |
 | QwenModel | weights, workspaces, kernel dispatch | sequence state between steps |
 
-`QwenModel` once owned 24 caches and one `length`; phase 1a moved KV storage and
-lengths into a caller-owned `KVPool`, and `ChatSession` still owns one history.
-In this design, the model becomes stateless between steps, the
-KVCacheManager owns all KV storage, each request owns its history, and chat
-becomes an engine client whose turns reuse earlier turns through prefix hits.
+`QwenModel` owns weights and workspaces; caller-owned `KVPool` owns KV storage
+and `BlockManager` manages physical blocks. `EngineCore` retains each request's
+token history. The direct `ChatSession` owns one conversation, while the engine
+adapter submits its full history on each turn. Phase 4 adds prefix hits so those
+engine-client turns can reuse earlier KV; the later KVCacheManager design also
+adds prefix indexing, cache events and SSD ownership.
 
 ### Failure domains decide the process split
 
 The engine can fail: a Metal error already invalidates today's session. The
-frontend therefore holds every in-flight request's authoritative token history
-and never shares a process with the GPU. After an engine exit, the supervisor
-restarts it and the frontend resubmits each in-flight request as its prompt
-plus the tokens generated so far. The client stream continues with no lost or
-duplicated tokens. Replay recomputes the generated tokens as prompt rows, so the
+phase 5 frontend will hold every in-flight request's authoritative token history
+in a process separate from the GPU. After an engine exit, the supervisor will
+restart it and the frontend will resubmit each in-flight request as its prompt
+plus the tokens generated so far. Recovery must preserve the client stream with
+no lost or duplicated tokens. Replay recomputes the generated tokens as prompt rows, so the
 continuation can differ numerically from an uninterrupted run; that difference
 is a recorded diagnostic, not a failure.
 
@@ -138,6 +196,9 @@ or grammar state, must define its own recovery first.
 ## Interfaces
 
 ### Token protocol
+
+The following wire protocol is planned for phase 5. Phase 3 exposes in-process
+token requests and events without socket transport.
 
 The engine accepts and returns token IDs only. Text, chat templates and stop
 strings belong to the frontend. Generated token IDs are authoritative, as in
@@ -160,13 +221,13 @@ parameters produce `Reject`, never silent defaults, and rejection leaves
 engine state unchanged. `resumed_tokens` marks a replayed suffix so accounting
 and latency records distinguish recovery from ordinary prefill.
 
-Mojo 1.0's standard library provides `subprocess` and `os` but no socket
-module. The transport uses POSIX sockets through `external_call`, as the
-runtime already does for clocks and signals.
+The original Mojo 1.0 design selected POSIX sockets through `external_call`,
+as used for clocks and signals. Phase 5 will check the locked runtime's transport
+capabilities before implementing that choice.
 
 ### Model card
 
-At startup the engine publishes the pinned model revision and hashes,
+The planned startup protocol publishes the pinned model revision and hashes,
 tokenizer table hashes, vocabulary size, stop IDs, per-request token limit,
 block size, pool capacity, numerical policy, source commit and executable
 hash. The frontend refuses to serve if its tokenizer tables differ. Every
@@ -174,8 +235,9 @@ retained serving measurement records the card.
 
 ### StepBatch
 
-`QwenModel.forward(ids)` becomes `QwenModel.forward(batch: StepBatch)`. A step
-concatenates the scheduled tokens of all its sequences, decode sequences first:
+`QwenModel.forward` accepts a `StepBatch`, the caller's KV pool and an execution
+plan. A step concatenates the scheduled tokens of all its sequences, decode
+sequences first:
 
 | Field | Shape | Meaning |
 | --- | --- | --- |
@@ -195,20 +257,38 @@ leading decode sequences and one prefill launch for the remaining chunk. Launch
 count depends on the layer count and on whether a step contains decode or
 prefill work, never on S. The vocabulary projection reads only `logits_rows`.
 
-Workspaces are sized once from the token budget and maximum sequence count.
-The step loop allocates nothing. Today's call is S = 1.
+GPU workspaces are sized once from declared physical capacity and maximum
+sequence count; the scheduler budget can use fewer rows within that capacity.
+The synchronous core currently allocates host metadata and event lists per step;
+its measurements include that bookkeeping. Avoiding those allocations is a
+later optimization. A mixed call contains singleton decode sequences and at
+most one multi-row prefill sequence.
 
 ### ModelRunner
 
-`execute(batch) -> StepResult` returns one selected token per sampling
-sequence plus the step's timings. Two implementations share the interface:
+The implemented `ModelRunner` interface has `execute(batch, kv) -> List[Int]`
+and `now_ns()`. Execution returns tokens in `logits_rows` order and completes
+before cache ownership can change. `EngineCore` records timings in `EngineStep`.
+Two implementations share this interface:
 
-- `MetalRunner` executes on the GPU.
-- `SimulatedRunner` advances a virtual clock with the fitted step-time model
-  and returns tokens from a deterministic script.
+- `QwenRunner` executes synchronously on Metal with reference configuration 27
+  by default. The optional Fast study selects 26 for eligible steps and 27
+  otherwise; its measured result leaves the default unchanged.
+- `SimulatedRunner` advances a virtual clock using configured synthetic fixed,
+  per-token and per-position costs, and returns a deterministic token script.
+  It does not consume the fitted hardware policy.
 
 The scheduler, KV manager and EngineCore are the same code in both. The
 simulator explores policies quickly; hardware measurements confirm them.
+
+The optional `AsyncModelRunner` adds
+`submit(batch, source_indices, source_ticket, kv) -> ticket`, `collect(ticket)`
+and `drain()`. Sources name literal tokens or selected-logit indices from the
+immediately preceding ticket. Submission records enqueued KV extents;
+collection completes the ticket and returns sampled tokens in immutable head
+order. `QwenAsyncRunner` implements this interface and retains both tickets'
+resources until collection/drain. Its synchronous `execute` compatibility path
+requires no pending async tickets.
 
 ### KV events and step records
 
@@ -250,21 +330,24 @@ any state → FINISHED(abort) at the next step boundary
 ```
 
 `LOADING_KV` exists only with the SSD tier. A preempted request returns to the
-front of the waiting queue and usually resumes by hitting its own released
-blocks.
+front of the waiting queue. In phase 3 its blocks are released to Reset and its
+retained prompt plus delivered tokens are recomputed; prefix hits require phase
+4. Recomputed rows are charged to execution, never delivered again as output.
 
 ### Step loop
 
 1. Drain the inbox: adds and aborts.
 2. Schedule within the token budget and maximum sequence count:
-   - running decodes first, one token each, allocating a block at each
-     boundary;
+   - running decodes first, one token each; incremental allocation extends KV
+     at block boundaries;
    - then one continuing prefill chunk;
-   - then first-come, first-served admission when free blocks cover the next
-     chunk plus a watermark.
+   - then first-come, first-served admission. The default incremental policy
+     requires space for the next chunk plus a watermark. Optional lifetime
+     reservation instead requires the request's full declared cache demand.
 
-   If a decode needs a block and none is free, preempt the most recently
-   admitted running request.
+   Incremental allocation preempts the newest eligible unscheduled holder when
+   a running request needs more blocks. Lifetime reservation keeps admitted
+   requests' blocks until completion and waits instead of evicting.
 3. Build the StepBatch and upload its metadata once.
 4. Execute: forward, token selection and one readback for all sequences.
 5. Append tokens, apply stop IDs and limits, release finished requests' blocks
@@ -274,28 +357,96 @@ Initially at most one sequence prefills per step, so the prefill kernel still
 handles one sequence with a cached prefix. Multi-sequence prefill is a separate
 measured extension.
 
+For positive output, lifetime reservation owns enough blocks for
+`prompt_length + max_new_tokens - 1` cached positions before prefill begins;
+the final emitted token need not enter KV. Zero-output requests have zero KV
+demand and finish at the next boundary without model execution or holding
+blocks, even when the prompt exceeds the physical pool. They still undergo
+context, token, identity and queue validation; an abort before that boundary
+takes precedence. Reserved capacity stays distinct from committed cache length
+and from the row budget: execution still uses the chosen fixed or fitted chunk.
+The oldest waiting request cannot be bypassed. The watermark applies while any
+request is resident, even if none is selected this step, and is ignored when
+the pool has no residents so a request that fits alone can progress. Every
+terminal path releases written and unused reserved blocks.
+
+Capacity reserved for maximum output can sit unused until completion; early stop
+makes actual demand lower than the reserved peak. FIFO can delay a smaller
+request behind an older request that needs more blocks.
+The admission study measures those choices with the same fixed row budget and
+numerical route. It does not promote reservation to the default or establish a
+client latency guarantee.
+
 ### Token budget
 
 Start with a fixed budget equal to today's 256-row chunk limit. Then fit
 
 ```text
-step_ns ≈ c0 + c1 · total_tokens + c2 · attended_positions
+execute_ns ≈ c0 + c1 · total_tokens + c2 · attended_positions
+             + c3 · attention_partitions + c4 · sampled_logit_rows
 ```
 
-from step records, and size each prefill chunk so the predicted step stays
-under a declared inter-token target while decodes are running. This is
-Sarathi-Serve's stall-free batching with a calibrated model in place of a
-hand-tuned constant. `predicted_step_ns` records each prediction beside its
-measurement.
+from step records. The first implementation fits five nonnegative coefficients
+and freezes them before evaluating a separate trace; `predicted_ns` records
+each estimate beside measured `execute_ns`. Attention partitions count actual
+singleton/decode and multi-row prefill launches; sampled rows account for the
+vocabulary head. The largest prefill chunk whose prediction fits is selected.
+Mandatory decodes, or one token when otherwise nothing can progress, may exceed
+the target and are reported as such. The provisional 25 ms research target is
+not a promised request-latency SLO. Prediction error and observed latency remain
+separate from the policy's target. This follows Sarathi-Serve's stall-free
+batching question with a measured cost model rather than a hand-tuned constant.
+The completed fixed-workspace comparison retains 256: offline at 128 blocks,
+fixed-32, fixed-64 and adaptive were slower by the paired noise rule, while
+fixed-128 was inconclusive; at 40 blocks all candidates were inconclusive.
+Online distributions remain descriptive. Thirty of 2,019 positive adaptive
+evaluation steps exceeded the 25 ms setting, despite predictions within it.
+The [retained results](../studies/model_generation/engine-core.md#fixed-workspace-budget-retained-bounded-results)
+report prediction errors and first-token/gap tradeoffs separately.
 
 ### Asynchronous stepping
 
-GPU token selection writes each decode sequence's next token directly into the
-next step's input buffer. The host submits step n+1 before reading step n's
-tokens and finishes its bookkeeping one step behind. A sequence that stops is
-detected one step late, and its extra token is discarded. The intended effect
-is to hide the readback wait in constraint 2. It requires writing step
-metadata without a synchronizing map; see the open questions.
+The implemented `QwenAsyncRunner` gives two tickets independent pinned metadata
+sources, device metadata/result banks and pinned readback destinations. GPU
+token selection writes a retained result; a chaining kernel resolves the next
+decode input from that result before embedding. The host can submit step n+1
+before collecting step n, overlapping CPU preparation and launch submission
+with GPU execution.
+
+Two actual Metal contexts use the public
+[`DeviceContext.enqueue_wait_for`](https://max.modular.com/stable/api/mojo/max/gpu/host/device_context/DeviceContext/)
+operation to capture the already queued predecessor prefix. Shared model
+workspaces and KV therefore execute in order; the two steps do not execute
+concurrently on the GPU. Collecting n synchronizes only its context, allowing
+n+1 to remain outstanding. A bank is reused only after collection, and its next
+prefix wait cannot depend on future submissions. Direct `DeviceStream` event
+recording is unavailable on the tested Metal backend; the implementation uses
+the public cross-context operation instead.
+
+There are at most two uncollected tickets inside `EngineCore.step_async`, and
+at most one at its public boundary. An unknown stop can leave one additional
+decode per request; its selected token is explicitly discarded. Known output
+limits prevent extra submission. Aborts suppress undelivered results, and
+terminal requests retain `DRAINING` ownership until both contexts finish using
+their KV. Incremental pressure drains pending work before preemption/replay.
+The terminal adapter opts in with `chat --engine --async-stepping` and uses
+lifetime reservation plus exact complete-history recomputation.
+
+The current lock resolves stable Mojo 1.1.0 / MAX 26.6.0. The
+[MAX release notes](https://github.com/modular/modular/blob/main/docs/releases/v26.6.md)
+describe nonblocking cross-context waits; the
+[Mojo 1.1 notes](https://mojolang.org/releases/v1.1.0/)
+cover the accompanying `max.gpu`, `Array`, SIMD namespace and move-rule
+migrations. The old MAX 26.5 metadata probe and measurements keep their original
+scope. The current
+[checkpoint and paired-load contract](../studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract)
+requires exact history, full guarded storage, finite active outputs, boundary
+cleanup and separate load measurements. The
+[acceptance receipt](../studies/model_generation/engine-async-evidence/engine-async-acceptance.json)
+retains the passed full validation and checkpoint/lifecycle gates. The separate
+[paired results](../studies/model_generation/engine-evidence.md#asynchronous-stepping)
+retain an inconclusive offline speed verdict and descriptive online distributions;
+async remains opt-in.
 
 ### Failure semantics
 
@@ -306,6 +457,54 @@ metadata without a synchronizing map; see the open questions.
 - The waiting queue is bounded; a full queue rejects new requests explicitly.
 - A request exceeding the per-request limit is rejected before any state
   changes, as today's chat rejects a full conversation.
+
+The supervisor and frontend above belong to phase 5. Phase 3 exposes the engine
+failure and fails its in-flight requests; it claims no automatic restart or
+client-stream recovery. Retained histories make that later recovery possible.
+
+### Phase 3 acceptance order
+
+1. **Readiness.** Freeze the baseline, assets, toolchain and device. Record the
+   full suite plus separate checkpoint lifecycle, batched equality and generation
+   checks in a readiness receipt. A historical suite result does not substitute
+   for this baseline check. A missing prepared checkpoint is an unavailable
+   check, not a pass.
+2. **Synchronous core.** Implement mixed decode with at most one prefill sequence,
+   a fixed total-token budget of 256, bounded admission, preemption, aborts,
+   scripted simulation and the Metal runner. Check scheduler and allocator
+   invariants after every simulated step and in Metal acceptance runs. Preserve
+   exact request/token accounting, rejection atomicity and write isolation.
+3. **Load evidence.** Compare sequential execution, static batching, continuous
+   batching and chunked prefill on frozen offline and seeded online traces. Keep
+   every request and step record. This is the first phase 3 performance boundary;
+   a working scheduler or faster kernel alone establishes no serving speedup.
+4. **Fitted budget.** Fit the declared step-time model on calibration traces, freeze
+   its coefficients, then evaluate on separate traces. Declare the predicted
+   execution-cost research target before fitting; the initial setting is 25 ms.
+   Declare a client inter-token SLO and goodput formula before corresponding
+   latency or target-capacity claims. No target or goodput threshold is inferred
+   from the observed result. Report predictions and errors as well as request metrics.
+5. **Asynchronous stepping.** First prove that the pinned Metal API permits
+   preparing the next metadata without a synchronizing map. Compare delivered
+   tokens against synchronous execution on an identical frozen step schedule,
+   including stop, limit and abort boundaries and discarded extra tokens. Then
+   measure it as its own arm. If the API cannot support it, retain the probe and
+   report that part of phase 3 as incomplete.
+
+This order records the original staged plan. The current optional implementation
+has passed its public two-context capability probe, full repository validation
+and clean-build checkpoint numerical/lifecycle qualification. Two complete
+12-run sync/self-sync/async grids retain exact frozen histories and terminal
+reasons. The canonical archive was freshly restored on CPU, with all 24 histories
+independently compared against the retained frozen expectations. This is local
+evidence retrieval, not a new GPU run or remote backup; see the
+[restore receipt](../studies/model_generation/engine-async-evidence/canonical-retrieval.json).
+
+Stages retain separate receipts for scheduling, budgeting and asynchronous work.
+The [declaration](../studies/model_generation/engine-core.md)
+defines schemas, replay requirements and the numerical boundary. Reference-route
+mixed-versus-solo execution, untouched storage and request accounting are exact
+checks. Comparisons against Fast are diagnostics.
 
 ## KV cache manager
 
@@ -448,10 +647,13 @@ Restored bytes equal stored bytes, so a disk hit is as exact as a memory hit.
 
 ### Numerical policy
 
-Serving uses Fast, the only application policy. Correctness follows the split
-in the [model contract](model.md#correctness-and-diagnostic-policy): system
-behavior is checked exactly, and numerical differences that depend on how work
-is scheduled are recorded as diagnostics.
+Fast remains the default application policy for chat and generation; optional
+`chat --engine` uses reference 27. Phase 3's initial
+runner instead uses reference configuration 27 for every scheduling arm, with
+an exact same-route mixed-versus-solo gate. This is a correctness and scheduling
+baseline, not a promoted Fast route or a timing comparison against the existing
+Fast application. Comparisons against Fast follow the diagnostic split in the
+[model contract](model.md#correctness-and-diagnostic-policy).
 
 In Fast, a row's arithmetic can depend on its step. A decode row scheduled with
 a prefill chunk may use a different projection kernel. A prefix-cache hit
@@ -461,10 +663,10 @@ these can change logits and occasionally a greedy token.
 
 ### Exact gates
 
-These hold by construction under Fast, so they test data movement and
-ownership rather than arithmetic:
+These test data movement and ownership with the same numerical route:
 
-- S = 1 through StepBatch equals today's forward: logits and all KV bytes.
+- Existing S = 1 Fast execution remains unchanged. Reference configuration 27
+  through StepBatch equals its solo route: logits and all KV bytes.
 - A decode-only batch equals decoding each sequence alone with the
   same kernels. Wrong positions, wrong blocks and
   cross-sequence writes break this equality even when outputs look plausible.
@@ -481,8 +683,9 @@ ownership rather than arithmetic:
 
 ### Diagnostics
 
-These comparisons record token agreement, first-divergence position and logit
-distances, never pass/fail thresholds:
+For Fast, these comparisons record token agreement, first-divergence position
+and logit distances, never pass/fail thresholds. Configuration 27's own-route
+mixed-versus-solo gate remains exact:
 
 - mixed steps against solo execution;
 - prefix-cache hits against recomputation;
@@ -528,7 +731,7 @@ configuration and trace identity.
 | --- | --- | --- | --- |
 | 1. Batched decode | StepBatch; multi-row configuration-26 decode kernels; one maximum-context block per sequence; a batch axis in the existing model benchmark | S = 1 equals today; batched rows equal solo rows | How do throughput and per-token latency scale for B = 1–64 at contexts 64, 1024 and 3968? |
 | 2. Paged KV | small blocks in the block-major pool, a block manager with the Reset, Partial and Complete states, paged decode and prefill attention | paged equals one block per sequence; allocation invariants; no writes outside a sequence's blocks | What does translation cost at each block size, and does head-major order help? |
-| 3. Engine core | EngineCore, Scheduler, both runners, chunked prefill, preemption, aborts, step records, trace driver, fitted budget, asynchronous stepping | scheduler and allocator invariants in simulation and on Metal; exact token accounting; asynchronous equals synchronous | How do latency percentiles respond to arrival rate across the scheduling arms, and where does the simulator disagree? |
+| 3. Engine core | EngineCore, Scheduler, both runners, chunked prefill, incremental and optional lifetime admission, preemption, aborts, step records, trace driver, fitted budget, asynchronous stepping | scheduler and allocator invariants in simulation and on Metal; exact token accounting; reserved requests drain without replay; asynchronous equals synchronous | How do latency percentiles respond to arrival rate and memory admission across the scheduling arms, and where does the simulator disagree? |
 | 4. Prefix caching | block keys, Registered blocks, KV events, prefix index, eviction, pinning, chat as an engine client | reused blocks keep their bytes and token IDs; only the uncached suffix is computed; logical event replay; existing chat checks pass | How does time to first token depend on shared-prefix length, hit rate and pool size? |
 | 5. Frontend and API | frontend process, token protocol, model card, HTTP/SSE, supervisor, replay, backpressure, HTTP load generator | replay loses and duplicates nothing and preserves delivered tokens | What do the edge and recovery cost end to end? |
 | 6. SSD tier | store entries keyed by engine identity, publication by rename, asynchronous loading, verification, eviction | restored bytes equal stored bytes; disk and memory hits agree; a changed engine identity never hits older entries | At what prefix length does restoring beat recomputing? |
@@ -602,9 +805,10 @@ before:
 
 ## Open questions
 
-- Can a host-visible MAX buffer on Metal be written for the next step without
-  synchronizing the stream? Asynchronous stepping and per-step uploads depend
-  on the answer.
+- How much does overlapping host preparation and submission with ordered GPU
+  work improve the declared load traces after extra stop/cancel work is charged?
+  Idle pinned metadata staging and prefix completion are now supported by the
+  qualified public two-context path; performance remains a separate question.
 - What does host access to a region of a device buffer cost, and what does it
   synchronize? SSD offload depends on it.
 - What is the largest single buffer the pool can use on this device, or should

@@ -1,0 +1,3060 @@
+{
+  "kind": "engine-core-results-card-v1",
+  "schema_version": 1,
+  "created_utc": "2026-10-08T18:41:56.212055+00:00",
+  "source_commit": "b18563b3a43c389991cd6679bf03892f140f15b0",
+  "source_and_build": {
+    "path": "/private/tmp/llm-mojo-engine-evidence-20261008/build/build.json",
+    "bytes": 29380,
+    "sha256": "d7480cb151e45c523410b2e6192ce26c142bbbec3bdb984d8415a0395120f171"
+  },
+  "readiness": {
+    "path": "/private/tmp/llm-mojo-engine-evidence-20261008/readiness.json",
+    "bytes": 104368,
+    "sha256": "571a956e8c149ff7db2ed85909adb59e40d14bd11fa250ae2bb98bd947edce51"
+  },
+  "validation": {
+    "path": "/private/tmp/llm-mojo-engine-evidence-20261008/validation.json",
+    "bytes": 8835,
+    "sha256": "58f2171f8bdb5d9176e7b2b48b7a2c5ccc044a0486898e09bdfa9b9ad89bcf7e"
+  },
+  "policy": "reference configuration 27; BF16 stored tensors and FP32 reductions; scheduling studies do not measure the existing Fast application",
+  "environment": {
+    "hardware": {
+      "model": "Mac16,7",
+      "chip": "Apple M4 Pro",
+      "logical_cpu_count": "14",
+      "gpu_api": "metal",
+      "gpu_target": "metal:4-metal4",
+      "physical_memory_bytes": 25769803776
+    },
+    "software": {
+      "macos": "26.6.2",
+      "macos_build": "25G83",
+      "darwin": "25.6.0",
+      "xcode": [
+        "Xcode 26.6",
+        "Build version 17F113"
+      ],
+      "metal": [
+        "Apple metal version 32023.883 (metalfe-32023.883)",
+        "Target: air64-apple-darwin25.6.0",
+        "Thread model: posix"
+      ],
+      "uv": "uv 0.12.5 (210d1f678 2026-08-14 aarch64-apple-darwin)",
+      "mojo": "1.0.0",
+      "max": "26.5.0"
+    }
+  },
+  "numerical_scope": "all generated request histories identical across paired arms in these retained traces; this does not assert equivalence with existing Fast arithmetic",
+  "statistical_unit": "four paired whole-trace blocks per study; table quantiles are the median of each block quantile, with linear within-block quantiles; requests/tokens are dependent and never pooled as independent repetitions",
+  "fixed": {
+    "offline": {
+      "evidence": {
+        "archive": {
+          "path": "/private/tmp/llm-mojo-engine-evidence-20261008/offline/engine-core.json.gz",
+          "bytes": 304704,
+          "sha256": "957236ad9c1c99f6af3d60781f46bf040af822d2c649ac4afea4d37b447f51a7"
+        },
+        "manifest": {
+          "path": "/private/tmp/llm-mojo-engine-evidence-20261008/offline/engine-core.json",
+          "bytes": 228,
+          "sha256": "1f269cdf38a115d6ff763959fe55bc0ebbbf7c5dc5783d7d1090b68147478ab3"
+        },
+        "summary_recomputed_from_all_native_stdout": true
+      },
+      "trace_sha256": "aa049dea1465e9e0fe542e5f8789aa70f11e3d294501984657e47ed825cdecd7",
+      "trace_mode": "offline",
+      "nominal_arrival_rate": null,
+      "requests_per_trace": 8,
+      "prompt_lengths": [
+        32,
+        128,
+        64,
+        512,
+        96,
+        1024,
+        256,
+        64
+      ],
+      "output_limits": [
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32
+      ],
+      "blocks": 128,
+      "block_size": 32,
+      "max_sequences": 8,
+      "warmup_steps": 10,
+      "arms": {
+        "serial": {
+          "paired_blocks": 4,
+          "median_of_block_metrics": {
+            "duration_ns": 3937801396.0,
+            "tokens_per_second": 65.03484968751603,
+            "delivered_tokens": 256.0,
+            "arrival_window_ns": 0.0,
+            "drain_tail_ns": 3937801396.0,
+            "steps": 256.0,
+            "preemptions": 0.0,
+            "total_tokens": 2424.0,
+            "attended_positions": 778048.0,
+            "ttft": {
+              "p50_ns": 1602443073.25,
+              "p95_ns": 3476210622.0499997,
+              "p99_ns": 3580200924.41,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "tpot": {
+              "p50_ns": 10654340.04032258,
+              "p95_ns": 11243114.542741936,
+              "p99_ns": 11270066.985967744,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "inter_token": {
+              "p50_ns": 10802999.75,
+              "p95_ns": 12237028.575,
+              "p99_ns": 13127780.14,
+              "sample_count_each_block": [
+                248,
+                248,
+                248,
+                248
+              ]
+            },
+            "end_to_end": {
+              "p50_ns": 1930893677.0,
+              "p95_ns": 3809360890.0249996,
+              "p99_ns": 3912100928.4049997,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            }
+          },
+          "per_block": [
+            {
+              "block": 0,
+              "calibration": false,
+              "duration_ns": 3807027333,
+              "tokens_per_second": 67.2440667239097,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 3807027333,
+              "steps": 256,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 3364727907.8999996,
+              "ttft_p99_ns": 3461911614.38,
+              "tpot_p95_ns": 10692531.727419354,
+              "tpot_p99_ns": 10745620.332580645,
+              "inter_token_p95_ns": 12254269.2,
+              "inter_token_p99_ns": 12929182.02,
+              "end_to_end_p95_ns": 3683566426.85,
+              "end_to_end_p99_ns": 3782324585.37
+            },
+            {
+              "block": 1,
+              "calibration": false,
+              "duration_ns": 4043795667,
+              "tokens_per_second": 63.30685847683312,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 4043795667,
+              "steps": 256,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 3550554583.5499997,
+              "ttft_p99_ns": 3663826950.31,
+              "tpot_p95_ns": 12444951.064516129,
+              "tpot_p99_ns": 12694363.322580645,
+              "inter_token_p95_ns": 13803053.95,
+              "inter_token_p99_ns": 16393198.27,
+              "end_to_end_p95_ns": 3907862520.5,
+              "end_to_end_p99_ns": 4016595970.5
+            },
+            {
+              "block": 2,
+              "calibration": false,
+              "duration_ns": 3862229542,
+              "tokens_per_second": 66.28295838352324,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 3862229542,
+              "steps": 256,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 3417162829.3999996,
+              "ttft_p99_ns": 3516642465.88,
+              "tpot_p95_ns": 11060463.837096775,
+              "tpot_p99_ns": 11074830.393225808,
+              "inter_token_p95_ns": 11857322.799999999,
+              "inter_token_p99_ns": 12221449.72,
+              "end_to_end_p95_ns": 3737883181.7999997,
+              "end_to_end_p99_ns": 3837349203.56
+            },
+            {
+              "block": 3,
+              "calibration": false,
+              "duration_ns": 4013373250,
+              "tokens_per_second": 63.78674099150883,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 4013373250,
+              "steps": 256,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 3535258414.7,
+              "ttft_p99_ns": 3643759382.94,
+              "tpot_p95_ns": 11425765.248387096,
+              "tpot_p99_ns": 11465303.578709679,
+              "inter_token_p95_ns": 12219787.95,
+              "inter_token_p99_ns": 13326378.26,
+              "end_to_end_p95_ns": 3880838598.25,
+              "end_to_end_p99_ns": 3986852653.25
+            }
+          ],
+          "minimum_no_replay_token_rows": 2424,
+          "recomputed_token_rows_each_block": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "executed_row_multiplier_each_block": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "static": {
+          "paired_blocks": 4,
+          "median_of_block_metrics": {
+            "duration_ns": 1611189854.0,
+            "tokens_per_second": 158.8982138740455,
+            "delivered_tokens": 256.0,
+            "arrival_window_ns": 0.0,
+            "drain_tail_ns": 1611189854.0,
+            "steps": 39.0,
+            "preemptions": 0.0,
+            "total_tokens": 2424.0,
+            "attended_positions": 778048.0,
+            "ttft": {
+              "p50_ns": 421632614.75,
+              "p95_ns": 1205442226.975,
+              "p99_ns": 1215127928.595,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "tpot": {
+              "p50_ns": 38649361.21774194,
+              "p95_ns": 50448118.77983871,
+              "p99_ns": 51070222.143064514,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "inter_token": {
+              "p50_ns": 12699250.0,
+              "p95_ns": 14418354.0,
+              "p99_ns": 983549003.2650003,
+              "sample_count_each_block": [
+                248,
+                248,
+                248,
+                248
+              ]
+            },
+            "end_to_end": {
+              "p50_ns": 1611161187.5,
+              "p95_ns": 1611161187.5,
+              "p99_ns": 1611161187.5,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            }
+          },
+          "per_block": [
+            {
+              "block": 0,
+              "calibration": false,
+              "duration_ns": 1598779250,
+              "tokens_per_second": 160.12216821052687,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 1598779250,
+              "steps": 39,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1198408460.75,
+              "ttft_p99_ns": 1207496525.75,
+              "tpot_p95_ns": 50191547.23709677,
+              "tpot_p99_ns": 50764761.06032258,
+              "inter_token_p95_ns": 13861667.0,
+              "inter_token_p99_ns": 982898143.7700003,
+              "end_to_end_p95_ns": 1598752375.0,
+              "end_to_end_p99_ns": 1598752375.0
+            },
+            {
+              "block": 1,
+              "calibration": false,
+              "duration_ns": 1556280875,
+              "tokens_per_second": 164.4947284981575,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 1556280875,
+              "steps": 39,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1176406552.75,
+              "ttft_p99_ns": 1185482577.75,
+              "tpot_p95_ns": 48435353.91935483,
+              "tpot_p99_ns": 49085489.08064516,
+              "inter_token_p95_ns": 14586583.0,
+              "inter_token_p99_ns": 941991031.2700003,
+              "end_to_end_p95_ns": 1556253584.0,
+              "end_to_end_p99_ns": 1556253584.0
+            },
+            {
+              "block": 2,
+              "calibration": false,
+              "duration_ns": 1623600458,
+              "tokens_per_second": 157.67425953756413,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 1623600458,
+              "steps": 39,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1212475993.2,
+              "ttft_p99_ns": 1222759331.44,
+              "tpot_p95_ns": 50704690.32258064,
+              "tpot_p99_ns": 51375683.22580645,
+              "inter_token_p95_ns": 14853584.0,
+              "inter_token_p99_ns": 984199862.7600003,
+              "end_to_end_p95_ns": 1623570000.0,
+              "end_to_end_p99_ns": 1623570000.0
+            },
+            {
+              "block": 3,
+              "calibration": false,
+              "duration_ns": 1674135000,
+              "tokens_per_second": 152.9147888312472,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 1674135000,
+              "steps": 39,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1267135766.9,
+              "ttft_p99_ns": 1277582753.3799999,
+              "tpot_p95_ns": 52586507.88064516,
+              "tpot_p99_ns": 53198710.19548387,
+              "inter_token_p95_ns": 14250125.0,
+              "inter_token_p99_ns": 1034324624.5000004,
+              "end_to_end_p95_ns": 1674103209.0,
+              "end_to_end_p99_ns": 1674103209.0
+            }
+          ],
+          "minimum_no_replay_token_rows": 2424,
+          "recomputed_token_rows_each_block": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "executed_row_multiplier_each_block": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "continuous": {
+          "paired_blocks": 4,
+          "median_of_block_metrics": {
+            "duration_ns": 1615079875.0,
+            "tokens_per_second": 158.50954647271837,
+            "delivered_tokens": 256.0,
+            "arrival_window_ns": 0.0,
+            "drain_tail_ns": 1615079875.0,
+            "steps": 39.0,
+            "preemptions": 0.0,
+            "total_tokens": 2424.0,
+            "attended_positions": 778048.0,
+            "ttft": {
+              "p50_ns": 428703375.25,
+              "p95_ns": 1215222631.25,
+              "p99_ns": 1224915426.25,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "tpot": {
+              "p50_ns": 38390082.32258065,
+              "p95_ns": 50450565.186290324,
+              "p99_ns": 51118395.29532258,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "inter_token": {
+              "p50_ns": 12359770.5,
+              "p95_ns": 14254396.0,
+              "p99_ns": 983011889.3650002,
+              "sample_count_each_block": [
+                248,
+                248,
+                248,
+                248
+              ]
+            },
+            "end_to_end": {
+              "p50_ns": 1615050812.5,
+              "p95_ns": 1615050812.5,
+              "p99_ns": 1615050812.5,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            }
+          },
+          "per_block": [
+            {
+              "block": 0,
+              "calibration": false,
+              "duration_ns": 1622619125,
+              "tokens_per_second": 157.76961830152223,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 1622619125,
+              "steps": 39,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1226556537.4,
+              "ttft_p99_ns": 1236923373.8799999,
+              "tpot_p95_ns": 50774982.38548387,
+              "tpot_p99_ns": 51416847.006129034,
+              "inter_token_p95_ns": 14277667.0,
+              "inter_token_p99_ns": 989872326.4900004,
+              "end_to_end_p95_ns": 1622592875.0,
+              "end_to_end_p99_ns": 1622592875.0
+            },
+            {
+              "block": 1,
+              "calibration": false,
+              "duration_ns": 1557261042,
+              "tokens_per_second": 164.39119267455482,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 1557261042,
+              "steps": 39,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1181653239.7,
+              "ttft_p99_ns": 1190629747.94,
+              "tpot_p95_ns": 48573120.95322581,
+              "tpot_p99_ns": 49256200.52612904,
+              "inter_token_p95_ns": 13716041.0,
+              "inter_token_p99_ns": 948642170.7400002,
+              "end_to_end_p95_ns": 1557228125.0,
+              "end_to_end_p99_ns": 1557228125.0
+            },
+            {
+              "block": 2,
+              "calibration": false,
+              "duration_ns": 1607540625,
+              "tokens_per_second": 159.2494746439145,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 1607540625,
+              "steps": 39,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1203888725.1,
+              "ttft_p99_ns": 1212907478.62,
+              "tpot_p95_ns": 50126147.98709677,
+              "tpot_p99_ns": 50819943.58451613,
+              "inter_token_p95_ns": 14231125.0,
+              "inter_token_p99_ns": 976151452.2400002,
+              "end_to_end_p95_ns": 1607508750.0,
+              "end_to_end_p99_ns": 1607508750.0
+            },
+            {
+              "block": 3,
+              "calibration": false,
+              "duration_ns": 1664113666,
+              "tokens_per_second": 153.83564550331624,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 1664113666,
+              "steps": 39,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1259348187.5,
+              "ttft_p99_ns": 1269082737.5,
+              "tpot_p95_ns": 52007004.75,
+              "tpot_p99_ns": 52687460.07258065,
+              "inter_token_p95_ns": 14464583.0,
+              "inter_token_p99_ns": 1016596543.4900004,
+              "end_to_end_p95_ns": 1664084041.0,
+              "end_to_end_p99_ns": 1664084041.0
+            }
+          ],
+          "minimum_no_replay_token_rows": 2424,
+          "recomputed_token_rows_each_block": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "executed_row_multiplier_each_block": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "chunked": {
+          "paired_blocks": 4,
+          "median_of_block_metrics": {
+            "duration_ns": 1715664271.0,
+            "tokens_per_second": 149.30638241137802,
+            "delivered_tokens": 256.0,
+            "arrival_window_ns": 0.0,
+            "drain_tail_ns": 1715664271.0,
+            "steps": 46.0,
+            "preemptions": 0.0,
+            "total_tokens": 2424.0,
+            "attended_positions": 778048.0,
+            "ttft": {
+              "p50_ns": 455059073.0,
+              "p95_ns": 1326456458.3249998,
+              "p99_ns": 1338879358.465,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "tpot": {
+              "p50_ns": 37799892.12903226,
+              "p95_ns": 48843408.409677416,
+              "p99_ns": 49400122.54645161,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "inter_token": {
+              "p50_ns": 13163124.5,
+              "p95_ns": 151796294.84999993,
+              "p99_ns": 192415312.0,
+              "sample_count_each_block": [
+                248,
+                248,
+                248,
+                248
+              ]
+            },
+            "end_to_end": {
+              "p50_ns": 1624545823.0,
+              "p95_ns": 1711809409.6,
+              "p99_ns": 1714873548.72,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            }
+          },
+          "per_block": [
+            {
+              "block": 0,
+              "calibration": false,
+              "duration_ns": 1655860875,
+              "tokens_per_second": 154.60236053949882,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 1655860875,
+              "steps": 46,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1271364262.95,
+              "ttft_p99_ns": 1281923086.19,
+              "tpot_p95_ns": 47019836.074193545,
+              "tpot_p99_ns": 47573053.227741934,
+              "inter_token_p95_ns": 146408458.0,
+              "inter_token_p99_ns": 177043500.0,
+              "end_to_end_p95_ns": 1651907866.9,
+              "end_to_end_p99_ns": 1655047273.38
+            },
+            {
+              "block": 1,
+              "calibration": false,
+              "duration_ns": 1672836209,
+              "tokens_per_second": 153.0335119617201,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 1672836209,
+              "steps": 46,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1295872542.1,
+              "ttft_p99_ns": 1308027575.62,
+              "tpot_p95_ns": 47494138.72419355,
+              "tpot_p99_ns": 48045583.66741936,
+              "inter_token_p95_ns": 149539750.0,
+              "inter_token_p99_ns": 187016333.0,
+              "end_to_end_p95_ns": 1668919727.75,
+              "end_to_end_p99_ns": 1672034412.75
+            },
+            {
+              "block": 2,
+              "calibration": false,
+              "duration_ns": 1758492333,
+              "tokens_per_second": 145.57925286103594,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 1758492333,
+              "steps": 46,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1357040374.55,
+              "ttft_p99_ns": 1369731141.31,
+              "tpot_p95_ns": 50493177.295161285,
+              "tpot_p99_ns": 50986250.529999994,
+              "inter_token_p95_ns": 154052839.69999987,
+              "inter_token_p99_ns": 204188458.0,
+              "end_to_end_p95_ns": 1754699091.45,
+              "end_to_end_p99_ns": 1757712684.69
+            },
+            {
+              "block": 3,
+              "calibration": false,
+              "duration_ns": 1764171750,
+              "tokens_per_second": 145.11058801389376,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 1764171750,
+              "steps": 46,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1368531079.6,
+              "ttft_p99_ns": 1380431383.12,
+              "tpot_p95_ns": 50192678.09516129,
+              "tpot_p99_ns": 50754661.42548387,
+              "inter_token_p95_ns": 155714084.0,
+              "inter_token_p99_ns": 197814291.0,
+              "end_to_end_p95_ns": 1760977470.95,
+              "end_to_end_p99_ns": 1763514294.19
+            }
+          ],
+          "minimum_no_replay_token_rows": 2424,
+          "recomputed_token_rows_each_block": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "executed_row_multiplier_each_block": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "paired_comparisons": [
+        {
+          "arm": "static",
+          "block_ratios": [
+            0.41995476001485277,
+            0.3848564574368243,
+            0.4203790687073565,
+            0.4171391235539829
+          ],
+          "median_ratio": 0.41854694178441787,
+          "same_generated_histories": true,
+          "outcome": "faster"
+        },
+        {
+          "arm": "continuous",
+          "block_ratios": [
+            0.4262168308944999,
+            0.3850988453022644,
+            0.4162208919792888,
+            0.4146421382561415
+          ],
+          "median_ratio": 0.41543151511771514,
+          "same_generated_histories": true,
+          "outcome": "faster"
+        },
+        {
+          "arm": "chunked",
+          "block_ratios": [
+            0.43494851235941995,
+            0.41367970757064465,
+            0.45530497705462375,
+            0.4395733065694799
+          ],
+          "median_ratio": 0.43726090946444995,
+          "same_generated_histories": true,
+          "outcome": "faster"
+        }
+      ],
+      "self_control_ratios": [
+        1.028925258572605,
+        0.9414312023891884,
+        1.0413078438930339,
+        0.9903167698145195
+      ],
+      "noise_floor": 0.058568797610811574,
+      "target": null,
+      "goodput": null,
+      "runtime_devices": [
+        "Apple M4 Pro/metal"
+      ],
+      "terminal_reasons_per_block": [
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        }
+      ],
+      "claim_scope": "bounded offline makespan comparison under existing paired rule"
+    },
+    "online": {
+      "evidence": {
+        "archive": {
+          "path": "/private/tmp/llm-mojo-engine-evidence-20261008/online/engine-core.json.gz",
+          "bytes": 423409,
+          "sha256": "d5b07bd96b839fe16a7f492fd1dc5402ba4a767edd4ef28b3c3ec962ec1194e8"
+        },
+        "manifest": {
+          "path": "/private/tmp/llm-mojo-engine-evidence-20261008/online/engine-core.json",
+          "bytes": 228,
+          "sha256": "f7da5f05112302285edd161029036e219162755bda6148a53ec07ac35d4f4193"
+        },
+        "summary_recomputed_from_all_native_stdout": true
+      },
+      "trace_sha256": "87a4274184eb3ca2b241091c2b698887a4dd47e7524eb8da045cf6b787486d38",
+      "trace_mode": "online",
+      "nominal_arrival_rate": 4.0,
+      "requests_per_trace": 8,
+      "prompt_lengths": [
+        32,
+        128,
+        64,
+        512,
+        96,
+        1024,
+        256,
+        64
+      ],
+      "output_limits": [
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32
+      ],
+      "blocks": 128,
+      "block_size": 32,
+      "max_sequences": 8,
+      "warmup_steps": 10,
+      "arms": {
+        "serial": {
+          "paired_blocks": 4,
+          "median_of_block_metrics": {
+            "duration_ns": 3783008958.5,
+            "tokens_per_second": 67.67974721636634,
+            "delivered_tokens": 256.0,
+            "arrival_window_ns": 2677538149.0,
+            "drain_tail_ns": 1105470809.5,
+            "steps": 256.0,
+            "preemptions": 0.0,
+            "total_tokens": 2424.0,
+            "attended_positions": 778048.0,
+            "ttft": {
+              "p50_ns": 500577227.25,
+              "p95_ns": 1230514381.2749996,
+              "p99_ns": 1425289950.6549997,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "tpot": {
+              "p50_ns": 10324121.306451613,
+              "p95_ns": 11174564.252419354,
+              "p99_ns": 11212494.606774192,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "inter_token": {
+              "p50_ns": 10512604.0,
+              "p95_ns": 12244744.799999999,
+              "p99_ns": 13213609.129999999,
+              "sample_count_each_block": [
+                248,
+                248,
+                248,
+                248
+              ]
+            },
+            "end_to_end": {
+              "p50_ns": 823905717.25,
+              "p95_ns": 1564171656.4249997,
+              "p99_ns": 1761774806.0849998,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            }
+          },
+          "per_block": [
+            {
+              "block": 0,
+              "calibration": false,
+              "duration_ns": 3826015834,
+              "tokens_per_second": 66.91033469465772,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 1148477685,
+              "steps": 256,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1277225914.9999995,
+              "ttft_p99_ns": 1468176590.9999998,
+              "tpot_p95_ns": 11370690.598387096,
+              "tpot_p99_ns": 11523084.36483871,
+              "inter_token_p95_ns": 12425656.35,
+              "inter_token_p99_ns": 13661530.25,
+              "end_to_end_p95_ns": 1620262481.6499996,
+              "end_to_end_p99_ns": 1823501237.9299998
+            },
+            {
+              "block": 1,
+              "calibration": false,
+              "duration_ns": 3583407875,
+              "tokens_per_second": 71.44037433918962,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 905869726,
+              "steps": 256,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1112353088.0499997,
+              "ttft_p99_ns": 1320201892.0099998,
+              "tpot_p95_ns": 10272061.89516129,
+              "tpot_p99_ns": 10294189.798387095,
+              "inter_token_p95_ns": 11532243.299999999,
+              "inter_token_p99_ns": 11853497.74,
+              "end_to_end_p95_ns": 1424312969.2999997,
+              "end_to_end_p99_ns": 1638026968.2599998
+            },
+            {
+              "block": 2,
+              "calibration": false,
+              "duration_ns": 3740002083,
+              "tokens_per_second": 68.44915973807494,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 1062463934,
+              "steps": 256,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1183802847.5499997,
+              "ttft_p99_ns": 1382403310.3099997,
+              "tpot_p95_ns": 10978437.906451613,
+              "tpot_p99_ns": 10987549.95548387,
+              "inter_token_p95_ns": 12307345.95,
+              "inter_token_p99_ns": 12765688.01,
+              "end_to_end_p95_ns": 1508080831.1999996,
+              "end_to_end_p99_ns": 1700048374.2399998
+            },
+            {
+              "block": 3,
+              "calibration": false,
+              "duration_ns": 3963255208,
+              "tokens_per_second": 64.5933674630019,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 1285717059,
+              "steps": 256,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 1398346521.3499997,
+              "ttft_p99_ns": 1586751845.87,
+              "tpot_p95_ns": 11430190.870967742,
+              "tpot_p99_ns": 11437439.258064516,
+              "inter_token_p95_ns": 12182143.649999999,
+              "inter_token_p99_ns": 14227321.99,
+              "end_to_end_p95_ns": 1740013410.6999996,
+              "end_to_end_p99_ns": 1935720423.7399998
+            }
+          ],
+          "minimum_no_replay_token_rows": 2424,
+          "recomputed_token_rows_each_block": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "executed_row_multiplier_each_block": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "static": {
+          "paired_blocks": 4,
+          "median_of_block_metrics": {
+            "duration_ns": 3294865645.5,
+            "tokens_per_second": 77.71807406890915,
+            "delivered_tokens": 256.0,
+            "arrival_window_ns": 2677538149.0,
+            "drain_tail_ns": 617327496.5,
+            "steps": 209.5,
+            "preemptions": 0.0,
+            "total_tokens": 2424.0,
+            "attended_positions": 778048.0,
+            "ttft": {
+              "p50_ns": 254545571.75,
+              "p95_ns": 964950258.7499996,
+              "p99_ns": 1159236462.2299998,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "tpot": {
+              "p50_ns": 10563118.95967742,
+              "p95_ns": 12000608.036290321,
+              "p99_ns": 12197147.21467742,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "inter_token": {
+              "p50_ns": 10623854.25,
+              "p95_ns": 11913811.174999999,
+              "p99_ns": 14779980.5,
+              "sample_count_each_block": [
+                248,
+                248,
+                248,
+                248
+              ]
+            },
+            "end_to_end": {
+              "p50_ns": 594119030.5,
+              "p95_ns": 1351882042.5249996,
+              "p99_ns": 1503376921.8249998,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            }
+          },
+          "per_block": [
+            {
+              "block": 0,
+              "calibration": false,
+              "duration_ns": 3474400958,
+              "tokens_per_second": 73.68176646697782,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 796862809,
+              "steps": 225,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 938240409.8999996,
+              "ttft_p99_ns": 1132902789.9799998,
+              "tpot_p95_ns": 11665961.162903225,
+              "tpot_p99_ns": 12025615.897096774,
+              "inter_token_p95_ns": 11724964.35,
+              "inter_token_p99_ns": 12825496.73,
+              "end_to_end_p95_ns": 1287939530.8499997,
+              "end_to_end_p99_ns": 1471452614.1699998
+            },
+            {
+              "block": 1,
+              "calibration": false,
+              "duration_ns": 3349579583,
+              "tokens_per_second": 76.42750191673831,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 672041434,
+              "steps": 225,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 859977688.0499997,
+              "ttft_p99_ns": 986568812.0099999,
+              "tpot_p95_ns": 22094060.611290313,
+              "tpot_p99_ns": 27306920.715806447,
+              "inter_token_p95_ns": 11199267.0,
+              "inter_token_p99_ns": 12341453.99,
+              "end_to_end_p95_ns": 1409260219.8999999,
+              "end_to_end_p99_ns": 1444267759.18
+            },
+            {
+              "block": 2,
+              "calibration": false,
+              "duration_ns": 3217805583,
+              "tokens_per_second": 79.55732358489105,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 540267434,
+              "steps": 194,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 992678964.3999996,
+              "ttft_p99_ns": 1185570134.4799998,
+              "tpot_p95_ns": 11821490.120967742,
+              "tpot_p99_ns": 11871920.60483871,
+              "inter_token_p95_ns": 13481307.999999996,
+              "inter_token_p99_ns": 21730964.76000001,
+              "end_to_end_p95_ns": 1348036939.3999996,
+              "end_to_end_p99_ns": 1535301229.4799998
+            },
+            {
+              "block": 3,
+              "calibration": false,
+              "duration_ns": 3240151708,
+              "tokens_per_second": 79.00864622107997,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 562613559,
+              "steps": 194,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 991660107.5999997,
+              "ttft_p99_ns": 1189607295.9199998,
+              "tpot_p95_ns": 12179725.951612903,
+              "tpot_p99_ns": 12368678.532258065,
+              "inter_token_p95_ns": 12102657.999999998,
+              "inter_token_p99_ns": 16734464.27,
+              "end_to_end_p95_ns": 1355727145.6499996,
+              "end_to_end_p99_ns": 1544702970.7299998
+            }
+          ],
+          "minimum_no_replay_token_rows": 2424,
+          "recomputed_token_rows_each_block": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "executed_row_multiplier_each_block": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "continuous": {
+          "paired_blocks": 4,
+          "median_of_block_metrics": {
+            "duration_ns": 3090338833.5,
+            "tokens_per_second": 82.83881319111893,
+            "delivered_tokens": 256.0,
+            "arrival_window_ns": 2677538149.0,
+            "drain_tail_ns": 412800684.5,
+            "steps": 138.5,
+            "preemptions": 0.0,
+            "total_tokens": 2424.0,
+            "attended_positions": 778048.0,
+            "ttft": {
+              "p50_ns": 109164874.0,
+              "p95_ns": 515833947.62499976,
+              "p99_ns": 617639064.3249998,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "tpot": {
+              "p50_ns": 12203611.56451613,
+              "p95_ns": 37862819.92096774,
+              "p99_ns": 40316319.351935476,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "inter_token": {
+              "p50_ns": 10549395.5,
+              "p95_ns": 12555061.625,
+              "p99_ns": 371140982.9850006,
+              "sample_count_each_block": [
+                248,
+                248,
+                248,
+                248
+              ]
+            },
+            "end_to_end": {
+              "p50_ns": 735368933.0,
+              "p95_ns": 1296771672.25,
+              "p99_ns": 1305424942.05,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            }
+          },
+          "per_block": [
+            {
+              "block": 0,
+              "calibration": false,
+              "duration_ns": 3090116458,
+              "tokens_per_second": 82.84477413051596,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 412578309,
+              "steps": 139,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 518443707.5999998,
+              "ttft_p99_ns": 620052415.9199998,
+              "tpot_p95_ns": 38102842.73870967,
+              "tpot_p99_ns": 40605154.560645156,
+              "inter_token_p95_ns": 12476542.0,
+              "inter_token_p99_ns": 371782570.2400006,
+              "end_to_end_p95_ns": 1306594788.75,
+              "end_to_end_p99_ns": 1316466898.55
+            },
+            {
+              "block": 1,
+              "calibration": false,
+              "duration_ns": 3081478875,
+              "tokens_per_second": 83.07699334787749,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 403940726,
+              "steps": 138,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 486229591.1499998,
+              "ttft_p99_ns": 581492426.2299999,
+              "tpot_p95_ns": 36770223.78709677,
+              "tpot_p99_ns": 39200830.770322576,
+              "inter_token_p95_ns": 12749583.0,
+              "inter_token_p99_ns": 356489588.2700006,
+              "end_to_end_p95_ns": 1258201517.7,
+              "end_to_end_p99_ns": 1270331010.74
+            },
+            {
+              "block": 2,
+              "calibration": false,
+              "duration_ns": 3090561209,
+              "tokens_per_second": 82.8328522517219,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 413023060,
+              "steps": 141,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 513224187.6499998,
+              "ttft_p99_ns": 615225712.7299999,
+              "tpot_p95_ns": 37622797.103225805,
+              "tpot_p99_ns": 40027484.143225804,
+              "inter_token_p95_ns": 12271856.25,
+              "inter_token_p99_ns": 370499395.7300006,
+              "end_to_end_p95_ns": 1286948555.75,
+              "end_to_end_p99_ns": 1294382985.55
+            },
+            {
+              "block": 3,
+              "calibration": false,
+              "duration_ns": 3099578333,
+              "tokens_per_second": 82.59187944194473,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 422040184,
+              "steps": 138,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 522150720.54999983,
+              "ttft_p99_ns": 627871952.1099999,
+              "tpot_p95_ns": 38890187.82903225,
+              "tpot_p99_ns": 41428694.54645161,
+              "inter_token_p95_ns": 12633581.249999998,
+              "inter_token_p99_ns": 378581065.4800006,
+              "end_to_end_p95_ns": 1330503512.0,
+              "end_to_end_p99_ns": 1343798376.8
+            }
+          ],
+          "minimum_no_replay_token_rows": 2424,
+          "recomputed_token_rows_each_block": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "executed_row_multiplier_each_block": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "chunked": {
+          "paired_blocks": 4,
+          "median_of_block_metrics": {
+            "duration_ns": 3116705542.0,
+            "tokens_per_second": 82.1383409839384,
+            "delivered_tokens": 256.0,
+            "arrival_window_ns": 2677538149.0,
+            "drain_tail_ns": 439167393.0,
+            "steps": 146.0,
+            "preemptions": 0.0,
+            "total_tokens": 2424.0,
+            "attended_positions": 778048.0,
+            "ttft": {
+              "p50_ns": 111531353.25,
+              "p95_ns": 576173476.6249998,
+              "p99_ns": 693632203.3249998,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "tpot": {
+              "p50_ns": 12274947.927419353,
+              "p95_ns": 37663721.09677419,
+              "p99_ns": 40037861.41935483,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "inter_token": {
+              "p50_ns": 10905156.25,
+              "p95_ns": 133855040.725,
+              "p99_ns": 183673264.86,
+              "sample_count_each_block": [
+                248,
+                248,
+                248,
+                248
+              ]
+            },
+            "end_to_end": {
+              "p50_ns": 780685755.5,
+              "p95_ns": 1301310041.775,
+              "p99_ns": 1301966035.1550002,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            }
+          },
+          "per_block": [
+            {
+              "block": 0,
+              "calibration": false,
+              "duration_ns": 3093842375,
+              "tokens_per_second": 82.7450040986655,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 416304226,
+              "steps": 146,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 579790913.8499998,
+              "ttft_p99_ns": 697552157.1699998,
+              "tpot_p95_ns": 37702850.130645156,
+              "tpot_p99_ns": 40101437.768064514,
+              "inter_token_p95_ns": 134764070.6,
+              "inter_token_p99_ns": 183790260.97000003,
+              "end_to_end_p95_ns": 1305070834.35,
+              "end_to_end_p99_ns": 1306138507.67
+            },
+            {
+              "block": 1,
+              "calibration": false,
+              "duration_ns": 3137614792,
+              "tokens_per_second": 81.59064033377365,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 460076643,
+              "steps": 146,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 585508905.9499998,
+              "ttft_p99_ns": 704825222.7899998,
+              "tpot_p95_ns": 38473631.46935484,
+              "tpot_p99_ns": 40789409.10677419,
+              "inter_token_p95_ns": 135133027.2,
+              "inter_token_p99_ns": 185842823.73000002,
+              "end_to_end_p95_ns": 1328749532.65,
+              "end_to_end_p99_ns": 1333393019.33
+            },
+            {
+              "block": 2,
+              "calibration": false,
+              "duration_ns": 3122934542,
+              "tokens_per_second": 81.9741805526451,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 445396393,
+              "steps": 150,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 508127370.54999983,
+              "ttft_p99_ns": 607598582.1099999,
+              "tpot_p95_ns": 34179856.83709677,
+              "tpot_p99_ns": 36400185.32870968,
+              "inter_token_p95_ns": 120940187.49999997,
+              "inter_token_p99_ns": 167582119.98000002,
+              "end_to_end_p95_ns": 1180641366.05,
+              "end_to_end_p99_ns": 1182208547.61
+            },
+            {
+              "block": 3,
+              "calibration": false,
+              "duration_ns": 3110476542,
+              "tokens_per_second": 82.3025014152317,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 2677538149,
+              "drain_tail_ns": 432938393,
+              "steps": 144,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 572556039.3999997,
+              "ttft_p99_ns": 689712249.4799999,
+              "tpot_p95_ns": 37624592.06290322,
+              "tpot_p99_ns": 39974285.07064515,
+              "inter_token_p95_ns": 132946010.85,
+              "inter_token_p99_ns": 183556268.75000003,
+              "end_to_end_p95_ns": 1297549249.2,
+              "end_to_end_p99_ns": 1297793562.64
+            }
+          ],
+          "minimum_no_replay_token_rows": 2424,
+          "recomputed_token_rows_each_block": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "executed_row_multiplier_each_block": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "paired_comparisons": [
+        {
+          "arm": "static",
+          "block_ratios": [
+            0.9080989490750759,
+            0.9347469503454167,
+            0.860375345143892,
+            0.8175480855887391
+          ],
+          "median_ratio": 0.884237147109484,
+          "same_generated_histories": true,
+          "outcome": "distribution-only"
+        },
+        {
+          "arm": "continuous",
+          "block_ratios": [
+            0.8076590876962899,
+            0.8599297044855659,
+            0.8263528041997618,
+            0.7820789150149525
+          ],
+          "median_ratio": 0.8170059459480259,
+          "same_generated_histories": true,
+          "outcome": "distribution-only"
+        },
+        {
+          "arm": "chunked",
+          "block_ratios": [
+            0.8086329250147061,
+            0.8755952159088225,
+            0.8350087707691792,
+            0.7848287275877087
+          ],
+          "median_ratio": 0.8218208478919427,
+          "same_generated_histories": true,
+          "outcome": "distribution-only"
+        }
+      ],
+      "self_control_ratios": [
+        0.9886158118811382,
+        1.0025324591329141,
+        1.0000972927265612,
+        0.9668586298114568
+      ],
+      "noise_floor": 0.05,
+      "target": null,
+      "goodput": null,
+      "runtime_devices": [
+        "Apple M4 Pro/metal"
+      ],
+      "terminal_reasons_per_block": [
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        }
+      ],
+      "claim_scope": "descriptive short-trace arrival/latency distributions; no steady-state capacity or SLO verdict"
+    },
+    "pressure": {
+      "evidence": {
+        "archive": {
+          "path": "/private/tmp/llm-mojo-engine-evidence-20261008/pressure/engine-core.json.gz",
+          "bytes": 391935,
+          "sha256": "678e8eace01b142244ad9482d42845ca8a2f968cb27670170665883c3137b354"
+        },
+        "manifest": {
+          "path": "/private/tmp/llm-mojo-engine-evidence-20261008/pressure/engine-core.json",
+          "bytes": 228,
+          "sha256": "c4f7b87738497b128cca273cb97fb6bcca1c552df59222e6c7acf31781ead2c6"
+        },
+        "summary_recomputed_from_all_native_stdout": true
+      },
+      "trace_sha256": "aa049dea1465e9e0fe542e5f8789aa70f11e3d294501984657e47ed825cdecd7",
+      "trace_mode": "offline",
+      "nominal_arrival_rate": null,
+      "requests_per_trace": 8,
+      "prompt_lengths": [
+        32,
+        128,
+        64,
+        512,
+        96,
+        1024,
+        256,
+        64
+      ],
+      "output_limits": [
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32
+      ],
+      "blocks": 40,
+      "block_size": 32,
+      "max_sequences": 8,
+      "warmup_steps": 10,
+      "arms": {
+        "serial": {
+          "paired_blocks": 4,
+          "median_of_block_metrics": {
+            "duration_ns": 3950809750.0,
+            "tokens_per_second": 64.81615020134899,
+            "delivered_tokens": 256.0,
+            "arrival_window_ns": 0.0,
+            "drain_tail_ns": 3950809750.0,
+            "steps": 256.0,
+            "preemptions": 0.0,
+            "total_tokens": 2424.0,
+            "attended_positions": 778048.0,
+            "ttft": {
+              "p50_ns": 1614889718.5,
+              "p95_ns": 3506023334.325,
+              "p99_ns": 3605628300.065,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "tpot": {
+              "p50_ns": 10512578.637096774,
+              "p95_ns": 11010687.233064517,
+              "p99_ns": 11077929.382096775,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "inter_token": {
+              "p50_ns": 10665062.5,
+              "p95_ns": 11954791.5,
+              "p99_ns": 12546669.99,
+              "sample_count_each_block": [
+                248,
+                248,
+                248,
+                248
+              ]
+            },
+            "end_to_end": {
+              "p50_ns": 1943931562.5,
+              "p95_ns": 3826314675.225,
+              "p99_ns": 3925900151.8450003,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            }
+          },
+          "per_block": [
+            {
+              "block": 0,
+              "calibration": false,
+              "duration_ns": 3882622750,
+              "tokens_per_second": 65.9348117197325,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 3882622750,
+              "steps": 256,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 3444852370.95,
+              "ttft_p99_ns": 3541244774.19,
+              "tpot_p95_ns": 11754864.661290321,
+              "tpot_p99_ns": 12190912.725806452,
+              "inter_token_p95_ns": 12772272.899999999,
+              "inter_token_p99_ns": 17193224.740000002,
+              "end_to_end_p95_ns": 3760486646.5,
+              "end_to_end_p99_ns": 3858185296.5
+            },
+            {
+              "block": 1,
+              "calibration": false,
+              "duration_ns": 3753310083,
+              "tokens_per_second": 68.20646158693624,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 3753310083,
+              "steps": 256,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 3311576445.95,
+              "ttft_p99_ns": 3407180789.19,
+              "tpot_p95_ns": 10419354.230645161,
+              "tpot_p99_ns": 10430308.471935485,
+              "inter_token_p95_ns": 11973118.2,
+              "inter_token_p99_ns": 12416143.99,
+              "end_to_end_p95_ns": 3629332277.2999997,
+              "end_to_end_p99_ns": 3728501289.06
+            },
+            {
+              "block": 2,
+              "calibration": false,
+              "duration_ns": 4018996750,
+              "tokens_per_second": 63.69748868296547,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 4018996750,
+              "steps": 256,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 3567194297.7,
+              "ttft_p99_ns": 3670011825.94,
+              "tpot_p95_ns": 10914286.637096774,
+              "tpot_p99_ns": 10999703.572580645,
+              "inter_token_p95_ns": 11871556.8,
+              "inter_token_p99_ns": 12608953.51,
+              "end_to_end_p95_ns": 3892142703.95,
+              "end_to_end_p99_ns": 3993615007.19
+            },
+            {
+              "block": 3,
+              "calibration": false,
+              "duration_ns": 4144310792,
+              "tokens_per_second": 61.77142903813378,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 4144310792,
+              "steps": 256,
+              "preemptions": 0,
+              "total_tokens": 2424,
+              "attended_positions": 778048,
+              "ttft_p95_ns": 3672719183.5499997,
+              "ttft_p99_ns": 3777674570.31,
+              "tpot_p95_ns": 11107087.829032259,
+              "tpot_p99_ns": 11156155.191612905,
+              "inter_token_p95_ns": 11936464.799999999,
+              "inter_token_p99_ns": 12484386.47,
+              "end_to_end_p95_ns": 4009933181.25,
+              "end_to_end_p99_ns": 4117413736.25
+            }
+          ],
+          "minimum_no_replay_token_rows": 2424,
+          "recomputed_token_rows_each_block": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "executed_row_multiplier_each_block": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "static": {
+          "paired_blocks": 4,
+          "median_of_block_metrics": {
+            "duration_ns": 11281234541.5,
+            "tokens_per_second": 22.77582073961559,
+            "delivered_tokens": 256.0,
+            "arrival_window_ns": 0.0,
+            "drain_tail_ns": 11281234541.5,
+            "steps": 163.0,
+            "preemptions": 62.0,
+            "total_tokens": 18488.0,
+            "attended_positions": 2916000.0,
+            "ttft": {
+              "p50_ns": 433118427.25,
+              "p95_ns": 9466595999.674997,
+              "p99_ns": 10655958816.939999,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "tpot": {
+              "p50_ns": 174666925.40322578,
+              "p95_ns": 187091778.2314516,
+              "p99_ns": 187784586.2914516,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "inter_token": {
+              "p50_ns": 163593687.5,
+              "p95_ns": 184858604.0,
+              "p99_ns": 595106411.005,
+              "sample_count_each_block": [
+                248,
+                248,
+                248,
+                248
+              ]
+            },
+            "end_to_end": {
+              "p50_ns": 5851831416.5,
+              "p95_ns": 11277715547.8,
+              "p99_ns": 11280517659.560001,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            }
+          },
+          "per_block": [
+            {
+              "block": 0,
+              "calibration": false,
+              "duration_ns": 10366921167,
+              "tokens_per_second": 24.6939275293131,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 10366921167,
+              "steps": 163,
+              "preemptions": 62,
+              "total_tokens": 18488,
+              "attended_positions": 2916000,
+              "ttft_p95_ns": 8688328039.249998,
+              "ttft_p99_ns": 9770192074.249998,
+              "tpot_p95_ns": 173660980.58870968,
+              "tpot_p99_ns": 174404413.33064517,
+              "inter_token_p95_ns": 170741083.0,
+              "inter_token_p99_ns": 588377205.49,
+              "end_to_end_p95_ns": 10363414697.7,
+              "end_to_end_p99_ns": 10366206005.94
+            },
+            {
+              "block": 1,
+              "calibration": false,
+              "duration_ns": 10599114291,
+              "tokens_per_second": 24.152961556172354,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 10599114291,
+              "steps": 163,
+              "preemptions": 62,
+              "total_tokens": 18488,
+              "attended_positions": 2916000,
+              "ttft_p95_ns": 8881329220.399998,
+              "ttft_p99_ns": 9987918876.88,
+              "tpot_p95_ns": 179362509.81935483,
+              "tpot_p99_ns": 180054840.67354837,
+              "inter_token_p95_ns": 168485375.0,
+              "inter_token_p99_ns": 595864657.75,
+              "end_to_end_p95_ns": 10595632164.35,
+              "end_to_end_p99_ns": 10598404432.87
+            },
+            {
+              "block": 2,
+              "calibration": false,
+              "duration_ns": 12084151583,
+              "tokens_per_second": 21.184772322795183,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 12084151583,
+              "steps": 163,
+              "preemptions": 62,
+              "total_tokens": 18488,
+              "attended_positions": 2916000,
+              "ttft_p95_ns": 10051862778.949997,
+              "ttft_p99_ns": 11367558722.189999,
+              "tpot_p95_ns": 194821046.64354837,
+              "tpot_p99_ns": 195514331.90935484,
+              "inter_token_p95_ns": 198976125.0,
+              "inter_token_p99_ns": 594820871.51,
+              "end_to_end_p95_ns": 12079212495.5,
+              "end_to_end_p99_ns": 12083144465.5
+            },
+            {
+              "block": 3,
+              "calibration": false,
+              "duration_ns": 11963354792,
+              "tokens_per_second": 21.398679923058825,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 11963354792,
+              "steps": 163,
+              "preemptions": 62,
+              "total_tokens": 18488,
+              "attended_positions": 2916000,
+              "ttft_p95_ns": 10083962616.999998,
+              "ttft_p99_ns": 11323998756.999998,
+              "tpot_p95_ns": 200680024.45161292,
+              "tpot_p99_ns": 201374894.12903228,
+              "inter_token_p95_ns": 210303000.0,
+              "inter_token_p99_ns": 595391950.5,
+              "end_to_end_p95_ns": 11959798931.25,
+              "end_to_end_p99_ns": 11962630886.25
+            }
+          ],
+          "minimum_no_replay_token_rows": 2424,
+          "recomputed_token_rows_each_block": [
+            16064,
+            16064,
+            16064,
+            16064
+          ],
+          "executed_row_multiplier_each_block": [
+            7.627062706270627,
+            7.627062706270627,
+            7.627062706270627,
+            7.627062706270627
+          ]
+        },
+        "continuous": {
+          "paired_blocks": 4,
+          "median_of_block_metrics": {
+            "duration_ns": 11078617604.0,
+            "tokens_per_second": 23.166018379801685,
+            "delivered_tokens": 256.0,
+            "arrival_window_ns": 0.0,
+            "drain_tail_ns": 11078617604.0,
+            "steps": 163.0,
+            "preemptions": 62.0,
+            "total_tokens": 18488.0,
+            "attended_positions": 2916000.0,
+            "ttft": {
+              "p50_ns": 436439135.75,
+              "p95_ns": 9258303130.374996,
+              "p99_ns": 10447064042.875,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "tpot": {
+              "p50_ns": 170844566.18548387,
+              "p95_ns": 183183554.02661288,
+              "p99_ns": 183895302.74080646,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "inter_token": {
+              "p50_ns": 156027312.0,
+              "p95_ns": 183464729.0,
+              "p99_ns": 598228200.615,
+              "sample_count_each_block": [
+                248,
+                248,
+                248,
+                248
+              ]
+            },
+            "end_to_end": {
+              "p50_ns": 5732620687.5,
+              "p95_ns": 11075596584.55,
+              "p99_ns": 11078001416.91,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            }
+          },
+          "per_block": [
+            {
+              "block": 0,
+              "calibration": false,
+              "duration_ns": 10395526458,
+              "tokens_per_second": 24.62597743695724,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 10395526458,
+              "steps": 163,
+              "preemptions": 62,
+              "total_tokens": 18488,
+              "attended_positions": 2916000,
+              "ttft_p95_ns": 8728247447.699997,
+              "ttft_p99_ns": 9796673955.939999,
+              "tpot_p95_ns": 176701259.8080645,
+              "tpot_p99_ns": 177468580.99387094,
+              "inter_token_p95_ns": 173214333.0,
+              "inter_token_p99_ns": 583799157.24,
+              "end_to_end_p95_ns": 10391404041.55,
+              "end_to_end_p99_ns": 10394688208.31
+            },
+            {
+              "block": 1,
+              "calibration": false,
+              "duration_ns": 10522171333,
+              "tokens_per_second": 24.32957912376164,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 10522171333,
+              "steps": 163,
+              "preemptions": 62,
+              "total_tokens": 18488,
+              "attended_positions": 2916000,
+              "ttft_p95_ns": 8773735885.199997,
+              "ttft_p99_ns": 9889896443.439999,
+              "tpot_p95_ns": 174624390.52419356,
+              "tpot_p99_ns": 175273797.45967743,
+              "inter_token_p95_ns": 170964417.0,
+              "inter_token_p99_ns": 594215047.48,
+              "end_to_end_p95_ns": 10518649549.9,
+              "end_to_end_p99_ns": 10521454076.38
+            },
+            {
+              "block": 2,
+              "calibration": false,
+              "duration_ns": 12469733375,
+              "tokens_per_second": 20.529709200779124,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 12469733375,
+              "steps": 163,
+              "preemptions": 62,
+              "total_tokens": 18488,
+              "attended_positions": 2916000,
+              "ttft_p95_ns": 10359157938.049997,
+              "ttft_p99_ns": 11789001854.81,
+              "tpot_p95_ns": 195022369.02580646,
+              "tpot_p99_ns": 195766810.37290323,
+              "inter_token_p95_ns": 212107208.0,
+              "inter_token_p99_ns": 602601550.76,
+              "end_to_end_p95_ns": 12465822656.25,
+              "end_to_end_p99_ns": 12468936431.25
+            },
+            {
+              "block": 3,
+              "calibration": false,
+              "duration_ns": 11635063875,
+              "tokens_per_second": 22.00245763584173,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 11635063875,
+              "steps": 163,
+              "preemptions": 62,
+              "total_tokens": 18488,
+              "attended_positions": 2916000,
+              "ttft_p95_ns": 9742870375.549997,
+              "ttft_p99_ns": 11004231642.31,
+              "tpot_p95_ns": 189665848.2451613,
+              "tpot_p99_ns": 190322024.48774195,
+              "inter_token_p95_ns": 193715125.0,
+              "inter_token_p99_ns": 602241353.75,
+              "end_to_end_p95_ns": 11632543619.2,
+              "end_to_end_p99_ns": 11634548757.44
+            }
+          ],
+          "minimum_no_replay_token_rows": 2424,
+          "recomputed_token_rows_each_block": [
+            16064,
+            16064,
+            16064,
+            16064
+          ],
+          "executed_row_multiplier_each_block": [
+            7.627062706270627,
+            7.627062706270627,
+            7.627062706270627,
+            7.627062706270627
+          ]
+        },
+        "chunked": {
+          "paired_blocks": 4,
+          "median_of_block_metrics": {
+            "duration_ns": 9172281791.5,
+            "tokens_per_second": 27.910339966039253,
+            "delivered_tokens": 256.0,
+            "arrival_window_ns": 0.0,
+            "drain_tail_ns": 9172281791.5,
+            "steps": 105.0,
+            "preemptions": 57.0,
+            "total_tokens": 16432.0,
+            "attended_positions": 2581749.0,
+            "ttft": {
+              "p50_ns": 445368843.5,
+              "p95_ns": 8812435702.900002,
+              "p99_ns": 8822791123.78,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "tpot": {
+              "p50_ns": 125276719.75806451,
+              "p95_ns": 135178321.80806452,
+              "p99_ns": 136055739.62612903,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            },
+            "inter_token": {
+              "p50_ns": 129208083.5,
+              "p95_ns": 146059979.5,
+              "p99_ns": 157966123.62,
+              "sample_count_each_block": [
+                248,
+                248,
+                248,
+                248
+              ]
+            },
+            "end_to_end": {
+              "p50_ns": 4649588499.75,
+              "p95_ns": 9168528100.875,
+              "p99_ns": 9171512603.375,
+              "sample_count_each_block": [
+                8,
+                8,
+                8,
+                8
+              ]
+            }
+          },
+          "per_block": [
+            {
+              "block": 0,
+              "calibration": false,
+              "duration_ns": 9150056625,
+              "tokens_per_second": 27.977968934154,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 9150056625,
+              "steps": 105,
+              "preemptions": 57,
+              "total_tokens": 16432,
+              "attended_positions": 2581749,
+              "ttft_p95_ns": 8795110676.85,
+              "ttft_p99_ns": 8805172535.37,
+              "tpot_p95_ns": 136372664.05322582,
+              "tpot_p99_ns": 137234919.90741935,
+              "inter_token_p95_ns": 146513250.0,
+              "inter_token_p99_ns": 153569792.0,
+              "end_to_end_p95_ns": 9146428370.4,
+              "end_to_end_p99_ns": 9149307306.88
+            },
+            {
+              "block": 1,
+              "calibration": false,
+              "duration_ns": 9064596666,
+              "tokens_per_second": 28.24174195860465,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 9064596666,
+              "steps": 105,
+              "preemptions": 57,
+              "total_tokens": 16432,
+              "attended_positions": 2581749,
+              "ttft_p95_ns": 8714861887.05,
+              "ttft_p99_ns": 8725516843.81,
+              "tpot_p95_ns": 133983979.56290323,
+              "tpot_p99_ns": 134876559.3448387,
+              "inter_token_p95_ns": 135047667.0,
+              "inter_token_p99_ns": 152805914.74,
+              "end_to_end_p95_ns": 9060820989.15,
+              "end_to_end_p99_ns": 9063829530.63
+            },
+            {
+              "block": 2,
+              "calibration": false,
+              "duration_ns": 9194506958,
+              "tokens_per_second": 27.842710997924506,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 9194506958,
+              "steps": 105,
+              "preemptions": 57,
+              "total_tokens": 16432,
+              "attended_positions": 2581749,
+              "ttft_p95_ns": 8829760728.95,
+              "ttft_p99_ns": 8840409712.19,
+              "tpot_p95_ns": 133851588.91451614,
+              "tpot_p99_ns": 134666844.67322582,
+              "inter_token_p95_ns": 145606709.0,
+              "inter_token_p99_ns": 162362455.24,
+              "end_to_end_p95_ns": 9190627831.35,
+              "end_to_end_p99_ns": 9193717899.87
+            },
+            {
+              "block": 3,
+              "calibration": false,
+              "duration_ns": 9945039250,
+              "tokens_per_second": 25.741477088690225,
+              "delivered_tokens": 256,
+              "arrival_window_ns": 0,
+              "drain_tail_ns": 9945039250,
+              "steps": 105,
+              "preemptions": 57,
+              "total_tokens": 16432,
+              "attended_positions": 2581749,
+              "ttft_p95_ns": 9613203258.1,
+              "ttft_p99_ns": 9624754051.62,
+              "tpot_p95_ns": 146294260.0096774,
+              "tpot_p99_ns": 147414152.00193548,
+              "inter_token_p95_ns": 163616566.54999995,
+              "inter_token_p99_ns": 171334283.97,
+              "end_to_end_p95_ns": 9941353353.95,
+              "end_to_end_p99_ns": 9944289037.19
+            }
+          ],
+          "minimum_no_replay_token_rows": 2424,
+          "recomputed_token_rows_each_block": [
+            14008,
+            14008,
+            14008,
+            14008
+          ],
+          "executed_row_multiplier_each_block": [
+            6.778877887788779,
+            6.778877887788779,
+            6.778877887788779,
+            6.778877887788779
+          ]
+        }
+      },
+      "paired_comparisons": [
+        {
+          "arm": "static",
+          "block_ratios": [
+            2.670082012732244,
+            2.8239378193149944,
+            3.0067582371147723,
+            2.8866934437189284
+          ],
+          "median_ratio": 2.8553156315169614,
+          "same_generated_histories": true,
+          "outcome": "slower"
+        },
+        {
+          "arm": "continuous",
+          "block_ratios": [
+            2.677449530217686,
+            2.8034377923258837,
+            3.1026980489596068,
+            2.807478603549673
+          ],
+          "median_ratio": 2.8054581979377784,
+          "same_generated_histories": true,
+          "outcome": "slower"
+        },
+        {
+          "arm": "chunked",
+          "block_ratios": [
+            2.3566689874776015,
+            2.415094001174216,
+            2.2877617300884854,
+            2.399684712159493
+          ],
+          "median_ratio": 2.378176849818547,
+          "same_generated_histories": true,
+          "outcome": "slower"
+        }
+      ],
+      "self_control_ratios": [
+        0.986034043096255,
+        1.0143977579269994,
+        0.9895524401705476,
+        0.9922415024804443
+      ],
+      "noise_floor": 0.05,
+      "target": null,
+      "goodput": null,
+      "runtime_devices": [
+        "Apple M4 Pro/metal"
+      ],
+      "terminal_reasons_per_block": [
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        },
+        {
+          "length": 8
+        }
+      ],
+      "claim_scope": "bounded offline makespan comparison under existing paired rule"
+    }
+  },
+  "adaptive": {
+    "evidence": {
+      "archive": {
+        "path": "/private/tmp/llm-mojo-engine-evidence-20261008/adaptive/engine-adaptive.json.gz",
+        "bytes": 548548,
+        "sha256": "8248b1db3934d32002825a186b298f8736f950919bbad46b2ca4c8a5fd8c7209"
+      },
+      "manifest": {
+        "path": "/private/tmp/llm-mojo-engine-evidence-20261008/adaptive/engine-adaptive.json",
+        "bytes": 238,
+        "sha256": "3e8823f8b98624d782a50b58d4d2845a3417e5e6bb5194f29b790103b4ae8587"
+      },
+      "summary_recomputed_from_all_native_stdout": true
+    },
+    "policy_sha256": "ce3da24fb92a36becff6db6c397a398c4f8a4f21b10a463626ed288f0a8b7136",
+    "trace_sha256": "b95c867b94a35ac19f6205c3be55be9d0ec94d3c8ab36c45cbcbe4122ba93f38",
+    "trace_mode": "online",
+    "nominal_arrival_rate": 16,
+    "requests_per_trace": 8,
+    "prompt_lengths": [
+      48,
+      192,
+      80,
+      768,
+      144,
+      1536,
+      320,
+      128
+    ],
+    "output_limits": [
+      24,
+      24,
+      24,
+      24,
+      24,
+      24,
+      24,
+      24
+    ],
+    "arms": {
+      "chunked": {
+        "paired_blocks": 4,
+        "median_of_block_metrics": {
+          "duration_ns": 2821475895.5,
+          "tokens_per_second": 68.3454875850912,
+          "delivered_tokens": 192.0,
+          "arrival_window_ns": 318435492.0,
+          "drain_tail_ns": 2503040403.5,
+          "steps": 43.0,
+          "preemptions": 0.0,
+          "total_tokens": 3400.0,
+          "attended_positions": 1644888.0,
+          "ttft": {
+            "p50_ns": 602849333.75,
+            "p95_ns": 2165955335.5,
+            "p99_ns": 2181600240.2999997,
+            "sample_count_each_block": [
+              8,
+              8,
+              8,
+              8
+            ]
+          },
+          "tpot": {
+            "p50_ns": 82673054.33695653,
+            "p95_ns": 108664144.33369565,
+            "p99_ns": 109822659.30152175,
+            "sample_count_each_block": [
+              8,
+              8,
+              8,
+              8
+            ]
+          },
+          "inter_token": {
+            "p50_ns": 15881854.5,
+            "p95_ns": 244277243.77499986,
+            "p99_ns": 278955166.5,
+            "sample_count_each_block": [
+              184,
+              184,
+              184,
+              184
+            ]
+          },
+          "end_to_end": {
+            "p50_ns": 2526725319.75,
+            "p95_ns": 2566346672.8,
+            "p99_ns": 2567652604.56,
+            "sample_count_each_block": [
+              8,
+              8,
+              8,
+              8
+            ]
+          }
+        },
+        "per_block": [
+          {
+            "block": 0,
+            "calibration": false,
+            "duration_ns": 2635796208,
+            "tokens_per_second": 72.84326436818365,
+            "delivered_tokens": 192,
+            "arrival_window_ns": 318435492,
+            "drain_tail_ns": 2317360716,
+            "steps": 43,
+            "preemptions": 0,
+            "total_tokens": 3400,
+            "attended_positions": 1644888,
+            "ttft_p95_ns": 2002404237.3,
+            "ttft_p99_ns": 2017160153.86,
+            "tpot_p95_ns": 101440671.00434783,
+            "tpot_p99_ns": 102491582.02695653,
+            "inter_token_p95_ns": 242571358.14999983,
+            "inter_token_p99_ns": 270464917.0,
+            "end_to_end_p95_ns": 2393861535.7,
+            "end_to_end_p99_ns": 2396146939.94,
+            "limited_steps": 0,
+            "predicted_over_target": 17,
+            "measured_over_target": 17,
+            "measured_steps": 43,
+            "prediction_mae_ns": 6287382.651162791,
+            "prediction_p95_abs_ns": 32999341.29999999
+          },
+          {
+            "block": 1,
+            "calibration": false,
+            "duration_ns": 2474795625,
+            "tokens_per_second": 77.58216398172273,
+            "delivered_tokens": 192,
+            "arrival_window_ns": 318435492,
+            "drain_tail_ns": 2156360133,
+            "steps": 43,
+            "preemptions": 0,
+            "total_tokens": 3400,
+            "attended_positions": 1644888,
+            "ttft_p95_ns": 1859835377.0,
+            "ttft_p99_ns": 1871046481.8,
+            "tpot_p95_ns": 95234153.88043478,
+            "tpot_p99_ns": 96284429.31521739,
+            "inter_token_p95_ns": 213978940.14999992,
+            "inter_token_p99_ns": 236509958.0,
+            "end_to_end_p95_ns": 2246988500.4,
+            "end_to_end_p99_ns": 2249657632.88,
+            "limited_steps": 0,
+            "predicted_over_target": 17,
+            "measured_over_target": 17,
+            "measured_steps": 43,
+            "prediction_mae_ns": 2369801.6744186045,
+            "prediction_p95_abs_ns": 8608469.2
+          },
+          {
+            "block": 2,
+            "calibration": false,
+            "duration_ns": 3133421792,
+            "tokens_per_second": 61.274865863957075,
+            "delivered_tokens": 192,
+            "arrival_window_ns": 318435492,
+            "drain_tail_ns": 2814986300,
+            "steps": 42,
+            "preemptions": 0,
+            "total_tokens": 3400,
+            "attended_positions": 1644888,
+            "ttft_p95_ns": 2441535235.55,
+            "ttft_p99_ns": 2458636887.11,
+            "tpot_p95_ns": 121507496.6673913,
+            "tpot_p99_ns": 122888328.3421739,
+            "inter_token_p95_ns": 270354083.7999999,
+            "inter_token_p99_ns": 298159250.0,
+            "end_to_end_p95_ns": 2865356038.55,
+            "end_to_end_p99_ns": 2869606541.31,
+            "limited_steps": 0,
+            "predicted_over_target": 17,
+            "measured_over_target": 17,
+            "measured_steps": 42,
+            "prediction_mae_ns": 17165554.095238097,
+            "prediction_p95_abs_ns": 59730529.19999999
+          },
+          {
+            "block": 3,
+            "calibration": false,
+            "duration_ns": 3007155583,
+            "tokens_per_second": 63.847710801998765,
+            "delivered_tokens": 192,
+            "arrival_window_ns": 318435492,
+            "drain_tail_ns": 2688720091,
+            "steps": 43,
+            "preemptions": 0,
+            "total_tokens": 3400,
+            "attended_positions": 1644888,
+            "ttft_p95_ns": 2329506433.7,
+            "ttft_p99_ns": 2346040326.74,
+            "tpot_p95_ns": 115887617.66304348,
+            "tpot_p99_ns": 117153736.57608695,
+            "inter_token_p95_ns": 245983129.3999999,
+            "inter_token_p99_ns": 287445416.0,
+            "end_to_end_p95_ns": 2738831809.9,
+            "end_to_end_p99_ns": 2739158269.18,
+            "limited_steps": 0,
+            "predicted_over_target": 17,
+            "measured_over_target": 17,
+            "measured_steps": 43,
+            "prediction_mae_ns": 13731154.46511628,
+            "prediction_p95_abs_ns": 46643161.8
+          }
+        ],
+        "counts_over_all_retained_steps": {
+          "limited_steps": 0,
+          "predicted_over_target": 68,
+          "measured_over_target": 68,
+          "measured_steps": 171
+        },
+        "median_block_prediction_errors_ns": {
+          "prediction_mae_ns": 10009268.558139535,
+          "prediction_p95_abs_ns": 39821251.55
+        }
+      },
+      "adaptive": {
+        "paired_blocks": 4,
+        "median_of_block_metrics": {
+          "duration_ns": 3248697083.5,
+          "tokens_per_second": 59.10080256799694,
+          "delivered_tokens": 192.0,
+          "arrival_window_ns": 318435492.0,
+          "drain_tail_ns": 2930261591.5,
+          "steps": 162.0,
+          "preemptions": 0.0,
+          "total_tokens": 3400.0,
+          "attended_positions": 1644888.0,
+          "ttft": {
+            "p50_ns": 805750709.25,
+            "p95_ns": 2649501856.225,
+            "p99_ns": 2670265977.645,
+            "sample_count_each_block": [
+              8,
+              8,
+              8,
+              8
+            ]
+          },
+          "tpot": {
+            "p50_ns": 22097096.010869563,
+            "p95_ns": 22999706.597826086,
+            "p99_ns": 23065200.728260867,
+            "sample_count_each_block": [
+              8,
+              8,
+              8,
+              8
+            ]
+          },
+          "inter_token": {
+            "p50_ns": 22492479.5,
+            "p95_ns": 24149219.7,
+            "p99_ns": 24975604.5,
+            "sample_count_each_block": [
+              184,
+              184,
+              184,
+              184
+            ]
+          },
+          "end_to_end": {
+            "p50_ns": 1330197375.75,
+            "p95_ns": 2922201437.65,
+            "p99_ns": 2928627843.93,
+            "sample_count_each_block": [
+              8,
+              8,
+              8,
+              8
+            ]
+          }
+        },
+        "per_block": [
+          {
+            "block": 0,
+            "calibration": false,
+            "duration_ns": 3121485500,
+            "tokens_per_second": 61.50917567933601,
+            "delivered_tokens": 192,
+            "arrival_window_ns": 318435492,
+            "drain_tail_ns": 2803050008,
+            "steps": 162,
+            "preemptions": 0,
+            "total_tokens": 3400,
+            "attended_positions": 1644888,
+            "ttft_p95_ns": 2539010481.5,
+            "ttft_p99_ns": 2556599636.3,
+            "tpot_p95_ns": 22531434.510869563,
+            "tpot_p99_ns": 22594652.119565215,
+            "inter_token_p95_ns": 23831487.6,
+            "inter_token_p99_ns": 25300584.0,
+            "end_to_end_p95_ns": 2797102475.25,
+            "end_to_end_p99_ns": 2801841835.05,
+            "limited_steps": 130,
+            "predicted_over_target": 0,
+            "measured_over_target": 3,
+            "measured_steps": 162,
+            "prediction_mae_ns": 3143648.1790123456,
+            "prediction_p95_abs_ns": 6136991.85
+          },
+          {
+            "block": 1,
+            "calibration": false,
+            "duration_ns": 3254463584,
+            "tokens_per_second": 58.995897494116804,
+            "delivered_tokens": 192,
+            "arrival_window_ns": 318435492,
+            "drain_tail_ns": 2936028092,
+            "steps": 162,
+            "preemptions": 0,
+            "total_tokens": 3400,
+            "attended_positions": 1644888,
+            "ttft_p95_ns": 2652745341.7,
+            "ttft_p99_ns": 2673820974.74,
+            "tpot_p95_ns": 23056715.02173913,
+            "tpot_p99_ns": 23098419.804347824,
+            "inter_token_p95_ns": 24358060.7,
+            "inter_token_p99_ns": 24650625.0,
+            "end_to_end_p95_ns": 2927661273.4,
+            "end_to_end_p99_ns": 2934335794.68,
+            "limited_steps": 130,
+            "predicted_over_target": 0,
+            "measured_over_target": 2,
+            "measured_steps": 162,
+            "prediction_mae_ns": 2298403.3024691357,
+            "prediction_p95_abs_ns": 4581165.95
+          },
+          {
+            "block": 2,
+            "calibration": false,
+            "duration_ns": 3242930583,
+            "tokens_per_second": 59.20570764187708,
+            "delivered_tokens": 192,
+            "arrival_window_ns": 318435492,
+            "drain_tail_ns": 2924495091,
+            "steps": 162,
+            "preemptions": 0,
+            "total_tokens": 3400,
+            "attended_positions": 1644888,
+            "ttft_p95_ns": 2646258370.75,
+            "ttft_p99_ns": 2666710980.55,
+            "tpot_p95_ns": 22942698.173913043,
+            "tpot_p99_ns": 23031981.65217391,
+            "inter_token_p95_ns": 23940378.7,
+            "inter_token_p99_ns": 24506792.0,
+            "end_to_end_p95_ns": 2916741601.9,
+            "end_to_end_p99_ns": 2922919893.18,
+            "limited_steps": 130,
+            "predicted_over_target": 0,
+            "measured_over_target": 2,
+            "measured_steps": 162,
+            "prediction_mae_ns": 2364894.796296296,
+            "prediction_p95_abs_ns": 4497457.899999999
+          },
+          {
+            "block": 3,
+            "calibration": false,
+            "duration_ns": 4068891334,
+            "tokens_per_second": 47.1873009720441,
+            "delivered_tokens": 192,
+            "arrival_window_ns": 318435492,
+            "drain_tail_ns": 3750455842,
+            "steps": 162,
+            "preemptions": 0,
+            "total_tokens": 3400,
+            "attended_positions": 1644888,
+            "ttft_p95_ns": 3399857106.95,
+            "ttft_p99_ns": 3429524294.99,
+            "tpot_p95_ns": 28891407.432608694,
+            "tpot_p99_ns": 28907094.529999997,
+            "inter_token_p95_ns": 30967767.0,
+            "inter_token_p99_ns": 31677151.779999997,
+            "end_to_end_p95_ns": 3739990733.6,
+            "end_to_end_p99_ns": 3748341953.12,
+            "limited_steps": 130,
+            "predicted_over_target": 0,
+            "measured_over_target": 109,
+            "measured_steps": 162,
+            "prediction_mae_ns": 3062327.345679012,
+            "prediction_p95_abs_ns": 5949994.799999999
+          }
+        ],
+        "counts_over_all_retained_steps": {
+          "limited_steps": 520,
+          "predicted_over_target": 0,
+          "measured_over_target": 116,
+          "measured_steps": 648
+        },
+        "median_block_prediction_errors_ns": {
+          "prediction_mae_ns": 2713611.070987654,
+          "prediction_p95_abs_ns": 5265580.375
+        }
+      }
+    },
+    "fixed_self_control": {
+      "paired_blocks": 4,
+      "median_of_block_metrics": {
+        "duration_ns": 2608991313.0,
+        "tokens_per_second": 73.73250227362044,
+        "delivered_tokens": 192.0,
+        "arrival_window_ns": 318435492.0,
+        "drain_tail_ns": 2290555821.0,
+        "steps": 43.0,
+        "preemptions": 0.0,
+        "total_tokens": 3400.0,
+        "attended_positions": 1644888.0,
+        "ttft": {
+          "p50_ns": 524315740.75,
+          "p95_ns": 1954626000.425,
+          "p99_ns": 1967398140.085,
+          "sample_count_each_block": [
+            8,
+            8,
+            8,
+            8
+          ]
+        },
+        "tpot": {
+          "p50_ns": 76159066.56521739,
+          "p95_ns": 99436740.75326087,
+          "p99_ns": 100420213.36804348,
+          "sample_count_each_block": [
+            8,
+            8,
+            8,
+            8
+          ]
+        },
+        "inter_token": {
+          "p50_ns": 15909125.0,
+          "p95_ns": 235079293.39999986,
+          "p99_ns": 259436812.5,
+          "sample_count_each_block": [
+            184,
+            184,
+            184,
+            184
+          ]
+        },
+        "end_to_end": {
+          "p50_ns": 2313427893.0,
+          "p95_ns": 2349171428.25,
+          "p99_ns": 2350374119.25,
+          "sample_count_each_block": [
+            8,
+            8,
+            8,
+            8
+          ]
+        }
+      },
+      "per_block": [
+        {
+          "block": 0,
+          "calibration": true,
+          "duration_ns": 2387820250,
+          "tokens_per_second": 80.40806254155856,
+          "delivered_tokens": 192,
+          "arrival_window_ns": 318435492,
+          "drain_tail_ns": 2069384758,
+          "steps": 43,
+          "preemptions": 0,
+          "total_tokens": 3400,
+          "attended_positions": 1644888,
+          "ttft_p95_ns": 1763262687.2,
+          "ttft_p99_ns": 1775804410.24,
+          "tpot_p95_ns": 91155069.73260869,
+          "tpot_p99_ns": 92077441.4595652,
+          "inter_token_p95_ns": 202483387.49999988,
+          "inter_token_p99_ns": 229048583.0,
+          "end_to_end_p95_ns": 2158624794.6,
+          "end_to_end_p99_ns": 2160301525.32,
+          "limited_steps": 0,
+          "predicted_over_target": 17,
+          "measured_over_target": 17,
+          "measured_steps": 43,
+          "prediction_mae_ns": 2564928.7209302327,
+          "prediction_p95_abs_ns": 6898059.1
+        },
+        {
+          "block": 1,
+          "calibration": true,
+          "duration_ns": 2494963542,
+          "tokens_per_second": 76.95503231525778,
+          "delivered_tokens": 192,
+          "arrival_window_ns": 318435492,
+          "drain_tail_ns": 2176528050,
+          "steps": 43,
+          "preemptions": 0,
+          "total_tokens": 3400,
+          "attended_positions": 1644888,
+          "ttft_p95_ns": 1870605002.35,
+          "ttft_p99_ns": 1881872806.87,
+          "tpot_p95_ns": 95413111.14565217,
+          "tpot_p99_ns": 96481310.64652173,
+          "inter_token_p95_ns": 215023914.34999987,
+          "inter_token_p99_ns": 237383833.0,
+          "end_to_end_p95_ns": 2259660315.75,
+          "end_to_end_p99_ns": 2261808496.75,
+          "limited_steps": 0,
+          "predicted_over_target": 17,
+          "measured_over_target": 17,
+          "measured_steps": 43,
+          "prediction_mae_ns": 2209525.023255814,
+          "prediction_p95_abs_ns": 6737498.199999999
+        },
+        {
+          "block": 2,
+          "calibration": true,
+          "duration_ns": 2723019084,
+          "tokens_per_second": 70.50997223198308,
+          "delivered_tokens": 192,
+          "arrival_window_ns": 318435492,
+          "drain_tail_ns": 2404583592,
+          "steps": 43,
+          "preemptions": 0,
+          "total_tokens": 3400,
+          "attended_positions": 1644888,
+          "ttft_p95_ns": 2038646998.5,
+          "ttft_p99_ns": 2052923473.3,
+          "tpot_p95_ns": 103460370.36086956,
+          "tpot_p99_ns": 104359116.08956522,
+          "inter_token_p95_ns": 255134672.44999987,
+          "inter_token_p99_ns": 281489792.0,
+          "end_to_end_p95_ns": 2438682540.75,
+          "end_to_end_p99_ns": 2438939741.75,
+          "limited_steps": 0,
+          "predicted_over_target": 17,
+          "measured_over_target": 17,
+          "measured_steps": 43,
+          "prediction_mae_ns": 7256948.0,
+          "prediction_p95_abs_ns": 44532499.6
+        },
+        {
+          "block": 3,
+          "calibration": true,
+          "duration_ns": 3020439417,
+          "tokens_per_second": 63.566909807679814,
+          "delivered_tokens": 192,
+          "arrival_window_ns": 318435492,
+          "drain_tail_ns": 2702003925,
+          "steps": 42,
+          "preemptions": 0,
+          "total_tokens": 3400,
+          "attended_positions": 1644888,
+          "ttft_p95_ns": 2338534347.95,
+          "ttft_p99_ns": 2352870275.99,
+          "tpot_p95_ns": 116696766.6673913,
+          "tpot_p99_ns": 117991608.39434782,
+          "inter_token_p95_ns": 267145023.14999983,
+          "inter_token_p99_ns": 286921250.0,
+          "end_to_end_p95_ns": 2750882407.1,
+          "end_to_end_p99_ns": 2755084947.82,
+          "limited_steps": 0,
+          "predicted_over_target": 17,
+          "measured_over_target": 17,
+          "measured_steps": 42,
+          "prediction_mae_ns": 14538752.142857144,
+          "prediction_p95_abs_ns": 51571820.85
+        }
+      ],
+      "counts_over_all_retained_steps": {
+        "limited_steps": 0,
+        "predicted_over_target": 68,
+        "measured_over_target": 68,
+        "measured_steps": 171
+      },
+      "median_block_prediction_errors_ns": {
+        "prediction_mae_ns": 4910938.360465117,
+        "prediction_p95_abs_ns": 25715279.35
+      }
+    },
+    "paired_comparisons": [
+      {
+        "block": 0,
+        "duration_ratio": 1.184266632801833,
+        "same_generated_histories": true,
+        "calibration_ratio": 0.9059199048669395
+      },
+      {
+        "block": 1,
+        "duration_ratio": 1.3150433721168389,
+        "same_generated_histories": true,
+        "calibration_ratio": 1.0081493262701238
+      },
+      {
+        "block": 2,
+        "duration_ratio": 1.0349486274971307,
+        "same_generated_histories": true,
+        "calibration_ratio": 0.8690241099848711
+      },
+      {
+        "block": 3,
+        "duration_ratio": 1.353069776968703,
+        "same_generated_histories": true,
+        "calibration_ratio": 1.0044174082894466
+      }
+    ],
+    "median_duration_ratio": 1.249655002459336,
+    "duration_ratio_range": [
+      1.0349486274971307,
+      1.353069776968703
+    ],
+    "self_control_ratios": [
+      0.9059199048669395,
+      1.0081493262701238,
+      0.8690241099848711,
+      1.0044174082894466
+    ],
+    "descriptive_noise_floor": 0.13097589001512888,
+    "policy_cost_ns": {
+      "fixed_ns": 9926060,
+      "per_row_ns": 431597,
+      "per_position_ns": 320,
+      "per_partition_ns": 0,
+      "per_logit_ns": 0,
+      "target_ns": 25000000
+    },
+    "calibration_samples": 2544,
+    "calibration_residuals_ns": {
+      "mae_ns": 1307114.8085691824,
+      "p95_abs_ns": 3609214.4499999997,
+      "max_abs_ns": 49225098
+    },
+    "independent_workload_identity_verified": true,
+    "calibration_archive_sha256": "957236ad9c1c99f6af3d60781f46bf040af822d2c649ac4afea4d37b447f51a7",
+    "calibration_workload_sha256": "f7699b0c0aff0e7825bdc7464c14f71ce19dc42db6a16ce0b72fa4faaa4ccefc",
+    "evaluation_workload_sha256": "32b162437cc108650e6a66a021bd4f0a11631c4320bb54190351ea6a028815a3",
+    "calibration_residual_scope": "descriptive residuals of all 2,544 dependent executed-step observations used for NNLS fitting; no independent-sample uncertainty claim",
+    "coefficient_scope": "zero fitted partition/logit coefficients do not imply zero physical cost; the fitted features can overlap in this workload",
+    "target_scope": "predicted synchronous execute cost; mandatory decodes/progress may exceed",
+    "goodput": null,
+    "asynchronous": false,
+    "claim_scope": "held-out short-trace predicted-execution budgeting tradeoff; no hard 25 ms guarantee, client SLO, goodput or default-policy promotion"
+  },
+  "findings": [
+    "With 128 blocks, static, continuous and fixed 256-token chunking are faster than serial on the frozen offline trace under the predeclared paired rule. Median delivered throughput is 158.90, 158.51 and 149.31 versus 65.03 tokens/s.",
+    "Latency quantiles cross: offline fixed chunking has median block gap p95/p99 of 151.80/192.42 ms versus continuous 14.25/983.01 ms. Online at nominal 4 requests/s, fixed chunking has 133.86/183.67 ms versus continuous 12.56/371.14 ms. Smaller prefill chunks replace rare large stalls with more frequent smaller stalls.",
+    "The 40-block pressure trace regresses versus serial: chunked duration ratio is 2.37818, continuous 2.80546 and static 2.85532. Chunking preempts 57 times/block and executes 16,432 rows instead of 2,424; full-prefill batching preempts 62 times and executes 18,488 rows. This is evidence of expensive repeated history replay under the current admission/preemption policy.",
+    "Adaptive execution on the held-out trace at nominal 16 requests/s raises median paired duration by 24.97% and lowers median delivered throughput from 68.35 to 59.10 tokens/s, while median block token-gap p95/p99 falls from 244.28/278.96 to 24.15/24.98 ms. Self-control variation reaches 13.10%; all blocks and their variability are retained.",
+    "Every adaptive prediction is at most 25 ms, but 116 of 648 measured executed steps exceed 25 ms, with block counts 3, 2, 2 and 109. Median quantiles cannot establish a 25 ms SLO or reliable tail cap.",
+    "These are eight-request synthetic traces on one Apple M4 Pro/Metal device. They do not establish production serving, steady-state capacity, general model quality, arbitrary arrival-rate capacity, Fast-route speedup or asynchronous execution."
+  ],
+  "default_policy_promoted": false,
+  "phase3_complete": false,
+  "asynchronous_stepping_established": false
+}

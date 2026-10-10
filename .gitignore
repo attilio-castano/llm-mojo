@@ -11,3 +11,13 @@ dist/
 *.mojoc
 *.o
 *.dylib
+# Full derived request summaries are reproduced from compact engine archives.
+/studies/model_generation/engine-core-offline-summary.json
+/studies/model_generation/engine-core-online-summary.json
+/studies/model_generation/engine-core-pressure-summary.json
+/studies/model_generation/engine-core-adaptive-summary.json
+/studies/model_generation/engine-admission-offline-summary.json
+/studies/model_generation/engine-admission-online-summary.json
+/studies/model_generation/engine-admission-pressure-summary.json
+/studies/model_generation/engine-admission-online-pressure-summary.json
+/studies/model_generation/engine-admission-range-*-summary.json

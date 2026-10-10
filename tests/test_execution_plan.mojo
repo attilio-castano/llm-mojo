@@ -5,6 +5,8 @@ lookup cannot silently drift from the evidence that justified it.
 """
 from std.testing import TestSuite, assert_equal, assert_raises
 from llm_mojo.models.qwen2.plan import ExecutionPlan, MEASURED_DEVICE, configured_plan, execution_plan, fast_plan
+from llm_mojo.models.qwen2.runner import select_engine_configuration
+from llm_mojo.serving.batch import StepBatch
 
 comptime M4_PRO = MEASURED_DEVICE
 
@@ -105,6 +107,40 @@ def test_batched_decode_steps_take_configuration_26_on_the_measured_device() rai
         ExecutionPlan(0, False, False, False).validate(2, 2)
     with assert_raises():
         _ = configured_plan(0, 2, 100, 2)
+
+
+def test_engine_singleton_prefill_needs_a_selected_logit_for_fast_decode() raises:
+    # A final one-token prompt chunk is a complete singleton query.
+    var final_prefill = StepBatch.sequence([11], 31, [0], 32)
+    final_prefill.validate(1, 32, 100)
+    assert_equal(select_engine_configuration(final_prefill), 27)
+    assert_equal(select_engine_configuration(final_prefill, False), 27)
+    assert_equal(select_engine_configuration(final_prefill, True), 26)
+    # The same one-row shape can be an unfinished prompt chunk. It must skip
+    # vocabulary work, rather than entering the decode composition's head.
+    var partial_prefill = StepBatch.sequence([11], 31, [0], 32)
+    partial_prefill.logits_rows = List[Int]()
+    partial_prefill.validate(1, 32, 100)
+    assert_equal(select_engine_configuration(partial_prefill, True), 27)
+    var multirow = StepBatch.sequence([11, 13], 0, [0], 32)
+    multirow.validate(1, 32, 100)
+    assert_equal(select_engine_configuration(multirow, True), 27)
+
+
+def test_engine_fast_decode_requires_all_singletons_and_all_selected_logits() raises:
+    var complete = StepBatch([11, 13, 17], [2, 5, 0], [0, 1, 2, 3], 3,
+                             [3, 6, 1], 1, [0, 1, 2], [2, 37, 64], [0, 1, 2])
+    complete.validate(3, 32, 100)
+    assert_equal(select_engine_configuration(complete), 27)
+    assert_equal(select_engine_configuration(complete, True), 26)
+    # One unfinished singleton in a batch prevents the head-required route.
+    complete.logits_rows = [0, 2]
+    complete.validate(3, 32, 100)
+    assert_equal(select_engine_configuration(complete, True), 27)
+    var mixed = StepBatch([11, 13, 17, 19], [2, 5, 0, 1], [0, 1, 2, 4], 2,
+                          [3, 6, 2], 1, [0, 1, 2], [2, 37, 64, 65], [0, 1, 3])
+    mixed.validate(3, 32, 100)
+    assert_equal(select_engine_configuration(mixed, True), 27)
 
 
 def main() raises:

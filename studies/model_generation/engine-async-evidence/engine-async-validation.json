@@ -1,0 +1,38 @@
+{
+  "kind": "engine-async-validation-v1",
+  "schema_version": 1,
+  "bytes": 2110489,
+  "sha256": "66eaabd4d03ad05d5211b5c1158b67f1491641f5901e10c0c1026f0ca92f14aa",
+  "uncompressed_sha256": "93481da8d99ea60b6f068ac196d4fb1cb38a9627911653b7834b92745dcbd635",
+  "retained_files": 407,
+  "hash_only_files": 28,
+  "measurements": [
+    {
+      "name": "measurements/engine-async-offline.json.gz",
+      "archive": {
+        "bytes": 205819,
+        "sha256": "f8e11cc66df632e8fafc19eb95092bdfca050737ddf1c4dfdcba1fc2ee9c551f"
+      },
+      "manifest": {
+        "bytes": 229,
+        "sha256": "3f47f06de9a7642dfef01944ea0b8f0e69bc875cfb0772462577a9690b33db1b"
+      },
+      "runs": 12,
+      "trace_mode": "offline"
+    },
+    {
+      "name": "measurements/engine-async-online.json.gz",
+      "archive": {
+        "bytes": 218718,
+        "sha256": "7204d33bda185a7b4fd57a8a666e4b17bbe0a2418aec83c85c0876f5e6e0e0a5"
+      },
+      "manifest": {
+        "bytes": 229,
+        "sha256": "9f03325e16bd7916fa6d5a841b5c273d79b92c95a65a2b8562ffc38eae5ff47c"
+      },
+      "runs": 12,
+      "trace_mode": "online"
+    }
+  ],
+  "custody": "local-only; no remote backup"
+}
