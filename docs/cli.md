@@ -13,6 +13,7 @@ uv run llm-mojo setup --check
 uv run llm-mojo models list
 uv run llm-mojo chat
 uv run --locked llm-mojo chat --engine
+uv run --locked llm-mojo chat --engine --async-stepping
 uv run llm-mojo generate --prompt "The capital of France is" --preset short
 uv run llm-mojo generate --prompt-file prompt.txt --max-new-tokens 64
 ```
@@ -53,6 +54,11 @@ reference EngineCore adapter, using configuration 27 for every call. It keeps
 weights resident, retains exact conversation token IDs and recomputes the complete
 history each turn. `--mode fast` is rejected with `--engine`; see
 [engine terminal chat](chat.md#optional-engine-terminal-chat).
+`--async-stepping` requires `--engine` and selects the bounded two-context
+reference runner. It queues a successor before collecting the older result,
+preserves exact delivered history and drains pending ownership at stop, limit,
+cancel or failure. Reports distinguish submitted, completed and discarded work.
+See [async terminal stepping](chat.md#optional-asynchronous-stepping).
 `generate --mode` also accepts two reference routes:
 `baseline` runs decoder configuration 0 for every call, and `consistent` runs the
 deterministic research route. Both are slower than `fast`.
@@ -174,7 +180,7 @@ historical source identity requires checking out the recorded commit.
 | `cli/` | Typer commands, launch preparation and native executable entry points |
 | `configuration.py` | Typed composition, literal overrides and validation |
 | `models/qwen2/` | Pinned asset preparation, tokenizer, Qwen model and chat semantics |
-| `serving/` | Synchronous `EngineCore`, the `ModelRunner` interface, request lifecycle, step scheduling and KV ownership through `StepBatch`, `KVPool` and `BlockManager` |
+| `serving/` | `EngineCore`, synchronous `ModelRunner` and optional `AsyncModelRunner`, request lifecycle, step scheduling and KV ownership through `StepBatch`, `KVPool` and `BlockManager`; async tickets retain ownership until collection and drain |
 | `runtime/` | Native builds, terminal and clock services |
 | `layers/` | Decoder, attention and MLP composition |
 | `kernels/` | Reusable numerical operations |
@@ -195,7 +201,7 @@ Each row imports only from the rows below it:
 ```text
 cli/ · benchmarks/ · validation/ · configuration.py   pick a model to run, measure or validate
 models/<family>/                                      one model; supplies what serving/ asks of it
-serving/                                              synchronous request engine and its types; names no model
+serving/                                              request engine, synchronous/async interfaces; names no model
 layers/ → kernels/                                    shared operations; shapes as parameters
 runtime/                                              services for every row; imports no model
 ```

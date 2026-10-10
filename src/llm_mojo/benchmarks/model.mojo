@@ -19,7 +19,7 @@ from std.math import ceildiv
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, DeviceGraph, DeviceGraphBuilder
 from layout import TileTensor, TensorLayout, row_major
-from std.gpu import global_idx
+from max.gpu import global_idx
 from llm_mojo.kernels.linear import DECODE_ARRANGEMENTS, decode_arrangement_reordered, enqueue_linear_decode_rows_apple_gpu
 from llm_mojo.kernels.paged_kv import kv_row
 from llm_mojo.models.qwen2.model import HEAD_DIM, KV_HEADS, KV_WIDTH, LAYERS, QwenModel, save_bf16

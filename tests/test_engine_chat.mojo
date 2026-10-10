@@ -55,6 +55,12 @@ struct ChatScriptRunner(EngineChatRunner):
         # Count actual logical rows, rather than Qwen's submitted layer rows.
         return self.submitted
 
+    def chat_device_name(self) -> String:
+        return "scripted"
+
+    def chat_device_api(self) -> String:
+        return "scripted"
+
     def chat_synchronize(mut self) raises:
         self.ctx.synchronize()
         self.synchronize_count += 1

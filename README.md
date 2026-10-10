@@ -37,8 +37,13 @@ pay off stay in the record alongside the ones that did, with the reason.
   default; optional [lifetime reservation](studies/model_generation/engine-core.md#lifetime-reservation-admission-bounded-successor-study)
   removes repeated replay on the frozen pressure trace by waiting until a request's
   declared cache growth fits.
-  Asynchronous stepping, a Fast engine route and frontend integration remain in the
-  [serving plan](docs/serving-plan.md).
+  The optional Fast engine route is qualified, with an inconclusive speed verdict;
+  reference configuration 27 remains the default. Optional
+  [asynchronous stepping](studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract)
+  now chains token IDs on the GPU and overlaps host submission with ordered GPU
+  work using two Metal contexts. Its focused numerical/lifecycle gates are
+  separate from paired load measurements. Prefix caching and the multi-request
+  frontend remain in the [serving plan](docs/serving-plan.md).
 - **Open questions.** For one conversation, submitting GPU work limits speed
   more than arithmetic does. Long prompts are slow to start. And whether building
   the same cache in different chunk sizes can give identical results is not yet
@@ -56,6 +61,17 @@ lists the exact prerequisites. From the repository root:
 uv run llm-mojo setup
 uv run llm-mojo chat
 ```
+
+The optional engine adapter recomputes complete history each turn. Select its
+asynchronous reference runner with:
+
+```sh
+uv run --locked llm-mojo chat --engine --async-stepping
+```
+
+This implementation uses stable Mojo 1.1.0 / MAX 26.6.0 resolved in `uv.lock`.
+Historical measurements retain their recorded runtime; the async implementation
+alone makes no speedup claim. The direct Fast chat remains the default.
 
 `setup` checks the toolchain and prints the fix for anything missing. It
 downloads the pinned model once per Mac, about 1 GB, into a shared store that
@@ -81,7 +97,7 @@ research modes, benchmarks and validation.
 - **Python prepares, Mojo runs.** Python verifies the model files and then hands
   over to a native Mojo program. Tokenization, the conversation, the model and
   streaming all run in Mojo.
-- **Nothing is computed twice.** The model's 24 layers run on the GPU in BF16. A
+- **The direct chat reuses its cache.** The model's 24 layers run on the GPU in BF16. A
   key-value cache keeps every processed token, so a new message computes only its
   own tokens, and each reply token after the first costs one model pass.
 - **Speed comes from launching less.** For one conversation, generating a token

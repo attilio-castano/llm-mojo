@@ -17,8 +17,9 @@ from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.compute.arch.mma_apple import _mma_apple_8x8
-from std.gpu import block_idx, thread_idx, lane_id
-from std.gpu.primitives import warp
+from max.gpu import block_idx, thread_idx, lane_id
+from max.gpu.primitives import warp
+from std.collections import Array
 from std.math import exp, max, min, ceildiv
 from std.sys.info import is_apple_gpu
 from std.utils.numerics import neg_inf
@@ -457,7 +458,7 @@ def _mma_tuned[
     ](row_major[BQ * HEADS, BK]())
     comptime assert probs.flat_rank == 2
     var u = SIMD[DType.float32, 16](0)
-    var fragments = (
+    var fragments: Array[SIMD[DType.float32, 2], 8] = [
         SIMD[DType.float32, 2](0),
         SIMD[DType.float32, 2](0),
         SIMD[DType.float32, 2](0),
@@ -466,7 +467,7 @@ def _mma_tuned[
         SIMD[DType.float32, 2](0),
         SIMD[DType.float32, 2](0),
         SIMD[DType.float32, 2](0),
-    )
+    ]
     var m: Float32 = neg_inf[DType.float32]()
     var z: Float32 = 0
     for base in range(begin, end, BK):

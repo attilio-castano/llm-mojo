@@ -50,6 +50,7 @@ before reuse.
 
 ```sh
 uv run --locked llm-mojo chat --engine
+uv run --locked llm-mojo chat --engine --async-stepping
 uv run --locked llm-mojo chat --engine --preset short --report /private/tmp/engine-chat.tsv
 uv run --locked llm-mojo chat --engine --show-config
 ```
@@ -64,7 +65,7 @@ The existing streaming decoder displays tokens. `/reset` restores system-only
 history without reloading weights. Ctrl-C takes effect at a synchronous step
 boundary and closes the partial assistant turn. Execution or output failure
 invalidates the process, drains logical request ownership and requires restarting
-the chat process. Device-loss recovery and asynchronous GPU stepping remain open.
+the chat process. Device-loss recovery remains open.
 
 Reports identify `reference-27/recompute-history`, retain exact prompt/history
 tokens and executed rows/steps, and record free/owned/written KV and live requests
@@ -74,6 +75,41 @@ including an interrupted prefix. Its injected nonfinite failure preserves the
 delivered token and closed history and returns all logical KV ownership.
 See the [engine study](../studies/model_generation/engine-core.md#optional-engine-terminal-chat-accepted-lifecycle)
 for the retained execution and restore scope.
+
+### Optional asynchronous stepping
+
+Add `--async-stepping` to `--engine` to select the two-context reference-27
+runner. The flag requires `--engine`; the direct Fast chat remains the default.
+Weights stay resident, and each turn still recomputes its exact token history.
+
+The CPU can schedule and submit the next step while the GPU finishes the earlier
+step. Each ticket has its own pinned metadata source, device metadata and token
+result, and pinned readback destination. The next decode token is taken directly
+from the preceding GPU result. Two Metal contexts order the shared model and KV
+work: each new context waits for the already submitted prefix of its predecessor.
+Collecting the older ticket waits only for its context. The two steps use the
+same model buffers and cache in order; this does not run them concurrently on
+the GPU.
+
+There are at most two submitted, uncollected tickets inside an engine call, and
+at most one when the call returns. An unknown stop may leave one additional
+decode already submitted. Cancellation suppresses any undelivered result;
+completion drains that work before releasing blocks or starting the next turn.
+A known reply limit prevents submission beyond the limit. Incremental memory
+pressure drains pending work before preemption and replay; terminal chat uses
+lifetime reservation.
+
+Async reports identify
+`reference-27/async-two-context/recompute-history`, prove the actual device and
+backend, and count submissions, completions, chained rows, selected and discarded
+tokens, extra rows and peak pending tickets separately. Their timestamps are
+host observations of submission, readback and delivery. They are not GPU kernel
+durations. The current implementation uses the deliberately upgraded locked
+Mojo 1.1.0 / MAX 26.6.0 runtime; older synchronous acceptance and timing records
+retain their original runtime identity. See the
+[async implementation and acceptance contract](../studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract)
+for qualification and paired collection. Implementation alone establishes no
+speedup or production-serving result.
 
 ## Ownership and turn boundaries
 

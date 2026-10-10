@@ -26,6 +26,7 @@ class ModeConfig:
 @dataclass
 class WorkloadConfig:
     engine: bool = False
+    async_steps: bool = False
     max_new_tokens: int = 256
     chunk_rows: int = 256
     prepared: str | None = None
@@ -78,7 +79,8 @@ def _register():
 _register()
 
 
-def resolve_run(command, *, preset='interactive', model=None, mode=None, engine=False, **options):
+def resolve_run(command, *, preset='interactive', model=None, mode=None, engine=False,
+                async_steps=False, **options):
     if command not in ('chat', 'generate'):
         raise ValueError('unknown application command')
     if preset not in WORKLOADS:
@@ -87,6 +89,8 @@ def resolve_run(command, *, preset='interactive', model=None, mode=None, engine=
         raise ValueError('unsupported model: ' + model)
     if type(engine) is not bool or (command != 'chat' and engine):
         raise ValueError('engine is an optional chat mode')
+    if type(async_steps) is not bool or (async_steps and (command != 'chat' or not engine)):
+        raise ValueError('asynchronous stepping requires chat --engine')
     modes = GENERATION_MODES if command == 'generate' else (('reference',) if engine else (APPLICATION_MODE,))
     default_mode = 'reference' if engine else APPLICATION_MODE
     if mode is not None and mode not in modes:
@@ -96,6 +100,7 @@ def resolve_run(command, *, preset='interactive', model=None, mode=None, engine=
     result = OmegaConf.to_object(cfg)
     w = result.workload
     w.engine = engine
+    w.async_steps = async_steps
     # Literal CLI text never enters OmegaConf interpolation or override grammar.
     for key, value in options.items():
         if key not in WorkloadConfig.__dataclass_fields__:

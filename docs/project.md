@@ -126,8 +126,9 @@ research questions, not prerequisites for calling the current milestone complete
    About 98% of each token's launch-submission interval is inside MAX's enqueue
    runtime, and reusing compiled kernel handles gave no qualifying speedup
    ([runtime enqueue](../studies/model_generation/runtime-enqueue.md)). The
-   pinned Metal backend cannot record command graphs, so batching launches is
-   unavailable ([batching feasibility](../studies/model_generation/batch-support.md)).
+   recorded MAX 26.5 Metal backend could not record command graphs, so that
+   batching route was unavailable
+   ([batching feasibility](../studies/model_generation/batch-support.md)).
    What remains is fewer launches per token, or batching below MAX's public API.
    Prefill is now the largest cost a user sees: the first token of a
    3,839-token prompt takes about 2.1 s. Keep current measurements as the
@@ -171,10 +172,18 @@ research questions, not prerequisites for calling the current milestone complete
    inconclusive within the declared noise floor, so reference-27 stays the
    engine default. Both studies retain independent local canonical CPU replay.
    The accepted [`chat --engine` adapter](chat.md#optional-engine-terminal-chat)
-   connects one terminal conversation to the synchronous reference core,
-   recomputing complete history each turn. Asynchronous stepping remains open on
-   MAX 26.5;
-   prefix caching and HTTP/restart recovery remain later phases.
+   connects one terminal conversation to the reference core, recomputing complete
+   history each turn. Optional [`--async-stepping`](chat.md#optional-asynchronous-stepping)
+   now uses two ordered Metal contexts, independent metadata/result banks and
+   device-side token chaining. Focused checkpoint gates cover exact submitted
+   schedules in both KV layouts, natural histories, stop/limit, abort/reuse and
+   numeric-fault cleanup. The
+   [async acceptance contract](../studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract)
+   keeps paired load evidence and final repository validation separate from
+   implementation. The deliberately upgraded lock resolves Mojo 1.1.0 / MAX
+   26.6.0; previous 26.5/1.0 results remain historical measurements. Async is
+   opt-in, with no speed verdict from implementation alone. Prefix caching and
+   HTTP/restart recovery remain later phases.
 
 Sampling, quantization, longer contexts, tool-oriented templates and additional
 model families can follow when they answer a concrete need. They are not current

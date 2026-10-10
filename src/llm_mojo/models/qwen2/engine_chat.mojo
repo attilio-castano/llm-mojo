@@ -22,6 +22,16 @@ struct EngineChatSession[Runner: EngineChatRunner = QwenRunner](Movable):
     var turn_rows: Int
     var turn_steps: Int
     var submitted_before: Int
+    var turn_prompt_rows: Int
+    var turn_submissions: Int
+    var turn_completions: Int
+    var turn_peak_pending: Int
+    var turn_submission_rows: Int
+    var turn_chained_rows: Int
+    var turn_selected_heads: Int
+    var turn_delivered_tokens: Int
+    var turn_discarded_tokens: Int
+    var turn_discarded_rows: Int
 
     def __init__(out self, prepared: String, tokenizer: Tokenizer,
                  mut work: TokenizerWorkspace, system: String,
@@ -40,10 +50,21 @@ struct EngineChatSession[Runner: EngineChatRunner = QwenRunner](Movable):
         self.turn_rows = 0
         self.turn_steps = 0
         self.submitted_before = 0
+        self.turn_prompt_rows = 0
+        self.turn_submissions = 0
+        self.turn_completions = 0
+        self.turn_peak_pending = 0
+        self.turn_submission_rows = 0
+        self.turn_chained_rows = 0
+        self.turn_selected_heads = 0
+        self.turn_delivered_tokens = 0
+        self.turn_discarded_tokens = 0
+        self.turn_discarded_rows = 0
 
     def check_drained(self) raises:
         self.engine.check(self.kv)
-        if self.engine.live() != 0 or self.engine.blocks.free_blocks() != self.kv.blocks:
+        if (self.engine.live() != 0 or self.engine.pending_steps() != 0
+                or self.engine.blocks.free_blocks() != self.kv.blocks):
             raise Error("engine chat terminal retained request or block ownership")
         for written in self.kv.written:
             if written != 0:
@@ -73,19 +94,40 @@ struct EngineChatSession[Runner: EngineChatRunner = QwenRunner](Movable):
         self.turn_rows = 0
         self.turn_steps = 0
         self.submitted_before = self.runner.chat_submitted_rows()
+        self.turn_prompt_rows = len(self.history.tokens)
+        self.turn_submissions = 0
+        self.turn_completions = 0
+        self.turn_peak_pending = 0
+        self.turn_submission_rows = 0
+        self.turn_chained_rows = 0
+        self.turn_selected_heads = 0
+        self.turn_delivered_tokens = 0
+        self.turn_discarded_tokens = 0
+        self.turn_discarded_rows = 0
 
     def abort(mut self):
         self.engine.abort(self.request_id)
 
     def step(mut self) raises -> EngineStep:
-        var record = self.engine.step(self.runner,self.kv)
+        var record = self.runner.chat_step(self.engine,self.kv)
         self.turn_rows += record.total_tokens
         self.turn_steps += 1
+        if self.runner.chat_async():
+            self.turn_submissions += len(record.async_submissions)
+            self.turn_completions += len(record.async_completions)
+            self.turn_selected_heads += len(record.async_heads)
+            self.turn_chained_rows += record.async_chained_tokens
+            for submission in record.async_submissions:
+                self.turn_submission_rows += submission.total_tokens
+                self.turn_peak_pending = max(self.turn_peak_pending,submission.pending)
+            for result in record.async_results:
+                self.turn_discarded_tokens += 1 if result.disposition != "delivered" else 0
         for event in record.events:
             if event.request_id != self.request_id:
                 raise Error("engine chat delivered another request's event")
             if event.kind == TOKEN_EVENT:
                 self.history.accept(event.token_id)
+                self.turn_delivered_tokens += 1
             elif event.kind == FINISH_EVENT:
                 if event.reason == "abort":
                     self.history.finish("interrupted")
@@ -97,6 +139,14 @@ struct EngineChatSession[Runner: EngineChatRunner = QwenRunner](Movable):
             self.check_drained()
             if self.history.generating:
                 raise Error("engine chat terminal did not finish exact history")
+            if self.runner.chat_async():
+                var necessary = self.turn_prompt_rows+self.history.generated-1 if self.history.generated > 0 else 0
+                self.turn_discarded_rows = self.turn_rows-necessary
+                if (self.turn_discarded_rows < 0 or self.turn_submission_rows != self.turn_rows
+                        or self.turn_submissions != self.turn_completions
+                        or self.turn_peak_pending > 2 or self.turn_selected_heads != self.turn_delivered_tokens+self.turn_discarded_tokens
+                        or self.turn_delivered_tokens != self.history.generated):
+                    raise Error("engine chat async submitted/completed/delivered work census differs")
             self.request_id += 1
         return record^
 
@@ -110,7 +160,8 @@ struct EngineChatSession[Runner: EngineChatRunner = QwenRunner](Movable):
         # Decoder/report failures also drop the sole live request before exit.
         if self.engine.live() > 0 and not self.engine.failed:
             self.abort()
-            _ = self.engine.step(self.runner,self.kv)
+            while self.engine.live() > 0:
+                _ = self.step()
         self.runner.chat_synchronize()
         self.history.finish("error")
         self.history.reason = "error"

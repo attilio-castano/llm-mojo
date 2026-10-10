@@ -4,8 +4,11 @@ Implementation authorized on 2026-10-08 from baseline
 `cb2416abf3c9fbb19c460fa99709d93eeabba97e` on `codex/engine-core`.
 **Status: synchronous core and bounded load studies validated.** Mixed execution,
 request lifecycle, KV-pressure replay, optional fitted budgeting and optional
-lifetime-reservation admission are implemented. Asynchronous LLM stepping remains
-open on the locked runtime. The original study binds clean implementation
+lifetime-reservation admission are implemented. Optional asynchronous LLM
+stepping is now implemented; its separate
+[acceptance contract](#asynchronous-stepping-implementation-and-acceptance-contract)
+does not inherit a speed verdict from these synchronous studies. The original
+study binds clean implementation
 `b18563b`; its final follow-up added acceptance tests and retained evidence.
 The [admission successor](#lifetime-reservation-admission-bounded-successor-study)
 binds `b81ea6c` and removes replay on both frozen pressure traces.
@@ -21,10 +24,12 @@ defines retention and paired comparisons.
 
 The native `EngineCore` accepts arrivals and aborts at step boundaries, schedules
 decode rows and one prefill tail, and delivers ordered token/finish events. Its
-Metal runner completes each step before cache ownership changes. The trace driver
-exercises this backend with fixed arrivals. Terminal chat defaults to its direct
-Fast session; the optional `chat --engine` adapter now uses the synchronous
-reference core with one request at a time and complete-history recomputation.
+synchronous Metal runner completes each step before cache ownership changes;
+the async runner retains submitted ownership until each ticket is collected.
+The trace driver exercises both backends with fixed arrivals. Terminal chat
+defaults to its direct Fast session; `chat --engine` uses the synchronous
+reference core, and `--async-stepping` opts into the async adapter. Both engine
+chat modes use one request at a time and complete-history recomputation.
 Prefix caching and multi-request frontend transport remain separate work.
 
 ```mermaid
@@ -468,8 +473,8 @@ repeated preemption. Cost-model variability and the cost of reserving maximum
 output capacity remain study questions. At this original milestone, multi-prefill
 steps, a measured Fast runner, prefix caching and frontend integration remained
 separate work; the implemented successor contracts and terminal adapter are
-recorded below. The asynchronous gate
-below is still open for LLM stepping.
+recorded below. The original asynchronous gate was still open at that milestone;
+the current implementation and successor acceptance contract follow below.
 
 ## Lifetime reservation admission: bounded successor study
 
@@ -951,8 +956,9 @@ completion and cancellation; `/reset` restores system-only history. Each new
 turn recomputes its full history with lifetime KV reservation; completed or
 cancelled requests return their blocks. Execution or output failure drains
 logical ownership and requires restarting the process. Prefix caching,
-concurrent terminal requests, asynchronous stepping and device-loss recovery
-remain separate work.
+concurrent terminal requests and device-loss recovery remain separate work.
+The accepted receipts in this section cover the synchronous adapter; the async
+adapter is described separately below.
 
 The [acceptance card](engine-chat-acceptance.json) retains exact agreement with
 direct reference full-history execution for 123 generated tokens across seven
@@ -989,6 +995,83 @@ separate pinned buffer returned before that work finished and moved the wait
 to final synchronization. This establishes the tested metadata preparation
 gate, not overlapped LLM request stepping or an LLM latency improvement.
 Creating a device event was unsupported on the pinned Metal runtime; the
-receipt retains that failure separately. Full asynchronous phase 3 stepping
-still requires token chaining, buffer reuse discipline and its exact token
-and measured-load gates.
+receipt retains that failure separately. At this gate, full asynchronous phase 3
+stepping still required token chaining, buffer reuse discipline and exact token
+and measured-load gates. The successor implementation below uses a newer locked
+runtime without rewriting this historical result.
+
+## Asynchronous stepping: implementation and acceptance contract
+
+The optional `AsyncModelRunner` interface separates submission from collection.
+`EngineCore.step_async` queues one successor before collecting the oldest ticket.
+The host can prepare the next batch and submit its launches while the previous
+GPU step runs. The next decode input references a selected-logit index from the
+preceding ticket; Qwen resolves it from the GPU token result before embedding.
+Host token history changes only after a healthy collected result is delivered.
+Mixed batching still contains leading singleton queries and at most one
+multi-row prefill tail. This change does not add multi-prompt prefill.
+
+`QwenAsyncRunner` uses two actual Metal contexts and two fixed buffer banks. Each
+bank retains its pinned metadata source, device metadata, device-selected token
+records and pinned result destination. A new context calls
+[`enqueue_wait_for`](https://max.modular.com/stable/api/mojo/max/gpu/host/device_context/DeviceContext/)
+on the already submitted predecessor prefix. Shared weights, layer workspaces
+and KV writes therefore execute in order. Synchronizing the older context for
+readback does not wait for the newer step. Reusing a bank requires collection of
+its ticket first; the next prefix wait cannot acquire a dependency on future
+submissions. These contexts support CPU/GPU overlap, while shared-cache GPU work
+remains serialized.
+
+The native capability probe established public cross-context prefix completion
+on Apple M4 Pro/Metal before the repository upgrade. The project now resolves
+stable Mojo 1.1.0 / MAX 26.6.0 through `uv.lock`. The
+[MAX 26.6 release notes](https://github.com/modular/modular/blob/main/docs/releases/v26.6.md)
+describe cross-context waits without blocking the host and Metal event support.
+A direct `DeviceStream` event-recording attempt still failed on this Metal
+backend; the adapter uses the public context operation above. The deliberate
+migration also follows the
+[Mojo 1.1 release notes](https://mojolang.org/releases/v1.1.0/): GPU primitives
+move to `max.gpu`, `InlineArray` is replaced by `Array`, explicit SIMD imports
+move to `std.simd`, and aggregates use explicit copies where the newer move
+rules require them. Earlier MAX 26.5 / Mojo 1.0 records keep their original
+source, binaries and measurements.
+
+At most two tickets are submitted and uncollected inside an engine call; at a
+public boundary there is at most one. Head ownership records bind each result
+to its request, generation ordinal and ticket. A stop token is unknown when its
+successor is queued, so one additional decode per request may execute and its token is
+explicitly discarded. An already known output limit prevents an extra
+submission. Abort suppresses undelivered tokens and retains the exact delivered
+prefix. Terminal ownership enters `DRAINING` until pending GPU work completes;
+blocks and written KV extents cannot be released early. Incremental pressure
+first drains pending work, then permits preemption/replay. Numeric faults
+invalidate the runner and drain both contexts before logical release; device
+loss and process recovery remain separate work.
+
+The optional terminal integration is
+`uv run --locked llm-mojo chat --engine --async-stepping`. It recomputes history
+per turn with lifetime reservation and records actual device/backend identity,
+submitted/completed tickets, chained rows, delivered/discarded selections,
+extra submitted rows and peak pending depth. `/reset` keeps weights resident;
+execution or output failure requires restarting the process after cleanup.
+
+The independent staged-model tests compare exact final active logits and every
+poisoned/owned KV element in both layouts across prefill, mixed chaining and
+bank reuse. The full-checkpoint qualification additionally checks finite active
+logits and written KV, natural greedy histories, zero-head prefill, stop/limit
+discards, abort/reuse and numeric-fault cleanup. The
+[async study commands](../../src/llm_mojo/benchmarks/README.md#asynchronous-engine-stepping)
+bind this gate to the exact clean source, checkpoint, toolchain, device and
+binaries before collection. Full repository validation and paired load
+acceptance are separate checks; this implementation description does not claim
+their final result.
+
+The bounded study holds reference configuration 27, fixed 256-row/eight-sequence
+workspaces, token budget 256, BF16 storage, 32-slot slot-major KV and reserved
+admission constant. Four balanced blocks contain sync, repeated sync and async
+arms. Every delivered natural history and terminal reason must match. Every
+selected head must be delivered or discarded exactly once, and all extra work
+is charged. Submission and completion timestamps are host observations, not GPU
+stage timings. Offline makespan uses the paired self-control noise floor;
+online latency distributions remain descriptive. Async remains opt-in, with
+no speed, sustainable-capacity or client-SLO claim from implementation alone.

@@ -19,7 +19,7 @@ create_event result on the repository's locked release instead of assuming it.
 """
 from layout import TileTensor, TensorLayout, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.gpu import global_idx
+from max.gpu import global_idx
 from std.sys import argv
 from llm_mojo.runtime.clock import now
 

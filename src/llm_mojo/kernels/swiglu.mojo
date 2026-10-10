@@ -1,7 +1,7 @@
 """Materialized BF16 SiLU and gating, with FP32 arithmetic between stores."""
 from layout import TensorLayout, TileTensor
 from max.gpu.host import DeviceContext
-from std.gpu import global_idx
+from max.gpu import global_idx
 from std.memory import bitcast
 from std.sys.info import is_gpu
 from std.ffi import external_call

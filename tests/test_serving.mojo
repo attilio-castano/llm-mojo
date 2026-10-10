@@ -1,5 +1,5 @@
 """Step format rules and KV pool layout, isolation and logical lengths."""
-from std.gpu import global_idx
+from max.gpu import global_idx
 from std.testing import TestSuite, assert_equal, assert_raises, assert_true
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceContext

@@ -7,7 +7,8 @@ from std.sys import argv
 from std.time import sleep
 from max.gpu.host import DeviceContext
 from llm_mojo.models.qwen2.model import VOCABULARY
-from llm_mojo.models.qwen2.runner import QwenRunner
+from llm_mojo.models.qwen2.runner import QwenRunner, QwenAsyncRunner, select_engine_configuration
+from llm_mojo.models.qwen2.plan import configured_plan
 from llm_mojo.serving.engine import EngineCore, EngineStep, StepCost, TOKEN_EVENT
 from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.runner import ModelRunner, SimulatedRunner
@@ -66,6 +67,43 @@ struct TraceSimulation(TraceRunner):
     def emit_route(self, step_id: Int, rows: Int):
         # engine-fast-v1 is Metal-only; simulation makes no route claim.
         return
+
+
+struct TraceSyncObservation(ModelRunner):
+    """Same synchronous reference adapter, with actual enqueue/readback marks."""
+    var inner: QwenRunner
+    var submit_begin_ns: Int
+    var submitted_ns: Int
+    var collect_begin_ns: Int
+    var completed_ns: Int
+
+    def __init__(out self, var runner: QwenRunner):
+        self.inner = runner^
+        self.submit_begin_ns = 0
+        self.submitted_ns = 0
+        self.collect_begin_ns = 0
+        self.completed_ns = 0
+
+    def now_ns(self) -> Int:
+        return self.inner.now_ns()
+
+    def execute(mut self, batch: StepBatch, mut kv: KVPool) raises -> List[Int]:
+        var total = 0
+        for length in batch.seq_lens:
+            total = max(total,length)
+        self.submit_begin_ns = self.now_ns()
+        try:
+            self.inner.model.forward(self.inner.ctx,batch,kv,
+                configured_plan(select_engine_configuration(batch),batch.rows(),total,batch.sequences()))
+            self.submitted_ns = self.now_ns()
+            self.collect_begin_ns = self.now_ns()
+            var tokens = self.inner.model.greedy_tokens(self.inner.ctx)
+            self.completed_ns = self.now_ns()
+            return tokens^
+        except error:
+            self.inner.model.valid = False
+            self.inner.ctx.synchronize()
+            raise error
 
 
 struct TraceRequest(Movable):
@@ -133,6 +171,186 @@ def emit(record: EngineStep, observe_kv: Bool = False):
             print("kv",record.step_id,phase,point.at_ns,point.allocated_blocks,point.written_blocks,
                   point.written_tokens,point.reserved_tokens,point.waiting_requests,point.resident_requests)
         print("kv_execute",record.step_id,record.execute_begin_ns,record.execute_end_ns)
+
+
+def emit_async_events(record: EngineStep, ticket: Int):
+    for event in record.events:
+        if event.kind == TOKEN_EVENT:
+            print("async_token",event.request_id,event.token_id,event.prompt_tokens,event.generated_tokens,
+                  event.arrival_ns,event.emitted_ns,ticket)
+        else:
+            # Queued aborts and zero limits are host boundaries without a
+            # selected head. Do not attach them to an unrelated GPU ticket.
+            var source = -1
+            for token in record.events:
+                if token.kind == TOKEN_EVENT and token.request_id == event.request_id:
+                    source = ticket
+            print("async_finish",event.request_id,event.reason,event.prompt_tokens,event.generated_tokens,
+                  event.arrival_ns,event.emitted_ns,source)
+
+
+def emit_async(record: EngineStep):
+    for submission in record.async_submissions:
+        print("submit",submission.ticket,submission.buffer_slot,submission.decode_seqs,submission.prefill_seqs,
+              submission.prefill_tokens,submission.total_tokens,submission.attended_positions,
+              submission.selected_logits,submission.begin_ns,submission.submitted_ns,submission.pending)
+        for head in record.async_heads:
+            if head.ticket == submission.ticket:
+                print("head",head.ticket,head.head,head.request_id,head.generated_tokens)
+    for completion in record.async_completions:
+        print("complete",completion.ticket,completion.begin_ns,completion.completed_ns,completion.pending)
+    for result in record.async_results:
+        print("result",result.ticket,result.head,result.request_id,result.token_id,result.generated_tokens,
+              result.disposition,result.observed_ns)
+    emit_async_events(record,record.async_ticket)
+
+
+def emit_sync_comparison(record: EngineStep, runner: TraceSyncObservation, ticket: Int):
+    if record.total_tokens > 0:
+        var selected = 0
+        for event in record.events:
+            selected += 1 if event.kind == TOKEN_EVENT else 0
+        print("submit",ticket,ticket % 2,record.decode_seqs,record.prefill_seqs,record.prefill_tokens,
+              record.total_tokens,record.attended_positions,selected,
+              runner.submit_begin_ns,runner.submitted_ns,1)
+        var head = 0
+        for event in record.events:
+            if event.kind == TOKEN_EVENT:
+                print("head",ticket,head,event.request_id,event.generated_tokens)
+                head += 1
+        print("complete",ticket,runner.collect_begin_ns,runner.completed_ns,0)
+        head = 0
+        for event in record.events:
+            if event.kind == TOKEN_EVENT:
+                print("result",ticket,head,event.request_id,event.token_id,event.generated_tokens,"delivered",event.emitted_ns)
+                head += 1
+    emit_async_events(record,ticket if record.total_tokens > 0 else -1)
+
+
+def async_ingress(at: Int, mut engine: EngineCore, mut requests: List[TraceRequest],
+                  mut aborts: List[TraceAbort], mut added: Int) raises:
+    for i in range(len(requests)):
+        if requests[i].observed_ns < 0 and requests[i].arrival_ns <= at:
+            requests[i].observed_ns = at
+            print("arrival",requests[i].request_id,requests[i].arrival_ns,at)
+    for a in range(len(aborts)):
+        if not aborts[a].applied and aborts[a].offset_ns <= at:
+            aborts[a].applied = True
+            engine.abort(aborts[a].request_id)
+            for i in range(len(requests)):
+                if requests[i].request_id == aborts[a].request_id:
+                    requests[i].aborted = True
+    for i in range(len(requests)):
+        if not requests[i].added and requests[i].observed_ns >= 0:
+            _ = engine.add(requests[i].request_id,requests[i].prompt,requests[i].maximum,
+                           requests[i].stops,requests[i].arrival_ns)
+            if requests[i].aborted:
+                engine.abort(requests[i].request_id)
+            requests[i].added = True
+            added += 1
+
+
+def wait_async_arrival(at: Int, requests: List[TraceRequest]) raises:
+    var next = Int.MAX
+    for index in range(len(requests)):
+        if requests[index].observed_ns < 0:
+            next = min(next,requests[index].arrival_ns)
+    if next == Int.MAX:
+        raise Error("no future arrival can advance the async trace")
+    sleep(Float64(max(next-at,0))/1e9)
+
+
+def async_identity(blocks: Int, execution: String):
+    print("config","chunked",blocks,256,8)
+    print("admission","reserved")
+    print("study","engine-async-v1")
+    print("work_capacity",256,8)
+    print("execution",execution)
+    print("completion_mode","two-context-prefix-wait" if execution == "async" else "synchronous-readback")
+    print("async_capacity",2)
+
+
+def emit_async_drain(engine: EngineCore, kv: KVPool, requests: Int, submitted: Int,
+                     completed: Int, delivered: Int, discarded: Int, at: Int) raises:
+    engine.check(kv)
+    var written = 0
+    for count in kv.written:
+        written += count
+    var free = engine.blocks.free_blocks()
+    if free != kv.blocks or written or engine.live() or engine.pending_steps():
+        raise Error("async trace did not drain all submissions and KV ownership")
+    print("async_drained",requests,submitted,completed,delivered,discarded,free,
+          kv.blocks-free,written,engine.live(),engine.pending_steps(),at)
+
+
+def run_sync_comparison(mut runner: TraceSyncObservation, mut kv: KVPool, mut requests: List[TraceRequest],
+                        mut aborts: List[TraceAbort], warmup_steps: Int) raises:
+    if warmup_steps > 0:
+        var warm = EngineCore(kv.blocks,32,4096,VOCABULARY,256,8,128,0,True,reserve_lifetime=True)
+        _ = warm.add(0,[11,13,17,19],warmup_steps,[])
+        while warm.live() > 0:
+            _ = warm.step(runner,kv)
+        warm.check(kv)
+    var engine = EngineCore(kv.blocks,32,4096,VOCABULARY,256,8,128,0,True,reserve_lifetime=True)
+    async_identity(kv.blocks,"sync")
+    runner.inner.reset_clock()
+    var added = 0
+    var submitted = 0
+    var delivered = 0
+    var iterations = 0
+    while added < len(requests) or engine.live() > 0:
+        var at = runner.now_ns()
+        async_ingress(at,engine,requests,aborts,added)
+        if engine.live() > 0:
+            var record = engine.step(runner,kv)
+            emit_sync_comparison(record,runner,submitted)
+            submitted += 1 if record.total_tokens > 0 else 0
+            for event in record.events:
+                delivered += 1 if event.kind == TOKEN_EVENT else 0
+            iterations += 1
+            if iterations > 1000000:
+                raise Error("bounded synchronous comparison did not drain")
+        elif added < len(requests):
+            wait_async_arrival(at,requests)
+    emit_async_drain(engine,kv,added,submitted,submitted,delivered,0,runner.now_ns())
+
+
+def run_async_comparison(mut runner: QwenAsyncRunner, mut kv: KVPool, mut requests: List[TraceRequest],
+                         mut aborts: List[TraceAbort], warmup_steps: Int) raises:
+    if warmup_steps > 0:
+        var warm = EngineCore(kv.blocks,32,4096,VOCABULARY,256,8,128,0,True,reserve_lifetime=True)
+        _ = warm.add(0,[11,13,17,19],warmup_steps,[])
+        while warm.live() > 0:
+            _ = warm.step_async(runner,kv)
+        _ = warm.drain_async(runner,kv)
+        warm.check(kv)
+    var engine = EngineCore(kv.blocks,32,4096,VOCABULARY,256,8,128,0,True,reserve_lifetime=True)
+    async_identity(kv.blocks,"async")
+    runner.reset_clock()
+    var added = 0
+    var submitted = 0
+    var completed = 0
+    var delivered = 0
+    var discarded = 0
+    var iterations = 0
+    while added < len(requests) or engine.live() > 0 or engine.pending_steps() > 0:
+        var at = runner.now_ns()
+        async_ingress(at,engine,requests,aborts,added)
+        if engine.live() > 0 or engine.pending_steps() > 0:
+            var record = engine.step_async(runner,kv)
+            emit_async(record)
+            submitted += len(record.async_submissions)
+            completed += len(record.async_completions)
+            for result in record.async_results:
+                discarded += 1 if result.disposition != "delivered" else 0
+            for event in record.events:
+                delivered += 1 if event.kind == TOKEN_EVENT else 0
+            iterations += 1
+            if iterations > 1000000:
+                raise Error("bounded asynchronous comparison did not drain")
+        elif added < len(requests):
+            wait_async_arrival(at,requests)
+    emit_async_drain(engine,kv,added,submitted,completed,delivered,discarded,runner.now_ns())
 
 
 def run_trace[Runner: TraceRunner](
@@ -239,7 +457,7 @@ def run_trace[Runner: TraceRunner](
 def main() raises:
     var args = argv()
     if len(args) < 9 or len(args) > 13:
-        raise Error("engine_trace prepared trace.tsv arm blocks budget max_sequences warmup_steps greedy|scripted [policy.tsv] [incremental|reserved [admission-range-v1|engine-budget-v1|engine-fast-v1 [reference|fast-decode]]]")
+        raise Error("engine_trace prepared trace.tsv arm blocks budget max_sequences warmup_steps greedy|scripted [policy.tsv] [incremental|reserved [admission-range-v1|engine-budget-v1|engine-fast-v1|engine-async-v1 [reference|fast-decode|sync|async]]]")
     var arm = args[3]
     var blocks = Int(args[4])
     var budget = Int(args[5])
@@ -290,15 +508,20 @@ def main() raises:
             runner_explicit = True
     if selector_explicit:
         if (selector != "admission-range-v1" and selector != "engine-budget-v1"
-                and selector != "engine-fast-v1"):
+                and selector != "engine-fast-v1" and selector != "engine-async-v1"):
             raise Error("invalid trace study selector")
         observe_kv = selector == "admission-range-v1"
     var budget_study = selector == "engine-budget-v1"
     var fast_study = selector == "engine-fast-v1"
-    if runner_explicit and (not fast_study or (runner_kind != "reference" and runner_kind != "fast-decode")):
-        raise Error("a reference|fast-decode runner selector belongs only to engine-fast-v1")
+    var async_study = selector == "engine-async-v1"
+    if runner_explicit and not ((fast_study and (runner_kind == "reference" or runner_kind == "fast-decode"))
+                               or (async_study and (runner_kind == "sync" or runner_kind == "async"))):
+        raise Error("runner selector differs from its explicit Fast or async study")
     if fast_study and (mode != "greedy" or not runner_explicit):
         raise Error("engine-fast-v1 requires greedy execution and an explicit runner selector")
+    if async_study and (not runner_explicit or mode != "greedy" or arm != "chunked"
+                        or budget != 256 or sequences != 8 or not admission_explicit or admission != "reserved"):
+        raise Error("engine-async-v1 requires fixed256/eight slots, reserved admission, greedy and sync|async")
     if budget_study or fast_study:
         if (not admission_explicit or sequences != 8
                 or (arm != "chunked" and arm != "adaptive")
@@ -344,7 +567,22 @@ def main() raises:
     for i in range(len(requests)):
         _ = check.add(requests[i].request_id,requests[i].prompt,requests[i].maximum,requests[i].stops,requests[i].arrival_ns)
     print("mode",mode)
-    if mode == "scripted":
+    if async_study:
+        if runner_kind == "sync":
+            var runner = TraceSyncObservation(QwenRunner(args[1],4096,256,8))
+            var kv = KVPool(runner.inner.ctx,blocks,32,runner.inner.model.kv_geometry())
+            print("device",runner.inner.ctx.name()+"/"+runner.inner.ctx.api())
+            if runner.inner.ctx.api() != "metal":
+                raise Error("async comparison requires a verified Metal backend")
+            run_sync_comparison(runner,kv,requests,aborts,warmup)
+        else:
+            var runner = QwenAsyncRunner(args[1],4096,256,8)
+            var kv = KVPool(runner.ctx,blocks,32,runner.model.kv_geometry())
+            print("device",runner.ctx.name()+"/"+runner.ctx.api())
+            if runner.ctx.api() != "metal":
+                raise Error("async comparison requires a verified Metal backend")
+            run_async_comparison(runner,kv,requests,aborts,warmup)
+    elif mode == "scripted":
         var ctx = DeviceContext()
         var kv = KVPool(ctx,blocks,32,KVGeometry(1,1,1))
         var runner = TraceSimulation(SimulatedRunner(script,VOCABULARY))

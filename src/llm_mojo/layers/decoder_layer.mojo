@@ -8,7 +8,7 @@ depend on S.
 """
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.collections import InlineArray
+from std.collections import Array
 from llm_mojo.layers.attention_sublayer import (
     AttentionWeights, AttentionCache, AttentionWorkspace,
     _validate_sublayer, enqueue_attention_sublayer,
@@ -127,7 +127,7 @@ def _decoder_checks[XL: TensorLayout](
     var n = a.max_rows
     var k = aw.kv_heads * aw.head_dim
     # Fixed stack storage. Entries 0..22 are writable; 23..33 are read-only.
-    var regions = InlineArray[SIMD[DType.uint64, 2], 34](uninitialized=True)
+    var regions = Array[SIMD[DType.uint64, 2], 34](uninitialized=True)
     regions[0] = key_region
     regions[1] = value_region
     regions[2] = _region(a.normalized, n * h)
@@ -276,7 +276,7 @@ def _decode_batch_preflight[QUERY_HEADS: Int, KV_HEADS: Int, HEAD_DIM: Int, SL: 
         raise Error("invalid decode composition rows, layer or pool geometry")
     validate_paged_pool[KV_HEADS, HEAD_DIM](len(storage), layer, layers, block_size, Int(tables.dim[1]()))
     # Fixed stack storage. Entries 0..11 are writable; 12..22 are read-only.
-    var regions = InlineArray[SIMD[DType.uint64, 2], 23](uninitialized=True)
+    var regions = Array[SIMD[DType.uint64, 2], 23](uninitialized=True)
     regions[0] = _region(storage, len(storage))
     regions[1] = _region(attention.normalized, s * HIDDEN)
     regions[2] = _region(attention.packed, s * (HIDDEN + 2 * WIDTH))

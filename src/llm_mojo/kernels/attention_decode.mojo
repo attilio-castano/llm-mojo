@@ -4,8 +4,8 @@ from layout import TensorLayout, TileTensor, row_major, stack_allocation
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.gpu import block_idx, thread_idx
-from std.gpu.primitives import warp
+from max.gpu import block_idx, thread_idx
+from max.gpu.primitives import warp
 from std.math import exp, max
 from std.sys.info import is_apple_gpu
 from llm_mojo.kernels.paged_kv import kv_row, kv_slot_stride, validate_paged_pool

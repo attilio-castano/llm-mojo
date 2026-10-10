@@ -11,9 +11,9 @@ configuration 27 is an explicit mixed reference composition; other
 configurations run one sequence through the generic layer dispatch.
 """
 from std.memory import bitcast
-from std.gpu import global_idx
+from max.gpu import global_idx
 from layout import TensorLayout, TileTensor, row_major
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from llm_mojo.layers.attention_sublayer import AttentionWeights, AttentionWorkspace
 from llm_mojo.layers.mlp import MLPWeights, MLPWorkspace
 from llm_mojo.layers.decoder_layer import (
@@ -50,6 +50,27 @@ comptime MARK_GREEDY = 6
 comptime MARK_MAPPED = 7
 comptime MARK_SELECTED = 8
 comptime MARK_RETURN = 9
+
+
+def _chain_tokens[ML: TensorLayout, RL: TensorLayout](
+    metadata: TileTensor[DType.int32, ML, MutAnyOrigin],
+    previous: TileTensor[DType.uint32, RL, ImmutAnyOrigin], rows: Int32,
+):
+    """Resolve validated negative token references in the ordered device queue.
+
+    A failed previous selection has no usable token. Zero is a safe bounded
+    drain input; the previous ticket's collector reports that numerical fault
+    before this dependent ticket can deliver any token.
+    """
+    comptime assert metadata.flat_rank == 1 and previous.flat_rank == 2
+    var row = Int(global_idx.x)
+    if row < Int(rows):
+        var encoded = rebind[Int32](metadata[row])
+        if encoded < 0:
+            var source = -Int(encoded)-1
+            var token = rebind[UInt32](previous[source,1])
+            var invalid = rebind[UInt32](previous[source,2])
+            metadata[row] = Int32(token) if invalid == 0 and token < UInt32(VOCABULARY) else Int32(0)
 
 
 def generation_budget(prompt_length: Int, maximum: Int) raises -> Int:
@@ -230,6 +251,9 @@ struct QwenModel(Movable):
     var gpu_argmax: Bool
     # One upload: token IDs, positions, physical slots, tables, then sampled rows.
     var step_input: DeviceBuffer[DType.int32]
+    # A staged forward has already queued metadata before the layer dispatch.
+    # Ordinary synchronous forwards retain their original mapped upload.
+    var metadata_queued: Bool
     var capacity: Int
     var max_rows: Int
     var max_sequences: Int
@@ -276,6 +300,7 @@ struct QwenModel(Movable):
         self.selection_partials = ctx.enqueue_create_buffer[DType.uint32](max_sequences*ARGMAX_GROUPS*3)
         self.selection_result = ctx.enqueue_create_buffer[DType.uint32](max_sequences*3)
         self.gpu_argmax = False
+        self.metadata_queued = False
         self.step_input = ctx.enqueue_create_buffer[DType.int32](3*max_rows+max_sequences*self.table_width+max_sequences)
 
     def __init__(out self, ctx: DeviceContext, path: String, capacity: Int, max_rows: Int,
@@ -380,6 +405,8 @@ struct QwenModel(Movable):
 
     def _upload(mut self, batch: StepBatch) raises:
         """Upload validated per-row metadata, tables, and the requested head rows."""
+        if self.metadata_queued:
+            return
         var rows = batch.rows()
         var entries = batch.sequences()*batch.max_blocks
         with self.step_input.map_to_host() as mapped:
@@ -391,6 +418,59 @@ struct QwenModel(Movable):
                 mapped.unsafe_ptr()[unsafe_offset=3*self.max_rows+i] = Int32(batch.block_table[i])
             for i in range(len(batch.logits_rows)):
                 mapped.unsafe_ptr()[unsafe_offset=3*self.max_rows+self.max_sequences*self.table_width+i] = Int32(batch.logits_rows[i])
+
+    def stage_metadata(self, batch: StepBatch, sources: List[Int], staging: HostBuffer[DType.int32]) raises:
+        """Fill an idle pinned source after the caller has preflighted its batch.
+
+        Sources are -1 for a literal token or a validated selected-logit index
+        of the preceding ticket. Negative encoded tokens exist only in this
+        staging record; StepBatch retains valid placeholder IDs on the host.
+        """
+        var rows = batch.rows()
+        var entries = batch.sequences()*batch.max_blocks
+        if (len(staging) != len(self.step_input) or len(sources) != rows or rows > self.max_rows
+                or entries > self.max_sequences*self.table_width):
+            raise Error("Invalid staged metadata allocation or row extent")
+        for i in range(rows):
+            staging[i] = Int32(-sources[i]-1 if sources[i] >= 0 else batch.token_ids[i])
+            staging[self.max_rows+i] = Int32(batch.positions[i])
+            staging[2*self.max_rows+i] = Int32(batch.slot_mapping[i])
+        for i in range(entries):
+            staging[3*self.max_rows+i] = Int32(batch.block_table[i])
+        for i in range(len(batch.logits_rows)):
+            staging[3*self.max_rows+self.max_sequences*self.table_width+i] = Int32(batch.logits_rows[i])
+
+    def forward_staged(mut self, ctx: DeviceContext, batch: StepBatch, mut kv: KVPool, plan: ExecutionPlan,
+                       staging: HostBuffer[DType.int32], metadata: DeviceBuffer[DType.int32],
+                       selected: DeviceBuffer[DType.uint32], previous: DeviceBuffer[DType.uint32],
+                       has_source: Bool) raises:
+        """Queue an already staged step; its adapter owns prefix dependencies.
+
+        The upload source and destination and both result banks remain alive
+        until their context completion. All shared layer workspaces are ordered
+        behind the preceding context prefix by QwenAsyncRunner.
+        """
+        self.preflight(ctx,batch,kv,plan)
+        if (self.metadata_queued or (plan.configuration != DECODER_MIXED and plan.configuration != DECODER_FUSED_DECODE)
+                or len(metadata) != len(self.step_input) or len(staging) != len(self.step_input)
+                or len(selected) != self.max_sequences*3 or len(previous) != self.max_sequences*3):
+            raise Error("Invalid staged forward storage or execution route")
+        self.step_input = metadata
+        self.selection_result = selected
+        ctx.enqueue_copy(dst_buf=self.step_input,src_buf=staging)
+        if has_source:
+            var tokens = TileTensor(self.step_input,row_major(batch.rows()))
+            var earlier = TileTensor(previous,row_major(self.max_sequences,3))
+            ctx.enqueue_function[_chain_tokens[type_of(tokens.layout),type_of(earlier.layout)]](
+                tokens,earlier,Int32(batch.rows()),grid_dim=(batch.rows()+127)//128,block_dim=128)
+        self.metadata_queued = True
+        try:
+            self.forward(ctx,batch,kv,plan)
+        except error:
+            self.metadata_queued = False
+            self.valid = False
+            raise error
+        self.metadata_queued = False
 
     @always_inline
     def _mark[OBSERVE: Bool](mut self, slot: Int):

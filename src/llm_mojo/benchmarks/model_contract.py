@@ -522,3 +522,42 @@ ENGINE_FAST_DECLARATION = dict(
     request_scope='greedy finite traces without aborts; necessary rows and complete pool drain',
     execution_timeout_seconds=180, fitted_budget=False, default_promotion=False,
 )
+
+
+# Async has separate timestamps and result ownership. The synchronous step
+# grammar and historical declarations remain unchanged.
+ENGINE_ASYNC_STUDY = 'engine-async-v1'
+ENGINE_ASYNC_EXECUTIONS = ('sync', 'async')
+ENGINE_ASYNC_SUBMIT_FIELDS = ('ticket', 'buffer_slot', 'decode_seqs', 'prefill_seqs',
+    'prefill_tokens', 'total_tokens', 'attended_positions', 'selected_logits',
+    'begin_ns', 'submitted_ns', 'pending')
+ENGINE_ASYNC_HEAD_FIELDS = ('ticket', 'head', 'request_id', 'generated_tokens')
+ENGINE_ASYNC_COMPLETE_FIELDS = ('ticket', 'begin_ns', 'completed_ns', 'pending')
+ENGINE_ASYNC_RESULT_FIELDS = ('ticket', 'head', 'request_id', 'token_id',
+    'generated_tokens', 'disposition', 'observed_ns')
+ENGINE_ASYNC_DISPOSITIONS = ('delivered', 'discarded-stop', 'discarded-length',
+                            'discarded-abort', 'discarded-error')
+ENGINE_ASYNC_CHECKPOINT_CHECKS = ('frozen-submitted-schedule', 'partial-prefill-zero-head',
+    'batched-mixed-chaining', 'ring-reuse', 'stop-limit-discard', 'abort-release-reuse',
+    'fault-cleanup')
+ENGINE_ASYNC_DECLARATION = dict(
+    ENGINE_DECLARATION, kind='qwen-engine-async-v1', arms=['chunked'], study=ENGINE_ASYNC_STUDY,
+    executions=list(ENGINE_ASYNC_EXECUTIONS), token_budget=256, max_sequences=8,
+    work_capacity=dict(token_rows=256, max_sequences=8), admission='reserved',
+    pending_capacity=2, grid=['sync', 'self-sync', 'async'],
+    completion_modes={'sync': 'synchronous-readback', 'async': 'two-context-prefix-wait'},
+    observation='separate submitted tickets, immutable head ownership, host-observed completion/readback, '
+        'delivered and explicitly discarded selected tokens; no GPU-stage timestamp claim',
+    numerical_policy='identical frozen submitted schedule equality before collection; natural greedy '
+        'delivered histories and terminal reasons exact across sync, self-sync and async; '
+        'all speculative rows and discarded selected tokens charged to actual work',
+    qualification='same clean build, source, assets and environment; checkpoint checks include '
+        'zero-head prefill, mixed/batched chaining, buffer reuse, stop/limit/abort and fault cleanup',
+    request_scope='bounded natural greedy traces without timed aborts; stop and length completions; '
+        'abort and fault boundaries are separate checkpoint acceptance checks',
+    pairing='same binary, assets, trace, physical workspace, fixed256 budget and reserved admission; '
+        'sync control and self-control; forward/reverse/reverse/forward block order',
+    accounting='submitted and completed tickets match exactly; every selected head is delivered once '
+        'or explicitly discarded once; pending buffers and KV blocks stay owned until drain',
+    execution_timeout_seconds=180, fitted_budget=False, asynchronous=True, default_promotion=False,
+)

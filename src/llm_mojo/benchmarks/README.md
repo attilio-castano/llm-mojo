@@ -749,9 +749,10 @@ Four balanced blocks contain reference, repeated reference and Fast candidate
 (12 runs). Numerical failure, differing own-route/cross-route histories or
 different ordered per-step work disables a speed verdict. Actual route records
 are retained; online results are descriptive. Replay never promotes Fast to a
-default. `--token-budget` and `--qualification` are Fast collection-only;
-`--budget-stage` and `--policy` are budget collection-only. Both studies require
-explicit `--admission-policy` on collection.
+default. `--token-budget` is Fast collection-only; `--qualification` belongs to
+Fast or async collection. `--budget-stage` and `--policy` are budget
+collection-only. These studies require explicit `--admission-policy` on
+collection.
 
 The [completed optional Fast comparison](../../../studies/model_generation/engine-core.md#optional-fast-engine-retained-bounded-results)
 passed four untimed qualification calls and one 12-call loose offline40,
@@ -764,10 +765,57 @@ Reference-27 remains the engine default. Replay the canonical measured archive:
 uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output studies/model_generation/engine-fast-loose-offline40.json.gz
 ```
 
-The study links both publication inventories and validation bundles, whose
+The Fast study links both publication inventories and validation bundles, whose
 independent local canonical retrieval/CPU replay passed with originals preserved.
 Full Fast restoration uses retained source/helpers and the compact
 `decoder_policies.json` import declaration; other source JSON/gz fixture contents
 remain hash-only provenance. Assets, executables and generated numerical arrays
 are excluded. Those receipts establish local replay, without a remote backup
 or new device-execution claim.
+
+### Asynchronous engine stepping
+
+`--async-study` compares synchronous reference-27 stepping, repeated sync and
+the optional two-context async runner. It fixes the scheduler budget and model
+workspace at 256 rows/eight sequences, with reserved admission, BF16 storage and
+32-slot slot-major KV. The locked runtime is Mojo 1.1.0 / MAX 26.6.0; historical
+26.5/1.0 collections keep their recorded identity and results.
+
+After full repository validation, use new external directories from a clean
+commit. Build the exact engine, qualify its checkpoint/lifecycle driver, then
+collect using that qualification:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build --async-study --prepared build/model-prepared-v1 --output /private/tmp/engine-async-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-qualify --build /private/tmp/engine-async-build --output /private/tmp/engine-async-qualification
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect --async-study --admission-policy reserved --qualification /private/tmp/engine-async-qualification/qualification.json --build /private/tmp/engine-async-build --trace studies/model_generation/engine-core-offline-trace.json --blocks 40 --max-sequences 8 --output /private/tmp/engine-async-evaluation
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --output /private/tmp/engine-async-evaluation/engine-async.json.gz
+```
+
+The qualification checks exact final active logits and all guarded KV elements
+in both layouts under an identical frozen submitted schedule. It checks finite
+active outputs, device token chaining, zero-head prefill, bank reuse, natural
+request histories, stop/limit, abort/release/reuse and fault cleanup. Source,
+assets, toolchain and device must match the engine build; receipts retain actual
+numeric exits and complete native output. Qualification failure prevents
+collection.
+
+Four balanced blocks contain sync, repeated sync and async (12 measured runs).
+All arms must deliver exact natural histories and terminal reasons. The parser
+requires contiguous FIFO tickets, immutable request/head ownership, collection
+before bank reuse, one disposition per selected head and full terminal drain.
+It records submitted rows and explicitly discarded tokens/extra rows, including
+the one successor that may already exist when an unknown stop is observed.
+Known output limits prevent extra submission. The async engine has two tickets
+at most inside a call and one at a public boundary; incremental pressure drains
+before physical KV reuse. The measured study uses lifetime reservation.
+
+The two contexts order GPU work on shared model/cache storage. The overlap is
+CPU batch preparation and submission with GPU execution. Submit/complete marks
+are host observations of enqueue/readback, not GPU stage durations. Every async
+arm must reach two pending tickets for performance eligibility. Offline
+makespan uses the existing paired noise rule; online metrics are descriptive.
+The implementation and qualification contract alone establish no speedup or
+default promotion. See the
+[engine explanation](../../../studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract)
+and [terminal usage](../../../docs/chat.md#optional-asynchronous-stepping).

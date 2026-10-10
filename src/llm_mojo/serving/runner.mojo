@@ -1,18 +1,43 @@
-"""A synchronous runner boundary shared by the engine and timing simulations.
+"""Explicit synchronous and bounded asynchronous runner boundaries.
 
-The runner returns one token per logits_rows entry and completes every use of
-the step's KV before returning. A GPU adapter lives with its model, not here.
-The scripted runner is a lifecycle oracle, not numerical or GPU evidence.
+ModelRunner returns one token per logits_rows entry after completing every use
+of its step's KV. AsyncModelRunner submits up to two FIFO tickets and separates
+enqueued writes from completion and result collection. GPU adapters live with
+their model. The scripted runner is a lifecycle oracle, not numerical or GPU
+evidence.
 """
 from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.kv_pool import KVPool
 
 
-trait ModelRunner(Movable):
+trait EngineClock(Movable):
     def now_ns(self) -> Int:
         ...
 
+
+trait ModelRunner(EngineClock):
     def execute(mut self, batch: StepBatch, mut kv: KVPool) raises -> List[Int]:
+        ...
+
+
+trait AsyncModelRunner(EngineClock):
+    """Two-ticket FIFO submission over explicitly ordered GPU work.
+
+    A negative source index means the row's literal token. Otherwise it names
+    a selected-logit index of source_ticket, the immediately preceding submit.
+    submit commits KV's enqueued extent; collect completes only its ticket and
+    returns immutable sampled results. An adapter may order two GPU contexts
+    through public prefix dependencies. drain completes every outstanding use
+    before the engine releases or reuses any referenced allocation.
+    """
+    def submit(mut self, batch: StepBatch, source_indices: List[Int],
+               source_ticket: Int, mut kv: KVPool) raises -> Int:
+        ...
+
+    def collect(mut self, ticket: Int) raises -> List[Int]:
+        ...
+
+    def drain(mut self) raises:
         ...
 
 

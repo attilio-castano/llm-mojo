@@ -41,9 +41,29 @@ class EngineChatConfigurationTests(unittest.TestCase):
         self.assertEqual(direct.mode.name,'fast'); self.assertFalse(direct.workload.engine)
         self.assertEqual(engine.mode.name,'reference'); self.assertTrue(engine.workload.engine)
         self.assertTrue(resolved_dict(engine)['workload']['engine'])
+        self.assertFalse(engine.workload.async_steps)
         for options in ({'engine':1},{'engine':True,'mode':'fast'}):
             with self.assertRaises(ValueError): resolve_run('chat',**options)
         with self.assertRaises(ValueError): resolve_run('generate',engine=True)
+
+    def test_async_stepping_requires_engine_and_preserves_reference_mode(self):
+        cfg=resolve_run('chat',engine=True,async_steps=True)
+        self.assertTrue(cfg.workload.async_steps)
+        self.assertEqual(cfg.mode.name,'reference')
+        for command,options in [('chat',{'async_steps':True}),
+                                ('chat',{'engine':True,'async_steps':1}),
+                                ('generate',{'async_steps':True}),
+                                ('chat',{'engine':True,'async_steps':True,'mode':'fast'})]:
+            with self.subTest(command=command,options=options), self.assertRaises(ValueError):
+                resolve_run(command,**options)
+
+    def test_async_launcher_selects_native_pipeline_and_records_option(self):
+        cfg=resolve_run('chat',engine=True,async_steps=True)
+        with mock.patch.object(launch,'prepare_launch',return_value=(Path('/chat-engine'),'/prepared','/tables')) as prepare, \
+             mock.patch.object(launch.os,'execv') as execute:
+            launch.launch_chat(cfg)
+        prepare.assert_called_once_with(cfg,'chat','chat_engine')
+        self.assertEqual(execute.call_args.args[1][-1],'async')
 
     def test_launcher_keeps_public_chat_sidecar_and_selects_separate_native_binary(self):
         with tempfile.TemporaryDirectory() as d:
@@ -68,6 +88,11 @@ class EngineChatConfigurationTests(unittest.TestCase):
             result=CliRunner().invoke(app,['chat','--engine','--show-config'])
         self.assertEqual(result.exit_code,0,result.output)
         self.assertEqual(json.loads(result.output)['mode']['name'],'reference')
+        native.assert_not_called()
+        with mock.patch.object(launch,'launch_chat') as native:
+            result=CliRunner().invoke(app,['chat','--engine','--async-stepping','--show-config'])
+        self.assertEqual(result.exit_code,0,result.output)
+        self.assertTrue(json.loads(result.output)['workload']['async_steps'])
         native.assert_not_called()
 
 

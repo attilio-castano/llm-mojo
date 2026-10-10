@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from llm_mojo.benchmarks import engine_budget, model_profile as profile
+from llm_mojo.benchmarks import engine_async, engine_budget, model_profile as profile
 
 
 class EngineStudyDispatchTests(unittest.TestCase):
@@ -41,6 +41,8 @@ class EngineStudyDispatchTests(unittest.TestCase):
             calls['engine_replay'].return_value = {}
             for name in ('fast_collect', 'scheduling_collect'):
                 calls[name] = stack.enter_context(mock.patch.object(engine_budget, name))
+            calls['async_collect'] = stack.enter_context(mock.patch.object(engine_async, 'collect'))
+            calls['async_qualify'] = stack.enter_context(mock.patch.object(engine_async, 'qualify'))
             try:
                 profile.main()
             except SystemExit as error:
@@ -64,7 +66,7 @@ class EngineStudyDispatchTests(unittest.TestCase):
                    ('--budget-stage', 'calibration'),
                    ('--policy', str(self.policy)),
                    ('--admission-policy', 'reserved')]
-        for command in ('engine-build', 'engine-replay', 'engine-specification'):
+        for command in ('engine-build', 'engine-qualify', 'engine-replay', 'engine-specification'):
             for option in options:
                 with self.subTest(command=command, option=option[0]):
                     self.assert_rejected(command, list(option))
@@ -94,10 +96,18 @@ class EngineStudyDispatchTests(unittest.TestCase):
                 self.assert_rejected('engine-collect', prefix+['--admission-policy', 'reserved'])
 
     def test_new_study_selectors_reject_non_build_collection_commands(self):
-        for command in ('engine-replay', 'engine-specification'):
-            for selector in ('--budget-study', '--fast-study'):
+        for command in ('engine-qualify', 'engine-replay', 'engine-specification'):
+            for selector in ('--budget-study', '--fast-study', '--async-study'):
                 with self.subTest(command=command, selector=selector):
                     self.assert_rejected(command, [selector])
+
+    def test_async_checkpoint_qualification_dispatches_before_collection(self):
+        code, calls = self.invoke('engine-qualify', [])
+        self.assertEqual(code, 0)
+        calls['async_qualify'].assert_called_once_with(self.build, self.output)
+        for name, call in calls.items():
+            if name != 'async_qualify':
+                call.assert_not_called()
 
     def test_explicit_fast_and_budget_collection_dispatch_preserves_parameters(self):
         code, calls = self.invoke('engine-collect',
@@ -142,6 +152,28 @@ class EngineStudyDispatchTests(unittest.TestCase):
         code, calls = self.invoke('engine-specification', [])
         self.assertEqual(code, 0)
         calls['engine_specification'].assert_called_once_with(self.output, 7, None)
+
+    def test_async_build_and_collection_dispatch_consumes_explicit_gate(self):
+        code, calls = self.invoke('engine-build', ['--async-study'])
+        self.assertEqual(code, 0)
+        calls['engine_build'].assert_called_once_with(self.output, self.prepared, async_study=True)
+        code, calls = self.invoke('engine-collect', ['--async-study', '--qualification', str(self.qualification),
+                                                    '--admission-policy', 'reserved', '--blocks', '40'])
+        self.assertEqual(code, 0)
+        calls['async_collect'].assert_called_once_with(self.build, self.trace, self.output,
+                                                       self.qualification, 40, 8, 10)
+        calls['fast_collect'].assert_not_called()
+        calls['scheduling_collect'].assert_not_called()
+        calls['engine_collect'].assert_not_called()
+
+    def test_async_options_reject_unsupported_configuration_before_work(self):
+        valid = ['--async-study', '--qualification', str(self.qualification), '--admission-policy', 'reserved']
+        for options in (['--async-study'], ['--async-study', '--qualification', str(self.qualification)],
+                ['--async-study', '--qualification', str(self.qualification), '--admission-policy', 'incremental'],
+                valid+['--token-budget', '32'], valid+['--policy', str(self.policy)],
+                valid+['--budget-stage', 'calibration'], valid+['--engine-mode', 'scripted']):
+            with self.subTest(options=options):
+                self.assert_rejected('engine-collect', options)
 
 
 if __name__ == '__main__':

@@ -43,7 +43,7 @@ def launch_chat(config):
     w = config.workload
     # Preserve the foreground process group; Mojo consumes SIGINT synchronously.
     os.execv(binary, [str(binary), prepared, tables, str(w.max_new_tokens), str(w.chunk_rows),
-                     w.system_file or '', w.report or ''])
+                     w.system_file or '', w.report or '', *(['async'] if w.async_steps else [])])
 
 
 def launch_generate(config):

@@ -40,8 +40,13 @@ retain independent local canonical retrieval/CPU replay and preserved originals.
 The optional [`chat --engine` adapter](chat.md#optional-engine-terminal-chat) now
 connects one terminal conversation to the synchronous reference core, recomputing
 its full token history each turn. Its checkpoint lifecycle acceptance is retained.
-Full asynchronous stepping, Fast default promotion, prefix caching and the
-multi-request frontend/process transport remain separate work.
+Optional [asynchronous stepping](../studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract)
+is now implemented on the deliberately upgraded stable Mojo 1.1.0 / MAX 26.6.0
+lock. Its focused checkpoint gates cover numerical, lifecycle and ownership
+acceptance; paired measurements and final repository validation remain separate
+checks. Async and Fast default promotion, prefix caching and the multi-request
+frontend/process transport remain separate work. Historical synchronous records
+retain their original runtime identities.
 Each phase is approved separately and records its own validation, like the
 existing plans. The [project direction](project.md) lists this as a follow-up
 track.
@@ -251,6 +256,15 @@ Two implementations share this interface:
 The scheduler, KV manager and EngineCore are the same code in both. The
 simulator explores policies quickly; hardware measurements confirm them.
 
+The optional `AsyncModelRunner` adds
+`submit(batch, source_indices, source_ticket, kv) -> ticket`, `collect(ticket)`
+and `drain()`. Sources name literal tokens or selected-logit indices from the
+immediately preceding ticket. Submission records enqueued KV extents;
+collection completes the ticket and returns sampled tokens in immutable head
+order. `QwenAsyncRunner` implements this interface and retains both tickets'
+resources until collection/drain. Its synchronous `execute` compatibility path
+requires no pending async tickets.
+
 ### KV events and step records
 
 KV events describe what is cached, not where. Each carries
@@ -364,12 +378,43 @@ report prediction errors and first-token/gap tradeoffs separately.
 
 ### Asynchronous stepping
 
-GPU token selection writes each decode sequence's next token directly into the
-next step's input buffer. The host submits step n+1 before reading step n's
-tokens and finishes its bookkeeping one step behind. A sequence that stops is
-detected one step late, and its extra token is discarded. The intended effect
-is to hide the readback wait in constraint 2. It requires writing step
-metadata without a synchronizing map; see the open questions.
+The implemented `QwenAsyncRunner` gives two tickets independent pinned metadata
+sources, device metadata/result banks and pinned readback destinations. GPU
+token selection writes a retained result; a chaining kernel resolves the next
+decode input from that result before embedding. The host can submit step n+1
+before collecting step n, overlapping CPU preparation and launch submission
+with GPU execution.
+
+Two actual Metal contexts use the public
+[`DeviceContext.enqueue_wait_for`](https://max.modular.com/stable/api/mojo/max/gpu/host/device_context/DeviceContext/)
+operation to capture the already queued predecessor prefix. Shared model
+workspaces and KV therefore execute in order; the two steps do not execute
+concurrently on the GPU. Collecting n synchronizes only its context, allowing
+n+1 to remain outstanding. A bank is reused only after collection, and its next
+prefix wait cannot depend on future submissions. Direct `DeviceStream` event
+recording is unavailable on the tested Metal backend; the implementation uses
+the public cross-context operation instead.
+
+There are at most two uncollected tickets inside `EngineCore.step_async`, and
+at most one at its public boundary. An unknown stop can leave one additional
+decode per request; its selected token is explicitly discarded. Known output
+limits prevent extra submission. Aborts suppress undelivered results, and
+terminal requests retain `DRAINING` ownership until both contexts finish using
+their KV. Incremental pressure drains pending work before preemption/replay.
+The terminal adapter opts in with `chat --engine --async-stepping` and uses
+lifetime reservation plus exact complete-history recomputation.
+
+The current lock resolves stable Mojo 1.1.0 / MAX 26.6.0. The
+[MAX release notes](https://github.com/modular/modular/blob/main/docs/releases/v26.6.md)
+describe nonblocking cross-context waits; the
+[Mojo 1.1 notes](https://mojolang.org/releases/v1.1.0/)
+cover the accompanying `max.gpu`, `Array`, SIMD namespace and move-rule
+migrations. The old MAX 26.5 metadata probe and measurements keep their original
+scope. The current
+[checkpoint and paired-load contract](../studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract)
+requires exact history, full guarded storage, finite active outputs, boundary
+cleanup and separate load measurements. Focused acceptance has passed; this
+section makes no final full-validation or speed claim.
 
 ### Failure semantics
 
@@ -413,6 +458,13 @@ client-stream recovery. Retained histories make that later recovery possible.
    including stop, limit and abort boundaries and discarded extra tokens. Then
    measure it as its own arm. If the API cannot support it, retain the probe and
    report that part of phase 3 as incomplete.
+
+This order records the original staged plan. The current optional implementation
+has passed its public two-context capability probe and focused checkpoint
+numerical/lifecycle gates. Its independent metadata banks and token chaining
+are present in code. Exact-build qualification, final validation and the
+sync/self-sync/async paired collection remain separately receipted checks; see
+the [current async contract](../studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract).
 
 Stages have separate receipts. Phase 3 is complete only after its declared gates
 and retained load study pass; a synchronous milestone does not close the fitted
@@ -720,9 +772,10 @@ before:
 
 ## Open questions
 
-- Can a host-visible MAX buffer on Metal be written for the next step without
-  synchronizing the stream? Asynchronous stepping and per-step uploads depend
-  on the answer.
+- How much does overlapping host preparation and submission with ordered GPU
+  work improve the declared load traces after extra stop/cancel work is charged?
+  Idle pinned metadata staging and prefix completion are now supported by the
+  qualified public two-context path; performance remains a separate question.
 - What does host access to a region of a device buffer cost, and what does it
   synchronize? SSD offload depends on it.
 - What is the largest single buffer the pool can use on this device, or should

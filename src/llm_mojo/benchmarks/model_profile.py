@@ -3469,7 +3469,7 @@ def _engine_same_json(value, expected):
 
 def _engine_declaration(record):
     declarations = {d['kind']: d for d in (contract.ENGINE_DECLARATION, contract.ENGINE_ADMISSION_DECLARATION,
-                                         contract.ENGINE_ADMISSION_RANGE_DECLARATION, contract.ENGINE_BUDGET_DECLARATION, contract.ENGINE_FAST_DECLARATION)}
+                                         contract.ENGINE_ADMISSION_RANGE_DECLARATION, contract.ENGINE_BUDGET_DECLARATION, contract.ENGINE_FAST_DECLARATION, contract.ENGINE_ASYNC_DECLARATION)}
     declaration = declarations.get(record.get('kind'))
     if declaration is None or record.get('declaration') != declaration:
         raise ValueError('engine measurement declaration changed')
@@ -3478,10 +3478,10 @@ def _engine_declaration(record):
     return declaration
 
 
-def _engine_collection_declaration(admission_pair, admission_range, budget_study=False, fast_study=False):
-    if any(type(v) is not bool for v in (admission_pair, admission_range, budget_study, fast_study)) or sum((admission_pair, admission_range, budget_study, fast_study)) > 1:
+def _engine_collection_declaration(admission_pair, admission_range, budget_study=False, fast_study=False, async_study=False):
+    if any(type(v) is not bool for v in (admission_pair, admission_range, budget_study, fast_study, async_study)) or sum((admission_pair, admission_range, budget_study, fast_study, async_study)) > 1:
         raise ValueError('select exactly one engine admission study')
-    return (contract.ENGINE_FAST_DECLARATION if fast_study else contract.ENGINE_BUDGET_DECLARATION if budget_study else
+    return (contract.ENGINE_ASYNC_DECLARATION if async_study else contract.ENGINE_FAST_DECLARATION if fast_study else contract.ENGINE_BUDGET_DECLARATION if budget_study else
             contract.ENGINE_ADMISSION_RANGE_DECLARATION if admission_range else
             contract.ENGINE_ADMISSION_DECLARATION if admission_pair else contract.ENGINE_DECLARATION)
 
@@ -3493,6 +3493,9 @@ def _engine_cells(block, admission_pair=False):
 
 
 def engine_study_summary(record):
+    if record.get('kind') == contract.ENGINE_ASYNC_DECLARATION['kind']:
+        from .engine_async import summary
+        return summary(record)
     if record.get('kind') == contract.ENGINE_FAST_DECLARATION['kind']:
         from .engine_budget import fast_summary
         return fast_summary(record)
@@ -3611,8 +3614,8 @@ def _validate_engine_range_execution(record, run, parsed):
         raise ValueError('operating-range native execution receipt changed or exceeded its bound')
 
 
-def engine_build(output, prepared, admission_pair=False, admission_range=False, budget_study=False, fast_study=False):
-    declaration = _engine_collection_declaration(admission_pair, admission_range, budget_study, fast_study)
+def engine_build(output, prepared, admission_pair=False, admission_range=False, budget_study=False, fast_study=False, async_study=False):
+    declaration = _engine_collection_declaration(admission_pair, admission_range, budget_study, fast_study, async_study)
     ensure_record_location(output)
     source = source_identity()
     if source['repository']['dirty']:
@@ -3743,7 +3746,7 @@ def engine_replay(directory):
     if directory.is_file():
         archive = directory
     else:
-        archives = [directory/(stem+'.json.gz') for stem in ('engine-core', 'engine-admission', 'engine-admission-range', 'engine-budget', 'engine-fast')
+        archives = [directory/(stem+'.json.gz') for stem in ('engine-core', 'engine-admission', 'engine-admission-range', 'engine-budget', 'engine-fast', 'engine-async')
                     if (directory/(stem+'.json.gz')).is_file()]
         if len(archives) != 1:
             raise ValueError('engine replay needs exactly one archive or an explicit file')
@@ -3754,7 +3757,7 @@ def engine_replay(directory):
     compressed = archive.read_bytes()
     payload = gzip.decompress(compressed)
     if (manifest.get('kind') not in (contract.ENGINE_DECLARATION['kind'], contract.ENGINE_ADMISSION_DECLARATION['kind'],
-                                    contract.ENGINE_ADMISSION_RANGE_DECLARATION['kind'], contract.ENGINE_BUDGET_DECLARATION['kind'], contract.ENGINE_FAST_DECLARATION['kind'])
+                                    contract.ENGINE_ADMISSION_RANGE_DECLARATION['kind'], contract.ENGINE_BUDGET_DECLARATION['kind'], contract.ENGINE_FAST_DECLARATION['kind'], contract.ENGINE_ASYNC_DECLARATION['kind'])
             or len(compressed) != manifest['bytes']
             or hashlib.sha256(compressed).hexdigest() != manifest['sha256']
             or hashlib.sha256(payload).hexdigest() != manifest['uncompressed_sha256']):
@@ -3785,7 +3788,7 @@ def main():
                                             'selection-replay','selection-plot','batch-size-build','batch-size-collect',
                                             'batch-size-confirm','batch-size-diagnose','batch-size-capture','batch-size-archive',
                                             'batch-size-replay','batch-size-plot','single-sequence',
-                                            'engine-specification','engine-build','engine-collect','engine-replay',
+                                            'engine-specification','engine-build','engine-qualify','engine-collect','engine-replay',
                                             *RETIRED])
     parser.add_argument('--projections',action='store_true',help='Replay/plot the projection arrangement study')
     parser.add_argument('--study', choices=['size','projections','reordered','addressing','paged','paged-loop'],
@@ -3826,24 +3829,27 @@ def main():
                         help='engine-build/collect: fixed-workspace row-budget and fresh fitted-policy study')
     admission_study.add_argument('--fast-study', action='store_true',
                         help='engine-build/collect: fixed-budget reference/self-reference/optional Fast route study')
+    admission_study.add_argument('--async-study', action='store_true',
+                        help='engine-build/collect: fixed256 reserved sync/self-sync/async reference stepping study')
     parser.add_argument('--token-budget', type=int, choices=[32, 64, 128, 256],
                         help='Fast engine-collect only: one fixed scheduler row budget')
-    parser.add_argument('--qualification', type=Path, help='Fast: frozen exact-build checkpoint qualification JSON')
+    parser.add_argument('--qualification', type=Path, help='Fast/async: frozen exact-build checkpoint qualification JSON')
     parser.add_argument('--budget-stage', choices=['calibration', 'evaluation'])
     parser.add_argument('--admission-policy', choices=list(contract.ENGINE_ADMISSION_POLICIES))
     parser.add_argument('--policy', type=Path, help='budget evaluation: frozen same-build fitted policy')
     args = parser.parse_args()
-    if (args.budget_study or args.fast_study) and args.command not in ('engine-build', 'engine-collect'):
-        parser.error('--budget-study and --fast-study belong only to engine-build/collect')
+    if (args.budget_study or args.fast_study or args.async_study) and args.command not in ('engine-build', 'engine-collect'):
+        parser.error('--budget-study, --fast-study and --async-study belong only to engine-build/collect')
     fast_collection = args.command == 'engine-collect' and args.fast_study
     budget_collection = args.command == 'engine-collect' and args.budget_study
+    async_collection = args.command == 'engine-collect' and args.async_study
     for option, value, allowed, selector in (
             ('--token-budget', args.token_budget, fast_collection, '--fast-study'),
-            ('--qualification', args.qualification, fast_collection, '--fast-study'),
+            ('--qualification', args.qualification, fast_collection or async_collection, '--fast-study or --async-study'),
             ('--budget-stage', args.budget_stage, budget_collection, '--budget-study'),
             ('--policy', args.policy, budget_collection, '--budget-study'),
-            ('--admission-policy', args.admission_policy, fast_collection or budget_collection,
-             '--fast-study or --budget-study')):
+            ('--admission-policy', args.admission_policy, fast_collection or budget_collection or async_collection,
+             '--fast-study, --budget-study or --async-study')):
         if value is not None and not allowed:
             parser.error(option + ' belongs only to engine-collect ' + selector)
     if args.command in RETIRED or (args.command == 'build' and (args.fusion or args.combined or args.selection
@@ -3854,10 +3860,24 @@ def main():
         engine_specification(args.output.resolve(), args.seed, args.arrival_rate)
     elif args.command == 'engine-build':
         if args.prepared is None: parser.error('engine-build needs --prepared')
-        engine_build(args.output.resolve(), args.prepared, args.admission_pair, args.admission_range, args.budget_study, args.fast_study)
+        if args.async_study:
+            engine_build(args.output.resolve(), args.prepared, async_study=True)
+        else:
+            engine_build(args.output.resolve(), args.prepared, args.admission_pair, args.admission_range, args.budget_study, args.fast_study)
+    elif args.command == 'engine-qualify':
+        if args.build is None: parser.error('engine-qualify needs --build')
+        from .engine_async import qualify
+        qualify(args.build.resolve(), args.output.resolve())
     elif args.command == 'engine-collect':
         if args.build is None or args.trace is None: parser.error('engine-collect needs --build and --trace')
-        if args.fast_study:
+        if args.async_study:
+            if (args.qualification is None or args.admission_policy != 'reserved' or args.engine_mode != 'greedy'
+                    or args.token_budget is not None or args.policy is not None or args.budget_stage is not None):
+                parser.error('async collection needs --qualification, --admission-policy reserved and greedy mode; budget is fixed256')
+            from .engine_async import collect
+            collect(args.build.resolve(), args.trace.resolve(), args.output.resolve(),
+                    args.qualification.resolve(), args.blocks, args.max_sequences, args.warmup_steps)
+        elif args.fast_study:
             if (args.token_budget is None or args.admission_policy is None or args.qualification is None
                     or args.policy is not None or args.budget_stage is not None or args.engine_mode != 'greedy'):
                 parser.error('Fast collection needs --token-budget, --admission-policy, --qualification and greedy mode')

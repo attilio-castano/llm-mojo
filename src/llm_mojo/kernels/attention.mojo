@@ -2,7 +2,7 @@
 
 from layout import TensorLayout, TileTensor
 from max.gpu.host import DeviceContext
-from std.gpu import global_idx
+from max.gpu import global_idx
 from std.math import ceildiv, exp, rsqrt
 from std.sys.info import is_apple_gpu
 

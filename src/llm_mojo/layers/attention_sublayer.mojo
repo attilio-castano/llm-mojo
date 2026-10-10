@@ -8,7 +8,7 @@ table (kernels/paged_kv.mojo).
 """
 from layout import TensorLayout, TileTensor, row_major
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_idx, global_idx
+from max.gpu import block_idx, global_idx
 from std.math import ceildiv
 from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu
 from llm_mojo.kernels.linear import (
@@ -18,7 +18,7 @@ from llm_mojo.kernels.linear import (
     enqueue_linear_prefill_mma_tile_apple_gpu,
 )
 from llm_mojo.kernels.rope import enqueue_rope_apple_gpu
-from std.builtin.simd import FastMathFlag
+from std.simd import FastMathFlag
 from std.sys.info import is_apple_gpu
 from llm_mojo.kernels.attention import enqueue_grouped_query_attention_apple_gpu
 from llm_mojo.kernels.attention_decode import (
