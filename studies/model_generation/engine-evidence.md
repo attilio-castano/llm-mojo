@@ -28,7 +28,13 @@ No default or performance claim changes during curation.
 The [machine-readable catalog](engine-evidence.json) binds 104 original evidence
 files to their byte counts and SHA-256 hashes at `e3cd31f`. Raw measurement and
 validation archives, specifications and execution receipts keep their existing
-paths and bytes. Eight expanded reports are reconstructed from these sources:
+paths and bytes.
+
+The original measured and catalog-basis commits are retained by
+[PR #35](https://github.com/attilio-castano/llm-mojo/pull/35). Recover its published
+history with `git fetch origin pull/35/head` after squash merge.
+
+Eight expanded reports are reconstructed from these sources:
 
 | Original report | Lossless retained source |
 | --- | --- |

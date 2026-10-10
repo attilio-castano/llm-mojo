@@ -51,6 +51,10 @@ records have separate purposes.
 | `01d8be4` | 26.5.0 / 1.0.0 | [Fixed-workspace budgeting](../studies/model_generation/engine-core.md#fixed-workspace-budget-retained-bounded-results) and [optional Fast](../studies/model_generation/engine-core.md#optional-fast-engine-retained-bounded-results) |
 | `adae54c` | 26.6.0 / 1.1.0 | [Async qualification and matched loads](../studies/model_generation/engine-core.md#asynchronous-stepping-retained-bounded-results), with [independent CPU restoration](../studies/model_generation/engine-async-evidence/README.md#independent-cpu-replay) |
 
+These measured commits are retained by [PR #35](https://github.com/attilio-castano/llm-mojo/pull/35).
+After squash merge, `git fetch origin pull/35/head` recovers the original
+implementation, evidence and curation history without changing these identities.
+
 The final full validation passed 392 Python tests, every native suite and every
 smoke before `adae54c` was committed. Its original dirty Git header is retained;
 the source-file map matches that commit and the later clean build. That clean
