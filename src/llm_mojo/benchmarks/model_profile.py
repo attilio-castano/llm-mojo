@@ -3039,6 +3039,12 @@ def engine_trace_tsv(trace):
     return '\n'.join(lines) + '\n'
 
 
+def engine_peak_cached_tokens(request):
+    """Validated request KV extent: zero-output uses none; final output is uncached."""
+    maximum = request['max_new_tokens']
+    return len(request['prompt_ids']) + maximum - 1 if maximum else 0
+
+
 def parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, policy=None, admission=None,
                      observation=None, study=None, token_budget=None, runner=None):
     """Reject malformed or incomplete native traces before computing any metric."""
@@ -3690,7 +3696,7 @@ def engine_collect(directory, trace_path, output, blocks=128, maximum_sequences=
     trace = validate_engine_trace(json.loads(trace_document))
     if admission_pair and any(r['abort_offset_ns'] is not None for r in trace['requests']):
         raise ValueError('paired admission study excludes timed aborts')
-    if any((max(len(r['prompt_ids']),len(r['prompt_ids'])+r['max_new_tokens']-1)+31)//32 > blocks
+    if any((engine_peak_cached_tokens(r)+31)//32 > blocks
            for r in trace['requests']):
         raise ValueError('a declared request cannot fit the pool alone')
     ensure_record_location(output)

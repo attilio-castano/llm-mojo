@@ -7,7 +7,7 @@ Metal allocation supplies KVPool, whose logical counts are the tested state.
 from std.testing import TestSuite, assert_equal, assert_true, assert_raises
 from max.gpu.host import DeviceContext
 from llm_mojo.serving.batch import StepBatch
-from llm_mojo.serving.engine import EngineCore, EngineStep, StepCost, DRAINING, FINISHED, TOKEN_EVENT, FINISH_EVENT
+from llm_mojo.serving.engine import EngineCore, EngineStep, StepCost, WAITING, DRAINING, FINISHED, TOKEN_EVENT, FINISH_EVENT
 from llm_mojo.serving.kv_pool import KVGeometry, KVPool
 from llm_mojo.serving.runner import AsyncModelRunner, SimulatedRunner
 
@@ -197,17 +197,78 @@ def test_known_single_token_limit_does_not_extend_the_declared_reservation() rai
     _all_free(engine, pool)
 
 
-def test_zero_limit_and_abort_before_submission_do_no_gpu_work() raises:
+def test_zero_generation_exceeding_pool_finishes_once_without_submission() raises:
+    var ctx = DeviceContext()
+    var pool = KVPool(ctx, 2, 4, KVGeometry(1, 1, 1))
+    for reserved in [False, True]:
+        for aborted in [False, True]:
+            var engine = EngineCore(2, 4, 16, 100, reserve_lifetime=reserved, observe_kv=True)
+            var runner = ScriptedAsyncRunner([7])
+            var prompt = List[Int](length=9, fill=1)
+            with assert_raises():
+                _ = engine.add(1, prompt, 1, List[Int]())
+            assert_equal(len(engine.requests), 0)
+            assert_equal(engine.next_ticket, 0)
+            var slot = engine.add(1, prompt, 0, List[Int]())
+            assert_equal(engine.requests[slot].state, WAITING)
+            assert_equal(engine.requests[slot].sequence, -1)
+            assert_equal(engine.live(), 1)
+            assert_equal(engine.next_ticket, 1)
+            assert_equal(len(engine.blocks.active), 0)
+            assert_equal(engine.blocks.free_blocks(), 2)
+            engine.check(pool)
+            if aborted:
+                engine.abort(1)
+                engine.abort(1)
+            var record = engine.step_async(runner, pool)
+            var reason = "abort" if aborted else "length"
+            assert_equal(record.finished, 1)
+            assert_equal(record.aborted, 1 if aborted else 0)
+            assert_equal(record.admitted, 0)
+            assert_equal(record.total_tokens, 0)
+            assert_equal(record.attended_positions, 0)
+            assert_equal(len(record.async_submissions), 0)
+            assert_equal(len(record.async_completions), 0)
+            assert_equal(len(record.events), 1)
+            assert_equal(record.events[0].kind, FINISH_EVENT)
+            assert_equal(record.events[0].request_id, 1)
+            assert_equal(record.events[0].reason, reason)
+            assert_equal(record.events[0].prompt_tokens, 9)
+            assert_equal(record.events[0].generated_tokens, 0)
+            assert_equal(engine.requests[slot].state, FINISHED)
+            assert_equal(engine.requests[slot].generated, 0)
+            assert_equal(engine.requests[slot].reason, reason)
+            _same(engine.requests[slot].tokens, prompt)
+            for point in record.kv_observations:
+                assert_equal(point.allocated_blocks, 0)
+                assert_equal(point.written_tokens, 0)
+                assert_equal(point.reserved_tokens, 0)
+                assert_equal(point.resident_requests, 0)
+            engine.abort(1)
+            var idle = engine.step_async(runner, pool)
+            assert_equal(idle.finished, 0)
+            assert_equal(len(idle.events), 0)
+            assert_equal(idle.admitted, 0)
+            assert_equal(idle.total_tokens, 0)
+            assert_equal(len(idle.async_submissions), 0)
+            assert_equal(len(idle.async_completions), 0)
+            assert_equal(runner.next_ticket, 0)
+            assert_equal(runner.collected, 0)
+            assert_equal(runner.reference.steps, 0)
+            assert_equal(len(engine.blocks.active), 0)
+            _all_free(engine, pool)
+
+
+def test_abort_before_submission_does_no_gpu_work() raises:
     var ctx = DeviceContext()
     var pool = KVPool(ctx, 2, 4, KVGeometry(1, 1, 1))
     var engine = EngineCore(2, 4, 8, 100)
     var runner = ScriptedAsyncRunner([7])
-    _ = engine.add(1, [1], 0, List[Int]())
     _ = engine.add(2, [2], 3, List[Int]())
     engine.abort(2)
     engine.abort(2)
     var boundary = engine.step_async(runner, pool)
-    assert_equal(boundary.finished, 2)
+    assert_equal(boundary.finished, 1)
     assert_equal(boundary.aborted, 1)
     assert_equal(runner.next_ticket, 0)
     _all_free(engine, pool)

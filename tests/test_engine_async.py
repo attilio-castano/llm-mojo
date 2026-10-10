@@ -276,6 +276,28 @@ class AsyncEvidenceTests(unittest.TestCase):
 
 
 class AsyncBuildBindingTests(unittest.TestCase):
+    def test_async_preflight_accepts_zero_output_beyond_pool_capacity(self):
+        for maximum in (0, 1):
+            with self.subTest(maximum=maximum), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                trace = trace_fixture()
+                trace['requests'][0].update(prompt_ids=[42]*33, max_new_tokens=maximum)
+                trace_path = root/'trace.json'
+                trace_path.write_text(json.dumps(trace))
+                qualification = root/'qualification.json'
+                qualification.write_text('{}')
+                # The qualification boundary follows preflight; no native work
+                # is performed for either acceptance or rejection.
+                with mock.patch.object(profile, 'verify_engine_build', return_value=study_fixture()['build']), \
+                        mock.patch.object(async_study, '_qualification', side_effect=RuntimeError('after preflight')) as collect, \
+                        mock.patch.object(profile, 'execute') as execute:
+                    expected = RuntimeError if maximum == 0 else ValueError
+                    message = 'after preflight' if maximum == 0 else 'cannot fit each request alone'
+                    with self.assertRaisesRegex(expected, message):
+                        async_study.collect(root/'build', trace_path, root/'output', qualification, blocks=1)
+                    self.assertEqual(collect.call_count, int(maximum == 0))
+                    execute.assert_not_called()
+
     def test_relocated_or_malformed_live_build_rejects_before_output_and_execution(self):
         for operation in ('qualify', 'collect'):
             for corruption in ('relocated', 'entrypoint', 'relative'):

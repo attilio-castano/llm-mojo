@@ -137,18 +137,100 @@ def test_aborts_are_boundary_actions_and_slots_can_be_reused() raises:
     assert_equal(engine.blocks.free_blocks(), 2)
 
 
-def test_zero_generation_finishes_without_execution() raises:
+def test_zero_generation_exceeding_pool_finishes_once_without_execution() raises:
     var ctx = DeviceContext()
-    var pool = KVPool(ctx, 1, 4, KVGeometry(1, 1, 1))
-    var engine = EngineCore(1, 4, 4, 100)
-    var runner = SimulatedRunner([10], 100)
-    var slot = engine.add(1, [1, 2, 3, 4], 0, List[Int]())
-    var record = engine.step(runner, pool)
-    assert_equal(record.finished, 1)
-    assert_equal(record.total_tokens, 0)
-    assert_equal(runner.steps, 0)
-    assert_equal(engine.requests[slot].generated, 0)
-    assert_equal(engine.requests[slot].reason, "length")
+    var pool = KVPool(ctx, 2, 4, KVGeometry(1, 1, 1))
+    for reserved in [False, True]:
+        for aborted in [False, True]:
+            var engine = EngineCore(2, 4, 16, 100, reserve_lifetime=reserved, observe_kv=True)
+            var runner = SimulatedRunner([10], 100)
+            var prompt = List[Int](length=9, fill=1)
+            # One output token requires prefill and cannot fit this pool.
+            with assert_raises():
+                _ = engine.add(1, prompt, 1, List[Int]())
+            assert_equal(len(engine.requests), 0)
+            assert_equal(engine.next_ticket, 0)
+            var slot = engine.add(1, prompt, 0, List[Int]())
+            assert_equal(engine.requests[slot].state, WAITING)
+            assert_equal(engine.requests[slot].sequence, -1)
+            assert_equal(engine.live(), 1)
+            assert_equal(engine.next_ticket, 1)
+            assert_equal(len(engine.blocks.active), 0)
+            assert_equal(engine.blocks.free_blocks(), 2)
+            engine.check(pool)
+            if aborted:
+                engine.abort(1)
+                engine.abort(1)
+            var record = engine.step(runner, pool)
+            var reason = "abort" if aborted else "length"
+            assert_equal(record.finished, 1)
+            assert_equal(record.aborted, 1 if aborted else 0)
+            assert_equal(record.admitted, 0)
+            assert_equal(record.total_tokens, 0)
+            assert_equal(record.attended_positions, 0)
+            assert_equal(record.execute_ns, 0)
+            assert_equal(len(record.events), 1)
+            assert_equal(record.events[0].kind, FINISH_EVENT)
+            assert_equal(record.events[0].request_id, 1)
+            assert_equal(record.events[0].reason, reason)
+            assert_equal(record.events[0].prompt_tokens, 9)
+            assert_equal(record.events[0].generated_tokens, 0)
+            assert_equal(engine.requests[slot].state, FINISHED)
+            assert_equal(engine.requests[slot].generated, 0)
+            assert_equal(engine.requests[slot].reason, reason)
+            _assert_list(engine.requests[slot].tokens, prompt)
+            for point in record.kv_observations:
+                assert_equal(point.allocated_blocks, 0)
+                assert_equal(point.written_tokens, 0)
+                assert_equal(point.reserved_tokens, 0)
+                assert_equal(point.resident_requests, 0)
+            engine.abort(1)
+            var idle = engine.step(runner, pool)
+            assert_equal(idle.finished, 0)
+            assert_equal(len(idle.events), 0)
+            assert_equal(idle.admitted, 0)
+            assert_equal(idle.total_tokens, 0)
+            assert_equal(runner.steps, 0)
+            assert_equal(engine.live(), 0)
+            assert_equal(len(engine.blocks.active), 0)
+            assert_equal(engine.blocks.free_blocks(), 2)
+            for count in pool.written:
+                assert_equal(count, 0)
+            engine.check(pool)
+
+
+def test_zero_generation_keeps_validation_and_queue_bounds() raises:
+    for reserved in [False, True]:
+        var engine = EngineCore(2, 4, 16, 100, max_requests=1, reserve_lifetime=reserved)
+        with assert_raises():
+            _ = engine.add(-1, [1], 0, List[Int]())
+        with assert_raises():
+            _ = engine.add(1, [1], 0, List[Int](), -2)
+        with assert_raises():
+            _ = engine.add(1, List[Int](), 0, List[Int]())
+        with assert_raises():
+            _ = engine.add(1, List[Int](length=17, fill=1), 0, List[Int]())
+        for invalid in [-1, 100]:
+            with assert_raises():
+                _ = engine.add(1, [invalid], 0, List[Int]())
+            with assert_raises():
+                _ = engine.add(1, [1], 0, [invalid])
+        assert_equal(len(engine.requests), 0)
+        assert_equal(engine.next_ticket, 0)
+        var prompt = List[Int](length=9, fill=1)
+        var slot = engine.add(1, prompt, 0, List[Int]())
+        with assert_raises():
+            _ = engine.add(1, [2], 0, List[Int]())
+        with assert_raises():
+            _ = engine.add(2, [2], 0, List[Int]())
+        assert_equal(len(engine.requests), 1)
+        assert_equal(engine.next_ticket, 1)
+        assert_equal(engine.requests[slot].state, WAITING)
+        assert_equal(engine.requests[slot].sequence, -1)
+        _assert_list(engine.requests[slot].tokens, prompt)
+        assert_equal(len(engine.blocks.active), 0)
+        assert_equal(engine.blocks.free_blocks(), 2)
+        engine.blocks.check()
 
 
 def test_pressure_preemption_replays_without_duplicate_delivery() raises:
@@ -517,9 +599,9 @@ def test_reserved_impossible_requests_reject_before_mutation() raises:
     for maximum in [9, Int.MAX]:
         with assert_raises():
             _ = engine.add(1, [1], maximum, List[Int]())
-    # Preserve the existing prompt-feasibility rule even for zero output.
+    # Positive output still requires the entire prompt to fit.
     with assert_raises():
-        _ = engine.add(1, List[Int](length=9, fill=1), 0, List[Int]())
+        _ = engine.add(1, List[Int](length=9, fill=1), 1, List[Int]())
     assert_equal(len(engine.requests), 0)
     assert_equal(engine.next_ticket, 0)
     assert_equal(engine.blocks.free_blocks(), 2)

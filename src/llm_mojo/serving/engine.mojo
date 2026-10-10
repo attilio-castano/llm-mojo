@@ -36,6 +36,11 @@ def _saturated_product(left: Int, right: Int) -> Int:
     return Int.MAX if left > Int.MAX // right else left * right
 
 
+def _peak_kv_extent(prompt_length: Int, maximum: Int) -> Int:
+    # Zero output finishes before scheduling; the final emitted token never enters KV.
+    return 0 if maximum == 0 else prompt_length + maximum - 1
+
+
 struct StepCost(ImplicitlyCopyable, Movable):
     """Frozen nonnegative integer coefficients; a prediction, not a hard SLO.
 
@@ -363,8 +368,7 @@ struct EngineCore(Movable):
             raise Error("invalid engine request")
         if len(prompt) > self.max_context or max_new_tokens > self.max_context - len(prompt):
             raise Error("request exceeds its declared context")
-        # The last selected token need not enter KV: generation ends immediately.
-        var extent = max(len(prompt), len(prompt) + max_new_tokens - 1)
+        var extent = _peak_kv_extent(len(prompt), max_new_tokens)
         if ceildiv(extent, self.blocks.block_size) > self.blocks.blocks:
             raise Error("request cannot fit its declared KV pool even alone")
         for token in prompt:
@@ -406,10 +410,7 @@ struct EngineCore(Movable):
         return False
 
     def _peak_extent(self, index: Int) -> Int:
-        # The last emitted token is never processed when the request finishes.
-        if self.requests[index].maximum == 0:
-            return 0
-        return self.requests[index].prompt_length + self.requests[index].maximum - 1
+        return _peak_kv_extent(self.requests[index].prompt_length, self.requests[index].maximum)
 
     def _release(mut self, index: Int, mut kv: KVPool) raises:
         if self._held(index):

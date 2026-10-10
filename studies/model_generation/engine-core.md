@@ -511,8 +511,13 @@ so a request validated to fit alone can run even with a full-pool watermark.
 With finite feasible arrivals, resident work is bounded and its growth already
 has capacity; oldest-first scheduling eventually releases that capacity and
 admits the head waiter. This is a finite-drain argument, not an arrival-rate SLO.
-Accepted zero-output requests finish at the next boundary without reservation;
-their existing prompt-feasibility validation is preserved.
+Zero-output requests finish at the next boundary without reservation or model
+execution. The original admission study preserved the requirement that their
+prompts fit the physical pool. The [PR #35](https://github.com/attilio-castano/llm-mojo/pull/35)
+review follow-up removes that requirement in the current engine and collectors:
+zero output has zero KV demand, while context, token, identity and queue checks
+remain enforced. The retained measurements and declarations keep their original
+bytes and implementation identities.
 
 Execution work is independent of reservation size. Retain the chosen fixed or
 fitted prefill row count when constructing a step. Do not infer that count from

@@ -359,8 +359,11 @@ measured extension.
 
 For positive output, lifetime reservation owns enough blocks for
 `prompt_length + max_new_tokens - 1` cached positions before prefill begins;
-the final emitted token need not enter KV. Zero-output requests finish without
-holding blocks. Reserved capacity stays distinct from committed cache length
+the final emitted token need not enter KV. Zero-output requests have zero KV
+demand and finish at the next boundary without model execution or holding
+blocks, even when the prompt exceeds the physical pool. They still undergo
+context, token, identity and queue validation; an abort before that boundary
+takes precedence. Reserved capacity stays distinct from committed cache length
 and from the row budget: execution still uses the chosen fixed or fitted chunk.
 The oldest waiting request cannot be bypassed. The watermark applies while any
 request is resident, even if none is selected this step, and is ignored when

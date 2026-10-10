@@ -509,7 +509,7 @@ def scheduling_collect(build, trace_path, output, stage, admission, policy_path=
     receipt = profile.verify_engine_build(build, declaration)
     document = trace_path.read_text()
     trace = profile.validate_engine_trace(json.loads(document))
-    if any(r['abort_offset_ns'] is not None or (max(len(r['prompt_ids']),len(r['prompt_ids'])+r['max_new_tokens']-1)+31)//32>blocks for r in trace['requests']):
+    if any(r['abort_offset_ns'] is not None or (profile.engine_peak_cached_tokens(r)+31)//32>blocks for r in trace['requests']):
         raise ValueError('scheduling trace has aborts or requests that cannot fit alone')
     policy = policy_document = compressed_calibration = None
     if stage=='evaluation':
@@ -824,7 +824,7 @@ def fast_collect(build,trace_path,output,qualification_path,token_budget,admissi
         raise ValueError('invalid bounded Fast collection')
     receipt=profile.verify_engine_build(build, declaration)
     document=trace_path.read_text(); trace=profile.validate_engine_trace(json.loads(document))
-    if any(r['abort_offset_ns'] is not None or (max(len(r['prompt_ids']),len(r['prompt_ids'])+r['max_new_tokens']-1)+31)//32>blocks for r in trace['requests']):
+    if any(r['abort_offset_ns'] is not None or (profile.engine_peak_cached_tokens(r)+31)//32>blocks for r in trace['requests']):
         raise ValueError('Fast trace has aborts or requests that cannot fit alone')
     qualification_document=qualification_path.read_text()
     qualification=json.loads(qualification_document)

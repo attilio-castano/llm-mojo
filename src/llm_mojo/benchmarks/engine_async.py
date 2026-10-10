@@ -400,7 +400,7 @@ def collect(build, trace_path, output, qualification_path, blocks=128, maximum_s
     receipt = profile.verify_engine_build(build, contract.ENGINE_ASYNC_DECLARATION)
     document = trace_path.read_text()
     trace = profile.validate_engine_trace(json.loads(document))
-    if any(r['abort_offset_ns'] is not None or (max(len(r['prompt_ids']), len(r['prompt_ids'])+r['max_new_tokens']-1)+31)//32 > blocks for r in trace['requests']):
+    if any(r['abort_offset_ns'] is not None or (profile.engine_peak_cached_tokens(r)+31)//32 > blocks for r in trace['requests']):
         raise ValueError('async measured trace has timed aborts or cannot fit each request alone')
     qualification_document = qualification_path.read_text()
     record = dict(kind=contract.ENGINE_ASYNC_DECLARATION['kind'], declaration=contract.ENGINE_ASYNC_DECLARATION,

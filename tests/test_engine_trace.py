@@ -148,6 +148,35 @@ def range_fixture():
 
 
 class EngineTraceTests(unittest.TestCase):
+    def test_collection_preflight_accepts_zero_output_beyond_pool_capacity(self):
+        # Valid context, but the prompt cannot fit in one 32-slot KV block.
+        # Stop immediately after preflight so this test launches no model work.
+        studies = [(False, False, contract.ENGINE_DECLARATION),
+                   (True, False, contract.ENGINE_ADMISSION_DECLARATION),
+                   (False, True, contract.ENGINE_ADMISSION_RANGE_DECLARATION)]
+        for admission_pair, admission_range, declaration in studies:
+            for maximum in (0, 1):
+                with self.subTest(study=declaration['kind'], maximum=maximum), \
+                        tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    trace = trace_fixture()
+                    trace['requests'] = trace['requests'][:1]
+                    trace['requests'][0].update(prompt_ids=[42]*33, max_new_tokens=maximum)
+                    trace_path = root/'trace.json'
+                    trace_path.write_text(json.dumps(trace))
+                    receipt = copy.deepcopy(study_fixture()['build'])
+                    receipt['declaration'] = declaration
+                    with mock.patch.object(profile, 'verify_build', return_value=receipt), \
+                            mock.patch.object(profile, 'conditions', side_effect=RuntimeError('after preflight')) as collect, \
+                            mock.patch.object(profile, 'execute') as execute:
+                        expected = RuntimeError if maximum == 0 else ValueError
+                        message = 'after preflight' if maximum == 0 else 'cannot fit the pool alone'
+                        with self.assertRaisesRegex(expected, message):
+                            engine_collect(root/'build', trace_path, root/'output', blocks=1,
+                                           admission_pair=admission_pair, admission_range=admission_range)
+                        self.assertEqual(collect.call_count, int(maximum == 0))
+                        execute.assert_not_called()
+
     def test_range_early_stops_admission_delay_and_bounded_byte_time(self):
         record = range_fixture()
         run = next(r for r in record['summary']['runs'] if r['admission'] == 'reserved')

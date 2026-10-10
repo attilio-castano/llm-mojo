@@ -698,6 +698,45 @@ class FastStudyTests(unittest.TestCase):
 
 
 class EngineCollectorBuildTests(unittest.TestCase):
+    def test_budget_and_fast_preflight_accept_zero_output_beyond_pool_capacity(self):
+        import json, tempfile
+        from pathlib import Path
+        from unittest import mock
+        from llm_mojo.benchmarks import engine_budget as budget
+        from llm_mojo.benchmarks import model_profile as profile
+        from tests.test_engine_trace import trace_fixture
+
+        for operation in ('budget', 'fast'):
+            for admission in profile.contract.ENGINE_ADMISSION_POLICIES:
+                for maximum in (0, 1):
+                    with self.subTest(operation=operation, admission=admission, maximum=maximum), \
+                            tempfile.TemporaryDirectory() as directory:
+                        root = Path(directory)
+                        trace = trace_fixture()
+                        trace['requests'] = trace['requests'][:1]
+                        trace['requests'][0].update(prompt_ids=[42]*33, max_new_tokens=maximum)
+                        trace_path = root/'trace.json'
+                        trace_path.write_text(json.dumps(trace))
+                        qualification = root/'qualification.json'
+                        qualification.write_text('{}')
+                        # Stop at the first boundary after preflight, without
+                        # compiling, qualifying or executing a model.
+                        target, name = (profile, 'conditions') if operation == 'budget' else (budget, '_fast_qualification')
+                        with mock.patch.object(profile, 'verify_engine_build', return_value=scheduling_fixture()['build']), \
+                                mock.patch.object(target, name, side_effect=RuntimeError('after preflight')) as collect, \
+                                mock.patch.object(profile, 'execute') as execute:
+                            expected = RuntimeError if maximum == 0 else ValueError
+                            message = 'after preflight' if maximum == 0 else 'cannot fit alone'
+                            with self.assertRaisesRegex(expected, message):
+                                if operation == 'budget':
+                                    budget.scheduling_collect(root/'build', trace_path, root/'output',
+                                                              'calibration', admission, blocks=1)
+                                else:
+                                    budget.fast_collect(root/'build', trace_path, root/'output',
+                                                        qualification, 64, admission, blocks=1)
+                            self.assertEqual(collect.call_count, int(maximum == 0))
+                            execute.assert_not_called()
+
     def test_copied_build_cannot_execute_its_changed_origin_binary(self):
         import hashlib, json, tempfile
         from pathlib import Path
