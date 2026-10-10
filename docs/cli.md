@@ -49,16 +49,17 @@ context capacity. Generation consumes raw text; chat applies Qwen's plain
 system/user/assistant template. Generation requires exactly one prompt source; an
 empty prompt is rejected.
 
-Chat defaults to the direct Fast session. `chat --engine` selects the synchronous
-reference EngineCore adapter, using configuration 27 for every call. It keeps
-weights resident, retains exact conversation token IDs and recomputes the complete
+Chat defaults to the direct Fast session. Without `--async-stepping`, `chat --engine`
+selects the synchronous reference EngineCore adapter, using configuration 27 for
+every call. It keeps weights resident, retains exact conversation token IDs and recomputes the complete
 history each turn. `--mode fast` is rejected with `--engine`; see
 [engine terminal chat](chat.md#optional-engine-terminal-chat).
 `--async-stepping` requires `--engine` and selects the bounded two-context
 reference runner. It queues a successor before collecting the older result,
 preserves exact delivered history and drains pending ownership at stop, limit,
 cancel or failure. Reports distinguish submitted, completed and discarded work.
-See [async terminal stepping](chat.md#optional-asynchronous-stepping).
+See [async terminal stepping](chat.md#optional-asynchronous-stepping) and its
+[accepted evidence](../studies/model_generation/engine-async-evidence/README.md).
 `generate --mode` also accepts two reference routes:
 `baseline` runs decoder configuration 0 for every call, and `consistent` runs the
 deterministic research route. Both are slower than `fast`.

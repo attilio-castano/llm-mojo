@@ -1,0 +1,12 @@
+{
+  "kind": "engine-async-restored-history-comparison-v1",
+  "status": "passed",
+  "measured_runs": 24,
+  "validation_archive_sha256": "66eaabd4d03ad05d5211b5c1158b67f1491641f5901e10c0c1026f0ca92f14aa",
+  "replay_result_sha256": "31450d67d0304746678cc824015fc329c62172e774521af1e19eb76627696ea5",
+  "expected_sha256": "633915a7cbe590e7b107860142294d65206ce61231fca14a13b5ac0dd1ba91f1",
+  "histories_and_reasons_equal": true,
+  "delivered_tokens_per_run": 97,
+  "necessary_rows_per_run": 2265,
+  "async_extra_rows_per_run": 8
+}

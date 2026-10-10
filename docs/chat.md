@@ -55,21 +55,22 @@ uv run --locked llm-mojo chat --engine --preset short --report /private/tmp/engi
 uv run --locked llm-mojo chat --engine --show-config
 ```
 
-The synchronous EngineCore adapter uses reference configuration 27 and admits
-one request at a time with lifetime KV reservation. Weights stay resident and
-conversation history remains in exact token IDs. Each turn recomputes that whole
+Without `--async-stepping`, the synchronous EngineCore adapter uses reference
+configuration 27 and admits one request at a time with lifetime KV reservation.
+Weights stay resident and conversation history remains in exact token IDs.
+Each turn recomputes that whole
 history; completed or cancelled replies release request ownership and valid KV
 extents. This adapter has no conversation prefix cache. `--mode fast` is rejected.
 
 The existing streaming decoder displays tokens. `/reset` restores system-only
-history without reloading weights. Ctrl-C takes effect at a synchronous step
-boundary and closes the partial assistant turn. Execution or output failure
-invalidates the process, drains logical request ownership and requires restarting
-the chat process. Device-loss recovery remains open.
+history without reloading weights. Without `--async-stepping`, Ctrl-C takes effect
+at a synchronous step boundary and closes the partial assistant turn. Execution
+or output failure invalidates the process, drains logical request ownership and
+requires restarting the chat process. Device-loss recovery remains open.
 
-Reports identify `reference-27/recompute-history`, retain exact prompt/history
-tokens and executed rows/steps, and record free/owned/written KV and live requests
-at each terminal. The [accepted checkpoint evidence](../studies/model_generation/engine-chat-acceptance.json)
+Synchronous reports identify `reference-27/recompute-history`, retain exact
+prompt/history tokens and executed rows/steps, and record free/owned/written KV and live requests
+at each terminal. The [historical synchronous checkpoint evidence](../studies/model_generation/engine-chat-acceptance.json)
 checks 123 generated tokens across seven histories and 455 reference rows,
 including an interrupted prefix. Its injected nonfinite failure preserves the
 delivered token and closed history and returns all logical KV ownership.
@@ -106,10 +107,16 @@ tokens, extra rows and peak pending tickets separately. Their timestamps are
 host observations of submission, readback and delivery. They are not GPU kernel
 durations. The current implementation uses the deliberately upgraded locked
 Mojo 1.1.0 / MAX 26.6.0 runtime; older synchronous acceptance and timing records
-retain their original runtime identity. See the
-[async implementation and acceptance contract](../studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract)
-for qualification and paired collection. Implementation alone establishes no
-speedup or production-serving result.
+retain their original runtime identity.
+
+The [accepted async evidence](../studies/model_generation/engine-async-evidence/engine-async-acceptance.json)
+matches all 123 natural reference tokens across seven terminal turns, with 455
+necessary rows and 462 async executed rows: seven additional submitted rows
+across the seven turns. Four normal synchronous/async terminal histories also match exactly.
+The separate [24-run engine comparison](../studies/model_generation/engine-async-evidence/engine-async-results.json)
+has an inconclusive offline speed verdict and descriptive online distributions;
+it establishes no chat-speed or production-serving result. See the
+[evidence and restore scope](../studies/model_generation/engine-async-evidence/README.md).
 
 ## Ownership and turn boundaries
 

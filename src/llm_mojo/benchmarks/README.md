@@ -819,3 +819,18 @@ The implementation and qualification contract alone establish no speedup or
 default promotion. See the
 [engine explanation](../../../studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract)
 and [terminal usage](../../../docs/chat.md#optional-asynchronous-stepping).
+
+The [accepted bounded comparison](../../../studies/model_generation/engine-async-evidence/README.md)
+binds clean source `adae54c095a747f8f69e283177420f71059421de`, Mojo 1.1.0 / MAX
+26.6.0 and Apple M4 Pro / Metal. Two complete 12-run grids retain 24 measured
+runs. Every run matches the frozen 97-token histories, 2,265 necessary rows and
+finish reasons. Each async run reaches two pending tickets, executes eight
+additional rows, and releases all request/KV ownership. The offline median
+async/sync makespan ratio is 0.956292, about 4.37% lower; it misses the declared
+5% floor, so the verdict is **inconclusive**. The online ratio is 0.974500 and
+remains distribution-only, with no capacity, SLO or default-promotion verdict.
+The [results](../../../studies/model_generation/engine-async-evidence/engine-async-results.json)
+retain each arm and full histories. A fresh canonical CPU restore and independent
+comparison of all 24 histories passed; the
+[retrieval receipt](../../../studies/model_generation/engine-async-evidence/canonical-retrieval.json)
+establishes local archive replay, without a new GPU run or remote backup.

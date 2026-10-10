@@ -2,12 +2,11 @@
 
 Implementation authorized on 2026-10-08 from baseline
 `cb2416abf3c9fbb19c460fa99709d93eeabba97e` on `codex/engine-core`.
-**Status: synchronous core and bounded load studies validated.** Mixed execution,
+**Status: synchronous core and optional asynchronous stepping validated.** Mixed execution,
 request lifecycle, KV-pressure replay, optional fitted budgeting and optional
 lifetime-reservation admission are implemented. Optional asynchronous LLM
-stepping is now implemented; its separate
-[acceptance contract](#asynchronous-stepping-implementation-and-acceptance-contract)
-does not inherit a speed verdict from these synchronous studies. The original
+stepping has separate [retained acceptance and paired results](#asynchronous-stepping-retained-bounded-results).
+Its offline speed verdict is inconclusive; it remains opt-in. The original
 study binds clean implementation
 `b18563b`; its final follow-up added acceptance tests and retained evidence.
 The [admission successor](#lifetime-reservation-admission-bounded-successor-study)
@@ -1062,9 +1061,9 @@ logits and written KV, natural greedy histories, zero-head prefill, stop/limit
 discards, abort/reuse and numeric-fault cleanup. The
 [async study commands](../../src/llm_mojo/benchmarks/README.md#asynchronous-engine-stepping)
 bind this gate to the exact clean source, checkpoint, toolchain, device and
-binaries before collection. Full repository validation and paired load
-acceptance are separate checks; this implementation description does not claim
-their final result.
+binaries before collection. Full repository validation, exact-build checkpoint
+qualification, paired collection and independent evidence replay all passed;
+their source identities and bounded results are retained below.
 
 The bounded study holds reference configuration 27, fixed 256-row/eight-sequence
 workspaces, token budget 256, BF16 storage, 32-slot slot-major KV and reserved
@@ -1074,4 +1073,77 @@ selected head must be delivered or discarded exactly once, and all extra work
 is charged. Submission and completion timestamps are host observations, not GPU
 stage timings. Offline makespan uses the paired self-control noise floor;
 online latency distributions remain descriptive. Async remains opt-in, with
-no speed, sustainable-capacity or client-SLO claim from implementation alone.
+no sustainable-capacity or client-SLO claim.
+
+## Asynchronous stepping: retained bounded results
+
+The clean implementation is `adae54c095a747f8f69e283177420f71059421de`.
+The full `uv run --locked llm-mojo validate` command passed on unchanged source
+bytes before that commit: **392 Python tests, every native test, both tokenizer
+parity runs and all benchmark smoke routes**. Its original dirty Git header is
+preserved. The source-file map matches the subsequent clean engine build and
+checkpoint qualification; no precommit execution is relabeled as a clean build.
+The [acceptance card](engine-async-evidence/engine-async-acceptance.json) and
+[validation archive](engine-async-evidence/engine-async-validation.json.gz)
+retain the actual commands, numeric exits, logs and before/after identities.
+
+The clean-build numerical gate ran Qwen2.5-0.5B-Instruct with BF16 storage and
+FP32 accumulations on **Apple M4 Pro / Metal, stable MAX 26.6.0 / Mojo 1.1.0**.
+All seven groups passed with zero mismatches and zero unexpected nonfinite
+values: 5,486,114 checks in the frozen schedule across complete poisoned KV
+storage and final active logits in both layouts; zero-head partial prefill;
+batched mixed chaining; bank reuse; stop/limit discards; abort/release/reuse;
+and fault cleanup. Natural greedy decoding uses actual preceding GPU selections.
+
+Two separate twelve-run grids used eight frozen synthetic requests, configuration
+27, resident weights, ten warmup steps, fixed 256-row/eight-sequence workspaces,
+token budget 256, reserved admission and forty 32-slot KV blocks. Each grid
+contains four balanced sync/self-sync/async blocks. All 24 runs delivered the
+same **97 tokens and finish reasons**, matching the prior frozen oracle, and
+needed **2,265 rows**. Every async run observed two pending tickets and charged
+eight additional decode rows and eight discarded selections after unknown stop
+tokens. Every run completed all submitted tickets and released all KV ownership.
+Sync used 79 steps offline; async used 82. Online batching used 86-90 sync steps
+and 95 async steps. These different schedules retain exactly the same delivered
+work and charge the lookahead cost.
+
+| Trace | Sync median makespan | Async median makespan | Median paired async/sync | Noise floor | Verdict |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Offline | 1,775.45 ms | 1,701.65 ms | 0.95629 | 5% | Inconclusive |
+| Online, 8 requests/s | 1,890.72 ms | 1,850.80 ms | 0.97450 | 5% | Distribution only |
+
+Makespans are medians of the four primary runs; the paired ratio is the median
+of four within-block ratios, rather than the ratio of those medians. The
+offline 4.37% reduction is below the declared floor. Self-sync deviations stayed
+below that floor in both grids. No timing cells were replaced or resampled.
+
+The online latency observations show a tradeoff: the median of per-run p50 TTFT
+rose from **241.36 to 264.84 ms**, while p50 inter-token latency fell from
+**9.26 to 7.14 ms**. Per-run p95 inter-token latency medians were 13.66 and
+12.23 ms; p95 end-to-end medians were 889.61 and 856.92 ms. Each run has only eight
+requests and 89 inter-token intervals; these are descriptive distributions, not
+client SLO or sustainable-load evidence. Submission/readback spans are host
+observations and do not isolate GPU kernel time. Full distributions, paired
+ratios, self-controls and actual execution receipts are in the
+[results](engine-async-evidence/engine-async-results.json) and separate
+[offline](engine-async-evidence/measurements/engine-async-offline.json.gz) and
+[online](engine-async-evidence/measurements/engine-async-online.json.gz) archives.
+
+The terminal acceptance contains seven turns per mode, cancellation and reuse,
+reset, Unicode and context rejection. Four normal sync/async histories match
+exactly. An independent direct-model driver checked **123/123 delivered tokens**
+across all seven async histories, including the interrupted prefix. It needed
+455 rows; the async terminal executed 462 rows, with all seven extra selections
+explicitly discarded and charged.
+
+The canonical files were hash-checked after copying, then restored into a fresh
+directory using the helper extracted from the retained archive. Strict CPU
+replay reconstructed both measurement grids, all terminal turns and the excluded
+reference fixture. A second checker compared all 24 restored histories and
+finish reasons with the retained frozen oracle. Both actual exits were zero;
+the [canonical retrieval card](engine-async-evidence/canonical-retrieval.json)
+binds their receipts and results. The [evidence guide](engine-async-evidence/README.md)
+gives regeneration and replay commands. This is retained native evidence with
+independent CPU replay and local custody; it does not claim a fresh GPU rerun,
+remote backup or production serving. Async remains opt-in and the synchronous
+engine remains the default.

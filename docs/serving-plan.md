@@ -37,15 +37,21 @@ TTFT, and the 25 ms prediction target was exceeded by measured executes. The
 matched full histories and ordered work, but its speed verdict is inconclusive
 within the 5% noise floor. Reference-27 remains the engine default. Both studies
 retain independent local canonical retrieval/CPU replay and preserved originals.
-The optional [`chat --engine` adapter](chat.md#optional-engine-terminal-chat) now
-connects one terminal conversation to the synchronous reference core, recomputing
-its full token history each turn. Its checkpoint lifecycle acceptance is retained.
+The optional [`chat --engine` adapter](chat.md#optional-engine-terminal-chat),
+without `--async-stepping`, connects one terminal conversation to the synchronous
+reference core, recomputing its full token history each turn. Its checkpoint
+lifecycle acceptance is retained.
 Optional [asynchronous stepping](../studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract)
 is now implemented on the deliberately upgraded stable Mojo 1.1.0 / MAX 26.6.0
-lock. Its focused checkpoint gates cover numerical, lifecycle and ownership
-acceptance; paired measurements and final repository validation remain separate
-checks. Async and Fast default promotion, prefix caching and the multi-request
-frontend/process transport remain separate work. Historical synchronous records
+lock. Its [accepted evidence](../studies/model_generation/engine-async-evidence/README.md)
+retains numerical, lifecycle and ownership qualification plus 24 measured runs.
+Full validation passed 392 Python tests, every native suite and every smoke;
+that run preceded commit `adae54c` and its source bytes match the commit. A later
+clean build from `adae54c` passed all seven exact-build checkpoint groups on
+Apple M4 Pro / Metal. The bounded offline speed verdict is inconclusive;
+online distributions are descriptive. Async and Fast default promotion, prefix
+caching and the multi-request frontend/process transport remain separate work.
+Historical synchronous records
 retain their original runtime identities.
 Each phase is approved separately and records its own validation, like the
 existing plans. The [project direction](project.md) lists this as a follow-up
@@ -413,8 +419,12 @@ migrations. The old MAX 26.5 metadata probe and measurements keep their original
 scope. The current
 [checkpoint and paired-load contract](../studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract)
 requires exact history, full guarded storage, finite active outputs, boundary
-cleanup and separate load measurements. Focused acceptance has passed; this
-section makes no final full-validation or speed claim.
+cleanup and separate load measurements. The
+[acceptance receipt](../studies/model_generation/engine-async-evidence/engine-async-acceptance.json)
+retains the passed full validation and checkpoint/lifecycle gates. The separate
+[paired results](../studies/model_generation/engine-async-evidence/engine-async-results.json)
+retain an inconclusive offline speed verdict and descriptive online distributions;
+async remains opt-in.
 
 ### Failure semantics
 
@@ -460,15 +470,16 @@ client-stream recovery. Retained histories make that later recovery possible.
    report that part of phase 3 as incomplete.
 
 This order records the original staged plan. The current optional implementation
-has passed its public two-context capability probe and focused checkpoint
-numerical/lifecycle gates. Its independent metadata banks and token chaining
-are present in code. Exact-build qualification, final validation and the
-sync/self-sync/async paired collection remain separately receipted checks; see
-the [current async contract](../studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract).
+has passed its public two-context capability probe, full repository validation
+and clean-build checkpoint numerical/lifecycle qualification. Two complete
+12-run sync/self-sync/async grids retain exact frozen histories and terminal
+reasons. The canonical archive was freshly restored on CPU, with all 24 histories
+independently compared against the retained frozen expectations. This is local
+evidence retrieval, not a new GPU run or remote backup; see the
+[restore receipt](../studies/model_generation/engine-async-evidence/canonical-retrieval.json).
 
-Stages have separate receipts. Phase 3 is complete only after its declared gates
-and retained load study pass; a synchronous milestone does not close the fitted
-budget or asynchronous work. The [declaration](../studies/model_generation/engine-core.md)
+Stages retain separate receipts for scheduling, budgeting and asynchronous work.
+The [declaration](../studies/model_generation/engine-core.md)
 defines schemas, replay requirements and the numerical boundary. Reference-route
 mixed-versus-solo execution, untouched storage and request accounting are exact
 checks. Comparisons against Fast are diagnostics.

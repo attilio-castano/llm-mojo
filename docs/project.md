@@ -149,8 +149,8 @@ research questions, not prerequisites for calling the current milestone complete
    decode attention paid for every block a sequence spans; after a fix, the
    [rerun](../studies/model_generation/paged-kv-loop.md) found no resolvable cost
    and selected 32-slot blocks, the default since 2026-10-05. Phase 2 is complete.
-   Phase 3 now has validated mixed steps, a synchronous scheduler, bounded
-   admission, aborts and recomputation under KV pressure. Its
+   Phase 3 now has validated mixed steps, a synchronous core with optional async
+   stepping, bounded admission, aborts and recomputation under KV pressure. Its
    [engine study](../studies/model_generation/engine-core.md) retains readiness,
    numerical diagnostics and offline/online/pressure measurements. Concurrent
    scheduling reduces offline makespan with adequate KV capacity. The original
@@ -175,14 +175,15 @@ research questions, not prerequisites for calling the current milestone complete
    connects one terminal conversation to the reference core, recomputing complete
    history each turn. Optional [`--async-stepping`](chat.md#optional-asynchronous-stepping)
    now uses two ordered Metal contexts, independent metadata/result banks and
-   device-side token chaining. Focused checkpoint gates cover exact submitted
+   device-side token chaining. Accepted checkpoint gates cover exact submitted
    schedules in both KV layouts, natural histories, stop/limit, abort/reuse and
-   numeric-fault cleanup. The
-   [async acceptance contract](../studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract)
-   keeps paired load evidence and final repository validation separate from
-   implementation. The deliberately upgraded lock resolves Mojo 1.1.0 / MAX
-   26.6.0; previous 26.5/1.0 results remain historical measurements. Async is
-   opt-in, with no speed verdict from implementation alone. Prefix caching and
+   numeric-fault cleanup. The [accepted async evidence](../studies/model_generation/engine-async-evidence/README.md)
+   retains full repository validation, clean-build qualification and 24 measured
+   sync/self-sync/async runs with exact frozen histories and terminal reasons.
+   The offline speed verdict is inconclusive; online distributions are descriptive.
+   Independent canonical CPU restore and history comparison passed. The deliberately
+   upgraded lock resolves Mojo 1.1.0 / MAX 26.6.0; previous 26.5/1.0 results remain
+   historical measurements. Async stays opt-in. Prefix caching and
    HTTP/restart recovery remain later phases.
 
 Sampling, quantization, longer contexts, tool-oriented templates and additional

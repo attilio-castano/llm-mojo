@@ -1,0 +1,63 @@
+{
+  "kind": "engine-async-canonical-copy-v1",
+  "copied_utc": "2026-10-10T00:09:29.136483+00:00",
+  "directory": "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/studies/model_generation/engine-async-evidence",
+  "files": [
+    {
+      "name": "engine-async-validation.json.gz",
+      "bytes": 2110489,
+      "sha256": "66eaabd4d03ad05d5211b5c1158b67f1491641f5901e10c0c1026f0ca92f14aa"
+    },
+    {
+      "name": "engine-async-validation.json",
+      "bytes": 1164,
+      "sha256": "042d8c69148fff451dbb20b27312a8c5d504e54ac39055d47b6852e404c1ae4f"
+    },
+    {
+      "name": "engine-async-acceptance.json",
+      "bytes": 1274,
+      "sha256": "41ce0767013179b6454198ad3f62a7acd43a24553c684a3bf2d1843822e02a2a"
+    },
+    {
+      "name": "engine-async-results.json",
+      "bytes": 160219,
+      "sha256": "8b72c348dc66559b9850691153c0fbdbf31c65754dd5a96a37bed236e7e7584e"
+    },
+    {
+      "name": "independent-replay.json",
+      "bytes": 203595,
+      "sha256": "acf720d9008e3c3d32206c79147ba7afd6c68af310aa28060d3a3143ba367587"
+    },
+    {
+      "name": "independent-replay-execution.json",
+      "bytes": 1523,
+      "sha256": "4e098dd3ee728ffeb484067aeb76af63bf0c42113cae34aafd77ac1f4fd22746"
+    },
+    {
+      "name": "independent-replay.log",
+      "bytes": 622,
+      "sha256": "a3380a6c84af23811ba78dea8d28b3e3042c2e8c290ac538561a1254c2759a54"
+    },
+    {
+      "name": "measurements/engine-async-offline.json.gz",
+      "bytes": 205819,
+      "sha256": "f8e11cc66df632e8fafc19eb95092bdfca050737ddf1c4dfdcba1fc2ee9c551f"
+    },
+    {
+      "name": "measurements/engine-async-offline.json",
+      "bytes": 229,
+      "sha256": "3f47f06de9a7642dfef01944ea0b8f0e69bc875cfb0772462577a9690b33db1b"
+    },
+    {
+      "name": "measurements/engine-async-online.json.gz",
+      "bytes": 218718,
+      "sha256": "7204d33bda185a7b4fd57a8a666e4b17bbe0a2418aec83c85c0876f5e6e0e0a5"
+    },
+    {
+      "name": "measurements/engine-async-online.json",
+      "bytes": 229,
+      "sha256": "9f03325e16bd7916fa6d5a841b5c273d79b92c95a65a2b8562ffc38eae5ff47c"
+    }
+  ],
+  "custody": "local-only; no remote backup"
+}

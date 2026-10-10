@@ -1,0 +1,44 @@
+{
+  "kind": "engine-async-canonical-retrieval-v1",
+  "status": "passed",
+  "validation_archive_sha256": "66eaabd4d03ad05d5211b5c1158b67f1491641f5901e10c0c1026f0ca92f14aa",
+  "actual_cpu_replay_exit_code": 0,
+  "actual_frozen_history_comparison_exit_code": 0,
+  "measurement_runs": 24,
+  "reference_tokens": 123,
+  "reference_necessary_rows": 455,
+  "files": [
+    {
+      "name": "canonical-replay.json",
+      "bytes": 203605,
+      "sha256": "31450d67d0304746678cc824015fc329c62172e774521af1e19eb76627696ea5"
+    },
+    {
+      "name": "canonical-replay-execution.json",
+      "bytes": 1497,
+      "sha256": "858cfb488fda4248ac27d84b7b70d5898830701d1895b8ee0046c36e8a3972b0"
+    },
+    {
+      "name": "canonical-replay.log",
+      "bytes": 620,
+      "sha256": "bb3d6f329305b1b4513f4b79d9e694d98150cb2fe7999414182de651a7828751"
+    },
+    {
+      "name": "frozen-history-comparison.json",
+      "bytes": 527,
+      "sha256": "c3fdc973b5e18199e15e1271eb855d5443e76f27fa0cfc85438cadf10eb9ee0f"
+    },
+    {
+      "name": "frozen-history-execution.json",
+      "bytes": 1323,
+      "sha256": "d947f6cc845a3c92bc4c83a92cd172530f4d017fb20d3eeb666aa6dde7bf1ae8"
+    },
+    {
+      "name": "frozen-history.log",
+      "bytes": 527,
+      "sha256": "c3fdc973b5e18199e15e1271eb855d5443e76f27fa0cfc85438cadf10eb9ee0f"
+    }
+  ],
+  "native_gpu_rerun": false,
+  "custody": "local-only; no remote backup"
+}

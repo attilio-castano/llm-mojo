@@ -1,0 +1,36 @@
+{
+  "kind": "engine-async-independent-replay-execution-v1",
+  "started_utc": "2026-10-10T00:09:03.141215+00:00",
+  "command": [
+    "/Users/attiliocastano/.codex/worktrees/9e32/llm-mojo/.venv/bin/python3",
+    "-B",
+    "/private/tmp/llm-mojo-async-20261009/retention/sealed-v1/replay-program.py",
+    "restore",
+    "--archive",
+    "/private/tmp/llm-mojo-async-20261009/retention/sealed-v1/engine-async-validation.json.gz",
+    "--manifest",
+    "/private/tmp/llm-mojo-async-20261009/retention/sealed-v1/engine-async-validation.json",
+    "--directory",
+    "/private/tmp/llm-mojo-async-20261009/retention/fresh-restore-v1",
+    "--result",
+    "/private/tmp/llm-mojo-async-20261009/retention/sealed-v1/independent-replay.json"
+  ],
+  "timeout_seconds": 180,
+  "exit_code": 0,
+  "status": "completed",
+  "archive_sha256": "66eaabd4d03ad05d5211b5c1158b67f1491641f5901e10c0c1026f0ca92f14aa",
+  "helper_sha256": "5aca35bd7aa9114f7da7cae13aee3ceb3eb898a2994ba4556d246b80afd9990a",
+  "process_group_id": 16857,
+  "completed_utc": "2026-10-10T00:09:03.531876+00:00",
+  "wall_elapsed_ns": 390545625,
+  "log": {
+    "path": "/private/tmp/llm-mojo-async-20261009/retention/sealed-v1/independent-replay.log",
+    "bytes": 622,
+    "sha256": "a3380a6c84af23811ba78dea8d28b3e3042c2e8c290ac538561a1254c2759a54"
+  },
+  "result": {
+    "path": "/private/tmp/llm-mojo-async-20261009/retention/sealed-v1/independent-replay.json",
+    "bytes": 203595,
+    "sha256": "acf720d9008e3c3d32206c79147ba7afd6c68af310aa28060d3a3143ba367587"
+  }
+}

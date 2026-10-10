@@ -24,8 +24,8 @@ reproduction commands.
 | --- | --- | --- |
 | [Fast runtime](runtime.md) | Current | All 24 layers, native generation, the eleven measured multi-row configuration cells and HF numerical diagnostics |
 | [Terminal chat](chat.md) | Current | Session state, exact token history, persistent caches, controls and measured cache reuse |
-| [Engine core](engine-core.md) | Current | Mixed reference execution, incremental admission and optional [lifetime reservation](engine-core.md#lifetime-reservation-admission-bounded-successor-study); retained synchronous studies bound pressure and budgeting behavior; optional [async stepping](engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract) is implemented with its own numerical, lifecycle and paired-load gates |
-| [Residual/RMSNorm alone and composed](residual-norm.md) | Promoted | Today's single-row decode route: configuration 26 with GPU argmax, buffer swapping and residual/RMSNorm fusion; 17.1–24.5% lower latency and 107–115 tokens/s |
+| [Engine core](engine-core.md) | Current | Mixed reference execution, incremental admission and optional [lifetime reservation](engine-core.md#lifetime-reservation-admission-bounded-successor-study); retained synchronous studies bound pressure and budgeting behavior; optional [async stepping](engine-async-evidence/README.md) has accepted numerical/lifecycle evidence and a bounded 24-run comparison with an inconclusive offline speed verdict |
+| [Residual/RMSNorm alone and composed](residual-norm.md) | Promoted | Current single-row decode route: configuration 26 with GPU argmax, buffer swapping and residual/RMSNorm fusion; retained MAX 26.5 / Mojo 1.0 measurements found 17.1–24.5% lower latency and 107–115 tokens/s |
 | [Combined QKV and activation fusion](combined-fusion.md) | Promoted | Configuration 26, the decode configuration: 16.9–19.4% lower latency with exact outputs and cache storage |
 | [Reordered batched projections](batch-reordered.md) | Promoted | Arrangement 8, four adjacent products per lane: 17–36% shorter batched steps than arrangement 5 from B = 16, about 10% shorter single-sequence steps and 998 tokens/s for 64 sequences at 1,024 cached tokens, with 5's worst-case accuracy and HF agreement; it changes Fast's summation order |
 | [Paged KV after the one-loop decode kernel](paged-kv-loop.md) | Promoted | With decode attention in one loop per SIMD group, blocks of 32, 64 and 128 slots cost nothing resolvable in 35 decode and prefill workloads; 32-slot slot-major blocks, selected and confirmed, are the default since 2026-10-05 |
@@ -80,4 +80,10 @@ Async stepping overlaps host preparation and submission with ordered GPU work.
 It retains two tickets at most, chains token IDs on the device, and drains before
 KV reuse. Its [study commands](../../src/llm_mojo/benchmarks/README.md#asynchronous-engine-stepping)
 require exact-build checkpoint qualification before paired sync/self-sync/async
-collection. No async speed verdict follows from the implementation alone.
+collection. The [accepted 24-run comparison](engine-async-evidence/engine-async-results.json)
+matches every frozen history and finish reason. Its offline median makespan is
+4.37% lower, below the declared 5% floor: the verdict is inconclusive. Online
+distributions are descriptive, and async remains opt-in. The
+[canonical CPU restore](engine-async-evidence/canonical-retrieval.json) independently
+compared all 24 histories with retained frozen expectations; it establishes
+local evidence retrieval, without a new GPU run or remote backup.
