@@ -139,8 +139,11 @@ Validation runs in four stages, stopping at the first failure:
    already be prepared; validation never downloads.
 2. **Python tests.** Setup and the shared store, the CLI and configuration,
    launch boundaries, evidence replays, numerical tooling and documentation links.
-3. **Mojo suites.** Every `tests/test_*.mojo` runs on Metal with
-   `MODULAR_DEBUG=device-sync-mode`.
+3. **Mojo suites.** Every `tests/test_*.mojo` runs with
+   `MODULAR_DEBUG=device-sync-mode`. Device suites require Metal; the
+   [BF16 selection contract](token-selection-contract.md) also has a host-only
+   suite whose assertions execute during compilation. Python tests check
+   deliberate compile failures outside this glob.
 4. **Route smoke.** Every maintained benchmark route runs once, and invalid
    selectors must be rejected.
 
