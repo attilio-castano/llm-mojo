@@ -113,7 +113,7 @@ The [accepted async evidence](../studies/model_generation/engine-async-evidence/
 matches all 123 natural reference tokens across seven terminal turns, with 455
 necessary rows and 462 async executed rows: seven additional submitted rows
 across the seven turns. Four normal synchronous/async terminal histories also match exactly.
-The separate [24-run engine comparison](../studies/model_generation/engine-async-evidence/engine-async-results.json)
+The separate [24-run engine comparison](../studies/model_generation/engine-evidence.md#asynchronous-stepping)
 has an inconclusive offline speed verdict and descriptive online distributions;
 it establishes no chat-speed or production-serving result. See the
 [evidence and restore scope](../studies/model_generation/engine-async-evidence/README.md).

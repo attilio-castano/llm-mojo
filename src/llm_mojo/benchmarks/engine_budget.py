@@ -506,9 +506,7 @@ def scheduling_collect(build, trace_path, output, stage, admission, policy_path=
             or (stage=='calibration' and policy_path is not None)
             or (stage=='evaluation' and policy_path is None)):
         raise ValueError('invalid bounded scheduling collection')
-    receipt = profile.verify_build(build)
-    if not profile._engine_same_json(receipt.get('declaration'), declaration) or set(receipt['binaries'])!={'engine'}:
-        raise ValueError('not a current scheduling study build')
+    receipt = profile.verify_engine_build(build, declaration)
     document = trace_path.read_text()
     trace = profile.validate_engine_trace(json.loads(document))
     if any(r['abort_offset_ns'] is not None or (max(len(r['prompt_ids']),len(r['prompt_ids'])+r['max_new_tokens']-1)+31)//32>blocks for r in trace['requests']):
@@ -549,17 +547,7 @@ def scheduling_collect(build, trace_path, output, stage, admission, policy_path=
                     or (native_policy is not None and sha(native_policy) != record['native_policy_sha256'])):
                 raise ValueError('scheduling generated input changed before a cell')
             log = output/f'block-{block}-{name}{"-calibration" if calibration else ""}.log'
-            started = profile.time.monotonic_ns()
-            execution = dict(command=command, timeout_seconds=180)
-            try:
-                stdout = profile.execute(command,log,timeout=180)
-            except Exception as error:
-                execution.update(wall_elapsed_ns=profile.time.monotonic_ns()-started,
-                                 exit_code=getattr(error,'returncode',None),error=str(error))
-                write(log.with_suffix('.execution.json'),execution)
-                raise
-            execution.update(wall_elapsed_ns=profile.time.monotonic_ns()-started,exit_code=0)
-            write(log.with_suffix('.execution.json'),execution)
+            stdout, execution = profile.checked_execution(command, log, 180)
             if (sha(native_trace) != record['native_trace_sha256']
                     or (native_policy is not None and sha(native_policy) != record['native_policy_sha256'])):
                 raise ValueError('scheduling generated input changed during a cell')
@@ -834,9 +822,7 @@ def fast_collect(build,trace_path,output,qualification_path,token_budget,admissi
             or type(maximum_sequences) is not int or maximum_sequences!=8
             or type(warmup_steps) is not int or warmup_steps!=10):
         raise ValueError('invalid bounded Fast collection')
-    receipt=profile.verify_build(build)
-    if not profile._engine_same_json(receipt.get('declaration'),declaration) or set(receipt['binaries'])!={'engine'}:
-        raise ValueError('not a current Fast study build')
+    receipt=profile.verify_engine_build(build, declaration)
     document=trace_path.read_text(); trace=profile.validate_engine_trace(json.loads(document))
     if any(r['abort_offset_ns'] is not None or (max(len(r['prompt_ids']),len(r['prompt_ids'])+r['max_new_tokens']-1)+31)//32>blocks for r in trace['requests']):
         raise ValueError('Fast trace has aborts or requests that cannot fit alone')
@@ -863,16 +849,7 @@ def fast_collect(build,trace_path,output,qualification_path,token_budget,admissi
             if sha(native_trace)!=record['native_trace_sha256']:
                 raise ValueError('Fast generated input changed before a cell')
             log=output/f'block-{block}-{runner}{"-calibration" if calibration else ""}.log'
-            started=profile.time.monotonic_ns();execution=dict(command=command,timeout_seconds=180)
-            try:
-                stdout=profile.execute(command,log,timeout=180)
-            except Exception as error:
-                execution.update(wall_elapsed_ns=profile.time.monotonic_ns()-started,
-                                 exit_code=getattr(error,'returncode',None),error=str(error))
-                write(log.with_suffix('.execution.json'),execution)
-                raise
-            execution.update(wall_elapsed_ns=profile.time.monotonic_ns()-started,exit_code=0)
-            write(log.with_suffix('.execution.json'),execution)
+            stdout, execution = profile.checked_execution(command, log, 180)
             if sha(native_trace)!=record['native_trace_sha256']:
                 raise ValueError('Fast generated input changed during a cell')
             run.update(stdout=stdout,execution=execution,conditions_before=before,conditions_after=profile.conditions(),

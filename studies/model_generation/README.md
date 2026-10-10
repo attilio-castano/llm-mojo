@@ -70,20 +70,15 @@ its tables without weights or a GPU:
 uv run --locked python studies/model_generation/summarize.py
 ```
 
+The [Phase 3 evidence catalog](engine-evidence.md) connects decisions to their
+complete archives and reconstructs the original report bytes and layout.
 The engine archives have separate [replay commands](engine-core.md#replay-and-next-work),
 including independent reconstruction of the fitted cost model.
 
 The current async implementation deliberately pins Mojo 1.1.0 / MAX 26.6.0.
 Historical model and synchronous-engine tables keep their recorded toolchain,
 source and device identities; the upgrade does not renew those measurements.
-Async stepping overlaps host preparation and submission with ordered GPU work.
-It retains two tickets at most, chains token IDs on the device, and drains before
-KV reuse. Its [study commands](../../src/llm_mojo/benchmarks/README.md#asynchronous-engine-stepping)
-require exact-build checkpoint qualification before paired sync/self-sync/async
-collection. The [accepted 24-run comparison](engine-async-evidence/engine-async-results.json)
-matches every frozen history and finish reason. Its offline median makespan is
-4.37% lower, below the declared 5% floor: the verdict is inconclusive. Online
-distributions are descriptive, and async remains opt-in. The
-[canonical CPU restore](engine-async-evidence/canonical-retrieval.json) independently
-compared all 24 histories with retained frozen expectations; it establishes
-local evidence retrieval, without a new GPU run or remote backup.
+The [async explanation and evidence](engine-evidence.md#asynchronous-stepping)
+retain exact-build qualification, the paired comparison and independent CPU
+restoration. The offline speed verdict is inconclusive; online distributions
+are descriptive and async remains opt-in.

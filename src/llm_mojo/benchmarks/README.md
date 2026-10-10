@@ -591,6 +591,21 @@ This is separate from the existing Fast application measurements. The
 [engine declaration](../../../studies/model_generation/engine-core.md) defines
 readiness, exact gates, boundaries and the compact archive schema.
 
+The [Phase 3 evidence catalog](../../../studies/model_generation/engine-evidence.md)
+keeps raw archives and historical receipts intact while storing expanded reports
+losslessly. Verify the catalog, or reconstruct the original layout in a fresh
+external directory before historical acceptance replay:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.engine_evidence verify
+uv run --locked python -m llm_mojo.benchmarks.engine_evidence restore --directory /private/tmp/engine-evidence-original
+```
+
+Live budget, Fast and async collection bind the executed binary to the exact
+build directory verified by its receipt; copied build receipts are rejected.
+Shared execution receipts retain actual exits on both success and failure.
+Historical replay keeps original absolute paths and does not execute binaries.
+
 After the readiness checks pass and the source is clean, prepare a frozen
 offline trace, build once and collect into new paths:
 
@@ -829,7 +844,7 @@ additional rows, and releases all request/KV ownership. The offline median
 async/sync makespan ratio is 0.956292, about 4.37% lower; it misses the declared
 5% floor, so the verdict is **inconclusive**. The online ratio is 0.974500 and
 remains distribution-only, with no capacity, SLO or default-promotion verdict.
-The [results](../../../studies/model_generation/engine-async-evidence/engine-async-results.json)
+The [results](../../../studies/model_generation/engine-evidence.md#asynchronous-stepping)
 retain each arm and full histories. A fresh canonical CPU restore and independent
 comparison of all 24 histories passed; the
 [retrieval receipt](../../../studies/model_generation/engine-async-evidence/canonical-retrieval.json)

@@ -8,7 +8,6 @@ import gzip
 import hashlib
 import json
 from pathlib import Path
-import time
 
 from . import model_contract as contract
 from . import model_profile as profile
@@ -306,55 +305,22 @@ def _qualification(record):
     return dict(numerical_passed=True, checks=checks)
 
 
-def _checked_execution(command, log, timeout):
-    """Retain failures and actual numeric exits as well as successful output."""
-    started = time.monotonic_ns()
-    receipt = dict(command=list(map(str, command)), timeout_seconds=timeout, exit_code=None)
-    try:
-        stdout = profile.execute(command, log, timeout=timeout)
-        receipt['exit_code'] = 0
-        return stdout, receipt
-    except Exception as error:
-        receipt.update(exit_code=getattr(error, 'returncode', None), error=str(error))
-        raise
-    finally:
-        receipt['wall_elapsed_ns'] = time.monotonic_ns()-started
-        write(log.with_suffix('.execution.json'), receipt)
-
-
-def _live_async_build(directory):
-    """Bind the command we execute to the binary verify_build actually hashed."""
-    directory = Path(directory).resolve()
-    build = profile.verify_build(directory)
-    command = build.get('command', [])
-    expected = [str(profile.environment_tool('mojo')), 'build', '-I', 'src',
-                'src/llm_mojo/benchmarks/engine_trace.mojo', '-o']
-    if (not _same(build.get('declaration'), contract.ENGINE_ASYNC_DECLARATION)
-            or set(build.get('binaries', {})) != {'engine'}
-            or not isinstance(command, list) or len(command) != 7
-            or not _same(command[:-1], expected)
-            or type(command[-1]) is not str or not Path(command[-1]).is_absolute()
-            or Path(command[-1]).resolve() != (directory/'engine').resolve()):
-        raise ValueError('async engine command differs from its verified live build binary')
-    return build
-
-
 def qualify(directory, output):
     """Compile and execute the exact-source checkpoint gate before collection."""
-    build = _live_async_build(directory)
+    build = profile.verify_engine_build(directory, contract.ENGINE_ASYNC_DECLARATION)
     profile.ensure_record_location(output)
     output.mkdir(parents=True, exist_ok=False)
     binary = output/'checkpoint-driver'
     command = [profile.environment_tool('mojo'), 'build', '-I', 'src', '-I', 'tests',
                'tests/engine_async_metal_driver.mojo', '-o', binary]
-    _, compiled = _checked_execution(command, output/'checkpoint-build.log', 600)
+    _, compiled = profile.checked_execution(command, output/'checkpoint-build.log', 600)
     if (profile.verify_build(directory) != build
             or profile.stable_environment() != build['environment']):
         raise ValueError('async source/assets/environment changed during qualification build')
     checkpoint_build = dict(source=build['source'], assets=build['assets'], environment=build['environment'],
         command=list(map(str, command)), binaries={'checkpoint-driver': dict(sha256=sha(binary), bytes=binary.stat().st_size)})
-    stdout, execution = _checked_execution([binary, build['assets']['prepared'], 'async-qualification'],
-                                           output/'checkpoint-native.log', 180)
+    stdout, execution = profile.checked_execution([binary, build['assets']['prepared'], 'async-qualification'],
+                                                  output/'checkpoint-native.log', 180)
     if (profile.verify_build(directory) != build or sha(binary) != checkpoint_build['binaries']['checkpoint-driver']['sha256']
             or profile.stable_environment() != build['environment']):
         raise ValueError('async source/assets/environment/binary changed during qualification execution')
@@ -431,7 +397,7 @@ def summary(record):
 def collect(build, trace_path, output, qualification_path, blocks=128, maximum_sequences=8, warmup_steps=10):
     if type(blocks) is not int or not 1 <= blocks <= 8192 or type(maximum_sequences) is not int or maximum_sequences != 8 or type(warmup_steps) is not int or warmup_steps != 10:
         raise ValueError('invalid bounded async collection')
-    receipt = _live_async_build(build)
+    receipt = profile.verify_engine_build(build, contract.ENGINE_ASYNC_DECLARATION)
     document = trace_path.read_text()
     trace = profile.validate_engine_trace(json.loads(document))
     if any(r['abort_offset_ns'] is not None or (max(len(r['prompt_ids']), len(r['prompt_ids'])+r['max_new_tokens']-1)+31)//32 > blocks for r in trace['requests']):
@@ -463,17 +429,7 @@ def collect(build, trace_path, output, qualification_path, blocks=128, maximum_s
             before = profile.conditions()
             command = _command(record, run)
             log = output/f'block-{block}-{execution}{"-calibration" if calibration else ""}.log'
-            started = profile.time.monotonic_ns()
-            native_execution = dict(command=command, timeout_seconds=180)
-            try:
-                stdout = profile.execute(command, log, timeout=180)
-            except Exception as error:
-                native_execution.update(wall_elapsed_ns=profile.time.monotonic_ns()-started,
-                    exit_code=getattr(error, 'returncode', None), error=str(error))
-                write(log.with_suffix('.execution.json'), native_execution)
-                raise
-            native_execution.update(wall_elapsed_ns=profile.time.monotonic_ns()-started, exit_code=0)
-            write(log.with_suffix('.execution.json'), native_execution)
+            stdout, native_execution = profile.checked_execution(command, log, 180)
             if sha(native) != record['native_trace_sha256']:
                 raise ValueError('async native input changed during collection')
             run.update(stdout=stdout, native_execution=native_execution, conditions_before=before,

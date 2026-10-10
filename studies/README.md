@@ -14,11 +14,14 @@ and [layouts](../docs/layouts.md) define the values, storage and ownership.
 | [Combined QKV and activation fusion](model_generation/combined-fusion.md) | Promoted M4 Pro single-token Fast route: 16.9–19.4% lower latency, 86–90 tokens/s streaming medians, exact outputs and cache storage |
 | [Reordered batched projections](model_generation/batch-reordered.md) | Promoted decode projections: four adjacent products per lane cut batched steps by 17–36% from B = 16 and single-sequence steps by about 10%, with arrangement 5's worst-case accuracy and HF agreement; 998 tokens/s for 64 sequences at 1,024 cached tokens |
 | [Paged KV after the one-loop decode kernel](model_generation/paged-kv-loop.md) | Default KV storage: 32-slot blocks, selected and confirmed with decode attention in one loop per SIMD group, cost nothing resolvable in 35 decode and prefill workloads and match phase 1 on one sequence |
-| [Synchronous engine core](model_generation/engine-core.md) | Mixed execution and bounded lifecycle; historical incremental pressure regressions, optional [lifetime admission](model_generation/engine-core.md#lifetime-reservation-admission-bounded-successor-study) without replay on the frozen pressure trace, and fitted-budget latency/throughput tradeoffs; asynchronous stepping remains open |
+| [Engine core](model_generation/engine-core.md) | Mixed execution and bounded lifecycle, optional lifetime admission, and measured budget/Fast tradeoffs; optional [async stepping](model_generation/engine-async-evidence/README.md) is qualified, with an inconclusive offline speed verdict |
 | [Native terminal chat](model_generation/chat.md) | Multi-turn cache reuse, exact history and terminal lifecycle, with paired prefill and actual interaction timings |
 | [Fast full-model runtime](model_generation/runtime.md) | All 24 layers, native generation, numerical diagnostics and 11 measured dispatch choices |
 
-The runtime measurements are against our optimized baseline; chat measurements
+The current lock resolves Mojo 1.1.0 / MAX 26.6.0. Earlier model and synchronous
+engine measurements above retain their recorded MAX 26.5 / Mojo 1.0 environment;
+the upgrade does not renew their timing claims. The runtime measurements are
+against our optimized baseline; chat measurements
 separately compare suffix-only prefill with full-history replay. Neither is an
 HF speed comparison. Full-model differences are diagnostic, while exact cache
 and lifecycle invariants remain required. [Numerical investigations](model_generation/README.md#numerical-history)

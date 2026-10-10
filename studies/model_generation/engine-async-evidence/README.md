@@ -12,7 +12,7 @@ reserved admission policy.
 The [acceptance card](engine-async-acceptance.json) records successful full
 repository validation on the same source bytes, exact-build numerical
 qualification, terminal acceptance and independent natural-token parity.
-The [results](engine-async-results.json) retain both complete twelve-run grids
+The [results](engine-async-results.json.gz) retain both complete twelve-run grids
 and their request latency distributions. Offline median paired async/sync
 makespan is 0.95629 with a 5% noise floor: **inconclusive**. The online
 eight-request/s trace is descriptive. All 24 runs match the frozen 97-token
@@ -33,11 +33,13 @@ The [copy record](canonical-copy.json) binds the original eleven sealed files
 to their canonical bytes. The [canonical retrieval card](canonical-retrieval.json)
 binds a second fresh CPU restore and a comparison of all 24 restored histories
 with the retained frozen oracle. Both actual exits were zero. The full replay
-result and its receipt are [canonical-replay.json](canonical-replay.json) and
+result and its receipt are [canonical-replay.json](canonical-replay.json.gz) and
 [canonical-replay-execution.json](canonical-replay-execution.json); the frozen
 history proof and receipt are
 [frozen-history-comparison.json](frozen-history-comparison.json) and
 [frozen-history-execution.json](frozen-history-execution.json).
+The [Phase 3 catalog](../engine-evidence.md#verify-and-restore) reconstructs
+these expanded reports byte-for-byte when the original layout is needed.
 Checksums establish integrity and CPU replay reconstructs retained evidence.
 Custody is local; this is not a fresh GPU execution or remote backup.
 

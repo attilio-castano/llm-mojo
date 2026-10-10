@@ -44,10 +44,10 @@ our optimized configuration 0 on M4 Pro / Metal. Other shapes retain that
 baseline; the result does not establish a universal best kernel or an HF speedup.
 The [composed decode study](../studies/model_generation/residual-norm.md) then
 promoted the single-row route that every generated token uses: configuration 26
-with GPU argmax, buffer swapping and residual/RMSNorm fusion. It lowers
-complete-token latency by 17.1–24.5% against the previous Fast route and
-streams 107–115 tokens/s after the first token. Serving phase 1 later changed
-the order in which decode projections sum, which shortened a single-sequence
+with GPU argmax, buffer swapping and residual/RMSNorm fusion. Retained MAX 26.5 /
+Mojo 1.0 measurements found 17.1–24.5% lower complete-token latency against the
+previous Fast route and 107–115 tokens/s after the first token. Serving phase 1
+later changed the order in which decode projections sum, which shortened a single-sequence
 decode step by about 10% in a generation check and changes Fast's results in
 their last bits ([decode projection order](model.md#decode-projection-order)).
 
@@ -122,17 +122,18 @@ research questions, not prerequisites for calling the current milestone complete
 2. **Matched HF comparison.** Numerical comparisons already exist. A performance
    study must name the HF backend/device, precision, identical token workload,
    cache behavior and timing boundary before comparing prefill or decode.
-3. **Further Fast optimization.** Decode is now limited by host submission.
-   About 98% of each token's launch-submission interval is inside MAX's enqueue
-   runtime, and reusing compiled kernel handles gave no qualifying speedup
+3. **Further Fast optimization.** The retained MAX 26.5 / Mojo 1.0 observations
+   found host submission limiting decode. About 98% of each token's
+   launch-submission interval was inside MAX's enqueue runtime, and reusing
+   compiled kernel handles gave no qualifying speedup
    ([runtime enqueue](../studies/model_generation/runtime-enqueue.md)). The
    recorded MAX 26.5 Metal backend could not record command graphs, so that
    batching route was unavailable
    ([batching feasibility](../studies/model_generation/batch-support.md)).
    What remains is fewer launches per token, or batching below MAX's public API.
-   Prefill is now the largest cost a user sees: the first token of a
-   3,839-token prompt takes about 2.1 s. Keep current measurements as the
-   baseline and retain new numerical diagnostics.
+   Those runs found about 2.1 s to the first token of a 3,839-token prompt,
+   making prefill the largest observed wait. Further comparisons must record
+   the current runtime and retain new numerical diagnostics.
 4. **Serving engine.** Serve many concurrent requests with batched decode, a
    paged KV cache, continuous batching and prefix caching, behind a separate
    frontend process that survives engine failures. The [serving plan](serving-plan.md)
@@ -141,50 +142,32 @@ research questions, not prerequisites for calling the current milestone complete
    scheduling with one numerical route. A promoted Fast engine route is a
    separate measured optimization decision.
    Phase 1 is complete: one step decodes up to 64 sequences with the launches of
-   one, each row bit-identical to decoding that sequence alone, and 64 sequences
-   at 1,024 cached tokens decode 998 tokens/s in aggregate
+   one, each row bit-identical to decoding that sequence alone. Its retained
+   MAX 26.5 / Mojo 1.0 measurements found 998 aggregate tokens/s for 64 sequences
+   at 1,024 cached tokens
    ([reordered projections](../studies/model_generation/batch-reordered.md)).
    Phase 2 added a paged KV cache. Its
    [translation-cost study](../studies/model_generation/paged-kv.md) found that
    decode attention paid for every block a sequence spans; after a fix, the
    [rerun](../studies/model_generation/paged-kv-loop.md) found no resolvable cost
    and selected 32-slot blocks, the default since 2026-10-05. Phase 2 is complete.
-   Phase 3 now has validated mixed steps, a synchronous core with optional async
-   stepping, bounded admission, aborts and recomputation under KV pressure. Its
-   [engine study](../studies/model_generation/engine-core.md) retains readiness,
-   numerical diagnostics and offline/online/pressure measurements. Concurrent
-   scheduling reduces offline makespan with adequate KV capacity. The original
-   incremental study regresses under KV pressure because of repeated replay.
-   Incremental admission remains the default; optional
-   [lifetime reservation](../studies/model_generation/engine-core.md#lifetime-reservation-admission-bounded-successor-study)
-   admits a request only when its declared cache growth fits and eliminates replay
-   on the frozen pressure trace. Maximum-output reservations can leave capacity
-   unused, and FIFO admission can delay smaller waiters. Its paired measurements
-   retain both work reduction and request latency; adequate-capacity timing remains
-   inconclusive. The [144-run operating-range study](../studies/model_generation/engine-core.md#admission-operating-range-retained-bounded-results)
-   measures the unused capacity and FIFO costs of larger output caps while
-   preserving exact outputs and zero reserved replay. The
-   [116-run fixed-workspace budget comparison](../studies/model_generation/engine-core.md#fixed-workspace-budget-retained-bounded-results)
-   retains fixed-256: smaller chunks reduced long offline token gaps but added
-   steps and TTFT, and the 25 ms fit target is no execution or client-latency
-   bound. The [qualified optional Fast comparison](../studies/model_generation/engine-core.md#optional-fast-engine-retained-bounded-results)
-   matched full histories and ordered work across four comparisons; speed was
-   inconclusive within the declared noise floor, so reference-27 stays the
-   engine default. Both studies retain independent local canonical CPU replay.
-   The accepted [`chat --engine` adapter](chat.md#optional-engine-terminal-chat)
-   connects one terminal conversation to the reference core, recomputing complete
-   history each turn. Optional [`--async-stepping`](chat.md#optional-asynchronous-stepping)
-   now uses two ordered Metal contexts, independent metadata/result banks and
-   device-side token chaining. Accepted checkpoint gates cover exact submitted
-   schedules in both KV layouts, natural histories, stop/limit, abort/reuse and
-   numeric-fault cleanup. The [accepted async evidence](../studies/model_generation/engine-async-evidence/README.md)
-   retains full repository validation, clean-build qualification and 24 measured
-   sync/self-sync/async runs with exact frozen histories and terminal reasons.
-   The offline speed verdict is inconclusive; online distributions are descriptive.
-   Independent canonical CPU restore and history comparison passed. The deliberately
-   upgraded lock resolves Mojo 1.1.0 / MAX 26.6.0; previous 26.5/1.0 results remain
-   historical measurements. Async stays opt-in. Prefix caching and
-   HTTP/restart recovery remain later phases.
+   Phase 3 has validated mixed steps, bounded request lifecycle, KV-pressure
+   replay and optional asynchronous stepping. Reference-27, fixed-256,
+   incremental admission and synchronous stepping remain the engine defaults.
+   Lifetime reservation removes replay on the frozen pressure workloads but
+   trades unused capacity and FIFO waiting against that work reduction. The
+   measured Fast and async speed verdicts are inconclusive; fitted budgeting
+   establishes no client latency bound. The
+   [engine study](../studies/model_generation/engine-core.md) retains those
+   separate comparisons and their numerical, work and latency evidence.
+   Optional [`chat --engine`](chat.md#optional-engine-terminal-chat) connects a
+   terminal conversation to the core, recomputing complete history each turn;
+   [`--async-stepping`](chat.md#optional-asynchronous-stepping) selects the
+   qualified two-context runner. The current lock resolves Mojo 1.1.0 /
+   MAX 26.6.0; earlier measurements retain their original runtime. The
+   [review and measured-commit map](serving-plan.md#phase-3-review-map) links
+   each implementation responsibility to its checks and evidence. Prefix
+   caching and HTTP/restart recovery remain phases 4 and 5.
 
 Sampling, quantization, longer contexts, tool-oriented templates and additional
 model families can follow when they answer a concrete need. They are not current

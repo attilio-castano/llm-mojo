@@ -10,58 +10,61 @@ model are merged as `a84ad34` (#32). Its translation-cost study found that
 small blocks made decode attention pay for every block; after a fix to that
 kernel, a rerun selected and confirmed 32-slot blocks, the default since
 2026-10-05. Phase 2 is complete.
-Phase 3's synchronous core and bounded load studies are validated on
-`codex/engine-core`, authorized from `cb2416a` on 2026-10-08. Its
-[engine study](../studies/model_generation/engine-core.md) retains readiness,
-correctness, fitted-budget evaluation and the separate asynchronous API probe.
-The initial runner uses reference configuration 27 in every arm, so scheduling
-has one numerical route. Existing chat and generation remain Fast; a measured
-Fast engine route is a separate optimization decision.
-The original measurements bind clean implementation `b18563b`. The optional
-[lifetime reservation follow-up](../studies/model_generation/engine-core.md#lifetime-reservation-admission-bounded-successor-study)
-binds `b81ea6c` and eliminates replay on the frozen pressure trace by delaying
-admission until declared cache growth fits. Incremental admission remains the
-default and its original pressure regression is retained.
-The follow-up records queueing and token-latency tradeoffs separately.
-The [144-run operating-range comparison](../studies/model_generation/engine-core.md#admission-operating-range-retained-bounded-results)
-binds `2af0933`: reservation removes replay at 40 blocks, while larger declared
-output limits tie up more unused capacity and can delay FIFO admission.
-Adequate-capacity paired speed remains inconclusive; incremental stays default.
-Fitted budgeting remains optional, without a client latency guarantee. The
-[fixed-workspace budget and optional Fast contracts](../studies/model_generation/engine-core.md#fixed-workspace-budget-and-optional-fast-contracts)
-now have separate retained measurements from clean `01d8be4`. The
-[116-run budget comparison](../studies/model_generation/engine-core.md#fixed-workspace-budget-retained-bounded-results)
-retains fixed-256: smaller chunks reduced long offline gaps but added steps and
-TTFT, and the 25 ms prediction target was exceeded by measured executes. The
-[qualified 12-run Fast comparison](../studies/model_generation/engine-core.md#optional-fast-engine-retained-bounded-results)
-matched full histories and ordered work, but its speed verdict is inconclusive
-within the 5% noise floor. Reference-27 remains the engine default. Both studies
-retain independent local canonical retrieval/CPU replay and preserved originals.
-The optional [`chat --engine` adapter](chat.md#optional-engine-terminal-chat),
-without `--async-stepping`, connects one terminal conversation to the synchronous
-reference core, recomputing its full token history each turn. Its checkpoint
-lifecycle acceptance is retained.
-Optional [asynchronous stepping](../studies/model_generation/engine-core.md#asynchronous-stepping-implementation-and-acceptance-contract)
-is now implemented on the deliberately upgraded stable Mojo 1.1.0 / MAX 26.6.0
-lock. Its [accepted evidence](../studies/model_generation/engine-async-evidence/README.md)
-retains numerical, lifecycle and ownership qualification plus 24 measured runs.
-Full validation passed 392 Python tests, every native suite and every smoke;
-that run preceded commit `adae54c` and its source bytes match the commit. A later
-clean build from `adae54c` passed all seven exact-build checkpoint groups on
-Apple M4 Pro / Metal. The bounded offline speed verdict is inconclusive;
-online distributions are descriptive. Async and Fast default promotion, prefix
-caching and the multi-request frontend/process transport remain separate work.
-Historical synchronous records
-retain their original runtime identities.
-Each phase is approved separately and records its own validation, like the
-existing plans. The [project direction](project.md) lists this as a follow-up
-track.
+Phase 3, authorized from `cb2416a` on 2026-10-08, now has a validated request
+engine: mixed prefill/decode, bounded admission, aborts, KV-pressure replay and
+optional asynchronous stepping. The [engine study](../studies/model_generation/engine-core.md)
+holds the numerical gates, mechanisms, measured tradeoffs and replay commands.
+The current defaults are reference configuration 27, a fixed 256-row budget,
+incremental admission and synchronous stepping. Lifetime reservation, fitted
+budgeting, Fast execution and async stepping are explicit options. The measured
+Fast and async speed verdicts are inconclusive; online distributions are descriptive.
+
+Direct chat and generation remain Fast. Optional [`chat --engine`](chat.md#optional-engine-terminal-chat)
+uses one request per turn and recomputes complete history; `--async-stepping`
+selects the qualified two-context runner. The current lock resolves stable Mojo
+1.1.0 / MAX 26.6.0. Historical measurements keep their original runtime identities.
+Prefix caching is phase 4; HTTP transport, process supervision and restart/replay
+are phase 5. Each phase retains its own acceptance evidence.
+
+## Phase 3 review map
+
+Review the implementation by responsibility, then follow the measured-commit
+table to the corresponding evidence. Source changes and retained experimental
+records have separate purposes.
+
+| Responsibility | Implementation entry point | Focused checks |
+| --- | --- | --- |
+| Mixed token execution and request isolation | [Qwen model](../src/llm_mojo/models/qwen2/model.mojo), [decoder layer](../src/llm_mojo/layers/decoder_layer.mojo) | [mixed layer](../tests/test_mixed_layer.mojo), [mixed model](../tests/test_mixed_model.mojo) |
+| Request lifecycle, admission, budgeting and memory pressure | [EngineCore](../src/llm_mojo/serving/engine.mojo), [runner interface](../src/llm_mojo/serving/runner.mojo) | [engine](../tests/test_engine.mojo), [serving](../tests/test_serving.mojo) |
+| Two-context execution, token chaining and pending ownership | [QwenAsyncRunner](../src/llm_mojo/models/qwen2/runner.mojo) | [async engine](../tests/test_async_engine.mojo), [async model](../tests/test_async_model.mojo), [checkpoint driver](../tests/engine_async_metal_driver.mojo) |
+| Terminal integration and cancellation | [engine session](../src/llm_mojo/models/qwen2/engine_chat.mojo), [native CLI](../src/llm_mojo/cli/chat_engine_cli.mojo) | [engine chat](../tests/test_engine_chat.mojo), [launcher](../tests/test_engine_chat_launcher.py), [async reports](../tests/test_async_chat_terminal.py) |
+| Collection, provenance and independent replay | [model tools](../src/llm_mojo/benchmarks/model_profile.py), [budget study](../src/llm_mojo/benchmarks/engine_budget.py), [async study](../src/llm_mojo/benchmarks/engine_async.py) | [trace](../tests/test_engine_trace.py), [budget](../tests/test_engine_budget.py), [async evidence](../tests/test_engine_async.py) |
+| Stable runtime migration | [dependency constraints](../pyproject.toml), [resolved lock](../uv.lock), `max.gpu` imports and fixed-array compatibility | Full repository validation and exact-build checkpoint qualification below |
+
+### Measured source commits
+
+| Source commit | MAX / Mojo | Retained comparison and reproduction entry point |
+| --- | --- | --- |
+| `b18563b` | 26.5.0 / 1.0.0 | [Original mixed/core load studies](../studies/model_generation/engine-core.md#completed-load-studies) and [replay](../studies/model_generation/engine-core.md#replay-and-next-work) |
+| `b81ea6c` | 26.5.0 / 1.0.0 | [Lifetime reservation](../studies/model_generation/engine-core.md#lifetime-reservation-admission-bounded-successor-study) and [reproduction](../studies/model_generation/engine-core.md#reproduce-the-admission-evidence) |
+| `2af0933` | 26.5.0 / 1.0.0 | [Admission operating range](../studies/model_generation/engine-core.md#admission-operating-range-retained-bounded-results), including restoration and replay |
+| `01d8be4` | 26.5.0 / 1.0.0 | [Fixed-workspace budgeting](../studies/model_generation/engine-core.md#fixed-workspace-budget-retained-bounded-results) and [optional Fast](../studies/model_generation/engine-core.md#optional-fast-engine-retained-bounded-results) |
+| `adae54c` | 26.6.0 / 1.1.0 | [Async qualification and matched loads](../studies/model_generation/engine-core.md#asynchronous-stepping-retained-bounded-results), with [independent CPU restoration](../studies/model_generation/engine-async-evidence/README.md#independent-cpu-replay) |
+
+The final full validation passed 392 Python tests, every native suite and every
+smoke before `adae54c` was committed. Its original dirty Git header is retained;
+the source-file map matches that commit and the later clean build. That clean
+build passed all seven checkpoint qualification groups on Apple M4 Pro / Metal.
+The [accepted evidence](../studies/model_generation/engine-async-evidence/README.md)
+preserves both scopes. Measured commit identities remain unchanged through
+curation; the eventual PR records their recovery reference under the
+[evidence-commit contract](experiments.md#evidence-commits).
 
 ## Why this track
 
-The completed milestone serves one conversation at a time: one token history,
-one set of 24 KV caches and greedy decoding in a persistent session. Its
-kernels, numerics and measurements are the foundation for everything below.
+This track builds on the direct chat's persistent conversation and resident
+weights. Phase 3 now schedules multiple independent token histories against a
+shared KV pool; the terminal adapter uses that engine for one conversation.
 
 Production inference engines spend most of their design effort elsewhere:
 deciding which requests share each GPU step, who owns KV memory, what happens
@@ -87,15 +90,17 @@ models, multiple GPUs and disaggregated prefill/decode are out of scope.
 
 ## Measured constraints
 
-Existing results shape the design:
+Retained MAX 26.5 / Mojo 1.0 measurements shaped the original design. They
+describe their recorded routes and timing boundaries; the MAX 26.6 / Mojo 1.1
+upgrade does not renew those measurements:
 
-1. **Step cost is mostly per launch.** A decode token issues about 245 compute
-   launches, each in its own Metal command buffer, and spends about 7 ms inside
+1. **Step cost is mostly per launch.** A decode token issued about 245 compute
+   launches, each in its own Metal command buffer, and spent about 7 ms inside
    MAX's enqueue calls ([runtime enqueue](../studies/model_generation/runtime-enqueue.md),
    [batching feasibility](../studies/model_generation/batch-support.md)).
    Adding sequences to a step adds GPU work but not launches. Launches per step
    must therefore scale with layers, never with sequences.
-2. **The host waits at the end of every step.** Greedy readback waited about
+2. **Synchronous readback adds a host wait.** Greedy readback waited about
    1.4–2.4 ms per token with the default projections
    ([projection scheduling](../studies/model_generation/projection-scheduling.md)).
 3. **KV memory is plentiful for this model.** BF16 KV costs 12,288 bytes per
@@ -112,6 +117,11 @@ Existing results shape the design:
    time goes.
 
 ## Architecture
+
+This is the target architecture across phases 3–6. The request engine, model
+runner and caller-owned KV storage are implemented. Prefix indexing, the
+frontend/engine process split, transport, supervision and SSD tier belong to
+later phases.
 
 ```text
 client ── HTTP/SSE ──► frontend process (Mojo)
@@ -131,11 +141,11 @@ client ── HTTP/SSE ──► frontend process (Mojo)
                          weights and workspaces, no sequence state between steps
                                │
                                ▼
-                       Metal, one ordered stream
+                       Metal, ordered GPU work
 ```
 
-The Python launcher starts and supervises both processes, as it already
-prepares assets and launches native executables.
+In phase 5, the Python launcher will start and supervise both processes,
+extending its current asset preparation and native executable launch duties.
 
 | Component | Owns | Does not own |
 | --- | --- | --- |
@@ -147,20 +157,21 @@ prepares assets and launches native executables.
 | ModelRunner | StepBatch upload, forward, token selection, readback, step timing | policy |
 | QwenModel | weights, workspaces, kernel dispatch | sequence state between steps |
 
-`QwenModel` once owned 24 caches and one `length`; phase 1a moved KV storage and
-lengths into a caller-owned `KVPool`, and `ChatSession` still owns one history.
-In this design, the model becomes stateless between steps, the
-KVCacheManager owns all KV storage, each request owns its history, and chat
-becomes an engine client whose turns reuse earlier turns through prefix hits.
+`QwenModel` owns weights and workspaces; caller-owned `KVPool` owns KV storage
+and `BlockManager` manages physical blocks. `EngineCore` retains each request's
+token history. The direct `ChatSession` owns one conversation, while the engine
+adapter submits its full history on each turn. Phase 4 adds prefix hits so those
+engine-client turns can reuse earlier KV; the later KVCacheManager design also
+adds prefix indexing, cache events and SSD ownership.
 
 ### Failure domains decide the process split
 
 The engine can fail: a Metal error already invalidates today's session. The
-frontend therefore holds every in-flight request's authoritative token history
-and never shares a process with the GPU. After an engine exit, the supervisor
-restarts it and the frontend resubmits each in-flight request as its prompt
-plus the tokens generated so far. The client stream continues with no lost or
-duplicated tokens. Replay recomputes the generated tokens as prompt rows, so the
+phase 5 frontend will hold every in-flight request's authoritative token history
+in a process separate from the GPU. After an engine exit, the supervisor will
+restart it and the frontend will resubmit each in-flight request as its prompt
+plus the tokens generated so far. Recovery must preserve the client stream with
+no lost or duplicated tokens. Replay recomputes the generated tokens as prompt rows, so the
 continuation can differ numerically from an uninterrupted run; that difference
 is a recorded diagnostic, not a failure.
 
@@ -181,6 +192,9 @@ or grammar state, must define its own recovery first.
 ## Interfaces
 
 ### Token protocol
+
+The following wire protocol is planned for phase 5. Phase 3 exposes in-process
+token requests and events without socket transport.
 
 The engine accepts and returns token IDs only. Text, chat templates and stop
 strings belong to the frontend. Generated token IDs are authoritative, as in
@@ -203,13 +217,13 @@ parameters produce `Reject`, never silent defaults, and rejection leaves
 engine state unchanged. `resumed_tokens` marks a replayed suffix so accounting
 and latency records distinguish recovery from ordinary prefill.
 
-Mojo 1.0's standard library provides `subprocess` and `os` but no socket
-module. The transport uses POSIX sockets through `external_call`, as the
-runtime already does for clocks and signals.
+The original Mojo 1.0 design selected POSIX sockets through `external_call`,
+as used for clocks and signals. Phase 5 will check the locked runtime's transport
+capabilities before implementing that choice.
 
 ### Model card
 
-At startup the engine publishes the pinned model revision and hashes,
+The planned startup protocol publishes the pinned model revision and hashes,
 tokenizer table hashes, vocabulary size, stop IDs, per-request token limit,
 block size, pool capacity, numerical policy, source commit and executable
 hash. The frontend refuses to serve if its tokenizer tables differ. Every
@@ -217,8 +231,9 @@ retained serving measurement records the card.
 
 ### StepBatch
 
-`QwenModel.forward(ids)` becomes `QwenModel.forward(batch: StepBatch)`. A step
-concatenates the scheduled tokens of all its sequences, decode sequences first:
+`QwenModel.forward` accepts a `StepBatch`, the caller's KV pool and an execution
+plan. A step concatenates the scheduled tokens of all its sequences, decode
+sequences first:
 
 | Field | Shape | Meaning |
 | --- | --- | --- |
@@ -422,7 +437,7 @@ requires exact history, full guarded storage, finite active outputs, boundary
 cleanup and separate load measurements. The
 [acceptance receipt](../studies/model_generation/engine-async-evidence/engine-async-acceptance.json)
 retains the passed full validation and checkpoint/lifecycle gates. The separate
-[paired results](../studies/model_generation/engine-async-evidence/engine-async-results.json)
+[paired results](../studies/model_generation/engine-evidence.md#asynchronous-stepping)
 retain an inconclusive offline speed verdict and descriptive online distributions;
 async remains opt-in.
 

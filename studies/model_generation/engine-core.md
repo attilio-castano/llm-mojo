@@ -1,4 +1,17 @@
-# Engine core: readiness, correctness and load declaration
+# Engine core: contracts and retained results
+
+Use the [Phase 3 review map](../../docs/serving-plan.md#phase-3-review-map) for
+implementation and tests, and the [evidence catalog](engine-evidence.md) for
+compact decisions, complete retained records and byte-exact restoration.
+The sections below keep each study's original source/runtime and claim scope.
+
+| Study question | Explanation |
+| --- | --- |
+| What does the core own and guarantee? | [Readiness](#readiness-receipt), [correctness gates](#staged-correctness-gates), [original loads](#completed-load-studies) |
+| How does admission behave under pressure? | [Lifetime reservation](#lifetime-reservation-admission-bounded-successor-study), [operating range](#admission-operating-range-retained-bounded-results) |
+| Which token budget and runner should be used? | [Fixed-workspace budget](#fixed-workspace-budget-retained-bounded-results), [Fast](#optional-fast-engine-retained-bounded-results) |
+| How does chat use the engine? | [Terminal lifecycle](#optional-engine-terminal-chat-accepted-lifecycle) |
+| How does GPU submission overlap host work? | [Async ownership contract](#asynchronous-stepping-implementation-and-acceptance-contract), [qualification and results](#asynchronous-stepping-retained-bounded-results) |
 
 Implementation authorized on 2026-10-08 from baseline
 `cb2416abf3c9fbb19c460fa99709d93eeabba97e` on `codex/engine-core`.
@@ -531,7 +544,7 @@ mode as an optional policy.
 ### Validation and retained results
 
 All four collections use one clean `b81ea6c` binary on Apple M4 Pro/Metal,
-Mojo 1.0.0 and MAX 26.5.0. The [result card](engine-admission-results.json)
+Mojo 1.0.0 and MAX 26.5.0. The [result card](engine-evidence.md#decisions-and-coverage)
 binds source blobs, locked dependencies, binary and asset hashes, device,
 conditions and every block's metrics. All 48 natural-greedy runs finish eight
 requests, deliver 256 tokens and return the complete pool. Control, self-control
@@ -621,13 +634,14 @@ counts and SHA256 hashes, including `intent.json`, the closeout script and its
 successful command log. Restore those files to an external directory after
 checking the compressed/uncompressed hashes in the validation manifest and
 each entry's bytes/hash. With the bundle restored to `/private/tmp/admission-evidence`,
-regenerate the card and tables independently:
+first [restore the original report layout](engine-evidence.md#verify-and-restore)
+to `/private/tmp/engine-evidence-original`, then regenerate the card and tables:
 
 ```sh
 uv run --locked python /private/tmp/admission-evidence/reproduction/admission_closeout.py \
   --root /private/tmp/admission-replay --retained-dir studies/model_generation \
   --intent /private/tmp/admission-evidence/intent.json \
-  --live-receipt studies/model_generation/engine-admission-results.json
+  --live-receipt /private/tmp/engine-evidence-original/engine-admission-results.json
 ```
 
 Retained replay verifies committed source blobs, archive identities, raw records,
@@ -701,7 +715,7 @@ The final `uv run --locked llm-mojo validate` passed 323 Python tests, the nativ
 suites including 29 engine cases, Unicode tokenizer checks and benchmark smokes,
 with unchanged source. The bounded campaign took 13.51 minutes.
 
-The [result card](engine-admission-range-results.json) retains every request,
+The [result card](engine-evidence.md#decisions-and-coverage) retains every request,
 latency distribution, raw-derived occupancy bound, FIFO witness and paired
 comparison. Twelve `engine-admission-range-*.json.gz` archives and their adjacent
 hash manifests retain all measured stdout and completion receipts. The
@@ -771,7 +785,9 @@ For full regeneration, verify and restore the validation archive's complete
 UTF-8 `files` entries to `/private/tmp/range-evidence` using the manifest's
 compressed/uncompressed and per-file hashes. The retained
 `acceptance/retention-checklist.md` includes a standard-library bootstrap.
-Then execute the independently restored script against the canonical archives:
+First [restore the original report layout](engine-evidence.md#verify-and-restore)
+to `/private/tmp/engine-evidence-original`, then execute the independently
+restored script against the canonical archives:
 
 ```sh
 uv run --locked python /private/tmp/range-evidence/reproduction/range_closeout.py \
@@ -779,7 +795,7 @@ uv run --locked python /private/tmp/range-evidence/reproduction/range_closeout.p
   --intent /private/tmp/range-evidence/fixtures/intent.json \
   --expected /private/tmp/range-evidence/fixtures/expected-histories.json \
   --campaign /private/tmp/range-evidence/commands/campaign-execution.json \
-  --live-receipt studies/model_generation/engine-admission-range-results.json
+  --live-receipt /private/tmp/engine-evidence-original/engine-admission-range-results.json
 ```
 
 This verifies original source blobs and reconstructs all 144 records, using the
@@ -856,7 +872,7 @@ MAE/p95/maximum were 2.400/4.497/11.210 ms. These pooled step statistics differ
 from medians of four per-run request quantiles. The 25 ms setting remains a
 prediction target, without an execution bound or client latency guarantee.
 
-The [results card](engine-budget-results.json),
+The [results card](engine-evidence.md#decisions-and-coverage),
 [calibration archive](engine-budget-calibration.json.gz), held-out
 [offline 40](engine-budget-loose-offline-blocks-40.json.gz) /
 [128](engine-budget-loose-offline-blocks-128.json.gz) and
@@ -867,7 +883,7 @@ fit, work/history checks, per-run metrics and prediction errors. The
 [manifest](engine-budget-validation.json) and
 [seal](engine-budget-retention-seal.json) retain commands, receipts and replay
 sources. Live closeout, staged replay, sealing and fresh restored replay passed.
-The [canonical retrieval receipt](engine-budget-publication.json) records
+The [canonical retrieval receipt](engine-budget-publication.json.gz) records
 another independent CPU restoration/replay from local repository files;
 originals are preserved. This establishes local canonical custody, with no
 remote backup claim. Queue data samples step-boundary waiting/free blocks;
@@ -881,7 +897,8 @@ uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay --outp
 ```
 
 For complete regeneration, verify the seal SHA against the separate publication
-inventory, then copy canonical files into a fresh external sealed layout:
+inventory, then [restore the original report layout](engine-evidence.md#verify-and-restore)
+and copy those files into a fresh external sealed layout:
 `engine-budget-retention-seal.json` becomes `retention-seal.json`, validation
 archive/manifest stay at the layout root, and the five raw archive/manifest
 pairs plus `engine-budget-results.json` go under `measurements/`. Check each
@@ -890,6 +907,9 @@ Run the retained `budget_retention.py restore` with that seal, its intended SHA,
 the recorded package/Git objects and a distinct fresh output directory. Execute
 the command emitted in `restore-receipt.json` and retain its actual exit, wall,
 log and source receipt separately from the seal being replayed.
+The helper verifies imported source bytes against `01d8be4`; use that measured
+source's `src/` as `PYTHONPATH` in a separate process. Current collection-tool
+fixes do not change the historical replay's source identity.
 
 ## Optional Fast engine: retained bounded results
 
@@ -924,7 +944,7 @@ The [isolation card](engine-fast-isolation.json),
 device/physical-input receipts, the pre-timing gate and all measured output.
 Fresh restored-source replay passed, followed by independent retrieval/replay
 from local canonical files, recorded in
-[the publication receipt](engine-fast-publication.json). Originals are
+[the publication receipt](engine-fast-publication.json.gz). Originals are
 preserved; remote backup and fresh device execution are separate claims.
 Executables, weights and generated numerical arrays are excluded. The compact
 `tests/fixtures/decoder_policies.json` declaration is retained to support package
@@ -1125,7 +1145,7 @@ requests and 89 inter-token intervals; these are descriptive distributions, not
 client SLO or sustainable-load evidence. Submission/readback spans are host
 observations and do not isolate GPU kernel time. Full distributions, paired
 ratios, self-controls and actual execution receipts are in the
-[results](engine-async-evidence/engine-async-results.json) and separate
+[results](engine-evidence.md#asynchronous-stepping) and separate
 [offline](engine-async-evidence/measurements/engine-async-offline.json.gz) and
 [online](engine-async-evidence/measurements/engine-async-online.json.gz) archives.
 

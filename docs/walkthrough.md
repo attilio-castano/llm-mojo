@@ -222,18 +222,19 @@ A calculation, not a measurement: each decode call reads every weight once,
 publishes for this chip's memory, reading it takes at least 3.6 ms. The KV cache
 adds 12,288 bytes per cached token, about 50 MB at 4,096 tokens.
 
-Measured on the reference M4 Pro:
+Retained measurements on the reference M4 Pro used MAX 26.5 / Mojo 1.0:
 
-- The Fast route streams 107–115 tokens per second after the first token, about
+- The Fast route streamed 107–115 tokens per second after the first token, about
   9 ms for each decode call ([composed decode study](../studies/model_generation/residual-norm.md)).
-- A decode call issues 245 compute commands. Submitting them takes about 7 ms,
-  and about 98% of that time is inside MAX's enqueue runtime, measured with call
+- A decode call issued 245 compute commands. Submitting them took about 7 ms,
+  and about 98% of that time was inside MAX's enqueue runtime, measured with call
   recording enabled ([runtime enqueue study](../studies/model_generation/runtime-enqueue.md)).
 
-So decode is limited by launching work, not by memory bandwidth, and the fusions
-above help mostly by issuing fewer commands. Prefill is a separate cost: for a
-3,839-token prompt the first token arrives after about 2.1 s, now the largest
-wait a user sees.
+Those observations found launch submission limiting decode; the fusions helped
+mostly by issuing fewer commands. Prefill was a separate cost: the first token
+of a 3,839-token prompt arrived after about 2.1 s, the largest observed wait.
+The current lock resolves MAX 26.6 / Mojo 1.1; it preserves these historical
+observations without claiming a new measurement of the direct Fast route.
 
 ## 9. What is exact and what is compared
 

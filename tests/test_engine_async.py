@@ -275,7 +275,7 @@ class AsyncEvidenceTests(unittest.TestCase):
         self.assertIsNone(result['speed_verdict'])
 
 
-class AsyncExecutionReceiptTests(unittest.TestCase):
+class AsyncBuildBindingTests(unittest.TestCase):
     def test_relocated_or_malformed_live_build_rejects_before_output_and_execution(self):
         for operation in ('qualify', 'collect'):
             for corruption in ('relocated', 'entrypoint', 'relative'):
@@ -296,41 +296,6 @@ class AsyncExecutionReceiptTests(unittest.TestCase):
                             async_study.collect(build_dir, root/'missing-trace', output, root/'missing-qualification')
                     execute.assert_not_called()
                     self.assertFalse(output.exists())
-
-    def test_actual_failure_code_and_log_survive_qualification_failure(self):
-        with tempfile.TemporaryDirectory() as directory:
-            log = Path(directory)/'native.log'
-            log.write_text('nonfinite head detected\n')
-            with mock.patch.object(profile, 'execute', side_effect=profile.NativeCommandError(17, log)):
-                with self.assertRaises(profile.NativeCommandError):
-                    async_study._checked_execution(['/absolute/native'], log, 180)
-            receipt = json.loads(log.with_suffix('.execution.json').read_text())
-            self.assertEqual(receipt['exit_code'], 17)
-            self.assertEqual(receipt['command'], ['/absolute/native'])
-            self.assertGreater(receipt['wall_elapsed_ns'], 0)
-            self.assertIn('error', receipt)
-            self.assertEqual(log.read_text(), 'nonfinite head detected\n')
-
-    def test_timeout_does_not_claim_a_successful_numeric_exit(self):
-        with tempfile.TemporaryDirectory() as directory:
-            log = Path(directory)/'native.log'
-            with mock.patch.object(profile, 'execute', side_effect=RuntimeError('native timeout')):
-                with self.assertRaises(RuntimeError):
-                    async_study._checked_execution(['/absolute/native'], log, 180)
-            receipt = json.loads(log.with_suffix('.execution.json').read_text())
-            self.assertIsNone(receipt['exit_code'])
-            self.assertIn('timeout', receipt['error'])
-
-    def test_success_receipt_records_the_same_executed_command(self):
-        with tempfile.TemporaryDirectory() as directory:
-            log = Path(directory)/'native.log'
-            with mock.patch.object(profile, 'execute', return_value='actual native output') as execute:
-                stdout, receipt = async_study._checked_execution(['/absolute/native', 'prepared'], log, 180)
-            execute.assert_called_once_with(['/absolute/native', 'prepared'], log, timeout=180)
-            self.assertEqual(stdout, 'actual native output')
-            self.assertEqual(receipt, json.loads(log.with_suffix('.execution.json').read_text()))
-            self.assertEqual(receipt['exit_code'], 0)
-            self.assertNotIn('error', receipt)
 
 
 if __name__ == '__main__':

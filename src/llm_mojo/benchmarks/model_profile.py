@@ -60,6 +60,22 @@ def execute(command, log, timeout=600):
     return result.stdout
 
 
+def checked_execution(command, log, timeout):
+    """Retain the actual exit and elapsed time, including failed native calls."""
+    started = time.monotonic_ns()
+    receipt = dict(command=list(map(str, command)), timeout_seconds=timeout, exit_code=None)
+    try:
+        stdout = execute(command, log, timeout=timeout)
+        receipt['exit_code'] = 0
+        return stdout, receipt
+    except Exception as error:
+        receipt.update(exit_code=getattr(error, 'returncode', None), error=str(error))
+        raise
+    finally:
+        receipt['wall_elapsed_ns'] = time.monotonic_ns()-started
+        write(log.with_suffix('.execution.json'), receipt)
+
+
 def conditions():
     result = conditions_snapshot()
     require_ac(result)
@@ -129,6 +145,27 @@ def verify_build(directory):
         raise ValueError('prepared assets changed')
     if stable_environment() != receipt['environment']:
         raise ValueError('hardware/software differs from build')
+    return receipt
+
+
+def verify_engine_build(directory, declaration):
+    """Bind the recorded command to the live engine binary verify_build hashed.
+
+    Archived replay keeps its historical absolute paths. Live collection must
+    execute the verified build in place, rather than a copied receipt's origin.
+    """
+    directory = Path(directory).resolve()
+    receipt = verify_build(directory)
+    command = receipt.get('command', [])
+    expected = [str(environment_tool('mojo')), 'build', '-I', 'src',
+                'src/llm_mojo/benchmarks/engine_trace.mojo', '-o']
+    if (not _engine_same_json(receipt.get('declaration'), declaration)
+            or set(receipt.get('binaries', {})) != {'engine'}
+            or not isinstance(command, list) or len(command) != 7
+            or not _engine_same_json(command[:-1], expected)
+            or type(command[-1]) is not str or not Path(command[-1]).is_absolute()
+            or Path(command[-1]).resolve() != (directory/'engine').resolve()):
+        raise ValueError('engine command differs from its verified live build binary')
     return receipt
 
 
@@ -3674,18 +3711,7 @@ def engine_collect(directory, trace_path, output, blocks=128, maximum_sequences=
                 command.append(declaration['observation'])
             log = output/f'block-{block}-{cell}{"-calibration" if calibration else ""}.log'
             if admission_range:
-                started = time.monotonic_ns()
-                execution = dict(command=list(map(str, command)),
-                                 timeout_seconds=declaration['execution_timeout_seconds'])
-                try:
-                    stdout = execute(command, log, timeout=execution['timeout_seconds'])
-                except Exception as error:
-                    execution.update(wall_elapsed_ns=time.monotonic_ns()-started,
-                                     exit_code=None, error=str(error))
-                    write(log.with_suffix('.execution.json'), execution)
-                    raise
-                execution.update(wall_elapsed_ns=time.monotonic_ns()-started, exit_code=0)
-                write(log.with_suffix('.execution.json'), execution)
+                stdout, execution = checked_execution(command, log, declaration['execution_timeout_seconds'])
             else:
                 stdout = execute(command, log)
             parsed = parse_engine_run(stdout, trace, arm, blocks, maximum_sequences, mode, admission=admission,

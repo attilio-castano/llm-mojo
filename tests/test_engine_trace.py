@@ -10,10 +10,11 @@ import unittest
 from unittest import mock
 
 from llm_mojo.benchmarks import model_contract as contract
+from llm_mojo.benchmarks import model_profile as profile
 from llm_mojo.benchmarks.model_profile import (
     engine_run_summary, engine_study_summary, engine_replay,
     engine_collect, engine_specification, engine_trace_tsv, parse_engine_run,
-    validate_engine_record_build, execute, NativeCommandError,
+    validate_engine_record_build, execute, checked_execution, NativeCommandError,
 )
 
 
@@ -539,6 +540,71 @@ class EngineTraceTests(unittest.TestCase):
                     validate_engine_record_build(broken)
                 with self.subTest(path=path), self.assertRaises(ValueError):
                     engine_replay(root)
+
+
+class EngineExecutionReceiptTests(unittest.TestCase):
+    def test_actual_failure_code_and_original_log_are_retained(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory)/'native.log'
+            log.write_text('nonfinite head detected\n')
+            with mock.patch.object(profile, 'execute', side_effect=NativeCommandError(17, log)):
+                with self.assertRaises(NativeCommandError):
+                    checked_execution(['/absolute/native'], log, 180)
+            receipt = json.loads(log.with_suffix('.execution.json').read_text())
+            self.assertEqual(receipt['exit_code'], 17)
+            self.assertEqual(receipt['command'], ['/absolute/native'])
+            self.assertGreater(receipt['wall_elapsed_ns'], 0)
+            self.assertIn('error', receipt)
+            self.assertEqual(log.read_text(), 'nonfinite head detected\n')
+
+    def test_timeout_does_not_claim_a_successful_numeric_exit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory)/'native.log'
+            with mock.patch.object(profile, 'execute', side_effect=RuntimeError('native timeout')):
+                with self.assertRaises(RuntimeError):
+                    checked_execution(['/absolute/native'], log, 180)
+            receipt = json.loads(log.with_suffix('.execution.json').read_text())
+            self.assertIsNone(receipt['exit_code'])
+            self.assertIn('timeout', receipt['error'])
+
+    def test_success_receipt_records_the_same_executed_command(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory)/'native.log'
+            with mock.patch.object(profile, 'execute', return_value='actual native output') as execute:
+                stdout, receipt = checked_execution(['/absolute/native', 'prepared'], log, 180)
+            execute.assert_called_once_with(['/absolute/native', 'prepared'], log, timeout=180)
+            self.assertEqual(stdout, 'actual native output')
+            self.assertEqual(receipt, json.loads(log.with_suffix('.execution.json').read_text()))
+            self.assertEqual(receipt['exit_code'], 0)
+            self.assertNotIn('error', receipt)
+
+    def test_failed_admission_range_cell_preserves_actual_exit_and_partial_log(self):
+        record = range_fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            receipt = record['build']
+            receipt['command'][-1] = str(root/'build'/'engine')
+            trace = root/'trace.json'
+            trace.write_text(record['trace_document'])
+            output = root/'failed'
+
+            def failed(command, log, timeout):
+                self.assertEqual(timeout, 180)
+                log.write_text('partial admission native output\n')
+                raise NativeCommandError(23, log)
+
+            with mock.patch.object(profile, 'verify_build', return_value=receipt), \
+                    mock.patch.object(profile, 'conditions', return_value=record['runs'][0]['conditions_before']), \
+                    mock.patch.object(profile, 'execute', side_effect=failed):
+                with self.assertRaises(NativeCommandError):
+                    engine_collect(root/'build', trace, output, blocks=4, admission_range=True)
+            log = output/'block-0-incremental.log'
+            self.assertEqual(log.read_text(), 'partial admission native output\n')
+            execution = json.loads(log.with_suffix('.execution.json').read_text())
+            self.assertEqual(execution['exit_code'], 23)
+            self.assertEqual(execution['command'][0], str(root/'build'/'engine'))
+            self.assertEqual(execution['timeout_seconds'], 180)
+            self.assertFalse((output/'engine-admission-range.json.gz').exists())
 
 
 if __name__ == '__main__':

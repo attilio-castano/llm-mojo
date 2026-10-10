@@ -202,7 +202,8 @@ class SchedulingStudyTests(unittest.TestCase):
             root=Path(d)
             receipt['command'][-1]=str(root/'build'/'engine')
             trace=root/'trace.json';trace.write_text(record['trace_document'])
-            with mock.patch('llm_mojo.benchmarks.model_profile.verify_build',return_value=receipt), \
+            with mock.patch('llm_mojo.benchmarks.model_profile.environment_tool',return_value='mojo'), \
+                 mock.patch('llm_mojo.benchmarks.model_profile.verify_build',return_value=receipt), \
                  mock.patch('llm_mojo.benchmarks.model_profile.conditions',return_value=record['runs'][0]['conditions_before']), \
                  mock.patch('llm_mojo.benchmarks.model_profile.execute',side_effect=mutate):
                 with self.assertRaisesRegex(ValueError,'generated input changed during'):
@@ -232,7 +233,8 @@ class SchedulingStudyTests(unittest.TestCase):
             root=Path(d)
             receipt['command'][-1]=str(root/'build'/'engine')
             trace=root/'trace.json';trace.write_text(record['trace_document'])
-            with mock.patch('llm_mojo.benchmarks.model_profile.verify_build',return_value=receipt), \
+            with mock.patch('llm_mojo.benchmarks.model_profile.environment_tool',return_value='mojo'), \
+                 mock.patch('llm_mojo.benchmarks.model_profile.verify_build',return_value=receipt), \
                  mock.patch('llm_mojo.benchmarks.model_profile.conditions',return_value=record['runs'][0]['conditions_before']), \
                  mock.patch('llm_mojo.benchmarks.model_profile.execute',side_effect=failed):
                 with self.assertRaisesRegex(RuntimeError,'command failed'):
@@ -303,7 +305,8 @@ class SchedulingStudyTests(unittest.TestCase):
                     self.assertEqual(Path(command[9]).name,'policy.tsv')
                     self.assertTrue(Path(command[9]).read_text().startswith('cost '))
                 return scheduling_native_fixture(int(command[5]),cost=policy['cost'] if adaptive else None)
-            with mock.patch('llm_mojo.benchmarks.model_profile.verify_build',return_value=record['build']), \
+            with mock.patch('llm_mojo.benchmarks.model_profile.environment_tool',return_value='mojo'), \
+                 mock.patch('llm_mojo.benchmarks.model_profile.verify_build',return_value=record['build']), \
                  mock.patch('llm_mojo.benchmarks.model_profile.conditions',return_value=record['runs'][0]['conditions_before']), \
                  mock.patch('llm_mojo.benchmarks.model_profile.execute',side_effect=execute):
                 result=scheduling_collect(root/'build',trace_path,root/'evaluation','evaluation','reserved',
@@ -332,7 +335,8 @@ class SchedulingStudyTests(unittest.TestCase):
             root=Path(d)
             receipt['command'][-1]=str(root/'build'/'engine')
             trace=root/'trace.json';trace.write_text(record['trace_document'])
-            with mock.patch('llm_mojo.benchmarks.model_profile.verify_build',return_value=receipt), \
+            with mock.patch('llm_mojo.benchmarks.model_profile.environment_tool',return_value='mojo'), \
+                 mock.patch('llm_mojo.benchmarks.model_profile.verify_build',return_value=receipt), \
                  mock.patch('llm_mojo.benchmarks.model_profile.conditions',return_value=record['runs'][0]['conditions_before']), \
                  mock.patch('llm_mojo.benchmarks.model_profile.execute',side_effect=execute):
                 result=scheduling_collect(root/'build',trace,root/'out','calibration','reserved',blocks=4)
@@ -554,7 +558,8 @@ class FastStudyTests(unittest.TestCase):
             def execute(command,log,timeout):
                 observed.append(command);self.assertEqual(command[-3:-1],['reserved','engine-fast-v1'])
                 return fast_native_fixture(command[-1],int(command[5]),12 if command[-1]=='fast-decode' else 11)
-            with mock.patch('llm_mojo.benchmarks.model_profile.verify_build',return_value=receipt), \
+            with mock.patch('llm_mojo.benchmarks.model_profile.environment_tool',return_value='mojo'), \
+                 mock.patch('llm_mojo.benchmarks.model_profile.verify_build',return_value=receipt), \
                  mock.patch('llm_mojo.benchmarks.model_profile.conditions',return_value=record['runs'][0]['conditions_before']), \
                  mock.patch('llm_mojo.benchmarks.model_profile.execute',side_effect=execute):
                 result=fast_collect(root/'build',trace,root/'collected',qualification,64,'reserved',blocks=4)
@@ -578,7 +583,8 @@ class FastStudyTests(unittest.TestCase):
                 route['natural_run']['execution']['command'][0]=receipt['command'][-1]
             trace=root/'trace.json';trace.write_text(record['trace_document'])
             qualification=root/'qualification.json';qualification.write_text(json.dumps(record['qualification']))
-            with mock.patch('llm_mojo.benchmarks.model_profile.verify_build',return_value=receipt), \
+            with mock.patch('llm_mojo.benchmarks.model_profile.environment_tool',return_value='mojo'), \
+                 mock.patch('llm_mojo.benchmarks.model_profile.verify_build',return_value=receipt), \
                  mock.patch('llm_mojo.benchmarks.model_profile.execute') as execute:
                 with self.assertRaisesRegex(ValueError,'qualification failed'):
                     fast_collect(root/'build',trace,root/'failed',qualification,64,'reserved',blocks=4)
@@ -679,7 +685,8 @@ class FastStudyTests(unittest.TestCase):
             def failed(command,log,timeout):
                 log.write_text('partial Fast native output\n')
                 raise NativeCommandError(9,log)
-            with mock.patch('llm_mojo.benchmarks.model_profile.verify_build',return_value=receipt), \
+            with mock.patch('llm_mojo.benchmarks.model_profile.environment_tool',return_value='mojo'), \
+                 mock.patch('llm_mojo.benchmarks.model_profile.verify_build',return_value=receipt), \
                  mock.patch('llm_mojo.benchmarks.model_profile.conditions',return_value=record['runs'][0]['conditions_before']), \
                  mock.patch('llm_mojo.benchmarks.model_profile.execute',side_effect=failed):
                 with self.assertRaisesRegex(RuntimeError,'command failed'):
@@ -688,6 +695,50 @@ class FastStudyTests(unittest.TestCase):
             execution=json.loads((root/'failed'/'block-0-reference.execution.json').read_text())
             self.assertEqual(execution['exit_code'],9);self.assertEqual(execution['command'][-1],'reference')
             self.assertFalse((root/'failed'/'engine-fast.json.gz').exists())
+
+
+class EngineCollectorBuildTests(unittest.TestCase):
+    def test_copied_build_cannot_execute_its_changed_origin_binary(self):
+        import hashlib, json, tempfile
+        from pathlib import Path
+        from unittest import mock
+        from llm_mojo.benchmarks import model_profile as profile
+        from llm_mojo.benchmarks.engine_budget import scheduling_collect, fast_collect
+
+        for operation, declaration in (('budget', profile.contract.ENGINE_BUDGET_DECLARATION),
+                                       ('fast', profile.contract.ENGINE_FAST_DECLARATION)):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                origin, copied = root/'original-build', root/'copied-build'
+                origin.mkdir()
+                copied.mkdir()
+                body = b'verified engine fixture'
+                (origin/'engine').write_bytes(body)
+                (copied/'engine').write_bytes(body)
+                receipt = copy.deepcopy(scheduling_fixture()['build'])
+                receipt['declaration'] = declaration
+                receipt['command'] = ['mojo', 'build', '-I', 'src',
+                    'src/llm_mojo/benchmarks/engine_trace.mojo', '-o', str(origin/'engine')]
+                receipt['binaries'] = {'engine': dict(sha256=hashlib.sha256(body).hexdigest(), bytes=len(body))}
+                (copied/'build.json').write_text(json.dumps(receipt))
+                # The copy still matches the receipt; its origin no longer does.
+                (origin/'engine').write_bytes(b'changed unverified origin engine')
+                output = root/'output'
+                with mock.patch.object(profile, 'source_identity', return_value=receipt['source']), \
+                        mock.patch.object(profile, 'assets', return_value=receipt['assets']), \
+                        mock.patch.object(profile, 'stable_environment', return_value=receipt['environment']), \
+                        mock.patch.object(profile, 'environment_tool', return_value='mojo'), \
+                        mock.patch.object(profile, 'execute') as execute:
+                    self.assertEqual(profile.verify_build(copied), receipt)
+                    with self.assertRaisesRegex(ValueError, 'verified live build binary'):
+                        if operation == 'budget':
+                            scheduling_collect(copied, root/'missing-trace', output,
+                                               'calibration', 'reserved', blocks=4)
+                        else:
+                            fast_collect(copied, root/'missing-trace', output,
+                                         root/'missing-qualification', 64, 'reserved', blocks=4)
+                    execute.assert_not_called()
+                    self.assertFalse(output.exists())
 
 
 if __name__=='__main__':
