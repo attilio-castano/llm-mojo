@@ -1,4 +1,4 @@
-"""Build the valid host contract and require deliberate mutants to fail compilation."""
+"""Build valid host contracts and reject scalar mutants and malformed reduction plans."""
 from pathlib import Path
 import re
 import subprocess
@@ -13,7 +13,7 @@ COMPILE_TIMEOUT_SECONDS = 180
 
 
 class TokenSelectionCompileTests(unittest.TestCase):
-    def test_valid_contract_builds_and_mutants_are_rejected(self):
+    def _check_contract(self, positive_source, mutants):
         compiler = environment_tool("mojo")
         with tempfile.TemporaryDirectory(prefix="llm-mojo-contract-") as directory:
             output = Path(directory)
@@ -26,7 +26,7 @@ class TokenSelectionCompileTests(unittest.TestCase):
                     timeout=COMPILE_TIMEOUT_SECONDS,
                 )
 
-            accepted = compile_source("tests/test_token_selection_contract.mojo", "valid")
+            accepted = compile_source(positive_source, "valid")
             self.assertEqual(
                 accepted.returncode, 0,
                 "The valid contract must compile before rejection is checked.\n"
@@ -39,16 +39,10 @@ class TokenSelectionCompileTests(unittest.TestCase):
             )
             self.assertEqual(executed.returncode, 0, executed.stdout + executed.stderr)
 
-            for name, diagnostic in (
-                ("signed_zero", "BF16 ordering contract failed"),
-                ("ignored_nan", "BF16 classification contract failed"),
-                ("larger_token", "argmax representative laws failed"),
-                ("dropped_invalid", "argmax representative laws failed"),
-            ):
+            for source, diagnostic in mutants:
+                name = Path(source).stem
                 with self.subTest(mutant=name):
-                    rejected = compile_source(
-                        f"tests/compile_fail/token_selection_{name}.mojo", name,
-                    )
+                    rejected = compile_source(source, name)
                     details = rejected.stdout + rejected.stderr
                     self.assertNotEqual(rejected.returncode, 0, details)
                     # Match the diagnostic itself, not an echoed source line
@@ -59,6 +53,23 @@ class TokenSelectionCompileTests(unittest.TestCase):
                         + re.escape(diagnostic) + r"\s*$",
                     )
                     self.assertFalse((output / name).exists())
+
+    def test_valid_contract_builds_and_mutants_are_rejected(self):
+        self._check_contract("tests/test_token_selection_contract.mojo", (
+            ("tests/compile_fail/token_selection_signed_zero.mojo", "BF16 ordering contract failed"),
+            ("tests/compile_fail/token_selection_ignored_nan.mojo", "BF16 classification contract failed"),
+            ("tests/compile_fail/token_selection_larger_token.mojo", "argmax representative laws failed"),
+            ("tests/compile_fail/token_selection_dropped_invalid.mojo", "argmax representative laws failed"),
+        ))
+
+    def test_reduction_plan_builds_and_invalid_plans_are_rejected(self):
+        self._check_contract("tests/test_reduction_plan.mojo", tuple(
+            (f"tests/compile_fail/reduction_plan_{name}.mojo", "argmax reduction plan rejected")
+            for name in (
+                "missing_input", "foreign_input", "forward_reference",
+                "negative_reference", "unsupported_operation", "invalid_root",
+            )
+        ))
 
 
 if __name__ == "__main__":

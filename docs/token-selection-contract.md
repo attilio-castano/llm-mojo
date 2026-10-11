@@ -55,6 +55,51 @@ These laws support regrouping selection over a complete set of logits. They
 do not require floating-point addition to be associative: selection compares
 integer ranks and performs no floating-point reduction.
 
+## Closed reduction descriptions
+
+`src/llm_mojo/kernels/argmax_reduction.mojo` describes a merge expression over
+exactly eight symbolic input records. `ArgmaxPlan` holds an array of
+`ReductionNode` values and a root index. Its vocabulary is closed: an `Input`
+node selects one of those records, an `Empty` node supplies the identity
+record, and a `Merge` node combines two earlier nodes with the fixed
+`merge_argmax` primitive. There are no arbitrary callbacks, arithmetic
+expressions, buffer accesses, or GPU operations in this
+description. The helpers `input_node`, `empty_node`, and `merge_node` construct
+these node kinds.
+
+`check_argmax_plan` validates every node's kind, input indices, backward
+references, canonical unused operands, and the root index. Unreachable nodes
+must also be valid; the root may precede the final node. Backward references
+make the graph acyclic and ensure each operand exists before it is used. Each
+node receives a support mask using eight bits:
+`Input` sets its input's bit, `Empty` has no bits, and `Merge` takes the union of
+its operands' masks. The root must have mask `0xff`, containing every input
+bit. This checks the set of inputs contributing to the root, rather than only
+counting leaves.
+Repeated uses of an input are permitted because merging a record with itself
+is idempotent; inserted identity nodes are permitted by the identity law.
+
+The symbolic argument is structural. Every node denotes the merge of the
+inputs in its support set. Associativity and commutativity permit regrouping
+and reordering; idempotence removes duplicate inputs; the identity law removes
+empty nodes. `check_argmax_equivalence` accepts two descriptions when both
+pass the checker: their roots then denote the same merge of all eight inputs
+for any fixed tuple of records with UInt32 rank and token fields and Boolean
+invalid flags. Symbolic input indices are independent of the records' token
+IDs, which need not be distinct. This conclusion is
+conditional on those merge laws and the correctness of the
+checker and interpreter. It does not enumerate all possible record values or
+machine-check the implementation of `merge_argmax`.
+
+`evaluate_argmax_plan` asserts acceptance of its compile-time plan parameter
+and unrolls that exact description, using the same fixed scalar primitive.
+This connects the checked expression to its host evaluation without reflecting
+a Mojo function body. The production scalar primitive remains unchanged. The
+description is not yet used to generate the production GPU schedule: it does
+not check which logits
+reach each thread, warp reduction behavior, memory ownership, synchronization,
+or correspondence with the complete Metal execution route.
+
 ## Execution boundary and reproduction
 
 The local, finishing, and shared-memory stages use the shared scalar merge.
@@ -76,11 +121,16 @@ From the repository root:
 
 ```sh
 uv run --locked mojo run -I src tests/test_token_selection_contract.mojo
+uv run --locked mojo run -I src -I tests tests/test_reduction_plan.mojo
 uv run --locked python -m unittest discover -s tests -p test_token_selection_compile.py
 MODULAR_DEBUG=device-sync-mode uv run --locked mojo run -I src tests/test_token_selection.mojo
 ```
 
-The first command forces the positive compile-time checks. The Python suite
-checks successful compilation and rejection of deliberately incorrect
+The two host Mojo commands force positive compile-time checks and exercise
+compiled host implementations. The reduction-plan suite checks sequential,
+balanced, reordered/duplicated, and earlier-root descriptions against an
+independent two-pass selection oracle. Its native malformed-plan checks
+include dead invalid nodes and noncanonical operands. The Python suite checks
+successful compilation and rejection of deliberately incorrect
 variants. The last command separately checks the actual GPU selection route;
 its device/backend evidence is required for a claim about Metal execution.
