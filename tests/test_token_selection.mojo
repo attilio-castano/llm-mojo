@@ -89,6 +89,46 @@ def rounded_tie(ctx: DeviceContext) raises:
         assert_equal(mapped.unsafe_ptr()[unsafe_offset=64].cast[DType.float32](),Float32(1))
 
 
+def independent_rows(ctx: DeviceContext) raises:
+    # A ragged second group, ties across groups and a poisoned row exercise
+    # the scalar contract's connection to the actual multi-row device route.
+    var count = 1025
+    var rows = 3
+    var groups = 2
+    var logits = ctx.enqueue_create_buffer[DType.bfloat16](rows * count)
+    var partials = ctx.enqueue_create_buffer[DType.uint32](rows * groups * 3 + 3)
+    var result = ctx.enqueue_create_buffer[DType.uint32](rows * 3 + 3)
+    partials.enqueue_fill(0xDEADBEEF)
+    result.enqueue_fill(0xDEADBEEF)
+    with logits.map_to_host() as mapped:
+        for row in range(rows):
+            for i in range(count):
+                var bits = UInt16(0x8000 if row == 0 else 0xBF80)
+                if row == 0 and i == count - 1:
+                    bits = UInt16(0)
+                elif row == 1 and i == count - 1:
+                    bits = UInt16(0x7F81)
+                elif row == 2 and (i == 127 or i == count - 1):
+                    bits = UInt16(0x0001)
+                mapped.unsafe_ptr()[unsafe_offset=row * count + i] = bitcast[DType.bfloat16](bits)
+    enqueue_argmax(ctx, TileTensor(logits, row_major(rows, count)),
+                  TileTensor(partials, row_major(rows * groups, 3)),
+                  TileTensor(result, row_major(rows, 3)))
+    with result.map_to_host() as mapped:
+        assert_equal(mapped.unsafe_ptr()[unsafe_offset=0], bf16_rank(UInt16(0)))
+        assert_equal(mapped.unsafe_ptr()[unsafe_offset=1], UInt32(0))
+        assert_equal(mapped.unsafe_ptr()[unsafe_offset=2], UInt32(0))
+        assert_equal(mapped.unsafe_ptr()[unsafe_offset=5], UInt32(1))
+        assert_equal(mapped.unsafe_ptr()[unsafe_offset=6], bf16_rank(UInt16(1)))
+        assert_equal(mapped.unsafe_ptr()[unsafe_offset=7], UInt32(127))
+        assert_equal(mapped.unsafe_ptr()[unsafe_offset=8], UInt32(0))
+        for i in range(rows * 3, rows * 3 + 3):
+            assert_equal(mapped.unsafe_ptr()[unsafe_offset=i], UInt32(0xDEADBEEF))
+    with partials.map_to_host() as mapped:
+        for i in range(rows * groups * 3, rows * groups * 3 + 3):
+            assert_equal(mapped.unsafe_ptr()[unsafe_offset=i], UInt32(0xDEADBEEF))
+
+
 def main() raises:
     var ctx = DeviceContext()
     if ctx.api() != "metal":
@@ -99,6 +139,7 @@ def main() raises:
         for pattern in range(9):
             reduction(ctx,count,pattern)
     rounded_tie(ctx)
+    independent_rows(ctx)
     var logits = ctx.enqueue_create_buffer[DType.bfloat16](65)
     var partials = ctx.enqueue_create_buffer[DType.uint32](6)
     var result = ctx.enqueue_create_buffer[DType.uint32](3)

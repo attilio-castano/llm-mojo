@@ -16,15 +16,9 @@ from max.gpu import WARP_SIZE, block_idx, lane_id, thread_idx
 from max.gpu.primitives import warp
 from std.memory import bitcast
 from std.sys.info import is_apple_gpu
-
-
-@always_inline
-def bf16_rank(bits: UInt16) -> UInt32:
-    # Canonicalize signed zero. Integer comparison also preserves subnormals.
-    var b = UInt32(bits)
-    if (b & 0x7FFF) == 0:
-        b = 0
-    return ((~b) & 0xFFFF) if (b & 0x8000) != 0 else (b ^ 0x8000)
+from llm_mojo.kernels.token_selection_contract import (
+    ArgmaxRecord, bf16_rank, bf16_nonfinite, empty_argmax, merge_argmax,
+)
 
 
 @always_inline
@@ -37,6 +31,7 @@ def _group_winner[OL: TensorLayout](
     var id = warp.min(token if rank == top else UInt32(0xFFFFFFFF))
     var bad = warp.max(invalid)
     var shared = stack_allocation[DType.uint32, address_space=AddressSpace.SHARED](row_major[4,3]())
+    comptime assert shared.flat_rank == 2
     var group = thread_idx.x // WARP_SIZE
     if lane_id() == 0:
         shared[group,0] = top
@@ -44,19 +39,16 @@ def _group_winner[OL: TensorLayout](
         shared[group,2] = bad
     barrier()
     if thread_idx.x == 0:
-        var best: UInt32 = 0
-        var winner = UInt32(0xFFFFFFFF)
-        var any_bad: UInt32 = 0
+        var best = empty_argmax()
         for i in range(4):
-            var r = rebind[UInt32](shared[i,0])
-            var t = rebind[UInt32](shared[i,1])
-            any_bad |= rebind[UInt32](shared[i,2])
-            if r > best or (r == best and t < winner):
-                best = r
-                winner = t
-        output[record,0] = best
-        output[record,1] = winner
-        output[record,2] = any_bad
+            best = merge_argmax(best, ArgmaxRecord(
+                rebind[UInt32](shared[i,0]),
+                rebind[UInt32](shared[i,1]),
+                rebind[UInt32](shared[i,2]),
+            ))
+        output[record,0] = best.rank
+        output[record,1] = best.token
+        output[record,2] = best.invalid
 
 
 def _argmax[IL: TensorLayout, OL: TensorLayout](
@@ -66,19 +58,13 @@ def _argmax[IL: TensorLayout, OL: TensorLayout](
     comptime assert is_apple_gpu() and WARP_SIZE == 32
     comptime assert logits.flat_rank == 2
     var row = block_idx.y
-    var best: UInt32 = 0
-    var winner = UInt32(0xFFFFFFFF)
-    var bad: UInt32 = 0
+    var best = empty_argmax()
     for j in range(8):
         var i = block_idx.x*1024 + thread_idx.x + j*128
         if i < Int(count):
             var bits = bitcast[DType.uint16](rebind[Scalar[DType.bfloat16]](logits[row,i]))
-            bad |= UInt32((bits & 0x7F80) == 0x7F80)
-            var rank = bf16_rank(bits)
-            if rank > best or (rank == best and UInt32(i) < winner):
-                best = rank
-                winner = UInt32(i)
-    _group_winner(partials,best,winner,bad,row*((Int(count)+1023)//1024)+block_idx.x)
+            best = merge_argmax(best, ArgmaxRecord(bf16_rank(bits), UInt32(i), bf16_nonfinite(bits)))
+    _group_winner(partials,best.rank,best.token,best.invalid,row*((Int(count)+1023)//1024)+block_idx.x)
 
 
 def _finish[IL: TensorLayout, OL: TensorLayout](
@@ -89,19 +75,16 @@ def _finish[IL: TensorLayout, OL: TensorLayout](
     comptime assert partials.flat_rank == 2
     var row = block_idx.x
     var first = row*Int(count)
-    var best: UInt32 = 0
-    var winner = UInt32(0xFFFFFFFF)
-    var bad: UInt32 = 0
+    var best = empty_argmax()
     var i = thread_idx.x
     while i < Int(count):
-        var rank = rebind[UInt32](partials[first+i,0])
-        var token = rebind[UInt32](partials[first+i,1])
-        bad |= rebind[UInt32](partials[first+i,2])
-        if rank > best or (rank == best and token < winner):
-            best = rank
-            winner = token
+        best = merge_argmax(best, ArgmaxRecord(
+            rebind[UInt32](partials[first+i,0]),
+            rebind[UInt32](partials[first+i,1]),
+            rebind[UInt32](partials[first+i,2]),
+        ))
         i += 128
-    _group_winner(result,best,winner,bad,row)
+    _group_winner(result,best.rank,best.token,best.invalid,row)
 
 
 def _validate[LL: TensorLayout, PL: TensorLayout, RL: TensorLayout](

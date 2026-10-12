@@ -28,6 +28,7 @@ Each fact has one home; other pages give a sentence and a link. Start with the
 | [Model contract](model.md) | Pinned weights, operation arithmetic, conversation semantics and the correctness and diagnostic policy |
 | [Runtime and workload policy](generation.md) | Model ownership, the Fast/baseline/consistent routes and how a call picks its kernels |
 | [Tokenizer](tokenizer.md) | The native byte-level BPE and its exactness against the reference |
+| [BF16 selection checks](token-selection-contract.md) | Compile-time BF16 checks, symbolic reduction composition, and remaining assumptions |
 | [Attention sublayer](attention-sublayer.md) | Attention arithmetic, reference authority, mappings and reproduction |
 | [MLP sublayer](mlp-sublayer.md) | SwiGLU rounding, fixtures, acceptance budgets and reproduction |
 | [Decoder layer](decoder-layer.md) | Composition, fixtures, acceptance, configurations and execution policies |
