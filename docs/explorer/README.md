@@ -5,7 +5,14 @@ Open the [hosted explorer](https://attilio-castano.github.io/llm-mojo/) or
 scripts, recorded data, source excerpts, and third-party notices. It works
 offline without installing Mojo, loading weights, or running a server.
 
-The shared component map connects three guided views:
+**Start here** introduces the project, shows the opening sentence of a recorded
+reply, and explains four parts of the computation in plain language. Replay,
+step or scrub through its 17 tokens; playback is slowed for reading, rather than
+timed as a performance demonstration. The excerpt opens complete, and the
+browser never runs the model. **Inspect this step** opens the corresponding
+stage and component in the detailed walkthrough.
+
+The shared component map then connects three guided views:
 
 1. **Prompt to next token:** one recorded Fast conversation, followed by a
    46-step reference-engine replay with mixed prefill/decode and KV accounting.
@@ -17,7 +24,9 @@ The shared component map connects three guided views:
 
 Choose **Direct chat** or **Serving core** to inspect the two execution paths.
 Select any component for its purpose, ownership, implementation and evidence.
-The address bar preserves the selected guide, route, component and example.
+The address bar preserves the selected guide, route, component and example,
+including the introductory excerpt position and explanation. Existing links to
+the three detailed views still open directly.
 
 ## Evidence and scope
 
