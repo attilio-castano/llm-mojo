@@ -1,0 +1,411 @@
+{
+  "schemaVersion": 1,
+  "vendor": {
+    "sourcePath": "docs/explorer/vendor/pretext.js",
+    "sourceSha256": "c85e755d86d33718e66978d18a2733eb5d11cf44747f58846bd390ed0d6f24e7",
+    "licensePath": "docs/explorer/vendor/PRETEXT-LICENSE.txt",
+    "licenseSha256": "6bbed33f971993e100dea60936f506116047269de04fbbfd700d4a687bb9d1a8",
+    "package": "@chenglou/pretext",
+    "purpose": "Pinned local text layout module, inlined into generated standalone HTML"
+  },
+  "repository": "https://github.com/attilio-castano/llm-mojo",
+  "sourceRevision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+  "assets": {
+    "residualNorm": {
+      "path": "studies/model_generation/residual-norm.json.gz",
+      "sha256": "744e24211e056e12e821940fe4f8f047325324c9c63860cd653e4367b544a2bb",
+      "selection": "terminal.blocks[0].arms[selection=3].turns[turn=1]; timing and numerical records",
+      "uncompressedSha256": "87caa1145b88242010482108a267b6364b4476570726adb2b807860ae446c0cc",
+      "hashManifest": "studies/model_generation/residual-norm.json"
+    },
+    "projectionArrangements": {
+      "path": "studies/model_generation/projection-arrangements.json.gz",
+      "sha256": "65b3ca14549adb49807896ed3d0fac27f84c679fa4178521d0fd0e28e79cf514",
+      "selection": "all screen timings, five candidates, all three contexts",
+      "uncompressedSha256": "ae18ede9565cad279fa41a8862db824722f8b6c873a0c5e62f1d7771daeca96c",
+      "hashManifest": "studies/model_generation/projection-arrangements.json"
+    },
+    "engineOffline": {
+      "path": "studies/model_generation/engine-core-offline.json.gz",
+      "sha256": "957236ad9c1c99f6af3d60781f46bf040af822d2c649ac4afea4d37b447f51a7",
+      "selection": "runs[first arm=chunked and calibration=false]",
+      "uncompressedSha256": "236ee9177ef90f715a47f44c0efdcbd8b4a26552ac23e106dfce1d972316c8bf",
+      "hashManifest": "studies/model_generation/engine-core-offline.json"
+    },
+    "residualNormSummary": {
+      "path": "studies/model_generation/residual-norm-summary.json",
+      "sha256": "f4d8084e31b8d4a190cafa8ae5fdbacb61641f235a85f7dcda2333bec0806d60",
+      "selection": "contexts, qualifiers, selected"
+    },
+    "projectionArrangementsSummary": {
+      "path": "studies/model_generation/projection-arrangements-summary.json",
+      "sha256": "333da7a1df5aa825ed712e9e5d29a488550e84459b34dd4e5b74c6738a7b8953",
+      "selection": "contexts, qualifiers, promotion decision"
+    },
+    "residualNormHash": {
+      "path": "studies/model_generation/residual-norm.json",
+      "sha256": "41754a4eb22b0e895f56a9e74fcabb8cbc422812a620afc91efd7497524e48ad",
+      "selection": "historical hash manifest"
+    },
+    "projectionArrangementsHash": {
+      "path": "studies/model_generation/projection-arrangements.json",
+      "sha256": "40564dd65f42ff223099deba815dcb9268b6b1e7eccc5e3b64d628f0c4975cae",
+      "selection": "historical hash manifest"
+    },
+    "engineOfflineHash": {
+      "path": "studies/model_generation/engine-core-offline.json",
+      "sha256": "1f269cdf38a115d6ff763959fe55bc0ebbbf7c5dc5783d7d1090b68147478ab3",
+      "selection": "historical hash manifest"
+    }
+  },
+  "sources": {
+    "docs/tokenizer.md": {
+      "sha256": "4be5e0d79cef9571880711d9368ada9ff0422bff59a9bab4c5a44fa95e0cc550",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "docs/model.md": {
+      "sha256": "2b8e474ca52c7635162deead7727847dd7d77dd7ec72c5aef6d7570e5b5a0376",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "studies/model_generation/chat.md": {
+      "sha256": "46f10555368eeb8de99127917a05e69dea60a75752589dcfc98d7d0eca9a6f86",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "studies/model_generation/combined-fusion.md": {
+      "sha256": "442072e81ee7aec9993ef180a8bc58975292ef7cdea16175124926382da6d18f",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "docs/paged-kv-plan.md": {
+      "sha256": "66dc71d00a78b6e5cb767ed3b9a26a71fa726cd5522aa9381d54c6d5247e580c",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/models/qwen2/tokenizer.mojo": {
+      "sha256": "50dfaebcc034e2dd584ac8b02fd3907504de5aa7b0150d869c5e4586b67b3a13",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/models/qwen2/chat.mojo": {
+      "sha256": "c3ee1fc26772c301e1f7d081cba0c863bfd7be692439d41cdbc759f0aacd6691",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/models/qwen2/model.mojo": {
+      "sha256": "47526ba0db7ac6b271e26da0493b3c5d0e9ff083fdb6ecc62b2a067cf7dc1903",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/models/qwen2/plan.mojo": {
+      "sha256": "44db03b890f88a26526b860a6d53287ed8d83d53c9509063cf5f738c56f6d44d",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/models/qwen2/runner.mojo": {
+      "sha256": "bdd620e696af3d225880da6b97e05bcce4d655da1c6dd3eaa5432dafdb9728ea",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/models/qwen2/engine_chat.mojo": {
+      "sha256": "77c395f03364004d3c2a3015b797e16288ee949288a4edce9e85666e79c63213",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/serving/engine.mojo": {
+      "sha256": "cfc64898f74b43fa6e509c4f9563748b9349a2fd8c88e9aefb040e94f33c957d",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/serving/blocks.mojo": {
+      "sha256": "cb1d4661ca2fd6df1c5c643d55c0574af584d7870571e9b0c02935fa47a234ab",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/serving/kv_pool.mojo": {
+      "sha256": "c4233fffd2baeb52b836ba20423f204431f4fffbe3d5752c838f3440bdcf147d",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/serving/batch.mojo": {
+      "sha256": "1a96a4e6902d0b87d29fb393fe84232162b8855e22945c4a7d70ee1cdc609a1f",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/serving/runner.mojo": {
+      "sha256": "90339ff3902feee37f39ea46b44b8aa6e5d529de406d1750e51f43e12c530c2b",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/layers/decoder_layer.mojo": {
+      "sha256": "03610729244fb571c9a6eedc678f63322e08098242637953fcf1806d4eaa134d",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/layers/attention_sublayer.mojo": {
+      "sha256": "76f3fd5940abc1c4df8112920c8f1b1eb72deab6189732a66d2e9805dfeb0b39",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/layers/mlp.mojo": {
+      "sha256": "2976546a15ea87a2c6aec46458104cf44d113156c3786b74fbe03254677a23b5",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/kernels/token_selection.mojo": {
+      "sha256": "5238a4a2576001aec785ac47d707c12b8b1e70b1d5156d3bc47c74644522fcb5",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/kernels/token_selection_contract.mojo": {
+      "sha256": "0aa382a50d0eafd70ebce927676c299938d0593ef5cf37a900acdea1492b9247",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/kernels/argmax_reduction.mojo": {
+      "sha256": "99ac3cf0aaa8c7bf75aca1050ad611eb5b1f4c3653708b7911a86849b7cd1716",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/kernels/residual_norm.mojo": {
+      "sha256": "7b33fd5ee157225af896bdfe5ef3f5feb8a04931f8de66a13dc70b9429617c3b",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "src/llm_mojo/kernels/swiglu.mojo": {
+      "sha256": "f54ea854a4b0be148971befbe24abfe664f28fcceba10a518ca06991b56c7ddd",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "docs/walkthrough.md": {
+      "sha256": "ae2d4356b71055a7c4db09929e2a8d28685bc4f1990854c2c18e00adcc97fe70",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "docs/serving-plan.md": {
+      "sha256": "881a9def2201d7e9b97f5388680f51a1ab05625ebe4b722e58da014d3235ad0e",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "docs/token-selection-contract.md": {
+      "sha256": "944c8b43ecd93a7cb66d400f6558b7d43dcabf0004cf95bebd4ad9df47db4de1",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "docs/project.md": {
+      "sha256": "1d00c23d747bf7ba7e778c3b718dc6a953e531e5739d1acdaf1643a3d35b72f4",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "docs/experiments.md": {
+      "sha256": "197622ce26c68d9f36fdacc3e84cc60b2af17ff3f4c2fd7e09bd054a881b78f5",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "studies/model_generation/residual-norm.md": {
+      "sha256": "bbedd58f8ab237f5604383fe1850f0b9dee3af38f65f121cfb96e95cd654b8cb",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "studies/model_generation/projection-arrangements.md": {
+      "sha256": "0dd6d19966712995dfad7f21fbfcdc2f1c69bf382c82a0e6b3986536baeef4f3",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "studies/model_generation/engine-core.md": {
+      "sha256": "4b1a1aa085664d99e8c6557adaa12f18a9876d39df84ad522cde2879c79ff4a8",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "studies/model_generation/engine-evidence.md": {
+      "sha256": "5433a497345c5060e8399d45da7916c2d588fe41af522c9016828e1648eae96f",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "tests/reduction_plan_cases.mojo": {
+      "sha256": "2975ff219364156f908d67766c025b0fb5f426fa0edecc55848c4f1226049821",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 41
+    },
+    "tests/test_reduction_plan.mojo": {
+      "sha256": "5bd4231f1a2beec8811afafea81db21b851cda74877e74fcdf3f514c16a3832c",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "tests/test_token_selection_contract.mojo": {
+      "sha256": "a00b5a46c704ba73ee76938b1f124eeada75d26bafeb573c1c050942586de194",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 29
+    },
+    "tests/test_engine.mojo": {
+      "sha256": "90a2169f3b87d8470df91a534d62879936d92a29543d07f26b5975ba020f26e5",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "tests/test_mixed_model.mojo": {
+      "sha256": "197e5c77bdf69a8e98d3c3201cbd70c40ca5142985c0a064bafe846a8b6952a0",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 70
+    },
+    "tests/compile_fail/reduction_plan_missing_input.mojo": {
+      "sha256": "28b70e8a5387cd15274aa059c664946e21652fdd6d876fe28a3c12353c680868",
+      "revision": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+      "startLine": 1,
+      "endLine": 23
+    }
+  },
+  "tokenizer": {
+    "modelRevision": "7ae557604adf67be50417f59c2c2f167def9a775",
+    "sourceSha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+    "sourceBytes": 7031645,
+    "source": "pinned tokenizer.json from local verified model store; no download",
+    "derivation": "Byte-level BPE vocabulary inverse plus literal added-token bytes; only selected recorded IDs retained",
+    "subsetSha256": "e80e344ce116eca33135e2ed4fbf1bbd9ef08d00d051cafc97be48bcba5ea246",
+    "pieces": {
+      "8": "29",
+      "11": "2c",
+      "13": "2e",
+      "16": "31",
+      "198": "0a",
+      "264": "2061",
+      "279": "20746865",
+      "304": "20696e",
+      "311": "20746f",
+      "315": "206f66",
+      "320": "2028",
+      "323": "20616e64",
+      "369": "20666f72",
+      "374": "206973",
+      "387": "206265",
+      "421": "206966",
+      "429": "2074686174",
+      "432": "206974",
+      "458": "20616e",
+      "498": "20796f75",
+      "525": "20617265",
+      "537": "206e6f74",
+      "553": "206279",
+      "646": "2063616e",
+      "686": "2077696c6c",
+      "701": "292c",
+      "817": "20706572",
+      "840": "4578",
+      "872": "75736572",
+      "882": "2074696d65",
+      "979": "207768656e",
+      "1096": "2054686973",
+      "1102": "20726573756c74",
+      "1207": "2051",
+      "1221": "207468656e",
+      "1416": "204966",
+      "1446": "20596f75",
+      "1447": "3a0a0a",
+      "1576": "2062656361757365",
+      "1633": "206f626a656374",
+      "1657": "206d616e79",
+      "1752": "20466f72",
+      "1803": "20636172",
+      "2155": "20646966666572656e74",
+      "2326": "207468726565",
+      "2610": "596f75",
+      "2670": "20696e636c7564696e67",
+      "2989": "20696d706f7274616e74",
+      "3059": "20726573756c7473",
+      "3070": "202a2a",
+      "3110": "206578616d706c65",
+      "3170": "20776879",
+      "3197": "205768656e",
+      "3465": "2063726561746564",
+      "3941": "206163726f7373",
+      "4628": "207370656564",
+      "5508": "20636f6e76657274",
+      "5671": "206172656173",
+      "5692": "2048657265",
+      "5942": "2073797374656d73",
+      "6010": "2064697374616e6365",
+      "6460": "20686f7572",
+      "6486": "207365636f6e6473",
+      "7530": "2f68",
+      "7565": "20657373656e7469616c",
+      "7707": "20636f6d7061726564",
+      "8153": "20756e697473",
+      "8756": "206d696c6573",
+      "8948": "73797374656d",
+      "10282": "206b656570696e67",
+      "10295": "206578616d706c6573",
+      "10950": "2068656c7066756c",
+      "11047": "2063616c63756c617465",
+      "11056": "5370656564",
+      "11136": "207479706963616c6c79",
+      "12850": "206d617474657273",
+      "12966": "20636f6e73697374656e74",
+      "14667": "20656e67696e656572696e67",
+      "14817": "20436c6f7564",
+      "15576": "20726573706563746976656c79",
+      "16017": "6b6d",
+      "16587": "206372756369616c",
+      "16948": "77656e",
+      "17847": "20617373697374616e74",
+      "20044": "206d6574657273",
+      "20678": "2047697665",
+      "20772": "706c61696e",
+      "21321": "2070687973696373",
+      "21937": "2063616c63756c6174696f6e",
+      "22414": "206d65616e696e6766756c",
+      "22573": "20656e737572696e67",
+      "28117": "2063616c63756c6174696f6e73",
+      "37614": "2063616c63756c6174696e67",
+      "40368": "20696c6c75737472617465",
+      "40568": "206b696c6f6d6574657273",
+      "54364": "20416c6962616261",
+      "55002": "6d7068",
+      "55926": "206d65616e696e676c657373",
+      "71347": "4b656570696e67",
+      "74216": "2043616c63756c6174696f6e",
+      "77091": "617373697374616e74",
+      "95518": "2a2a3a",
+      "151644": "3c7c696d5f73746172747c3e",
+      "151645": "3c7c696d5f656e647c3e"
+    }
+  }
+}
