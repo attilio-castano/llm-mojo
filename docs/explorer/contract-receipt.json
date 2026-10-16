@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "status": "passed",
-  "checked_at": "2026-10-16T14:29:00+00:00",
+  "checked_at": "2026-10-16T16:46:39+00:00",
   "scope": "Host compilation and execution only; no GPU run or performance measurement.",
-  "command": "DEVELOPER_DIR=/Library/Developer/CommandLineTools /Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/python docs/explorer/verify_contract.py --compiler /Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/mojo",
+  "command": "DEVELOPER_DIR=/Library/Developer/CommandLineTools /Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/python3 docs/explorer/verify_contract.py --compiler /Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/mojo",
   "environment": {
     "DEVELOPER_DIR": "/Library/Developer/CommandLineTools"
   },
@@ -11,20 +11,21 @@
   "toolchain": {
     "mojo": "1.1.0",
     "max": "26.6.0",
-    "compiler": "/Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/mojo",
+    "compiler": "/Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/mojo",
     "compiler_version": "Mojo 1.1.0 (8189361e)",
     "compiler_release": "1.1.0",
     "python": "3.12.14",
-    "python_executable": "/Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/python"
+    "python_executable": "/Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/python3"
   },
-  "source_commit": "1bdf3277378a30f48fbfc5086876bf9b5b6d884b",
+  "source_commit": "4801a131cfc0a59c3774f49342cd7e336f4b425b",
   "sources_unchanged_during_run": true,
   "sources": {
     "uv.lock": "5c9991fce05956e6dec983529e037dee3eddc1e8e2cb40e53358a0e34c3f90aa",
     "pyproject.toml": "be8e5e02e11368fde534a5b4c650391e9434b8a1e789e5ff6c9da338403ac88c",
-    "docs/explorer/verify_contract.py": "bef5aa2cac2e46a2c6288df77d412906e1bd4e67633d94c808f0c4600c8cc10a",
+    "docs/explorer/verify_contract.py": "5877ef4595003dd7e0dc2c05fd595ef8a40791dba4c5e32de1247885a29baa59",
     "docs/token-selection-contract.md": "944c8b43ecd93a7cb66d400f6558b7d43dcabf0004cf95bebd4ad9df47db4de1",
     "tests/test_token_selection_compile.py": "1d34dce6715d9369cb12124d6ead1dff2d38d26178c40e775b530ca54634a7dc",
+    "src/llm_mojo/__init__.py": "d45f08c560f8a501262a3c17663244a1a74fb76658d746e99a430dbc1f9935b7",
     "src/llm_mojo/_repository.py": "4f202ce0ef30d29f58240d1b089ee8331827b6403daf5e1f48d1f56da6d39cab",
     "src/llm_mojo/__init__.mojo": "54ca844ca97d5f13084dae07021cbe9535b95cf3414d5133daec18787507d905",
     "src/llm_mojo/kernels/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -33,7 +34,7 @@
     "tests/test_token_selection_contract.mojo": "a00b5a46c704ba73ee76938b1f124eeada75d26bafeb573c1c050942586de194",
     "tests/test_reduction_plan.mojo": "5bd4231f1a2beec8811afafea81db21b851cda74877e74fcdf3f514c16a3832c",
     "tests/reduction_plan_cases.mojo": "2975ff219364156f908d67766c025b0fb5f426fa0edecc55848c4f1226049821",
-    "tests/test_explorer_compiler.py": "4d687d0b978ec8f1832ecf5e82b63970d5cc624485d9e5824625efc8369e8b11",
+    "tests/test_explorer_compiler.py": "4852d641b6d90ced92fb83e3cb548290075c6fb59439ef3cbb11387934097dcd",
     "tests/compile_fail/reduction_plan_foreign_input.mojo": "24de8527e0776567ac249ce70c9c68388faf05d95b37462d0513ca6ad05cd87c",
     "tests/compile_fail/reduction_plan_forward_reference.mojo": "1a4dba10833888068058d0475e9d311251ebdf0656391c46b76c4e60b227e15c",
     "tests/compile_fail/reduction_plan_invalid_root.mojo": "9e065331487a61eba569e5b64c24457e0ee79662f09ded2bff6f76dfb5848d9d",
@@ -151,7 +152,7 @@
   "executions": [
     {
       "command": [
-        "/Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/mojo",
+        "/Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/mojo",
         "build",
         "-I",
         "src",
@@ -159,29 +160,29 @@
         "tests",
         "tests/test_reduction_plan.mojo",
         "-o",
-        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-78ezap4r/valid"
+        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-egtj0c1w/valid"
       ],
       "source": "tests/test_reduction_plan.mojo",
       "stage": "compile",
       "exit_code": 0,
-      "log": "build/explorer/contract-logs/20261016T142847783598Z/01-test_reduction_plan.log",
-      "log_sha256": "8b33180b5dd484cbaa302cc68b3794e69204fc8de4d0b692cbb1332a95aa44d0",
+      "log": "build/explorer/contract-logs/20261016T164627969786Z/01-test_reduction_plan.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "diagnostic": null
     },
     {
       "command": [
-        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-78ezap4r/valid"
+        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-egtj0c1w/valid"
       ],
       "source": "tests/test_reduction_plan.mojo",
       "stage": "execute",
       "exit_code": 0,
-      "log": "build/explorer/contract-logs/20261016T142847783598Z/02-test_reduction_plan.log",
+      "log": "build/explorer/contract-logs/20261016T164627969786Z/02-test_reduction_plan.log",
       "log_sha256": "6a9be50b45ab40ad5aa6f8ee6a7c63fc7a69ebdd15722a8e9dfe74a25b2fe39a",
       "diagnostic": null
     },
     {
       "command": [
-        "/Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/mojo",
+        "/Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/mojo",
         "build",
         "-I",
         "src",
@@ -189,18 +190,18 @@
         "tests",
         "tests/compile_fail/reduction_plan_missing_input.mojo",
         "-o",
-        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-78ezap4r/reduction_plan_missing_input"
+        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-egtj0c1w/reduction_plan_missing_input"
       ],
       "source": "tests/compile_fail/reduction_plan_missing_input.mojo",
       "stage": "compile",
       "exit_code": 1,
-      "log": "build/explorer/contract-logs/20261016T142847783598Z/03-reduction_plan_missing_input.log",
-      "log_sha256": "bad87cedc19fda5b8142bbc49f29328472888b595505a089e33d80866ac7a4f2",
+      "log": "build/explorer/contract-logs/20261016T164627969786Z/03-reduction_plan_missing_input.log",
+      "log_sha256": "e4c92fd026da407b5ea5e52f229a6955e66d96d0c7f06a0748572520ef3e6bb6",
       "diagnostic": "argmax reduction plan rejected"
     },
     {
       "command": [
-        "/Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/mojo",
+        "/Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/mojo",
         "build",
         "-I",
         "src",
@@ -208,18 +209,18 @@
         "tests",
         "tests/compile_fail/reduction_plan_foreign_input.mojo",
         "-o",
-        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-78ezap4r/reduction_plan_foreign_input"
+        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-egtj0c1w/reduction_plan_foreign_input"
       ],
       "source": "tests/compile_fail/reduction_plan_foreign_input.mojo",
       "stage": "compile",
       "exit_code": 1,
-      "log": "build/explorer/contract-logs/20261016T142847783598Z/04-reduction_plan_foreign_input.log",
-      "log_sha256": "0d97f077526fed82e02d08ac0cc4f37972c4b00cfe700b8e26137b15229e6a08",
+      "log": "build/explorer/contract-logs/20261016T164627969786Z/04-reduction_plan_foreign_input.log",
+      "log_sha256": "59e79098ecd2598b046fa296aac1431be0ef049fcbc001e64145b03f44de08d7",
       "diagnostic": "argmax reduction plan rejected"
     },
     {
       "command": [
-        "/Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/mojo",
+        "/Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/mojo",
         "build",
         "-I",
         "src",
@@ -227,18 +228,18 @@
         "tests",
         "tests/compile_fail/reduction_plan_forward_reference.mojo",
         "-o",
-        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-78ezap4r/reduction_plan_forward_reference"
+        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-egtj0c1w/reduction_plan_forward_reference"
       ],
       "source": "tests/compile_fail/reduction_plan_forward_reference.mojo",
       "stage": "compile",
       "exit_code": 1,
-      "log": "build/explorer/contract-logs/20261016T142847783598Z/05-reduction_plan_forward_reference.log",
-      "log_sha256": "20f5cf61eb44f801e514f54ec649758068055e68a9f09bab8bd9e0d023955475",
+      "log": "build/explorer/contract-logs/20261016T164627969786Z/05-reduction_plan_forward_reference.log",
+      "log_sha256": "0b10c9092184638d77034ada7ec142206c12b048a234180131fe17ff8d79a288",
       "diagnostic": "argmax reduction plan rejected"
     },
     {
       "command": [
-        "/Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/mojo",
+        "/Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/mojo",
         "build",
         "-I",
         "src",
@@ -246,18 +247,18 @@
         "tests",
         "tests/compile_fail/reduction_plan_negative_reference.mojo",
         "-o",
-        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-78ezap4r/reduction_plan_negative_reference"
+        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-egtj0c1w/reduction_plan_negative_reference"
       ],
       "source": "tests/compile_fail/reduction_plan_negative_reference.mojo",
       "stage": "compile",
       "exit_code": 1,
-      "log": "build/explorer/contract-logs/20261016T142847783598Z/06-reduction_plan_negative_reference.log",
-      "log_sha256": "7a90ac8b550b88cf220a1a64ee4537b11029f1cf4c3f3d2fd8faef5e7ed3725d",
+      "log": "build/explorer/contract-logs/20261016T164627969786Z/06-reduction_plan_negative_reference.log",
+      "log_sha256": "8c1ca241051b4b5ca80988cad20ccfb44b4ba5a5988f4628268a08f28d799e3b",
       "diagnostic": "argmax reduction plan rejected"
     },
     {
       "command": [
-        "/Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/mojo",
+        "/Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/mojo",
         "build",
         "-I",
         "src",
@@ -265,18 +266,18 @@
         "tests",
         "tests/compile_fail/reduction_plan_unsupported_operation.mojo",
         "-o",
-        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-78ezap4r/reduction_plan_unsupported_operation"
+        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-egtj0c1w/reduction_plan_unsupported_operation"
       ],
       "source": "tests/compile_fail/reduction_plan_unsupported_operation.mojo",
       "stage": "compile",
       "exit_code": 1,
-      "log": "build/explorer/contract-logs/20261016T142847783598Z/07-reduction_plan_unsupported_operation.log",
-      "log_sha256": "811244de725711abad3a7c44f203e29c24cebddea592a0461efe4d58623b18b7",
+      "log": "build/explorer/contract-logs/20261016T164627969786Z/07-reduction_plan_unsupported_operation.log",
+      "log_sha256": "ca01f6fcbf90fd33c4ae039445f3883144ebb6d6c8f51153be14bcfaa357dd97",
       "diagnostic": "argmax reduction plan rejected"
     },
     {
       "command": [
-        "/Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/mojo",
+        "/Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/mojo",
         "build",
         "-I",
         "src",
@@ -284,18 +285,18 @@
         "tests",
         "tests/compile_fail/reduction_plan_invalid_root.mojo",
         "-o",
-        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-78ezap4r/reduction_plan_invalid_root"
+        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-egtj0c1w/reduction_plan_invalid_root"
       ],
       "source": "tests/compile_fail/reduction_plan_invalid_root.mojo",
       "stage": "compile",
       "exit_code": 1,
-      "log": "build/explorer/contract-logs/20261016T142847783598Z/08-reduction_plan_invalid_root.log",
-      "log_sha256": "b1b0c97d0eae9d31bfb1b8f9e4080973b62098c7e529ecdfb8c0dd38dbf77ae3",
+      "log": "build/explorer/contract-logs/20261016T164627969786Z/08-reduction_plan_invalid_root.log",
+      "log_sha256": "ada49d260a056d5505af82c6cd97dc4f0f9c31a1d4b5f9b3d0071a0921e72748",
       "diagnostic": "argmax reduction plan rejected"
     },
     {
       "command": [
-        "/Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/mojo",
+        "/Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/mojo",
         "build",
         "-I",
         "src",
@@ -303,29 +304,29 @@
         "tests",
         "tests/test_token_selection_contract.mojo",
         "-o",
-        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-eiupd05k/valid"
+        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-j5pj5cam/valid"
       ],
       "source": "tests/test_token_selection_contract.mojo",
       "stage": "compile",
       "exit_code": 0,
-      "log": "build/explorer/contract-logs/20261016T142847783598Z/09-test_token_selection_contract.log",
-      "log_sha256": "8b33180b5dd484cbaa302cc68b3794e69204fc8de4d0b692cbb1332a95aa44d0",
+      "log": "build/explorer/contract-logs/20261016T164627969786Z/09-test_token_selection_contract.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "diagnostic": null
     },
     {
       "command": [
-        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-eiupd05k/valid"
+        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-j5pj5cam/valid"
       ],
       "source": "tests/test_token_selection_contract.mojo",
       "stage": "execute",
       "exit_code": 0,
-      "log": "build/explorer/contract-logs/20261016T142847783598Z/10-test_token_selection_contract.log",
+      "log": "build/explorer/contract-logs/20261016T164627969786Z/10-test_token_selection_contract.log",
       "log_sha256": "96a4e544211aaaf8301f0f31b02ba881824c96d7012c51f8e763eca0076ba5a5",
       "diagnostic": null
     },
     {
       "command": [
-        "/Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/mojo",
+        "/Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/mojo",
         "build",
         "-I",
         "src",
@@ -333,18 +334,18 @@
         "tests",
         "tests/compile_fail/token_selection_signed_zero.mojo",
         "-o",
-        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-eiupd05k/token_selection_signed_zero"
+        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-j5pj5cam/token_selection_signed_zero"
       ],
       "source": "tests/compile_fail/token_selection_signed_zero.mojo",
       "stage": "compile",
       "exit_code": 1,
-      "log": "build/explorer/contract-logs/20261016T142847783598Z/11-token_selection_signed_zero.log",
-      "log_sha256": "c3403b7e34ef528462d27193a9ea0cb0266aa9dd029e2c65c59e321289e7cf38",
+      "log": "build/explorer/contract-logs/20261016T164627969786Z/11-token_selection_signed_zero.log",
+      "log_sha256": "e73856c9d077b7a11a45b91ccf1b3ff0c230de9b25778aebfbfccde6d29b2a85",
       "diagnostic": "BF16 ordering contract failed"
     },
     {
       "command": [
-        "/Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/mojo",
+        "/Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/mojo",
         "build",
         "-I",
         "src",
@@ -352,18 +353,18 @@
         "tests",
         "tests/compile_fail/token_selection_ignored_nan.mojo",
         "-o",
-        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-eiupd05k/token_selection_ignored_nan"
+        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-j5pj5cam/token_selection_ignored_nan"
       ],
       "source": "tests/compile_fail/token_selection_ignored_nan.mojo",
       "stage": "compile",
       "exit_code": 1,
-      "log": "build/explorer/contract-logs/20261016T142847783598Z/12-token_selection_ignored_nan.log",
-      "log_sha256": "027482765f489001201717bf21640ac485b05268071968239e7dcfb074bcc28d",
+      "log": "build/explorer/contract-logs/20261016T164627969786Z/12-token_selection_ignored_nan.log",
+      "log_sha256": "05abf312cbe4b05bd87f151141d1eddd4bf84589dfffd439b99f7ab7636260ee",
       "diagnostic": "BF16 classification contract failed"
     },
     {
       "command": [
-        "/Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/mojo",
+        "/Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/mojo",
         "build",
         "-I",
         "src",
@@ -371,18 +372,18 @@
         "tests",
         "tests/compile_fail/token_selection_larger_token.mojo",
         "-o",
-        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-eiupd05k/token_selection_larger_token"
+        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-j5pj5cam/token_selection_larger_token"
       ],
       "source": "tests/compile_fail/token_selection_larger_token.mojo",
       "stage": "compile",
       "exit_code": 1,
-      "log": "build/explorer/contract-logs/20261016T142847783598Z/13-token_selection_larger_token.log",
-      "log_sha256": "a90d1e3cbdff79f2996f58659b80d32faaaef3eb037273a26023316ffbda8751",
+      "log": "build/explorer/contract-logs/20261016T164627969786Z/13-token_selection_larger_token.log",
+      "log_sha256": "b6d30d60b05428a78c65ed6db2bf766933ee44b5559126af2b3741d446fa5b29",
       "diagnostic": "argmax representative laws failed"
     },
     {
       "command": [
-        "/Users/attiliocastano/.codex/worktrees/efa1/llm-mojo/.venv/bin/mojo",
+        "/Users/attiliocastano/.codex/worktrees/c82a/llm-mojo/.venv/bin/mojo",
         "build",
         "-I",
         "src",
@@ -390,18 +391,18 @@
         "tests",
         "tests/compile_fail/token_selection_dropped_invalid.mojo",
         "-o",
-        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-eiupd05k/token_selection_dropped_invalid"
+        "/var/folders/r4/jbhl2y2n075fkmzxgfn6d3mm0000gn/T/llm-mojo-contract-j5pj5cam/token_selection_dropped_invalid"
       ],
       "source": "tests/compile_fail/token_selection_dropped_invalid.mojo",
       "stage": "compile",
       "exit_code": 1,
-      "log": "build/explorer/contract-logs/20261016T142847783598Z/14-token_selection_dropped_invalid.log",
-      "log_sha256": "0959d33e7afa1e243ad8553e5b60d86997541e687538bede382bcf85c7f90031",
+      "log": "build/explorer/contract-logs/20261016T164627969786Z/14-token_selection_dropped_invalid.log",
+      "log_sha256": "86a083f30d845816eca9bb9ff13e085c9c3236c5ac4355fcb2b19d0b1ecd79d8",
       "diagnostic": "argmax representative laws failed"
     }
   ],
-  "suite_log": "build/explorer/contract-logs/20261016T142847783598Z/unittest.log",
-  "suite_log_sha256": "bb2ac722ce91e69be1321725edb92124afa73b3298462c5d4b57a76cc8a03576",
+  "suite_log": "build/explorer/contract-logs/20261016T164627969786Z/unittest.log",
+  "suite_log_sha256": "455e7ea3aed7bb3aeaeca17f880e64dd0d8fd70f55737812104b024b7feb4b21",
   "limits": [
     "Reduction plans describe exactly eight symbolic inputs.",
     "Merge-law generalization uses the documented comparison-only mathematical argument.",

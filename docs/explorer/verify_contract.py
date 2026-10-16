@@ -31,7 +31,8 @@ HARNESS = "tests/test_token_selection_compile.py"
 SOURCE_PATHS = [
     "uv.lock", "pyproject.toml", "docs/explorer/verify_contract.py",
     "docs/token-selection-contract.md", HARNESS,
-    "src/llm_mojo/_repository.py", "src/llm_mojo/__init__.mojo",
+    "src/llm_mojo/__init__.py", "src/llm_mojo/_repository.py",
+    "src/llm_mojo/__init__.mojo",
     "src/llm_mojo/kernels/__init__.mojo",
     "src/llm_mojo/kernels/token_selection_contract.mojo",
     "src/llm_mojo/kernels/argmax_reduction.mojo",
@@ -42,6 +43,57 @@ SOURCE_PATHS = [
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def source_paths(root: Path) -> list[str]:
+    return SOURCE_PATHS + [str(path.relative_to(root)) for path in sorted(
+        (root / "tests/compile_fail").glob("*.mojo")
+    ) if path.name.startswith(("reduction_plan_", "token_selection_"))]
+
+
+def git_output(root: Path, *arguments: str) -> bytes:
+    return subprocess.run(["git", *arguments], cwd=root, capture_output=True,
+                          check=True).stdout
+
+
+def committed_sources(root: Path) -> tuple[str, dict[str, str]]:
+    """Bind every tested input to one commit, independently of the Git index."""
+    commit = git_output(root, "rev-parse", "HEAD").decode().strip()
+    committed_fixtures = [path for path in git_output(
+        root, "ls-tree", "-rz", "--name-only", commit, "--", "tests/compile_fail"
+    ).decode().split("\0") if Path(path).parent == Path("tests/compile_fail")
+        and path.endswith(".mojo")
+        and Path(path).name.startswith(("reduction_plan_", "token_selection_"))]
+    paths = source_paths(root)
+    if set(paths) != set(SOURCE_PATHS + committed_fixtures):
+        raise RuntimeError("Contract source set differs from commit; commit added or removed fixtures before verification")
+    sources = {}
+    for path in paths:
+        try:
+            committed = git_output(root, "show", f"{commit}:{path}")
+        except subprocess.CalledProcessError as error:
+            raise RuntimeError(f"Contract source is absent from commit {commit}: {path}") from error
+        try:
+            actual = digest(root / path)
+        except OSError as error:
+            raise RuntimeError(f"Contract source is missing or unreadable: {path}") from error
+        if actual != hashlib.sha256(committed).hexdigest():
+            raise RuntimeError(f"Contract source differs from commit {commit}: {path}; commit source changes before verification")
+        sources[path] = actual
+    return commit, sources
+
+
+def verify_sources_unchanged(root: Path, commit: str, sources: dict[str, str]) -> None:
+    """Reject persistent input changes, fixture additions/removals, and moving HEAD."""
+    if git_output(root, "rev-parse", "HEAD").decode().strip() != commit:
+        raise RuntimeError("HEAD changed during verification; rerun from the committed sources")
+    try:
+        unchanged = (set(source_paths(root)) == set(sources)
+                     and all(digest(root / path) == expected for path, expected in sources.items()))
+    except OSError:
+        unchanged = False
+    if not unchanged:
+        raise RuntimeError("Contract source inputs changed during verification; receipt was not replaced")
 
 
 def checked_compiler_version(output: str, locked_version: str) -> str:
@@ -64,13 +116,11 @@ def main() -> int:
                         default=Path(sys.executable).parent / "mojo")
     args = parser.parse_args()
     compiler = args.compiler.absolute()
+    source_commit, sources = committed_sources(ROOT)
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     logs = ROOT / "build/explorer/contract-logs" / run_id
     logs.mkdir(parents=True, exist_ok=True)
-    paths = SOURCE_PATHS + [str(path.relative_to(ROOT)) for path in sorted(
-        (ROOT / "tests/compile_fail").glob("*.mojo")
-    ) if path.name.startswith(("reduction_plan_", "token_selection_"))]
-    sources = {path: digest(ROOT / path) for path in paths}
+    paths = list(sources)
     locked = {package["name"]: package["version"]
               for package in tomllib.loads((ROOT / "uv.lock").read_text())["package"]}
     toolchain = {name: metadata.version(name) for name in ("mojo", "max")}
@@ -122,7 +172,7 @@ def main() -> int:
         result = unittest.TextTestRunner(stream=output, verbosity=2).run(suite)
     test_log = logs / "unittest.log"
     test_log.write_text(output.getvalue())
-    unchanged = all(digest(ROOT / path) == sha256 for path, sha256 in sources.items())
+    verify_sources_unchanged(ROOT, source_commit, sources)
 
     def passed(source):
         runs = [entry for entry in executions if entry["source"] == source]
@@ -164,7 +214,7 @@ def main() -> int:
                      if scalars else "The valid scalar suite did not compile and execute successfully; see retained logs."),
                 dict(id="ties-and-nonfinite", status="passed" if plans and scalars else "failed",
                      detail="Host assertions cover lowest-token-ID ties and invalid flags from nonwinning records.")]
-    success = result.wasSuccessful() and unchanged
+    success = result.wasSuccessful()
     command = shlex.join([sys.executable, "docs/explorer/verify_contract.py", "--compiler", str(compiler)])
     command = "".join(f"{name}={shlex.quote(value)} " for name, value in environment.items()) + command
     receipt = dict(
@@ -173,9 +223,8 @@ def main() -> int:
         scope="Host compilation and execution only; no GPU run or performance measurement.",
         command=command, environment=environment,
         harness=HARNESS, toolchain=toolchain,
-        source_commit=real_run(["git", "rev-parse", "HEAD"], cwd=ROOT,
-                               capture_output=True, text=True, check=True).stdout.strip(),
-        sources_unchanged_during_run=unchanged, sources=sources,
+        source_commit=source_commit,
+        sources_unchanged_during_run=True, sources=sources,
         tests_run=result.testsRun, results=results, executions=executions,
         suite_log=str(test_log.relative_to(ROOT)), suite_log_sha256=digest(test_log),
         limits=["Reduction plans describe exactly eight symbolic inputs.",

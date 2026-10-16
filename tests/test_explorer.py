@@ -353,6 +353,11 @@ class ExplorerEvidenceTests(unittest.TestCase):
                         if execution["source"] == "tests/compile_fail/reduction_plan_missing_input.mojo")
         self.assertEqual(rejected["diagnostic"], "argmax reduction plan rejected")
 
+    def test_original_contract_receipt_is_preserved_byte_for_byte(self):
+        original = ROOT / EXPLORER / "contract-receipt-2026-10-16-pre-provenance-fix.json"
+        self.assertEqual(sha(original.read_bytes()),
+                         "9baa3e181fb9123ca6a0bc318cfb880f0384b4311b3032fccf25fb9760f9234e")
+
 
 if __name__ == "__main__":
     unittest.main()
