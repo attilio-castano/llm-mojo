@@ -68,7 +68,17 @@ without overwriting it. Historical archives are never rewritten.
 When changing presentation, edit `explorer.template.html` and rebuild. When
 changing source or choosing another recorded run, review and update the relevant
 manifest hashes and excerpt ranges deliberately. Keep the original measurements
-and compiler receipts unchanged; a changed contract needs a fresh receipt.
+and historical compiler receipts unchanged; a changed contract needs a fresh
+active receipt.
+
+Commit the contract sources, verifier, and its regression tests before running
+the verifier. It captures `HEAD` before testing and requires every declared input
+to match that commit, including the complete rejection-fixture set. Staged edits
+alone are insufficient. It rechecks `HEAD`, the input set and the input hashes
+after execution; a change aborts without replacing the active receipt. Unrelated
+presentation edits and generated outputs do not prevent verification. These
+endpoint checks detect persistent changes, not a transient edit restored during
+compilation; they do not isolate the compiler from concurrent writers.
 
 To rerun the existing host compiler harness with the installed locked toolchain:
 
@@ -85,7 +95,19 @@ selection used on this machine. Reproduction on another machine may use its own
 installed compiler; `--compiler /absolute/path/to/mojo` selects one explicitly.
 
 After a new receipt, rebuild the page and run the integrity checks above.
+Commit the receipt and generated page separately from the source changes they
+describe. Since the verifier and its regression tests are themselves receipt
+inputs, the earlier receipt is temporarily stale between those two commits.
 Refreshing the page does not rerun the compiler tests.
+
+The [original October 16 receipt](contract-receipt-2026-10-16-pre-provenance-fix.json)
+is retained byte-for-byte (SHA-256
+`9baa3e181fb9123ca6a0bc318cfb880f0384b4311b3032fccf25fb9760f9234e`).
+Its `source_commit` names the checkout's earlier `HEAD`, which did not contain
+the verifier and compiler-version test listed in its source hashes. The Mojo
+contract and fixture hashes match that commit. This historical provenance defect
+does not supply evidence against its recorded host outcomes; the active receipt
+comes from a fresh run against committed inputs.
 
 For a local HTTP preview, run from the repository root:
 
