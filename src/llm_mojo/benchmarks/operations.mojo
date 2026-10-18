@@ -1,7 +1,8 @@
-"""Inspectable paired timings for RMSNorm, QKV projection, and RoPE.
+"""Inspectable paired timings for RMSNorm, QKV projection, RoPE, and argmax.
 
 All allocations and output checks precede timing. Each sample enqueues a hot
 call or a 24-buffer sweep, synchronizes once, and divides by the layer count.
+Argmax uses that count for repetitions over the same resident buffers.
 """
 from layout import TensorLayout, TileTensor, row_major
 from llm_mojo.kernels.rms_norm import enqueue_rms_norm_apple_gpu, enqueue_rms_norm_apple_gpu_shared_tree
@@ -11,7 +12,11 @@ from llm_mojo.kernels.linear import (
     enqueue_linear_prefill_register_2x2_apple_gpu, enqueue_linear_prefill_mma_8x16_apple_gpu,
 )
 from llm_mojo.kernels.rope import enqueue_rope_apple_gpu
+from llm_mojo.kernels.token_selection import enqueue_argmax
+from llm_mojo.kernels.token_selection_contract import bf16_rank
+from llm_mojo.kernels.argmax_reduction import balanced_argmax_plan
 from max.gpu.host import DeviceContext, DeviceBuffer
+from std.memory import bitcast
 from std.sys import argv
 from std.time import perf_counter_ns
 from std.math import isfinite
@@ -209,6 +214,96 @@ def rope(ctx: DeviceContext, rows: Int, layers: Int, control: Int, candidate: In
     print("BENCHMARK_COMPLETE")
 
 
+def token_selection_route[LL: TensorLayout, PL: TensorLayout, RL: TensorLayout](
+    variant: Int, ctx: DeviceContext,
+    logits: TileTensor[DType.bfloat16, LL, MutAnyOrigin],
+    partials: TileTensor[DType.uint32, PL, MutAnyOrigin],
+    result: TileTensor[DType.uint32, RL, MutAnyOrigin],
+) raises -> Int:
+    if variant == 0:
+        enqueue_argmax(ctx, logits, partials, result)
+    elif variant == 1:
+        enqueue_argmax[plan=balanced_argmax_plan[8]()](ctx, logits, partials, result)
+    elif variant == 2:
+        enqueue_argmax[finish_threads=64, finish_items_per_thread=3,
+                      finish_plan=balanced_argmax_plan[3]()](ctx, logits, partials, result)
+    else:
+        raise Error("unknown token selection route")
+    return variant
+
+
+def token_selection(ctx: DeviceContext, rows: Int, layers: Int, control: Int, candidate: Int, first: Int, seed: Int, repetitions: Int, warmup: Int) raises:
+    # A regression diagnostic for Qwen's rounded logits, with allocation and
+    # numerical checks outside timing. Both arms reuse identical resident data.
+    comptime count = 151936
+    comptime groups = (count + 1023) // 1024
+    var ll = row_major(rows, count)
+    var pl = row_major(rows * groups, 3)
+    var rl = row_major(rows, 3)
+    var logits_buffer = ctx.enqueue_create_buffer[DType.bfloat16](rows * count)
+    var partials_buffer = ctx.enqueue_create_buffer[DType.uint32](rows * groups * 3 + 3)
+    var result_buffer = ctx.enqueue_create_buffer[DType.uint32](rows * 3 + 3)
+    var logits = TileTensor(logits_buffer, ll)
+    var partials = TileTensor(partials_buffer, pl)
+    var result = TileTensor(result_buffer, rl)
+    var phase = ((seed % 127) + 127) % 127
+    def launch(variant: Int) raises {imm} -> Int:
+        return token_selection_route(variant, ctx, logits, partials, result)
+    # Poison first, then leave finite tied inputs resident for timed calls.
+    for pattern in [2, 0, 1]:
+        with logits_buffer.map_to_host() as mapped:
+            for row in range(rows):
+                var early = 1 + (phase + row * 17) % 1023
+                var late = count - 1 - row % 127
+                for i in range(count):
+                    var bits = UInt16(0xBF80 + (i + row + phase) % 127)
+                    if i == late or (pattern != 0 and i == early):
+                        bits = UInt16(0x3F80)
+                    if pattern == 2 and i == late:
+                        bits = UInt16(0xFFFF)  # Losing NaN must still poison the result.
+                    mapped.unsafe_ptr()[unsafe_offset=row * count + i] = bitcast[DType.bfloat16](bits)
+        for arm in range(2):
+            var variant = control if arm == 0 else candidate
+            partials_buffer.enqueue_fill(0xDEADBEEF)
+            result_buffer.enqueue_fill(0xDEADBEEF)
+            if launch(variant) != variant:
+                raise Error("wrong token selection route")
+            ctx.synchronize()
+            with result_buffer.map_to_host() as mapped:
+                for row in range(rows):
+                    var early = 1 + (phase + row * 17) % 1023
+                    var late = count - 1 - row % 127
+                    var expected_id = late if pattern == 0 else early
+                    if (mapped.unsafe_ptr()[unsafe_offset=row * 3] != bf16_rank(UInt16(0x3F80))
+                            or mapped.unsafe_ptr()[unsafe_offset=row * 3 + 1] != UInt32(expected_id)
+                            or mapped.unsafe_ptr()[unsafe_offset=row * 3 + 2] != UInt32(pattern == 2)):
+                        raise Error("token selection benchmark output check failed")
+                for i in range(rows * 3, rows * 3 + 3):
+                    if mapped.unsafe_ptr()[unsafe_offset=i] != UInt32(0xDEADBEEF):
+                        raise Error("token selection result guard changed")
+            with partials_buffer.map_to_host() as mapped:
+                for i in range(rows * groups * 3, rows * groups * 3 + 3):
+                    if mapped.unsafe_ptr()[unsafe_offset=i] != UInt32(0xDEADBEEF):
+                        raise Error("token selection scratch guard changed")
+    print("correctness: passed")
+    print("token-count:", count, "threads:", 128, "items-per-thread:", 8)
+    print("finishing: variants 0/1 use 128 threads x 1 item; variant 2 uses 64 x 3 balanced")
+    print("logits-dtype: bfloat16 record-dtype: uint32 reuse: same resident buffers")
+    for arm in range(2):
+        var is_candidate = (arm == 0) == (first == 1)
+        var variant = candidate if is_candidate else control
+        var label = "candidate" if is_candidate else "control"
+        for sample in range(warmup + repetitions):
+            var started = perf_counter_ns()
+            for _ in range(layers):
+                _ = launch(variant)
+            ctx.synchronize()
+            var elapsed = Float64(perf_counter_ns() - started) / Float64(1000 * layers)
+            if sample >= warmup:
+                print("SAMPLE", label, variant, sample - warmup, elapsed)
+    print("BENCHMARK_COMPLETE")
+
+
 def main() raises:
     var args = List[String]()
     for arg in argv():
@@ -240,5 +335,7 @@ def main() raises:
         rms_norm(ctx, rows, layers, control, candidate, first, seed, repetitions, warmup)
     elif operation == "rope":
         rope(ctx, rows, layers, control, candidate, first, seed, repetitions, warmup)
+    elif operation == "token_selection":
+        token_selection(ctx, rows, layers, control, candidate, first, seed, repetitions, warmup)
     else:
         raise Error("unknown benchmark operation")

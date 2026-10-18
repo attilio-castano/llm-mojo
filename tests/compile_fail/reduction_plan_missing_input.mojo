@@ -1,23 +1,20 @@
-"""Execution admission must reject a root that omits symbolic input seven."""
+"""Admission must reject omission of input 64 without a support-mask width cap."""
 from std.collections import Array
 from llm_mojo.kernels.token_selection_contract import ArgmaxRecord
 from llm_mojo.kernels.argmax_reduction import ArgmaxPlan, input_node, evaluate_argmax_plan
 from reduction_plan_cases import sequential_plan
 
 
-def invalid_plan() -> ArgmaxPlan[17]:
-    var plan = sequential_plan()
-    plan.nodes[7] = input_node(6)
+def invalid_plan() -> ArgmaxPlan[65, 131]:
+    var plan = sequential_plan[65]()
+    plan.nodes[64] = input_node(63)
     return plan^
 
 
 def main():
     comptime bad = invalid_plan()
-    var inputs: Array[ArgmaxRecord, 8] = [
-        ArgmaxRecord(0, 0, 0), ArgmaxRecord(0, 1, 0),
-        ArgmaxRecord(0, 2, 0), ArgmaxRecord(0, 3, 0),
-        ArgmaxRecord(0, 4, 0), ArgmaxRecord(0, 5, 0),
-        ArgmaxRecord(0, 6, 0), ArgmaxRecord(0, 7, 0),
-    ]
-    var result = evaluate_argmax_plan[17, bad](inputs)
+    var inputs = Array[ArgmaxRecord, 65](uninitialized=True)
+    for i in range(65):
+        inputs[i] = ArgmaxRecord(0, UInt32(i), 0)
+    var result = evaluate_argmax_plan[65, 131, bad](inputs)
     print(result.rank)
