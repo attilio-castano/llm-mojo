@@ -407,5 +407,10 @@
       "151644": "3c7c696d5f73746172747c3e",
       "151645": "3c7c696d5f656e647c3e"
     }
+  },
+  "sourceArchive": {
+    "path": "docs/explorer/recorded-sources.json.gz",
+    "sha256": "fb304686f141cf12a2276a8b3950dd5b23592c277de8cd186c1a12ca9050177a",
+    "uncompressedSha256": "7bc62df775ee1e21cc07a1b03fd0b82662d2a7629a301ae7f2567b2546df78de"
   }
 }

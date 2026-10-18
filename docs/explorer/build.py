@@ -53,10 +53,61 @@ def load_asset(root, manifest, name):
     return json.loads(raw)
 
 
-def source_records(root, manifest):
+def load_recorded_sources(root=ROOT, manifest=None, receipt=None):
+    """Validate the exact historical source closure, without Git or live code."""
+    root = Path(root)
+    if manifest is None:
+        manifest = load_manifest(root)
+    if receipt is None:
+        receipt = json.loads((root / DIRECTORY / 'contract-receipt.json').read_text())
+    spec = manifest['sourceArchive']
+    raw = (root / spec['path']).read_bytes()
+    require(digest(raw) == spec['sha256'], 'recorded source archive checksum mismatch')
+    raw = gzip.decompress(raw)
+    require(digest(raw) == spec['uncompressedSha256'],
+            'uncompressed recorded source archive checksum mismatch')
+    recorded = json.loads(raw)
+    require(recorded.get('schemaVersion') == 1
+            and isinstance(recorded.get('revisions'), dict)
+            and isinstance(recorded.get('blobs'), dict), 'unknown recorded source archive schema')
+    expected = {(spec['revision'], path): spec['sha256']
+                for path, spec in manifest['sources'].items()}
+    for path, checksum in receipt['sources'].items():
+        key = (receipt['source_commit'], path)
+        require(key not in expected or expected[key] == checksum,
+                f'conflicting recorded source checksum: {path}')
+        expected[key] = checksum
+    bindings = {}
+    for revision, sources in recorded['revisions'].items():
+        require(re.fullmatch(r'[0-9a-f]{40}', revision) is not None
+                and isinstance(sources, dict), 'invalid recorded source revision')
+        bindings.update({(revision, path): checksum for path, checksum in sources.items()})
+    require(set(bindings) == set(expected), 'recorded source revision/path bindings differ')
+    for key, checksum in expected.items():
+        require(bindings[key] == checksum, f'recorded source checksum mismatch: {key[1]}')
+    require(set(recorded['blobs']) == set(expected.values()), 'recorded source blob set differs')
+    for checksum, text in recorded['blobs'].items():
+        require(isinstance(text, str) and digest(text.encode()) == checksum,
+                f'recorded source checksum mismatch: {checksum}')
+    return recorded
+
+
+def recorded_source(recorded, revision, path):
+    try:
+        checksum = recorded['revisions'][revision][path]
+        raw = recorded['blobs'][checksum].encode()
+    except KeyError as error:
+        raise ValueError(f'recorded source absent: {revision}:{path}') from error
+    require(digest(raw) == checksum, f'recorded source checksum mismatch: {path}')
+    return raw
+
+
+def source_records(root, manifest, recorded=None):
+    if recorded is None:
+        recorded = load_recorded_sources(root, manifest)
     result = {}
     for path, spec in manifest['sources'].items():
-        raw = (Path(root) / path).read_bytes()
+        raw = recorded_source(recorded, spec['revision'], path)
         require(digest(raw) == spec['sha256'], f'source checksum mismatch: {path}')
         lines = raw.decode().splitlines()
         start = spec.get('startLine', 1)
@@ -270,15 +321,24 @@ def integer_expression(text, variables):
     return visit(node)
 
 
-def derive_plans(root):
+def derive_plans(root, recorded=None, receipt=None):
     """Interpret only the tiny constructor language actually used by the fixtures."""
+    if receipt is None:
+        receipt = json.loads((Path(root) / DIRECTORY / 'contract-receipt.json').read_text())
+    if recorded is None:
+        recorded = load_recorded_sources(root, receipt=receipt)
+    def source(path):
+        raw = recorded_source(recorded, receipt['source_commit'], path)
+        require(digest(raw) == receipt['sources'][path],
+                f'compiler receipt source checksum mismatch: {path}')
+        return raw.decode()
     paths = ['tests/reduction_plan_cases.mojo', 'tests/compile_fail/reduction_plan_missing_input.mojo']
     functions = {}
     for path in paths:
-        source = (Path(root) / path).read_text()
-        matches = list(re.finditer(r'^def (\w+)\(\) -> ArgmaxPlan\[(\d+)\]:\n', source, re.M))
+        text = source(path)
+        matches = list(re.finditer(r'^def (\w+)\(\) -> ArgmaxPlan\[(\d+)\]:\n', text, re.M))
         for match in matches:
-            following = source[match.end():]
+            following = text[match.end():]
             body = re.split(r'\n(?=def )', following, maxsplit=1)[0]
             functions[match[1]] = (int(match[2]), body.splitlines())
     def make(name):
@@ -351,7 +411,7 @@ def derive_plans(root):
     require(result[0]['nodes'][9]['tuple'] == [2,8,0] and result[1]['nodes'][16]['tuple'] == [2,15,8]
             and result[2]['nodes'][16]['tuple'] == [2,15,15] and result[3]['root'] == 15
             and result[4]['missing'] == [7], 'expected plan edges changed')
-    test_source = (Path(root) / 'tests/test_reduction_plan.mojo').read_text().split('def main() raises:', 1)[1]
+    test_source = source('tests/test_reduction_plan.mojo').split('def main() raises:', 1)[1]
     initial_inputs = test_source.split('var inputs:', 1)[1].split('= [', 1)[1].split(']', 1)[0]
     inputs = [dict(rank=int(rank), token=int(token), invalid=int(invalid))
               for rank, token, invalid in re.findall(r'ArgmaxRecord\((\d+), (\d+), (\d+)\)', initial_inputs)]
@@ -361,15 +421,18 @@ def derive_plans(root):
                 scope='The browser displays fixture-derived plans. Mojo compile-time acceptance and rejection are separate compiler evidence; this view does not prove GPU or full-model behavior.')
 
 
-def contract_receipt(root):
+def contract_receipt(root, recorded=None, receipt=None):
     path = Path(root) / DIRECTORY / 'contract-receipt.json'
-    receipt = json.loads(path.read_text())
+    if receipt is None:
+        receipt = json.loads(path.read_text())
+    if recorded is None:
+        recorded = load_recorded_sources(root, receipt=receipt)
     require(receipt['schema_version'] == 1 and receipt['status'] in ('passed', 'failed'),
             'unknown compiler receipt schema or status')
     require(receipt['sources_unchanged_during_run'] is True, 'compiler receipt sources changed during run')
     require(receipt['sources'] and receipt['tests_run'] > 0, 'compiler receipt has no executed checks')
     for source, expected in receipt['sources'].items():
-        require(digest((Path(root) / source).read_bytes()) == expected,
+        require(digest(recorded_source(recorded, receipt['source_commit'], source)) == expected,
                 f'compiler receipt source checksum mismatch: {source}')
     if receipt['status'] == 'passed':
         require(all(r['status'] == 'passed' for r in receipt['results']),
@@ -402,15 +465,17 @@ def contract_receipt(root):
 def build_data(root=ROOT):
     root = Path(root)
     manifest = load_manifest(root)
-    sources = source_records(root, manifest)
+    receipt = json.loads((root / DIRECTORY / 'contract-receipt.json').read_text())
+    recorded = load_recorded_sources(root, manifest, receipt)
+    sources = source_records(root, manifest, recorded)
     # Verify every declared asset, including report summaries and original hash manifests.
     assets = {name: load_asset(root, manifest, name) for name in manifest['assets']}
     tokenizer = manifest['tokenizer']
     require(digest(json.dumps(tokenizer['pieces'], sort_keys=True, separators=(',', ':')).encode())
             == tokenizer['subsetSha256'], 'tokenizer subset checksum mismatch')
     accepted, rejected = assets['residualNorm'], assets['projectionArrangements']
-    proof = derive_plans(root)
-    proof['receipt'] = contract_receipt(root)
+    proof = derive_plans(root, recorded, receipt)
+    proof['receipt'] = contract_receipt(root, recorded, receipt)
     return dict(meta=dict(revision=manifest['sourceRevision'], model='Qwen2.5-0.5B-Instruct',
                           device='Apple M4 Pro / Metal', recordedToolchain='Mojo 1.0.0 / MAX 26.5.0',
                           generatedFrom='Pinned recorded archives; no live inference in this page',
