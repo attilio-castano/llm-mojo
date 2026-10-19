@@ -520,7 +520,8 @@ def run_prefix_trace(mut runner: TraceMetal, mut kv: KVPool, requests: List[Trac
     var phase_begin = Int(now())
     runner.reset_clock()
     print("arrival",seed.request_id,0,runner.now_ns())
-    _ = engine.add(seed.request_id,seed.prompt,seed.maximum,seed.stops,cache_salt="prefix-study")
+    _ = engine.add(seed.request_id,seed.prompt,seed.maximum,seed.stops,seed.arrival_ns,
+                   cache_salt="prefix-study")
     var seed_steps = 0
     while engine.live() > 0:
         var record = engine.step(runner,kv)

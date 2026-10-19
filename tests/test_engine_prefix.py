@@ -209,6 +209,43 @@ class PrefixTraceTests(unittest.TestCase):
         self.assertGreater(warm['episode_ns'],warm['duration_ns']+warm['seed_ns'])
         self.assertTrue(warm['cache_cleared'])
 
+    def test_seed_scheduled_arrival_is_distinct_from_observation_and_first_step(self):
+        # The failed c959179 preflight observed the seed at42, then began its
+        # first step at8500. Omitting EngineCore.add's arrival argument stamped
+        # token/finish arrival8500, although the frozen seed is scheduled at0.
+        trace=trace_fixture(reuse=0)
+        lines=native_fixture(trace,'disabled').splitlines()
+        delay=8499
+        phase=None
+        for i,line in enumerate(lines):
+            fields=line.split()
+            if fields[:1]==['phase']:
+                phase=fields[1]
+            elif phase=='seed' and fields[:1]==['arrival']:
+                fields[3]='42'
+            elif phase=='seed' and fields[:1]==['step']:
+                for key in ('begin_ns','end_ns'):
+                    index=contract.ENGINE_STEP_FIELDS.index(key)+1
+                    fields[index]=str(int(fields[index])+delay)
+            elif phase=='seed' and fields[:1] in (['token'],['finish'],['prefix_drained']):
+                fields[-1]=str(int(fields[-1])+delay)
+            elif fields[:1]==['phase_time']:
+                if phase!='seed':
+                    fields[2]=str(int(fields[2])+delay)
+                fields[3]=str(int(fields[3])+delay)
+            lines[i]=' '.join(fields)
+        valid='\n'.join(lines)
+        parsed=prefix.parse_run(valid,trace,'disabled',384)
+        self.assertEqual(parsed['phases']['seed']['arrivals']['128'],dict(scheduled_ns=0,actual_ns=42))
+        self.assertEqual(parsed['phases']['seed']['steps'][0]['begin_ns'],8500)
+        for kind in ('token','finish'):
+            changed=lines.copy()
+            index=next(i for i,line in enumerate(lines) if line.startswith(kind+' 128 '))
+            fields=changed[index].split(); fields[-2]='8500'
+            changed[index]=' '.join(fields)
+            with self.subTest(kind=kind),self.assertRaisesRegex(ValueError,'prefix event time or prompt differs'):
+                prefix.parse_run('\n'.join(changed),trace,'disabled',384)
+
     def test_namespace_salt_tokens_and_event_gap_are_exact(self):
         stdout=native_fixture(); trace=trace_fixture()
         event=next(line for line in stdout.splitlines() if line.startswith('cache_event 0 '))
