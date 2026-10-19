@@ -6,6 +6,7 @@ complete program identifies its canonical traversal library. Arbitrary
 submitted proofs continue through the original independent full checkers;
 they never borrow a canonical library's acceptance.
 """
+from std.sys.info import is_gpu
 from llm_mojo.kernels.finishing_proof_kernel import FinishingProgram
 from llm_mojo.kernels.finishing_typed_coverage import (
     check_finishing_typed_coverage, make_finishing_typed_coverage,
@@ -57,3 +58,20 @@ def check_canonical_finishing_execution[
     """
     return (check_finishing_execution_descriptor(descriptor)
         and _CANONICAL_EXECUTION_ADMITTED)
+
+
+def require_finishing_traversal[program: FinishingProgram]():
+    """Call ordinarily so this host specialization admits its program once.
+
+    The body enforces compile-time obligations; it supplies no runtime witness
+    or acceptance flag. Re-evaluating a comptime expression at every caller
+    would repeat work even when its mathematical inputs are identical.
+    """
+    comptime assert not is_gpu(), "finishing proof admission requires host compilation"
+    comptime assert FinishingTraversalLibrary[program].accepted, "argmax fold plan rejected"
+
+
+def require_finishing_execution():
+    """An ordinary host call forces this fixed theorem's compile-time gate."""
+    comptime assert not is_gpu(), "finishing proof admission requires host compilation"
+    comptime assert canonical_finishing_execution_admitted(), "checked finishing execution rejected"

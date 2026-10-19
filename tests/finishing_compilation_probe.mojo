@@ -2,7 +2,7 @@
 
 PROFILE_STAGE: 0 arithmetic bootstrap, 1 coverage, 2 termination, 3 execution,
 4 production fold and execution binding. PROFILE_COPIES makes distinct caller
-specializations with an identical mathematical shape, like different layouts.
+specializations of one loop program, alternating sequential/balanced local trees.
 This is a host compiler diagnostic, not a GPU correctness/performance test.
 """
 from std.sys import get_defined_int
@@ -18,16 +18,25 @@ from llm_mojo.kernels.finishing_execution_check import (
     check_finishing_execution_rules, make_finishing_execution_certificate,
     check_finishing_execution_certificate_request,
 )
-from llm_mojo.kernels.argmax_reduction import sequential_argmax_plan
+from llm_mojo.kernels.argmax_reduction import sequential_argmax_plan, balanced_argmax_plan
+from llm_mojo.kernels.finishing_execution import check_finishing_execution_descriptor
 from llm_mojo.kernels.token_selection import (
     make_argmax_fold_plan, check_argmax_fold_plan,
     make_argmax_finishing_execution, check_argmax_finishing_execution,
     _argmax_execution_descriptor,
 )
 from llm_mojo.kernels.finishing_checked_exports import (
-    FinishingTraversalLibrary, canonical_finishing_execution_admitted,
-    check_canonical_finishing_execution,
+    FinishingTraversalLibrary,
+    require_finishing_traversal, require_finishing_execution,
 )
+
+
+def _require_profile_coverage[program: tk.FinishingProgram]():
+    comptime assert FinishingTraversalLibrary[program].coverage_accepted
+
+
+def _require_profile_termination[program: tk.FinishingProgram]():
+    comptime assert FinishingTraversalLibrary[program].termination_accepted
 
 
 def check_case[copy_index: Int]():
@@ -39,27 +48,29 @@ def check_case[copy_index: Int]():
         comptime assert tk._NAT_ARITHMETIC_CERTIFIED
     elif stage == 1:
         comptime if reuse:
-            comptime assert FinishingTraversalLibrary[program].coverage_accepted
+            _require_profile_coverage[program]()
         else:
             comptime proof = make_finishing_typed_coverage(program)
             comptime assert check_finishing_typed_coverage(program, proof)
     elif stage == 2:
         comptime if reuse:
-            comptime assert FinishingTraversalLibrary[program].termination_accepted
+            _require_profile_termination[program]()
         else:
             comptime proof = make_finishing_typed_proofs(program)
             comptime assert check_finishing_typed_proofs(program, proof)
     elif stage == 3:
         comptime if reuse:
-            comptime assert canonical_finishing_execution_admitted()
+            require_finishing_execution()
         else:
             comptime assert check_finishing_execution_rules()
     else:
-        comptime plan = sequential_argmax_plan[3]()
+        comptime plan = (balanced_argmax_plan[3]() if copy_index % 2 == 1
+            else sequential_argmax_plan[3]())
         comptime if reuse:
             comptime descriptor = _argmax_execution_descriptor[64, 3, 7](materialize[plan]())
-            comptime assert FinishingTraversalLibrary[descriptor.program].accepted
-            comptime assert check_canonical_finishing_execution(descriptor)
+            require_finishing_traversal[descriptor.program]()
+            require_finishing_execution()
+            comptime assert check_finishing_execution_descriptor(descriptor)
         else:
             comptime fold = make_argmax_fold_plan[64, 3, 7, plan]()
             comptime assert check_argmax_fold_plan(fold)

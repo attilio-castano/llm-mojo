@@ -12,9 +12,11 @@ from llm_mojo.kernels.finishing_execution_check import (
 )
 from llm_mojo.kernels.finishing_proof import FinishingProgram, make_finishing_program
 from llm_mojo.kernels.finishing_typed_derivation import check_finishing_typed_proofs
+from llm_mojo.kernels.finishing_execution import check_finishing_execution_descriptor
 from llm_mojo.kernels.finishing_checked_exports import (
     FinishingTraversalLibrary,
-    canonical_finishing_execution_admitted, check_canonical_finishing_execution,
+    check_canonical_finishing_execution, require_finishing_traversal,
+    require_finishing_execution,
 )
 
 
@@ -81,6 +83,7 @@ def raw_execution_controls() raises:
     comptime plan = sequential_argmax_plan[3]()
     var descriptor = _argmax_execution_descriptor[64, 3, 7](materialize[plan]())
     var certificate = make_finishing_execution_certificate(descriptor)
+    assert_equal(check_canonical_finishing_execution(descriptor), True)
     assert_equal(check_finishing_execution_certificate_request(certificate, descriptor), True)
     for mode in range(5):
         var bad = changed_certificate[64, 3, 7, plan](mode)
@@ -100,9 +103,9 @@ def main() raises:
     comptime program = make_finishing_program(64, 3, 192)
     comptime plan = sequential_argmax_plan[3]()
     comptime descriptor = _argmax_execution_descriptor[64, 3, 7](materialize[plan]())
-    comptime assert FinishingTraversalLibrary[program].accepted, "canonical traversal positive rejected"
-    comptime assert canonical_finishing_execution_admitted(), "canonical execution proof rejected"
-    comptime assert check_canonical_finishing_execution(descriptor), "canonical execution request rejected"
+    require_finishing_traversal[program]()
+    require_finishing_execution()
+    comptime assert check_finishing_execution_descriptor(descriptor), "canonical execution request rejected"
     comptime bad_program = wrong_program()
     comptime assert not FinishingTraversalLibrary[bad_program].accepted, "invalid canonical traversal accepted"
     # Arbitrary inputs never use canonical acceptance. Check mutations through

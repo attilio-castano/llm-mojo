@@ -43,7 +43,7 @@ from llm_mojo.kernels.finishing_typed_coverage import (
     make_finishing_typed_coverage, check_finishing_typed_coverage,
 )
 from llm_mojo.kernels.finishing_checked_exports import (
-    FinishingTraversalLibrary, check_canonical_finishing_execution,
+    require_finishing_traversal, require_finishing_execution,
 )
 
 
@@ -259,8 +259,9 @@ def _finish[
         comptime descriptor = _argmax_execution_descriptor[threads, items_per_thread, plan_nodes](materialize[plan]())
         comptime assert (descriptor.program.count_limit == 2147483647
             and descriptor.program.integer_limit == Int.MAX), "argmax fold plan rejected"
-        comptime assert FinishingTraversalLibrary[descriptor.program].accepted, "argmax fold plan rejected"
-        comptime assert check_canonical_finishing_execution(descriptor), "checked finishing execution rejected"
+        require_finishing_traversal[descriptor.program]()
+        require_finishing_execution()
+        comptime assert check_finishing_execution_descriptor(descriptor), "checked finishing execution rejected"
         var rows = Int(result.dim[0]())
 
         def kernel() {var partials, var result, var count}:

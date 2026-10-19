@@ -187,6 +187,18 @@ independently check submitted proofs. The base-linearity and termination roots
 now use the kernel's existing multi-root API to share one inference state;
 both independently required closed types and every syntax entry are checked.
 
+Production makes ordinary host calls to `require_finishing_traversal[program]`
+and `require_finishing_execution`. Their bodies contain the compile-time
+assertions. The traversal body specializes only on the complete program;
+the general execution body has no shape parameter. Named function
+specializations provide the reuse boundary. Merely reading a `comptime`
+expression in each caller can repeat substantial elaboration even when the
+mathematical inputs match. The admission functions pass no proof handle or
+acceptance flag and perform no runtime proof checking.
+The ordinary-call rejection fixture requires an actual compiler diagnostic
+and no executable, including under optimization: a no-op runtime body must
+not allow the compiler to erase an unchecked compile-time obligation.
+
 `_finish` takes a small local plan and is a checked host launcher. It constructs
 the canonical executable descriptor and performs these compile-time checks
 before enqueuing a nested, value-taking GPU closure. The closure owns only the
@@ -207,8 +219,8 @@ altered submitted proofs, unused syntax, trees, descriptors and budgets in
 native code. These inputs always use the original full checkers. The
 compiler's correct evaluation and identity of immutable program parameters
 remain within the existing compiler trust assumption.
-The host-launcher rejection fixture requires the actual fold-admission
-diagnostic and absence of an executable. An unrelated parser/device failure,
+The host-launcher and ordinary-call rejection fixtures require the actual
+fold-admission diagnostic and absence of an executable. An unrelated parser/device failure,
 crash or timeout is not a passing rejection.
 
 For a reproducible host compilation profile on macOS:
@@ -221,8 +233,9 @@ uv run --locked python -B tests/profile_finishing_compilation.py --stage 4 --cop
 Use a clean source commit and new output paths for each invocation. The tool
 uses a fresh compiler cache, records compiler/host identity and complete input
 hashes, retains MLIR pass and process-resource reports, checks unchanged inputs,
-and executes the resulting probe. `--copies` varies distinct caller
-specializations of the same mathematical shape. `--stage` isolates arithmetic
+and executes the resulting probe. `--copies` varies distinct callers of one
+loop program, alternating sequential and balanced local reduction trees.
+`--stage` isolates arithmetic
 bootstrap (0), coverage (1), termination (2), the general execution theorem (3),
 or the complete fold/request (4). Compiler `--threads` controls compilation
 concurrency and does not constrain GPU computation shapes. These host costs

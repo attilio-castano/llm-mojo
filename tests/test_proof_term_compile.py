@@ -37,18 +37,20 @@ class ProofTermCompileTests(unittest.TestCase):
             self.assertEqual(executed.returncode, 0, executed.stdout + executed.stderr)
             self.assertEqual(executed.stdout.splitlines(),
                 ["Checked immutable finishing exports and 19 changed-input controls passed"])
-            rejected_binary = Path(directory) / "invalid-host-plan"
-            rejected = subprocess.run(
-                [compiler, "build", "-j", "2", "-I", "src", "-I", "tests",
-                 "tests/compile_fail/finishing_export_host_plan.mojo", "-o", str(rejected_binary)],
-                cwd=ROOT, capture_output=True, text=True,
-                timeout=PROOF_COMPILE_TIMEOUT_SECONDS,
-            )
-            details = rejected.stdout + rejected.stderr
-            self.assertNotEqual(rejected.returncode, 0, details)
-            self.assertRegex(details, r"(?m)^.*\b(?:error|note):\s*constraint failed:\s*"
-                             + re.escape("argmax fold plan rejected") + r"\s*$")
-            self.assertFalse(rejected_binary.exists())
+            for fixture in ("finishing_export_host_plan", "finishing_export_program_gate"):
+                with self.subTest(fixture=fixture):
+                    rejected_binary = Path(directory) / fixture
+                    rejected = subprocess.run(
+                        [compiler, "build", "-j", "2", "-I", "src", "-I", "tests",
+                         f"tests/compile_fail/{fixture}.mojo", "-o", str(rejected_binary)],
+                        cwd=ROOT, capture_output=True, text=True,
+                        timeout=PROOF_COMPILE_TIMEOUT_SECONDS,
+                    )
+                    details = rejected.stdout + rejected.stderr
+                    self.assertNotEqual(rejected.returncode, 0, details)
+                    self.assertRegex(details, r"(?m)^.*\b(?:error|note):\s*constraint failed:\s*"
+                                     + re.escape("argmax fold plan rejected") + r"\s*$")
+                    self.assertFalse(rejected_binary.exists())
 
     def test_finishing_record_execution_is_checked(self):
         compiler = environment_tool("mojo")
