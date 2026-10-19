@@ -39,6 +39,7 @@ reproduction commands.
 | [Batched decode against batch size](batch-size.md) | Diagnostic | With tile 4, throughput levels off at 2.2–3.2× one sequence by B = 64; per-row work in the multi-row projections sets the cost, and tiles 8 and 16 are slower than tile 4 |
 | [Inter-layer buffer swapping](buffer-swap.md) | Not promoted alone | 23 fewer compute copies with exact outputs; 5.3–8.3% median paired reductions missed the standalone gate |
 | [GPU token selection](token-selection.md) | Not promoted alone | A separate GPU argmax gains 4.5–7% but missed its standalone gate; the fused vocabulary head was slower |
+| [Finishing-proof compilation](finishing-compilation.md) | Diagnostic | Cold compiler cost and reuse of checked proofs across flexible finishing callers; separate from GPU performance |
 | [QKV fusion](qkv-fusion.md) | Superseded | Configuration 25: exact, with 12–15% lower token latency, but short-context calibration prevented promotion; configuration 26 replaced it |
 | [Complete token profile](token-profile.md) | Diagnostic | Where a roughly 17 ms decode step spent its time before the decode fusions |
 | [Projection arrangements](projection-arrangements.md) | Failed gate | None of five fixed-width and block-size arrangements met the frozen full-token gate |

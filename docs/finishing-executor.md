@@ -249,6 +249,10 @@ host proof probe. `--source-root` and `--probe` can select a pinned source
 snapshot for a before/after comparison. The complete input hashes identify
 that snapshot even when it differs from the tooling checkout.
 
+The [retained compilation study](../studies/model_generation/finishing-compilation.md)
+compares cold builds and mixed-tree caller scaling, including compiler
+instructions, memory, exact source identities and actual Metal qualification.
+
 ## Qualification and remaining work
 
 Run the focused native/proof suite with:
