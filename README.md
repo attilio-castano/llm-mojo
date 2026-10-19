@@ -46,7 +46,7 @@ pay off stay in the record alongside the ones that did, with the reason.
   runs. The bounded offline speed comparison is inconclusive, so async remains opt-in.
   Optional `chat --engine --prefix-cache` retains immutable full KV blocks for
   later requests, with exact prefix identity and idle eviction. It uses the
-  synchronous reference runner; the [prefix study](studies/model_generation/engine-core.md#prefix-caching-frozen-implementation-and-evidence-contract)
+  synchronous reference runner; the [prefix study](studies/model_generation/engine-core.md#prefix-caching-retained-bounded-results)
   separates numerical qualification from measured reuse. The multi-request
   frontend remains in the [serving plan](docs/serving-plan.md).
 - **Open questions.** For one conversation, submitting GPU work limits speed

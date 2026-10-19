@@ -20,7 +20,7 @@ budgeting, Fast execution and async stepping are explicit options. The measured
 Fast and async speed verdicts are inconclusive; online distributions are descriptive.
 
 Direct chat and generation remain Fast. Optional [`chat --engine`](chat.md#optional-engine-terminal-chat)
-uses one request per turn and recomputes complete history; `--async-stepping`
+uses one request per turn and recomputes complete history without prefix caching; `--async-stepping`
 selects the qualified two-context runner. The current lock resolves stable Mojo
 1.1.0 / MAX 26.6.0. Historical measurements keep their original runtime identities.
 The initial phase 4 prefix cache is opt-in with `chat --engine --prefix-cache`.
@@ -29,6 +29,9 @@ runner, using bounded exact token-prefix/namespace/salt lookup and idle LRU
 eviction. The [prefix contract](../studies/model_generation/engine-core.md#prefix-caching-frozen-implementation-and-evidence-contract)
 separates numerical qualification, lifecycle and timing. HTTP transport, process
 supervision and restart/replay are phase 5. Each phase retains its own evidence.
+The [qualified prefix results](../studies/model_generation/engine-core.md#prefix-caching-retained-bounded-results)
+bind the exact source and record all 96 paired timing calls, including no-hit
+cost and the pressure case's larger stream gaps.
 
 ## Phase 3 review map
 

@@ -904,5 +904,14 @@ input identities and total work; qualified native numerical/ownership tests
 establish per-request completed-step publication. Index equality is exact; no SHA-256 cache-key claim is
 made. Cache admission time includes attachment, reservation and eviction;
 removal events supply eviction counts without an isolated eviction-time claim.
-Evidence and performance conclusions belong to the eventual measured source
-and retained results, not to successful tooling compilation alone.
+The completed campaign binds clean `dcd09b5d57eb4cb20ed7f7bd806d6e6c5c23cd91`:
+all sixteen preflights and all 96 timed calls passed with identical delivered
+histories. Six reuse cells are faster under the frozen paired rule; both
+zero-reuse cells are inconclusive. Full 1,024-token reuse at 384 blocks has
+continuation/seed-plus-continuation ratios 0.108679/0.191188. Pressure can improve
+completion while increasing inter-token gaps. The
+[results and limits](../../../studies/model_generation/engine-core.md#prefix-caching-retained-bounded-results)
+and [sealed CPU restoration](../../../studies/model_generation/engine-prefix-evidence/README.md)
+retain all costs, both earlier failed untimed harness attempts and exact source.
+Cache use stays opt-in; these finite instrumented offline traces establish no
+capacity, SLO or default-promotion result.

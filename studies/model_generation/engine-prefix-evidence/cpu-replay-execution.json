@@ -1,0 +1,18 @@
+{
+  "command": [
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python3",
+    "-B",
+    "/private/tmp/llm-mojo-prefix-20261018-v3-canonical-restored/retention/prefix_retention.py",
+    "cpu-check",
+    "--directory",
+    "/private/tmp/llm-mojo-prefix-20261018-v3-canonical-restored"
+  ],
+  "exit_code": 0,
+  "timeout_seconds": 600,
+  "wall_elapsed_ns": 2865563333,
+  "log_sha256": "9919b98dd971811a939f58402e92fd919ec786f17397915f6c344cff82f2cd1d",
+  "archive_sha256": "73c10a73c0c84422177db8e9cea4a523b1e557baf90c9c11be5e95c4c464bd3f",
+  "source_commit": "dcd09b5d57eb4cb20ed7f7bd806d6e6c5c23cd91",
+  "native_execution": false,
+  "asset_access": false
+}

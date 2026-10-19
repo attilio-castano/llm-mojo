@@ -1,0 +1,50 @@
+{
+  "kind": "engine-prefix-acceptance-v1",
+  "source_commit": "dcd09b5d57eb4cb20ed7f7bd806d6e6c5c23cd91",
+  "full_validation_exit_code": 0,
+  "final_python_tests": 424,
+  "final_python_exit_code": 0,
+  "production_sources_match_full_native_validation": true,
+  "final_build_exit_code": 0,
+  "final_qualification_exit_code": 0,
+  "numerical": [
+    {
+      "name": "prefix-chunk-schedule-kv-logits-greedy",
+      "checked": 64252482,
+      "mismatches": 0,
+      "nonfinite": 0
+    },
+    {
+      "name": "readonly-prefix-divergent-consumers-cold-recompute",
+      "checked": 25926962,
+      "mismatches": 0,
+      "nonfinite": 0
+    },
+    {
+      "name": "prefix-engine-lifetime-incremental",
+      "checked": 354,
+      "mismatches": 0,
+      "nonfinite": 0
+    },
+    {
+      "name": "prefix-engine-numeric-fault-cache-clear",
+      "checked": 103,
+      "mismatches": 0,
+      "nonfinite": 0
+    }
+  ],
+  "untimed_preflights": 16,
+  "measured_calls": 96,
+  "campaign_exit_code": 0,
+  "cpu_cli_replay_exit_code": 0,
+  "same_delivered_histories": true,
+  "drain_and_clear_passed": true,
+  "measurement": {
+    "kind": "qwen-engine-prefix-v1",
+    "bytes": 2408797,
+    "sha256": "1cb0dc9a848adefccb25d46d0816fa9db771f751221b2925a0f03c0b462032f4",
+    "uncompressed_sha256": "145ffd2c03d5a7919e4ed77c6cb5ef3bb0ae0c50ff2ae90fbc028784031f5f0e"
+  },
+  "source_and_binary_unchanged_through_campaign": true,
+  "scope": "Opt-in synchronous reference27 on Apple M4 Pro/Metal; fixed prepared assets, BF16/FP32, 32-slot slot-major KV, reserved offline campaign; no default promotion/capacity/SLO claim."
+}

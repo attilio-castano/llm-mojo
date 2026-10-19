@@ -12,11 +12,11 @@ The sections below keep each study's original source/runtime and claim scope.
 | Which token budget and runner should be used? | [Fixed-workspace budget](#fixed-workspace-budget-retained-bounded-results), [Fast](#optional-fast-engine-retained-bounded-results) |
 | How does chat use the engine? | [Terminal lifecycle](#optional-engine-terminal-chat-accepted-lifecycle) |
 | How does GPU submission overlap host work? | [Async ownership contract](#asynchronous-stepping-implementation-and-acceptance-contract), [qualification and results](#asynchronous-stepping-retained-bounded-results) |
-| How can repeated prompts reuse completed KV? | [Frozen prefix-cache contract](#prefix-caching-frozen-implementation-and-evidence-contract) |
+| How can repeated prompts reuse completed KV? | [Frozen contract](#prefix-caching-frozen-implementation-and-evidence-contract), [qualified results](#prefix-caching-retained-bounded-results) |
 
 Implementation authorized on 2026-10-08 from baseline
 `cb2416abf3c9fbb19c460fa99709d93eeabba97e` on `codex/engine-core`.
-**Status: synchronous core and optional asynchronous stepping validated.** Mixed execution,
+**Status: synchronous core, optional asynchronous stepping and optional prefix caching validated within their recorded scopes.** Mixed execution,
 request lifecycle, KV-pressure replay, optional fitted budgeting and optional
 lifetime-reservation admission are implemented. Optional asynchronous LLM
 stepping has separate [retained acceptance and paired results](#asynchronous-stepping-retained-bounded-results).
@@ -42,7 +42,9 @@ the async runner retains submitted ownership until each ticket is collected.
 The trace driver exercises both backends with fixed arrivals. Terminal chat
 defaults to its direct Fast session; `chat --engine` uses the synchronous
 reference core, and `--async-stepping` opts into the async adapter. Both engine
-chat modes use one request at a time and complete-history recomputation.
+chat modes use one request at a time. With `--prefix-cache`, synchronous chat
+attaches completed full prefix blocks and computes the remaining history.
+Without caching, the engine recomputes the complete history.
 Prefix caching and multi-request frontend transport remain separate work.
 
 ```mermaid
@@ -1378,3 +1380,164 @@ prerequisite; the GPU gate build fails during Metal compilation. Metal component
 readiness is consequently unresolved. Production cache ownership, indexing,
 chat integration and timing collection have not started. These are readiness
 observations, not numerical qualification or performance results.
+
+## Prefix caching: retained bounded results
+
+The approved synchronous prefix-cache milestone completed on 2026-10-19 UTC
+(October 18 locally). The measured clean commit is
+`dcd09b5d57eb4cb20ed7f7bd806d6e6c5c23cd91`. Use
+`uv run --locked llm-mojo chat --engine --prefix-cache` to opt in.
+Default engine behavior stays cache-disabled.
+
+The causal mechanism is reuse of already completed causal-transformer work:
+identical token IDs, positions, resident weights and numerical policy produce
+the same prefix KV. The bounded index compares the entire prefix, namespace
+and request salt. Only full 32-token blocks become immutable Registered entries;
+request tables hold references while private tails receive new writes. Lookup
+always leaves the final prompt query to execute. Healthy synchronous completion
+precedes publication. Idle LRU eviction precedes live preemption; reset, close
+and numeric failure clear retained ownership according to their contracts.
+SHA digests, radix indexing, persistence and asynchronous pins remain future
+choices.
+
+### Qualification and acceptance
+
+The [acceptance card](engine-prefix-evidence/engine-prefix-acceptance.json) and
+[source/validation archive](engine-prefix-evidence/engine-prefix-validation.json.gz)
+retain the evidence layers separately:
+
+- Fixture-level exact KV/logit/greedy and divergent-consumer qualification
+  passed before production cache changes. The checkpoint gate then passed
+  64,252,482 schedule comparisons, 25,926,962 sharing comparisons, 354 engine
+  checks and 103 fault checks, with zero mismatches or unexpected nonfinite
+  values on the final build.
+- Complete repository validation passed on implementation commit `c959179`:
+  38 Mojo invocations, including 252 tests reported by 32 native suites, the
+  custom parity checks and every benchmark smoke route. The final complete
+  Python rerun passed 424 tests. Three benchmark/parser/test files changed
+  after the broad native run; production engine/model/cache bytes stayed
+  identical. Targeted regressions and the final exact-build qualification
+  cover those changes.
+- Seven historical chat histories matched all 123 natural tokens: 359 computed
+  plus 96 reused rows, versus 455 cold rows. Terminal reset, EOF, Unicode and
+  Ctrl-C acceptance passed. An intentional nonfinite CLI failure preserved
+  delivered history and cleared cache, private ownership and written counts;
+  its native exit 1 is an expected fault result.
+- All 16 untimed disabled/enabled preflights passed before the first timed
+  call. They froze seed and measured literal histories and finish reasons.
+  All 96 timed calls reproduced those histories. Each measured request actually
+  delivered 16 tokens and finished by length.
+
+Two earlier untimed qualification attempts remain failed in the archive. One
+exposed an omitted seed arrival timestamp in the native trace; the other
+exposed a parser assumption that an enabled no-op handoff must take positive
+time. The repairs pass the declared seed timestamp and accept equal clock
+endpoints only for an enabled handoff containing no cache events. No recorded
+timestamp was changed, and no timed cell was replaced or resampled.
+
+### Work and paired time
+
+The recorded target is Apple M4 Pro / Metal (`metal:4-metal4`), 24 GiB memory,
+macOS 26.6.2, Xcode 27.0 / 27A266a, Mojo 1.1.0 and MAX 26.6.0. The pinned
+Qwen2.5-0.5B-Instruct checkpoint uses 24 layers, width 896, fourteen query heads,
+two KV heads and head dimension 64, with BF16 storage / FP32 accumulation,
+reference configuration 27, projection 8 and 32-slot slot-major KV.
+All runs recorded AC power, normal power mode and no thermal warnings.
+
+The frozen campaign contains eight offline cells, each with four balanced
+disabled/self-disabled/enabled triples: 96 calls once. Eight requests arrive
+at zero, with a 256- or 1,024-token prefix, distinct 64-token suffixes and a
+16-token output limit. Fixed 256-row/eight-sequence workspaces and lifetime
+reservation stay constant. Both arms load the model, perform ten untimed warmup
+steps and execute the same cache-enabled seed; controls then clear and disable
+the cache. The seed processes 257 or 1,025 rows and emits one token.
+
+For a request with prompt length P, G delivered tokens and H reused rows, the
+necessary computed rows are P + G - 1 - H. The last emitted token has no KV row
+yet. Independent replay verified this identity and the corresponding sum of
+causal attention positions in every run.
+
+Ratios below are medians of four within-block enabled/disabled ratios. A smaller
+ratio means less time. The continuation interval excludes seed and handoff;
+the resident episode includes both, ending at request drain before final clear.
+The declared self-control rule uses at least a 5% noise floor. The largest
+observed continuation floors are 7.86% for 1,024/8/384 and 7.26% for
+1,024/4/40. Both time metrics classify all six reuse cells as faster and both
+zero-reuse cells as inconclusive.
+
+| Prefix | Matching requests | Blocks | Computed rows, off → on | Reused rows | Continuation ratio | Episode ratio | Verdict |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 256 | 0/8 | 384 | 2680 → 2680 | 0 | 1.0031 | 1.0045 | inconclusive |
+| 256 | 4/8 | 384 | 2680 → 1656 | 1024 | 0.6702 | 0.6968 | faster |
+| 256 | 8/8 | 384 | 2680 → 632 | 2048 | 0.3394 | 0.3933 | faster |
+| 1024 | 0/8 | 384 | 8824 → 8824 | 0 | 1.0052 | 1.0046 | inconclusive |
+| 1024 | 4/8 | 384 | 8824 → 4728 | 4096 | 0.5413 | 0.5821 | faster |
+| 1024 | 8/8 | 384 | 8824 → 632 | 8192 | 0.1087 | 0.1912 | faster |
+| 1024 | 4/8 | 40 | 8824 → 4728 | 4096 | 0.5879 | 0.6238 | faster |
+| 1024 | 8/8 | 40 | 8824 → 632 | 8192 | 0.1596 | 0.2320 | faster |
+
+Full 1,024-token reuse avoids 8,192 of 8,824 continuation rows, with about
+9.2× faster continuation and 5.2× faster seed-plus-continuation episodes in
+the 384-block cell. The zero-reuse median ratios are close to one, but the
+declared rule does not establish either zero overhead or a slowdown.
+
+### Latency, pressure and cleanup
+
+These milliseconds are medians of four per-run quantiles, using linear
+interpolation. Each entry shows cache off → on. They describe these finite
+traces; paired makespan is the confirmatory time comparison.
+
+| Prefix | Matching requests | Blocks | TTFT p50, ms | TTFT p95, ms | Inter-token gap p95, ms |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 256 | 0/8 | 384 | 710.36 → 711.15 | 1227.32 → 1229.06 | 120.86 → 120.90 |
+| 256 | 4/8 | 384 | 710.14 → 232.76 | 1227.63 → 751.37 | 120.78 → 121.07 |
+| 256 | 8/8 | 384 | 709.79 → 171.84 | 1226.38 → 301.80 | 120.59 → 41.69 |
+| 1024 | 0/8 | 384 | 2948.48 → 2955.41 | 5037.85 → 5053.72 | 178.75 → 179.27 |
+| 1024 | 4/8 | 384 | 3241.28 → 559.21 | 5718.02 → 2882.29 | 211.03 → 203.13 |
+| 1024 | 8/8 | 384 | 3088.80 → 243.91 | 5470.57 → 428.24 | 204.51 → 59.26 |
+| 1024 | 4/8 | 40 | 3427.53 → 763.20 | 5935.39 → 3290.19 | 12.81 → 13.70 |
+| 1024 | 8/8 | 40 | 3434.10 → 464.33 | 5953.85 → 850.82 | 13.16 → 53.58 |
+
+The full-reuse 40-block cell improves completion and TTFT while worsening p95
+stream gaps. Lifetime reservation admits fewer simultaneous cold requests;
+sharing admits more readers, whose decode steps share time with suffix prefill.
+Each cold request reserves 35 blocks. A hit reuses 32 shared blocks and needs
+three private blocks, so two readers fit in 38 blocks while two cold requests
+would need 70. This changes which work overlaps in the 40-block pool.
+Faster total completion therefore does not guarantee smaller gaps for every
+request. The two enabled pressure cells evict 137 and 10 idle entries per run,
+respectively. All requests complete without preemption. This demonstrates
+bounded ownership and progress under this pool constraint.
+
+Independent raw replay checked 6,500 physical-capacity snapshots, 144 hit
+receipts, 5,152 stored/removed event pairs and 160 clear events. Registered
+blocks include both referenced and idle entries and count once in the physical
+partition. Every drain has zero request references, private blocks and pending
+work; every final clear restores all blocks to Free with zero written counts.
+Seed-phase arm medians range from 129 to 603 ms. Enabled final clear ranges
+from 0.181 to 4.565 ms across primary runs. The retained results also show the
+descriptive seed-through-final-clear costs; including cleanup preserves the
+six-faster/two-inconclusive pattern without creating a new promotion rule.
+
+### Evidence and claim boundary
+
+The [compact results](engine-prefix-evidence/engine-prefix-results.json) retain
+paired ratios, calibration ratios, noise floors, work, TTFT, TPOT, token-gap
+quantiles, observed maxima, cache costs, evictions and cleanup. The
+[complete measurement archive](engine-prefix-evidence/measurements/engine-prefix.json.gz)
+retains all 96 calls and embeds the final qualification and all 16 preflights.
+The [evidence guide](engine-prefix-evidence/README.md) provides source restoration,
+commands, checksums and the independent CPU audit. The existing Phase 3
+104-file historical catalog is unchanged.
+
+Timing includes retained stdout/cache-event serialization between steps, so
+these are instrumented host-to-drain measurements. Model loading and warmup
+precede the resident episode. CPU replay verifies prefix identities, event/index
+state and total work; the native ownership and numerical tests establish
+per-request completed-step publication. Neither layer alone is a universal
+proof of backend behavior for arbitrary inputs.
+
+Acceptance is limited to the qualified synchronous reference route, fixed
+resident assets and recorded workloads. Async/Fast cache combinations are
+rejected. No online arrival study, sustainable capacity, client SLO, goodput,
+device-loss recovery or default promotion follows from this campaign.
