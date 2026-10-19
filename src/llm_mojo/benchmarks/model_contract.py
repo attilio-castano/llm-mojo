@@ -411,6 +411,23 @@ def batch_configuration(data):
 
 # Phase 3 keeps the token-trace declaration beside the existing model matrices.
 ENGINE_ARMS = ('serial', 'static', 'continuous', 'chunked')
+ENGINE_PREFIX_STUDY = 'engine-prefix-v1'
+ENGINE_PREFIX_DECLARATION = dict(
+    kind='qwen-engine-prefix-v1', schema_version=1, study=ENGINE_PREFIX_STUDY,
+    model='Qwen2.5-0.5B-Instruct', policy='reference configuration 27; BF16 storage, FP32 reductions',
+    max_context=4096, block_size=32, order='slot-major', paired_blocks=4,
+    token_budget=256, max_sequences=8, warmup_steps=10, admission='reserved',
+    prefix_lengths=[256, 1024], reuse_requests=[0, 4, 8], primary_blocks=384,
+    pressure_cells=[dict(prefix_tokens=1024, reuse_requests=4, blocks=40),
+                    dict(prefix_tokens=1024, reuse_requests=8, blocks=40)],
+    requests_per_trace=8, suffix_tokens=64, max_new_tokens=16,
+    grid=['disabled', 'self-disabled', 'enabled'], measured_runs=96, untimed_preflights=16,
+    identity='bounded exact namespace, salt and full token-prefix equality; no digest surrogate',
+    timing_boundary='resident weights and ten warmup steps outside episode; retain seed, '
+        'handoff, measured trace and final cache clear as separate host intervals',
+    target=None, goodput=None, asynchronous=False, default_promotion=False,
+    execution_timeout_seconds=180, campaign_timeout_seconds=7200,
+)
 ENGINE_STEP_FIELDS = (
     'step_id', 'decode_seqs', 'prefill_seqs', 'prefill_tokens', 'total_tokens',
     'attended_positions', 'admitted', 'preempted', 'finished', 'aborted',

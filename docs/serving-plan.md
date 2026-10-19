@@ -23,8 +23,12 @@ Direct chat and generation remain Fast. Optional [`chat --engine`](chat.md#optio
 uses one request per turn and recomputes complete history; `--async-stepping`
 selects the qualified two-context runner. The current lock resolves stable Mojo
 1.1.0 / MAX 26.6.0. Historical measurements keep their original runtime identities.
-Prefix caching is phase 4; HTTP transport, process supervision and restart/replay
-are phase 5. Each phase retains its own acceptance evidence.
+The initial phase 4 prefix cache is opt-in with `chat --engine --prefix-cache`.
+It shares immutable full 32-slot blocks under the synchronous reference-27
+runner, using bounded exact token-prefix/namespace/salt lookup and idle LRU
+eviction. The [prefix contract](../studies/model_generation/engine-core.md#prefix-caching-frozen-implementation-and-evidence-contract)
+separates numerical qualification, lifecycle and timing. HTTP transport, process
+supervision and restart/replay are phase 5. Each phase retains its own evidence.
 
 ## Phase 3 review map
 
@@ -164,9 +168,11 @@ extending its current asset preparation and native executable launch duties.
 `QwenModel` owns weights and workspaces; caller-owned `KVPool` owns KV storage
 and `BlockManager` manages physical blocks. `EngineCore` retains each request's
 token history. The direct `ChatSession` owns one conversation, while the engine
-adapter submits its full history on each turn. Phase 4 adds prefix hits so those
-engine-client turns can reuse earlier KV; the later KVCacheManager design also
-adds prefix indexing, cache events and SSD ownership.
+adapter submits its full history on each turn. With prefix caching enabled,
+engine-client turns attach retained full blocks and compute only the remaining
+suffix, including the final prompt query. The current manager/index own shared
+references and logical cache events; the later design adds persisted identities
+and SSD ownership.
 
 ### Failure domains decide the process split
 
@@ -554,7 +560,7 @@ Revisit smaller blocks only if a larger model makes KV memory scarce.
 | Reset | free, no sequence |
 | Partial | receiving tokens for one sequence; private |
 | Complete | every slot submitted; not yet reusable |
-| Registered | hashed, indexed and reusable by other requests |
+| Registered | indexed, immutable and reusable by other requests |
 
 `Complete` does not mean written: cache lengths count submitted tokens, and
 the GPU writes asynchronously. Readers on the same ordered stream are safe.
@@ -566,7 +572,8 @@ completion of the step that wrote the block.
 Checked after every step in debug builds and in every scheduler simulation:
 
 - Total reference counts equal total block-table entries.
-- Free, referenced and cached blocks partition the pool.
+- Free, private and Registered blocks partition the pool; Registered blocks
+  may have active readers or be idle, and are counted once.
 - A Registered block's bytes never change while referenced or indexed.
 - Only full blocks are shared; Partial blocks are private, so no
   copy-on-write is needed.
@@ -574,7 +581,15 @@ Checked after every step in debug builds and in every scheduler simulation:
 
 ### Prefix index
 
-A block key is `SHA-256(parent_key, block_token_ids, cache_salt)`, so a key
+The first in-memory implementation stores the exact complete token prefix at
+each full block boundary, scoped to one qualified resident model/numerical
+namespace and an exact request salt. A bounded native index compares those
+values directly and stops lookup at the first absent prefix block. No digest is
+used as a surrogate for token equality. Only successful completed synchronous
+steps publish blocks; active registered blocks are never evicted or written.
+
+The hash-chained alternative below remains a possible lookup optimization. A
+block key would be `SHA-256(parent_key, block_token_ids, cache_salt)`, so a key
 commits to the complete prefix and tenant. Each Registered block also stores
 its token IDs, which are compared on every hit: the hash is an index, not
 proof. In memory, one engine build writes every block, so the key needs no engine
@@ -584,10 +599,12 @@ At least the final prompt token must be computed, because its logits are
 needed. When the whole prompt hits, the final block is recomputed into a
 private block, so shared blocks are never written.
 
-Eviction is least recently used among unreferenced Registered blocks. A
-finished sequence releases its blocks tail-first, so descendants are evicted
-before their parents. An interactive chat session may pin its chain for a
-limited time.
+The first implementation evicts unreferenced Registered entries by their last
+successful cached attachment or initial publication, with deterministic index
+order breaking ties. Release is tail-first but does not update that recency.
+An evicted ancestor makes retained descendants unreachable until their complete
+prefix chain is resident again; full-prefix identity keeps this a safe miss.
+Pinning and a descendant-first eviction preference remain later options.
 
 A cache hit reveals through latency that another request sent the same
 prefix. `cache_salt` isolates tenants when a server has more than one.

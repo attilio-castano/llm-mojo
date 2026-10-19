@@ -71,6 +71,10 @@ struct ChatScriptRunner(EngineChatRunner):
     def now_ns(self) -> Int:
         return self.oracle.now_ns()
 
+    def prefix_cache_identity(self) -> String:
+        # Scripted lifecycle identity, never checkpoint numerical evidence.
+        return "scripted-engine-chat-prefix-v1"
+
     def execute(mut self, batch: StepBatch, mut kv: KVPool) raises -> List[Int]:
         if not self.valid:
             raise Error("scripted runner is invalid")
@@ -99,8 +103,10 @@ def _ids(actual: List[Int], expected: List[Int]) raises:
 
 
 def _session(tokenizer: Tokenizer, mut work: TokenizerWorkspace,
-             script: List[Int], chunk: Int = 256, capacity: Int = 512) raises -> ScriptedSession:
-    var session = ScriptedSession("scripted-lifecycle",tokenizer,work,"test",chunk,capacity)
+             script: List[Int], chunk: Int = 256, capacity: Int = 512,
+             prefix_caching: Bool = False) raises -> ScriptedSession:
+    var session = ScriptedSession("scripted-lifecycle",tokenizer,work,"test",chunk,capacity,
+                                  prefix_caching=prefix_caching)
     session.runner.oracle = SimulatedRunner(script,VOCABULARY)
     return session^
 
@@ -117,9 +123,14 @@ def _closed(prompt: List[Int], reply: List[Int]) -> List[Int]:
 def _drained(session: ScriptedSession) raises:
     session.check_drained()
     assert_equal(session.engine.live(),0)
-    assert_equal(session.engine.blocks.free_blocks(),session.kv.blocks)
+    assert_equal(session.engine.cache_references(),0)
+    assert_equal(session.engine.private_blocks(),0)
+    assert_equal(session.engine.blocks.free_blocks()+session.engine.cached_blocks(),session.kv.blocks)
+    var valid = 0
     for written in session.kv.written:
-        assert_equal(written,0)
+        assert_true(written == 0 or written == KV_BLOCK_SIZE)
+        valid += written
+    assert_equal(valid,session.engine.cached_blocks()*KV_BLOCK_SIZE)
     for i in range(len(session.engine.requests)):
         assert_equal(session.engine.requests[i].state,FINISHED)
         assert_equal(session.engine.requests[i].sequence,-1)
@@ -333,6 +344,66 @@ def test_engine_chat_slot_reuse_reset_and_full_history_reprefill() raises:
     _ = _drain(session)
     assert_equal(session.turn_rows,len(first_prompt))
     assert_equal(session.request_id,3)
+
+
+def _prefix_message() -> String:
+    var message = String()
+    for _ in range(80):
+        message += "word "
+    return message^
+
+
+def test_engine_chat_prefix_cache_seven_turns_reset_and_close() raises:
+    var tokenizer = Tokenizer(String(TABLES))
+    var work = TokenizerWorkspace()
+    var session = _session(tokenizer,work,[42],32,1024,True)
+    var initial = session.history.tokens.copy()
+    var previous_prompt = 0
+    for turn in range(7):
+        session.begin(tokenizer,work,_prefix_message() if turn == 0 else "continue",1)
+        var prompt = session.history.tokens.copy()
+        assert_true(len(prompt) > 64)
+        _ = _drain(session)
+        var hit = 0 if turn == 0 else previous_prompt//32*32
+        assert_equal(session.turn_cache_hit_tokens,hit)
+        assert_equal(session.turn_rows,len(prompt)-hit)
+        _ids(session.history.tokens,_closed(prompt,[42]))
+        assert_true(session.engine.cached_blocks() > 0)
+        previous_prompt = len(prompt)
+    session.reset()
+    _ids(session.history.tokens,initial)
+    assert_equal(session.engine.cached_blocks(),0)
+    assert_equal(session.engine.blocks.free_blocks(),session.kv.blocks)
+    session.begin(tokenizer,work,_prefix_message(),1)
+    var cold_prompt = len(session.history.tokens)
+    _ = _drain(session)
+    assert_equal(session.turn_cache_hit_tokens,0)
+    assert_equal(session.turn_rows,cold_prompt)
+    assert_true(session.engine.cached_blocks() > 0)
+    session.close()
+    assert_equal(session.engine.cached_blocks(),0)
+    _drained(session)
+
+
+def test_engine_chat_prefix_cache_failure_clears_idle_and_live_blocks() raises:
+    var tokenizer = Tokenizer(String(TABLES))
+    var work = TokenizerWorkspace()
+    var session = _session(tokenizer,work,[42],32,1024,True)
+    session.begin(tokenizer,work,_prefix_message(),1)
+    _ = _drain(session)
+    assert_true(session.engine.cached_blocks() > 0)
+    session.begin(tokenizer,work,"continue",3)
+    var prompt = session.history.tokens.copy()
+    while session.history.generated == 0:
+        _ = session.step()
+    assert_true(session.turn_cache_hit_tokens > 0)
+    session.fail()
+    assert_equal(session.history.reason,"error")
+    assert_true(session.engine.failed)
+    assert_equal(session.engine.cached_blocks(),0)
+    assert_equal(session.engine.blocks.free_blocks(),session.kv.blocks)
+    _ids(session.history.tokens,_closed(prompt,[42]))
+    _drained(session)
 
 
 def test_engine_chat_context_and_invalid_turn_rejection_are_atomic() raises:

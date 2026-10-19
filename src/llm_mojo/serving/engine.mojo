@@ -3,8 +3,9 @@
 One step takes running decodes first and at most one prompt/replay chunk.
 Incremental admission drops KV under pressure and recomputes retained history.
 Optional lifetime reservation instead admits only requests whose declared peak
-KV demand fits and keeps their blocks until completion. Prefix caching is a
-later mechanism. Lists have declared capacities, but this implementation does
+KV demand fits and keeps their blocks until completion. Optional synchronous
+prefix caching retains immutable full blocks across requests. Lists have declared
+capacities, but this implementation does
 not claim allocation-free host scheduling. Synchronous step finishes every GPU
 use before return. Optional step_async queues at most one successor before
 collecting the oldest result and retains each referenced KV owner until its
@@ -13,7 +14,8 @@ symbolic GPU dependencies and enqueued KV extents.
 """
 from std.math import ceildiv
 from llm_mojo.serving.batch import StepBatch
-from llm_mojo.serving.blocks import BlockManager
+from llm_mojo.serving.blocks import BlockManager, REGISTERED, PARTIAL, COMPLETE
+from llm_mojo.serving.prefix_cache import PrefixCache, PrefixCacheEvent
 from llm_mojo.serving.kv_pool import KVPool
 from llm_mojo.serving.runner import EngineClock, ModelRunner, AsyncModelRunner
 
@@ -94,9 +96,10 @@ struct EngineRequest(Movable):
     # Uncollected samples are symbolic GPU dependencies, never delivered IDs.
     var pending_samples: Int
     var pending_uses: Int
+    var cache_salt: String
 
     def __init__(out self, request_id: Int, prompt: List[Int], maximum: Int,
-                 stops: List[Int], ticket: Int, arrival_ns: Int):
+                 stops: List[Int], ticket: Int, arrival_ns: Int, cache_salt: String = ""):
         self.request_id = request_id
         self.tokens = List[Int](capacity=len(prompt) + maximum)
         for token in prompt:
@@ -114,6 +117,7 @@ struct EngineRequest(Movable):
         self.arrival_ns = arrival_ns
         self.pending_samples = 0
         self.pending_uses = 0
+        self.cache_salt = cache_salt
 
 
 @fieldwise_init
@@ -126,6 +130,12 @@ struct EngineEvent(Copyable, Movable):
     var generated_tokens: Int
     var arrival_ns: Int
     var emitted_ns: Int
+
+
+@fieldwise_init
+struct EngineCacheHit(ImplicitlyCopyable, Movable):
+    var request_id: Int
+    var cached_tokens: Int
 
 
 @fieldwise_init
@@ -227,6 +237,12 @@ struct EngineStep(Copyable, Movable):
     var async_heads: List[EngineAsyncHead]
     var async_completions: List[EngineAsyncCompletion]
     var async_results: List[EngineAsyncResult]
+    var cache_hit_tokens: Int
+    var cache_hits: List[EngineCacheHit]
+    var cache_events: List[PrefixCacheEvent]
+    var cache_lookup_ns: Int
+    var cache_publish_ns: Int
+    var cache_admission_ns: Int
 
     def __init__(out self, step_id: Int, capacity: Int, observe_kv: Bool = False,
                  async_step: Bool = False):
@@ -268,6 +284,12 @@ struct EngineStep(Copyable, Movable):
         self.async_heads = List[EngineAsyncHead](capacity=2 * capacity if async_step else 0)
         self.async_completions = List[EngineAsyncCompletion](capacity=2 if async_step else 0)
         self.async_results = List[EngineAsyncResult](capacity=capacity if async_step else 0)
+        self.cache_hit_tokens = 0
+        self.cache_hits = List[EngineCacheHit]()
+        self.cache_events = List[PrefixCacheEvent]()
+        self.cache_lookup_ns = 0
+        self.cache_publish_ns = 0
+        self.cache_admission_ns = 0
 
 
 @fieldwise_init
@@ -313,17 +335,23 @@ struct EngineCore(Movable):
     var step_id: Int
     var failed: Bool
     var failure_events: List[EngineEvent]
+    var failure_cache_events: List[PrefixCacheEvent]
     var async_pending: List[EngineAsyncPending]
     var async_enabled: Bool
     var async_last_ticket: Int
+    var prefix_caching: Bool
+    var prefix_cache: PrefixCache
+    var prefix_namespace: String
 
     def __init__(out self, blocks: Int, block_size: Int, max_context: Int, vocabulary: Int,
                  token_budget: Int = 256, max_sequences: Int = 64, max_requests: Int = 128,
                  watermark_blocks: Int = 0, mixed_prefill: Bool = True,
-                 reserve_lifetime: Bool = False, observe_kv: Bool = False) raises:
+                 reserve_lifetime: Bool = False, observe_kv: Bool = False,
+                 prefix_caching: Bool = False, prefix_namespace: String = "") raises:
         if (blocks < 1 or block_size < 1 or max_context < 1 or max_context > 4096 or vocabulary < 1
                 or token_budget < 1 or token_budget > 4096 or max_sequences < 1 or max_sequences > 64
-                or max_requests < 1 or watermark_blocks < 0 or watermark_blocks > blocks):
+                or max_requests < 1 or watermark_blocks < 0 or watermark_blocks > blocks
+                or (prefix_caching and (block_size != 32 or prefix_namespace.byte_length() == 0))):
             raise Error("invalid bounded engine configuration")
         self.blocks = BlockManager(blocks, block_size, max_context)
         self.requests = List[EngineRequest](capacity=max_requests)
@@ -342,9 +370,43 @@ struct EngineCore(Movable):
         self.step_id = 0
         self.failed = False
         self.failure_events = List[EngineEvent](capacity=max_requests)
+        self.failure_cache_events = List[PrefixCacheEvent]()
         self.async_pending = List[EngineAsyncPending](capacity=2)
         self.async_enabled = False
         self.async_last_ticket = -1
+        self.prefix_caching = prefix_caching
+        self.prefix_cache = PrefixCache(blocks if prefix_caching else 0, block_size, max_context)
+        self.prefix_namespace = prefix_namespace
+
+    def cached_blocks(self) -> Int:
+        return len(self.prefix_cache.entries)
+
+    def cache_references(self) -> Int:
+        var total = 0
+        for count in self.blocks.refs:
+            total += count
+        return total
+
+    def private_blocks(self) -> Int:
+        var total = 0
+        for state in self.blocks.states:
+            if state == PARTIAL or state == COMPLETE:
+                total += 1
+        return total
+
+    def _clear_blocks(mut self, mut kv: KVPool, cleared: List[Int]) raises:
+        for block in cleared:
+            kv.truncate(block, 0)
+
+    def clear_cache(mut self, mut kv: KVPool) raises -> List[PrefixCacheEvent]:
+        """Clear a drained cache, including after failure, preserving its event log."""
+        if (self.live() != 0 or self.pending_steps() != 0
+                or kv.blocks != self.blocks.blocks or kv.block_size != self.blocks.block_size):
+            raise Error("cache clear requires drained requests and GPU work")
+        self.check(kv)
+        var cleared = self.prefix_cache.clear(self.blocks)
+        self._clear_blocks(kv, cleared)
+        return self.prefix_cache.take_events()
 
     def set_cost_policy(mut self, policy: StepCost) raises:
         """Enable a frozen cost model only after validating all its fields."""
@@ -362,7 +424,7 @@ struct EngineCore(Movable):
         return count
 
     def add(mut self, request_id: Int, prompt: List[Int], max_new_tokens: Int,
-            stop_ids: List[Int], arrival_ns: Int = -1) raises -> Int:
+            stop_ids: List[Int], arrival_ns: Int = -1, cache_salt: String = "") raises -> Int:
         """Validate before mutation; a reused finished slot receives a fresh ticket."""
         if self.failed or request_id < 0 or len(prompt) < 1 or max_new_tokens < 0 or arrival_ns < -1:
             raise Error("invalid engine request")
@@ -385,7 +447,7 @@ struct EngineCore(Movable):
                 slot = i
         if slot < 0 and len(self.requests) == self.max_requests:
             raise Error("engine request queue is full")
-        var request = EngineRequest(request_id, prompt, max_new_tokens, stop_ids, self.next_ticket, arrival_ns)
+        var request = EngineRequest(request_id, prompt, max_new_tokens, stop_ids, self.next_ticket, arrival_ns, cache_salt)
         if slot < 0:
             slot = len(self.requests)
             self.requests.append(request^)
@@ -415,8 +477,8 @@ struct EngineCore(Movable):
     def _release(mut self, index: Int, mut kv: KVPool) raises:
         if self._held(index):
             var sequence = self.requests[index].sequence
-            kv.truncate_table(self.blocks.table(sequence), 0)
-            self.blocks.release(sequence)
+            var cleared = self.blocks.detach(sequence)
+            self._clear_blocks(kv, cleared)
             self.requests[index].sequence = -1
 
     def _finish(mut self, index: Int, reason: String, mut kv: KVPool, mut record: EngineStep, at_ns: Int) raises:
@@ -467,6 +529,10 @@ struct EngineCore(Movable):
                 raise Error("a step exceeds its lifetime KV reservation")
             return True
         var needed = ceildiv(length, self.blocks.block_size) - len(self.blocks.tables[self.requests[index].sequence])
+        if self.prefix_caching:
+            var cleared = self.prefix_cache.reclaim(self.blocks, min(needed,
+                self.blocks.free_blocks() + self.prefix_cache.reclaimable(self.blocks, List[Int]())), List[Int]())
+            self._clear_blocks(kv, cleared)
         while needed > self.blocks.free_blocks():
             # Already scheduled holders cannot be invalidated. Among the rest,
             # dropping the newest preserves progress of the oldest request.
@@ -483,6 +549,10 @@ struct EngineCore(Movable):
             if victim < 0:
                 raise Error("no reclaimable owner for an unsatisfiable reservation")
             self._preempt(victim, kv, record)
+            if self.prefix_caching:
+                var cleared = self.prefix_cache.reclaim(self.blocks, min(needed,
+                    self.blocks.free_blocks() + self.prefix_cache.reclaimable(self.blocks, List[Int]())), List[Int]())
+                self._clear_blocks(kv, cleared)
             if victim == index:
                 return False
         self.blocks.reserve(self.requests[index].sequence, length)
@@ -492,8 +562,8 @@ struct EngineCore(Movable):
         return len(self.requests[index].tokens) + self.requests[index].pending_samples
 
     def _prefill_count(self, index: Int, budget: Int, selected: List[Int],
-                       mut record: EngineStep) raises -> Int:
-        var past = self.blocks.length(self.requests[index].sequence) if self._held(index) else 0
+                       mut record: EngineStep, planned_past: Int = 0) raises -> Int:
+        var past = self.blocks.length(self.requests[index].sequence) if self._held(index) else planned_past
         var remaining = self._history_length(index) - past
         var maximum = min(budget, remaining)
         if not self.cost_policy_enabled:
@@ -542,6 +612,43 @@ struct EngineCore(Movable):
         if index < 0:
             index = self._oldest(WAITING, List[Int]())
             if index >= 0:
+                if self.prefix_caching:
+                    var lookup_begin = runner.now_ns()
+                    var cached = self.prefix_cache.match(self.blocks, self.requests[index].tokens,
+                        self.prefix_namespace, self.requests[index].cache_salt)
+                    record.cache_lookup_ns += runner.now_ns() - lookup_begin
+                    var past = len(cached) * self.blocks.block_size
+                    count = self._prefill_count(index, budget, selected, record, past)
+                    var residents = self._has_resident() if self.reserve_lifetime else len(selected) > 0
+                    var watermark = self.watermark_blocks if residents else 0
+                    var available = max(self.blocks.free_blocks()
+                        + self.prefix_cache.reclaimable(self.blocks, cached) - watermark, 0)
+                    var extent = self._peak_extent(index) if self.reserve_lifetime else past + count
+                    if self.reserve_lifetime:
+                        if ceildiv(extent, self.blocks.block_size) - len(cached) > available:
+                            return False
+                    else:
+                        count = min(count, available * self.blocks.block_size)
+                        extent = past + count
+                    if count < 1:
+                        return False
+                    var admission_begin = runner.now_ns()
+                    var admission = self.prefix_cache.admit(self.blocks, cached, extent, watermark)
+                    self._clear_blocks(kv, admission.cleared)
+                    record.cache_admission_ns += runner.now_ns() - admission_begin
+                    self.requests[index].sequence = admission.sequence
+                    self.requests[index].state = PREFILL
+                    record.admitted += 1
+                    record.cache_hit_tokens += past
+                    record.cache_hits.append(EngineCacheHit(self.requests[index].request_id, past))
+                    if self.observe_kv:
+                        record.admitted_request_id = self.requests[index].request_id
+                        record.admitted_ns = runner.now_ns()
+                    selected.append(index)
+                    counts.append(count)
+                    record.prefill_seqs = 1
+                    record.prefill_tokens = count
+                    return True
                 var free = self.blocks.free_blocks()
                 # The conservative margin applies while any request resides,
                 # even if none was selected. Ignore it when the pool is empty
@@ -673,6 +780,8 @@ struct EngineCore(Movable):
     def check(self, kv: KVPool) raises:
         self.blocks.check()
         self.blocks.check_pool(kv)
+        if self.prefix_caching or self.cached_blocks() > 0:
+            self.prefix_cache.check(self.blocks)
         if self.live() > self.max_requests:
             raise Error("live requests exceed the bound")
         for sequence in range(len(self.blocks.active)):
@@ -919,7 +1028,8 @@ struct EngineCore(Movable):
         ticket, then a later call can safely preempt/replay through the common
         scheduler. Lifetime reservations keep the normal pipeline resident.
         """
-        if self.failed or kv.blocks != self.blocks.blocks or kv.block_size != self.blocks.block_size:
+        if (self.failed or self.prefix_caching or self.cached_blocks() > 0
+                or kv.blocks != self.blocks.blocks or kv.block_size != self.blocks.block_size):
             raise Error("failed engine or incompatible pool")
         self.check(kv)
         self.async_enabled = True
@@ -1016,6 +1126,13 @@ struct EngineCore(Movable):
     def step[Runner: ModelRunner](mut self, mut runner: Runner, mut kv: KVPool) raises -> EngineStep:
         if self.failed or self.async_enabled or kv.blocks != self.blocks.blocks or kv.block_size != self.blocks.block_size:
             raise Error("failed engine or incompatible pool")
+        if not self.prefix_caching and self.cached_blocks() > 0:
+            raise Error("clear retained prefix blocks before disabling caching")
+        if self.prefix_caching:
+            var identity = runner.prefix_cache_identity()
+            if (identity.byte_length() == 0 or kv.head_major
+                    or identity != self.prefix_namespace):
+                raise Error("prefix caching requires one qualified synchronous reference runner and slot-major pool")
         self.check(kv)
         var record = EngineStep(self.step_id, self.max_requests + 2 * self.max_sequences, self.observe_kv)
         record.begin_ns = runner.now_ns()
@@ -1039,6 +1156,11 @@ struct EngineCore(Movable):
             var input = self._batch(selected, counts, List[Int](), List[Int]())
             var batch = self._copy_batch(input.batch)
             batch.validate(kv.blocks, kv.block_size, self.vocabulary)
+            if self.prefix_caching:
+                for slot in batch.slot_mapping:
+                    var block = slot // kv.block_size
+                    if self.blocks.states[block] == REGISTERED or self.blocks.refs[block] != 1:
+                        raise Error("prefix cache writes require a private block")
             record.total_tokens = batch.rows()
             for s in range(len(selected)):
                 var past = batch.positions[batch.query_start[s]]
@@ -1070,6 +1192,9 @@ struct EngineCore(Movable):
                 for i in range(len(self.requests)):
                     if self.requests[i].state != FINISHED:
                         self._finish(i, "error", kv, record, runner.now_ns())
+                if self.prefix_caching:
+                    record.cache_events = self.clear_cache(kv)
+                    self.failure_cache_events = record.cache_events.copy()
                 self.failure_events = record.events.copy()
                 raise error
             postprocess_begin = runner.now_ns()
@@ -1082,6 +1207,12 @@ struct EngineCore(Movable):
             for s in range(len(selected)):
                 var index = selected[s]
                 self.blocks.commit(self.requests[index].sequence, batch.seq_lens[s])
+                if self.prefix_caching:
+                    var publish_begin = runner.now_ns()
+                    var cleared = self.prefix_cache.publish(self.blocks, self.requests[index].sequence,
+                        self.requests[index].tokens, self.prefix_namespace, self.requests[index].cache_salt)
+                    self._clear_blocks(kv, cleared)
+                    record.cache_publish_ns += runner.now_ns() - publish_begin
                 if batch.seq_lens[s] == len(self.requests[index].tokens):
                     var token = tokens[sampled]
                     sampled += 1
@@ -1109,6 +1240,8 @@ struct EngineCore(Movable):
             if self.requests[i].state == WAITING:
                 record.waiting += 1
         self.check(kv)
+        if self.prefix_caching:
+            record.cache_events = self.prefix_cache.take_events()
         record.end_ns = runner.now_ns()
         record.postprocess_ns = record.end_ns - postprocess_begin
         self._observe_kv(kv, record, 3, record.end_ns)

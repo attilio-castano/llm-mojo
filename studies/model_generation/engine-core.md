@@ -12,6 +12,7 @@ The sections below keep each study's original source/runtime and claim scope.
 | Which token budget and runner should be used? | [Fixed-workspace budget](#fixed-workspace-budget-retained-bounded-results), [Fast](#optional-fast-engine-retained-bounded-results) |
 | How does chat use the engine? | [Terminal lifecycle](#optional-engine-terminal-chat-accepted-lifecycle) |
 | How does GPU submission overlap host work? | [Async ownership contract](#asynchronous-stepping-implementation-and-acceptance-contract), [qualification and results](#asynchronous-stepping-retained-bounded-results) |
+| How can repeated prompts reuse completed KV? | [Frozen prefix-cache contract](#prefix-caching-frozen-implementation-and-evidence-contract) |
 
 Implementation authorized on 2026-10-08 from baseline
 `cb2416abf3c9fbb19c460fa99709d93eeabba97e` on `codex/engine-core`.
@@ -1172,3 +1173,208 @@ gives regeneration and replay commands. This is retained native evidence with
 independent CPU replay and local custody; it does not claim a fresh GPU rerun,
 remote backup or production serving. Async remains opt-in and the synchronous
 engine remains the default.
+
+## Prefix caching: frozen implementation and evidence contract
+
+Implementation was authorized on 2026-10-17 after review of the retained engine
+results. This section freezes the next milestone; it is a declaration, not a
+completion receipt or a new measurement. Historical core, admission, budget,
+Fast and async records retain their original bytes, source identities and
+conclusions.
+
+The first cache is an explicit option for the synchronous reference-27 engine,
+with 32-slot slot-major KV, the current locked model/runtime and fixed 256-row
+budget. Both incremental and lifetime-reservation admission must work with it.
+Direct Fast chat/generation and cache-disabled engine behavior keep their
+existing contracts. A cache request combined with Fast or asynchronous stepping
+must fail before request, allocator, cache or GPU state changes. Supporting either
+combination requires a separately declared numerical and ownership gate.
+This milestone changes host KV ownership, admission and reuse; it does not add
+new kernels, a model/runtime upgrade, SSD storage, HTTP transport or restart
+recovery.
+
+### Exact numerical gate comes first
+
+Before editing production cache ownership, prove with the existing model and
+explicit test block tables that synchronous reference-27 execution with a reused
+prefix equals its uncached recomputation byte for byte in final active
+logits and every valid KV element, with identical natural greedy histories and
+terminal reasons. Reuse must preserve the stored shared bytes exactly. Poisoned
+inactive slots, spare blocks and other requests' private blocks must remain
+unchanged. Check boundary prompts of 31, 32, 33, 63, 64 and 65 tokens, a private
+suffix crossing a block boundary, two consumers with different suffixes and a
+mixed step containing a cache-hit remainder and another request's decode.
+
+Use the existing small model/decoder fixtures for this first gate, before adding
+the production prefix index, shared ownership or collector integration. Missing
+compiler/Metal capability leaves that gate pending; it does not authorize bypassing
+it. After the gate passes and the implementation is complete, qualify the exact
+clean build with the complete Qwen checkpoint on Apple M4 Pro/Metal before
+performance collection. Retain actual device/backend identity,
+source/binary/asset hashes, commands, numeric exits and check counts. A numerical
+or ownership failure stops the dependent implementation or timing work; do not
+replace exact equality with a fitted tolerance or change arithmetic to pass this
+gate. Host simulations establish lifecycle invariants, not numerical or GPU
+performance claims.
+
+### Bounded exact index and namespace
+
+The initial in-memory index is bounded by the physical pool. Each reusable
+record identifies a full block and stores the exact token prefix ending at that
+block, the exact cache salt and the resident engine namespace. Lookup compares
+those values, then follows the longest matching complete chain. The namespace
+binds the resident model/checkpoint, reference-27 numerical policy and KV layout;
+reuse cannot cross namespaces or salts. No persisted entry survives the process.
+
+This is a deliberate simplification of the serving plan's chained SHA-256
+index. Full-prefix equality establishes identity directly; a digest is not needed
+to decide correctness in this bounded first implementation. A later SHA-256
+index may accelerate candidate lookup, but must retain exact token, ancestry,
+namespace and salt verification. Logical event replay for this milestone uses
+the exact prefix identity. It must not label a noncryptographic identifier as
+SHA-256 or claim compatibility with the planned digest event format. Keep this
+version distinct from every retained earlier event/declaration format.
+
+Only whole healthy blocks become Registered and reusable. A partial block is
+private and is never shared or copied on write. For a positive-output prompt of
+length `P`, the reused token count is at most
+`32 * floor((P - 1) / 32)`: at least the final prompt token must execute to produce
+its logits. When the prompt ends at a block boundary, recompute its final block
+privately. Zero-output requests perform no cache lookup, allocation or model
+execution. A cache hit changes the computed suffix and capacity needed; it does
+not change absolute positions or the authoritative request token history.
+
+Publication occurs only after a synchronous step has completed successfully and
+its result has passed the existing health checks. A merely submitted or reserved
+block cannot become a hit. A fatal runner fault publishes nothing from that
+step, invalidates the runner, releases requests and clears reusable cache state
+before any possible subsequent process-level reuse. No device-loss recovery
+claim follows.
+
+### Ownership, release and lifecycle gates
+
+Reference counts count sequence-table references, separately from index
+ownership. Free, private and Registered physical blocks partition the pool;
+referenced and unreferenced Registered blocks are counted once. Registered bytes
+are immutable while indexed or referenced. Shared blocks retain their valid
+written count when one consumer releases its reference. Only private blocks may
+receive writes. Admission credits shared physical blocks once and reserves only
+the additional private capacity; the declared token/row budget remains unchanged.
+
+Evict least recently used unreferenced Registered entries. Referenced blocks
+cannot be reused as private storage. Releasing a request works
+tail-first and leaves no request references; private tails return to the free
+pool while reusable full blocks may remain indexed. Idle chat reuse comes from
+that index, with reset/close clearing the session cache after request drain.
+There is no separate pin mechanism in this milestone; bounded pinning is a later
+option if measurements justify it. Rejection leaves state unchanged. Abort, stop, limit, zero output,
+preemption/replay, request-slot reuse and execution/output failure each finish a
+request exactly once and preserve the already delivered token prefix.
+
+Cache-enabled request drain means zero live requests, zero pending GPU tickets
+and zero private request ownership; full indexed Registered blocks may remain
+valid. Explicit cache clear, after all dependent work has completed, returns the
+whole pool and makes every written-valid count zero. Cache-disabled drain keeps
+the existing all-free/zero-valid-KV contract. Extend chat and collector checks
+with the new versioned distinction rather than weakening historical assertions.
+
+Deterministic and seeded host tests must cover exact prefix/salt/namespace
+matching, different ancestors, partial misses, forced candidate collisions,
+shared release, finite progress under both admission policies, FIFO pressure,
+LRU eviction, invalid-operation atomicity and all terminal
+paths. An independent replay of versioned store/remove/clear events must
+reconstruct the exact logical index; missing, duplicate or reordered IDs and
+changed identity data are rejected. Metal tests additionally compare all shared
+and inactive bytes before and after suffix work, eviction and physical block
+reuse. Chat repeats the existing cancellation/reset/Unicode/context-rejection
+and injected-fault acceptance against an independent direct reference history.
+
+### Frozen bounded comparison
+
+The confirmatory campaign has eight cells and exactly 96 measured native runs:
+
+| Shared-prefix tokens | Intended reusable-request fraction | KV blocks | Cells |
+| --- | --- | --- | ---: |
+| 256 and 1,024 | 0%, 50% and 100% for each length | 384 | 6 |
+| 1,024 | 50% and 100% | 40 | 2 |
+
+Each measured trace has eight requests, a 64-token private suffix per prompt and
+at most 16 new tokens per request. Use owned system/instruction/document text,
+tokenize once with the pinned tokenizer, and freeze the exact token arrays,
+request order, stop IDs and arrival offsets before qualification or timings.
+The 0/50/100% labels specify zero/four/eight prompts matching the declared seed
+prefix; they are not measured hit-rate promises under eviction. Nonmatching
+prefixes must differ within their first full block, and private suffixes must
+differ so accidental suffix reuse cannot alter the declared work. Every request
+fits the 40-block pool alone. The 384-block primary pool also holds eight longest
+uncached requests and the seed prefix without imposed capacity pressure.
+
+Hold reference 27, synchronous stepping, BF16 storage/FP32 reductions, fixed
+256-row/eight-sequence workspaces, token budget 256, zero watermark and explicit
+lifetime-reservation admission constant throughout timing. Incremental admission
+has correctness gates but is not another timing axis in this campaign. Four
+balanced blocks contain cache-disabled control, repeated disabled control and
+cache-enabled candidate, with forward/reverse/reverse/forward order. There are
+three runs per block, twelve per cell. No Fast/adaptive/async arm is included.
+
+Each invocation performs ten representative warmup steps outside timing, clears
+all warmup cache/request state, then executes the same declared seed phase. The
+seed prompt contains the shared prefix plus one private query token and has an
+output limit of one, so the full shared prefix has actually executed before it
+can be reused. Retain seed time and rows separately. Disabled controls discard
+the seed's cache; the enabled arm keeps it. Measured request arrivals use the
+same frozen offsets and a clock origin after the seed phase; do not shift later
+arrivals in response to the arm's measured completion times. Fix the request
+order with matching-prefix consumers before nonmatching requests in the 50%
+pressure case, and retain that order even if it leads to eviction or queueing.
+
+Report both the measured warm-cache trace and the complete seed-plus-continuation
+episode cost, including cache handling between phases, so seed work cannot
+disappear from the amortization claim. Seed time, warmup time and request latency
+are distinct boundaries. This comparison does not require duplicate-prefill
+coalescing; an all-at-once cold trace can admit duplicates before any block is
+Registered and must not be presented as an equivalent warm-cache workload.
+
+Every run must preserve the frozen complete natural histories and finish reasons,
+have zero unexpected nonfinite values, finish all requests, return all request
+references and successfully clear the final cache. Account for actually hit
+tokens and computed rows; absent replay, a positive-output request computes
+`prompt_length + delivered_tokens - 1 - cache_hit_tokens` rows. No result is
+relabelled to hide eviction, misses, replay or extra work. The exact token arrays
+and seed phase must be identical across all three arms in each paired cell.
+
+Report TTFT, TPOT, full inter-token/end-to-end distributions, makespan, delivered
+throughput, hit tokens, computed/recomputed rows, admissions/waiting, evictions,
+references and free/private/cached capacity. Separate host lookup, cache admission
+and registration cost where recorded. Cache admission includes attachment,
+reservation and eviction; report eviction counts from removal events without
+claiming an isolated eviction time. Synchronous execute still includes
+upload, submission, wait and readback. A capacity count is not OS memory pressure
+or measured memory bandwidth. The existing paired rule and self-control noise
+floor apply to offline makespan; latency distributions and any online extension
+remain descriptive, with no client SLO or sustainable-capacity claim.
+
+Bound each native invocation, including initialization and warmup, to 180 seconds
+and the full collection campaign to two hours. Preserve incomplete or failed
+logs and actual exits; a failed qualification/cell stops the campaign rather
+than changing a workload, replacing a timing cell or resampling a noisy block.
+Retain the complete raw records, provenance, frozen declaration and compact
+lossless evidence in this existing study topic. Extend the existing engine
+trace/build/collect/replay tooling, with independent CPU reconstruction of
+identity, event/index state, work accounting and derived metrics. No new
+experiment hierarchy or independent inference implementation is part of this
+milestone.
+
+### Initial implementation readiness, 2026-10-17
+
+The numerical gate is prepared in `test_mixed_model.mojo` and the existing
+`engine_metal_driver.mojo` checkpoint driver. It has not executed or passed.
+The locked environment and pinned assets are prepared, and all regenerated
+oracles match their frozen anchors. The unchanged block-manager suite passes
+all four tests. The Python suite runs 405 tests: 403 pass, while the two
+positive/negative compilation suites fail at executable linking because Xcode
+27 requires its license to be accepted. `xcrun -f metal` also exits 69 for that
+prerequisite; the GPU gate build fails during Metal compilation. Metal component
+readiness is consequently unresolved. Production cache ownership, indexing,
+chat integration and timing collection have not started. These are readiness
+observations, not numerical qualification or performance results.

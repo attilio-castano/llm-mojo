@@ -1,0 +1,367 @@
+"""Prefix replay checks exact identities, charged seed work and real phase bounds."""
+import copy
+import gzip
+import hashlib
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest import mock
+
+from llm_mojo.benchmarks import engine_prefix as prefix
+from llm_mojo.benchmarks import model_contract as contract
+from llm_mojo.benchmarks import model_profile as profile
+
+
+def trace_fixture(length=256,reuse=4,blocks=384):
+    common=list(range(length+1))
+    requests=[]
+    for i in range(8):
+        base=common[:length] if i<reuse else [5000+i,*common[1:length]]
+        requests.append(prefix._request(i,base+[6000+i]*64))
+    return dict(kind='engine-token-trace-v1',schema_version=1,mode='offline',scripted_tokens=[11],
+        prefix=dict(tokens=length,reuse_requests=reuse,blocks=blocks,salt=prefix.SALT,
+                    seed_request=prefix._request(128,common,1)),requests=requests)
+
+
+def native_fixture(trace=None,cache='enabled'):
+    trace=trace or trace_fixture()
+    blocks=trace['prefix']['blocks']
+    namespace='qwen-reference27-projection8//prepared'
+    lines=['device Apple M4 Pro/metal','mode greedy',f'config chunked {blocks} 256 8',
+           'admission reserved','study engine-prefix-v1','work_capacity 256 8',f'cache {cache}',
+           f'namespace {namespace}',f'salt {prefix.SALT}']
+    indexed={}
+    event_id=0
+    step_id=0
+    absolute=1000
+    def event(kind,tokens):
+        nonlocal event_id
+        row=f'cache_event {event_id} {step_id if phase in ("seed","measure") else -1} {kind} '
+        if kind=='cleared':
+            row+='- - -'
+        else:
+            row+=f'{namespace} {prefix.SALT} '+','.join(map(str,tokens))
+        event_id+=1
+        return row
+    def clear():
+        result=[]
+        for key in list(indexed):
+            result.append(event('removed',key))
+            del indexed[key]
+        result.append(event('cleared',[]))
+        return result
+    def run_phase(requests,enabled):
+        nonlocal step_id
+        local=0
+        steps=0
+        for request in requests:
+            lines.append(f'arrival {request["request_id"]} 0 0')
+        for request in requests:
+            ids=request['prompt_ids']
+            hit=0
+            if enabled:
+                for size in range(32,((len(ids)-1)//32)*32+1,32):
+                    if tuple(ids[:size]) not in indexed:
+                        break
+                    hit=size
+            past=hit
+            while past<len(ids):
+                rows=min(256,len(ids)-past)
+                end=past+rows
+                last=end==len(ids)
+                changes=[]
+                if enabled:
+                    wanted=[tuple(ids[:n]) for n in range(32,(end//32)*32+1,32)]
+                    for key in wanted:
+                        if key in indexed:
+                            continue
+                        while len(indexed)>=blocks:
+                            victim=next(k for k in indexed if k not in wanted)
+                            changes.append(event('removed',victim)); del indexed[victim]
+                        indexed[key]=True
+                        changes.append(event('stored',key))
+                begin=local+1
+                local=begin+10
+                values=dict.fromkeys(contract.ENGINE_STEP_FIELDS,0)
+                values.update(step_id=step_id,prefill_seqs=1,prefill_tokens=rows,total_tokens=rows,
+                    attended_positions=rows*(past+1)+rows*(rows-1)//2,admitted=int(past==hit),
+                    finished=int(last),blocks_free=blocks-len(indexed),begin_ns=begin,schedule_ns=1,
+                    build_ns=1,execute_ns=4,postprocess_ns=1,end_ns=local)
+                lines.append('step '+' '.join(str(values[k]) for k in contract.ENGINE_STEP_FIELDS))
+                if last:
+                    i=request['request_id']
+                    lines.append(f'token {i} 151643 {len(ids)} 1 0 {local-1}')
+                    lines.append(f'finish {i} stop {len(ids)} 1 0 {local-1}')
+                lines.append(f'prefix_step {step_id} {hit if past==hit else 0} 1 1 0')
+                if hit and past==hit:
+                    lines.append(f'cache_hit {step_id} {request["request_id"]} {hit}')
+                lines.extend(changes)
+                lines.append(f'cache_state {step_id} {blocks-len(indexed)} {len(indexed)} 0 0')
+                step_id+=1; steps+=1; past=end
+        lines.append(f'prefix_drained {len(requests)} {steps} {blocks-len(indexed)} {len(indexed)} 0 0 0 {local+1}')
+        return local+3
+    for phase in prefix.PHASES:
+        lines.append('phase '+phase)
+        if phase=='seed':
+            duration=run_phase([trace['prefix']['seed_request']],True)
+        elif phase=='handoff':
+            if cache=='disabled': lines.extend(clear())
+            duration=5
+        elif phase=='measure':
+            duration=run_phase(trace['requests'],cache=='enabled')
+        else:
+            lines.extend(clear())
+            lines.append(f'cache_cleared {blocks} 0 0 0 0 0')
+            duration=5
+        lines.append(f'phase_time {phase} {absolute} {absolute+duration}')
+        absolute+=duration+2
+    return '\n'.join(lines)
+
+
+def campaign_fixture():
+    return dict(kind='engine-prefix-campaign-v1',schema_version=1,source_text=prefix.SOURCE_TEXT,
+        source_text_sha256=prefix._hash(prefix.SOURCE_TEXT),
+        text_provenance='repository-authored engineering text; no external corpus',
+        tokenizer=dict(tables_sha256='a'*64,binary_sha256='b'*64,generator_source_sha256='c'*64),
+        traces=[trace_fixture(*values) for values in prefix.CELL_CONFIGS])
+
+
+def record_fixture():
+    build=dict(source=dict(repository=dict(commit='a'*40,dirty=False),sources={'uv.lock':'b'*64,
+        'src/llm_mojo/benchmarks/engine_prefix.py':'c'*64,'tests/engine_metal_driver.mojo':'d'*64}),
+        assets=dict(prepared='/prepared',prepared_sha256='c'*64,tables_sha256='a'*64),
+        environment=dict(hardware={'chip':'Apple M4 Pro'},software={'mojo':'1.1.0','max':'26.6.0'}),
+        declaration=contract.ENGINE_PREFIX_DECLARATION,
+        command=['/mojo','build','-I','src','src/llm_mojo/benchmarks/engine_trace.mojo','-o','/engine'],
+        binaries={'engine':dict(sha256='e'*64,bytes=1)})
+    numerical=dict(source=build['source'],assets=build['assets'],environment=build['environment'],
+        command=['/mojo','build','-I','src','-I','tests','tests/engine_metal_driver.mojo','-o','/checkpoint-driver'],
+        binaries={'checkpoint-driver':dict(sha256='f'*64,bytes=1)})
+    output='\n'.join(['device Apple M4 Pro/metal','qualification '+prefix.CHECKPOINT_IDENTITY,
+        'configuration 27 projection 8 dtype BF16/FP32 block-size 32',
+        *[f'check {name} checked 4 mismatches 0 unexpected-nonfinite 0' for name in prefix.CHECKPOINT_GROUPS]])
+    def receipt(command,timeout):
+        return dict(command=list(map(str,command)),exit_code=0,timeout_seconds=timeout,wall_elapsed_ns=10000000)
+    qualification=dict(kind='engine-prefix-qualification-v1',schema_version=1,build=build,
+        checkpoint_receipt=dict(build=numerical,build_execution=receipt(numerical['command'],600),
+            stdout=output,stdout_sha256=prefix._hash(output),
+            execution=receipt(['/checkpoint-driver','/prepared','prefix-cache-qualification'],180)))
+    campaign=campaign_fixture(); document=json.dumps(campaign)
+    qualification.update(campaign=campaign,campaign_document=document,campaign_sha256=prefix._hash(document),preflight_cells=[])
+    record=dict(kind=contract.ENGINE_PREFIX_DECLARATION['kind'],declaration=contract.ENGINE_PREFIX_DECLARATION,
+        build=build,trace=campaign,trace_document=document,trace_sha256=prefix._hash(document),
+        qualification=qualification,cells=[])
+    conditions=dict(battery={'power_source':'AC Power'},power_mode_raw='0',
+        thermal=['No thermal warning level has been recorded','No performance warning level has been recorded'])
+    for trace in campaign['traces']:
+        params=trace['prefix']; name=prefix.cell_id(params['tokens'],params['reuse_requests'],params['blocks'])
+        cell=dict(cell_id=name,trace=trace,native_trace_path=f'/records/{name}/trace.tsv',
+                  native_trace_sha256=prefix._hash(prefix.trace_tsv(trace)),runs=[])
+        preflight=dict(cell_id=name,trace=trace,native_trace_path=f'/qualification/{name}/trace.tsv',
+                       native_trace_sha256=prefix._hash(prefix.trace_tsv(trace)),runs=[])
+        for cache in ('disabled','enabled'):
+            stdout=native_fixture(trace,cache)
+            run=dict(cache=cache,stdout=stdout,parsed=prefix.parse_run(stdout,trace,cache,params['blocks']))
+            run['native_execution']=receipt(prefix._command(record,preflight,run),180)
+            preflight['runs'].append(run)
+        preflight['expected_histories']=prefix._histories(preflight['runs'][0]['parsed'],trace)
+        qualification['preflight_cells'].append(preflight)
+        for block in range(4):
+            for cache,calibration in prefix.cells(block):
+                run=copy.deepcopy(next(r for r in preflight['runs'] if r['cache']==cache))
+                run.update(block=block,calibration=calibration,conditions_before=conditions,conditions_after=conditions)
+                run['native_execution']=receipt(prefix._command(record,cell,run),180)
+                cell['runs'].append(run)
+        record['cells'].append(cell)
+    record['qualification_document']=json.dumps(qualification)
+    record['qualification_sha256']=prefix._hash(record['qualification_document'])
+    record['summary']=prefix.summary(record)
+    return record
+
+
+class PrefixTraceTests(unittest.TestCase):
+    def test_actual_initial_gate_stdout_keeps_coverage_scope(self):
+        # Exact retained checkpoint-qualification.log from numerical-attempt-2.
+        initial='\n'.join(['device Apple M4 Pro/metal',
+            'qualification engine-prefix-cache-reference27-v1',
+            'configuration 27 projection 8 dtype BF16/FP32 block-size 32',
+            'check prefix-chunk-schedule-kv-logits-greedy checked 64252482 mismatches 0 unexpected-nonfinite 0',
+            'check readonly-prefix-divergent-consumers-cold-recompute checked 25926962 mismatches 0 unexpected-nonfinite 0'])
+        checked=prefix.parse_checkpoint(initial,prefix.CHECKPOINT_GROUPS[:2])
+        self.assertEqual(sum(c['checked'] for c in checked['checks']),90179444)
+        with self.assertRaises(ValueError):
+            prefix.parse_checkpoint(initial)  # Production Engine groups are still required.
+        for wrong in ('configuration 26','projection 5','dtype FP16/FP32','block-size 64'):
+            fields=wrong.split(); current=' '.join(fields[:-1])
+            changed=initial.replace(next(part for part in ('configuration 27','projection 8','dtype BF16/FP32','block-size 32') if part.startswith(current)),wrong)
+            with self.subTest(wrong=wrong),self.assertRaises(ValueError):
+                prefix.parse_checkpoint(changed,prefix.CHECKPOINT_GROUPS[:2])
+
+    def test_hit_rows_and_seed_cost_have_separate_observed_boundaries(self):
+        trace=trace_fixture()
+        warm=prefix.run_summary(prefix.parse_run(native_fixture(trace),trace,'enabled',384),trace)
+        cold=prefix.run_summary(prefix.parse_run(native_fixture(trace,'disabled'),trace,'disabled',384),trace)
+        self.assertEqual(warm['cache_hit_tokens'],4*256)
+        self.assertEqual(cold['cache_hit_tokens'],0)
+        self.assertEqual(cold['total_tokens']-warm['total_tokens'],4*256)
+        self.assertEqual(warm['seed_rows'],257)
+        self.assertGreater(warm['episode_ns'],warm['duration_ns']+warm['seed_ns'])
+        self.assertTrue(warm['cache_cleared'])
+
+    def test_namespace_salt_tokens_and_event_gap_are_exact(self):
+        stdout=native_fixture(); trace=trace_fixture()
+        event=next(line for line in stdout.splitlines() if line.startswith('cache_event 0 '))
+        mutations=[stdout.replace(event,event.replace('cache_event 0 ','cache_event 1 ')),
+            stdout.replace(event,event.replace('prefix-study','another-salt')),
+            stdout.replace(event,event.replace('/prepared','/other-checkpoint')),
+            stdout.replace(event,event.rsplit(' ',1)[0]+' 0'),stdout.replace(event+'\n',''),
+            stdout.replace('cache_hit 2 0 256','cache_hit 2 0 224')]
+        for broken in mutations:
+            with self.subTest(change=broken[:30]),self.assertRaises(ValueError):
+                prefix.parse_run(broken,trace,'enabled',384)
+
+    def test_coherent_unused_index_identity_change_still_fails(self):
+        trace=trace_fixture(reuse=0)
+        lines=native_fixture(trace).splitlines()
+        for i,line in enumerate(lines):
+            fields=line.split()
+            if fields[:1]==['cache_event'] and fields[3]!='cleared':
+                fields[6]=','.join(str(int(token)+90000) for token in fields[6].split(','))
+                lines[i]=' '.join(fields)
+        with self.assertRaisesRegex(ValueError,'outside known computed input histories'):
+            prefix.parse_run('\n'.join(lines),trace,'enabled',384)
+
+    def test_seed_cannot_publish_later_blocks_before_their_completed_rows(self):
+        trace=trace_fixture(1024,0,384)
+        lines=native_fixture(trace).splitlines()
+        first=lines.index('phase seed')+1
+        last=next(i for i,line in enumerate(lines) if line.startswith('phase_time seed '))
+        stored=[line for line in lines[first:last] if line.startswith('cache_event ')]
+        self.assertEqual(len(stored),32)
+        relocated=[]
+        for line in stored:
+            fields=line.split(); fields[2]='0'
+            relocated.append(' '.join(fields))
+        body=[]; inserted=False
+        for line in lines[first:last]:
+            fields=line.split()
+            if fields[:1]==['cache_event']:
+                continue
+            if fields[:1]==['step']:
+                fields[contract.ENGINE_STEP_FIELDS.index('blocks_free')+1]='352'
+            elif fields[:1]==['cache_state']:
+                fields[2:4]=['352','32']
+                if not inserted:
+                    body.extend(relocated); inserted=True
+            body.append(' '.join(fields))
+        changed='\n'.join([*lines[:first],*body,*lines[last:]])
+        with self.assertRaisesRegex(ValueError,'seed stored prefix exceeds cumulative completed rows'):
+            prefix.parse_run(changed,trace,'enabled',384)
+
+    def test_clear_and_ownership_are_independent_from_request_completion(self):
+        stdout=native_fixture()
+        drained=next(line for line in stdout.splitlines() if line.startswith('prefix_drained '))
+        fields=drained.split(); fields[5]='1'
+        corruptions=[stdout.replace('cache_cleared 384 0 0 0 0 0','cache_cleared 383 1 0 0 0 32'),
+            stdout.replace(drained,' '.join(fields)),
+            stdout.replace('phase clear','phase handoff'),
+            stdout.replace('device Apple M4 Pro/metal','device cpu/host')]
+        for broken in corruptions:
+            with self.subTest(change=broken[-100:]),self.assertRaises(ValueError):
+                prefix.parse_run(broken,trace_fixture(),'enabled',384)
+
+    def test_omitted_step_token_and_hit_adjusted_work_fail(self):
+        stdout=native_fixture()
+        lines=stdout.splitlines()
+        for marker in ('step ','token ','prefix_step '):
+            removed=next(line for line in lines if line.startswith(marker))
+            with self.subTest(marker=marker),self.assertRaises(ValueError):
+                prefix.parse_run(stdout.replace(removed+'\n','',1),trace_fixture(),'enabled',384)
+        step=next(line for line in lines if line.startswith('step '))
+        parts=step.split(); parts[contract.ENGINE_STEP_FIELDS.index('total_tokens')+1]='255'
+        with self.assertRaises(ValueError):
+            prefix.parse_run(stdout.replace(step,' '.join(parts)),trace_fixture(),'enabled',384)
+
+    def test_frozen_census_and_nonmatching_first_blocks(self):
+        campaign=campaign_fixture()
+        self.assertIs(prefix.validate_campaign(campaign),campaign)
+        for mutation in (lambda c:c['traces'].pop(),lambda c:c['traces'].reverse(),
+                         lambda c:c['traces'][0]['requests'][0].update(prompt_ids=c['traces'][0]['prefix']['seed_request']['prompt_ids'][:-1]+[11]*64)):
+            broken=copy.deepcopy(campaign); mutation(broken)
+            with self.assertRaises(ValueError): prefix.validate_campaign(broken)
+
+
+class PrefixCampaignTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.record=record_fixture()
+
+    def test_complete_grid_and_cpu_archive_replay(self):
+        self.assertEqual(self.record['summary']['measured_runs'],96)
+        self.assertEqual(len(self.record['summary']['cells']),8)
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            raw=json.dumps(self.record).encode(); compressed=gzip.compress(raw,mtime=0)
+            (root/'engine-prefix.json.gz').write_bytes(compressed)
+            (root/'engine-prefix.json').write_text(json.dumps(dict(kind=self.record['kind'],bytes=len(compressed),
+                sha256=hashlib.sha256(compressed).hexdigest(),uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+            with mock.patch.object(profile,'execute',side_effect=AssertionError('CPU replay must not execute native work')), \
+                 mock.patch.object(profile,'assets',side_effect=AssertionError('CPU replay must not read checkpoint assets')):
+                self.assertEqual(profile.engine_replay(root),self.record['summary'])
+
+    def test_duplicate_missing_reordered_failed_and_changed_qualification_fail(self):
+        mutations=[lambda r:r['cells'][0]['runs'].pop(),
+            lambda r:r['cells'][0]['runs'].reverse(),
+            lambda r:r['cells'][0]['runs'][0]['native_execution'].update(exit_code=True),
+            lambda r:r['cells'][0]['runs'][0]['native_execution'].update(exit_code=1),
+            lambda r:r['qualification'].update(kind='unqualified'),
+            lambda r:r['cells'][0]['runs'][0]['parsed']['phase_times']['seed'].update(end_ns=1)]
+        for mutate in mutations:
+            broken=copy.deepcopy(self.record); mutate(broken)
+            with self.subTest(mutate=mutate),self.assertRaises(ValueError): prefix.summary(broken)
+
+    def test_coherent_namespace_change_cannot_cross_qualified_checkpoint(self):
+        for phase in ('qualification','measurement'):
+            broken=copy.deepcopy(self.record)
+            if phase=='qualification':
+                cell=broken['qualification']['preflight_cells'][0]
+            else:
+                cell=broken['cells'][0]
+            run=cell['runs'][0]
+            run['stdout']=run['stdout'].replace('qwen-reference27-projection8//prepared','qwen-reference27-projection8//other')
+            run['parsed']=prefix.parse_run(run['stdout'],cell['trace'],run['cache'],cell['trace']['prefix']['blocks'])
+            if phase=='qualification':
+                broken['qualification_document']=json.dumps(broken['qualification'])
+                broken['qualification_sha256']=prefix._hash(broken['qualification_document'])
+            with self.subTest(phase=phase),self.assertRaisesRegex(ValueError,'namespace|identity'):
+                prefix.summary(broken)
+
+    def test_coherently_resealed_qualification_still_requires_provenance(self):
+        mutations=[lambda q:q.update(schema_version=True),
+            lambda q:q['checkpoint_receipt']['build']['binaries']['checkpoint-driver'].update(sha256='x'),
+            lambda q:q['checkpoint_receipt']['build']['binaries']['checkpoint-driver'].update(bytes=0),
+            lambda q:q['checkpoint_receipt']['execution'].update(wall_elapsed_ns=0),
+            lambda q:q['checkpoint_receipt']['build']['command'].__setitem__(0,'/other-compiler'),
+            lambda q:q['preflight_cells'][0]['runs'].pop(),
+            lambda q:q['preflight_cells'][0].update(expected_histories={})]
+        for mutate in mutations:
+            broken=copy.deepcopy(self.record); mutate(broken['qualification'])
+            broken['qualification_document']=json.dumps(broken['qualification'])
+            broken['qualification_sha256']=prefix._hash(broken['qualification_document'])
+            with self.subTest(mutate=mutate),self.assertRaises(ValueError):
+                prefix.summary(broken)
+
+    def test_cli_binds_campaign_before_qualification_and_timing(self):
+        with mock.patch('sys.argv',['model_profile','engine-qualify','--prefix-study','--build','/build',
+                        '--trace','/campaign.json','--output','/qualification']),mock.patch.object(prefix,'qualify') as qualify:
+            profile.main()
+            qualify.assert_called_once_with(Path('/build'),Path('/qualification'),Path('/campaign.json'))
+        with mock.patch('sys.argv',['model_profile','engine-collect','--prefix-study','--build','/build',
+                        '--trace','/campaign.json','--qualification','/qualification.json','--output','/measure']),mock.patch.object(prefix,'collect') as collect:
+            profile.main()
+            collect.assert_called_once_with(Path('/build'),Path('/campaign.json'),Path('/measure'),Path('/qualification.json'))
+
+
+if __name__=='__main__':
+    unittest.main()

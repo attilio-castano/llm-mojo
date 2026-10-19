@@ -8,12 +8,16 @@ its writes are enqueued. Truncation and release return whole blocks, last block
 first. The manager submits no GPU work; the model checks each step against the
 pool's written counts, which must agree with the lengths committed here.
 
-Block states follow the serving plan, without Registered, which arrives with
-shared blocks in phase 4:
+Block states distinguish private writes from immutable cached history:
 - Reset: free, held by no sequence;
 - Partial: held by one sequence and not yet full, including blocks reserved for
   a step that has not been committed;
-- Complete: held by one sequence, every slot submitted.
+- Complete: held by one sequence, every slot submitted;
+- Registered: full and retained by a prefix index, with any number of readers.
+
+`refs` counts active sequence-table references, independently of cache retention.
+The caller clears KV written counts only for private blocks actually returned to
+the free list or idle Registered blocks explicitly evicted from the index.
 
 Every rejected operation raises before it changes any state.
 """
@@ -23,6 +27,7 @@ from llm_mojo.serving.kv_pool import KVPool
 comptime RESET = 0
 comptime PARTIAL = 1
 comptime COMPLETE = 2
+comptime REGISTERED = 3
 
 
 struct BlockManager(Movable):
@@ -32,6 +37,7 @@ struct BlockManager(Movable):
     # Free blocks; allocation takes the last one.
     var free: List[Int]
     var states: List[Int]
+    var refs: List[Int]
     # Per sequence slot: its blocks in position order, the positions whose
     # writes committed steps have enqueued, the positions its blocks were
     # reserved for, and whether the slot holds a sequence.
@@ -63,8 +69,10 @@ struct BlockManager(Movable):
         for i in range(blocks - 1, -1, -1):
             self.free.append(order[i])
         self.states = List[Int](capacity=blocks)
+        self.refs = List[Int](capacity=blocks)
         for _ in range(blocks):
             self.states.append(RESET)
+            self.refs.append(0)
         self.tables = List[List[Int]]()
         self.lengths = List[Int]()
         self.reserved = List[Int]()
@@ -97,6 +105,45 @@ struct BlockManager(Movable):
     def free_blocks(self) -> Int:
         return len(self.free)
 
+    def attach(mut self, cached: List[Int]) raises -> Int:
+        """Borrow a complete immutable prefix, validating before creating its slot."""
+        if len(cached) > self.max_length // self.block_size:
+            raise Error("cached prefix exceeds the sequence limit")
+        for i in range(len(cached)):
+            var block = cached[i]
+            if block < 0 or block >= self.blocks or self.states[block] != REGISTERED:
+                raise Error("cached prefix must contain Registered blocks")
+            for previous in range(i):
+                if cached[previous] == block:
+                    raise Error("cached prefix repeats a physical block")
+        var sequence = self.add()
+        for block in cached:
+            self.tables[sequence].append(block)
+            self.refs[block] += 1
+        self.lengths[sequence] = len(cached) * self.block_size
+        self.reserved[sequence] = self.lengths[sequence]
+        return sequence
+
+    def register(mut self, sequence: Int, ordinal: Int) raises:
+        """Retain one full committed block; the caller establishes GPU completion."""
+        self._known(sequence)
+        if ordinal < 0 or ordinal >= self.lengths[sequence] // self.block_size:
+            raise Error("only full committed blocks can be Registered")
+        var block = self.tables[sequence][ordinal]
+        if self.states[block] == REGISTERED:
+            return
+        if self.states[block] != COMPLETE or self.refs[block] != 1:
+            raise Error("registration needs a private Complete block")
+        self.states[block] = REGISTERED
+
+    def evict_registered(mut self, block: Int) raises:
+        """Return one idle cache block; its index entry and KV count retire together."""
+        if (block < 0 or block >= self.blocks or self.states[block] != REGISTERED
+                or self.refs[block] != 0):
+            raise Error("only an idle Registered block can be evicted")
+        self.states[block] = RESET
+        self.free.append(block)
+
     def reserve(mut self, sequence: Int, length: Int) raises:
         """Hold blocks for `length` positions of a sequence, allocating at each block boundary."""
         self._known(sequence)
@@ -108,6 +155,7 @@ struct BlockManager(Movable):
         for _ in range(needed):
             var block = self.free.pop()
             self.states[block] = PARTIAL
+            self.refs[block] = 1
             self.tables[sequence].append(block)
         self.reserved[sequence] = max(self.reserved[sequence], length)
 
@@ -118,7 +166,9 @@ struct BlockManager(Movable):
             raise Error("a committed length must lie between the sequence's length and its reservation")
         self.lengths[sequence] = length
         for i in range(length // self.block_size):
-            self.states[self.tables[sequence][i]] = COMPLETE
+            var block = self.tables[sequence][i]
+            if self.states[block] != REGISTERED:
+                self.states[block] = COMPLETE
 
     def truncate(mut self, sequence: Int, length: Int) raises:
         """Shorten a sequence to `length` positions, freeing whole blocks past it, last block first."""
@@ -126,22 +176,37 @@ struct BlockManager(Movable):
         if length < 0 or length > self.lengths[sequence]:
             raise Error("a truncation must lie between zero and the sequence's length")
         var keep = ceildiv(length, self.block_size)
+        if length % self.block_size != 0 and self.states[self.tables[sequence][keep - 1]] == REGISTERED:
+            raise Error("cannot truncate inside an immutable Registered block")
         while len(self.tables[sequence]) > keep:
             var block = self.tables[sequence].pop()
-            self.states[block] = RESET
-            self.free.append(block)
+            self.refs[block] -= 1
+            if self.states[block] != REGISTERED:
+                self.states[block] = RESET
+                self.free.append(block)
         if length % self.block_size != 0:
             self.states[self.tables[sequence][keep - 1]] = PARTIAL
         self.lengths[sequence] = length
         self.reserved[sequence] = length
 
     def release(mut self, sequence: Int) raises:
-        """Free every block of a sequence, last block first, and forget the sequence."""
+        """Drop all sequence references, retaining immutable cache blocks."""
         self.truncate(sequence, 0)
         self.active[sequence] = False
 
+    def detach(mut self, sequence: Int) raises -> List[Int]:
+        """Release a sequence and return only IDs whose KV counts must be cleared."""
+        self._known(sequence)
+        var freed = List[Int](capacity=len(self.tables[sequence]))
+        for i in range(len(self.tables[sequence]) - 1, -1, -1):
+            var block = self.tables[sequence][i]
+            if self.states[block] != REGISTERED:
+                freed.append(block)
+        self.release(sequence)
+        return freed^
+
     def reset(mut self) raises:
-        """Release every sequence."""
+        """Release every sequence; the prefix index separately evicts idle cache."""
         for s in range(len(self.active)):
             if self.active[s]:
                 self.release(s)
@@ -149,13 +214,16 @@ struct BlockManager(Movable):
     def check(self) raises:
         """Raise unless every invariant holds.
 
-        Free and held blocks partition the pool: each block is either on the free
-        list once and Reset, or in exactly one table entry of one sequence and
-        Partial or Complete, so every reference count is 0 or 1. A sequence's
-        table covers its reserved length, which lies between its length and the
-        per-sequence limit; blocks wholly below its length are Complete and the
-        others Partial. A released slot holds nothing.
+        Reset blocks are free exactly once and unreferenced. Private Partial or
+        Complete blocks have one owner. Registered blocks are never free and
+        appear only in fully committed history; the prefix index retains them
+        even with no active readers. Stored refs equal exact table occurrences.
+        A released slot holds nothing.
         """
+        if (len(self.states) != self.blocks or len(self.refs) != self.blocks
+                or len(self.tables) != len(self.active) or len(self.lengths) != len(self.active)
+                or len(self.reserved) != len(self.active)):
+            raise Error("block-manager storage geometry disagrees")
         var free = List[Int](capacity=self.blocks)
         var held = List[Int](capacity=self.blocks)
         for _ in range(self.blocks):
@@ -182,19 +250,35 @@ struct BlockManager(Movable):
                     raise Error("a table entry is outside the pool")
                 held[block] += 1
                 var expected = COMPLETE if i < length // self.block_size else PARTIAL
-                if self.states[block] != expected:
+                if self.states[block] == REGISTERED:
+                    for previous in range(i):
+                        if self.tables[s][previous] == block:
+                            raise Error("one sequence repeats an immutable physical block")
+                    if expected != COMPLETE:
+                        raise Error("Registered block lies outside full committed history")
+                elif self.states[block] != expected:
                     raise Error("a held block's state disagrees with its sequence's length")
         for block in range(self.blocks):
-            if free[block] + held[block] != 1:
-                raise Error("block " + String(block) + " is not exactly free or held once")
-            if free[block] == 1 and self.states[block] != RESET:
-                raise Error("a free block is not Reset")
+            if self.refs[block] != held[block] or self.refs[block] < 0:
+                raise Error("stored block references disagree with sequence tables")
+            if self.states[block] == RESET:
+                if free[block] != 1 or held[block] != 0:
+                    raise Error("a Reset block is not exactly free and unreferenced")
+            elif self.states[block] == REGISTERED:
+                if free[block] != 0:
+                    raise Error("a Registered block appears on the free list")
+            elif self.states[block] == PARTIAL or self.states[block] == COMPLETE:
+                if free[block] != 0 or held[block] != 1:
+                    raise Error("a private block does not have exactly one owner")
+            else:
+                raise Error("unknown block state")
 
     def check_pool(self, pool: KVPool) raises:
         """Raise unless the pool's written slots agree with every committed length.
 
         Blocks wholly below a sequence's length are full, its next block holds
-        the rest, and every other block, free or reserved, is empty. Holds
+        the rest, and every free or unwritten reserved block is empty. Idle
+        Registered blocks remain full. Holds
         between steps: during a step the model has advanced the pool before the
         step is committed here.
         """
@@ -202,8 +286,8 @@ struct BlockManager(Movable):
         if pool.blocks != self.blocks or pool.block_size != self.block_size:
             raise Error("the pool and the block manager disagree about blocks")
         var expected = List[Int](capacity=self.blocks)
-        for _ in range(self.blocks):
-            expected.append(0)
+        for block in range(self.blocks):
+            expected.append(self.block_size if self.states[block] == REGISTERED else 0)
         for s in range(len(self.active)):
             for i in range(len(self.tables[s])):
                 expected[self.tables[s][i]] = min(max(self.lengths[s] - i * self.block_size, 0), self.block_size)

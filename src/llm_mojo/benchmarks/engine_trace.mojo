@@ -13,6 +13,8 @@ from llm_mojo.serving.engine import EngineCore, EngineStep, StepCost, TOKEN_EVEN
 from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.runner import ModelRunner, SimulatedRunner
 from llm_mojo.serving.kv_pool import KVGeometry, KVPool
+from llm_mojo.serving.prefix_cache import PrefixCacheEvent
+from llm_mojo.runtime.clock import now
 
 
 trait TraceRunner(ModelRunner):
@@ -29,6 +31,9 @@ trait TraceRunner(ModelRunner):
 @fieldwise_init
 struct TraceMetal(TraceRunner):
     var inner: QwenRunner
+
+    def prefix_cache_identity(self) -> String:
+        return self.inner.prefix_cache_identity()
 
     def now_ns(self) -> Int:
         return self.inner.now_ns()
@@ -454,6 +459,112 @@ def run_trace[Runner: TraceRunner](
     print("drained",admitted,iterations,engine.blocks.free_blocks(),runner.now_ns())
 
 
+def emit_prefix_event(event: PrefixCacheEvent, step_id: Int):
+    var tokens = String("-")
+    if len(event.tokens) > 0:
+        tokens = String()
+        for i in range(len(event.tokens)):
+            if i > 0:
+                tokens += ","
+            tokens += String(event.tokens[i])
+    print("cache_event",event.event_id,step_id,event.kind,
+          event.namespace if event.namespace.byte_length() > 0 else "-",
+          event.salt if event.salt.byte_length() > 0 else "-",tokens)
+
+
+def emit_prefix(record: EngineStep, engine: EngineCore):
+    emit(record)
+    print("prefix_step",record.step_id,record.cache_hit_tokens,record.cache_lookup_ns,
+          record.cache_publish_ns,record.cache_admission_ns)
+    for hit in record.cache_hits:
+        if hit.cached_tokens > 0:
+            print("cache_hit",record.step_id,hit.request_id,hit.cached_tokens)
+    for event in record.cache_events:
+        emit_prefix_event(event,record.step_id)
+    print("cache_state",record.step_id,engine.blocks.free_blocks(),engine.cached_blocks(),
+          engine.cache_references(),engine.private_blocks())
+
+
+def prefix_drain(engine: EngineCore, kv: KVPool, requests: Int, steps: Int, elapsed: Int) raises:
+    engine.check(kv)
+    if (engine.live() != 0 or engine.pending_steps() != 0 or engine.cache_references() != 0
+            or engine.private_blocks() != 0
+            or engine.blocks.free_blocks()+engine.cached_blocks() != kv.blocks):
+        raise Error("prefix trace did not drain request ownership")
+    print("prefix_drained",requests,steps,engine.blocks.free_blocks(),engine.cached_blocks(),
+          engine.cache_references(),engine.private_blocks(),engine.pending_steps(),elapsed)
+
+
+def run_prefix_trace(mut runner: TraceMetal, mut kv: KVPool, requests: List[TraceRequest],
+                     seed: TraceRequest, cache_mode: String) raises:
+    var identity = runner.prefix_cache_identity()
+    if identity.byte_length() == 0 or len(identity.split()) != 1:
+        raise Error("prefix benchmark requires a token-safe qualified runner namespace")
+    # The same ordinary ten-step warmup precedes every seed, outside episode timing.
+    var warm = EngineCore(kv.blocks,32,4096,VOCABULARY,256,8,128,0,True,reserve_lifetime=True)
+    _ = warm.add(0,[11,13,17,19],10,[])
+    while warm.live() > 0:
+        _ = warm.step(runner,kv)
+    warm.check(kv)
+    var engine = EngineCore(kv.blocks,32,4096,VOCABULARY,256,8,128,0,True,
+                           reserve_lifetime=True,prefix_caching=True,prefix_namespace=identity)
+    print("mode","greedy")
+    print("config","chunked",kv.blocks,256,8)
+    print("admission","reserved")
+    print("study","engine-prefix-v1")
+    print("work_capacity",256,8)
+    print("cache",cache_mode)
+    print("namespace",identity)
+    print("salt","prefix-study")
+    print("phase","seed")
+    var phase_begin = Int(now())
+    runner.reset_clock()
+    print("arrival",seed.request_id,0,runner.now_ns())
+    _ = engine.add(seed.request_id,seed.prompt,seed.maximum,seed.stops,cache_salt="prefix-study")
+    var seed_steps = 0
+    while engine.live() > 0:
+        var record = engine.step(runner,kv)
+        emit_prefix(record,engine)
+        seed_steps += 1
+    prefix_drain(engine,kv,1,seed_steps,runner.now_ns())
+    print("phase_time","seed",phase_begin,Int(now()))
+    print("phase","handoff")
+    phase_begin = Int(now())
+    if cache_mode == "disabled":
+        var events = engine.clear_cache(kv)
+        for event in events:
+            emit_prefix_event(event,-1)
+        engine.prefix_caching = False
+    print("phase_time","handoff",phase_begin,Int(now()))
+    print("phase","measure")
+    phase_begin = Int(now())
+    runner.reset_clock()
+    for i in range(len(requests)):
+        print("arrival",requests[i].request_id,requests[i].arrival_ns,runner.now_ns())
+        _ = engine.add(requests[i].request_id,requests[i].prompt,requests[i].maximum,requests[i].stops,
+                       requests[i].arrival_ns,cache_salt="prefix-study")
+    var steps = 0
+    while engine.live() > 0:
+        var record = engine.step(runner,kv)
+        emit_prefix(record,engine)
+        steps += 1
+        if steps > 1000000:
+            raise Error("bounded prefix trace did not drain")
+    prefix_drain(engine,kv,len(requests),steps,runner.now_ns())
+    print("phase_time","measure",phase_begin,Int(now()))
+    print("phase","clear")
+    phase_begin = Int(now())
+    var events = engine.clear_cache(kv)
+    for event in events:
+        emit_prefix_event(event,-1)
+    var written = 0
+    for count in kv.written:
+        written += count
+    print("cache_cleared",engine.blocks.free_blocks(),engine.cached_blocks(),engine.cache_references(),
+          engine.private_blocks(),engine.pending_steps(),written)
+    print("phase_time","clear",phase_begin,Int(now()))
+
+
 def main() raises:
     var args = argv()
     if len(args) < 9 or len(args) > 13:
@@ -508,20 +619,27 @@ def main() raises:
             runner_explicit = True
     if selector_explicit:
         if (selector != "admission-range-v1" and selector != "engine-budget-v1"
-                and selector != "engine-fast-v1" and selector != "engine-async-v1"):
+                and selector != "engine-fast-v1" and selector != "engine-async-v1"
+                and selector != "engine-prefix-v1"):
             raise Error("invalid trace study selector")
         observe_kv = selector == "admission-range-v1"
     var budget_study = selector == "engine-budget-v1"
     var fast_study = selector == "engine-fast-v1"
     var async_study = selector == "engine-async-v1"
+    var prefix_study = selector == "engine-prefix-v1"
     if runner_explicit and not ((fast_study and (runner_kind == "reference" or runner_kind == "fast-decode"))
-                               or (async_study and (runner_kind == "sync" or runner_kind == "async"))):
+                               or (async_study and (runner_kind == "sync" or runner_kind == "async"))
+                               or (prefix_study and (runner_kind == "enabled" or runner_kind == "disabled"))):
         raise Error("runner selector differs from its explicit Fast or async study")
     if fast_study and (mode != "greedy" or not runner_explicit):
         raise Error("engine-fast-v1 requires greedy execution and an explicit runner selector")
     if async_study and (not runner_explicit or mode != "greedy" or arm != "chunked"
                         or budget != 256 or sequences != 8 or not admission_explicit or admission != "reserved"):
         raise Error("engine-async-v1 requires fixed256/eight slots, reserved admission, greedy and sync|async")
+    if prefix_study and (not runner_explicit or mode != "greedy" or arm != "chunked"
+                         or budget != 256 or sequences != 8 or warmup != 10
+                         or not admission_explicit or admission != "reserved" or (blocks != 40 and blocks != 384)):
+        raise Error("engine-prefix-v1 requires fixed256/eight slots, reserved, ten warmups and declared pool")
     if budget_study or fast_study:
         if (not admission_explicit or sequences != 8
                 or (arm != "chunked" and arm != "adaptive")
@@ -534,6 +652,8 @@ def main() raises:
     var requests = List[TraceRequest]()
     var aborts = List[TraceAbort]()
     var script: List[Int] = [11,13,17,19,23]
+    var seed = TraceRequest(128,0,1,[151643,151645],[11])
+    var has_seed = False
     var previous = -1
     for line in open(args[2],"r").read().splitlines():
         var fields = String(line).split()
@@ -550,6 +670,12 @@ def main() raises:
                     raise Error("duplicate trace request ID")
             requests.append(TraceRequest(id,arrival,maximum,integers(String(fields[4])),integers(String(fields[5]))))
             previous = arrival
+        elif fields[0] == "seed" and len(fields) == 7 and prefix_study:
+            if has_seed or String(fields[6]) != "prefix-study":
+                raise Error("invalid or duplicate prefix seed")
+            seed = TraceRequest(Int(fields[1]),Int(fields[2]),Int(fields[3]),
+                                integers(String(fields[4])),integers(String(fields[5])))
+            has_seed = True
         elif fields[0] == "abort" and len(fields) == 3:
             var offset = Int(fields[2])
             if offset < 0:
@@ -566,8 +692,16 @@ def main() raises:
                            reserve_lifetime=reserve_lifetime)
     for i in range(len(requests)):
         _ = check.add(requests[i].request_id,requests[i].prompt,requests[i].maximum,requests[i].stops,requests[i].arrival_ns)
-    print("mode",mode)
-    if async_study:
+    if prefix_study:
+        if not has_seed or len(requests) != 8 or len(aborts) != 0:
+            raise Error("prefix study requires one seed and eight finite requests")
+        _ = check.add(seed.request_id,seed.prompt,seed.maximum,seed.stops)
+        var runner = TraceMetal(QwenRunner(args[1],4096,256,8))
+        var kv = KVPool(runner.inner.ctx,blocks,32,runner.inner.model.kv_geometry())
+        print("device",runner.inner.ctx.name()+"/"+runner.inner.ctx.api())
+        run_prefix_trace(runner,kv,requests,seed,runner_kind)
+    elif async_study:
+        print("mode",mode)
         if runner_kind == "sync":
             var runner = TraceSyncObservation(QwenRunner(args[1],4096,256,8))
             var kv = KVPool(runner.inner.ctx,blocks,32,runner.inner.model.kv_geometry())
@@ -583,12 +717,14 @@ def main() raises:
                 raise Error("async comparison requires a verified Metal backend")
             run_async_comparison(runner,kv,requests,aborts,warmup)
     elif mode == "scripted":
+        print("mode",mode)
         var ctx = DeviceContext()
         var kv = KVPool(ctx,blocks,32,KVGeometry(1,1,1))
         var runner = TraceSimulation(SimulatedRunner(script,VOCABULARY))
         print("device simulated/virtual")
         run_trace(runner,kv,requests,aborts,arm,budget,sequences,warmup,cost,reserve_lifetime,admission_explicit,observe_kv,budget_study,fast_study,runner_kind)
     else:
+        print("mode",mode)
         # Budget studies vary scheduler work while holding the model's physical
         # row/sequence workspace capacity and metadata strides fixed.
         var rows = budget if arm == "chunked" or arm == "adaptive" else 4096

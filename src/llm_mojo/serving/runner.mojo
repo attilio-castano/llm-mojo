@@ -16,6 +16,10 @@ trait EngineClock(Movable):
 
 
 trait ModelRunner(EngineClock):
+    def prefix_cache_identity(self) -> String:
+        """Empty unless this runner explicitly qualifies synchronous prefix reuse."""
+        return ""
+
     def execute(mut self, batch: StepBatch, mut kv: KVPool) raises -> List[Int]:
         ...
 
@@ -67,6 +71,12 @@ struct SimulatedRunner(ModelRunner):
 
     def now_ns(self) -> Int:
         return self.clock_ns
+
+    def prefix_cache_identity(self) -> String:
+        var identity = String("scripted-prefix-v1/") + String(self.vocabulary)
+        for token in self.script:
+            identity += "/" + String(token)
+        return identity
 
     def execute(mut self, batch: StepBatch, mut kv: KVPool) raises -> List[Int]:
         batch.validate(kv.blocks, kv.block_size, self.vocabulary)

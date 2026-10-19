@@ -11,10 +11,12 @@ from std.math import isfinite
 from std.memory import bitcast
 from std.sys import argv
 from std.testing import assert_equal, assert_raises, assert_true
+from max.gpu.host import DeviceContext
 from llm_mojo.layers.decoder_layer import DECODER_FUSED_DECODE, DECODER_MIXED
-from llm_mojo.models.qwen2.model import HIDDEN, LAYERS, VOCABULARY
+from llm_mojo.models.qwen2.model import HIDDEN, LAYERS, VOCABULARY, QwenModel
 from llm_mojo.models.qwen2.runner import QwenRunner
-from llm_mojo.models.qwen2.plan import MAX_CONTEXT, configured_plan
+from llm_mojo.models.qwen2.tokenizer import TableReader
+from llm_mojo.models.qwen2.plan import MAX_CONTEXT, DECODE_PROJECTION, configured_plan
 from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.engine import EngineCore, PREFILL, DECODE, WAITING, FINISHED, TOKEN_EVENT, FINISH_EVENT
 from llm_mojo.serving.kv_pool import KVPool
@@ -728,6 +730,486 @@ def _qualification_fault(mut runner: QwenRunner, mut check: FastChecks) raises:
     # unexpected finite-boundary failure and no corrupted logits are accepted.
 
 
+comptime PREFIX_POISON = UInt16(0x7FC1)
+
+
+def _prefix_ids(start: Int, rows: Int, modulus: Int) -> List[Int]:
+    var ids = List[Int](capacity=rows)
+    for position in range(start,start+rows):
+        ids.append((position*103+42)%modulus)
+    return ids^
+
+
+def _prefix_submit(mut model: QwenModel, ctx: DeviceContext, mut pool: KVPool,
+                   ids: List[Int], past: Int, table: List[Int], sample: Bool,
+                   mut check: FastChecks) raises -> List[Int]:
+    var batch = StepBatch.sequence(ids,past,table,32)
+    if not sample:
+        batch.logits_rows = List[Int]()
+    model.forward(ctx,batch,pool,configured_plan(DECODER_MIXED,len(ids),past+len(ids)))
+    check.equal(model.last_route.configuration,DECODER_MIXED,"prefix reference route")
+    var tokens = model.greedy_tokens(ctx)
+    check.equal(len(tokens),1 if sample else 0,"prefix selected rows")
+    return tokens^
+
+
+def _prefix_pool_equal(actual: KVPool, table: List[Int], expected: KVPool,
+                       length: Int, label: String, mut check: FastChecks) raises:
+    # The reference uses independent physical blocks 0,1,2. Every active K/V
+    # element is compared; numerical closeness cannot substitute for equality.
+    with actual.storage.map_to_host() as a:
+        with expected.storage.map_to_host() as b:
+            for layer in range(actual.geometry.layers):
+                for kind in range(2):
+                    for position in range(length):
+                        var slot = position%32
+                        var offset = (slot*2)*64
+                        var actual_base = actual.key_offset(table[position//32],layer)+kind*actual.region()+offset
+                        var expected_base = expected.key_offset(position//32,layer)+kind*expected.region()+offset
+                        for i in range(2*64):
+                            check.element(a.unsafe_ptr()[unsafe_offset=actual_base+i],
+                                          b.unsafe_ptr()[unsafe_offset=expected_base+i],
+                                          label+" layer "+String(layer)+" position "+String(position))
+
+
+def _prefix_guards(pool: KVPool, mut check: FastChecks) raises:
+    # Poison is a NaN payload: an accidental read is also rejected by the
+    # active-value finite checks. Compare inactive bytes without float equality.
+    with pool.storage.map_to_host() as a:
+        for block in range(pool.blocks):
+            for layer in range(pool.geometry.layers):
+                for kind in range(2):
+                    var base = pool.key_offset(block,layer)+kind*pool.region()
+                    for i in range(pool.written[block]*2*64,pool.region()):
+                        check.equal(Int(bitcast[DType.uint16](a.unsafe_ptr()[unsafe_offset=base+i])),
+                                    Int(PREFIX_POISON),"prefix inactive KV poison")
+
+
+def _prefix_written(pool: KVPool, tables: List[List[Int]], lengths: List[Int],
+                    mut check: FastChecks) raises:
+    # Derive extents from the test inputs, not model-owned written metadata:
+    # an incorrectly enlarged count must not hide an inactive-storage write.
+    var expected = List[Int](capacity=pool.blocks)
+    for _ in range(pool.blocks):
+        expected.append(0)
+    for sequence in range(len(tables)):
+        for b in range(len(tables[sequence])):
+            var count = min(max(lengths[sequence]-b*32,0),32)
+            var block = tables[sequence][b]
+            if expected[block] > 0 and count > 0:
+                check.equal(count,expected[block],"shared prefix expected extent")
+            expected[block] = max(expected[block],count)
+    for block in range(pool.blocks):
+        check.equal(pool.written[block],expected[block],"prefix independently derived written extent")
+
+
+def _prefix_logits(actual: QwenModel, row: Int, expected: QwenModel,
+                   mut check: FastChecks) raises:
+    with actual.logits.map_to_host() as a:
+        with expected.logits.map_to_host() as b:
+            for i in range(VOCABULARY):
+                check.element(a.unsafe_ptr()[unsafe_offset=row*VOCABULARY+i],
+                              b.unsafe_ptr()[unsafe_offset=i],"prefix all-vocabulary logits")
+
+
+def _prefix_head_guards(model: QwenModel, rows: Int, mut check: FastChecks) raises:
+    with model.logits.map_to_host() as a:
+        for i in range(rows*VOCABULARY,len(model.logits)):
+            check.equal(Int(bitcast[DType.uint16](a.unsafe_ptr()[unsafe_offset=i])),
+                        Int(PREFIX_POISON),"prefix inactive logits poison")
+    with model.normalized.map_to_host() as a:
+        for i in range(rows*HIDDEN,len(model.normalized)):
+            check.equal(Int(bitcast[DType.uint16](a.unsafe_ptr()[unsafe_offset=i])),
+                        Int(PREFIX_POISON),"prefix inactive head rows poison")
+
+
+def _prefix_table(shared: Int, consumer: Int) -> List[Int]:
+    var table: List[Int] = [0,3,7] if consumer == 0 else [1,4,8]
+    if shared > 0:
+        table[0] = 6
+    if shared > 1:
+        table[1] = 2
+    return table^
+
+
+def _prefix_frozen(pool: KVPool, table: List[Int], blocks: Int) raises -> List[UInt16]:
+    var bits = List[UInt16]()
+    with pool.storage.map_to_host() as a:
+        for index in range(blocks):
+            var base = pool.key_offset(table[index],0)
+            for i in range(pool.geometry.layers*2*pool.region()):
+                bits.append(bitcast[DType.uint16](a.unsafe_ptr()[unsafe_offset=base+i]))
+    return bits^
+
+
+def prefix_reuse_model_qualification(mut model: QwenModel, ctx: DeviceContext,
+                                     mut cold: QwenModel, cold_ctx: DeviceContext,
+                                     capacity: Int, token_modulus: Int,
+                                     mut schedules: FastChecks, mut sharing: FastChecks) raises:
+    """Qualify reference-27 reuse independently of the future cache manager.
+
+    Both fixture and pinned-checkpoint callers exercise this identical native
+    test. Producer schedules differ from the one-call cold recomputation. This
+    is an exact prospective gate, separate from cross-engine HF accuracy.
+    """
+    assert_equal(ctx.api(),"metal")
+    assert_equal(cold_ctx.api(),"metal")
+    assert_equal(DECODE_PROJECTION,8)
+    schedules.equal(model.kv_geometry().kv_heads,2,"prefix KV heads")
+    schedules.equal(model.kv_geometry().head_dim,64,"prefix head dimension")
+    for length in [31,32,33,63,64,65]:
+        for chunk in [1,17,32]:
+            model.reset(ctx)
+            cold.reset(cold_ctx)
+            model.logits.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+            model.normalized.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+            cold.logits.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+            cold.normalized.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+            var pool = KVPool(ctx,5,32,model.kv_geometry())
+            var reference = KVPool(cold_ctx,3,32,cold.kv_geometry())
+            pool.storage.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+            reference.storage.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+            var table: List[Int] = [3,1,4]
+            var selected = List[Int]()
+            var past = 0
+            while past < length:
+                var count = min(chunk,length-past)
+                selected = _prefix_submit(model,ctx,pool,_prefix_ids(past,count,token_modulus),
+                                          past,table,past+count == length,schedules)
+                past += count
+            var expected = _prefix_submit(cold,cold_ctx,reference,_prefix_ids(0,length,token_modulus),
+                                          0,[0,1,2],True,schedules)
+            schedules.equal(selected[0],expected[0],"chunk schedule greedy token")
+            _prefix_logits(model,0,cold,schedules)
+            _prefix_pool_equal(pool,table,reference,length,
+                               "prefix length "+String(length)+" chunk "+String(chunk),schedules)
+            _prefix_written(pool,[table.copy()],[length],schedules)
+            _prefix_written(reference,[[0,1,2]],[length],schedules)
+            _prefix_guards(pool,schedules)
+            _prefix_guards(reference,schedules)
+            _prefix_head_guards(model,1,schedules)
+            _prefix_head_guards(cold,1,schedules)
+    for prefix in [32,64]:
+        for natural in [False,True]:
+            model.reset(ctx)
+            model.logits.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+            model.normalized.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+            var pool = KVPool(ctx,10,32,model.kv_geometry())
+            pool.storage.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+            var table_a = _prefix_table(prefix//32,0)
+            var table_b = _prefix_table(prefix//32,1)
+            var history = List[Int]()
+            if natural:
+                # Real preceding selections become subsequent inputs. Only the
+                # submitted prefix enters KV; its final emitted token does not.
+                history.append(_prefix_ids(0,1,token_modulus)[0])
+                var token = 0
+                for position in range(prefix):
+                    if position > 0:
+                        history.append(token)
+                    var output = _prefix_submit(model,ctx,pool,[history[position]],position,
+                                                table_a,True,sharing)
+                    token = output[0]
+            else:
+                history = _prefix_ids(0,prefix,token_modulus)
+                var past = 0
+                while past < prefix:
+                    var count = min(17,prefix-past)
+                    _ = _prefix_submit(model,ctx,pool,_prefix_ids(past,count,token_modulus),
+                                       past,table_a,False,sharing)
+                    past += count
+            var frozen = _prefix_frozen(pool,table_a,prefix//32)
+            var tail = min(3,capacity-prefix)
+            var first = (17+prefix)%token_modulus
+            var ids: List[Int] = [first]
+            var positions: List[Int] = [prefix]
+            var slots: List[Int] = [table_a[prefix//32]*32]
+            var histories = List[List[Int]]()
+            var a_history = history.copy()
+            a_history.append(first)
+            histories.append(a_history^)
+            var b_history = history.copy()
+            for i in range(tail):
+                var next = (43+prefix+i)%token_modulus
+                ids.append(next)
+                b_history.append(next)
+                positions.append(prefix+i)
+                slots.append(table_b[(prefix+i)//32]*32+(prefix+i)%32)
+            histories.append(b_history^)
+            var tables = table_a.copy()
+            tables.extend(table_b.copy())
+            var batch = StepBatch(ids^,positions^,[0,1,1+tail],2 if tail == 1 else 1,
+                                  [prefix+1,prefix+tail],3,tables^,slots^,[0,tail])
+            model.forward(ctx,batch,pool,configured_plan(DECODER_MIXED,1+tail,prefix+tail,2))
+            var selected = model.greedy_tokens(ctx)
+            sharing.equal(len(selected),2,"shared-prefix consumer token count")
+            for consumer in range(2):
+                cold.reset(cold_ctx)
+                cold.logits.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+                cold.normalized.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+                var reference = KVPool(cold_ctx,3,32,cold.kv_geometry())
+                reference.storage.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+                var expected = _prefix_submit(cold,cold_ctx,reference,histories[consumer],
+                                              0,[0,1,2],True,sharing)
+                sharing.equal(selected[consumer],expected[0],"shared-prefix greedy token")
+                _prefix_logits(model,consumer,cold,sharing)
+                _prefix_pool_equal(pool,table_a if consumer == 0 else table_b,reference,
+                                   len(histories[consumer]),"shared-prefix cold recomputation",sharing)
+                _prefix_written(reference,[[0,1,2]],[len(histories[consumer])],sharing)
+                _prefix_guards(reference,sharing)
+                _prefix_head_guards(cold,1,sharing)
+            var after = _prefix_frozen(pool,table_a,prefix//32)
+            sharing.equal(len(after),len(frozen),"shared-prefix snapshot length")
+            for i in range(len(frozen)):
+                sharing.equal(Int(after[i]),Int(frozen[i]),"shared-prefix immutable bytes")
+            _prefix_written(pool,[table_a.copy(),table_b.copy()],[prefix+1,prefix+tail],sharing)
+            _prefix_guards(pool,sharing)
+            _prefix_head_guards(model,2,sharing)
+
+
+def prefix_cache_qualification(path: String) raises:
+    var runner = QwenRunner(path,MAX_CONTEXT,QUAL_ROWS,QUAL_SEQUENCES)
+    var cold = QwenRunner(path,MAX_CONTEXT,QUAL_ROWS,QUAL_SEQUENCES)
+    assert_equal(runner.ctx.name(),"Apple M4 Pro")
+    assert_equal(runner.ctx.api(),"metal")
+    assert_equal(cold.ctx.name(),runner.ctx.name())
+    assert_equal(cold.ctx.api(),runner.ctx.api())
+    assert_equal(runner.model.kv_geometry().layers,LAYERS)
+    print("device",runner.ctx.name()+"/"+runner.ctx.api())
+    print("qualification","engine-prefix-cache-reference27-v1")
+    print("configuration",DECODER_MIXED,"projection",DECODE_PROJECTION,"dtype","BF16/FP32","block-size",32)
+    var schedules = FastChecks()
+    var sharing = FastChecks()
+    prefix_reuse_model_qualification(runner.model,runner.ctx,cold.model,cold.ctx,
+                                     QUAL_CONTEXT,VOCABULARY,schedules,sharing)
+    schedules.emit("prefix-chunk-schedule-kv-logits-greedy")
+    sharing.emit("readonly-prefix-divergent-consumers-cold-recompute")
+    var lifecycle = FastChecks()
+    _prefix_engine_lifecycle(runner,cold,lifecycle)
+    lifecycle.emit("prefix-engine-lifetime-incremental")
+    var fault = FastChecks()
+    _prefix_engine_fault(runner,fault)
+    fault.emit("prefix-engine-numeric-fault-cache-clear")
+
+
+def _prefix_engine_drained(engine: EngineCore, pool: KVPool, mut check: FastChecks) raises:
+    engine.check(pool)
+    check.equal(engine.live(),0,"prefix engine drained requests")
+    check.equal(engine.pending_steps(),0,"prefix engine drained GPU work")
+    check.equal(engine.cache_references(),0,"prefix engine retained no references")
+    check.equal(engine.private_blocks(),0,"prefix engine retained no private blocks")
+    check.equal(engine.blocks.free_blocks()+engine.cached_blocks(),pool.blocks,"prefix cache pool partition")
+    var written = 0
+    for count in pool.written:
+        check.truth(count == 0 or count == 32,"prefix terminal full-block extents")
+        written += count
+    check.equal(written,engine.cached_blocks()*32,"prefix terminal cache extent census")
+
+
+def _prefix_engine_drain(mut engine: EngineCore, mut runner: QwenRunner,
+                         mut pool: KVPool, mut check: FastChecks) raises -> List[Int]:
+    var rows = 0
+    var hits = 0
+    var finishes = 0
+    var steps = 0
+    while engine.live() > 0:
+        check.truth(steps < 512,"prefix engine bounded progress")
+        var record = engine.step(runner,pool)
+        rows += record.total_tokens
+        hits += record.cache_hit_tokens
+        for event in record.events:
+            finishes += 1 if event.kind == FINISH_EVENT else 0
+        steps += 1
+    check.equal(finishes,1,"prefix engine exactly-once finish")
+    _prefix_engine_drained(engine,pool,check)
+    return [rows,hits]
+
+
+def _prefix_cold_tokens(mut runner: QwenRunner, prompt: List[Int], maximum: Int,
+                        mut check: FastChecks) raises -> List[Int]:
+    runner.model.reset(runner.ctx)
+    var pool = KVPool(runner.ctx,4,32,runner.model.kv_geometry())
+    var selected = _prefix_submit(runner.model,runner.ctx,pool,prompt,0,[0,1,2,3],True,check)
+    var tokens = List[Int]()
+    for i in range(maximum):
+        tokens.append(selected[0])
+        if i+1 < maximum:
+            selected = _prefix_submit(runner.model,runner.ctx,pool,[tokens[i]],len(prompt)+i,
+                                      [0,1,2,3],True,check)
+    return tokens^
+
+
+def _prefix_engine_lifecycle(mut runner: QwenRunner, mut cold: QwenRunner,
+                             mut check: FastChecks) raises:
+    for reserved in [False,True]:
+        runner.model.reset(runner.ctx)
+        var pool = KVPool(runner.ctx,8,32,runner.model.kv_geometry())
+        var engine = EngineCore(8,32,QUAL_CONTEXT,VOCABULARY,token_budget=32,
+            max_sequences=1,max_requests=2,reserve_lifetime=reserved,prefix_caching=True,
+            prefix_namespace=runner.prefix_cache_identity())
+        _ = engine.add(0,_prefix_ids(0,65,VOCABULARY),1,List[Int]())
+        var seed = _prefix_engine_drain(engine,runner,pool,check)
+        check.equal(seed[0],65,"cold seed computed every prompt row")
+        check.equal(seed[1],0,"cold seed had no hit")
+        check.equal(engine.cached_blocks(),2,"seed retained two full blocks")
+        for length in [64,65]:
+            var prompt = _prefix_ids(0,length,VOCABULARY)
+            var expected = _prefix_cold_tokens(cold,prompt,3,check)
+            var request = engine.add(length,prompt,3,List[Int]())
+            var run = _prefix_engine_drain(engine,runner,pool,check)
+            var hit = 32 if length == 64 else 64
+            check.equal(run[1],hit,"whole-prompt hit preserves private final query block")
+            check.equal(run[0],length+2-hit,"prefix engine avoided exactly cached rows")
+            check.equal(engine.requests[request].generated,3,"prefix engine output cap")
+            check.reason(engine.requests[request].reason,"length")
+            for i in range(3):
+                check.equal(engine.requests[request].tokens[length+i],expected[i],"prefix natural output equals cold")
+        var prompt = _prefix_ids(0,65,VOCABULARY)
+        var stop = _prefix_cold_tokens(cold,prompt,1,check)
+        var request = engine.add(100,prompt,4,stop)
+        var stopped = _prefix_engine_drain(engine,runner,pool,check)
+        check.equal(stopped[0],1,"prefix stop computed one private query")
+        check.equal(stopped[1],64,"prefix stop reused two full blocks")
+        check.equal(engine.requests[request].generated,1,"prefix stop delivered once")
+        check.reason(engine.requests[request].reason,"stop")
+        _ = engine.add(101,prompt,1,List[Int](),cache_salt="another-salt")
+        var miss = _prefix_engine_drain(engine,runner,pool,check)
+        check.equal(miss[1],0,"different salt did not reuse cached prefix")
+        check.equal(miss[0],65,"different salt recomputed its prompt")
+        _ = engine.add(102,prompt,0,List[Int]())
+        var zero = _prefix_engine_drain(engine,runner,pool,check)
+        check.equal(zero[0],0,"zero-output prefix request performed no work")
+        check.equal(zero[1],0,"zero-output request acquired no cached prefix")
+        request = engine.add(103,_prefix_ids(0,110,VOCABULARY),4,List[Int]())
+        var partial = engine.step(runner,pool)
+        check.equal(partial.cache_hit_tokens,64,"cancelled prefill reused two blocks")
+        check.equal(partial.total_tokens,32,"cancelled prefill bounded partial rows")
+        check.equal(engine.requests[request].generated,0,"cancelled partial prompt emitted nothing")
+        engine.abort(103)
+        engine.abort(103)
+        var aborted = _prefix_engine_drain(engine,runner,pool,check)
+        check.equal(aborted[0],0,"abort boundary submitted no extra rows")
+        check.reason(engine.requests[request].reason,"abort")
+        _ = engine.clear_cache(pool)
+        check.equal(engine.cached_blocks(),0,"explicit cache clear removed all entries")
+        _qualification_drained(engine,pool,check)
+
+
+def _prefix_engine_fault(mut runner: QwenRunner, mut check: FastChecks) raises:
+    runner.model.reset(runner.ctx)
+    var pool = KVPool(runner.ctx,8,32,runner.model.kv_geometry())
+    var engine = EngineCore(8,32,QUAL_CONTEXT,VOCABULARY,token_budget=256,
+        max_sequences=1,max_requests=1,reserve_lifetime=True,prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity())
+    var prompt = _prefix_ids(0,65,VOCABULARY)
+    _ = engine.add(0,prompt,1,List[Int]())
+    _ = _prefix_engine_drain(engine,runner,pool,check)
+    check.truth(engine.cached_blocks() > 0,"fault starts with reusable cached blocks")
+    var request = engine.add(1,prompt,4,List[Int]())
+    var first = engine.step(runner,pool)
+    check.equal(first.cache_hit_tokens,64,"fault request used cached prefix")
+    check.equal(engine.requests[request].generated,1,"fault has one delivered token")
+    var history = engine.requests[request].tokens.copy()
+    var poisoned = 0 if history[len(history)-1] != 0 else 15
+    with runner.model.embedding.map_to_host() as a:
+        a.unsafe_ptr()[unsafe_offset=poisoned*HIDDEN] = bitcast[DType.bfloat16](UInt16(0x7FC0))
+    with assert_raises(contains="nonfinite"):
+        _ = engine.step(runner,pool)
+    check.checked += 1
+    check.truth(engine.failed,"numeric fault invalidated prefix engine")
+    check.equal(engine.cached_blocks(),0,"numeric fault invalidated whole cache")
+    check.equal(len(engine.failure_events),1,"numeric fault finishes request once")
+    check.reason(engine.failure_events[0].reason,"error")
+    check.equal(len(engine.requests[request].tokens),len(history),"fault retained delivered history length")
+    for i in range(len(history)):
+        check.equal(engine.requests[request].tokens[i],history[i],"fault retained delivered prefix")
+    _qualification_drained(engine,pool,check)
+
+
+def prefix_history_qualification(path: String, fixture_path: String) raises:
+    """Replay frozen independently supplied natural histories through the cache.
+
+    The historical direct-reference driver separately verifies this fixture.
+    Prompt IDs are inputs; every generated ID comes from the actual runner.
+    Interrupted cases abort after their declared observed natural prefix.
+    """
+    var fixture = TableReader(fixture_path)
+    assert_equal(fixture.u32(),0x43485231)
+    assert_equal(fixture.u32(),1)
+    var cases = fixture.u32()
+    _ = fixture.u32()
+    assert_true(cases > 0 and cases <= 64)
+    var runner = QwenRunner(path,MAX_CONTEXT,QUAL_ROWS,1)
+    assert_equal(runner.ctx.name(),"Apple M4 Pro")
+    assert_equal(runner.ctx.api(),"metal")
+    var pool = KVPool(runner.ctx,128,32,runner.model.kv_geometry())
+    var engine = EngineCore(128,32,MAX_CONTEXT,VOCABULARY,token_budget=256,
+        max_sequences=1,max_requests=1,reserve_lifetime=True,prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity())
+    print("device",runner.ctx.name()+"/"+runner.ctx.api())
+    print("qualification","engine-prefix-history-reference27-v1")
+    var check = FastChecks()
+    var last_group = -1
+    var total_tokens = 0
+    var total_rows = 0
+    var total_hits = 0
+    for case_index in range(cases):
+        var group = fixture.u32()
+        var turn = fixture.u32()
+        var scope = fixture.u32()
+        var prompt = fixture.ints()
+        var expected = fixture.ints()
+        var expected_history = fixture.ints()
+        check.truth(group >= 0 and group <= 1 and scope >= 0 and scope <= 2,"frozen chat case identity")
+        check.truth(len(expected) > 0,"frozen chat observed predictions")
+        if group != last_group or (group == 0 and turn == 3) or (group == 1 and turn == 3):
+            _ = engine.clear_cache(pool)
+        last_group = group
+        var request = engine.add(case_index,prompt,len(expected) if scope == 1 else len(expected)+1,[151643,151645])
+        var selected = 0
+        var rows = 0
+        var hits = 0
+        var finishes = 0
+        var steps = 0
+        while engine.live() > 0:
+            check.truth(steps < 1024,"frozen chat bounded progress")
+            var record = engine.step(runner,pool)
+            rows += record.total_tokens
+            hits += record.cache_hit_tokens
+            for event in record.events:
+                if event.kind == TOKEN_EVENT:
+                    check.truth(selected < len(expected),"frozen chat generated no extra token")
+                    check.equal(event.token_id,expected[selected],"frozen chat natural prediction")
+                    selected += 1
+                    if scope == 2 and selected == len(expected):
+                        engine.abort(case_index)
+                elif event.kind == FINISH_EVENT:
+                    finishes += 1
+                    check.reason(event.reason,"stop" if scope == 0 else "length" if scope == 1 else "abort")
+            steps += 1
+        check.equal(selected,len(expected),"frozen chat complete observed prefix")
+        check.equal(finishes,1,"frozen chat exactly-once terminal")
+        check.equal(rows+hits,len(prompt)+selected-1,"frozen chat computed and reused rows")
+        var history = engine.requests[request].tokens.copy()
+        if history[len(history)-1] != 151645:
+            history.append(151645)
+        history.append(198)
+        check.equal(len(history),len(expected_history),"frozen chat closure length")
+        for i in range(len(history)):
+            check.equal(history[i],expected_history[i],"frozen chat exact closed history")
+        _prefix_engine_drained(engine,pool,check)
+        total_tokens += selected
+        total_rows += rows
+        total_hits += hits
+        print("case",group,turn,"tokens",selected,"computed-rows",rows,"cache-hit-tokens",hits)
+    check.equal(fixture.pos,len(fixture.data),"frozen fixture consumed exactly")
+    check.truth(total_hits > 0,"frozen histories actually reused cache")
+    _ = engine.clear_cache(pool)
+    _qualification_drained(engine,pool,check)
+    check.emit("prefix-seven-frozen-histories")
+    print("summary","cases",cases,"tokens",total_tokens,"computed-rows",total_rows,"cache-hit-tokens",total_hits)
+
+
 def fast_qualification(path: String, kind: String) raises:
     if kind != "reference" and kind != "fast-decode":
         raise Error("fast-qualification requires reference|fast-decode")
@@ -766,7 +1248,11 @@ def main() raises:
         numeric_fault_cleanup(args[1])
     elif len(args) == 3 and args[2] == "admission":
         admission(args[1])
+    elif len(args) == 3 and args[2] == "prefix-cache-qualification":
+        prefix_cache_qualification(args[1])
+    elif len(args) == 4 and args[2] == "prefix-history-qualification":
+        prefix_history_qualification(args[1],args[3])
     elif len(args) == 4 and args[2] == "fast-qualification":
         fast_qualification(args[1],args[3])
     else:
-        raise Error("usage: engine_metal_driver VERIFIED_PREPARED_PATH [admission|fast-qualification reference|fast-decode]")
+        raise Error("usage: engine_metal_driver VERIFIED_PREPARED_PATH [admission|prefix-cache-qualification|prefix-history-qualification FIXTURE_BIN|fast-qualification reference|fast-decode]")

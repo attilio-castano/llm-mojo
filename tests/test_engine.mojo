@@ -1057,5 +1057,217 @@ def test_fixed_budget_matrix_counts_decode_rows_and_keeps_lifetime_capacity() ra
         engine.check(pool)
 
 
+def _prefix_prompt(length: Int = 65, variant: Int = 0) -> List[Int]:
+    var result = List[Int](capacity=length)
+    for position in range(length):
+        result.append((position + variant) % 100)
+    return result^
+
+
+def _prefix_drain(mut engine: EngineCore, mut runner: SimulatedRunner, mut pool: KVPool,
+                  bound: Int = 3000) raises -> Int:
+    var rows = 0
+    var steps = 0
+    while engine.live() > 0 and steps < bound:
+        var record = engine.step(runner, pool)
+        rows += record.total_tokens
+        engine.check(pool)
+        steps += 1
+    assert_equal(engine.live(), 0)
+    assert_equal(engine.cache_references(), 0)
+    assert_equal(engine.private_blocks(), 0)
+    assert_equal(engine.blocks.free_blocks() + engine.cached_blocks(), pool.blocks)
+    return rows
+
+
+def test_prefix_cache_reuses_exact_history_and_preserves_terminal_accounting() raises:
+    var ctx = DeviceContext()
+    for reserved in [False, True]:
+        var runner = SimulatedRunner([10, 11, 12], 100)
+        var pool = KVPool(ctx, 8, 32, KVGeometry(1, 1, 1))
+        var engine = EngineCore(8, 32, 256, 100, token_budget=32, reserve_lifetime=reserved,
+            prefix_caching=True, prefix_namespace=runner.prefix_cache_identity())
+        _ = engine.add(0, _prefix_prompt(), 4, List[Int](), cache_salt="one")
+        assert_equal(_prefix_drain(engine, runner, pool), 68)
+        var expected = engine.requests[0].tokens.copy()
+        assert_equal(engine.cached_blocks(), 2)
+        _ = engine.add(1, _prefix_prompt(), 4, List[Int](), cache_salt="one")
+        var hit = engine.step(runner, pool)
+        assert_equal(hit.cache_hit_tokens, 64)
+        assert_equal(hit.prefill_tokens, 1)
+        assert_equal(hit.cache_hits[0].request_id, 1)
+        assert_equal(_prefix_drain(engine, runner, pool), 3)
+        _assert_list(engine.requests[0].tokens, expected)
+        _ = engine.add(2, _prefix_prompt(), 1, List[Int](), cache_salt="different")
+        var miss = engine.step(runner, pool)
+        assert_equal(miss.cache_hit_tokens, 0)
+        _ = _prefix_drain(engine, runner, pool)
+        _ = engine.clear_cache(pool)
+        assert_equal(engine.cached_blocks(), 0)
+        assert_equal(engine.blocks.free_blocks(), pool.blocks)
+        for written in pool.written:
+            assert_equal(written, 0)
+
+
+def test_prefix_cache_shared_reader_abort_keeps_the_other_reader_valid() raises:
+    var ctx = DeviceContext()
+    var runner = SimulatedRunner([10, 11, 12], 100)
+    var pool = KVPool(ctx, 5, 32, KVGeometry(1, 1, 1))
+    var engine = EngineCore(5, 32, 128, 100, token_budget=32, reserve_lifetime=True,
+        prefix_caching=True, prefix_namespace=runner.prefix_cache_identity())
+    _ = engine.add(0, _prefix_prompt(), 1, List[Int]())
+    _ = _prefix_drain(engine, runner, pool)
+    _ = engine.add(1, _prefix_prompt(), 5, List[Int]())
+    _ = engine.step(runner, pool)
+    _ = engine.add(2, _prefix_prompt(), 5, List[Int]())
+    _ = engine.step(runner, pool)
+    var shared = engine.prefix_cache.entries[0].block
+    assert_equal(engine.blocks.refs[shared], 2)
+    with assert_raises():
+        _ = engine.clear_cache(pool)
+    engine.abort(1)
+    var boundary = engine.step(runner, pool)
+    assert_equal(boundary.aborted, 1)
+    assert_equal(engine.blocks.refs[shared], 1)
+    assert_equal(pool.written[shared], 32)
+    _ = _prefix_drain(engine, runner, pool)
+    _ = engine.clear_cache(pool)
+    engine.check(pool)
+
+
+def test_prefix_cache_pressure_drains_and_evicts_before_live_preemption() raises:
+    var ctx = DeviceContext()
+    for reserved in [False, True]:
+        var runner = SimulatedRunner([10, 11, 12], 100)
+        var pool = KVPool(ctx, 5, 32, KVGeometry(1, 1, 1))
+        var engine = EngineCore(5, 32, 160, 100, token_budget=32, max_sequences=4,
+            reserve_lifetime=reserved, prefix_caching=True,
+            prefix_namespace=runner.prefix_cache_identity())
+        _ = engine.add(0, _prefix_prompt(), 1, List[Int]())
+        _ = _prefix_drain(engine, runner, pool)
+        for request in range(1, 9):
+            _ = engine.add(request, _prefix_prompt(65, request % 2), 65, List[Int]())
+        _ = _prefix_drain(engine, runner, pool, 5000)
+        for request in range(len(engine.requests)):
+            assert_equal(engine.requests[request].generated, 65)
+            assert_equal(engine.requests[request].reason, "length")
+        _ = engine.clear_cache(pool)
+        engine.check(pool)
+
+
+def test_prefix_cache_zero_output_does_not_lookup_or_change_retained_blocks() raises:
+    var ctx = DeviceContext()
+    var runner = SimulatedRunner([10], 100)
+    var pool = KVPool(ctx, 3, 32, KVGeometry(1, 1, 1))
+    var engine = EngineCore(3, 32, 256, 100, prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity())
+    _ = engine.add(0, _prefix_prompt(), 1, List[Int]())
+    _ = _prefix_drain(engine, runner, pool)
+    var cached = engine.cached_blocks()
+    var clock = engine.prefix_cache.clock
+    _ = engine.add(1, _prefix_prompt(200), 0, List[Int]())
+    var empty = engine.step(runner, pool)
+    assert_equal(empty.total_tokens, 0)
+    assert_equal(empty.cache_hit_tokens, 0)
+    assert_equal(len(empty.cache_hits), 0)
+    assert_equal(empty.finished, 1)
+    assert_equal(engine.cached_blocks(), cached)
+    assert_equal(engine.prefix_cache.clock, clock)
+    _ = engine.clear_cache(pool)
+
+
+struct PrefixFaultRunner(ModelRunner):
+    var oracle: SimulatedRunner
+    var fail: Bool
+
+    def __init__(out self) raises:
+        self.oracle = SimulatedRunner([10], 100)
+        self.fail = False
+
+    def prefix_cache_identity(self) -> String:
+        return self.oracle.prefix_cache_identity()
+
+    def now_ns(self) -> Int:
+        return self.oracle.now_ns()
+
+    def execute(mut self, batch: StepBatch, mut pool: KVPool) raises -> List[Int]:
+        var output = self.oracle.execute(batch, pool)
+        if self.fail:
+            raise Error("injected prefix-cache runner fault after writes")
+        return output^
+
+
+def test_prefix_cache_fault_flushes_earlier_publication_and_all_request_refs() raises:
+    var ctx = DeviceContext()
+    var runner = PrefixFaultRunner()
+    var pool = KVPool(ctx, 4, 32, KVGeometry(1, 1, 1))
+    var engine = EngineCore(4, 32, 128, 100, prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity())
+    _ = engine.add(0, _prefix_prompt(), 1, List[Int]())
+    _ = engine.step(runner, pool)
+    assert_equal(engine.cached_blocks(), 2)
+    _ = engine.add(1, _prefix_prompt(), 4, List[Int]())
+    runner.fail = True
+    with assert_raises():
+        _ = engine.step(runner, pool)
+    assert_true(engine.failed)
+    assert_equal(engine.live(), 0)
+    assert_equal(engine.cached_blocks(), 0)
+    assert_equal(engine.cache_references(), 0)
+    assert_equal(engine.blocks.free_blocks(), pool.blocks)
+    for written in pool.written:
+        assert_equal(written, 0)
+    assert_true(len(engine.failure_cache_events) > 0)
+    assert_equal(engine.failure_cache_events[len(engine.failure_cache_events) - 1].kind, "cleared")
+    engine.check(pool)
+
+
+def test_prefix_cache_requires_qualified_namespace_and_rejects_runner_changes_atomically() raises:
+    with assert_raises():
+        _ = EngineCore(4, 32, 128, 100, prefix_caching=True)
+    var ctx = DeviceContext()
+    var runner = SimulatedRunner([10], 100)
+    var pool = KVPool(ctx, 4, 32, KVGeometry(1, 1, 1))
+    var engine = EngineCore(4, 32, 128, 100, prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity())
+    _ = engine.add(0, _prefix_prompt(), 1, List[Int]())
+    var other = SimulatedRunner([11], 100)
+    with assert_raises():
+        _ = engine.step(other, pool)
+    assert_equal(engine.step_id, 0)
+    assert_equal(engine.requests[0].sequence, -1)
+    assert_equal(engine.cached_blocks(), 0)
+    var identity = engine.prefix_namespace.copy()
+    engine.prefix_namespace = ""
+    with assert_raises():
+        _ = engine.step(runner, pool)
+    assert_equal(engine.step_id, 0)
+    engine.prefix_namespace = identity
+    _ = _prefix_drain(engine, runner, pool)
+    _ = engine.clear_cache(pool)
+
+
+def test_prefix_cache_clear_rejects_the_wrong_pool_before_mutation() raises:
+    var ctx = DeviceContext()
+    var runner = SimulatedRunner([10], 100)
+    var pool = KVPool(ctx, 4, 32, KVGeometry(1, 1, 1))
+    var engine = EngineCore(4, 32, 128, 100, prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity())
+    _ = engine.add(0, _prefix_prompt(), 1, List[Int]())
+    _ = _prefix_drain(engine, runner, pool)
+    var cached = engine.cached_blocks()
+    var event_id = engine.prefix_cache.event_id
+    var wrong = KVPool(ctx, 2, 32, KVGeometry(1, 1, 1))
+    with assert_raises():
+        _ = engine.clear_cache(wrong)
+    var empty = KVPool(ctx, 4, 32, KVGeometry(1, 1, 1))
+    with assert_raises():
+        _ = engine.clear_cache(empty)
+    assert_equal(engine.cached_blocks(), cached)
+    assert_equal(engine.prefix_cache.event_id, event_id)
+    engine.check(pool)
+    _ = engine.clear_cache(pool)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

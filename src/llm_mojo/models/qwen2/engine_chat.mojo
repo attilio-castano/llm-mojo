@@ -1,7 +1,7 @@
-"""One request engine chat; weights resident, complete history recomputed per turn.
+"""One request engine chat with optional full-block prefix reuse between turns.
 
 Terminal EngineCore requests release all logical KV ownership. ChatHistory
-retains exact token IDs and framing; it does not claim persistent conversation KV.
+retains exact token IDs and framing; reusable full blocks may remain unreferenced.
 Execution failure invalidates this process, including reset.
 """
 from llm_mojo.models.qwen2.chat import ChatHistory
@@ -32,20 +32,25 @@ struct EngineChatSession[Runner: EngineChatRunner = QwenRunner](Movable):
     var turn_delivered_tokens: Int
     var turn_discarded_tokens: Int
     var turn_discarded_rows: Int
+    var turn_cache_hit_tokens: Int
 
     def __init__(out self, prepared: String, tokenizer: Tokenizer,
                  mut work: TokenizerWorkspace, system: String,
-                 chunk_rows: Int = 256, capacity: Int = MAX_CONTEXT) raises:
+                 chunk_rows: Int = 256, capacity: Int = MAX_CONTEXT,
+                 prefix_caching: Bool = False) raises:
         self.history = ChatHistory(tokenizer,work,system)
         if (capacity < 1 or capacity > MAX_CONTEXT or chunk_rows < 1
                 or chunk_rows > capacity or len(self.history.tokens)+3 >= capacity):
             raise Error("invalid engine chat capacity or system message")
         self.runner = Self.Runner.create_chat_runner(prepared,capacity,chunk_rows)
+        if prefix_caching and self.runner.chat_async():
+            raise Error("prefix caching requires synchronous engine stepping")
         var blocks = (capacity+KV_BLOCK_SIZE-1)//KV_BLOCK_SIZE
         self.kv = self.runner.create_chat_kv(capacity)
         self.engine = EngineCore(blocks,KV_BLOCK_SIZE,capacity,VOCABULARY,
                                  token_budget=chunk_rows,max_sequences=1,max_requests=1,
-                                 reserve_lifetime=True)
+                                 reserve_lifetime=True,prefix_caching=prefix_caching,
+                                 prefix_namespace=self.runner.prefix_cache_identity() if prefix_caching else "")
         self.request_id = 0
         self.turn_rows = 0
         self.turn_steps = 0
@@ -60,15 +65,21 @@ struct EngineChatSession[Runner: EngineChatRunner = QwenRunner](Movable):
         self.turn_delivered_tokens = 0
         self.turn_discarded_tokens = 0
         self.turn_discarded_rows = 0
+        self.turn_cache_hit_tokens = 0
 
     def check_drained(self) raises:
         self.engine.check(self.kv)
         if (self.engine.live() != 0 or self.engine.pending_steps() != 0
-                or self.engine.blocks.free_blocks() != self.kv.blocks):
+                or self.engine.cache_references() != 0 or self.engine.private_blocks() != 0
+                or self.engine.blocks.free_blocks()+self.engine.cached_blocks() != self.kv.blocks):
             raise Error("engine chat terminal retained request or block ownership")
+        var written_tokens = 0
         for written in self.kv.written:
-            if written != 0:
-                raise Error("engine chat terminal retained valid KV rows")
+            if written != 0 and written != self.kv.block_size:
+                raise Error("engine chat terminal retained a partial KV block")
+            written_tokens += written
+        if written_tokens != self.engine.cached_blocks()*self.kv.block_size:
+            raise Error("engine chat terminal cached KV census disagrees")
 
     def begin(mut self, tokenizer: Tokenizer, mut work: TokenizerWorkspace,
               message: String, maximum: Int) raises:
@@ -104,6 +115,7 @@ struct EngineChatSession[Runner: EngineChatRunner = QwenRunner](Movable):
         self.turn_delivered_tokens = 0
         self.turn_discarded_tokens = 0
         self.turn_discarded_rows = 0
+        self.turn_cache_hit_tokens = 0
 
     def abort(mut self):
         self.engine.abort(self.request_id)
@@ -112,6 +124,7 @@ struct EngineChatSession[Runner: EngineChatRunner = QwenRunner](Movable):
         var record = self.runner.chat_step(self.engine,self.kv)
         self.turn_rows += record.total_tokens
         self.turn_steps += 1
+        self.turn_cache_hit_tokens += record.cache_hit_tokens
         if self.runner.chat_async():
             self.turn_submissions += len(record.async_submissions)
             self.turn_completions += len(record.async_completions)
@@ -154,7 +167,15 @@ struct EngineChatSession[Runner: EngineChatRunner = QwenRunner](Movable):
         if self.engine.failed or not self.runner.chat_valid():
             raise Error("Engine execution failed: restart the chat process.")
         self.check_drained()
+        _ = self.engine.clear_cache(self.kv)
         self.history.reset()
+        self.check_drained()
+
+    def close(mut self) raises:
+        self.check_drained()
+        self.runner.chat_synchronize()
+        _ = self.engine.clear_cache(self.kv)
+        self.check_drained()
 
     def fail(mut self) raises:
         # Decoder/report failures also drop the sole live request before exit.
@@ -163,6 +184,7 @@ struct EngineChatSession[Runner: EngineChatRunner = QwenRunner](Movable):
             while self.engine.live() > 0:
                 _ = self.step()
         self.runner.chat_synchronize()
+        _ = self.engine.clear_cache(self.kv)
         self.history.finish("error")
         self.history.reason = "error"
         self.engine.failed = True

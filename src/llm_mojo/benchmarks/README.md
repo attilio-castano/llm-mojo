@@ -849,3 +849,60 @@ retain each arm and full histories. A fresh canonical CPU restore and independen
 comparison of all 24 histories passed; the
 [retrieval receipt](../../../studies/model_generation/engine-async-evidence/canonical-retrieval.json)
 establishes local archive replay, without a new GPU run or remote backup.
+
+### Synchronous reference prefix-cache campaign
+
+The [frozen prefix contract](../../../studies/model_generation/engine-core.md#prefix-caching-frozen-implementation-and-evidence-contract)
+declares eight cells and 96 timed runs. Use fresh external output paths, a clean
+source checkout, the locked runtime and verified existing checkpoint/tokenizer
+assets. The fixture-level exact numerical gate precedes production ownership
+changes. The final exact-build qualification below then runs all four checkpoint
+groups and all sixteen untimed cache-disabled/cache-enabled preflights before
+any campaign timings. It freezes full seed and measured natural histories,
+finish reasons, native commands, actual exits and input/source/binary identities.
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-specification \
+  --prefix-study --output /private/tmp/prefix-campaign.json
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build \
+  --prefix-study --prepared VERIFIED_PREPARED_PATH --output /private/tmp/prefix-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-qualify \
+  --prefix-study --build /private/tmp/prefix-build --trace /private/tmp/prefix-campaign.json \
+  --output /private/tmp/prefix-qualification
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect \
+  --prefix-study --build /private/tmp/prefix-build --trace /private/tmp/prefix-campaign.json \
+  --qualification /private/tmp/prefix-qualification/qualification.json \
+  --output /private/tmp/prefix-measurements
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay \
+  --output /private/tmp/prefix-measurements/engine-prefix.json.gz
+```
+
+Specification tokenizes repository-authored engineering text with the pinned
+native tokenizer and retains literal IDs plus tokenizer/generator identities.
+It freezes 256/1,024-token shared prefixes, zero/four/eight intended matching
+requests, 64-token private suffixes and at most sixteen outputs. The six primary
+cells use 384 blocks; two 1,024-token pressure cells use forty. Fixed 256-row/eight-
+sequence workspaces, synchronous reference 27, BF16/FP32, 32-slot slot-major KV
+and lifetime reservation stay constant. Generic `--blocks`, arrival-rate and
+other workload overrides are rejected; the campaign document owns the matrix.
+
+Every invocation executes the same cache-enabled seed after ten untimed warmup
+steps. Disabled controls then clear and disable the cache; the candidate keeps
+the seed index. The record distinguishes seed, handoff, measured request drain
+and final clear. Results report warm request metrics and the complete seed-plus-
+continuation episode cost separately. Four balanced control/self-control/cache
+triples per cell use the existing offline paired noise rule. A failure stops
+the dependent campaign and retains incomplete records; no cell is resampled.
+
+CPU replay needs neither weights nor device access. It reconstructs exact
+namespace/salt/token-prefix index events, rejects changed or omitted ownership,
+phase, work and completion records, verifies the sixteen preflight receipts and
+all 96 timed calls, and compares every full history with the qualification's
+frozen literal oracle. Seed publication is additionally bounded by cumulative
+completed seed rows. For the mixed measured phase, CPU replay validates known
+input identities and total work; qualified native numerical/ownership tests
+establish per-request completed-step publication. Index equality is exact; no SHA-256 cache-key claim is
+made. Cache admission time includes attachment, reservation and eviction;
+removal events supply eviction counts without an isolated eviction-time claim.
+Evidence and performance conclusions belong to the eventual measured source
+and retained results, not to successful tooling compilation alone.
