@@ -290,7 +290,11 @@ def parse_run(stdout, trace, cache_mode, blocks):
                 raise ValueError('disabled measurement retained seed index')
         elif name == 'phase_time' and len(fields) == 4:
             phase, begin, end = fields[1], int(fields[2]), int(fields[3])
-            if phase != current or phase in phase_times or begin < 0 or end <= begin:
+            # Keeping the seed cache is a no-op; adjacent clock reads may agree.
+            zero_work_handoff = (phase == 'handoff' and cache_mode == 'enabled'
+                                 and not any(event['phase'] == phase for event in events))
+            if (phase != current or phase in phase_times or begin < 0 or end < begin
+                    or (end == begin and not zero_work_handoff)):
                 raise ValueError('invalid prefix phase boundary')
             phase_times[phase] = dict(begin_ns=begin,end_ns=end)
         elif name == 'cache_event' and len(fields) == 7:

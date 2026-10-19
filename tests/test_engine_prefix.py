@@ -258,6 +258,25 @@ class PrefixTraceTests(unittest.TestCase):
             with self.subTest(change=broken[:30]),self.assertRaises(ValueError):
                 prefix.parse_run(broken,trace,'enabled',384)
 
+    def test_only_enabled_noop_handoff_may_have_zero_duration(self):
+        # The final v2 enabled 1024/reuse8/blocks40 preflight recorded exactly
+        # phase_time handoff 52734680091916 52734680091916, with no cache events.
+        trace=trace_fixture(1024,8,40)
+        stdout=native_fixture(trace)
+        def interval(raw,phase,delta=0):
+            row=next(line for line in raw.splitlines() if line.startswith('phase_time '+phase+' '))
+            fields=row.split(); fields[3]=str(int(fields[2])+delta)
+            return raw.replace(row,' '.join(fields))
+        parsed=prefix.parse_run(interval(stdout,'handoff'),trace,'enabled',40)
+        self.assertEqual(prefix.run_summary(parsed,trace)['handoff_ns'],0)
+        corruptions=[(interval(stdout,phase),'enabled') for phase in ('seed','measure','clear')]
+        corruptions.extend([(interval(stdout,'handoff',-1),'enabled'),
+            (interval(stdout.replace('cache enabled','cache disabled'),'handoff'),'disabled'),
+            (interval(native_fixture(trace,'disabled').replace('cache disabled','cache enabled'),'handoff'),'enabled')])
+        for broken,cache in corruptions:
+            with self.subTest(cache=cache,phase=broken[-100:]),self.assertRaisesRegex(ValueError,'invalid prefix phase boundary'):
+                prefix.parse_run(broken,trace,cache,40)
+
     def test_coherent_unused_index_identity_change_still_fails(self):
         trace=trace_fixture(reuse=0)
         lines=native_fixture(trace).splitlines()
