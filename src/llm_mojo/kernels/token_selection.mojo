@@ -16,7 +16,7 @@ from max.gpu import WARP_SIZE, block_idx, lane_id, thread_idx
 from max.gpu.primitives import warp
 from std.collections import Array
 from std.memory import bitcast
-from std.sys.info import is_apple_gpu
+from std.sys.info import is_apple_gpu, is_gpu
 from llm_mojo.kernels.token_selection_contract import (
     ArgmaxRecord, bf16_rank, bf16_nonfinite, empty_argmax, merge_argmax,
 )
@@ -32,7 +32,6 @@ from llm_mojo.kernels.finishing_execution import (
     finishing_execution_loop_active, finishing_execution_load_active,
 )
 from llm_mojo.kernels.finishing_execution_check import (
-    make_finishing_execution_certificate, check_finishing_execution_certificate_request,
     same_finishing_execution_descriptor,
 )
 from llm_mojo.kernels.finishing_typed_derivation import (
@@ -42,6 +41,9 @@ from llm_mojo.kernels.finishing_typed_derivation import (
 from llm_mojo.kernels.finishing_typed_coverage import (
     FinishingTypedCoverageProofs, FINISHING_TYPED_COVERAGE_CAPACITY,
     make_finishing_typed_coverage, check_finishing_typed_coverage,
+)
+from llm_mojo.kernels.finishing_checked_exports import (
+    FinishingTraversalLibrary, check_canonical_finishing_execution,
 )
 
 
@@ -96,6 +98,15 @@ def make_argmax_fold_plan[
     )
 
 
+def _argmax_fold_binding[threads: Int, items_per_thread: Int, plan_nodes: Int](
+    fold: ArgmaxFoldPlan[threads, items_per_thread, plan_nodes],
+) -> Bool:
+    return (threads >= 1 and threads % 32 == 0 and items_per_thread >= 1
+        and fold.program.threads == threads and fold.program.items == items_per_thread
+        and fold.stride == fold.program.stride
+        and fold.program.count_limit == 2147483647 and fold.program.integer_limit == Int.MAX)
+
+
 def check_argmax_fold_plan[threads: Int, items_per_thread: Int, plan_nodes: Int](
     fold: ArgmaxFoldPlan[threads, items_per_thread, plan_nodes],
 ) -> Bool:
@@ -107,11 +118,7 @@ def check_argmax_fold_plan[threads: Int, items_per_thread: Int, plan_nodes: Int]
     closed base-linearity and termination terms. Nat induction is derived
     from checked declarations. It does not reflect an arbitrary Mojo body.
     """
-    if threads < 1 or threads % 32 != 0 or items_per_thread < 1:
-        return False
-    if (fold.program.threads != threads or fold.program.items != items_per_thread
-            or fold.stride != fold.program.stride
-            or fold.program.count_limit != 2147483647 or fold.program.integer_limit != Int.MAX):
+    if not _argmax_fold_binding(fold):
         return False
     if not check_finishing_typed_coverage(fold.program, fold.proof):
         return False
@@ -125,6 +132,18 @@ def argmax_fold_index[threads: Int](base: Int, thread: Int, item: Int) -> Int:
     return base + argmax_tile_offset[threads](thread, item)
 
 
+def _argmax_execution_descriptor[threads: Int, items_per_thread: Int, plan_nodes: Int](
+    plan: ArgmaxPlan[items_per_thread, plan_nodes],
+) -> FinishingExecutionDescriptor[
+    threads, items_per_thread, plan_nodes, 32, 65, 2 * (threads // 32) + 1,
+]:
+    var subgroup = sequential_argmax_plan[32]()
+    var final = sequential_argmax_plan[threads // 32]()
+    return make_finishing_execution_descriptor[
+        threads, items_per_thread, plan_nodes, 32, 65, 2 * (threads // 32) + 1,
+    ](plan, subgroup, final)
+
+
 def make_argmax_finishing_execution[threads: Int, items_per_thread: Int, plan_nodes: Int](
     fold: ArgmaxFoldPlan[threads, items_per_thread, plan_nodes],
 ) -> FinishingExecutionDescriptor[
@@ -136,11 +155,7 @@ def make_argmax_finishing_execution[threads: Int, items_per_thread: Int, plan_no
     rank-max/token-min/invalid-max warp operations remains a named backend
     refinement, including the boundary condition invalid in {0,1}.
     """
-    var subgroup = sequential_argmax_plan[32]()
-    var final = sequential_argmax_plan[threads // 32]()
-    var descriptor = make_finishing_execution_descriptor[
-        threads, items_per_thread, plan_nodes, 32, 65, 2 * (threads // 32) + 1,
-    ](fold.reduction, subgroup, final)
+    var descriptor = _argmax_execution_descriptor[threads, items_per_thread, plan_nodes](fold.reduction)
     # Keep every program field, including limits, rather than silently
     # replacing a caller-supplied program with a canonical one.
     descriptor.program = fold.program
@@ -226,43 +241,60 @@ def _argmax[
 
 def _finish[
     IL: TensorLayout, OL: TensorLayout, threads: Int, items_per_thread: Int,
-    plan_nodes: Int, fold: ArgmaxFoldPlan[threads, items_per_thread, plan_nodes],
+    plan_nodes: Int, plan: ArgmaxPlan[items_per_thread, plan_nodes],
 ](
-    partials: TileTensor[DType.uint32, IL, MutAnyOrigin],
-    result: TileTensor[DType.uint32, OL, MutAnyOrigin], count: Int32,
-):
-    comptime assert is_apple_gpu() and WARP_SIZE == 32
-    comptime assert partials.flat_rank == 2
-    comptime assert check_argmax_fold_plan(fold), "argmax fold plan rejected"
-    comptime descriptor = make_argmax_finishing_execution(fold)
-    comptime assert check_argmax_finishing_execution(fold, descriptor), "checked finishing execution rejected"
-    comptime certificate = make_finishing_execution_certificate(descriptor)
-    comptime assert check_finishing_execution_certificate_request(certificate, descriptor), "checked finishing execution rejected"
-    comptime plan = descriptor.local
-    comptime program = descriptor.program
-    # Ordinary helper arguments borrow a runtime value. Materialize the exact
-    # checked descriptor explicitly; its plans are Copyable, not ImplicitlyCopyable.
-    var runtime_descriptor = materialize[descriptor]()
-    var row = block_idx.x
-    var first = Int(row)*Int(count)
-    var best = empty_argmax()
-    var base: Int = program.start
-    while finishing_execution_loop_active(runtime_descriptor, base, Int(count)):
-        var records = Array[ArgmaxRecord, items_per_thread](uninitialized=True)
-        comptime for item in range(items_per_thread):
-            var i = finishing_execution_index(runtime_descriptor, base, Int(thread_idx.x), item)
-            records[item] = empty_argmax()
-            if finishing_execution_load_active(runtime_descriptor, i, Int(count)):
-                records[item] = ArgmaxRecord(
-                    rebind[UInt32](partials[first+i,0]),
-                    rebind[UInt32](partials[first+i,1]),
-                    rebind[UInt32](partials[first+i,2]),
-                )
-        var tile_best = evaluate_argmax_plan[items_per_thread, plan_nodes, plan](records)
-        best = merge_argmax(best, tile_best)
-        base += program.stride
-    _group_winner[OL, threads, 2 * (threads // 32) + 1, descriptor.final](
-        result,best.rank,best.token,best.invalid,Int(row))
+    ctx: DeviceContext, var partials: TileTensor[DType.uint32, IL, MutAnyOrigin],
+    var result: TileTensor[DType.uint32, OL, MutAnyOrigin], var count: Int32,
+) raises:
+    """Check on the host, then enqueue a nested descriptor interpreter.
+
+    No proof data or acceptance flag is passed to the device. The body is
+    nested in this checked launcher, so it has no unchecked public entrypoint.
+    """
+    comptime assert not is_gpu(), "finishing proof admission requires host compilation"
+    comptime valid_shape = (threads >= 1 and threads % 32 == 0
+        and items_per_thread >= 1 and check_argmax_plan(plan))
+    comptime if valid_shape:
+        comptime assert partials.flat_rank == 2 and result.flat_rank == 2
+        comptime descriptor = _argmax_execution_descriptor[threads, items_per_thread, plan_nodes](materialize[plan]())
+        comptime assert (descriptor.program.count_limit == 2147483647
+            and descriptor.program.integer_limit == Int.MAX), "argmax fold plan rejected"
+        comptime assert FinishingTraversalLibrary[descriptor.program].accepted, "argmax fold plan rejected"
+        comptime assert check_canonical_finishing_execution(descriptor), "checked finishing execution rejected"
+        var rows = Int(result.dim[0]())
+
+        def kernel() {var partials, var result, var count}:
+            comptime assert is_apple_gpu() and WARP_SIZE == 32
+            comptime assert partials.flat_rank == 2
+            comptime local_plan = descriptor.local
+            comptime program = descriptor.program
+            comptime assert program.integer_limit <= Int.MAX, "finishing target integer range rejected"
+            # Borrow the exact checked executable data, not its proof syntax.
+            var runtime_descriptor = materialize[descriptor]()
+            var row = block_idx.x
+            var first = Int(row)*Int(count)
+            var best = empty_argmax()
+            var base: Int = program.start
+            while finishing_execution_loop_active(runtime_descriptor, base, Int(count)):
+                var records = Array[ArgmaxRecord, items_per_thread](uninitialized=True)
+                comptime for item in range(items_per_thread):
+                    var i = finishing_execution_index(runtime_descriptor, base, Int(thread_idx.x), item)
+                    records[item] = empty_argmax()
+                    if finishing_execution_load_active(runtime_descriptor, i, Int(count)):
+                        records[item] = ArgmaxRecord(
+                            rebind[UInt32](partials[first+i,0]),
+                            rebind[UInt32](partials[first+i,1]),
+                            rebind[UInt32](partials[first+i,2]),
+                        )
+                var tile_best = evaluate_argmax_plan[items_per_thread, plan_nodes, local_plan](records)
+                best = merge_argmax(best, tile_best)
+                base += program.stride
+            _group_winner[OL, threads, 2 * (threads // 32) + 1, descriptor.final](
+                result,best.rank,best.token,best.invalid,Int(row))
+
+        ctx.enqueue_function(kernel, grid_dim=rows, block_dim=threads)
+    else:
+        comptime assert False, "argmax fold plan rejected"
 
 
 def _validate[LL: TensorLayout, PL: TensorLayout, RL: TensorLayout](
@@ -298,14 +330,12 @@ def enqueue_argmax[
 ) raises:
     comptime assert check_argmax_schedule[threads, items_per_thread](), "argmax schedule rejected"
     comptime assert check_argmax_plan(plan), "argmax reduction plan rejected"
-    comptime fold = make_argmax_fold_plan[finish_threads,finish_items_per_thread,finish_plan_nodes,finish_plan]()
-    comptime assert check_argmax_fold_plan(fold), "argmax fold plan rejected"
     var rows = Int(logits.dim[0]())
     var count = Int(logits.dim[1]())
     comptime tile = threads * items_per_thread
     var groups = 1 + (count - 1) // tile if count > 0 else 0
     _validate(ctx,logits,partials,result,groups)
     comptime first = _argmax[LL,PL,threads,items_per_thread,plan_nodes,plan]
-    comptime last = _finish[PL,RL,finish_threads,finish_items_per_thread,finish_plan_nodes,fold]
     ctx.enqueue_function[first](logits,partials,Int32(count),grid_dim=(groups,rows),block_dim=threads)
-    ctx.enqueue_function[last](partials,result,Int32(groups),grid_dim=rows,block_dim=finish_threads)
+    _finish[PL,RL,finish_threads,finish_items_per_thread,finish_plan_nodes,finish_plan](
+        ctx, partials.copy(), result.copy(), Int32(groups))

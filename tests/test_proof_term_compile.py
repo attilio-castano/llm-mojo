@@ -20,6 +20,36 @@ FINISHING_RECORD_COMPILE_TIMEOUT_SECONDS = 7200
 
 
 class ProofTermCompileTests(unittest.TestCase):
+    def test_finishing_checked_exports_are_bound(self):
+        compiler = environment_tool("mojo")
+        with tempfile.TemporaryDirectory(prefix="llm-mojo-finishing-exports-") as directory:
+            binary = Path(directory) / "valid"
+            built = subprocess.run(
+                [compiler, "build", "-j", "2", "-I", "src", "-I", "tests",
+                 "tests/test_finishing_checked_exports.mojo", "-o", str(binary)],
+                cwd=ROOT, capture_output=True, text=True,
+                timeout=PROOF_COMPILE_TIMEOUT_SECONDS,
+            )
+            self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
+            self.assertTrue(binary.is_file())
+            executed = subprocess.run([str(binary)], cwd=ROOT, capture_output=True,
+                                      text=True, timeout=COMPILE_TIMEOUT_SECONDS)
+            self.assertEqual(executed.returncode, 0, executed.stdout + executed.stderr)
+            self.assertEqual(executed.stdout.splitlines(),
+                ["Checked immutable finishing exports and 19 changed-input controls passed"])
+            rejected_binary = Path(directory) / "invalid-host-plan"
+            rejected = subprocess.run(
+                [compiler, "build", "-j", "2", "-I", "src", "-I", "tests",
+                 "tests/compile_fail/finishing_export_host_plan.mojo", "-o", str(rejected_binary)],
+                cwd=ROOT, capture_output=True, text=True,
+                timeout=PROOF_COMPILE_TIMEOUT_SECONDS,
+            )
+            details = rejected.stdout + rejected.stderr
+            self.assertNotEqual(rejected.returncode, 0, details)
+            self.assertRegex(details, r"(?m)^.*\b(?:error|note):\s*constraint failed:\s*"
+                             + re.escape("argmax fold plan rejected") + r"\s*$")
+            self.assertFalse(rejected_binary.exists())
+
     def test_finishing_record_execution_is_checked(self):
         compiler = environment_tool("mojo")
         with tempfile.TemporaryDirectory(prefix="llm-mojo-finishing-record-") as directory:

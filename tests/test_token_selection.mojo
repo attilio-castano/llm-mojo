@@ -372,10 +372,8 @@ def _finish_case[threads: Int, items: Int, nodes: Int, plan: ArgmaxPlan[items, n
             expected.append(best_rank)
             expected.append(best_token)
             expected.append(invalid)
-    comptime fold = make_argmax_fold_plan[threads, items, nodes, plan]()
-    comptime kernel = _finish[PL, RL, threads, items, nodes, fold]
-    ctx.enqueue_function[kernel](TileTensor(partials, partial_layout), TileTensor(result, result_layout),
-                                 Int32(count), grid_dim=rows, block_dim=threads)
+    _finish[PL, RL, threads, items, nodes, plan](
+        ctx, TileTensor(partials, partial_layout), TileTensor(result, result_layout), Int32(count))
     with result.map_to_host() as mapped:
         for row in range(rows):
             for field in range(3):

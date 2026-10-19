@@ -152,12 +152,102 @@ that every arbitrary scheduling policy produces such a trace. A native
 remaining-event rank and bounded state exploration provide separate concrete
 progress checks.
 
+## Reusing checked exports during compilation
+
+`finishing_checked_exports.mojo` exposes immutable compiler-associated
+admissions. Each Boolean is evaluated by the existing independent checker;
+there is no caller-provided acceptance flag, serialized proof receipt, new
+inference rule, or state imported into the proof kernel.
+
+Production coverage and termination use `FinishingTraversalLibrary`, keyed by
+the complete `FinishingProgram`. It constructs the canonical proof bundles as
+associated data and independently checks all roots and headroom evidence.
+Callers with different tensor layouts or local reduction trees reuse that
+admission. Each caller still checks its own tree and exact program binding.
+A genuinely different program requires another admission. This does not yet
+replace the shape-specific
+coverage and termination proofs with theorems universally quantified over
+all program fields.
+
+The canonical general execution proof already quantifies over its inputs,
+join evidence, registers and schedules. A module-level constant admits its
+actual syntax once with the existing checker and budget. Canonical requests
+validate their descriptor and use that fixed theorem; they accept no submitted
+proof, claimed theorem type, or acceptance flag.
+
+Arbitrary submitted proofs retain the full-input APIs, with no memoized
+acceptance for caller syntax. Every submission checks its roots, unused syntax,
+declarations and resource budget. Certificate/request equality remains
+mandatory. A canonical admission never authorizes a changed submitted proof
+or mismatched certificate.
+
+The production host launcher uses these checked canonical libraries. The
+original mutable-value checker APIs remain available and
+independently check submitted proofs. The base-linearity and termination roots
+now use the kernel's existing multi-root API to share one inference state;
+both independently required closed types and every syntax entry are checked.
+
+`_finish` takes a small local plan and is a checked host launcher. It constructs
+the canonical executable descriptor and performs these compile-time checks
+before enqueuing a nested, value-taking GPU closure. The closure owns only the
+tensor views and runtime count; its executable descriptor remains the exact
+compile-time value checked by the launcher. Its body contains the same fixed
+loop and local/final DAG checks, but no proof construction or admission.
+An explicit host-target assertion catches accidental re-entry of the launcher
+during GPU offload. There is no unchecked kernel entrypoint, caller-provided
+acceptance flag, or proof handle whose constructor must be trusted.
+Proof bundles are associated library data rather than closure type parameters;
+their full syntax would otherwise exceed the Apple linker's symbol-name limit.
+The existing compiler, closure argument transport and source-to-model boundary
+still require trust and actual device qualification.
+
+`tests/test_finishing_checked_exports.mojo` forces canonical admissions during
+compilation, rejects a changed canonical program at compile time, then checks
+altered submitted proofs, unused syntax, trees, descriptors and budgets in
+native code. These inputs always use the original full checkers. The
+compiler's correct evaluation and identity of immutable program parameters
+remain within the existing compiler trust assumption.
+The host-launcher rejection fixture requires the actual fold-admission
+diagnostic and absence of an executable. An unrelated parser/device failure,
+crash or timeout is not a passing rejection.
+
+For a reproducible host compilation profile on macOS:
+
+```sh
+uv run --locked python -B tests/profile_finishing_compilation.py --stage 4 --copies 4 --reuse 0 --output /private/tmp/finishing-unshared
+uv run --locked python -B tests/profile_finishing_compilation.py --stage 4 --copies 4 --reuse 1 --output /private/tmp/finishing-shared
+```
+
+Use a clean source commit and new output paths for each invocation. The tool
+uses a fresh compiler cache, records compiler/host identity and complete input
+hashes, retains MLIR pass and process-resource reports, checks unchanged inputs,
+and executes the resulting probe. `--copies` varies distinct caller
+specializations of the same mathematical shape. `--stage` isolates arithmetic
+bootstrap (0), coverage (1), termination (2), the general execution theorem (3),
+or the complete fold/request (4). Compiler `--threads` controls compilation
+concurrency and does not constrain GPU computation shapes. These host costs
+are separate from device correctness and GPU performance evidence.
+
+`--target operations` profiles the real operation benchmark and checks a paired
+token-selection route on Metal. `--target numerical` profiles and runs the
+entire existing token-selection numerical matrix. Those targets use the
+selected source's production verification path; `--reuse` only switches the
+host proof probe. `--source-root` and `--probe` can select a pinned source
+snapshot for a before/after comparison. The complete input hashes identify
+that snapshot even when it differs from the tooling checkout.
+
 ## Qualification and remaining work
 
 Run the focused native/proof suite with:
 
 ```bash
 uv run --locked mojo run -I src -I tests tests/test_finishing_execution.mojo
+```
+
+Check immutable admissions, changed inputs and host-launcher rejection with:
+
+```sh
+uv run --locked python -B tests/test_proof_term_compile.py ProofTermCompileTests.test_finishing_checked_exports_are_bound
 ```
 
 Run its positive compiler/native gate followed by the exact negative fixtures:

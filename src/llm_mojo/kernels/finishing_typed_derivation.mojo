@@ -13,6 +13,7 @@ the definition-derived Prop eliminator and structural count monotonicity;
 the signature generator and constructor computation remain generic kernel rules.
 """
 import llm_mojo.kernels.proof_term_kernel as tk
+from std.collections import Array
 from llm_mojo.kernels.finishing_proof_kernel import FinishingProgram
 
 comptime FINISHING_TYPED_PROOF_CAPACITY = 256
@@ -321,15 +322,15 @@ def check_finishing_typed_proofs[capacity: Int](program: FinishingProgram,
         return False
     if not tk.check_inductive_definition_matches(program, proofs.bundle, expected_definition):
         return False
-    var base = proofs.bundle.copy()
-    var expected_base = base_linearity_type(base, program)
-    base.root = proofs.base_root
-    if not tk.check_proof_terms(program, base, expected_base):
-        return False
-    var termination = proofs.bundle.copy()
-    var expected_termination = termination_type(termination)
-    termination.root = proofs.termination_root
-    return tk.check_proof_terms(program, termination, expected_termination)
+    # Both roots inhabit the same immutable syntax/environment. The existing
+    # multi-root checker still checks all syntax and each closed expected type,
+    # while sharing inference and conversion work within that one admission.
+    var bundle = proofs.bundle.copy()
+    bundle.root = proofs.base_root
+    var judgments = Array[tk.ProofTermJudgment, 2](fill=tk.ProofTermJudgment(-1, -1))
+    judgments[0] = tk.ProofTermJudgment(proofs.base_root, base_linearity_type(bundle, program))
+    judgments[1] = tk.ProofTermJudgment(proofs.termination_root, termination_type(bundle))
+    return tk.check_proof_terms_many(program, bundle, judgments)
 
 
 def _done_property[capacity: Int](mut p: tk.ProofTermBundle[capacity],

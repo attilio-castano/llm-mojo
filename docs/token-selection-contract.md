@@ -185,7 +185,12 @@ Public preflight bounds real row/record offsets; allocation extent, injective
 layouts and nonaliasing remain caller obligations.
 These count and row/scratch guarantees come from the public launcher; direct
 calls to private `_finish` must establish positive count and valid row/scratch
-extents themselves.
+extents themselves. `_finish` now checks admission during host compilation
+and launches a nested GPU closure bound to the same descriptor. The block
+size remains the checked thread parameter, and the grid uses the result's row
+extent.
+The [checked-export boundary](finishing-executor.md#reusing-checked-exports-during-compilation)
+describes shared admissions and the unchanged trust assumptions.
 
 ### What is checked, and where
 
