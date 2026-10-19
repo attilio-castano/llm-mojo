@@ -240,16 +240,19 @@ def _finish[
     comptime assert check_finishing_execution_certificate_request(certificate, descriptor), "checked finishing execution rejected"
     comptime plan = descriptor.local
     comptime program = descriptor.program
+    # Ordinary helper arguments borrow a runtime value. Materialize the exact
+    # checked descriptor explicitly; its plans are Copyable, not ImplicitlyCopyable.
+    var runtime_descriptor = materialize[descriptor]()
     var row = block_idx.x
     var first = Int(row)*Int(count)
     var best = empty_argmax()
     var base: Int = program.start
-    while finishing_execution_loop_active(descriptor, base, Int(count)):
+    while finishing_execution_loop_active(runtime_descriptor, base, Int(count)):
         var records = Array[ArgmaxRecord, items_per_thread](uninitialized=True)
         comptime for item in range(items_per_thread):
-            var i = finishing_execution_index(descriptor, base, Int(thread_idx.x), item)
+            var i = finishing_execution_index(runtime_descriptor, base, Int(thread_idx.x), item)
             records[item] = empty_argmax()
-            if finishing_execution_load_active(descriptor, i, Int(count)):
+            if finishing_execution_load_active(runtime_descriptor, i, Int(count)):
                 records[item] = ArgmaxRecord(
                     rebind[UInt32](partials[first+i,0]),
                     rebind[UInt32](partials[first+i,1]),

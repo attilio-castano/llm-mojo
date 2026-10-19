@@ -1303,6 +1303,18 @@ uv run --locked python -m unittest discover -s tests -p test_proof_term_compile.
 MODULAR_DEBUG=device-sync-mode uv run --locked mojo run -I src tests/test_token_selection.mojo
 ```
 
+The GPU suite instantiates many checked plans and layouts. To reduce concurrent
+compiler workspaces, build it with a compiler thread limit, then run the same
+suite:
+
+```sh
+uv run --locked mojo build -j 2 -I src tests/test_token_selection.mojo -o build/token-selection-test
+MODULAR_DEBUG=device-sync-mode build/token-selection-test
+```
+
+`-j 2` controls compiler concurrency. All GPU thread/item geometries, reduction
+plans, layouts and compile-time assertions remain in the suite.
+
 The host Mojo commands force positive compile-time checks and exercise
 compiled host implementations. The reduction-plan suite checks sequential,
 balanced, reordered/duplicated, and earlier-root descriptions against an
@@ -1334,7 +1346,21 @@ row/column layouts, tail winners, lowest-ID ties, poisoned tail records, and
 unchanged input/output guards. The public dispatcher also exercises a compact
 five-input finishing plan with a different node count.
 
-The existing operation benchmark includes a bounded `token_selection` route:
+The maintained benchmark driver includes an opt-in `token_selection` study.
+From a clean, validated commit with the documented Metal prerequisites, use
+fresh external directories:
+
+```sh
+uv run --locked llm-mojo bench build --build-dir /private/tmp/token-selection-build
+uv run --locked llm-mojo bench run --study token_selection --build-dir /private/tmp/token-selection-build --output /private/tmp/token-selection-run
+```
+
+The driver records source, binary and device identity and the complete paired
+matrix: 1/16 rows, 1/24 calls per sample, and candidates 0/1/2 against control
+0, including control self-pairs and both arm orders. The general route smoke
+also checks this matrix in both orders, validates the emitted sample protocol,
+and requires invalid candidate and control routes to fail. A direct single
+comparison is also available:
 
 ```sh
 uv run --locked mojo build -I src src/llm_mojo/benchmarks/operations.mojo -o build/operations
@@ -1351,4 +1377,6 @@ host enqueue through synchronization, with one call or 24 repeated calls to
 the same buffers according to the third argument. This is an operation
 regression diagnostic, not full-token performance evidence. Use the paired
 protocol and source/device provenance in [experiments.md](experiments.md) for
-a retained performance conclusion.
+a retained performance conclusion. Registering and testing the Python driver
+does not establish Metal kernel correctness or a performance result; those
+require actual device runs.

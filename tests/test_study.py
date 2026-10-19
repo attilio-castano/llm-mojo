@@ -1,9 +1,12 @@
 import copy
+from contextlib import ExitStack
 import gzip
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from llm_mojo.benchmarks.study import (parse_output, summarize, encode_samples, read_samples,
                               load_run, sha, write_json, REPETITIONS,
@@ -205,3 +208,177 @@ class StudyTests(unittest.TestCase):
                 parse_output(output,3,3,False,query_rows=wrong,**kwargs)
         with self.assertRaises(ValueError):
             parse_output(output.replace('SAMPLE candidate 3','SAMPLE candidate 0'),3,3,False,query_rows=7,**kwargs)
+
+
+class TokenSelectionStudyTests(unittest.TestCase):
+    """Exercise the Python measurement protocol with simulated process output.
+
+    These tests do not compile Mojo, execute kernels, or provide GPU evidence.
+    """
+
+    @staticmethod
+    def process_output(command):
+        _, operation, rows, layers, candidate, control, first, seed, mode, repetitions, _ = map(str, command)
+        arms = [('control', control), ('candidate', candidate)]
+        if first == '1':
+            arms.reverse()
+        return '\n'.join([
+            'device: Apple Test GPU', 'api: metal', f'operation: {operation}',
+            f'shape: {rows} {layers} seed: {seed}',
+            f'variants: {control} {candidate} candidate-first: {first}',
+            'correctness: passed',
+            *[f'SAMPLE {arm} {variant} {rep} 100'
+              for arm, variant in arms for rep in range(int(repetitions))],
+            'BENCHMARK_COMPLETE',
+        ]) + '\n'
+
+    def test_token_selection_specification_declares_its_actual_measurement(self):
+        from llm_mojo.benchmarks.study import STUDIES, comparisons
+        spec = STUDIES['token_selection']
+        self.assertEqual(spec['operation'], 'token_selection')
+        self.assertIs(spec['opt_in'], True)
+        self.assertEqual(spec['control'], 0)
+        self.assertEqual(spec['candidates'], [0, 1, 2])
+        self.assertEqual(spec['rows'], [1, 16])
+        self.assertEqual(spec['layers'], [1, 24])
+        self.assertEqual(set(spec['names']), {0, 1, 2})
+        self.assertEqual(len(comparisons(spec)), 12)
+        self.assertRegex(spec['arithmetic'].lower(), r'bf16|bfloat16')
+        self.assertIn('uint32', spec['arithmetic'].lower())
+        self.assertIn('151936', spec['layout'])
+        for field in ('inputs', 'timing'):
+            with self.subTest(field=field):
+                self.assertIn('resident', spec[field].lower())
+
+    def test_token_selection_runner_preserves_argv_metadata_and_both_arm_orders(self):
+        from llm_mojo.benchmarks import run as runner
+        from llm_mojo.benchmarks.study import STUDIES
+        spec = STUDIES['token_selection']
+        repo = dict(commit='a' * 40, branch='test', dirty=False)
+        sources = {'fixture-source': 'fixture-digest'}
+        environment = {'fixture-environment': True}
+        with tempfile.TemporaryDirectory() as temporary, ExitStack() as stack:
+            root = Path(temporary)
+            build = root / 'build'
+            build.mkdir()
+            binary = build / 'operations'
+            binary.write_bytes(b'Simulated benchmark binary; never executed.\n')
+            write_json(build / 'build.json', dict(
+                repository=repo, sources=sources, environment=environment,
+                binaries={'operations': sha(binary)},
+            ))
+            replacements = dict(
+                ensure_record_location=None, repository_state=repo,
+                source_hashes=sources, stable_environment=environment,
+                checked_conditions={'power': 'AC'},
+            )
+            for name, value in replacements.items():
+                stack.enter_context(patch.object(runner, name, return_value=value))
+            process = stack.enter_context(patch.object(
+                runner.subprocess, 'run', side_effect=lambda command, **kwargs:
+                subprocess.CompletedProcess(command, 0, self.process_output(command), ''),
+            ))
+            parser = stack.enter_context(patch.object(runner, 'parse_output', wraps=parse_output))
+            output = root / 'output'
+            runner.run(build, output, ['token_selection'])
+            record, samples, summary = load_run(output / 'token_selection')
+            self.assertEqual(len(samples), 960)
+            self.assertEqual(len(summary), 12)
+            self.assertEqual(record['specification'], json.loads(json.dumps(spec)))
+            self.assertEqual(record['dtype'], spec['arithmetic'])
+            self.assertEqual(record['inputs'], spec['inputs'])
+            self.assertEqual(record['timing'], spec['timing'])
+            self.assertEqual(process.call_count, 48)
+            self.assertEqual(parser.call_count, 48)
+            commands = [list(map(str, call.args[0])) for call in process.call_args_list]
+            self.assertEqual({command[0] for command in commands}, {str(binary)})
+            self.assertEqual({command[1] for command in commands}, {'token_selection'})
+            self.assertEqual({tuple(map(int, command[2:5])) for command in commands},
+                             {(rows, layers, variant) for rows in (1, 16)
+                              for layers in (1, 24) for variant in (0, 1, 2)})
+            self.assertEqual({command[5] for command in commands}, {'0'})
+            self.assertEqual({command[6] for command in commands}, {'0', '1'})
+            self.assertEqual({tuple(command[7:]) for command in commands},
+                             {('53', 'bench', str(REPETITIONS), '10')})
+            self.assertEqual([bool(call.args[3]) for call in parser.call_args_list],
+                             [first for first in (False, True, True, False) for _ in range(12)])
+            for call in parser.call_args_list:
+                self.assertEqual(call.kwargs['operation'], 'token_selection')
+
+    def smoke_process(self, command, **kwargs):
+        command = list(map(str, command))
+        if '99' in command[4:6]:
+            diagnostic = ('unknown token selection route'
+                          if command[1] == 'token_selection' else 'invalid variant')
+            return subprocess.CompletedProcess(command, 1, '', diagnostic)
+        return subprocess.CompletedProcess(command, 0, self.process_output(command), '')
+
+    def test_token_selection_smoke_covers_all_registered_routes_and_invalid_arms(self):
+        from llm_mojo.benchmarks import smoke
+        target = Path('/not-executed/operations')
+        env = {'SIMULATED_BENCHMARK': '1'}
+        with patch.object(smoke.subprocess, 'run', side_effect=self.smoke_process) as process:
+            smoke.operations_smoke(target, env)
+        calls = [call for call in process.call_args_list
+                 if str(call.args[0][1]) == 'token_selection']
+        valid = [call for call in calls if '99' not in list(map(str, call.args[0][4:6]))]
+        invalid = [call for call in calls if call not in valid]
+        self.assertEqual(len(valid), 24)
+        self.assertEqual(len(invalid), 2)
+        self.assertEqual({tuple(map(int, call.args[0][2:7])) for call in valid},
+                         {(rows, layers, variant, 0, first)
+                          for rows in (1, 16) for layers in (1, 24)
+                          for variant in (0, 1, 2) for first in (0, 1)})
+        self.assertEqual({tuple(map(int, call.args[0][4:6])) for call in invalid},
+                         {(99, 0), (0, 99)})
+        for call in valid:
+            self.assertEqual(int(call.args[0][9]), REPETITIONS)
+            self.assertEqual(call.kwargs['env'], env)
+
+    def test_token_selection_smoke_rejects_wrong_identity_and_incomplete_output(self):
+        from llm_mojo.benchmarks import smoke
+        mutations = {
+            'device': lambda text: text.replace('Apple Test GPU', 'CPU'),
+            'operation': lambda text: text.replace('operation: token_selection', 'operation: rope'),
+            'sample': lambda text: '\n'.join(line for line in text.splitlines()
+                                           if not line.startswith('SAMPLE control 0 0 ')) + '\n',
+            'completion': lambda text: text.replace('BENCHMARK_COMPLETE', ''),
+        }
+        for name, mutate in mutations.items():
+            def simulated(command, **kwargs):
+                result = self.smoke_process(command, **kwargs)
+                if str(command[1]) == 'token_selection' and result.returncode == 0:
+                    result.stdout = mutate(result.stdout)
+                return result
+            with self.subTest(mutation=name), \
+                    patch.object(smoke.subprocess, 'run', side_effect=simulated), \
+                    self.assertRaises((ValueError, RuntimeError)):
+                smoke.operations_smoke(Path('/not-executed/operations'), {})
+
+    def test_token_selection_smoke_rejects_an_accepted_invalid_arm(self):
+        from llm_mojo.benchmarks import smoke
+        for invalid_arm in ('candidate', 'control'):
+            def simulated(command, **kwargs):
+                result = self.smoke_process(command, **kwargs)
+                index = 4 if invalid_arm == 'candidate' else 5
+                if str(command[1]) == 'token_selection' and str(command[index]) == '99':
+                    result.returncode = 0
+                return result
+            with self.subTest(arm=invalid_arm), \
+                    patch.object(smoke.subprocess, 'run', side_effect=simulated), \
+                    self.assertRaises(RuntimeError):
+                smoke.operations_smoke(Path('/not-executed/operations'), {})
+
+    def test_token_selection_smoke_does_not_count_unrelated_failures_as_invalid_routes(self):
+        from llm_mojo.benchmarks import smoke
+        for invalid_arm in ('candidate', 'control'):
+            def simulated(command, **kwargs):
+                result = self.smoke_process(command, **kwargs)
+                index = 4 if invalid_arm == 'candidate' else 5
+                if str(command[1]) == 'token_selection' and str(command[index]) == '99':
+                    result.stderr = 'device unavailable'
+                return result
+            with self.subTest(arm=invalid_arm), \
+                    patch.object(smoke.subprocess, 'run', side_effect=simulated), \
+                    self.assertRaisesRegex(RuntimeError, 'expected diagnostic'):
+                smoke.operations_smoke(Path('/not-executed/operations'), {})
