@@ -139,6 +139,66 @@ Validation runs in four stages, stopping at the first failure:
    already be prepared; validation never downloads.
 2. **Python tests.** Setup and the shared store, the CLI and configuration,
    launch boundaries, evidence replays, numerical tooling and documentation links.
+   This stage also checks successful Mojo compilation and deliberate rejection
+   of malformed finishing-loop certificates, typed proof terms, inductive
+   definitions (including Nat), their derived eliminators, and typed coverage
+   with explicit inverse ownership and headroom. Checked Nat-recursive arithmetic
+   definitions, Base's derived zero/successor equations, and order/division proofs
+   also have compiler controls for altered bodies, exports, circular references,
+   retired driver axioms and namespace interference. Checked export
+   instantiation has independent contracts for all sixteen exports, mixed
+   parameters and large symbolic specializations, with compiler controls for
+   wrong factors/divisors, namespaces, closure and capture. Compact operators
+   also have checked raw representations, with compiler controls
+   for wrong meanings, projections, parameter routing and circular bootstrap use.
+   Its positive controls cover symbolic operands and large parameter values;
+   resugaring must pass an independent raw administrative comparison. Each
+   compact numeral also has a checked binary Nat denotation and constructor-view
+   conversion derivation. Its raw bootstrap forbids compact numeral syntax;
+   controls reject altered definitions, conversion rules, endpoints and binding.
+   Large literal and power-of-two carry controls check bounded workspace growth
+   for typing and one-layer recursion/elimination, including `succ(Int.MAX)`.
+   Word interpretation additionally needs independent structural checks of
+   the actual binary Nat spines: fixed lengths, bit positions and the raw zero
+   endpoint, at compile time and natively. Matching producer/checker results
+   alone cannot establish that interpretation. A pinned compiler/evaluator
+   defect truncated a signed `Int` division loop at compile time, decoding
+   `Int.MAX` into 31 digits instead of 63 despite preserving its original word
+   value. Digit extraction uses explicit `UInt64` masks and logical shifts
+   consistently in producers and kernel endpoint reconstruction. These word
+   controls qualify known boundaries; unsigned conversion and bit decoding
+   remain trusted primitives, without a checked machine-word theory. Word
+   width and proof workspace do not select a computation geometry.
+   Optional literal arithmetic uses raw Nat reflexivity/conversion proofs in an
+   isolated environment with every native arithmetic shortcut disabled. Its
+   controls bind operations, operands, results, definitions and divisor routing;
+   reject unused compact/reflection syntax; and preserve typed expressions when
+   overflow or finite conversion resources prevent compaction. Symbolic
+   induction lemmas do not become definitional equality shortcuts.
+   Coverage keeps nine roots in its shared bundle and checks headroom through a
+   separate raw Nat certificate. Its nine canonical data definitions and
+   thirteen ordinary helper definitions derive the binary addition/carry and
+   order steps; two addition proofs bind the sum and proposed slack to the
+   requested count cap, stride and integer limit. The fresh checker forbids
+   native, export and reflection syntax, including unused entries. Its required
+   theorem still quantifies over arbitrary Nat counts and keeps computation
+   shape parameterized. Mandatory headroom checking rejects exhausted resources
+   without a reflection fallback. Focused controls cover tight bounds, long
+   carries, insufficient and overflowing bounds, altered proofs and definitions,
+   unused forbidden syntax, and generic alpha/beta/congruence conversion.
+   Affine reasoning in other coverage roots, literal-order reflection outside
+   headroom, integer decoding, descriptor arithmetic, generic kernel/compiler
+   correctness and runtime/GPU correspondence remain explicit assumptions; the
+   [headroom contract](token-selection-contract.md#headroom-from-ordinary-nat-proofs)
+   describes that boundary. Test results qualify the implementation separately
+   from its proof construction. The superseded `headroom-nat-check-v3` attempt
+   had focused positive proofs but failed to qualify word meaning; retain that
+   evidence without treating those positives as end-to-end headroom validation.
+   Each compiler-negative suite builds and executes its positive control first.
+   Nat arithmetic certification adds substantial compilation work. Native typed proof
+   compiler controls have separate budgets of 50 minutes, or 60 minutes for
+   coverage/fold gates; native positive-control execution retains its three-minute
+   bound. A timeout is a validation error, never evidence of proof rejection.
 3. **Mojo suites.** Every `tests/test_*.mojo` runs with
    `MODULAR_DEBUG=device-sync-mode`. Device suites require Metal; the
    [BF16 selection contract](token-selection-contract.md) also has host-only
@@ -154,6 +214,26 @@ Validation runs in four stages, stopping at the first failure:
 | Attention | `test_attention`, `test_attention_decode`, `test_attention_decode_benchmark`, `test_attention_prefill`, `test_attention_precision`, `test_attention_sublayer`, `test_attention_sublayer_operations`, `test_qkv_fusion` |
 | MLP and decoder layer | `test_mlp`, `test_decoder_layer`, `test_decoder_selection`, `test_consistency` |
 | Model and runtime | `test_model`, `test_execution_plan`, `test_decode_route`, `test_chat`, `test_tokenizer`, `test_import` |
+
+For the standalone private record-population model and checked commutation
+requests, run:
+
+```bash
+uv run --locked mojo run -I src -I tests tests/test_finishing_phase.mojo
+uv run --locked python tests/test_proof_term_compile.py ProofTermCompileTests.test_private_finishing_phase_commutation_is_checked
+```
+
+The focused Python command compiles and executes the positive host suite before
+requiring eight malformed certificates to fail compilation with the exact
+phase-admission diagnostic.
+
+The [phase contract](token-selection-contract.md#private-record-population-commutation)
+defines the fixed-row/base scope, immutable input prerequisite, selected-key
+proof binding and remaining model/compiler/device assumptions. This phase ends
+before local reduction and adds no runtime or all-thread barrier. Its host
+checks are separate from GPU/backend qualification and do not establish full
+schedule determinism. Record actual compilation and native results separately;
+the command and mathematical proof design alone are not validation evidence.
 
 The attention suites keep their frozen tolerances, diagnostic tensors, ragged
 tiles, full and incremental prefill, and all 24 decode cases. Prefill adds 29

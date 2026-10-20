@@ -75,6 +75,8 @@ class ExplorerEvidenceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.manifest = read_json(ROOT / EXPLORER / "recordings.json")
+        cls.receipt = read_json(ROOT / EXPLORER / "contract-receipt.json")
+        cls.recorded = read_json(ROOT / cls.manifest["sourceArchive"]["path"])
         cls.data = builder.build_data(ROOT)
         cls.archives = {
             name: read_json(ROOT / cls.manifest["assets"][name]["path"])
@@ -88,18 +90,27 @@ class ExplorerEvidenceTests(unittest.TestCase):
             root = Path(directory)
             shutil.copytree(ROOT / EXPLORER, root / EXPLORER,
                             ignore=shutil.ignore_patterns("__pycache__"))
-            paths = set(self.manifest["sources"])
+            paths = set()
             for asset in self.manifest["assets"].values():
                 paths.add(asset["path"])
                 if "hashManifest" in asset:
                     paths.add(asset["hashManifest"])
-            receipt = read_json(ROOT / EXPLORER / "contract-receipt.json")
-            paths.update(receipt["sources"])
             for relative in paths:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ROOT / relative, target)
             yield root
+
+    def write_recorded_archive(self, root, recorded):
+        """Rehash the outer container so malformed source contents reach validation."""
+        manifest = read_json(root / EXPLORER / "recordings.json")
+        archive = manifest["sourceArchive"]
+        expanded = json.dumps(recorded, sort_keys=True, separators=(",", ":")).encode()
+        raw = gzip.compress(expanded, mtime=0)
+        (root / archive["path"]).write_bytes(raw)
+        archive["sha256"] = sha(raw)
+        archive["uncompressedSha256"] = sha(expanded)
+        (root / EXPLORER / "recordings.json").write_text(json.dumps(manifest))
 
     def check_cli(self, root):
         return subprocess.run(
@@ -133,15 +144,111 @@ class ExplorerEvidenceTests(unittest.TestCase):
             self.assertEqual(page.read_text(), changed)
 
     def test_modified_pinned_source_and_asset_are_rejected(self):
-        source = next(path for path in self.manifest["sources"] if path.endswith(".mojo"))
         asset = self.manifest["assets"]["residualNorm"]["path"]
-        for relative in (source, asset, self.manifest["vendor"]["sourcePath"]):
+        for relative in (self.manifest["sourceArchive"]["path"], asset,
+                         self.manifest["vendor"]["sourcePath"]):
             with self.subTest(path=relative), self.copied_inputs() as root:
                 path = root / relative
                 path.write_bytes(path.read_bytes() + b"\nchanged")
                 checked = self.check_cli(root)
                 self.assertNotEqual(checked.returncode, 0)
                 self.assertIn("checksum mismatch", checked.stderr)
+
+    def test_historical_render_does_not_require_git_or_current_sources(self):
+        expected = (ROOT / EXPLORER / "index.html").read_text()
+        with self.copied_inputs() as root:
+            self.assertFalse((root / ".git").exists())
+            paths = set(self.manifest["sources"]) | set(self.receipt["sources"])
+            for relative in paths:
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"Changed current source; not historical evidence.\n")
+            self.assertEqual(builder.render(root), expected)
+            checked = self.check_cli(root)
+            self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
+            for relative in paths:
+                (root / relative).unlink()
+            self.assertEqual(builder.render(root), expected)
+            checked = self.check_cli(root)
+            self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
+
+    def test_recorded_sources_match_exact_excerpt_and_receipt_closure(self):
+        expected = {(spec["revision"], path): spec["sha256"]
+                    for path, spec in self.manifest["sources"].items()}
+        expected.update({(self.receipt["source_commit"], path): checksum
+                         for path, checksum in self.receipt["sources"].items()})
+        actual = {(revision, path): checksum
+                  for revision, sources in self.recorded["revisions"].items()
+                  for path, checksum in sources.items()}
+        self.assertEqual(actual, expected)
+        self.assertEqual(set(self.recorded["blobs"]), set(expected.values()))
+        for checksum, text in self.recorded["blobs"].items():
+            with self.subTest(checksum=checksum):
+                self.assertEqual(sha(text.encode()), checksum)
+
+    def test_missing_recorded_source_archive_is_rejected(self):
+        with self.copied_inputs() as root:
+            (root / self.manifest["sourceArchive"]["path"]).unlink()
+            with self.assertRaises((OSError, ValueError)):
+                builder.build_data(root)
+
+    def test_changed_uncompressed_archive_digest_is_rejected(self):
+        with self.copied_inputs() as root:
+            manifest = copy.deepcopy(self.manifest)
+            manifest["sourceArchive"]["uncompressedSha256"] = "0" * 64
+            (root / EXPLORER / "recordings.json").write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, "checksum mismatch"):
+                builder.build_data(root)
+
+    def test_rehashed_archive_cannot_hide_changed_source_bytes(self):
+        for source, revision in (
+                (next(path for path in self.manifest["sources"] if path.endswith(".mojo")),
+                 self.manifest["sourceRevision"]),
+                ("uv.lock", self.receipt["source_commit"])):
+            with self.subTest(path=source), self.copied_inputs() as root:
+                recorded = copy.deepcopy(self.recorded)
+                checksum = recorded["revisions"][revision][source]
+                recorded["blobs"][checksum] += "\nchanged historical source\n"
+                self.write_recorded_archive(root, recorded)
+                with self.assertRaises(ValueError):
+                    builder.build_data(root)
+
+    def test_rehashed_archive_rejects_missing_or_wrong_revision_bindings(self):
+        revision = self.receipt["source_commit"]
+        source = "uv.lock"
+        for change in ("missing-source", "wrong-revision", "missing-blob", "extra-blob",
+                       "retargeted-source"):
+            with self.subTest(change=change), self.copied_inputs() as root:
+                recorded = copy.deepcopy(self.recorded)
+                if change == "missing-source":
+                    del recorded["revisions"][revision][source]
+                elif change == "wrong-revision":
+                    recorded["revisions"]["0" * 40] = recorded["revisions"].pop(revision)
+                elif change == "missing-blob":
+                    del recorded["blobs"][recorded["revisions"][revision][source]]
+                elif change == "extra-blob":
+                    text = "Unreferenced historical source.\n"
+                    recorded["blobs"][sha(text.encode())] = text
+                else:
+                    original = recorded["revisions"][revision][source]
+                    text = recorded["blobs"][original] + "\nchanged historical source\n"
+                    replacement = sha(text.encode())
+                    recorded["blobs"][replacement] = text
+                    recorded["revisions"][revision][source] = replacement
+                    referenced = {checksum for sources in recorded["revisions"].values()
+                                  for checksum in sources.values()}
+                    if original not in referenced:
+                        del recorded["blobs"][original]
+                    self.assertEqual(set(recorded["blobs"]), referenced)
+                    self.assertTrue(all(sha(text.encode()) == checksum
+                                        for checksum, text in recorded["blobs"].items()))
+                self.write_recorded_archive(root, recorded)
+                if change == "retargeted-source":
+                    with self.assertRaisesRegex(ValueError, "recorded source checksum mismatch: uv.lock"):
+                        builder.build_data(root)
+                else:
+                    with self.assertRaises(ValueError):
+                        builder.build_data(root)
 
     def test_rehashed_summary_cannot_replace_the_raw_measurement(self):
         with self.copied_inputs() as root:
@@ -166,12 +273,7 @@ class ExplorerEvidenceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "source excerpt range"):
                 builder.build_data(root)
 
-    def test_compiler_receipt_does_not_accept_changed_sources_or_fake_success(self):
-        with self.copied_inputs() as root:
-            path = root / "uv.lock"
-            path.write_bytes(path.read_bytes() + b"\nchanged\n")
-            with self.assertRaisesRegex(ValueError, "compiler receipt source checksum mismatch"):
-                builder.build_data(root)
+    def test_compiler_receipt_does_not_accept_fake_success(self):
         with self.copied_inputs() as root:
             path = root / EXPLORER / "contract-receipt.json"
             receipt = read_json(path)
@@ -184,7 +286,8 @@ class ExplorerEvidenceTests(unittest.TestCase):
         self.assertGreater(len(self.data["sources"]), 10)
         for path, record in self.data["sources"].items():
             with self.subTest(path=path):
-                source = (ROOT / path).read_bytes()
+                checksum = self.recorded["revisions"][record["revision"]][path]
+                source = self.recorded["blobs"][checksum].encode()
                 lines = source.decode().splitlines()
                 self.assertEqual(sha(source), record["sha256"])
                 self.assertRegex(record["revision"], r"^[0-9a-f]{40}$")
@@ -329,13 +432,15 @@ class ExplorerEvidenceTests(unittest.TestCase):
         self.assertTrue(any(record["invalid"] and record["rank"] < top for record in inputs))
         self.assertGreater(sum(record["rank"] == top for record in inputs), 1)
 
-    def test_contract_receipt_binds_real_compiler_outcomes_to_current_sources(self):
+    def test_contract_receipt_binds_real_compiler_outcomes_to_recorded_sources(self):
         receipt = read_json(ROOT / EXPLORER / "contract-receipt.json")
         self.assertEqual(receipt["status"], "passed")
         self.assertTrue(receipt["sources_unchanged_during_run"])
         for path, expected in receipt["sources"].items():
             with self.subTest(path=path):
-                self.assertEqual(sha((ROOT / path).read_bytes()), expected)
+                checksum = self.recorded["revisions"][receipt["source_commit"]][path]
+                self.assertEqual(checksum, expected)
+                self.assertEqual(sha(self.recorded["blobs"][checksum].encode()), expected)
         results = {result["id"]: result for result in receipt["results"]}
         self.assertGreaterEqual(len(results), 16)
         self.assertEqual({result["status"] for result in results.values()}, {"passed"})

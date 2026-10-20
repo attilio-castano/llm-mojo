@@ -49,11 +49,13 @@ the archive does not record physical block identities.
 
 Performance tables are recomputed from the original four paired blocks and
 their raw samples, with the original calibration thresholds. They retain
-Mojo 1.0 / MAX 26.5 identities. Current source snapshots and historical measured
-source links are distinct.
+Mojo 1.0 / MAX 26.5 identities. Source excerpts and compiler receipts retain
+their recorded revisions while the active implementation evolves.
 
-The compile-time view uses the exact graph constructors from
-`tests/reduction_plan_cases.mojo` and the missing-input fixture.
+The compile-time view uses the exact recorded graph constructors from
+`tests/reduction_plan_cases.mojo` and the missing-input fixture at the compiler
+receipt's source commit. Its eight-input example remains a historical example;
+the current implementation supports parameterized computation shapes.
 Its small numeric scores are illustrative; the compiler tests exercise separate
 representative records. The result concerns selection from already rounded
 BF16 scores and checked host evaluation. GPU schedule correspondence and
@@ -70,15 +72,29 @@ python3 -B -m unittest discover -s tests -p test_explorer.py -v
 ```
 
 `recordings.json` freezes archive hashes, exact selections, source excerpts,
-the tokenizer byte subset, and vendored runtime identities. A normal build
-rejects changed inputs. `--check` additionally rejects stale generated HTML
-without overwriting it. Historical archives are never rewritten.
+the tokenizer byte subset, and vendored runtime identities. Its `sourceArchive`
+entry pins [recorded-sources.json.gz](recorded-sources.json.gz), a compact UTF-8
+source archive extracted from the declared Git commits. Revision/path bindings
+refer to SHA-256-addressed full source blobs. The archive contains exactly the
+source excerpt and compiler receipt inputs, including the historical plan
+fixtures. Both archive hashes and every original source digest are checked.
+The builder needs neither Git history nor current engine sources, so a shallow
+checkout or standalone copy can reproduce the historical page.
+
+A normal build rejects changed recorded inputs. `--check` additionally rejects
+stale generated HTML without overwriting it. Historical archives are never
+rewritten. Changes to the active engine, fixtures, or lockfile leave this replay
+of the recorded versions stable.
 
 When changing presentation, edit `explorer.template.html` and rebuild. When
-changing source or choosing another recorded run, review and update the relevant
-manifest hashes and excerpt ranges deliberately. Keep the original measurements
-and historical compiler receipts unchanged; a changed contract needs a fresh
-active receipt.
+choosing another recorded run or source revision, review the relevant manifest
+hashes and excerpt ranges deliberately. Extract each retained source from its
+declared Git commit and verify its existing digest before rebuilding the source
+archive. Its `revisions` map binds revision/path pairs to the `blobs` map;
+canonical sorted-key JSON and gzip with `mtime=0` keep the archive reproducible.
+Update its compressed and uncompressed hashes in `sourceArchive`. Keep original
+measurements and historical compiler receipts unchanged; checking a changed
+contract requires fresh evidence with its own recorded sources.
 
 Commit the contract sources, verifier, and its regression tests before running
 the verifier. It captures `HEAD` before testing and requires every declared input
@@ -89,13 +105,14 @@ presentation edits and generated outputs do not prevent verification. These
 endpoint checks detect persistent changes, not a transient edit restored during
 compilation; they do not isolate the compiler from concurrent writers.
 
-To rerun the existing host compiler harness with the installed locked toolchain:
+To reproduce the retained host compiler receipt, use a separate clean checkout
+of its `source_commit` and that checkout's installed locked toolchain:
 
 ```sh
 uv run --locked python docs/explorer/verify_contract.py
 ```
 
-The verifier runs the unchanged positive/negative harness, stores detailed logs
+The verifier runs that checkout's positive/negative harness, stores detailed logs
 under ignored `build/explorer/`, and writes the compact dated
 `contract-receipt.json`. It binds source hashes, toolchain versions, commands,
 exit codes and intended rejection diagnostics. The retained receipt records an
@@ -103,11 +120,12 @@ explicit compatible installed environment and a per-process Command Line Tools
 selection used on this machine. Reproduction on another machine may use its own
 installed compiler; `--compiler /absolute/path/to/mojo` selects one explicitly.
 
-After a new receipt, rebuild the page and run the integrity checks above.
+After selecting a new receipt, retain its exact committed sources in the source
+archive, rebuild the page, and run the integrity checks above.
 Commit the receipt and generated page separately from the source changes they
-describe. Since the verifier and its regression tests are themselves receipt
-inputs, the earlier receipt is temporarily stale between those two commits.
-Refreshing the page does not rerun the compiler tests.
+describe. The retained page continues to describe its historical receipt until
+a replacement and matching source archive are deliberately selected. Refreshing
+the page does not rerun the compiler tests.
 
 The [original October 16 receipt](contract-receipt-2026-10-16-pre-provenance-fix.json)
 is retained byte-for-byte (SHA-256
@@ -115,8 +133,8 @@ is retained byte-for-byte (SHA-256
 Its `source_commit` names the checkout's earlier `HEAD`, which did not contain
 the verifier and compiler-version test listed in its source hashes. The Mojo
 contract and fixture hashes match that commit. This historical provenance defect
-does not supply evidence against its recorded host outcomes; the active receipt
-comes from a fresh run against committed inputs.
+does not supply evidence against its recorded host outcomes; the later retained
+receipt comes from a fresh run against committed inputs.
 
 For a local HTTP preview, run from the repository root:
 

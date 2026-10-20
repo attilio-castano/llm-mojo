@@ -79,6 +79,23 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(run.call_args.args, (Path('/build'), Path('/output'), ['rms_norm']))
         self.assertEqual(run.call_args.kwargs['resolved_configuration']['studies'], ['rms_norm'])
 
+    def test_token_selection_benchmark_is_listed_and_explicitly_selectable(self):
+        self.assertEqual(resolve_bench(studies=['token_selection']).studies, ['token_selection'])
+        self.assertNotIn('token_selection', resolve_bench().studies)
+        result = CliRunner().invoke(app, ['bench', 'list'])
+        self.assertEqual(result.exit_code, 0, result.output)
+        listed = json.loads(result.output)
+        self.assertIn('token_selection', listed['studies'])
+        self.assertNotIn('token_selection', listed['replay_only'])
+
+    def test_token_selection_benchmark_hands_off_to_the_maintained_runner(self):
+        with patch('llm_mojo.benchmarks.run.run') as run:
+            result = CliRunner().invoke(app, ['bench', 'run', '--study', 'token_selection',
+                                             '--build-dir', '/build', '--output', '/output'])
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertEqual(run.call_args.args, (Path('/build'), Path('/output'), ['token_selection']))
+        self.assertEqual(run.call_args.kwargs['resolved_configuration']['studies'], ['token_selection'])
+
     def test_replay_only_studies_are_listed_but_never_run(self):
         from llm_mojo.benchmarks.study import REPLAY_ONLY
         from llm_mojo.benchmarks.run import run

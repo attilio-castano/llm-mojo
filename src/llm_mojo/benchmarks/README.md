@@ -36,7 +36,16 @@ samples. A gain needs a median improvement exceeding both 5% and the largest
 self-pair deviation, with all four blocks faster. Partial grids, wrong routes,
 nonfinite samples, changed identity, and missing completion markers fail.
 
-`operations.mojo` covers RMSNorm, linear decode/prefill and RoPE.
+`operations.mojo` covers RMSNorm, linear decode/prefill, RoPE and token selection.
+The opt-in `token_selection` study compares sequential and balanced first-pass
+trees and a different finishing geometry at 1/16 rows and 1/24 calls per sample.
+Select it with `llm-mojo bench run --study token_selection` (or the legacy
+`--studies token_selection`). It uses BF16 logits with 151,936 columns and
+UInt32 rank/token/invalid records. Its 24-call mode repeats the same resident
+input, partials and output buffers; it does not use 24 distinct input buffers.
+The route smoke checks all three variants, both arm orders and invalid
+candidate/control routes. See [the contract](../../../docs/token-selection-contract.md)
+for correctness checks and the limits of this operation diagnostic.
 `attention_decode.mojo` retains all thirteen GQA routes; the maintained matrix
 compares the materialized control, simple fusion, parallel fusion, and split
 head reuse. The full numerical suites still test every original GQA candidate.
@@ -83,7 +92,8 @@ defines the matrices, selection and interpretation. Retain these files under
 their matching `tiles_`, `split_domain_` and `timing_` prefixes in the existing
 attention study; the common plotter reconstructs all tables and figures.
 
-Hot measures one operation through completion. Ring24 measures 24 distinct
+For the other operation studies, hot measures one operation through completion.
+Ring24 measures 24 distinct
 input buffers (RMSNorm/RoPE/GQA) or weight buffers (linear), one synchronization,
 and divides by 24. Output and scratch are reused. These modes have different
 synchronization amortization; their difference is not a pure cache effect.

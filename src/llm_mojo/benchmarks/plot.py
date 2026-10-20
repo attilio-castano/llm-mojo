@@ -953,9 +953,12 @@ def render(directory):
         writer.writeheader()
         writer.writerows(summary)
     fig, axes = plt.subplots(2, 2, figsize=(11.8, 8.2), squeeze=False)
+    sweep_title = ('24 calls · same resident buffers · one synchronization'
+                   if spec['operation'] == 'token_selection'
+                   else '24 buffers · one synchronization per sweep')
     for col, layers in enumerate((1, 24)):
         ax, relative = axes[0, col], axes[1, col]
-        ax.set_title('Hot call · one synchronization' if layers == 1 else '24 buffers · one synchronization per sweep')
+        ax.set_title('Hot call · one synchronization' if layers == 1 else sweep_title)
         for color, candidate in zip(COLORS, spec['candidates']):
             data = [s for s in summary if s['layers'] == layers and s['candidate'] == candidate]
             single = len(spec['rows']) == 1
