@@ -1359,5 +1359,49 @@ PROFILE_REGION_END
             self.assertEqual(identity['workload']['dispatches_per_iteration'],410)
 
 
+class ActivePrefillCommandContractTests(unittest.TestCase):
+    def test_active_campaign_dispatch_preserves_explicit_identity(self):
+        from unittest import mock
+        from llm_mojo.benchmarks import model_profile as profile, engine_prefix
+        cases = (
+            ('engine-specification', [], 'specification', (Path('/output'),)),
+            ('engine-qualify', ['--build', '/build', '--trace', '/campaign'], 'qualify',
+             (Path('/build'), Path('/output'), Path('/campaign'))),
+            ('engine-collect', ['--build', '/build', '--trace', '/campaign', '--qualification', '/qualification'],
+             'collect', (Path('/build'), Path('/campaign'), Path('/output'), Path('/qualification'))),
+        )
+        for command, options, method, expected in cases:
+            with self.subTest(command=command), mock.patch('sys.argv',
+                    ['model_profile', command, '--active-prefill-study', '--output', '/output', *options]), \
+                    mock.patch.object(engine_prefix, method) as called:
+                profile.main()
+                called.assert_called_once_with(*expected, active_prefill=True)
+
+    def test_active_campaign_rejects_workload_and_route_overrides(self):
+        import contextlib
+        import io
+        from unittest import mock
+        from llm_mojo.benchmarks import model_profile as profile
+        for options in (['--blocks', '40'], ['--arrival-rate', '8'], ['--seed', '9'],
+                        ['--warmup-steps', '0'], ['--max-sequences', '4'],
+                        ['--token-budget', '32'], ['--engine-mode', 'scripted'], ['--prefix-study']):
+            with self.subTest(options=options), mock.patch('sys.argv', ['model_profile', 'engine-collect',
+                    '--active-prefill-study', '--build', '/build', '--trace', '/campaign',
+                    '--qualification', '/qualification', '--output', '/output', *options]), \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                profile.main()
+            self.assertEqual(error.exception.code, 2)
+
+    def test_active_build_has_separate_declaration(self):
+        from unittest import mock
+        from llm_mojo.benchmarks import model_profile as profile
+        with mock.patch('sys.argv', ['model_profile', 'engine-build', '--active-prefill-study',
+                '--prepared', '/prepared', '--output', '/output']), mock.patch.object(profile, 'engine_build') as called:
+            profile.main()
+            called.assert_called_once_with(Path('/output'), Path('/prepared'), active_prefill_study=True)
+        self.assertEqual(profile._engine_collection_declaration(False, False, active_prefill_study=True),
+                         contract.ENGINE_PREFIX_ACTIVE_DECLARATION)
+
+
 if __name__ == '__main__':
     unittest.main()

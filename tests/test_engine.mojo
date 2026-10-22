@@ -6,9 +6,10 @@ tests. A small Metal allocation supplies the existing KVPool container.
 from std.testing import TestSuite, assert_equal, assert_raises, assert_true
 from max.gpu.host import DeviceContext
 from llm_mojo.serving.batch import StepBatch
+from llm_mojo.serving.blocks import PARTIAL, REGISTERED
 from llm_mojo.serving.engine import EngineCore, EngineStep, StepCost, WAITING, PREFILL, DECODE, FINISHED, TOKEN_EVENT, FINISH_EVENT
 from llm_mojo.serving.kv_pool import KVGeometry, KVPool
-from llm_mojo.serving.runner import ModelRunner, SimulatedRunner
+from llm_mojo.serving.runner import AsyncModelRunner, ModelRunner, SimulatedRunner
 
 
 def _assert_list(actual: List[Int], expected: List[Int]) raises:
@@ -1267,6 +1268,273 @@ def test_prefix_cache_clear_rejects_the_wrong_pool_before_mutation() raises:
     assert_equal(engine.prefix_cache.event_id, event_id)
     engine.check(pool)
     _ = engine.clear_cache(pool)
+
+
+def test_active_prefill_cap_validates_and_keeps_the_idle_budget() raises:
+    for invalid in [-1, 4097]:
+        with assert_raises():
+            _ = EngineCore(16, 32, 512, 100, active_prefill_cap=invalid)
+    var ctx = DeviceContext()
+    for cap in [0, 16, 32, 4096]:
+        var pool = KVPool(ctx, 16, 32, KVGeometry(1, 1, 1))
+        var engine = EngineCore(16, 32, 512, 100, token_budget=256,
+            reserve_lifetime=True, active_prefill_cap=cap)
+        var runner = SimulatedRunner([10], 100)
+        var slot = engine.add(0, List[Int](length=300, fill=1), 2, List[Int]())
+        var first = engine.step(runner, pool)
+        assert_equal(first.prefill_tokens, 256)
+        assert_equal(first.total_tokens, 256)
+        assert_equal(len(first.events), 0)
+        assert_equal(engine.blocks.reserved[engine.requests[slot].sequence], 301)
+        var final = engine.step(runner, pool)
+        assert_equal(final.decode_seqs, 0)
+        assert_equal(final.prefill_tokens, 44)
+        assert_equal(engine.requests[slot].generated, 1)
+        _ = _drain(engine, runner, pool)
+
+
+def test_active_prefill_cap_splits_mixed_prompts_without_changing_histories() raises:
+    var ctx = DeviceContext()
+    for reserved in [False, True]:
+        var reference = List[List[Int]]()
+        for cap in [0, 16, 32]:
+            var pool = KVPool(ctx, 12, 32, KVGeometry(1, 1, 1))
+            var engine = EngineCore(12, 32, 256, 100, token_budget=256,
+                reserve_lifetime=reserved, active_prefill_cap=cap)
+            var runner = SimulatedRunner([10, 11, 12], 100)
+            var incumbent = engine.add(0, [1], 12, List[Int]())
+            var first = engine.step(runner, pool)
+            var rows = first.total_tokens
+            var newcomer = engine.add(1, List[Int](length=65, fill=2), 2, List[Int]())
+            var completed = 0
+            var mixed_steps = 0
+            while completed < 65:
+                var record = engine.step(runner, pool)
+                var expected = min(65 - completed, 255 if cap == 0 else cap)
+                completed += expected
+                mixed_steps += 1
+                rows += record.total_tokens
+                assert_equal(record.decode_seqs, 1)
+                assert_equal(record.prefill_tokens, expected)
+                assert_equal(record.total_tokens, expected + 1)
+                assert_equal(record.budget_limited, 0)
+                assert_equal(engine.requests[incumbent].generated, mixed_steps + 1)
+                assert_equal(engine.requests[newcomer].generated, 1 if completed == 65 else 0)
+                assert_equal(len(record.events), 2 if completed == 65 else 1)
+                assert_equal(engine.requests[newcomer].state, DECODE if completed == 65 else PREFILL)
+                engine.check(pool)
+            assert_equal(mixed_steps, 1 if cap == 0 else 65 // cap + 1)
+            rows += _prefix_drain(engine, runner, pool)
+            assert_equal(rows, 78)  # (1 + 12 - 1) + (65 + 2 - 1).
+            for slot in [incumbent, newcomer]:
+                if cap == 0:
+                    reference.append(engine.requests[slot].tokens.copy())
+                else:
+                    _assert_list(engine.requests[slot].tokens, reference[slot])
+
+
+def test_active_prefill_cap_restores_idle_work_when_the_incumbent_finishes() raises:
+    var ctx = DeviceContext()
+    for cap in [16, 32]:
+        var pool = KVPool(ctx, 8, 32, KVGeometry(1, 1, 1))
+        var engine = EngineCore(8, 32, 256, 100, token_budget=256,
+            reserve_lifetime=True, active_prefill_cap=cap)
+        var runner = SimulatedRunner([10], 100)
+        _ = engine.add(0, [1], 2, List[Int]())
+        _ = engine.step(runner, pool)
+        var newcomer = engine.add(1, List[Int](length=100, fill=2), 2, List[Int]())
+        var mixed = engine.step(runner, pool)
+        assert_equal(mixed.decode_seqs, 1)
+        assert_equal(mixed.prefill_tokens, cap)
+        assert_equal(mixed.finished, 1)
+        assert_equal(engine.requests[newcomer].generated, 0)
+        var idle = engine.step(runner, pool)
+        assert_equal(idle.decode_seqs, 0)
+        assert_equal(idle.prefill_tokens, 100 - cap)
+        assert_true(idle.prefill_tokens > cap)
+        assert_equal(engine.requests[newcomer].generated, 1)
+        _ = _drain(engine, runner, pool)
+
+
+def test_active_prefill_cap_respects_the_remaining_global_budget() raises:
+    var ctx = DeviceContext()
+    for cap in [16, 32]:
+        var pool = KVPool(ctx, 8, 32, KVGeometry(1, 1, 1))
+        var engine = EngineCore(8, 32, 256, 100, token_budget=8,
+            reserve_lifetime=True, active_prefill_cap=cap)
+        var runner = SimulatedRunner([10], 100)
+        _ = engine.add(0, [1], 4, List[Int]())
+        _ = engine.step(runner, pool)
+        _ = engine.add(1, List[Int](length=33, fill=2), 2, List[Int]())
+        var mixed = engine.step(runner, pool)
+        assert_equal(mixed.decode_seqs, 1)
+        assert_equal(mixed.prefill_tokens, 7)
+        assert_equal(mixed.total_tokens, 8)
+        _ = _drain(engine, runner, pool)
+
+
+def test_active_prefill_cap_uses_cached_past_and_keeps_partial_blocks_private() raises:
+    var ctx = DeviceContext()
+    for reserved in [False, True]:
+        for cap in [16, 32]:
+            for abort_partial in [False, True]:
+                var runner = SimulatedRunner([10, 11, 12], 100)
+                var pool = KVPool(ctx, 8, 32, KVGeometry(1, 1, 1))
+                var engine = EngineCore(8, 32, 256, 100, token_budget=256,
+                    reserve_lifetime=reserved, prefix_caching=True,
+                    prefix_namespace=runner.prefix_cache_identity(), active_prefill_cap=cap)
+                _ = engine.add(0, _prefix_prompt(33), 1, List[Int]())
+                _ = _prefix_drain(engine, runner, pool)
+                var shared = engine.prefix_cache.entries[0].block
+                var incumbent = engine.add(1, _prefix_prompt(33), 10, List[Int]())
+                _ = engine.step(runner, pool)
+                var newcomer = engine.add(2, _prefix_prompt(97), 2, List[Int]())
+                var first = engine.step(runner, pool)
+                assert_equal(first.cache_hit_tokens, 32)
+                assert_equal(first.cache_hits[0].request_id, 2)
+                assert_equal(first.prefill_tokens, cap)
+                assert_equal(first.attended_positions, 34 + cap * 32 + cap * (cap + 1) // 2)
+                assert_equal(engine.requests[newcomer].generated, 0)
+                var sequence = engine.requests[newcomer].sequence
+                var tail = engine.blocks.tables[sequence][1]
+                assert_equal(engine.blocks.length(sequence), 32 + cap)
+                assert_equal(pool.written[tail], cap)
+                assert_equal(engine.blocks.states[tail], PARTIAL if cap == 16 else REGISTERED)
+                assert_equal(engine.cached_blocks(), 1 if cap == 16 else 2)
+                assert_equal(engine.blocks.refs[shared], 2)
+                assert_equal(pool.written[shared], 32)
+                if reserved:
+                    assert_equal(engine.blocks.reserved[sequence], 98)
+                if abort_partial:
+                    engine.abort(2)
+                    var boundary = engine.step(runner, pool)
+                    assert_equal(boundary.aborted, 1)
+                    assert_equal(boundary.prefill_tokens, 0)
+                    assert_equal(engine.requests[newcomer].generated, 0)
+                    assert_equal(engine.blocks.refs[shared], 1)
+                    assert_equal(pool.written[tail], 0 if cap == 16 else 32)
+                elif cap == 16:
+                    var second = engine.step(runner, pool)
+                    assert_equal(second.prefill_tokens, 16)
+                    assert_equal(engine.blocks.length(sequence), 64)
+                    assert_equal(pool.written[tail], 32)
+                    assert_equal(engine.blocks.states[tail], REGISTERED)
+                    assert_equal(engine.cached_blocks(), 2)
+                _ = _prefix_drain(engine, runner, pool)
+                assert_equal(engine.requests[incumbent].generated, 10)
+                assert_equal(engine.requests[newcomer].generated, 0 if abort_partial else 2)
+                assert_equal(engine.requests[newcomer].reason, "abort" if abort_partial else "length")
+                _ = engine.clear_cache(pool)
+                assert_equal(engine.blocks.free_blocks(), pool.blocks)
+                for written in pool.written:
+                    assert_equal(written, 0)
+                engine.check(pool)
+
+
+def test_active_prefill_cap_and_fitted_cost_keep_decode_and_idle_progress() raises:
+    var ctx = DeviceContext()
+    for cap in [16, 32]:
+        var pool = KVPool(ctx, 8, 32, KVGeometry(1, 1, 1))
+        var engine = EngineCore(8, 32, 256, 100, token_budget=256,
+            reserve_lifetime=True, active_prefill_cap=cap)
+        var runner = SimulatedRunner([10], 100)
+        var incumbent = engine.add(0, [1], 4, List[Int]())
+        _ = engine.step(runner, pool)
+        var newcomer = engine.add(1, List[Int](length=100, fill=2), 1, List[Int]())
+        engine.set_cost_policy(StepCost(0, 1, 0, 0, 0, 5))
+        var fitted = engine.step(runner, pool)
+        assert_equal(fitted.decode_seqs, 1)
+        assert_equal(fitted.prefill_tokens, 4)
+        assert_equal(fitted.budget_limited, 1)
+        engine.set_cost_policy(StepCost(1000, 1, 0, 0, 0, 1))
+        for generated in [3, 4]:
+            var decodes = engine.step(runner, pool)
+            assert_equal(decodes.decode_seqs, 1)
+            assert_equal(decodes.prefill_tokens, 0)
+            assert_equal(engine.requests[incumbent].generated, generated)
+        var idle = engine.step(runner, pool)
+        assert_equal(idle.decode_seqs, 0)
+        assert_equal(idle.prefill_tokens, 1)
+        assert_equal(engine.blocks.length(engine.requests[newcomer].sequence), 5)
+        engine.set_cost_policy(StepCost(0, 0, 0, 0, 0, 1))
+        var rest = engine.step(runner, pool)
+        assert_equal(rest.prefill_tokens, 95)
+        assert_equal(engine.live(), 0)
+        assert_equal(engine.blocks.free_blocks(), pool.blocks)
+        engine.check(pool)
+
+
+def test_active_prefill_cap_fitted_positions_start_after_the_cached_prefix() raises:
+    var ctx = DeviceContext()
+    for cap in [16, 32]:
+        var runner = SimulatedRunner([10], 100)
+        var pool = KVPool(ctx, 8, 32, KVGeometry(1, 1, 1))
+        var engine = EngineCore(8, 32, 256, 100, token_budget=256,
+            reserve_lifetime=True, prefix_caching=True,
+            prefix_namespace=runner.prefix_cache_identity(), active_prefill_cap=cap)
+        _ = engine.add(0, _prefix_prompt(33), 1, List[Int]())
+        _ = _prefix_drain(engine, runner, pool)
+        _ = engine.add(1, _prefix_prompt(33), 5, List[Int]())
+        _ = engine.step(runner, pool)
+        _ = engine.add(2, _prefix_prompt(97), 2, List[Int]())
+        engine.set_cost_policy(StepCost(0, 0, 1, 0, 0, 100))
+        var fitted = engine.step(runner, pool)
+        assert_equal(fitted.cache_hit_tokens, 32)
+        assert_equal(fitted.decode_seqs, 1)
+        assert_equal(fitted.prefill_tokens, 1)
+        assert_equal(fitted.attended_positions, 67)  # Existing decode 34, new query 33.
+        assert_equal(fitted.predicted_ns, 67)
+        assert_equal(fitted.budget_limited, 1)
+        engine.set_cost_policy(StepCost(0, 0, 0, 0, 0, 1))
+        _ = _prefix_drain(engine, runner, pool)
+        _ = engine.clear_cache(pool)
+        engine.check(pool)
+
+
+struct ActiveCapAsyncProbe(AsyncModelRunner):
+    var calls: Int
+
+    def __init__(out self):
+        self.calls = 0
+
+    def now_ns(self) -> Int:
+        return 0
+
+    def submit(mut self, batch: StepBatch, source_indices: List[Int], source_ticket: Int,
+               mut pool: KVPool) raises -> Int:
+        self.calls += 1
+        raise Error("unexpected asynchronous submission")
+
+    def collect(mut self, ticket: Int) raises -> List[Int]:
+        self.calls += 1
+        raise Error("unexpected asynchronous collection")
+
+    def drain(mut self) raises:
+        self.calls += 1
+
+
+def test_active_prefill_cap_rejects_async_before_boundary_mutation() raises:
+    var ctx = DeviceContext()
+    for cap in [16, 32]:
+        var pool = KVPool(ctx, 4, 32, KVGeometry(1, 1, 1))
+        var engine = EngineCore(4, 32, 128, 100, active_prefill_cap=cap)
+        var runner = ActiveCapAsyncProbe()
+        var slot = engine.add(0, [1], 2, List[Int]())
+        engine.abort(0)
+        with assert_raises(contains="synchronous"):
+            _ = engine.step_async(runner, pool)
+        assert_equal(runner.calls, 0)
+        assert_equal(engine.step_id, 0)
+        assert_equal(engine.async_enabled, False)
+        assert_equal(len(engine.async_pending), 0)
+        assert_equal(engine.requests[slot].state, WAITING)
+        assert_equal(engine.requests[slot].sequence, -1)
+        assert_equal(engine.blocks.free_blocks(), pool.blocks)
+        var healthy = SimulatedRunner([10], 100)
+        var boundary = engine.step(healthy, pool)
+        assert_equal(boundary.aborted, 1)
+        assert_equal(engine.live(), 0)
+        engine.check(pool)
 
 
 def main() raises:

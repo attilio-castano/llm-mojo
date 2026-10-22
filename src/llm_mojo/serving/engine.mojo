@@ -327,6 +327,7 @@ struct EngineCore(Movable):
     var max_requests: Int
     var watermark_blocks: Int
     var mixed_prefill: Bool
+    var active_prefill_cap: Int
     var reserve_lifetime: Bool
     var observe_kv: Bool
     var cost_policy: StepCost
@@ -347,10 +348,12 @@ struct EngineCore(Movable):
                  token_budget: Int = 256, max_sequences: Int = 64, max_requests: Int = 128,
                  watermark_blocks: Int = 0, mixed_prefill: Bool = True,
                  reserve_lifetime: Bool = False, observe_kv: Bool = False,
-                 prefix_caching: Bool = False, prefix_namespace: String = "") raises:
+                 prefix_caching: Bool = False, prefix_namespace: String = "",
+                 active_prefill_cap: Int = 0) raises:
         if (blocks < 1 or block_size < 1 or max_context < 1 or max_context > 4096 or vocabulary < 1
                 or token_budget < 1 or token_budget > 4096 or max_sequences < 1 or max_sequences > 64
                 or max_requests < 1 or watermark_blocks < 0 or watermark_blocks > blocks
+                or active_prefill_cap < 0 or active_prefill_cap > 4096
                 or (prefix_caching and (block_size != 32 or prefix_namespace.byte_length() == 0))):
             raise Error("invalid bounded engine configuration")
         self.blocks = BlockManager(blocks, block_size, max_context)
@@ -362,6 +365,7 @@ struct EngineCore(Movable):
         self.max_requests = max_requests
         self.watermark_blocks = watermark_blocks
         self.mixed_prefill = mixed_prefill
+        self.active_prefill_cap = active_prefill_cap
         self.reserve_lifetime = reserve_lifetime
         self.observe_kv = observe_kv
         self.cost_policy = StepCost(0, 0, 0, 0, 0)
@@ -566,6 +570,10 @@ struct EngineCore(Movable):
         var past = self.blocks.length(self.requests[index].sequence) if self._held(index) else planned_past
         var remaining = self._history_length(index) - past
         var maximum = min(budget, remaining)
+        # Bound prompt interference only while this step advances a decode.
+        # Idle prefill keeps the full row budget; reservations retain peak KV.
+        if self.active_prefill_cap > 0 and len(selected) > 0:
+            maximum = min(maximum, self.active_prefill_cap)
         if not self.cost_policy_enabled:
             return maximum
         var decodes = len(selected)
@@ -1028,6 +1036,8 @@ struct EngineCore(Movable):
         ticket, then a later call can safely preempt/replay through the common
         scheduler. Lifetime reservations keep the normal pipeline resident.
         """
+        if self.active_prefill_cap != 0:
+            raise Error("active prefill caps require synchronous stepping")
         if (self.failed or self.prefix_caching or self.cached_blocks() > 0
                 or kv.blocks != self.blocks.blocks or kv.block_size != self.blocks.block_size):
             raise Error("failed engine or incompatible pool")

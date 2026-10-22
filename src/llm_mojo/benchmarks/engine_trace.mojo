@@ -496,7 +496,8 @@ def prefix_drain(engine: EngineCore, kv: KVPool, requests: Int, steps: Int, elap
 
 
 def run_prefix_trace(mut runner: TraceMetal, mut kv: KVPool, requests: List[TraceRequest],
-                     seed: TraceRequest, cache_mode: String) raises:
+                     seed: TraceRequest, cache_mode: String, active_study: Bool = False,
+                     active_prefill_cap: Int = 0) raises:
     var identity = runner.prefix_cache_identity()
     if identity.byte_length() == 0 or len(identity.split()) != 1:
         raise Error("prefix benchmark requires a token-safe qualified runner namespace")
@@ -511,7 +512,9 @@ def run_prefix_trace(mut runner: TraceMetal, mut kv: KVPool, requests: List[Trac
     print("mode","greedy")
     print("config","chunked",kv.blocks,256,8)
     print("admission","reserved")
-    print("study","engine-prefix-v1")
+    print("study","engine-prefix-active-v1" if active_study else "engine-prefix-v1")
+    if active_study:
+        print("active_prefill_cap",active_prefill_cap)
     print("work_capacity",256,8)
     print("cache",cache_mode)
     print("namespace",identity)
@@ -536,6 +539,9 @@ def run_prefix_trace(mut runner: TraceMetal, mut kv: KVPool, requests: List[Trac
         for event in events:
             emit_prefix_event(event,-1)
         engine.prefix_caching = False
+    # Both the ordinary warmup and the reusable seed use cap zero in every arm.
+    # Only the measured continuation varies its mixed-step prefill limit.
+    engine.active_prefill_cap = active_prefill_cap
     print("phase_time","handoff",phase_begin,Int(now()))
     print("phase","measure")
     phase_begin = Int(now())
@@ -589,6 +595,7 @@ def main() raises:
     var selector_explicit = False
     var runner_kind = "reference"
     var runner_explicit = False
+    var active_prefill_cap = 0
     if arm == "adaptive":
         if len(args) < 10 or mode != "greedy":
             raise Error("adaptive trace requires Metal and a frozen cost policy")
@@ -607,27 +614,34 @@ def main() raises:
             runner_kind = args[12]
             runner_explicit = True
     else:
-        if len(args) > 12:
-            raise Error("a cost policy belongs only to the adaptive arm")
         if len(args) >= 10:
             admission = args[9]
             admission_explicit = True
         if len(args) >= 11:
             selector = args[10]
             selector_explicit = True
-        if len(args) == 12:
+        if len(args) >= 12:
             runner_kind = args[11]
             runner_explicit = True
+        if len(args) == 13:
+            active_prefill_cap = Int(args[12])
     if selector_explicit:
         if (selector != "admission-range-v1" and selector != "engine-budget-v1"
                 and selector != "engine-fast-v1" and selector != "engine-async-v1"
-                and selector != "engine-prefix-v1"):
+                and selector != "engine-prefix-v1" and selector != "engine-prefix-active-v1"):
             raise Error("invalid trace study selector")
         observe_kv = selector == "admission-range-v1"
     var budget_study = selector == "engine-budget-v1"
     var fast_study = selector == "engine-fast-v1"
     var async_study = selector == "engine-async-v1"
-    var prefix_study = selector == "engine-prefix-v1"
+    var active_study = selector == "engine-prefix-active-v1"
+    var prefix_study = selector == "engine-prefix-v1" or active_study
+    if arm != "adaptive" and len(args) == 13 and not active_study:
+        raise Error("a trailing active prefill cap belongs only to engine-prefix-active-v1")
+    if active_study and (arm == "adaptive" or len(args) != 13
+                         or runner_kind != "enabled"
+                         or (active_prefill_cap != 0 and active_prefill_cap != 16 and active_prefill_cap != 32)):
+        raise Error("engine-prefix-active-v1 requires enabled cache and an explicit 0|32|16 cap")
     if runner_explicit and not ((fast_study and (runner_kind == "reference" or runner_kind == "fast-decode"))
                                or (async_study and (runner_kind == "sync" or runner_kind == "async"))
                                or (prefix_study and (runner_kind == "enabled" or runner_kind == "disabled"))):
@@ -700,7 +714,7 @@ def main() raises:
         var runner = TraceMetal(QwenRunner(args[1],4096,256,8))
         var kv = KVPool(runner.inner.ctx,blocks,32,runner.inner.model.kv_geometry())
         print("device",runner.inner.ctx.name()+"/"+runner.inner.ctx.api())
-        run_prefix_trace(runner,kv,requests,seed,runner_kind)
+        run_prefix_trace(runner,kv,requests,seed,runner_kind,active_study,active_prefill_cap)
     elif async_study:
         print("mode",mode)
         if runner_kind == "sync":

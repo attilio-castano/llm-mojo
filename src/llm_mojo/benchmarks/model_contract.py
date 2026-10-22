@@ -428,6 +428,23 @@ ENGINE_PREFIX_DECLARATION = dict(
     target=None, goodput=None, asynchronous=False, default_promotion=False,
     execution_timeout_seconds=180, campaign_timeout_seconds=7200,
 )
+ENGINE_PREFIX_ACTIVE_STUDY = 'engine-prefix-active-v1'
+ENGINE_PREFIX_ACTIVE_DECLARATION = dict(
+    ENGINE_PREFIX_DECLARATION, kind='qwen-engine-prefix-active-v1', study=ENGINE_PREFIX_ACTIVE_STUDY,
+    prefix_lengths=[1024], reuse_requests=[4, 8, 0],
+    grid=['current', 'self-current', 'cap32', 'cap16'], measured_runs=80, untimed_preflights=15,
+    active_prefill_caps=[0, 32, 16], seed_active_prefill_cap=0,
+    cap_boundary='Measured continuation only; cap prefill rows when decodes are selected; idle prefill keeps the 256-row budget.',
+    balanced_orders=[[0, 1, 3, 2], [1, 2, 0, 3], [2, 3, 1, 0], [3, 0, 2, 1]],
+    usefulness=dict(primary_cell='prefix-1024-reuse-8-blocks-40', primary_cap=32, exploratory_caps=[16],
+        p95_gap_ratio_max=.75, completion_ratio_max=1.10, p95_ttft_ratio_max=1.10,
+        noise='max(0.05, maximum absolute self/current ratio deviation), independently for each metric',
+        gap_rule='All four candidate/current ratios below one, median at most 0.75, effect larger than metric noise.',
+        cost_rule='Median ratio plus/minus noise is an engineering buffer, not a confidence interval; pass upper<=1.10, fail lower>1.10, else inconclusive.',
+        worst_gap_rule='Pass median<=1+noise; fail only if all four ratios>1 and median>1+noise; else inconclusive.',
+        decision='Primary hypothesis uses the primary cell only; broad_guard_pass additionally requires cost/worst-gap guards in all five cells. Promotion remains false.'),
+    gap_thresholds_ns=[20_000_000, 50_000_000],
+)
 ENGINE_STEP_FIELDS = (
     'step_id', 'decode_seqs', 'prefill_seqs', 'prefill_tokens', 'total_tokens',
     'attended_positions', 'admitted', 'preempted', 'finished', 'aborted',

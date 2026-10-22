@@ -1541,3 +1541,69 @@ Acceptance is limited to the qualified synchronous reference route, fixed
 resident assets and recorded workloads. Async/Fast cache combinations are
 rejected. No online arrival study, sustainable capacity, client SLO, goodput,
 device-loss recovery or default promotion follows from this campaign.
+
+## Active-stream prefill caps: frozen comparison contract
+
+This successor asks whether smaller prefill chunks during mixed steps reduce
+streaming gaps while retaining the completion and first-token benefits of prefix
+reuse. The primary candidate is 32 tokens; 16 is exploratory. The scheduler
+applies the cap only after at least one decode has been selected. Without a
+selected decode, prefill keeps the 256-row budget. With decodes, prefill receives
+`min(remaining prompt rows, remaining total row budget, active cap)`. A cap of
+zero preserves the existing behavior. Lifetime reservations, FIFO order, zero
+watermark, eight sequence slots, immutable 32-token cache blocks, model kernels
+and physical workspaces remain fixed. Partial 16-token blocks stay private.
+
+The `engine-prefix-active-v1` study uses the same literal 1,024-token prefixes,
+64-token private suffixes, eight simultaneous requests and 16-token output
+limits as the earlier campaign. Its five cells are four/eight matching requests
+at 40/384 blocks, plus zero matching requests at 384 blocks. Cache is enabled in
+all arms. Each invocation runs the same ten warmup steps and unrestricted seed;
+the selected cap applies only to measured continuation. Reference configuration
+27, projection 8, BF16 storage/FP32 reductions, slot-major KV, synchronous
+execution and lifetime reservation remain required. Fitted cost budgeting is
+disabled. These caps are row-count limits, without a promised execution duration.
+
+Before timing, an exact-build numerical checkpoint checks actual mixed 16/32-row
+schedules against reference KV/logits/greedy results, including partial prefill,
+shared-reader isolation and cleanup. Fifteen untimed preflights (five cells,
+three distinct policies) freeze complete natural seed/continuation histories and
+finish reasons. Across policies, per-request cache hits, necessary computed rows
+and causal attention-position totals must agree; execution step sequences may
+differ. Timed runs must reproduce the frozen histories without replay or
+preemption, drain all active ownership, and restore an empty pool after clear.
+
+Four balanced blocks each contain current policy, repeated current policy,
+cap 32 and cap 16: 80 timed calls. Orders balance arm positions and immediate
+predecessors. The native-call timeout is 180 seconds and the campaign timeout is
+two hours. A failure stops dependent collection and retains the attempted
+records. Cells are not selectively resampled. New records have their own
+declaration and archive identity; retained prefix-v1 evidence is unchanged.
+
+Completion time runs from earliest scheduled arrival through complete trace
+drain. Each request also retains arrival-to-terminal time. TTFT runs from
+scheduled arrival to first engine token availability, including waiting and
+prefill. Streaming gaps are differences between consecutive token-availability
+events for the same request and exclude TTFT. Retain every request's TTFT,
+maximum gap and history; per-run p50/p95/p99 and maximum gaps; counts above 20
+and 50 ms; and gap attribution to mixed versus decode-only steps. Step records
+retain row counts, attention positions and schedule/build/execute/postprocess
+durations. Engine availability timestamps do not measure client rendering.
+Report paired within-block ratios and medians of per-run quantiles, without
+pooling repetitions. A 16-output/eight-request trace contains only 120 gaps, so
+quantiles, maxima and exceedance counts are complementary finite observations.
+Retain seed-to-drain episode and final-clear costs separately.
+
+For each metric, noise is `n = max(0.05, max(abs(self/current - 1)))` over four
+blocks. The primary cap-32/40-block/full-reuse usefulness gate requires every
+p95-gap ratio below one, median ratio at most 0.75, and reduction larger than
+`n`. Completion and p95-TTFT use a 10% regression budget: a median ratio plus
+`n` at most 1.10 passes; median minus `n` above 1.10 fails; otherwise the result
+is inconclusive. This buffer is an engineering selection rule, not a statistical
+confidence interval. Worst gap passes when its median ratio is at most `1+n`;
+it fails when all four ratios exceed one and the median exceeds `1+n`, otherwise
+it is inconclusive. Missing denominators make a gate inconclusive. Thresholds
+stay fixed when noise grows. All primary guards must pass for primary success.
+The same cost/worst-gap guards are reported for the other cells and cap 16;
+broader use requires considering their regressions. No default promotion,
+online-arrival, sustainable-capacity, client-SLO or goodput claim follows.

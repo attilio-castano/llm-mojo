@@ -915,3 +915,41 @@ and [sealed CPU restoration](../../../studies/model_generation/engine-prefix-evi
 retain all costs, both earlier failed untimed harness attempts and exact source.
 Cache use stays opt-in; these finite instrumented offline traces establish no
 capacity, SLO or default-promotion result.
+
+### Conditional prefill caps during active streams
+
+The [active-stream contract](../../../studies/model_generation/engine-core.md#active-stream-prefill-caps-frozen-comparison-contract)
+keeps cache enabled and compares current behavior, repeated current behavior,
+cap 32 and cap 16. A cap limits prefill only when a decode is selected; idle
+prefill retains the 256-row budget. Five fixed cells and four balanced blocks
+produce 80 timed calls, after an exact-build numerical checkpoint and fifteen
+untimed preflights. The 40-block/full-reuse cap-32 cell is primary; cap 16 is
+exploratory. All arrivals and token IDs are frozen by specification.
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-specification \
+  --active-prefill-study --output /private/tmp/active-prefill-campaign.json
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build \
+  --active-prefill-study --prepared VERIFIED_PREPARED_PATH --output /private/tmp/active-prefill-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-qualify \
+  --active-prefill-study --build /private/tmp/active-prefill-build \
+  --trace /private/tmp/active-prefill-campaign.json --output /private/tmp/active-prefill-qualification
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect \
+  --active-prefill-study --build /private/tmp/active-prefill-build \
+  --trace /private/tmp/active-prefill-campaign.json \
+  --qualification /private/tmp/active-prefill-qualification/qualification.json \
+  --output /private/tmp/active-prefill-measurements
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay \
+  --output /private/tmp/active-prefill-measurements/engine-prefix-active.json.gz
+```
+
+Collection requires clean committed sources and qualified Apple M4 Pro/Metal
+reference 27/projection 8, BF16/FP32, slot-major 32-token KV, lifetime reservation,
+256-row/eight-sequence workspaces and nominal power/thermal conditions. Every arm
+uses unrestricted identical warmup/seed work; the cap applies to continuation.
+The archive binds source, binary, assets, commands, actual exits, complete token
+histories, ownership and work. CPU replay recomputes completion/TTFT/gap metrics,
+maximum and per-request worst gaps, fixed 20/50-ms exceedance counts, mixed-step
+attribution, paired noise and usefulness gates. Failed attempts remain recorded;
+there is no selective resampling. Existing prefix-v1 archives keep their
+original declaration and replay behavior. Defaults remain unchanged.

@@ -15,7 +15,7 @@ from llm_mojo.models.qwen2.runner import select_engine_configuration
 from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.kv_pool import KVPool
 from decoder_layer_support import decoder_support, load_decoder
-from engine_metal_driver import FastChecks, prefix_reuse_model_qualification
+from engine_metal_driver import FastChecks, prefix_reuse_model_qualification, prefix_active_model_qualification
 
 comptime CASE = "h896_i4864_nq14_nk2_d64_t65_s4001_base"
 comptime LAYERS = 3
@@ -322,6 +322,20 @@ def test_reference_prefix_reuse_matches_cold_recomputation() raises:
     prefix_reuse_model_qualification(model,ctx,cold,ctx,CONTEXT,CONTEXT,schedules,sharing)
     schedules.emit("fixture-prefix-chunk-schedule")
     sharing.emit("fixture-prefix-readonly-sharing")
+
+
+def test_reference_active_prefill_schedules_match_cold_recomputation() raises:
+    var support = decoder_support()
+    support.verify_case(CASE)
+    var ctx = DeviceContext()
+    assert_equal(ctx.api(), "metal")
+    var model = _model(ctx,2)
+    var cold = _model(ctx,1)
+    var mixed = FastChecks()
+    var partial = FastChecks()
+    prefix_active_model_qualification(model,ctx,cold,ctx,CONTEXT,mixed,partial)
+    mixed.emit("fixture-prefix-active-mixed-kv-logits-greedy")
+    partial.emit("fixture-prefix-active-zero-head-partial")
 
 
 def main() raises:

@@ -24,13 +24,16 @@ def trace_fixture(length=256,reuse=4,blocks=384):
                     seed_request=prefix._request(128,common,1)),requests=requests)
 
 
-def native_fixture(trace=None,cache='enabled'):
+def native_fixture(trace=None,cache='enabled',active_prefill_cap=None):
     trace=trace or trace_fixture()
     blocks=trace['prefix']['blocks']
     namespace='qwen-reference27-projection8//prepared'
     lines=['device Apple M4 Pro/metal','mode greedy',f'config chunked {blocks} 256 8',
            'admission reserved','study engine-prefix-v1','work_capacity 256 8',f'cache {cache}',
            f'namespace {namespace}',f'salt {prefix.SALT}']
+    if active_prefill_cap is not None:
+        lines[4]='study engine-prefix-active-v1'
+        lines.append(f'active_prefill_cap {active_prefill_cap}')
     indexed={}
     event_id=0
     step_id=0
@@ -119,37 +122,38 @@ def native_fixture(trace=None,cache='enabled'):
     return '\n'.join(lines)
 
 
-def campaign_fixture():
-    return dict(kind='engine-prefix-campaign-v1',schema_version=1,source_text=prefix.SOURCE_TEXT,
+def campaign_fixture(active_prefill=False):
+    return dict(kind='engine-prefix-active-campaign-v1' if active_prefill else 'engine-prefix-campaign-v1',schema_version=1,source_text=prefix.SOURCE_TEXT,
         source_text_sha256=prefix._hash(prefix.SOURCE_TEXT),
         text_provenance='repository-authored engineering text; no external corpus',
         tokenizer=dict(tables_sha256='a'*64,binary_sha256='b'*64,generator_source_sha256='c'*64),
-        traces=[trace_fixture(*values) for values in prefix.CELL_CONFIGS])
+        traces=[trace_fixture(*values) for values in (prefix.ACTIVE_CELL_CONFIGS if active_prefill else prefix.CELL_CONFIGS)])
 
 
-def record_fixture():
+def record_fixture(active_prefill=False):
+    declaration=prefix._declaration(active_prefill)
     build=dict(source=dict(repository=dict(commit='a'*40,dirty=False),sources={'uv.lock':'b'*64,
         'src/llm_mojo/benchmarks/engine_prefix.py':'c'*64,'tests/engine_metal_driver.mojo':'d'*64}),
         assets=dict(prepared='/prepared',prepared_sha256='c'*64,tables_sha256='a'*64),
         environment=dict(hardware={'chip':'Apple M4 Pro'},software={'mojo':'1.1.0','max':'26.6.0'}),
-        declaration=contract.ENGINE_PREFIX_DECLARATION,
+        declaration=declaration,
         command=['/mojo','build','-I','src','src/llm_mojo/benchmarks/engine_trace.mojo','-o','/engine'],
         binaries={'engine':dict(sha256='e'*64,bytes=1)})
     numerical=dict(source=build['source'],assets=build['assets'],environment=build['environment'],
         command=['/mojo','build','-I','src','-I','tests','tests/engine_metal_driver.mojo','-o','/checkpoint-driver'],
         binaries={'checkpoint-driver':dict(sha256='f'*64,bytes=1)})
-    output='\n'.join(['device Apple M4 Pro/metal','qualification '+prefix.CHECKPOINT_IDENTITY,
+    output='\n'.join(['device Apple M4 Pro/metal','qualification '+(prefix.ACTIVE_CHECKPOINT_IDENTITY if active_prefill else prefix.CHECKPOINT_IDENTITY),
         'configuration 27 projection 8 dtype BF16/FP32 block-size 32',
-        *[f'check {name} checked 4 mismatches 0 unexpected-nonfinite 0' for name in prefix.CHECKPOINT_GROUPS]])
+        *[f'check {name} checked 4 mismatches 0 unexpected-nonfinite 0' for name in (prefix.ACTIVE_CHECKPOINT_GROUPS if active_prefill else prefix.CHECKPOINT_GROUPS)]])
     def receipt(command,timeout):
         return dict(command=list(map(str,command)),exit_code=0,timeout_seconds=timeout,wall_elapsed_ns=10000000)
-    qualification=dict(kind='engine-prefix-qualification-v1',schema_version=1,build=build,
+    qualification=dict(kind='engine-prefix-active-qualification-v1' if active_prefill else 'engine-prefix-qualification-v1',schema_version=1,build=build,
         checkpoint_receipt=dict(build=numerical,build_execution=receipt(numerical['command'],600),
             stdout=output,stdout_sha256=prefix._hash(output),
-            execution=receipt(['/checkpoint-driver','/prepared','prefix-cache-qualification'],180)))
-    campaign=campaign_fixture(); document=json.dumps(campaign)
+            execution=receipt(['/checkpoint-driver','/prepared','prefix-active-qualification' if active_prefill else 'prefix-cache-qualification'],180)))
+    campaign=campaign_fixture(active_prefill); document=json.dumps(campaign)
     qualification.update(campaign=campaign,campaign_document=document,campaign_sha256=prefix._hash(document),preflight_cells=[])
-    record=dict(kind=contract.ENGINE_PREFIX_DECLARATION['kind'],declaration=contract.ENGINE_PREFIX_DECLARATION,
+    record=dict(kind=declaration['kind'],declaration=declaration,
         build=build,trace=campaign,trace_document=document,trace_sha256=prefix._hash(document),
         qualification=qualification,cells=[])
     conditions=dict(battery={'power_source':'AC Power'},power_mode_raw='0',
@@ -160,16 +164,20 @@ def record_fixture():
                   native_trace_sha256=prefix._hash(prefix.trace_tsv(trace)),runs=[])
         preflight=dict(cell_id=name,trace=trace,native_trace_path=f'/qualification/{name}/trace.tsv',
                        native_trace_sha256=prefix._hash(prefix.trace_tsv(trace)),runs=[])
-        for cache in ('disabled','enabled'):
-            stdout=native_fixture(trace,cache)
-            run=dict(cache=cache,stdout=stdout,parsed=prefix.parse_run(stdout,trace,cache,params['blocks']))
+        policies=[('enabled',cap) for cap in prefix.ACTIVE_CAPS] if active_prefill else [(cache,None) for cache in ('disabled','enabled')]
+        for cache,cap in policies:
+            stdout=native_fixture(trace,cache,cap)
+            run=dict(cache=cache,stdout=stdout,parsed=prefix.parse_run(stdout,trace,cache,params['blocks'],cap))
+            if active_prefill: run['active_prefill_cap']=cap
             run['native_execution']=receipt(prefix._command(record,preflight,run),180)
             preflight['runs'].append(run)
         preflight['expected_histories']=prefix._histories(preflight['runs'][0]['parsed'],trace)
+        if active_prefill: preflight['expected_work']=prefix._work_signature(preflight['runs'][0]['parsed'],trace)
         qualification['preflight_cells'].append(preflight)
         for block in range(4):
-            for cache,calibration in prefix.cells(block):
-                run=copy.deepcopy(next(r for r in preflight['runs'] if r['cache']==cache))
+            policies=[('enabled',cap,calibration) for cap,calibration in prefix.active_cells(block)] if active_prefill else [(cache,None,calibration) for cache,calibration in prefix.cells(block)]
+            for cache,cap,calibration in policies:
+                run=copy.deepcopy(next(r for r in preflight['runs'] if r['cache']==cache and (not active_prefill or r['active_prefill_cap']==cap)))
                 run.update(block=block,calibration=calibration,conditions_before=conditions,conditions_after=conditions)
                 run['native_execution']=receipt(prefix._command(record,cell,run),180)
                 cell['runs'].append(run)
@@ -417,6 +425,133 @@ class PrefixCampaignTests(unittest.TestCase):
                         '--trace','/campaign.json','--qualification','/qualification.json','--output','/measure']),mock.patch.object(prefix,'collect') as collect:
             profile.main()
             collect.assert_called_once_with(Path('/build'),Path('/campaign.json'),Path('/measure'),Path('/qualification.json'))
+
+
+class ActivePrefixTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.record=record_fixture(True)
+
+    def test_balanced_grid_and_complete_cpu_replay(self):
+        orders=[prefix.active_cells(b) for b in range(4)]
+        self.assertEqual(len({(a,b) for row in orders for a,b in zip(row,row[1:])}),12)
+        for position in range(4): self.assertEqual(len({row[position] for row in orders}),4)
+        self.assertEqual(self.record['summary']['measured_runs'],80)
+        self.assertEqual(self.record['summary']['untimed_preflights'],15)
+        self.assertFalse(self.record['summary']['promotion'])
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); raw=json.dumps(self.record).encode(); compressed=gzip.compress(raw,mtime=0)
+            (root/'engine-prefix-active.json.gz').write_bytes(compressed)
+            (root/'engine-prefix-active.json').write_text(json.dumps(dict(kind=self.record['kind'],bytes=len(compressed),
+                sha256=hashlib.sha256(compressed).hexdigest(),uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+            with mock.patch.object(profile,'execute',side_effect=AssertionError('CPU replay cannot run native work')), \
+                 mock.patch.object(profile,'assets',side_effect=AssertionError('CPU replay cannot read assets')):
+                self.assertEqual(profile.engine_replay(root),self.record['summary'])
+
+    def test_active_cap_identity_idle_work_and_delivery_guards(self):
+        trace=trace_fixture(1024,8,40); stdout=native_fixture(trace,'enabled',32)
+        prefix.parse_run(stdout,trace,'enabled',40,32)
+        with self.assertRaises(ValueError): prefix.parse_run(stdout,trace,'enabled',40)
+        with self.assertRaises(ValueError): prefix.parse_run(stdout,trace,'enabled',40,True)
+        corruptions=[stdout.replace('active_prefill_cap 32','active_prefill_cap 16'),stdout.replace('cache enabled','cache disabled')]
+        lines=stdout.splitlines(); start=lines.index('phase measure')
+        index=next(i for i in range(start,len(lines)) if lines[i].startswith('step '))
+        fields=lines[index].split()
+        for key,value in [('prefill_tokens',16),('attended_positions',int(fields[contract.ENGINE_STEP_FIELDS.index('attended_positions')+1])+1)]:
+            changed=lines.copy(); row=fields.copy(); row[contract.ENGINE_STEP_FIELDS.index(key)+1]=str(value); changed[index]=' '.join(row)
+            corruptions.append('\n'.join(changed))
+        changed=lines.copy(); row=fields.copy()
+        row[contract.ENGINE_STEP_FIELDS.index('decode_seqs')+1]='1'; row[contract.ENGINE_STEP_FIELDS.index('prefill_tokens')+1]='63'
+        changed[index]=' '.join(row); corruptions.append('\n'.join(changed))
+        finish=next(i for i,line in enumerate(lines) if line.startswith('finish 0 '))
+        changed=lines.copy(); row=changed[finish].split(); row[-1]=str(int(row[-1])+1); changed[finish]=' '.join(row)
+        corruptions.append('\n'.join(changed))
+        for broken in corruptions:
+            with self.subTest(change=broken[:80]),self.assertRaises(ValueError): prefix.parse_run(broken,trace,'enabled',40,32)
+
+    def test_actual_raw_trace_cannot_merge_two_token_deliveries_into_one_step(self):
+        path=Path(__file__).resolve().parents[1]/'studies/model_generation/engine-prefix-evidence/measurements/engine-prefix.json.gz'
+        recorded=json.loads(gzip.decompress(path.read_bytes()))
+        cell=next(c for c in recorded['cells'] if c['cell_id']=='prefix-1024-reuse-8-blocks-40')
+        stdout=next(r['stdout'] for r in cell['runs'] if r['cache']=='enabled')
+        stdout=stdout.replace('study engine-prefix-v1','study engine-prefix-active-v1\nactive_prefill_cap 0')
+        prefix.parse_run(stdout,cell['trace'],'enabled',40,0)
+        with self.assertRaisesRegex(ValueError,'mixed-step cap'):
+            prefix.parse_run(stdout.replace('active_prefill_cap 0','active_prefill_cap 32'),cell['trace'],'enabled',40,32)
+        lines=stdout.splitlines(); indexes=[i for i,line in enumerate(lines) if line.startswith('token 0 ')]
+        first=lines[indexes[0]].split(); second=lines[indexes[1]].split(); first[-1]=second[-1]
+        lines[indexes[1]]=' '.join(first)+'\n'+lines[indexes[1]]; del lines[indexes[0]]
+        with self.assertRaisesRegex(ValueError,'two tokens|head census'):
+            prefix.parse_run('\n'.join(lines),cell['trace'],'enabled',40,0)
+
+    def test_frozen_preflight_caps_work_grid_and_commands_cannot_change(self):
+        for mutate in (lambda r:r['cells'][0]['runs'].pop(),lambda r:r['cells'][0]['runs'].reverse(),
+                lambda r:r['cells'][0]['runs'][0]['native_execution']['command'].__setitem__(-1,'16'),
+                lambda r:r['qualification']['preflight_cells'][0]['expected_work']['measure'].update(rows=1)):
+            broken=copy.deepcopy(self.record); mutate(broken)
+            broken['qualification_document']=json.dumps(broken['qualification']); broken['qualification_sha256']=prefix._hash(broken['qualification_document'])
+            with self.assertRaises(ValueError): prefix.summary(broken)
+
+    def test_gap_counts_and_crossed_step_attribution_are_exact(self):
+        def step(i,decode,prefill,begin,end):
+            return dict(step_id=i,decode_seqs=decode,prefill_tokens=prefill,begin_ns=begin,end_ns=end,execute_ns=end-begin,schedule_ns=0,build_ns=0)
+        scale=1_000_000
+        steps=[step(0,0,64,0,10*scale),step(1,1,32,10*scale,20*scale),step(2,2,0,20*scale,70*scale),step(3,3,0,70*scale,130*scale)]
+        events=[dict(kind='token',request_id=i,step_id=s,emitted_ns=t*scale) for s,t,ids in [(0,0,[0,2]),(1,20,[0,1]),(2,70,[0,1]),(3,130,[0,1,2])] for i in ids]
+        data=prefix._active_metrics(dict(phases=dict(measure=dict(steps=steps,events=events))))
+        self.assertEqual(data['gap_tail']['count'],6)
+        self.assertEqual(data['gap_tail']['above_20ms'],5)
+        self.assertEqual(data['gap_tail']['above_50ms'],3)
+        self.assertEqual(data['gap_tail']['maximum_ns'],130*scale)
+        self.assertEqual([r['maximum_ns'] for r in data['gap_tail']['requests']],[60*scale,60*scale,130*scale])
+        self.assertEqual(data['gap_tail']['attribution']['mixed']['count'],2)
+        self.assertEqual(data['gap_tail']['attribution']['decode_only']['count'],4)
+        self.assertEqual(data['step_classes']['mixed']['prefill_rows_max'],32)
+
+    def test_decision_noise_buffers_thresholds_and_unavailable_tails(self):
+        def comparison(ratio,noise=.05):
+            return dict(available=True,block_ratios=[ratio]*4,median_ratio=ratio,noise_floor=noise,
+                speed_verdict=profile._outcome([ratio]*4,noise))
+        base={metric:comparison(ratio) for metric,ratio in [('duration_ns',1),('episode_ns',1),('p95_ttft_ns',1),('p95_gap_ns',.75),('maximum_gap_ns',.8)]}
+        self.assertEqual(prefix._active_decision(base)['hypothesis'],'supported')
+        for metric,ratio,status in [('duration_ns',1.08,'inconclusive'),('p95_ttft_ns',1.17,'failed'),('p95_gap_ns',.76,'failed'),('maximum_gap_ns',1.08,'failed')]:
+            changed=copy.deepcopy(base); changed[metric]=comparison(ratio)
+            self.assertEqual(prefix._active_decision(changed)['hypothesis'],status)
+        changed=copy.deepcopy(base); changed['p95_gap_ns']=comparison(.75,.30)
+        self.assertEqual(prefix._active_decision(changed)['hypothesis'],'inconclusive')
+        changed=copy.deepcopy(base); changed['maximum_gap_ns']=dict(available=False)
+        self.assertEqual(prefix._active_decision(changed)['hypothesis'],'inconclusive')
+        runs=[]
+        for block in range(4):
+            for cap,calibration in prefix.active_cells(block):
+                factor=1.30 if calibration else .70 if cap else 1
+                runs.append(dict(block=block,active_prefill_cap=cap,calibration=calibration,duration_ns=100,episode_ns=100,
+                    ttft=dict(p95_ns=100),inter_token=dict(p95_ns=100*factor),gap_tail=dict(maximum_ns=100*factor)))
+        actual=prefix._active_comparisons(runs,32)
+        self.assertAlmostEqual(actual['p95_gap_ns']['noise_floor'],.30)
+        self.assertEqual(actual['duration_ns']['noise_floor'],.05)
+        self.assertEqual(prefix._active_decision(actual)['hypothesis'],'inconclusive')
+
+    def test_failed_native_call_is_retained_once_without_resampling(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); binary=root/'checkpoint-driver'; binary.write_bytes(b'fixture')
+            q=copy.deepcopy(self.record['qualification']); q['checkpoint_receipt']['build']['command'][-1]=str(binary)
+            q['checkpoint_receipt']['build']['binaries']['checkpoint-driver']=dict(sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),bytes=7)
+            qualification=root/'qualification.json'; qualification.write_text(json.dumps(q))
+            campaign=root/'campaign.json'; campaign.write_text(self.record['trace_document'])
+            def fail(command,log,timeout):
+                log.write_text('actual native failure\n')
+                log.with_suffix('.execution.json').write_text(json.dumps(dict(command=list(map(str,command)),exit_code=9,timeout_seconds=timeout,wall_elapsed_ns=100)))
+                raise profile.NativeCommandError(9,log)
+            with mock.patch.object(profile,'verify_engine_build',return_value=self.record['build']), \
+                 mock.patch.object(prefix,'_qualification',return_value=self.record['summary']['qualification']), \
+                 mock.patch.object(profile,'conditions',return_value={}),mock.patch.object(profile,'checked_execution',side_effect=fail) as execute:
+                with self.assertRaises(profile.NativeCommandError): prefix.collect(root/'build',campaign,root/'output',qualification,True)
+                self.assertEqual(execute.call_count,1)
+            failed=json.loads((root/'output/incomplete-campaign.json').read_text())['cells'][0]['runs']
+            self.assertEqual(len(failed),1)
+            self.assertEqual(failed[0]['native_execution']['exit_code'],9)
+            self.assertEqual(failed[0]['stdout'],'actual native failure\n')
 
 
 if __name__=='__main__':

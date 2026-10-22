@@ -967,6 +967,115 @@ def prefix_reuse_model_qualification(mut model: QwenModel, ctx: DeviceContext,
             _prefix_head_guards(model,2,sharing)
 
 
+def prefix_active_model_qualification(mut model: QwenModel, ctx: DeviceContext,
+                                      mut cold: QwenModel, cold_ctx: DeviceContext,
+                                      token_modulus: Int, mut mixed: FastChecks,
+                                      mut partial: FastChecks) raises:
+    """Exact numerical gate for the new 16/32-row mixed chunk schedules.
+
+    A readonly 32-token prefix feeds a natural decode and a distinct prompt
+    consumer. Every completed mixed submission is compared with full cold
+    recomputation of both logical histories, including partial prompt chunks.
+    The engine lifecycle gate separately proves the scheduler chooses these
+    shapes; this helper is shared by the three-layer fixture and checkpoint.
+    """
+    assert_equal(ctx.api(),"metal")
+    assert_equal(cold_ctx.api(),"metal")
+    assert_equal(DECODE_PROJECTION,8)
+    for cap in [32,16]:
+        for length in [47,48,49,63,64,65]:
+            model.reset(ctx)
+            var pool = KVPool(ctx,10,32,model.kv_geometry())
+            pool.storage.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+            var a = _prefix_table(1,0)
+            var b = _prefix_table(1,1)
+            var prefix = _prefix_ids(0,32,token_modulus)
+            _ = _prefix_submit(model,ctx,pool,prefix,0,a,False,mixed)
+            var frozen = _prefix_frozen(pool,a,1)
+            var decode_history = prefix.copy()
+            var prompt_history = prefix.copy()
+            var next = (17+length)%token_modulus
+            var past = 32
+            var step = 0
+            while past < length:
+                var count = min(cap,length-past)
+                var final = past+count == length
+                decode_history.append(next)
+                var tail = _prefix_ids(past,count,token_modulus)
+                prompt_history.extend(tail.copy())
+                var ids: List[Int] = [next]
+                ids.extend(tail^)
+                var positions: List[Int] = [32+step]
+                var slots: List[Int] = [a[(32+step)//32]*32+(32+step)%32]
+                for position in range(past,past+count):
+                    positions.append(position)
+                    slots.append(b[position//32]*32+position%32)
+                var tables = a.copy()
+                tables.extend(b.copy())
+                var heads: List[Int] = [0]
+                if final:
+                    heads.append(count)
+                model.logits.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+                model.normalized.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+                var batch = StepBatch(ids^,positions^,[0,1,1+count],2 if count == 1 else 1,
+                                      [33+step,past+count],3,tables^,slots^,heads^)
+                model.forward(ctx,batch,pool,configured_plan(DECODER_MIXED,1+count,past+count,2))
+                var selected = model.greedy_tokens(ctx)
+                mixed.equal(model.last_route.configuration,DECODER_MIXED,"active-cap mixed reference route")
+                mixed.equal(len(selected),2 if final else 1,"active-cap compact selected rows")
+                for consumer in range(2):
+                    cold.reset(cold_ctx)
+                    cold.logits.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+                    cold.normalized.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+                    var reference = KVPool(cold_ctx,3,32,cold.kv_geometry())
+                    reference.storage.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+                    var history = decode_history.copy() if consumer == 0 else prompt_history.copy()
+                    var sample = consumer == 0 or final
+                    var expected = _prefix_submit(cold,cold_ctx,reference,history,0,[0,1,2],sample,mixed)
+                    if sample:
+                        mixed.equal(selected[consumer],expected[0],"active-cap cold greedy token")
+                        _prefix_logits(model,consumer,cold,mixed)
+                    _prefix_pool_equal(pool,a if consumer == 0 else b,reference,len(history),
+                                       "active-cap mixed cold KV",mixed)
+                    _prefix_written(reference,[[0,1,2]],[len(history)],mixed)
+                    _prefix_guards(reference,mixed)
+                    _prefix_head_guards(cold,1 if sample else 0,mixed)
+                _prefix_written(pool,[a.copy(),b.copy()],[33+step,past+count],mixed)
+                _prefix_guards(pool,mixed)
+                _prefix_head_guards(model,2 if final else 1,mixed)
+                var after = _prefix_frozen(pool,a,1)
+                mixed.equal(len(after),len(frozen),"active-cap shared prefix extent")
+                for i in range(len(frozen)):
+                    mixed.equal(Int(after[i]),Int(frozen[i]),"active-cap readonly prefix bytes")
+                next = selected[0]
+                past += count
+                step += 1
+        # A standalone unfinished prompt has no sampled head at all. These
+        # submissions cross the 32-slot boundary from a partial first block.
+        model.reset(ctx)
+        cold.reset(cold_ctx)
+        var pool = KVPool(ctx,5,32,model.kv_geometry())
+        var reference = KVPool(cold_ctx,3,32,cold.kv_geometry())
+        pool.storage.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+        reference.storage.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+        var table: List[Int] = [3,1,4]
+        _ = _prefix_submit(model,ctx,pool,_prefix_ids(0,17,token_modulus),0,table,False,partial)
+        model.logits.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+        model.normalized.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+        cold.logits.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+        cold.normalized.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+        _ = _prefix_submit(model,ctx,pool,_prefix_ids(17,cap,token_modulus),17,table,False,partial)
+        _ = _prefix_submit(cold,cold_ctx,reference,_prefix_ids(0,17+cap,token_modulus),
+                           0,[0,1,2],False,partial)
+        _prefix_pool_equal(pool,table,reference,17+cap,"active-cap zero-head partial KV",partial)
+        _prefix_written(pool,[table.copy()],[17+cap],partial)
+        _prefix_written(reference,[[0,1,2]],[17+cap],partial)
+        _prefix_guards(pool,partial)
+        _prefix_guards(reference,partial)
+        _prefix_head_guards(model,0,partial)
+        _prefix_head_guards(cold,0,partial)
+
+
 def prefix_cache_qualification(path: String) raises:
     var runner = QwenRunner(path,MAX_CONTEXT,QUAL_ROWS,QUAL_SEQUENCES)
     var cold = QwenRunner(path,MAX_CONTEXT,QUAL_ROWS,QUAL_SEQUENCES)
@@ -1126,6 +1235,211 @@ def _prefix_engine_fault(mut runner: QwenRunner, mut check: FastChecks) raises:
     _qualification_drained(engine,pool,check)
 
 
+def _prefix_active_seed(mut engine: EngineCore, mut runner: QwenRunner,
+                        mut pool: KVPool, cap: Int, mut check: FastChecks) raises:
+    # Mirror the study: the seed and its route are identical for every arm.
+    engine.active_prefill_cap = 0
+    _ = engine.add(0,_prefix_ids(0,65,VOCABULARY),1,List[Int]())
+    var seed = _prefix_engine_drain(engine,runner,pool,check)
+    check.equal(seed[0],65,"active-cap seed rows are unchanged")
+    check.equal(seed[1],0,"active-cap seed begins cold")
+    check.equal(engine.cached_blocks(),2,"active-cap seed retained two full blocks")
+    engine.active_prefill_cap = cap
+
+
+def _prefix_active_pair(mut runner: QwenRunner, mut cold: QwenRunner, cap: Int,
+                        stopped: Bool, mut check: FastChecks) raises:
+    runner.model.reset(runner.ctx)
+    var pool = KVPool(runner.ctx,16,32,runner.model.kv_geometry())
+    var engine = EngineCore(16,32,QUAL_CONTEXT,VOCABULARY,token_budget=256,
+        max_sequences=8,max_requests=8,reserve_lifetime=True,prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity(),active_prefill_cap=cap)
+    _prefix_active_seed(engine,runner,pool,cap,check)
+    var prompt_a = _prefix_ids(0,65,VOCABULARY)
+    var prompt_b = _prefix_ids(0,110,VOCABULARY)
+    var expected_a = _prefix_cold_tokens(cold,prompt_a,8,check)
+    var expected_b = _prefix_cold_tokens(cold,prompt_b,3,check)
+    var a = engine.add(1,prompt_a,8,List[Int]())
+    var first = engine.step(runner,pool)
+    check.equal(first.decode_seqs,0,"active-cap first request is idle prefill")
+    check.equal(first.total_tokens,1,"active-cap first request recomputes final query")
+    check.equal(first.cache_hit_tokens,64,"active-cap first request shares two blocks")
+    var stops = List[Int]()
+    if stopped:
+        stops.append(expected_b[0])
+    var b = engine.add(2,prompt_b,3,stops)
+    var rows = first.total_tokens
+    var hits = first.cache_hit_tokens
+    var attended = first.attended_positions
+    var remaining = 46
+    var mixed_steps = 0
+    var finishes = 0
+    var steps = 0
+    while engine.live() > 0:
+        check.truth(steps < 32,"active-cap pair bounded progress")
+        # First mixed submission has an unfinished prompt and exactly one head.
+        if mixed_steps == 0:
+            runner.model.logits.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+            runner.model.normalized.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+        var record = engine.step(runner,pool)
+        rows += record.total_tokens
+        hits += record.cache_hit_tokens
+        attended += record.attended_positions
+        check.equal(record.preempted,0,"active-cap reserved pair never replays")
+        check.equal(record.budget_limited,0,"active-cap pair has no fitted-cost policy")
+        check.equal(runner.model.last_route.configuration,DECODER_MIXED,"active-cap engine reference route")
+        if record.prefill_seqs > 0:
+            check.truth(record.decode_seqs > 0,"active-cap pair prompt overlaps decode")
+            check.equal(record.prefill_tokens,min(cap,remaining),"active-cap actual mixed scheduler count")
+            remaining -= record.prefill_tokens
+            mixed_steps += 1
+            if mixed_steps == 1:
+                check.equal(record.cache_hit_tokens,64,"active-cap second consumer shares seed")
+                check.equal(engine.requests[b].generated,0,"active-cap partial prompt emitted nothing")
+                check.equal(runner.model.sampled_rows,1,"active-cap partial prompt has no head")
+                _prefix_head_guards(runner.model,1,check)
+                var table = engine.blocks.table(engine.requests[b].sequence)
+                check.equal(pool.written[table[2]],cap,"active-cap partial-block written extent")
+                check.equal(engine.cached_blocks(),3 if cap == 32 else 2,
+                            "active-cap publishes full blocks only")
+        for event in record.events:
+            if event.kind == FINISH_EVENT:
+                finishes += 1
+        engine.check(pool)
+        steps += 1
+    var generated_b = 1 if stopped else 3
+    check.equal(mixed_steps,(46+cap-1)//cap,"active-cap binding mixed chunks")
+    check.equal(remaining,0,"active-cap prompt completed all rows")
+    check.equal(finishes,2,"active-cap pair exactly-once finishes")
+    check.equal(rows,8+46+generated_b-1,"active-cap pair exact computed-row census")
+    check.equal(hits,128,"active-cap pair exact hit census")
+    var b_rows = 46+generated_b-1
+    check.equal(attended,8*65+8*7//2+b_rows*65+b_rows*(b_rows-1)//2,
+                "active-cap pair exact attended-position census")
+    for index in [a,b]:
+        var expected = expected_a.copy() if index == a else expected_b.copy()
+        var prompt = 65 if index == a else 110
+        var generated = 8 if index == a else generated_b
+        check.equal(engine.requests[index].generated,generated,"active-cap natural output length")
+        check.reason(engine.requests[index].reason,"stop" if index == b and stopped else "length")
+        for i in range(generated):
+            check.equal(engine.requests[index].tokens[prompt+i],expected[i],"active-cap natural cold token")
+    _prefix_engine_drained(engine,pool,check)
+    _ = engine.clear_cache(pool)
+    _qualification_drained(engine,pool,check)
+    if stopped:
+        return
+    # With no selected decode, the unchanged 256-row budget admits this whole
+    # cold prompt in one step even though the active cap remains positive.
+    _ = engine.add(3,prompt_b,1,List[Int]())
+    var idle = engine.step(runner,pool)
+    check.equal(idle.decode_seqs,0,"active-cap idle has no selected decode")
+    check.equal(idle.prefill_tokens,110,"active-cap idle prefill keeps full budget")
+    check.equal(idle.cache_hit_tokens,0,"active-cap idle check starts cold")
+    _prefix_engine_drained(engine,pool,check)
+    _ = engine.clear_cache(pool)
+    _prefix_active_seed(engine,runner,pool,cap,check)
+    a = engine.add(4,prompt_a,8,List[Int]())
+    _ = engine.step(runner,pool)
+    b = engine.add(5,prompt_b,3,List[Int]())
+    var partial = engine.step(runner,pool)
+    check.equal(partial.decode_seqs,1,"active-cap cancellation overlaps a decode")
+    check.equal(partial.prefill_tokens,cap,"active-cap cancellation follows capped partial chunk")
+    check.equal(engine.requests[b].generated,0,"active-cap cancelled prompt delivered nothing")
+    var before = runner.model.submitted_rows
+    engine.abort(4)
+    engine.abort(5)
+    engine.abort(5)
+    var aborted = engine.step(runner,pool)
+    check.equal(aborted.total_tokens,0,"active-cap abort boundary submitted no extra rows")
+    check.equal(runner.model.submitted_rows,before,"active-cap abort enqueued no layers")
+    check.equal(aborted.aborted,2,"active-cap abort exactly-once terminal results")
+    check.reason(engine.requests[a].reason,"abort")
+    check.reason(engine.requests[b].reason,"abort")
+    _prefix_engine_drained(engine,pool,check)
+    _ = engine.clear_cache(pool)
+    _qualification_drained(engine,pool,check)
+
+
+def _prefix_active_fault(mut runner: QwenRunner, cap: Int, mut check: FastChecks) raises:
+    runner.model.reset(runner.ctx)
+    var pool = KVPool(runner.ctx,16,32,runner.model.kv_geometry())
+    var engine = EngineCore(16,32,QUAL_CONTEXT,VOCABULARY,token_budget=256,
+        max_sequences=8,max_requests=8,reserve_lifetime=True,prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity(),active_prefill_cap=cap)
+    _prefix_active_seed(engine,runner,pool,cap,check)
+    var a = engine.add(1,_prefix_ids(0,65,VOCABULARY),8,List[Int]())
+    _ = engine.step(runner,pool)
+    var history = engine.requests[a].tokens.copy()
+    var prompt_b = _prefix_ids(0,110,VOCABULARY)
+    var b = engine.add(2,prompt_b,3,List[Int]())
+    var poisoned = 0 if history[len(history)-1] != 0 else 15
+    for i in range(64,64+cap):
+        check.truth(poisoned != prompt_b[i],"active-cap fault row absent from prompt input")
+    var saved: UInt16
+    with runner.model.embedding.map_to_host() as mapped:
+        saved = bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=poisoned*HIDDEN])
+        mapped.unsafe_ptr()[unsafe_offset=poisoned*HIDDEN] = bitcast[DType.bfloat16](UInt16(0x7FC0))
+    var before = runner.model.submitted_rows
+    with assert_raises(contains="nonfinite"):
+        _ = engine.step(runner,pool)
+    check.checked += 1
+    check.equal(runner.model.last_route.configuration,DECODER_MIXED,"active-cap fault reference route")
+    check.equal(runner.model.last_route.sequences,2,"active-cap fault actual mixed sequences")
+    check.equal(runner.model.submitted_rows-before,(cap+1)*LAYERS,"active-cap fault submitted capped mixed rows")
+    check.equal(runner.model.sampled_rows,1,"active-cap fault unfinished prompt has no selected head")
+    check.truth(engine.failed,"active-cap numeric fault invalidates engine")
+    check.truth(not runner.model.valid,"active-cap numeric fault invalidates model")
+    check.equal(engine.cached_blocks(),0,"active-cap numeric fault invalidates cache")
+    check.equal(len(engine.failure_events),2,"active-cap numeric fault exactly-once terminals")
+    for event in engine.failure_events:
+        check.equal(event.kind,FINISH_EVENT,"active-cap fault finish kind")
+        check.reason(event.reason,"error")
+        check.equal(event.generated_tokens,1 if event.request_id == 1 else 0,"active-cap fault delivered count")
+    check.equal(len(engine.requests[a].tokens),len(history),"active-cap fault preserved history length")
+    for i in range(len(history)):
+        check.equal(engine.requests[a].tokens[i],history[i],"active-cap fault preserved delivered history")
+    check.equal(engine.requests[b].generated,0,"active-cap fault delivers no partial-prompt token")
+    _qualification_drained(engine,pool,check)
+    _ = engine.clear_cache(pool)
+    check.equal(engine.cached_blocks(),0,"active-cap fault clear is empty")
+    with assert_raises():
+        _ = engine.step(runner,pool)
+    check.checked += 1
+    check.equal(runner.model.submitted_rows,before+(cap+1)*LAYERS,"active-cap failed engine submits no further work")
+    # The expected healthy-device numerical fault affects resident test bytes
+    # only. Restore the exact head weight before the next independent cap case.
+    with runner.model.embedding.map_to_host() as mapped:
+        mapped.unsafe_ptr()[unsafe_offset=poisoned*HIDDEN] = bitcast[DType.bfloat16](saved)
+
+
+def prefix_active_qualification(path: String) raises:
+    var runner = QwenRunner(path,MAX_CONTEXT,QUAL_ROWS,QUAL_SEQUENCES)
+    var cold = QwenRunner(path,MAX_CONTEXT,QUAL_ROWS,QUAL_SEQUENCES)
+    assert_equal(runner.ctx.name(),"Apple M4 Pro")
+    assert_equal(runner.ctx.api(),"metal")
+    assert_equal(cold.ctx.name(),runner.ctx.name())
+    assert_equal(cold.ctx.api(),runner.ctx.api())
+    assert_equal(runner.model.kv_geometry().layers,LAYERS)
+    print("device",runner.ctx.name()+"/"+runner.ctx.api())
+    print("qualification","engine-prefix-active-reference27-v1")
+    print("configuration",DECODER_MIXED,"projection",DECODE_PROJECTION,"dtype","BF16/FP32","block-size",32)
+    var mixed = FastChecks()
+    var partial = FastChecks()
+    prefix_active_model_qualification(runner.model,runner.ctx,cold.model,cold.ctx,VOCABULARY,mixed,partial)
+    mixed.emit("prefix-active-mixed-kv-logits-greedy-cold-recompute")
+    partial.emit("prefix-active-zero-head-partial")
+    var lifecycle = FastChecks()
+    for cap in [32,16]:
+        _prefix_active_pair(runner,cold,cap,False,lifecycle)
+        _prefix_active_pair(runner,cold,cap,True,lifecycle)
+    lifecycle.emit("prefix-active-engine-cap-lifecycle")
+    var fault = FastChecks()
+    for cap in [32,16]:
+        _prefix_active_fault(runner,cap,fault)
+    fault.emit("prefix-active-engine-fault-cache-clear")
+
+
 def prefix_history_qualification(path: String, fixture_path: String) raises:
     """Replay frozen independently supplied natural histories through the cache.
 
@@ -1250,6 +1564,8 @@ def main() raises:
         admission(args[1])
     elif len(args) == 3 and args[2] == "prefix-cache-qualification":
         prefix_cache_qualification(args[1])
+    elif len(args) == 3 and args[2] == "prefix-active-qualification":
+        prefix_active_qualification(args[1])
     elif len(args) == 4 and args[2] == "prefix-history-qualification":
         prefix_history_qualification(args[1],args[3])
     elif len(args) == 4 and args[2] == "fast-qualification":
