@@ -1666,3 +1666,117 @@ synchronous reference 27/projection 8, BF16/FP32, fixed 256-row/eight-sequence
 workspaces, 32-slot slot-major KV and lifetime reservation. Timings include
 trace serialization; engine availability and finite offline gaps establish no
 client SLO, online capacity, goodput, async support or default promotion.
+
+## Adaptive prefill: frozen comparison contract
+
+Frozen on 2026-10-22 before implementation, from clean `019419f`. This study
+implements the approved deterministic short-tail admission rule; the current
+five cells are development workloads, not held-out generalization evidence.
+The policy is opt-in, synchronous, prefix-cache enabled, lifetime-reserved and
+mixed-prefill, with fixed 256-row/eight-sequence workspace, zero watermark,
+reference 27/projection 8, BF16 storage/FP32 accumulation and 32-slot slot-major
+KV. Fixed-cap and fitted-cost combinations are rejected. Defaults stay current.
+
+After the ordinary FIFO cache match, let R be prompt length minus matched
+rows, K = ceil((prompt length + declared output limit - 1)/block size) minus
+matched blocks, and A = max(free blocks + reclaimable idle blocks - ordinary
+watermark, 0), protecting the matched blocks. Begin with the current chunk.
+Only for a new admission which already fits (0 < K <= A), choose
+min(current chunk, 32) when exactly one decode is selected, its remaining
+declared output budget before execution is at least two, 33 <= R <= 64,
+a sequence slot would remain after admission (D + 1 < maximum sequences),
+and A - K < K. Otherwise use current scheduling. No positive-hit requirement
+is added. Declared budget is not knowledge of future EOS. Held prefills use
+current scheduling; a reduced first chunk leaves at most 32 rows, needing
+no latch. Capacity for a comparable next request is a heuristic, not a claim
+about the actual next request or optimal scheduling.
+
+The implementation must use the existing admission capacity calculation,
+without speculative evictions, extra cache lookups or mutations of ownership.
+The rule adds at most one prefill submission per affected admission in this
+configuration. Its own mode and trace identity are `engine-prefix-adaptive-v1`;
+it is not the fixed active cap's global mixed-step ceiling.
+
+All twelve cells have a 1,024-token prefix and eight requests arriving at zero.
+Seed and tokenizer-authored text follow the existing literal prefix generator.
+Positive-match requests share the seed's prefix; every private suffix differs
+within its first block, and every nonmatch differs within its first block.
+The generator freezes exact literal IDs and source/tokenizer hashes before
+qualification. Seed, ten warmup steps and cache state are identical for every
+arm; warmup/seed use current scheduling. Only continuation uses the selected
+mode. Natural outputs stop at EOS or the declared limit.
+
+| Role | Matching requests | Blocks | Suffix rows | Output limit | Match order |
+| --- | ---: | ---: | ---: | ---: | --- |
+| known | 4 | 384 | 64 | 16 | first four |
+| known | 8 | 384 | 64 | 16 | all |
+| known | 4 | 40 | 64 | 16 | first four |
+| primary | 8 | 40 | 64 | 16 | all |
+| known | 0 | 384 | 64 | 16 | none |
+| holdout | 8 | 41 | 64 | 16 | all |
+| holdout | 8 | 56 | 64 | 16 | all |
+| holdout | 8 | 36 | 33 | 16 | all |
+| holdout | 8 | 40 | 63 | 16 | all |
+| holdout | 8 | 40 | 65 | 16 | all |
+| holdout | 8 | 40 | 64 | 2 | all |
+| holdout | 4 | 40 | 64 | 16 | even request IDs |
+
+There are four balanced blocks per cell with current, self-current, fixed32
+and adaptive arms. Orders, by arm indices 0/1/2/3, are [0,1,3,2], [1,2,0,3],
+[2,3,1,0], [3,0,2,1]. This is 192 timed calls and 36 unique-policy untimed
+preflights. All preflights and the exact-build numerical checkpoint precede
+any timing. Each native call has a 180-second timeout and collection has a
+two-hour limit. Native failure or invalid evidence stops dependent collection;
+retain attempted records and actual exits. Negative performance results do
+not authorize omitted cells, resampling or threshold changes.
+
+Correctness first requires host boundaries R=32/33/64/65, A=K-1/K/2K-1/2K,
+K=0, no/multiple selected decodes, remaining output budgets one/two, last slot,
+watermarks, protected versus reclaimable idle entries, partial publication,
+stop/abort/fault cleanup and rejected configuration before mutation. Actual
+EngineCore adaptive decisions must run through KV/logit/greedy comparison
+against cold reference execution. Full documented validation precedes clean
+source commit and exact-build numerical qualification.
+
+All arms record new-admission decision inputs, baseline/chosen rows, eligibility,
+application and reason; every step records ordered request IDs, past positions,
+query counts and selected heads. CPU replay verifies the literal predicate,
+full ordered batch inputs/selections, cache admissions/evictions, per-request
+hits, histories, finish reasons, necessary rows/attention and complete drain/
+clear. Known 40-block cells must match fixed32 logically (69 and 115 steps for
+full and half reuse); the three 384-block cells must match current logically
+(23,39,55 steps for full,half,zero reuse), excluding timestamps and diagnostics.
+These are predictions to test, not timing evidence. New holdouts may reveal
+changes in reuse; any across-policy hit/work divergence blocks a like-for-like
+performance claim and is retained as failed qualification evidence.
+
+Completion is earliest scheduled arrival to trace drain. TTFT is scheduled
+arrival to first engine token availability. Gaps are consecutive availability
+events within each request, excluding TTFT. Retain individual histories,
+TTFT, maximum gap, per-run p50/p95/p99/max, counts above 20/50 ms, mixed/decode
+attribution, all step work and schedule/build/execute/postprocess durations,
+seed-to-drain episode and final clear separately. Do not pool repetitions.
+Output-limit-two traces have fewer gaps; retain their actual sample counts.
+Engine availability is not network/client rendering or isolated GPU kernel time.
+
+For each current-relative metric n=max(0.05,max(abs(self-current/current-1)))
+over the four blocks. The primary adaptive/current p95-gap gate requires all
+four ratios below one, median <=0.75 and reduction >n. Every cell's completion
+and p95-TTFT guard passes if median ratio+n<=1.10, fails if median ratio-n>1.10,
+otherwise is inconclusive. Worst gap passes if median<=1+n; fails only when
+all four ratios>1 and median>1+n; otherwise is inconclusive. Missing denominators
+are inconclusive. The buffer is an engineering rule, not a confidence interval.
+Primary success requires its gap and all cost/worst-gap guards; broad study
+success additionally requires all twelve cells' cost/worst-gap guards. Fixed32
+ratios are descriptive: no static32 self-control or formal adaptive/static32
+timing-equivalence claim is present. Other cells' gap outcomes are reported,
+without a universal p95-improvement claim.
+
+Identical fallback schedules do not establish zero elapsed overhead. Large
+self-control noise stays visible and can prevent a guard from passing even
+near ratio one; additional samples do not automatically shrink a maximum-based
+buffer. Do not retune the rule from these holdout results. Any revision needs
+a new contract and study identity. Retain compact raw records, exact source,
+actual validation/qualification exits and guarded source/CPU replay separately
+from native correctness. No default promotion, async support, online capacity,
+goodput, client SLO or arbitrary-input backend proof follows.
