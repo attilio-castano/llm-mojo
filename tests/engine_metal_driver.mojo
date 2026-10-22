@@ -1440,6 +1440,240 @@ def prefix_active_qualification(path: String) raises:
     fault.emit("prefix-active-engine-fault-cache-clear")
 
 
+def _prefix_adaptive_compare(mut runner: QwenRunner, mut cold: QwenRunner,
+                             engine: EngineCore, pool: KVPool, request: Int,
+                             length: Int, head: Int, mut check: FastChecks) raises:
+    """Recompute the actual engine request's submitted history from empty KV."""
+    var sequence = engine.requests[request].sequence
+    check.truth(sequence >= 0,"adaptive numerical probe retains request ownership")
+    check.equal(engine.blocks.length(sequence),length,"adaptive independently counted query extent")
+    var history = List[Int]()
+    for i in range(length):
+        history.append(engine.requests[request].tokens[i])
+    cold.model.reset(cold.ctx)
+    cold.model.logits.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+    cold.model.normalized.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+    var reference = KVPool(cold.ctx,4,32,cold.model.kv_geometry())
+    reference.storage.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+    var expected = _prefix_submit(cold.model,cold.ctx,reference,history,0,[0,1,2,3],head >= 0,check)
+    if head >= 0:
+        check.equal(engine.requests[request].tokens[length],expected[0],"adaptive actual engine natural cold token")
+        _prefix_logits(runner.model,head,cold.model,check)
+    _prefix_pool_equal(pool,engine.blocks.table(sequence),reference,length,"adaptive actual engine cold KV",check)
+    _prefix_written(reference,[[0,1,2,3]],[length],check)
+    _prefix_guards(reference,check)
+    _prefix_head_guards(cold.model,1 if head >= 0 else 0,check)
+
+
+def _prefix_adaptive_probe(mut runner: QwenRunner, mut cold: QwenRunner, remaining: Int,
+                           pressure: Bool, protected_idle: Bool, mut check: FastChecks) raises:
+    runner.model.reset(runner.ctx)
+    var prompt_b = _prefix_ids(0,32+remaining,VOCABULARY)
+    var required = (len(prompt_b)+2+31)//32-1
+    # At the tested admission A=2K-1 is pressure; A=2K falls back. The
+    # protected-idle case has one separate active prefix and an unrelated idle
+    # cache entry, so raw free blocks and reclaimable capacity differ.
+    var blocks = 2*required+(2 if protected_idle or not pressure else 1)
+    var pool = KVPool(runner.ctx,blocks,32,runner.model.kv_geometry())
+    pool.storage.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+    var engine = EngineCore(blocks,32,QUAL_CONTEXT,VOCABULARY,token_budget=256,
+        max_sequences=8,max_requests=8,reserve_lifetime=True,prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity(),observe_prefill_policy=True)
+    if protected_idle:
+        _ = engine.add(100,_prefix_ids(11,33,VOCABULARY),1,List[Int]())
+        _ = _prefix_engine_drain(engine,runner,pool,check)
+    _ = engine.add(0,_prefix_ids(0,33,VOCABULARY),1,List[Int]())
+    _ = _prefix_engine_drain(engine,runner,pool,check)
+    engine.adaptive_prefill = True
+    var prompt_a = _prefix_ids(7 if protected_idle else 0,33,VOCABULARY)
+    var a = engine.add(1,prompt_a,8,List[Int]())
+    var initial = engine.step(runner,pool)
+    check.equal(initial.prefill_tokens,33 if protected_idle else 1,"adaptive first consumer idle rows")
+    var b = engine.add(2,prompt_b,3,List[Int]())
+    var a_length = 33
+    var b_length = 32
+    var iterations = 0
+    var apply = pressure and remaining >= 33 and remaining <= 64
+    var shared = List[UInt16]()
+    if not protected_idle:
+        shared = _prefix_frozen(pool,engine.blocks.table(engine.requests[a].sequence),1)
+    while engine.requests[b].generated == 0:
+        check.truth(iterations < 3,"adaptive numerical probe bounded chunks")
+        runner.model.logits.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+        runner.model.normalized.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+        var submitted = runner.model.submitted_rows
+        var record = engine.step(runner,pool)
+        var count = min(32,remaining) if iterations == 0 and apply else remaining-(b_length-32)
+        a_length += 1
+        b_length += count
+        check.equal(record.decode_seqs,1,"adaptive actual mixed decode count")
+        check.equal(record.prefill_tokens,count,"adaptive actual chosen prefill rows")
+        check.equal(record.total_tokens,1+count,"adaptive actual total query rows")
+        check.equal(record.preempted,0,"adaptive lifetime probe has no replay")
+        check.equal(runner.model.last_route.configuration,DECODER_MIXED,"adaptive actual reference route")
+        check.equal(runner.model.submitted_rows-submitted,(1+count)*LAYERS,"adaptive submitted every checkpoint layer")
+        if iterations == 0:
+            check.equal(len(record.prefill_decisions),1,"adaptive new admission has one decision")
+            var point = record.prefill_decisions[0].copy()
+            check.equal(point.request_id,2,"adaptive decision request identity")
+            check.equal(point.matched_tokens,32,"adaptive decision exact prefix match")
+            check.equal(point.remaining_prompt_tokens,remaining,"adaptive decision remaining prompt")
+            check.equal(point.required_blocks,required,"adaptive decision private lifetime blocks")
+            check.equal(point.available_blocks,2*required-1 if pressure else 2*required,"adaptive decision effective capacity")
+            check.equal(point.selected_decodes,1,"adaptive decision sole decode")
+            check.equal(point.incumbent_request_id,1,"adaptive decision incumbent identity")
+            check.equal(point.incumbent_remaining_outputs,7,"adaptive decision pre-execution output budget")
+            check.equal(point.baseline_tokens,remaining,"adaptive decision baseline rows")
+            check.equal(point.chosen_tokens,count,"adaptive decision chosen rows")
+            check.truth(point.eligible == apply,"adaptive decision literal eligibility")
+            check.truth(point.applied == apply,"adaptive decision application")
+            check.reason(point.reason,"adaptive_short_tail" if apply else
+                         "tail_length" if remaining == 65 else "capacity_headroom")
+            if protected_idle:
+                check.equal(point.free_blocks,2,"adaptive protected-idle raw free capacity")
+                check.equal(point.reclaimable_blocks,1,"adaptive protects its own idle matched block")
+        else:
+            check.equal(len(record.prefill_decisions),0,"adaptive held tail makes no new policy decision")
+        check.equal(len(record.selections),2,"adaptive ordered mixed selections")
+        check.equal(record.selections[0].request_id,1,"adaptive ordered decode request")
+        check.equal(record.selections[0].past,a_length-1,"adaptive decode past")
+        check.equal(record.selections[0].query_tokens,1,"adaptive decode query count")
+        check.equal(record.selections[0].selected_head,0,"adaptive decode absolute selected head")
+        check.equal(record.selections[1].request_id,2,"adaptive ordered prompt request")
+        check.equal(record.selections[1].past,b_length-count,"adaptive prompt past")
+        check.equal(record.selections[1].query_tokens,count,"adaptive prompt query count")
+        var final = b_length == len(prompt_b)
+        check.equal(record.selections[1].selected_head,count if final else -1,"adaptive prompt absolute selected head")
+        check.equal(runner.model.sampled_rows,2 if final else 1,"adaptive partial prompt has exactly one sampled head")
+        _prefix_adaptive_compare(runner,cold,engine,pool,a,a_length,0,check)
+        _prefix_adaptive_compare(runner,cold,engine,pool,b,b_length,1 if final else -1,check)
+        _prefix_head_guards(runner.model,2 if final else 1,check)
+        if not protected_idle:
+            var after = _prefix_frozen(pool,engine.blocks.table(engine.requests[a].sequence),1)
+            for i in range(len(shared)):
+                check.equal(Int(after[i]),Int(shared[i]),"adaptive immutable shared-prefix bytes")
+        engine.check(pool)
+        iterations += 1
+    check.equal(iterations,2 if apply else 1,"adaptive adds at most one submission")
+    engine.abort(1)
+    engine.abort(2)
+    var aborted = engine.step(runner,pool)
+    check.equal(aborted.total_tokens,0,"adaptive numerical-probe abort submits no extra work")
+    check.equal(aborted.aborted,2,"adaptive numerical-probe exactly-once aborts")
+    _prefix_engine_drained(engine,pool,check)
+    _ = engine.clear_cache(pool)
+    _qualification_drained(engine,pool,check)
+
+
+def _prefix_adaptive_terminals(mut runner: QwenRunner, mut cold: QwenRunner,
+                               mut check: FastChecks) raises:
+    runner.model.reset(runner.ctx)
+    var pool = KVPool(runner.ctx,7,32,runner.model.kv_geometry())
+    var engine = EngineCore(7,32,QUAL_CONTEXT,VOCABULARY,token_budget=256,
+        max_sequences=8,max_requests=8,reserve_lifetime=True,prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity(),observe_prefill_policy=True)
+    _ = engine.add(0,_prefix_ids(0,33,VOCABULARY),1,List[Int]())
+    _ = _prefix_engine_drain(engine,runner,pool,check)
+    engine.adaptive_prefill = True
+    var prompt = _prefix_ids(0,96,VOCABULARY)
+    var stop = _prefix_cold_tokens(cold,prompt,1,check)
+    var a = engine.add(1,_prefix_ids(0,33,VOCABULARY),8,List[Int]())
+    _ = engine.step(runner,pool)
+    var b = engine.add(2,prompt,3,stop)
+    var partial = engine.step(runner,pool)
+    check.truth(partial.prefill_decisions[0].applied,"adaptive stop starts with applied admission")
+    check.equal(partial.prefill_tokens,32,"adaptive stop first chunk is partial")
+    check.equal(engine.requests[b].generated,0,"adaptive stop partial prompt has no output")
+    while engine.live() > 0:
+        _ = engine.step(runner,pool)
+    check.equal(engine.requests[b].generated,1,"adaptive stop delivers the natural stop once")
+    check.reason(engine.requests[b].reason,"stop")
+    check.equal(engine.requests[b].tokens[len(prompt)],stop[0],"adaptive exact natural stop token")
+    check.reason(engine.requests[a].reason,"length")
+    _prefix_engine_drained(engine,pool,check)
+    _ = engine.clear_cache(pool)
+    _ = engine.add(3,prompt,0,List[Int]())
+    var zero = engine.step(runner,pool)
+    check.equal(zero.total_tokens,0,"adaptive zero-output request submits no rows")
+    check.equal(len(zero.prefill_decisions),0,"adaptive zero-output request makes no admission decision")
+    _qualification_drained(engine,pool,check)
+
+
+def _prefix_adaptive_fault(mut runner: QwenRunner, mut check: FastChecks) raises:
+    runner.model.reset(runner.ctx)
+    var pool = KVPool(runner.ctx,7,32,runner.model.kv_geometry())
+    var engine = EngineCore(7,32,QUAL_CONTEXT,VOCABULARY,token_budget=256,
+        max_sequences=8,max_requests=8,reserve_lifetime=True,prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity(),observe_prefill_policy=True)
+    _ = engine.add(0,_prefix_ids(0,33,VOCABULARY),1,List[Int]())
+    _ = _prefix_engine_drain(engine,runner,pool,check)
+    engine.adaptive_prefill = True
+    var a = engine.add(1,_prefix_ids(0,33,VOCABULARY),8,List[Int]())
+    _ = engine.step(runner,pool)
+    var history = engine.requests[a].tokens.copy()
+    var prompt = _prefix_ids(0,96,VOCABULARY)
+    var b = engine.add(2,prompt,3,List[Int]())
+    var poisoned = 0 if history[len(history)-1] != 0 else 15
+    for i in range(32,64):
+        check.truth(poisoned != prompt[i],"adaptive fault row absent from prompt input")
+    var saved: UInt16
+    with runner.model.embedding.map_to_host() as mapped:
+        saved = bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=poisoned*HIDDEN])
+        mapped.unsafe_ptr()[unsafe_offset=poisoned*HIDDEN] = bitcast[DType.bfloat16](UInt16(0x7FC0))
+    var submitted = runner.model.submitted_rows
+    with assert_raises(contains="nonfinite"):
+        _ = engine.step(runner,pool)
+    check.checked += 1
+    check.equal(runner.model.submitted_rows-submitted,33*LAYERS,"adaptive fault used capped actual mixed rows")
+    check.equal(runner.model.sampled_rows,1,"adaptive fault partial prompt has no selected head")
+    check.truth(engine.failed,"adaptive fault invalidated engine")
+    check.truth(not runner.model.valid,"adaptive fault invalidated model")
+    check.equal(engine.cached_blocks(),0,"adaptive fault invalidated cache")
+    check.equal(len(engine.failure_events),2,"adaptive fault exactly-once terminal census")
+    for event in engine.failure_events:
+        check.reason(event.reason,"error")
+        check.equal(event.generated_tokens,1 if event.request_id == 1 else 0,"adaptive fault preserves delivered counts")
+    for i in range(len(history)):
+        check.equal(engine.requests[a].tokens[i],history[i],"adaptive fault preserves delivered history")
+    check.equal(engine.requests[b].generated,0,"adaptive fault has no partial-prompt output")
+    _qualification_drained(engine,pool,check)
+    _ = engine.clear_cache(pool)
+    with assert_raises():
+        _ = engine.step(runner,pool)
+    check.checked += 1
+    check.equal(runner.model.submitted_rows,submitted+33*LAYERS,"adaptive failed engine enqueues no further work")
+    with runner.model.embedding.map_to_host() as mapped:
+        mapped.unsafe_ptr()[unsafe_offset=poisoned*HIDDEN] = bitcast[DType.bfloat16](saved)
+
+
+def prefix_adaptive_qualification(path: String) raises:
+    var runner = QwenRunner(path,MAX_CONTEXT,QUAL_ROWS,QUAL_SEQUENCES)
+    var cold = QwenRunner(path,MAX_CONTEXT,QUAL_ROWS,QUAL_SEQUENCES)
+    assert_equal(runner.ctx.name(),"Apple M4 Pro")
+    assert_equal(runner.ctx.api(),"metal")
+    assert_equal(cold.ctx.name(),runner.ctx.name())
+    assert_equal(cold.ctx.api(),runner.ctx.api())
+    assert_equal(runner.model.kv_geometry().layers,LAYERS)
+    print("device",runner.ctx.name()+"/"+runner.ctx.api())
+    print("qualification","engine-prefix-adaptive-reference27-v1")
+    print("configuration",DECODER_MIXED,"projection",DECODE_PROJECTION,"dtype","BF16/FP32","block-size",32)
+    var mixed = FastChecks()
+    var partial = FastChecks()
+    prefix_active_model_qualification(runner.model,runner.ctx,cold.model,cold.ctx,VOCABULARY,mixed,partial)
+    mixed.emit("prefix-adaptive-mixed-kv-logits-greedy-cold-recompute")
+    partial.emit("prefix-adaptive-zero-head-partial")
+    var decisions = FastChecks()
+    for remaining in [33,63,64,65]:
+        for pressure in [True,False]:
+            _prefix_adaptive_probe(runner,cold,remaining,pressure,False,decisions)
+    _prefix_adaptive_probe(runner,cold,33,True,True,decisions)
+    decisions.emit("prefix-adaptive-engine-decisions-kv-logits-greedy")
+    var terminals = FastChecks()
+    _prefix_adaptive_terminals(runner,cold,terminals)
+    _prefix_adaptive_fault(runner,terminals)
+    terminals.emit("prefix-adaptive-engine-terminal-fault-cache-clear")
+
+
 def prefix_history_qualification(path: String, fixture_path: String) raises:
     """Replay frozen independently supplied natural histories through the cache.
 
@@ -1566,6 +1800,8 @@ def main() raises:
         prefix_cache_qualification(args[1])
     elif len(args) == 3 and args[2] == "prefix-active-qualification":
         prefix_active_qualification(args[1])
+    elif len(args) == 3 and args[2] == "prefix-adaptive-qualification":
+        prefix_adaptive_qualification(args[1])
     elif len(args) == 4 and args[2] == "prefix-history-qualification":
         prefix_history_qualification(args[1],args[3])
     elif len(args) == 4 and args[2] == "fast-qualification":

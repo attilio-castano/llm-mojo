@@ -472,7 +472,7 @@ def emit_prefix_event(event: PrefixCacheEvent, step_id: Int):
           event.salt if event.salt.byte_length() > 0 else "-",tokens)
 
 
-def emit_prefix(record: EngineStep, engine: EngineCore):
+def emit_prefix(record: EngineStep, engine: EngineCore, observe_policy: Bool = False):
     emit(record)
     print("prefix_step",record.step_id,record.cache_hit_tokens,record.cache_lookup_ns,
           record.cache_publish_ns,record.cache_admission_ns)
@@ -483,6 +483,17 @@ def emit_prefix(record: EngineStep, engine: EngineCore):
         emit_prefix_event(event,record.step_id)
     print("cache_state",record.step_id,engine.blocks.free_blocks(),engine.cached_blocks(),
           engine.cache_references(),engine.private_blocks())
+    if observe_policy:
+        for point in record.prefill_decisions:
+            print("prefill_decision",record.step_id,point.request_id,point.prompt_length,
+                  point.maximum_outputs,point.matched_tokens,point.free_blocks,point.reclaimable_blocks,
+                  point.watermark_blocks,point.available_blocks,point.required_blocks,point.selected_decodes,
+                  point.incumbent_request_id,point.incumbent_remaining_outputs,point.remaining_prompt_tokens,
+                  point.row_budget,point.max_sequences,point.baseline_tokens,point.chosen_tokens,
+                  1 if point.eligible else 0,1 if point.applied else 0,point.reason)
+        for i in range(len(record.selections)):
+            var point = record.selections[i].copy()
+            print("batch_selection",record.step_id,i,point.request_id,point.past,point.query_tokens,point.selected_head)
 
 
 def prefix_drain(engine: EngineCore, kv: KVPool, requests: Int, steps: Int, elapsed: Int) raises:
@@ -497,7 +508,8 @@ def prefix_drain(engine: EngineCore, kv: KVPool, requests: Int, steps: Int, elap
 
 def run_prefix_trace(mut runner: TraceMetal, mut kv: KVPool, requests: List[TraceRequest],
                      seed: TraceRequest, cache_mode: String, active_study: Bool = False,
-                     active_prefill_cap: Int = 0) raises:
+                     active_prefill_cap: Int = 0, adaptive_study: Bool = False,
+                     prefill_policy: String = "current") raises:
     var identity = runner.prefix_cache_identity()
     if identity.byte_length() == 0 or len(identity.split()) != 1:
         raise Error("prefix benchmark requires a token-safe qualified runner namespace")
@@ -508,13 +520,17 @@ def run_prefix_trace(mut runner: TraceMetal, mut kv: KVPool, requests: List[Trac
         _ = warm.step(runner,kv)
     warm.check(kv)
     var engine = EngineCore(kv.blocks,32,4096,VOCABULARY,256,8,128,0,True,
-                           reserve_lifetime=True,prefix_caching=True,prefix_namespace=identity)
+                           reserve_lifetime=True,prefix_caching=True,prefix_namespace=identity,
+                           observe_prefill_policy=adaptive_study)
     print("mode","greedy")
     print("config","chunked",kv.blocks,256,8)
     print("admission","reserved")
-    print("study","engine-prefix-active-v1" if active_study else "engine-prefix-v1")
+    print("study","engine-prefix-adaptive-v1" if adaptive_study else
+          "engine-prefix-active-v1" if active_study else "engine-prefix-v1")
     if active_study:
         print("active_prefill_cap",active_prefill_cap)
+    if adaptive_study:
+        print("prefill_policy",prefill_policy)
     print("work_capacity",256,8)
     print("cache",cache_mode)
     print("namespace",identity)
@@ -528,7 +544,7 @@ def run_prefix_trace(mut runner: TraceMetal, mut kv: KVPool, requests: List[Trac
     var seed_steps = 0
     while engine.live() > 0:
         var record = engine.step(runner,kv)
-        emit_prefix(record,engine)
+        emit_prefix(record,engine,adaptive_study)
         seed_steps += 1
     prefix_drain(engine,kv,1,seed_steps,runner.now_ns())
     print("phase_time","seed",phase_begin,Int(now()))
@@ -541,7 +557,8 @@ def run_prefix_trace(mut runner: TraceMetal, mut kv: KVPool, requests: List[Trac
         engine.prefix_caching = False
     # Both the ordinary warmup and the reusable seed use cap zero in every arm.
     # Only the measured continuation varies its mixed-step prefill limit.
-    engine.active_prefill_cap = active_prefill_cap
+    engine.active_prefill_cap = 32 if adaptive_study and prefill_policy == "fixed32" else active_prefill_cap
+    engine.adaptive_prefill = adaptive_study and prefill_policy == "adaptive"
     print("phase_time","handoff",phase_begin,Int(now()))
     print("phase","measure")
     phase_begin = Int(now())
@@ -553,7 +570,7 @@ def run_prefix_trace(mut runner: TraceMetal, mut kv: KVPool, requests: List[Trac
     var steps = 0
     while engine.live() > 0:
         var record = engine.step(runner,kv)
-        emit_prefix(record,engine)
+        emit_prefix(record,engine,adaptive_study)
         steps += 1
         if steps > 1000000:
             raise Error("bounded prefix trace did not drain")
@@ -596,6 +613,7 @@ def main() raises:
     var runner_kind = "reference"
     var runner_explicit = False
     var active_prefill_cap = 0
+    var prefill_policy = "current"
     if arm == "adaptive":
         if len(args) < 10 or mode != "greedy":
             raise Error("adaptive trace requires Metal and a frozen cost policy")
@@ -624,24 +642,33 @@ def main() raises:
             runner_kind = args[11]
             runner_explicit = True
         if len(args) == 13:
-            active_prefill_cap = Int(args[12])
+            if selector == "engine-prefix-adaptive-v1":
+                prefill_policy = args[12]
+            else:
+                active_prefill_cap = Int(args[12])
     if selector_explicit:
         if (selector != "admission-range-v1" and selector != "engine-budget-v1"
                 and selector != "engine-fast-v1" and selector != "engine-async-v1"
-                and selector != "engine-prefix-v1" and selector != "engine-prefix-active-v1"):
+                and selector != "engine-prefix-v1" and selector != "engine-prefix-active-v1"
+                and selector != "engine-prefix-adaptive-v1"):
             raise Error("invalid trace study selector")
         observe_kv = selector == "admission-range-v1"
     var budget_study = selector == "engine-budget-v1"
     var fast_study = selector == "engine-fast-v1"
     var async_study = selector == "engine-async-v1"
     var active_study = selector == "engine-prefix-active-v1"
-    var prefix_study = selector == "engine-prefix-v1" or active_study
-    if arm != "adaptive" and len(args) == 13 and not active_study:
+    var adaptive_study = selector == "engine-prefix-adaptive-v1"
+    var prefix_study = selector == "engine-prefix-v1" or active_study or adaptive_study
+    if arm != "adaptive" and len(args) == 13 and not (active_study or adaptive_study):
         raise Error("a trailing active prefill cap belongs only to engine-prefix-active-v1")
     if active_study and (arm == "adaptive" or len(args) != 13
                          or runner_kind != "enabled"
                          or (active_prefill_cap != 0 and active_prefill_cap != 16 and active_prefill_cap != 32)):
         raise Error("engine-prefix-active-v1 requires enabled cache and an explicit 0|32|16 cap")
+    if adaptive_study and (arm == "adaptive" or len(args) != 13 or runner_kind != "enabled"
+                           or (prefill_policy != "current" and prefill_policy != "fixed32"
+                               and prefill_policy != "adaptive")):
+        raise Error("engine-prefix-adaptive-v1 requires enabled cache and current|fixed32|adaptive")
     if runner_explicit and not ((fast_study and (runner_kind == "reference" or runner_kind == "fast-decode"))
                                or (async_study and (runner_kind == "sync" or runner_kind == "async"))
                                or (prefix_study and (runner_kind == "enabled" or runner_kind == "disabled"))):
@@ -653,7 +680,9 @@ def main() raises:
         raise Error("engine-async-v1 requires fixed256/eight slots, reserved admission, greedy and sync|async")
     if prefix_study and (not runner_explicit or mode != "greedy" or arm != "chunked"
                          or budget != 256 or sequences != 8 or warmup != 10
-                         or not admission_explicit or admission != "reserved" or (blocks != 40 and blocks != 384)):
+                         or not admission_explicit or admission != "reserved"
+                         or (blocks != 40 and blocks != 384 and not
+                             (adaptive_study and (blocks == 36 or blocks == 41 or blocks == 56)))):
         raise Error("engine-prefix-v1 requires fixed256/eight slots, reserved, ten warmups and declared pool")
     if budget_study or fast_study:
         if (not admission_explicit or sequences != 8
@@ -714,7 +743,8 @@ def main() raises:
         var runner = TraceMetal(QwenRunner(args[1],4096,256,8))
         var kv = KVPool(runner.inner.ctx,blocks,32,runner.inner.model.kv_geometry())
         print("device",runner.inner.ctx.name()+"/"+runner.inner.ctx.api())
-        run_prefix_trace(runner,kv,requests,seed,runner_kind,active_study,active_prefill_cap)
+        run_prefix_trace(runner,kv,requests,seed,runner_kind,active_study,active_prefill_cap,
+                         adaptive_study,prefill_policy)
     elif async_study:
         print("mode",mode)
         if runner_kind == "sync":

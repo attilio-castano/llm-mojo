@@ -445,6 +445,26 @@ ENGINE_PREFIX_ACTIVE_DECLARATION = dict(
         decision='Primary hypothesis uses the primary cell only; broad_guard_pass additionally requires cost/worst-gap guards in all five cells. Promotion remains false.'),
     gap_thresholds_ns=[20_000_000, 50_000_000],
 )
+ENGINE_PREFIX_ADAPTIVE_STUDY = 'engine-prefix-adaptive-v1'
+ENGINE_PREFIX_ADAPTIVE_CELLS = [
+    [4,384,64,16,'first'], [8,384,64,16,'first'], [4,40,64,16,'first'],
+    [8,40,64,16,'first'], [0,384,64,16,'first'], [8,41,64,16,'first'],
+    [8,56,64,16,'first'], [8,36,33,16,'first'], [8,40,63,16,'first'],
+    [8,40,65,16,'first'], [8,40,64,2,'first'], [4,40,64,16,'even'],
+]
+ENGINE_PREFIX_ADAPTIVE_DECLARATION = dict(
+    {k:v for k,v in ENGINE_PREFIX_ACTIVE_DECLARATION.items() if k not in ('primary_blocks','pressure_cells')},
+    kind='qwen-engine-prefix-adaptive-v1',study=ENGINE_PREFIX_ADAPTIVE_STUDY,
+    grid=['current','self-current','fixed32','adaptive'],measured_runs=192,untimed_preflights=36,
+    cells=ENGINE_PREFIX_ADAPTIVE_CELLS,active_prefill_caps=[0,32],suffix_tokens=[33,63,64,65],max_new_tokens=[2,16],
+    cap_boundary='Measured continuation only; adaptive cap applies only to an eligible new FIFO admission after cache match. Held prefill remains baseline. Fixed32 is the separate static mixed-prefill arm.',
+    policy='New FIFO admission only after ordinary cache match; 0<K<=A, D==1, incumbent declared remaining outputs>=2, 33<=R<=64, D+1<max_sequences, A-K<K. Choose min(baseline,32), otherwise baseline. Held prefill remains baseline.',
+    observation='Ordered selections and every attempted new-admission decision, including blocked attempts; no fitted budget.',
+    usefulness=dict({k:v for k,v in ENGINE_PREFIX_ACTIVE_DECLARATION['usefulness'].items() if k not in ('primary_cap','exploratory_caps')},
+        primary_cell='prefix-1024-reuse-8-blocks-40-suffix-64-out-16-first',
+        primary_policy='adaptive',fixed32_comparison='descriptive; no static32 self-control or timing-equivalence gate',
+        decision='Primary uses its adaptive/current gap and guards; broad success additionally requires cost/worst-gap guards for all twelve cells. Exact fallback scheduling is independent of elapsed overhead. Promotion remains false.'),
+)
 ENGINE_STEP_FIELDS = (
     'step_id', 'decode_seqs', 'prefill_seqs', 'prefill_tokens', 'total_tokens',
     'attended_positions', 'admitted', 'preempted', 'finished', 'aborted',

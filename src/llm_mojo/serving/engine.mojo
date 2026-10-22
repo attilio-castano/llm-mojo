@@ -198,6 +198,39 @@ struct EngineAsyncResult(Copyable, Movable):
     var observed_ns: Int
 
 
+@fieldwise_init
+struct EnginePrefillDecision(Copyable, Movable):
+    """Inputs to one ordinary FIFO new-admission decision, before mutation."""
+    var request_id: Int
+    var prompt_length: Int
+    var maximum_outputs: Int
+    var matched_tokens: Int
+    var free_blocks: Int
+    var reclaimable_blocks: Int
+    var watermark_blocks: Int
+    var available_blocks: Int
+    var required_blocks: Int
+    var selected_decodes: Int
+    var incumbent_request_id: Int
+    var incumbent_remaining_outputs: Int
+    var remaining_prompt_tokens: Int
+    var row_budget: Int
+    var max_sequences: Int
+    var baseline_tokens: Int
+    var chosen_tokens: Int
+    var eligible: Bool
+    var applied: Bool
+    var reason: String
+
+
+@fieldwise_init
+struct EngineSelectedRequest(Copyable, Movable):
+    var request_id: Int
+    var past: Int
+    var query_tokens: Int
+    var selected_head: Int
+
+
 struct EngineStep(Copyable, Movable):
     var step_id: Int
     var decode_seqs: Int
@@ -243,6 +276,8 @@ struct EngineStep(Copyable, Movable):
     var cache_lookup_ns: Int
     var cache_publish_ns: Int
     var cache_admission_ns: Int
+    var prefill_decisions: List[EnginePrefillDecision]
+    var selections: List[EngineSelectedRequest]
 
     def __init__(out self, step_id: Int, capacity: Int, observe_kv: Bool = False,
                  async_step: Bool = False):
@@ -290,6 +325,8 @@ struct EngineStep(Copyable, Movable):
         self.cache_lookup_ns = 0
         self.cache_publish_ns = 0
         self.cache_admission_ns = 0
+        self.prefill_decisions = List[EnginePrefillDecision]()
+        self.selections = List[EngineSelectedRequest]()
 
 
 @fieldwise_init
@@ -328,6 +365,8 @@ struct EngineCore(Movable):
     var watermark_blocks: Int
     var mixed_prefill: Bool
     var active_prefill_cap: Int
+    var adaptive_prefill: Bool
+    var observe_prefill_policy: Bool
     var reserve_lifetime: Bool
     var observe_kv: Bool
     var cost_policy: StepCost
@@ -349,12 +388,15 @@ struct EngineCore(Movable):
                  watermark_blocks: Int = 0, mixed_prefill: Bool = True,
                  reserve_lifetime: Bool = False, observe_kv: Bool = False,
                  prefix_caching: Bool = False, prefix_namespace: String = "",
-                 active_prefill_cap: Int = 0) raises:
+                 active_prefill_cap: Int = 0, adaptive_prefill: Bool = False,
+                 observe_prefill_policy: Bool = False) raises:
         if (blocks < 1 or block_size < 1 or max_context < 1 or max_context > 4096 or vocabulary < 1
                 or token_budget < 1 or token_budget > 4096 or max_sequences < 1 or max_sequences > 64
                 or max_requests < 1 or watermark_blocks < 0 or watermark_blocks > blocks
                 or active_prefill_cap < 0 or active_prefill_cap > 4096
-                or (prefix_caching and (block_size != 32 or prefix_namespace.byte_length() == 0))):
+                or (prefix_caching and (block_size != 32 or prefix_namespace.byte_length() == 0))
+                or (adaptive_prefill and (not prefix_caching or not mixed_prefill
+                    or not reserve_lifetime or active_prefill_cap != 0))):
             raise Error("invalid bounded engine configuration")
         self.blocks = BlockManager(blocks, block_size, max_context)
         self.requests = List[EngineRequest](capacity=max_requests)
@@ -366,6 +408,8 @@ struct EngineCore(Movable):
         self.watermark_blocks = watermark_blocks
         self.mixed_prefill = mixed_prefill
         self.active_prefill_cap = active_prefill_cap
+        self.adaptive_prefill = adaptive_prefill
+        self.observe_prefill_policy = observe_prefill_policy
         self.reserve_lifetime = reserve_lifetime
         self.observe_kv = observe_kv
         self.cost_policy = StepCost(0, 0, 0, 0, 0)
@@ -414,6 +458,8 @@ struct EngineCore(Movable):
 
     def set_cost_policy(mut self, policy: StepCost) raises:
         """Enable a frozen cost model only after validating all its fields."""
+        if self.adaptive_prefill:
+            raise Error("adaptive prefill requires fixed row budgeting")
         policy.validate()
         if self.failed:
             raise Error("a failed engine cannot change policy")
@@ -600,6 +646,53 @@ struct EngineCore(Movable):
         # progress even when fixed cost alone exceeds the research target.
         return max(best, 1) if decodes == 0 else best
 
+    def _admission_prefill_count(self, index: Int, budget: Int, selected: List[Int],
+                                past: Int, free: Int, reclaimable: Int, watermark: Int,
+                                available: Int, required: Int, count: Int,
+                                mut record: EngineStep) -> Int:
+        """Choose only a new admission's first chunk; held work needs no latch."""
+        var remaining = self.requests[index].prompt_length - past
+        var baseline = min(budget, remaining)
+        var incumbent = -1
+        var incumbent_remaining = -1
+        if len(selected) == 1:
+            incumbent = self.requests[selected[0]].request_id
+            incumbent_remaining = self.requests[selected[0]].maximum - self.requests[selected[0]].generated
+        var reason = String("adaptive_short_tail")
+        if required > available:
+            reason = "admission_blocked"
+        elif required <= 0:
+            reason = "no_private_blocks"
+        elif len(selected) != 1:
+            reason = "decode_count"
+        elif incumbent_remaining < 2:
+            reason = "incumbent_terminal"
+        elif remaining < 33 or remaining > 64:
+            reason = "tail_length"
+        elif len(selected) + 1 >= self.max_sequences:
+            reason = "last_sequence_slot"
+        elif available - required >= required:
+            reason = "capacity_headroom"
+        var eligible = reason == "adaptive_short_tail"
+        var chosen = 0 if required > available else count
+        var applied = False
+        if eligible:
+            if not self.adaptive_prefill:
+                reason = "adaptive_disabled"
+            elif baseline <= 32:
+                reason = "baseline_at_most_32"
+            else:
+                chosen = min(count, 32)
+                applied = chosen < baseline
+        if self.observe_prefill_policy:
+            record.prefill_decisions.append(EnginePrefillDecision(
+                self.requests[index].request_id, self.requests[index].prompt_length,
+                self.requests[index].maximum, past, free, reclaimable, watermark,
+                available, required, len(selected), incumbent, incumbent_remaining,
+                remaining, budget, self.max_sequences, baseline, chosen,
+                eligible, applied, reason))
+        return chosen
+
     def _schedule_prefill[Runner: EngineClock](mut self, budget: Int, mut selected: List[Int], mut counts: List[Int],
                           mut runner: Runner, mut kv: KVPool, mut record: EngineStep) raises -> Bool:
         if budget < 1 or len(selected) == self.max_sequences:
@@ -629,11 +722,16 @@ struct EngineCore(Movable):
                     count = self._prefill_count(index, budget, selected, record, past)
                     var residents = self._has_resident() if self.reserve_lifetime else len(selected) > 0
                     var watermark = self.watermark_blocks if residents else 0
-                    var available = max(self.blocks.free_blocks()
-                        + self.prefix_cache.reclaimable(self.blocks, cached) - watermark, 0)
+                    var free = self.blocks.free_blocks()
+                    var reclaimable = self.prefix_cache.reclaimable(self.blocks, cached)
+                    var available = max(free + reclaimable - watermark, 0)
                     var extent = self._peak_extent(index) if self.reserve_lifetime else past + count
                     if self.reserve_lifetime:
-                        if ceildiv(extent, self.blocks.block_size) - len(cached) > available:
+                        var required = ceildiv(extent, self.blocks.block_size) - len(cached)
+                        if self.adaptive_prefill or self.observe_prefill_policy:
+                            count = self._admission_prefill_count(index, budget, selected, past,
+                                free, reclaimable, watermark, available, required, count, record)
+                        if required > available:
                             return False
                     else:
                         count = min(count, available * self.blocks.block_size)
@@ -1036,7 +1134,7 @@ struct EngineCore(Movable):
         ticket, then a later call can safely preempt/replay through the common
         scheduler. Lifetime reservations keep the normal pipeline resident.
         """
-        if self.active_prefill_cap != 0:
+        if self.active_prefill_cap != 0 or self.adaptive_prefill:
             raise Error("active prefill caps require synchronous stepping")
         if (self.failed or self.prefix_caching or self.cached_blocks() > 0
                 or kv.blocks != self.blocks.blocks or kv.block_size != self.blocks.block_size):
@@ -1134,6 +1232,9 @@ struct EngineCore(Movable):
             reserved_tokens, waiting, residents))
 
     def step[Runner: ModelRunner](mut self, mut runner: Runner, mut kv: KVPool) raises -> EngineStep:
+        if self.adaptive_prefill and (not self.prefix_caching or not self.mixed_prefill
+                or not self.reserve_lifetime or self.active_prefill_cap != 0 or self.cost_policy_enabled):
+            raise Error("adaptive prefill requires prefix caching, mixed lifetime reservations and fixed row budgeting")
         if self.failed or self.async_enabled or kv.blocks != self.blocks.blocks or kv.block_size != self.blocks.block_size:
             raise Error("failed engine or incompatible pool")
         if not self.prefix_caching and self.cached_blocks() > 0:
@@ -1175,6 +1276,10 @@ struct EngineCore(Movable):
             for s in range(len(selected)):
                 var past = batch.positions[batch.query_start[s]]
                 record.attended_positions += counts[s] * past + counts[s] * (counts[s] + 1) // 2
+                if self.observe_prefill_policy:
+                    var head = batch.logits_rows[input.sample_indices[s]] if input.sample_indices[s] >= 0 else -1
+                    record.selections.append(EngineSelectedRequest(
+                        self.requests[selected[s]].request_id, past, counts[s], head))
             if self.cost_policy_enabled:
                 var partitions = (1 if batch.decode_count > 0 else 0) + (1 if batch.rows() > batch.decode_count else 0)
                 record.predicted_ns = self.cost_policy.estimate(batch.rows(), record.attended_positions,

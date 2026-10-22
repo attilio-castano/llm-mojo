@@ -27,6 +27,15 @@ CHECKPOINT_GROUPS = ('prefix-chunk-schedule-kv-logits-greedy',
 CELL_CONFIGS = tuple((length, reuse, 384) for length in (256, 1024) for reuse in (0, 4, 8)) + ((1024, 4, 40), (1024, 8, 40))
 ACTIVE_CELL_CONFIGS = ((1024, 4, 384), (1024, 8, 384), (1024, 4, 40), (1024, 8, 40), (1024, 0, 384))
 ACTIVE_CAPS = (0, 32, 16)
+ADAPTIVE_MODES = ('current','fixed32','adaptive')
+ADAPTIVE_CHECKPOINT_IDENTITY = 'engine-prefix-adaptive-reference27-v1'
+ADAPTIVE_CHECKPOINT_GROUPS = ('prefix-adaptive-mixed-kv-logits-greedy-cold-recompute',
+    'prefix-adaptive-zero-head-partial','prefix-adaptive-engine-decisions-kv-logits-greedy',
+    'prefix-adaptive-engine-terminal-fault-cache-clear')
+DECISION_FIELDS = ('request_id','prompt_length','maximum_outputs','matched_tokens','free_blocks',
+    'reclaimable_blocks','watermark_blocks','available_blocks','required_blocks','selected_decodes',
+    'incumbent_request_id','incumbent_remaining_outputs','remaining_prompt_tokens','row_budget',
+    'max_sequences','baseline_tokens','chosen_tokens')
 # A separate native identity preserves the original checkpoint coverage scope.
 ACTIVE_CHECKPOINT_IDENTITY = 'engine-prefix-active-reference27-v1'
 ACTIVE_CHECKPOINT_GROUPS = ('prefix-active-mixed-kv-logits-greedy-cold-recompute',
@@ -71,12 +80,27 @@ def active_cells(block):
     return [arms[i] for i in contract.ENGINE_PREFIX_ACTIVE_DECLARATION['balanced_orders'][block]]
 
 
-def _declaration(active):
-    return contract.ENGINE_PREFIX_ACTIVE_DECLARATION if active else contract.ENGINE_PREFIX_DECLARATION
+def _declaration(active=False,adaptive=False):
+    return contract.ENGINE_PREFIX_ADAPTIVE_DECLARATION if adaptive else contract.ENGINE_PREFIX_ACTIVE_DECLARATION if active else contract.ENGINE_PREFIX_DECLARATION
 
 
 def _active(record):
     return record.get('kind') == contract.ENGINE_PREFIX_ACTIVE_DECLARATION['kind']
+
+
+def _adaptive(record):
+    return record.get('kind') == contract.ENGINE_PREFIX_ADAPTIVE_DECLARATION['kind']
+
+
+def adaptive_cells(block):
+    if type(block) is not int or block not in range(4): raise ValueError('adaptive block must be 0..3')
+    arms=[('current',False),('current',True),('fixed32',False),('adaptive',False)]
+    return [arms[i] for i in contract.ENGINE_PREFIX_ADAPTIVE_DECLARATION['balanced_orders'][block]]
+
+
+def _cell_name(trace,adaptive=False):
+    p=trace['prefix']; name=cell_id(p['tokens'],p['reuse_requests'],p['blocks'])
+    return name+f"-suffix-{p['suffix_tokens']}-out-{p['max_new_tokens']}-{p['match_order']}" if adaptive else name
 
 
 def cell_id(length, reuse, blocks):
@@ -88,12 +112,16 @@ def _request(identifier, ids, maximum=16):
                 max_new_tokens=maximum, stop_ids=[151643, 151645], abort_offset_ns=None, output_script=None)
 
 
-def validate_trace(trace):
+def validate_trace(trace,adaptive_prefill=False):
     profile.validate_engine_trace(trace)
     prefix = trace.get('prefix', {})
     length, reuse, blocks = (prefix.get(k) for k in ('tokens', 'reuse_requests', 'blocks'))
-    if ((length, reuse, blocks) not in CELL_CONFIGS
-            or any(type(v) is not int for v in (length, reuse, blocks))
+    config=[reuse,blocks,prefix.get('suffix_tokens'),prefix.get('max_new_tokens'),prefix.get('match_order')]
+    valid=config in contract.ENGINE_PREFIX_ADAPTIVE_CELLS and length==1024 if adaptive_prefill else (length,reuse,blocks) in CELL_CONFIGS
+    suffix=prefix['suffix_tokens'] if adaptive_prefill else 64
+    maximum=prefix['max_new_tokens'] if adaptive_prefill else 16
+    if (not valid
+            or any(type(v) is not int for v in ((length,reuse,blocks,suffix,maximum) if adaptive_prefill else (length,reuse,blocks)))
             or trace.get('mode') != 'offline' or prefix.get('salt') != SALT
             or len(trace['requests']) != 8):
         raise ValueError('prefix trace differs from frozen cell declaration')
@@ -107,16 +135,17 @@ def validate_trace(trace):
     tails, first_blocks = set(), set()
     for i, request in enumerate(trace['requests']):
         ids = request['prompt_ids']
-        if (request['request_id'] != i or len(ids) != length + 64
-                or request['max_new_tokens'] != 16 or request['stop_ids'] != [151643, 151645]
+        matching=i%2==0 if adaptive_prefill and prefix['match_order']=='even' else i<reuse
+        if (request['request_id'] != i or len(ids) != length + suffix
+                or request['max_new_tokens'] != maximum or request['stop_ids'] != [151643, 151645]
                 or request['arrival_offset_ns'] != 0 or request['abort_offset_ns'] is not None
-                or (ids[:length] == common) != (i < reuse)):
+                or (ids[:length] == common) != matching):
             raise ValueError('prefix request length, order or intended reuse changed')
         tail = tuple(ids[length:length+32])
         if tail in tails:
             raise ValueError('private suffixes must differ within their first full block')
         tails.add(tail)
-        if i >= reuse:
+        if not matching:
             first = tuple(ids[:32])
             if first == tuple(common[:32]) or first in first_blocks:
                 raise ValueError('nonmatching prefixes must differ within first full block')
@@ -124,9 +153,9 @@ def validate_trace(trace):
     return trace
 
 
-def validate_campaign(campaign, active_prefill=False):
-    configs = ACTIVE_CELL_CONFIGS if active_prefill else CELL_CONFIGS
-    kind = 'engine-prefix-active-campaign-v1' if active_prefill else 'engine-prefix-campaign-v1'
+def validate_campaign(campaign, active_prefill=False,adaptive_prefill=False):
+    configs = contract.ENGINE_PREFIX_ADAPTIVE_CELLS if adaptive_prefill else ACTIVE_CELL_CONFIGS if active_prefill else CELL_CONFIGS
+    kind = 'engine-prefix-adaptive-campaign-v1' if adaptive_prefill else 'engine-prefix-active-campaign-v1' if active_prefill else 'engine-prefix-campaign-v1'
     if (campaign.get('kind') != kind or type(campaign.get('schema_version')) is not int or campaign['schema_version'] != 1
             or campaign.get('source_text') != SOURCE_TEXT
             or campaign.get('source_text_sha256') != _hash(SOURCE_TEXT)
@@ -139,13 +168,14 @@ def validate_campaign(campaign, active_prefill=False):
     if len(traces) != len(configs):
         raise ValueError('prefix campaign must contain its complete frozen cells')
     for trace, expected in zip(traces, configs):
-        validate_trace(trace)
-        if tuple(trace['prefix'][k] for k in ('tokens', 'reuse_requests', 'blocks')) != expected:
+        validate_trace(trace,adaptive_prefill)
+        observed=[trace['prefix'][k] for k in ('reuse_requests','blocks','suffix_tokens','max_new_tokens','match_order')] if adaptive_prefill else tuple(trace['prefix'][k] for k in ('tokens','reuse_requests','blocks'))
+        if observed != expected:
             raise ValueError('prefix campaign cells reordered or duplicated')
     return campaign
 
 
-def specification(output, active_prefill=False):
+def specification(output, active_prefill=False,adaptive_prefill=False):
     """Tokenize owned text once with the verified native tokenizer, then freeze IDs."""
     from ..models.qwen2.tokenizer_assets import ensure_binary, ensure_prepared
     if output.exists():
@@ -164,28 +194,31 @@ def specification(output, active_prefill=False):
         return ids
     common = encode(SOURCE_TEXT * 32)
     variants = [encode(f'Independent engineering case {i}.\n' + SOURCE_TEXT * 32) for i in range(8)]
-    suffixes = [encode(f'Question {i}: explain request {i} in detail.\n' + SOURCE_TEXT * 4)[:64] for i in range(8)]
-    if min(map(len, [common, *variants])) < 1025 or any(len(t) != 64 for t in suffixes):
+    suffix_length=65 if adaptive_prefill else 64
+    suffixes = [encode(f'Question {i}: explain request {i} in detail.\n' + SOURCE_TEXT * 4)[:suffix_length] for i in range(8)]
+    if min(map(len, [common, *variants])) < 1025 or any(len(t) != suffix_length for t in suffixes):
         raise ValueError('owned text did not produce declared prompt lengths')
     traces = []
-    for length, reuse, blocks in (ACTIVE_CELL_CONFIGS if active_prefill else CELL_CONFIGS):
+    configs=[(1024,*values) for values in contract.ENGINE_PREFIX_ADAPTIVE_CELLS] if adaptive_prefill else [(length,reuse,blocks,64,16,'first') for length,reuse,blocks in (ACTIVE_CELL_CONFIGS if active_prefill else CELL_CONFIGS)]
+    for length,reuse,blocks,suffix,maximum,order in configs:
         traces.append(dict(kind='engine-token-trace-v1', schema_version=1, mode='offline',
             generator='owned-engineering-text-prefix-v1', seed=0, arrival_rate=None, scripted_tokens=[11],
             prefix=dict(tokens=length, reuse_requests=reuse, blocks=blocks, salt=SALT,
                         seed_request=_request(128, common[:length+1], 1)),
-            requests=[_request(i, (common if i < reuse else variants[i])[:length] + suffixes[i]) for i in range(8)]))
-    result = dict(kind='engine-prefix-active-campaign-v1' if active_prefill else 'engine-prefix-campaign-v1', schema_version=1, source_text=SOURCE_TEXT,
+            requests=[_request(i,(common if (i%2==0 if order=='even' else i<reuse) else variants[i])[:length]+suffixes[i][:suffix],maximum) for i in range(8)]))
+        if adaptive_prefill: traces[-1]['prefix'].update(suffix_tokens=suffix,max_new_tokens=maximum,match_order=order)
+    result = dict(kind='engine-prefix-adaptive-campaign-v1' if adaptive_prefill else 'engine-prefix-active-campaign-v1' if active_prefill else 'engine-prefix-campaign-v1', schema_version=1, source_text=SOURCE_TEXT,
         source_text_sha256=_hash(SOURCE_TEXT), text_provenance='repository-authored engineering text; no external corpus',
         tokenizer=tokenizer_identity, traces=traces)
-    validate_campaign(result,active_prefill)
+    validate_campaign(result,active_prefill,adaptive_prefill)
     if tokenizer_identity != dict(tables_sha256=sha(tables), binary_sha256=sha(binary),generator_source_sha256=sha(Path(__file__))):
         raise ValueError('tokenizer changed while freezing prefix campaign')
     write(output, result)
     return result
 
 
-def trace_tsv(trace):
-    validate_trace(trace)
+def trace_tsv(trace,adaptive_prefill=False):
+    validate_trace(trace,adaptive_prefill)
     seed = trace['prefix']['seed_request']
     seed_line = 'seed {} {} {} {} {} {}\n'.format(seed['request_id'], seed['arrival_offset_ns'],
         seed['max_new_tokens'], ','.join(map(str, seed['stop_ids'])),
@@ -202,18 +235,20 @@ def _ids(value):
     return result
 
 
-def _phase_data():
-    return dict(mode='greedy', arrivals={}, events=[], steps=[], cache_steps=[], cache_states=[], hits=[], drained=None)
+def _phase_data(adaptive=False):
+    result=dict(mode='greedy', arrivals={}, events=[], steps=[], cache_steps=[], cache_states=[], hits=[], drained=None)
+    if adaptive: result.update(prefill_decisions=[],selections=[])
+    return result
 
 
-def _validate_phase(data, trace, blocks, start_step, active_prefill_cap=None):
+def _validate_phase(data, trace, blocks, start_step, active_prefill_cap=None,adaptive=False):
     requests = {r['request_id']: r for r in trace['requests']}
     if set(data['arrivals']) != {str(i) for i in requests}:
         raise ValueError('incomplete prefix phase arrivals')
     steps, events = data['steps'], data['events']
     if [s['step_id'] for s in steps] != list(range(start_step, start_step+len(steps))):
         raise ValueError('missing or unordered prefix step')
-    if active_prefill_cap is not None:
+    if active_prefill_cap is not None and not adaptive:
         first=trace['requests'][0]; prefix=trace.get('prefix',{})
         hit=prefix.get('tokens',0) if first['request_id'] < prefix.get('reuse_requests',0) else 0
         if (not steps or steps[0]['decode_seqs'] or steps[0]['prefill_tokens']!=min(256,len(first['prompt_ids'])-hit)):
@@ -296,7 +331,7 @@ def _validate_phase(data, trace, blocks, start_step, active_prefill_cap=None):
         raise ValueError('prefix executed rows differ from actual hit-adjusted necessary work')
     if active_prefill_cap is not None:
         prefix = trace.get('prefix',{})
-        for i in requests:
+        for i in ([] if adaptive else requests):
             expected_hit = prefix.get('tokens',0) if i < prefix.get('reuse_requests',0) else 0
             if hit_by_request[i] != expected_hit:
                 raise ValueError('active prefix per-request reuse differs from frozen workload')
@@ -314,16 +349,21 @@ def _validate_phase(data, trace, blocks, start_step, active_prefill_cap=None):
     return data
 
 
-def parse_run(stdout, trace, cache_mode, blocks, active_prefill_cap=None):
+def parse_run(stdout, trace, cache_mode, blocks, active_prefill_cap=None,adaptive_prefill_mode=None):
     """Reconstruct exact logical entries and complete request/phase accounting."""
-    validate_trace(trace)
+    adaptive=adaptive_prefill_mode is not None
+    validate_trace(trace,adaptive)
+    if adaptive:
+        if adaptive_prefill_mode not in ADAPTIVE_MODES or active_prefill_cap is not None:
+            raise ValueError('invalid adaptive policy mode or conflicting fixed cap')
+        active_prefill_cap=32 if adaptive_prefill_mode=='fixed32' else 0
     if cache_mode not in ('enabled','disabled') or blocks != trace['prefix']['blocks']:
         raise ValueError('prefix execution differs from declared cell')
     active = active_prefill_cap is not None
     if active and (type(active_prefill_cap) is not int or active_prefill_cap not in ACTIVE_CAPS
-                   or cache_mode != 'enabled' or tuple(trace['prefix'][k] for k in ('tokens','reuse_requests','blocks')) not in ACTIVE_CELL_CONFIGS):
+                   or cache_mode != 'enabled' or (not adaptive and tuple(trace['prefix'][k] for k in ('tokens','reuse_requests','blocks')) not in ACTIVE_CELL_CONFIGS)):
         raise ValueError('active prefix execution differs from declared cell or policy')
-    metadata, phase_times, phases = {}, {}, {name:_phase_data() for name in ('seed','measure')}
+    metadata, phase_times, phases = {}, {}, {name:_phase_data(adaptive) for name in ('seed','measure')}
     entries, events, current, phase_order = set(), [], None, []
     next_event = 0
     cleared = None
@@ -334,7 +374,7 @@ def parse_run(stdout, trace, cache_mode, blocks, active_prefill_cap=None):
         name = fields[0]
         if current in phase_times and name != 'phase':
             raise ValueError('prefix record appeared after its closed phase boundary')
-        if name in ('device','mode','config','admission','study','work_capacity','cache','namespace','salt') or (active and name=='active_prefill_cap'):
+        if name in ('device','mode','config','admission','study','work_capacity','cache','namespace','salt') or (active and not adaptive and name=='active_prefill_cap') or (adaptive and name=='prefill_policy'):
             if current is not None or name in metadata:
                 raise ValueError('duplicate or late prefix identity')
             metadata[name] = fields[1:]
@@ -391,7 +431,15 @@ def parse_run(stdout, trace, cache_mode, blocks, active_prefill_cap=None):
                                namespace=namespace,salt=salt,tokens=ids))
         elif current in phases:
             data = phases[current]
-            if name == 'step' and len(fields) == len(contract.ENGINE_STEP_FIELDS)+1:
+            if adaptive and name=='prefill_decision' and len(fields)==22:
+                if not data['steps'] or int(fields[1])!=data['steps'][-1]['step_id'] or fields[19] not in ('0','1') or fields[20] not in ('0','1'):
+                    raise ValueError('invalid adaptive decision step or boolean')
+                data['prefill_decisions'].append(dict(step_id=int(fields[1]),**dict(zip(DECISION_FIELDS,map(int,fields[2:19]))),eligible=fields[19]=='1',applied=fields[20]=='1',reason=fields[21]))
+            elif adaptive and name=='batch_selection' and len(fields)==7:
+                if not data['steps'] or int(fields[1])!=data['steps'][-1]['step_id']:
+                    raise ValueError('adaptive selection outside its step')
+                data['selections'].append(dict(zip(('step_id','order','request_id','past','query_tokens','selected_head'),map(int,fields[1:]))))
+            elif name == 'step' and len(fields) == len(contract.ENGINE_STEP_FIELDS)+1:
                 data['steps'].append(dict(zip(contract.ENGINE_STEP_FIELDS,map(int,fields[1:]))))
             elif name == 'prefix_step' and len(fields) == 6:
                 value = dict(zip(('step_id','cache_hit_tokens','lookup_ns','publish_ns','admission_ns'),map(int,fields[1:])))
@@ -441,9 +489,10 @@ def parse_run(stdout, trace, cache_mode, blocks, active_prefill_cap=None):
         else:
             raise ValueError('unknown prefix line: '+line[:100])
     expected = dict(device=['Apple','M4','Pro/metal'],mode=['greedy'],config=['chunked',str(blocks),'256','8'],
-        admission=['reserved'],study=[contract.ENGINE_PREFIX_ACTIVE_STUDY if active else contract.ENGINE_PREFIX_STUDY],work_capacity=['256','8'],cache=[cache_mode],
+        admission=['reserved'],study=[contract.ENGINE_PREFIX_ADAPTIVE_STUDY if adaptive else contract.ENGINE_PREFIX_ACTIVE_STUDY if active else contract.ENGINE_PREFIX_STUDY],work_capacity=['256','8'],cache=[cache_mode],
         salt=[SALT],namespace=metadata.get('namespace'))
-    if active:
+    if adaptive: expected['prefill_policy']=[adaptive_prefill_mode]
+    elif active:
         expected['active_prefill_cap']=[str(active_prefill_cap)]
     if metadata != expected or not metadata.get('namespace') or len(metadata['namespace'])!=1:
         raise ValueError('prefix device/backend or configuration changed')
@@ -453,8 +502,8 @@ def parse_run(stdout, trace, cache_mode, blocks, active_prefill_cap=None):
         if phase_times[left]['end_ns'] > phase_times[right]['begin_ns']:
             raise ValueError('prefix phase times overlap or reverse')
     seed_trace = dict(kind='engine-token-trace-v1',schema_version=1,mode='offline',scripted_tokens=[11],requests=[trace['prefix']['seed_request']])
-    _validate_phase(phases['seed'],seed_trace,blocks,0,0 if active else None)
-    _validate_phase(phases['measure'],trace,blocks,len(phases['seed']['steps']),active_prefill_cap)
+    _validate_phase(phases['seed'],seed_trace,blocks,0,0 if active else None,adaptive)
+    _validate_phase(phases['measure'],trace,blocks,len(phases['seed']['steps']),active_prefill_cap,adaptive)
     for event in events:
         if event['kind']!='stored':
             continue
@@ -480,7 +529,10 @@ def parse_run(stdout, trace, cache_mode, blocks, active_prefill_cap=None):
             raise ValueError('prefix phase execution exceeds episode boundary')
     result = dict(device='Apple M4 Pro/metal',mode='greedy',cache=cache_mode,blocks=blocks,
                   namespace=metadata['namespace'][0],phases=phases,phase_times=phase_times,cache_events=events)
-    if active:
+    if adaptive:
+        result['prefill_policy']=adaptive_prefill_mode
+        result['policy_replay']=_validate_adaptive_replay(result,trace)
+    elif active:
         result['active_prefill_cap']=active_prefill_cap
     return result
 
@@ -505,7 +557,9 @@ def run_summary(parsed, trace):
     hits={h['request_id']:h['cached_tokens'] for h in parsed['phases']['measure']['hits']}
     for request in result['requests']:
         request['cached_prompt_tokens']=hits.get(request['request_id'],0)
-    if 'active_prefill_cap' in parsed:
+    if 'prefill_policy' in parsed:
+        result.update(prefill_policy=parsed['prefill_policy'],**_active_metrics(parsed),policy_replay=parsed['policy_replay'])
+    elif 'active_prefill_cap' in parsed:
         result.update(active_prefill_cap=parsed['active_prefill_cap'],**_active_metrics(parsed))
     return result
 
@@ -543,6 +597,133 @@ def _active_metrics(parsed):
                     attribution={name:tails(values) for name,values in attributed.items()}),step_classes=classes)
 
 
+def adaptive_decision(inputs,mode):
+    """Literal frozen predicate; no timing observations or learned parameters."""
+    d=inputs; a,k=d['available_blocks'],d['required_blocks']; count=d['selected_decodes']
+    checks=[(k>a,'admission_blocked'),(k<=0,'no_private_blocks'),(count!=1,'decode_count'),
+        (d['incumbent_remaining_outputs']<2,'incumbent_terminal'),
+        (not 33<=d['remaining_prompt_tokens']<=64,'tail_length'),
+        (count+1>=d['max_sequences'],'last_sequence_slot'),(a-k>=k,'capacity_headroom')]
+    reason=next((reason for failed,reason in checks if failed),None)
+    eligible=reason is None
+    baseline=d['baseline_tokens']
+    chosen=0 if k>a else min(baseline,32) if (mode=='fixed32' and count>0) or (mode=='adaptive' and eligible) else baseline
+    applied=mode=='adaptive' and chosen<baseline and eligible
+    if eligible:
+        reason='adaptive_disabled' if mode!='adaptive' else 'adaptive_short_tail' if applied else 'baseline_at_most_32'
+    return dict(chosen_tokens=chosen,eligible=eligible,applied=applied,reason=reason)
+
+
+def _validate_adaptive_replay(parsed,trace):
+    """Independent logical ownership/FIFO replay, including exact LRU and private reservations."""
+    blocks=parsed['blocks']; entries={}; private={}; clock=0; stats=Counter()
+    def require(value,message):
+        if not value: raise ValueError('adaptive replay: '+message)
+    def free(): return blocks-len(entries)-sum(private.values())
+    def refs(): return sum(private.values())+sum(len(e['owners']) for e in entries.values())
+    for phase_name in ('seed','measure'):
+        phase=parsed['phases'][phase_name]
+        requests=[trace['prefix']['seed_request']] if phase_name=='seed' else trace['requests']
+        requests={r['request_id']:r for r in requests}; ids=list(requests)
+        generated={i:[] for i in ids}; computed={}; finished=set()
+        mode='current' if phase_name=='seed' else parsed['prefill_policy']
+        for step in phase['steps']:
+            sid=step['step_id']; expected_events=[]
+            decodes=[i for i in ids if i in computed and i not in finished and generated[i]][:8]
+            budget=256-len(decodes); chosen=[(i,1) for i in decodes]; incumbent=decodes[0] if len(decodes)==1 else -1
+            expected_decisions=[]; expected_hits=[]; admission=0
+            resident=next((i for i in ids if i in computed and i not in finished and not generated[i]),None)
+            if len(decodes)<8 and resident is not None:
+                remaining=len(requests[resident]['prompt_ids'])-computed[resident]
+                count=min(budget,remaining,32 if mode=='fixed32' and decodes else 256)
+                chosen.append((resident,count))
+            elif len(decodes)<8:
+                waiting=next((i for i in ids if i not in computed),None)
+                if waiting is not None:
+                    r=requests[waiting]; prompt=r['prompt_ids']; matched=[]
+                    for n in range(32,((len(prompt)-1)//32)*32+1,32):
+                        key=tuple(prompt[:n])
+                        if key not in entries: break
+                        matched.append(key)
+                    h=len(matched)*32; required=(len(prompt)+r['max_new_tokens']-1+31)//32-len(matched)
+                    reclaimable=sum(not e['owners'] and key not in matched for key,e in entries.items())
+                    inputs=dict(request_id=waiting,prompt_length=len(prompt),maximum_outputs=r['max_new_tokens'],matched_tokens=h,
+                        free_blocks=free(),reclaimable_blocks=reclaimable,watermark_blocks=0,available_blocks=free()+reclaimable,
+                        required_blocks=required,selected_decodes=len(decodes),incumbent_request_id=incumbent,
+                        incumbent_remaining_outputs=requests[incumbent]['max_new_tokens']-len(generated[incumbent]) if incumbent>=0 else -1,
+                        remaining_prompt_tokens=len(prompt)-h,row_budget=budget,max_sequences=8,baseline_tokens=min(budget,len(prompt)-h))
+                    decision=dict(step_id=sid,**inputs,**adaptive_decision(inputs,mode)); expected_decisions.append(decision)
+                    stats['decisions']+=1; stats['eligible']+=decision['eligible']; stats['applied']+=decision['applied']
+                    if decision['chosen_tokens']>0:
+                        while free()<required:
+                            candidates=[key for key,e in entries.items() if not e['owners'] and key not in matched]
+                            require(candidates,'admission cannot reclaim its claimed capacity')
+                            victim=min(candidates,key=lambda key:entries[key]['stamp'])
+                            del entries[victim]; expected_events.append(('removed',victim))
+                        private[waiting]=required; computed[waiting]=h; clock+=1
+                        for key in matched: entries[key]['owners'].add(waiting); entries[key]['stamp']=clock
+                        chosen.append((waiting,decision['chosen_tokens'])); admission=1
+                        if h: expected_hits.append(dict(step_id=sid,request_id=waiting,cached_tokens=h))
+            actual_decisions=[d for d in phase['prefill_decisions'] if d['step_id']==sid]
+            require(_same(actual_decisions,expected_decisions),'decision inputs, capacity, predicate or reason differs')
+            actual_hits=[h for h in phase['hits'] if h['step_id']==sid]
+            require(_same(actual_hits,expected_hits),'matched prefix differs from exact live index')
+            expected_selections=[]; offset=0; positions=0
+            for order,(i,count) in enumerate(chosen):
+                past=computed[i]; history=requests[i]['prompt_ids']+generated[i]
+                head=offset+count-1 if past+count==len(history) else -1
+                expected_selections.append(dict(step_id=sid,order=order,request_id=i,past=past,query_tokens=count,selected_head=head))
+                positions+=count*past+count*(count+1)//2; offset+=count
+            actual_selections=[s for s in phase['selections'] if s['step_id']==sid]
+            require(_same(actual_selections,expected_selections),'ordered request/past/query/head selection differs')
+            require(step['decode_seqs']==len(decodes) and step['prefill_seqs']==int(len(chosen)>len(decodes))
+                and step['prefill_tokens']==sum(c for _,c in chosen[len(decodes):]) and step['total_tokens']==offset
+                and step['attended_positions']==positions and step['admitted']==admission,'step counters differ from ordered inputs')
+            tokens=[e for e in phase['events'] if e['step_id']==sid and e['kind']=='token']
+            require([e['request_id'] for e in tokens]==[s['request_id'] for s in expected_selections if s['selected_head']>=0],
+                    'sampled heads are omitted, duplicated or reordered')
+            by_id={e['request_id']:e for e in tokens}
+            for selection in expected_selections:
+                i=selection['request_id']; computed[i]+=selection['query_tokens']; history=requests[i]['prompt_ids']+generated[i]
+                for n in range(32,computed[i]//32*32+1,32):
+                    key=tuple(history[:n])
+                    if key in entries: continue
+                    require(private[i]>0,'publication has no completed private block')
+                    private[i]-=1; clock+=1; entries[key]=dict(owners={i},stamp=clock)
+                    expected_events.append(('stored',key))
+                if i in by_id:
+                    token=by_id[i]['token_id']; generated[i].append(token)
+                    terminal=token in requests[i]['stop_ids'] or len(generated[i])==requests[i]['max_new_tokens']
+                    finishes=[e for e in phase['events'] if e['step_id']==sid and e['kind']=='finish' and e['request_id']==i]
+                    require(len(finishes)==int(terminal),'terminal event differs from actual selected token/limit')
+                    if terminal:
+                        finished.add(i); del private[i]
+                        for entry in entries.values(): entry['owners'].discard(i)
+            actual_events=[(e['kind'],tuple(e['tokens'])) for e in parsed['cache_events'] if e['phase']==phase_name and e['step_id']==sid]
+            require(actual_events==expected_events,'publication or idle LRU eviction differs from completed ownership')
+            state=next(s for s in phase['cache_states'] if s['step_id']==sid)
+            require(state['free_blocks']==free() and state['cached_blocks']==len(entries) and state['references']==refs()
+                and state['private_blocks']==sum(private.values()),'physical capacity/reference snapshot differs')
+            require(step['waiting']==sum(i not in computed for i in ids),'FIFO waiting census differs')
+        require(finished==set(ids) and not private and refs()==0,'phase does not release every request owner')
+    require(not [e for e in parsed['cache_events'] if e['phase']=='handoff'],'enabled handoff changed the cache')
+    clears=[(e['kind'],tuple(e['tokens'])) for e in parsed['cache_events'] if e['phase']=='clear']
+    require(clears==[('removed',key) for key in entries]+[('cleared',())],'final clear order or completeness differs')
+    return dict(stats,logical_schedule_sha256=_hash(json.dumps(_schedule_signature(parsed),sort_keys=True,separators=(',',':'))))
+
+
+def _schedule_signature(parsed):
+    """Complete logical ordered schedule/cache observations, excluding time and policy diagnostics."""
+    result={}
+    for name in ('seed','measure'):
+        data=parsed['phases'][name]
+        result[name]=[dict(work={k:v for k,v in step.items() if not k.endswith('_ns') and k not in ('predicted_ns','budget_limited')},
+            selections=[s for s in data['selections'] if s['step_id']==step['step_id']],
+            hits=[h for h in data['hits'] if h['step_id']==step['step_id']],
+            cache=[dict(kind=e['kind'],tokens=e['tokens']) for e in parsed['cache_events'] if e['phase']==name and e['step_id']==step['step_id']]) for step in data['steps']]
+    return result
+
+
 def _execution(value, command, timeout, minimum_ns=0):
     if (value.get('command') != list(map(str,command)) or type(value.get('exit_code')) is not int
             or value['exit_code'] != 0 or type(value.get('timeout_seconds')) is not int
@@ -551,11 +732,11 @@ def _execution(value, command, timeout, minimum_ns=0):
         raise ValueError('prefix native execution receipt changed or failed')
 
 
-def parse_checkpoint(stdout, required_groups=None, active_prefill=False):
+def parse_checkpoint(stdout, required_groups=None, active_prefill=False,adaptive_prefill=False):
     """Check native arithmetic identity and the explicitly required coverage."""
     identity, checks = {},[]
     if required_groups is None:
-        required_groups=ACTIVE_CHECKPOINT_GROUPS if active_prefill else CHECKPOINT_GROUPS
+        required_groups=ADAPTIVE_CHECKPOINT_GROUPS if adaptive_prefill else ACTIVE_CHECKPOINT_GROUPS if active_prefill else CHECKPOINT_GROUPS
     for line in stdout.splitlines():
         fields = line.split()
         if fields and fields[0] in ('device','qualification','configuration') and fields[0] not in identity:
@@ -564,7 +745,7 @@ def parse_checkpoint(stdout, required_groups=None, active_prefill=False):
             checks.append(dict(name=fields[1],checked=int(fields[3]),mismatches=int(fields[5]),nonfinite=int(fields[7])))
         else:
             raise ValueError('unknown prefix checkpoint qualification line')
-    expected=dict(device=['Apple','M4','Pro/metal'],qualification=[ACTIVE_CHECKPOINT_IDENTITY if active_prefill else CHECKPOINT_IDENTITY],
+    expected=dict(device=['Apple','M4','Pro/metal'],qualification=[ADAPTIVE_CHECKPOINT_IDENTITY if adaptive_prefill else ACTIVE_CHECKPOINT_IDENTITY if active_prefill else CHECKPOINT_IDENTITY],
                   configuration=['27','projection','8','dtype','BF16/FP32','block-size','32'])
     if (identity != expected or tuple(c['name'] for c in checks)!=required_groups
             or any(c['checked']<1 or c['mismatches'] or c['nonfinite'] for c in checks)):
@@ -576,8 +757,25 @@ def _qualified_namespace(build):
     return 'qwen-reference27-projection8/'+build['assets']['prepared']
 
 
+def _parse_policy(stdout,trace,run,active=False,adaptive=False):
+    return parse_run(stdout,trace,run['cache'],trace['prefix']['blocks'],
+                     run['active_prefill_cap'] if active and not adaptive else None,
+                     run['prefill_policy'] if adaptive else None)
+
+
+def _schedule_matches(trace,schedules):
+    """Frozen mechanism claims concern all logical selections, not timings."""
+    p=trace['prefix']; known=p['suffix_tokens']==64 and p['max_new_tokens']==16 and p['match_order']=='first'
+    if not known or p['blocks'] not in (40,384): return dict(required=False)
+    reference='fixed32' if p['blocks']==40 else 'current'
+    expected_steps=({4:115,8:69} if p['blocks']==40 else {0:55,4:39,8:23})[p['reuse_requests']]
+    if not _same(schedules['adaptive'],schedules[reference]) or len(schedules['adaptive']['measure'])!=expected_steps:
+        raise ValueError('adaptive known-cell logical schedule differs from frozen reference')
+    return dict(required=True,reference=reference,matched=True,measured_steps=expected_steps)
+
+
 def _qualification(record, require_preflights=True):
-    active=_active(record)
+    adaptive=_adaptive(record); active=_active(record) or adaptive
     build = profile.validate_engine_record_build(record)
     document = record.get('qualification_document')
     if (type(document) is not str or _hash(document) != record.get('qualification_sha256')
@@ -586,7 +784,7 @@ def _qualification(record, require_preflights=True):
     qualification = record['qualification']
     checkpoint = qualification.get('checkpoint_receipt',{})
     actual = checkpoint.get('build',{})
-    if (qualification.get('kind') != ('engine-prefix-active-qualification-v1' if active else 'engine-prefix-qualification-v1')
+    if (qualification.get('kind') != ('engine-prefix-adaptive-qualification-v1' if adaptive else 'engine-prefix-active-qualification-v1' if active else 'engine-prefix-qualification-v1')
             or type(qualification.get('schema_version')) is not int or qualification['schema_version']!=1
             or not _same(qualification.get('build'),build)
             or any(not _same(actual.get(k),build.get(k)) for k in ('source','assets','environment'))):
@@ -603,38 +801,39 @@ def _qualification(record, require_preflights=True):
         raise ValueError('prefix checkpoint build command changed')
     _execution(checkpoint.get('build_execution',{}),command,600)
     _execution(checkpoint.get('execution',{}),[command[-1],build['assets']['prepared'],
-               'prefix-active-qualification' if active else 'prefix-cache-qualification'],180)
+               'prefix-adaptive-qualification' if adaptive else 'prefix-active-qualification' if active else 'prefix-cache-qualification'],180)
     stdout = checkpoint.get('stdout')
     if type(stdout) is not str or _hash(stdout)!=checkpoint.get('stdout_sha256'):
         raise ValueError('prefix qualification stdout changed')
-    checked=parse_checkpoint(stdout,active_prefill=active)
+    checked=parse_checkpoint(stdout,active_prefill=active,adaptive_prefill=adaptive)
     if not require_preflights:
         return checked
     document=qualification.get('campaign_document')
     if (type(document) is not str or _hash(document)!=qualification.get('campaign_sha256')
             or not _same(json.loads(document),qualification.get('campaign'))):
         raise ValueError('prefix qualification campaign document changed')
-    campaign=validate_campaign(qualification['campaign'],active)
+    campaign=validate_campaign(qualification['campaign'],active,adaptive)
     if ('trace' in record and not _same(record['trace'],campaign)):
         raise ValueError('prefix qualification does not bind measured campaign')
     if (campaign['tokenizer']['tables_sha256']!=build['assets']['tables_sha256']
             or campaign['tokenizer']['generator_source_sha256']!=build['source']['sources'].get('src/llm_mojo/benchmarks/engine_prefix.py')):
         raise ValueError('prefix qualification tokenizer/generator changed')
     preflights=qualification.get('preflight_cells',[])
-    if len(preflights)!=(5 if active else 8):
+    if len(preflights)!=(12 if adaptive else 5 if active else 8):
         raise ValueError('prefix qualification requires all declared untimed preflights')
-    expected={}; expected_work={}
+    expected={}; expected_work={}; expected_schedules={}; matches={}
     for cell,trace in zip(preflights,campaign['traces']):
-        params=trace['prefix']; name=cell_id(params['tokens'],params['reuse_requests'],params['blocks'])
+        params=trace['prefix']; name=_cell_name(trace,adaptive)
+        observed_policies=[(r.get('cache'),r.get('prefill_policy')) for r in cell.get('runs',[])] if adaptive else [(r.get('cache'),r.get('active_prefill_cap')) for r in cell.get('runs',[])] if active else [r.get('cache') for r in cell.get('runs',[])]
+        policies=[('enabled',mode) for mode in ADAPTIVE_MODES] if adaptive else [('enabled',cap) for cap in ACTIVE_CAPS] if active else ['disabled','enabled']
         if (cell.get('cell_id')!=name or not _same(cell.get('trace'),trace)
-                or cell.get('native_trace_sha256')!=_hash(trace_tsv(trace))
+                or cell.get('native_trace_sha256')!=_hash(trace_tsv(trace,adaptive))
                 or not Path(cell.get('native_trace_path','')).is_absolute()
-                or ([(r.get('cache'),r.get('active_prefill_cap')) for r in cell.get('runs',[])] != [('enabled',cap) for cap in ACTIVE_CAPS]
-                    if active else [r.get('cache') for r in cell.get('runs',[])]!=['disabled','enabled'])):
+                or observed_policies!=policies):
             raise ValueError('prefix qualification preflight identity/census changed')
-        oracle=None; work=None
+        oracle=None; work=None; schedules={}
         for run in cell['runs']:
-            parsed=parse_run(run['stdout'],trace,run['cache'],params['blocks'],run['active_prefill_cap'] if active else None)
+            parsed=_parse_policy(run['stdout'],trace,run,active,adaptive)
             if not _same(parsed,run.get('parsed')) or parsed['namespace']!=_qualified_namespace(build):
                 raise ValueError('prefix preflight parsed identity differs from qualified source')
             minimum=parsed['phase_times']['clear']['end_ns']-parsed['phase_times']['seed']['begin_ns']
@@ -649,6 +848,7 @@ def _qualification(record, require_preflights=True):
                 if work is None: work=current_work
                 if not _same(work,current_work):
                     raise ValueError('active prefix untimed per-request reuse or total work differs')
+            if adaptive: schedules[run['prefill_policy']]=_schedule_signature(parsed)
         if not _same(cell.get('expected_histories'),oracle):
             raise ValueError('prefix qualification frozen histories changed')
         expected[name]=oracle
@@ -656,13 +856,18 @@ def _qualification(record, require_preflights=True):
             if not _same(cell.get('expected_work'),work):
                 raise ValueError('active prefix qualification frozen work changed')
             expected_work[name]=work
-    result=dict(**checked,untimed_preflights=15 if active else 16,expected_histories=expected,campaign_sha256=qualification['campaign_sha256'])
+        if adaptive:
+            if not _same(cell.get('expected_schedules'),schedules): raise ValueError('adaptive frozen logical schedules changed')
+            expected_schedules[name]=schedules; matches[name]=_schedule_matches(trace,schedules)
+    result=dict(**checked,untimed_preflights=36 if adaptive else 15 if active else 16,expected_histories=expected,campaign_sha256=qualification['campaign_sha256'])
     if active: result['expected_work']=expected_work
+    if adaptive: result.update(expected_schedules=expected_schedules,logical_schedule_matches=matches)
     return result
 
 
-def qualify(directory, output, trace_path, active_prefill=False):
-    declaration=_declaration(active_prefill)
+def qualify(directory, output, trace_path, active_prefill=False,adaptive_prefill=False):
+    active=active_prefill or adaptive_prefill
+    declaration=_declaration(active,adaptive_prefill)
     build=profile.verify_engine_build(directory,declaration)
     ensure_record_location(output)
     output.mkdir(parents=True,exist_ok=False)
@@ -674,10 +879,10 @@ def qualify(directory, output, trace_path, active_prefill=False):
     numerical=dict(source=build['source'],assets=build['assets'],environment=build['environment'],
         command=list(map(str,command)),binaries={'checkpoint-driver':dict(sha256=sha(binary),bytes=binary.stat().st_size)})
     stdout,execution=profile.checked_execution([binary,build['assets']['prepared'],
-        'prefix-active-qualification' if active_prefill else 'prefix-cache-qualification'],output/'checkpoint-native.log',180)
+        'prefix-adaptive-qualification' if adaptive_prefill else 'prefix-active-qualification' if active else 'prefix-cache-qualification'],output/'checkpoint-native.log',180)
     if profile.verify_build(directory)!=build or sha(binary)!=numerical['binaries']['checkpoint-driver']['sha256']:
         raise ValueError('prefix build changed during qualification execution')
-    qualification=dict(kind='engine-prefix-active-qualification-v1' if active_prefill else 'engine-prefix-qualification-v1',schema_version=1,build=build,
+    qualification=dict(kind='engine-prefix-adaptive-qualification-v1' if adaptive_prefill else 'engine-prefix-active-qualification-v1' if active else 'engine-prefix-qualification-v1',schema_version=1,build=build,
         checkpoint_receipt=dict(build=numerical,build_execution=compiled,stdout=stdout,stdout_sha256=_hash(stdout),execution=execution))
     def checker(require_preflights=True):
         document=json.dumps(qualification,indent=2,allow_nan=False)+'\n'
@@ -686,45 +891,49 @@ def qualify(directory, output, trace_path, active_prefill=False):
         return _qualification(record,require_preflights)
     checker(False)
     campaign_document=trace_path.read_text()
-    campaign=validate_campaign(json.loads(campaign_document),active_prefill)
+    campaign=validate_campaign(json.loads(campaign_document),active,adaptive_prefill)
     if any(ch.isspace() for ch in build['assets']['prepared']):
         raise ValueError('bounded prefix benchmark requires whitespace-free prepared path')
     qualification.update(campaign=campaign,campaign_document=campaign_document,campaign_sha256=_hash(campaign_document),preflight_cells=[])
     try:
         for trace in campaign['traces']:
-            params=trace['prefix']; name=cell_id(params['tokens'],params['reuse_requests'],params['blocks'])
+            params=trace['prefix']; name=_cell_name(trace,adaptive_prefill)
             cell_dir=output/name; cell_dir.mkdir()
-            native=cell_dir/'trace.tsv'; native.write_text(trace_tsv(trace))
+            native=cell_dir/'trace.tsv'; native.write_text(trace_tsv(trace,adaptive_prefill))
             cell=dict(cell_id=name,trace=trace,native_trace_path=str(native),native_trace_sha256=sha(native),runs=[])
             qualification['preflight_cells'].append(cell)
-            oracle=None; work=None
-            policies=[dict(cache='enabled',active_prefill_cap=cap) for cap in ACTIVE_CAPS] if active_prefill else [dict(cache=cache) for cache in ('disabled','enabled')]
+            oracle=None; work=None; schedules={}
+            policies=([dict(cache='enabled',prefill_policy=mode) for mode in ADAPTIVE_MODES] if adaptive_prefill else
+                      [dict(cache='enabled',active_prefill_cap=cap) for cap in ACTIVE_CAPS] if active else [dict(cache=cache) for cache in ('disabled','enabled')])
             for run in policies:
-                cache=run['cache']; cap=run['active_prefill_cap'] if active_prefill else None
                 command=_command(dict(build=build,kind=declaration['kind']),cell,run)
-                label=f'cap-{cap}' if active_prefill else cache
+                label=run['prefill_policy'] if adaptive_prefill else f"cap-{run['active_prefill_cap']}" if active else run['cache']
                 log=cell_dir/f'preflight-{label}.log'
-                if active_prefill: cell['runs'].append(run)
+                if active: cell['runs'].append(run)
                 try:
                     stdout,execution=profile.checked_execution(command,log,180)
                     run.update(stdout=stdout,native_execution=execution)
-                    parsed=parse_run(stdout,trace,cache,params['blocks'],cap)
+                    parsed=_parse_policy(stdout,trace,run,active,adaptive_prefill)
                 except Exception as error:
-                    if active_prefill: _retain_failure(run,log,error)
+                    if active: _retain_failure(run,log,error)
                     raise
                 run.update(stdout=stdout,native_execution=execution,parsed=parsed)
-                if not active_prefill: cell['runs'].append(run)
+                if not active: cell['runs'].append(run)
                 actual=_histories(parsed,trace)
                 if oracle is None: oracle=actual
                 if not _same(oracle,actual):
                     raise ValueError('prefix qualification histories differ before timing')
-                if active_prefill:
+                if active:
                     actual_work=_work_signature(parsed,trace)
                     if work is None: work=actual_work
                     if not _same(work,actual_work):
                         raise ValueError('active prefix qualification work differs before timing')
+                if adaptive_prefill: schedules[run['prefill_policy']]=_schedule_signature(parsed)
             cell['expected_histories']=oracle
-            if active_prefill: cell['expected_work']=work
+            if active: cell['expected_work']=work
+            if adaptive_prefill:
+                cell['expected_schedules']=schedules
+                _schedule_matches(trace,schedules)
             if sha(native)!=cell['native_trace_sha256']:
                 raise ValueError('prefix qualification input changed')
         if (profile.verify_build(directory)!=build or sha(binary)!=numerical['binaries']['checkpoint-driver']['sha256']
@@ -741,11 +950,12 @@ def qualify(directory, output, trace_path, active_prefill=False):
 
 
 def _command(record, cell, run):
-    active=_active(record)
+    adaptive=_adaptive(record); active=_active(record)
     result=[record['build']['command'][-1],record['build']['assets']['prepared'],cell['native_trace_path'],
             'chunked',cell['trace']['prefix']['blocks'],256,8,10,'greedy','reserved',
-            contract.ENGINE_PREFIX_ACTIVE_STUDY if active else contract.ENGINE_PREFIX_STUDY,run['cache']]
-    if active: result.append(run['active_prefill_cap'])
+            contract.ENGINE_PREFIX_ADAPTIVE_STUDY if adaptive else contract.ENGINE_PREFIX_ACTIVE_STUDY if active else contract.ENGINE_PREFIX_STUDY,run['cache']]
+    if adaptive: result.append(run['prefill_policy'])
+    elif active: result.append(run['active_prefill_cap'])
     return result
 
 
@@ -771,14 +981,14 @@ def _work_signature(parsed,trace):
 
 
 def summary(record):
-    active=_active(record); declaration=_declaration(active)
+    adaptive=_adaptive(record); active=_active(record) or adaptive; declaration=_declaration(active,adaptive)
     if record.get('declaration')!=declaration or record.get('kind')!=declaration['kind']:
         raise ValueError('prefix campaign declaration changed')
     qualification=_qualification(record)
-    campaign=validate_campaign(record['trace'],active)
+    campaign=validate_campaign(record['trace'],active,adaptive)
     if (type(record.get('trace_document')) is not str or _hash(record['trace_document'])!=record.get('trace_sha256')
             or not _same(json.loads(record['trace_document']),campaign)
-            or len(record.get('cells',[]))!=(5 if active else 8)):
+            or len(record.get('cells',[]))!=(12 if adaptive else 5 if active else 8)):
         raise ValueError('prefix campaign document or cell census changed')
     if campaign['tokenizer']['tables_sha256']!=record['build']['assets']['tables_sha256']:
         raise ValueError('prefix workload tokenizer differs from qualified build')
@@ -787,20 +997,20 @@ def summary(record):
     cells_out=[]
     for cell,trace in zip(record['cells'],campaign['traces']):
         params=trace['prefix']
-        name=cell_id(params['tokens'],params['reuse_requests'],params['blocks'])
+        name=_cell_name(trace,adaptive)
         if (cell.get('cell_id')!=name or not _same(cell.get('trace'),trace)
-                or cell.get('native_trace_sha256')!=_hash(trace_tsv(trace))
+                or cell.get('native_trace_sha256')!=_hash(trace_tsv(trace,adaptive))
                 or not Path(cell.get('native_trace_path','')).is_absolute()):
             raise ValueError('prefix native trace identity changed')
         runs=cell.get('runs',[])
-        expected=[(b,'enabled',cap,calibration) for b in range(4) for cap,calibration in active_cells(b)] if active else [(b,cache,calibration) for b in range(4) for cache,calibration in cells(b)]
-        observed=[(r.get('block'),r.get('cache'),r.get('active_prefill_cap'),r.get('calibration')) for r in runs] if active else [(r.get('block'),r.get('cache'),r.get('calibration')) for r in runs]
+        expected=[(b,'enabled',mode,calibration) for b in range(4) for mode,calibration in adaptive_cells(b)] if adaptive else [(b,'enabled',cap,calibration) for b in range(4) for cap,calibration in active_cells(b)] if active else [(b,cache,calibration) for b in range(4) for cache,calibration in cells(b)]
+        observed=[(r.get('block'),r.get('cache'),r.get('prefill_policy' if adaptive else 'active_prefill_cap'),r.get('calibration')) for r in runs] if active else [(r.get('block'),r.get('cache'),r.get('calibration')) for r in runs]
         if observed!=expected:
             raise ValueError('incomplete, duplicate or reordered prefix paired grid')
         histories=qualification['expected_histories'][name]
         summaries=[]
         for run in runs:
-            parsed=parse_run(run['stdout'],trace,run['cache'],params['blocks'],run['active_prefill_cap'] if active else None)
+            parsed=_parse_policy(run['stdout'],trace,run,active,adaptive)
             if not _same(parsed,run.get('parsed')):
                 raise ValueError('prefix parsed record differs from native stdout')
             if parsed['namespace']!=_qualified_namespace(record['build']):
@@ -812,6 +1022,8 @@ def summary(record):
                 raise ValueError('prefix natural greedy histories or terminal reasons diverged')
             if active and not _same(_work_signature(parsed,trace),qualification['expected_work'][name]):
                 raise ValueError('active prefix measured reuse or total work differs from preflight')
+            if adaptive and not _same(_schedule_signature(parsed),qualification['expected_schedules'][name][run['prefill_policy']]):
+                raise ValueError('adaptive measured logical schedule differs from preflight')
             if type(run['block']) is not int or type(run['calibration']) is not bool:
                 raise ValueError('prefix block/calibration types changed')
             for key in ('conditions_before','conditions_after'):
@@ -825,9 +1037,13 @@ def summary(record):
                     raise ValueError('missing or non-nominal prefix conditions') from error
             summaries.append(dict(block=run['block'],cache=run['cache'],calibration=run['calibration'],**run_summary(parsed,trace)))
         if active:
-            comparisons={str(cap):_active_comparisons(summaries,cap) for cap in (32,16)}
+            choices=('fixed32','adaptive') if adaptive else (32,16)
+            comparisons={str(cap):_active_comparisons(summaries,cap,adaptive) for cap in choices}
             cells_out.append(dict(cell_id=name,runs=summaries,comparisons=comparisons,frozen_histories=histories,
-                frozen_work=qualification['expected_work'][name],decisions={str(cap):_active_decision(comparisons[str(cap)]) for cap in (32,16)}))
+                frozen_work=qualification['expected_work'][name],decisions={str(cap):_active_decision(comparisons[str(cap)]) for cap in choices}))
+            if adaptive:
+                cells_out[-1].update(logical_schedule_matches=qualification['logical_schedule_matches'][name],
+                    schedule_sha256={mode:_hash(json.dumps(schedule,sort_keys=True,separators=(',',':'))) for mode,schedule in qualification['expected_schedules'][name].items()})
             continue
         by_key={(r['block'],r['cache'],r['calibration']):r for r in summaries}
         comparisons={}
@@ -838,10 +1054,16 @@ def summary(record):
             comparisons[metric]=dict(block_ratios=ratios,median_ratio=statistics.median(ratios),
                 calibration_ratios=self_ratios,noise_floor=floor,speed_verdict=profile._outcome(ratios,floor))
         cells_out.append(dict(cell_id=name,runs=summaries,comparisons=comparisons,frozen_histories=histories))
-    result=dict(cells=cells_out,qualification=qualification,measured_runs=80 if active else 96,untimed_preflights=15 if active else 16,
+    result=dict(cells=cells_out,qualification=qualification,measured_runs=192 if adaptive else 80 if active else 96,untimed_preflights=36 if adaptive else 15 if active else 16,
                 same_delivered_histories=True,asynchronous=False,promotion=False,target=None,goodput=None,quantile_method='linear')
     if active:
         primary=next(c for c in cells_out if c['cell_id']==declaration['usefulness']['primary_cell'])
+        if adaptive:
+            result.update(same_reuse_work=True,usefulness=dict(primary_cell=primary['cell_id'],primary_policy='adaptive',
+                primary=primary['decisions']['adaptive'],broad_guard_pass=all(c['decisions']['adaptive']['guards_pass'] for c in cells_out),
+                fixed32_comparison='Descriptive paired ratios only; no equivalence claim.',
+                uncertainty='Engineering median-ratio plus/minus self-control noise buffer; not a confidence interval.'))
+            return result
         result.update(same_reuse_work=True,usefulness=dict(primary_cell=primary['cell_id'],primary_cap=32,
             primary=primary['decisions']['32'],broad_guard_pass=all(c['decisions']['32']['guards_pass'] for c in cells_out),
             exploratory_cap16=dict(primary=primary['decisions']['16'],broad_guard_pass=all(c['decisions']['16']['guards_pass'] for c in cells_out)),
@@ -849,8 +1071,8 @@ def summary(record):
     return result
 
 
-def _active_comparisons(runs,cap):
-    by_key={(r['block'],r['active_prefill_cap'],r['calibration']):r for r in runs}
+def _active_comparisons(runs,cap,adaptive=False):
+    by_key={(r['block'],r['prefill_policy' if adaptive else 'active_prefill_cap'],r['calibration']):r for r in runs}
     def value(run,metric):
         if metric=='p95_gap_ns': return (run['inter_token'] or {}).get('p95_ns')
         if metric=='p95_ttft_ns': return (run['ttft'] or {}).get('p95_ns')
@@ -858,8 +1080,8 @@ def _active_comparisons(runs,cap):
         return run[metric]
     comparisons={}
     for metric in ('duration_ns','episode_ns','p95_ttft_ns','p95_gap_ns','maximum_gap_ns'):
-        baseline=[value(by_key[b,0,False],metric) for b in range(4)]
-        controls=[value(by_key[b,0,True],metric) for b in range(4)]
+        baseline=[value(by_key[b,'current' if adaptive else 0,False],metric) for b in range(4)]
+        controls=[value(by_key[b,'current' if adaptive else 0,True],metric) for b in range(4)]
         candidate=[value(by_key[b,cap,False],metric) for b in range(4)]
         if any(v is None or v<=0 for v in baseline+controls+candidate):
             comparisons[metric]=dict(available=False,block_ratios=[],calibration_ratios=[],median_ratio=None,noise_floor=None,speed_verdict='inconclusive')
@@ -899,12 +1121,13 @@ def _active_decision(comparisons):
         hypothesis='supported' if all(s=='pass' for s in statuses) else 'failed' if 'fail' in statuses else 'inconclusive')
 
 
-def collect(directory,trace_path,output,qualification_path,active_prefill=False):
+def collect(directory,trace_path,output,qualification_path,active_prefill=False,adaptive_prefill=False):
     """Run the selected frozen campaign once, retaining every actual invocation."""
-    declaration=_declaration(active_prefill)
+    active=active_prefill or adaptive_prefill
+    declaration=_declaration(active,adaptive_prefill)
     build=profile.verify_engine_build(directory,declaration)
     document=trace_path.read_text()
-    campaign=validate_campaign(json.loads(document),active_prefill)
+    campaign=validate_campaign(json.loads(document),active,adaptive_prefill)
     if campaign['tokenizer']['tables_sha256']!=build['assets']['tables_sha256']:
         raise ValueError('prefix campaign tokenizer differs from clean build')
     if campaign['tokenizer']['generator_source_sha256']!=build['source']['sources'].get('src/llm_mojo/benchmarks/engine_prefix.py'):
@@ -934,38 +1157,40 @@ def collect(directory,trace_path,output,qualification_path,active_prefill=False)
             stdout,execution=profile.checked_execution(_command(record,cell,run),log,180)
             run.update(stdout=stdout,native_execution=execution,conditions_before=before)
             run['conditions_after']=profile.conditions()
-            run['parsed']=parse_run(stdout,cell['trace'],run['cache'],cell['trace']['prefix']['blocks'],run['active_prefill_cap'] if active_prefill else None)
+            run['parsed']=_parse_policy(stdout,cell['trace'],run,active,adaptive_prefill)
         except Exception as error:
-            if active_prefill: _retain_failure(run,log,error)
+            if active: _retain_failure(run,log,error)
             raise
         return run
     try:
         for trace in campaign['traces']:
             params=trace['prefix']
-            name=cell_id(params['tokens'],params['reuse_requests'],params['blocks'])
+            name=_cell_name(trace,adaptive_prefill)
             cell_dir=output/name
             cell_dir.mkdir()
             native=cell_dir/'trace.tsv'
-            native.write_text(trace_tsv(trace))
+            native.write_text(trace_tsv(trace,adaptive_prefill))
             cell=dict(cell_id=name,trace=trace,native_trace_path=str(native),native_trace_sha256=sha(native),runs=[])
             record['cells'].append(cell)
             oracle=accepted['expected_histories'][name]
             for block in range(4):
-                policies=[('enabled',cap,calibration) for cap,calibration in active_cells(block)] if active_prefill else [(cache,None,calibration) for cache,calibration in cells(block)]
+                policies=[('enabled',mode,calibration) for mode,calibration in adaptive_cells(block)] if adaptive_prefill else [('enabled',cap,calibration) for cap,calibration in active_cells(block)] if active else [(cache,None,calibration) for cache,calibration in cells(block)]
                 for cache,cap,calibration in policies:
                     if sha(native)!=cell['native_trace_sha256']:
                         raise ValueError('prefix native trace changed during campaign')
                     run=dict(block=block,cache=cache,calibration=calibration)
-                    if active_prefill:
-                        run['active_prefill_cap']=cap
+                    if active:
+                        run['prefill_policy' if adaptive_prefill else 'active_prefill_cap']=cap
                         cell['runs'].append(run)
-                    label=f'cap-{cap}' if active_prefill else cache
+                    label=cap if adaptive_prefill else f'cap-{cap}' if active else cache
                     run=execute(cell,run,cell_dir/f'block-{block}-{label}{"-calibration" if calibration else ""}.log')
-                    if not active_prefill: cell['runs'].append(run)
+                    if not active: cell['runs'].append(run)
                     if _histories(run['parsed'],trace)!=oracle:
                         raise ValueError('prefix measured natural history differs from frozen preflight')
-                    if active_prefill and not _same(_work_signature(run['parsed'],trace),accepted['expected_work'][name]):
+                    if active and not _same(_work_signature(run['parsed'],trace),accepted['expected_work'][name]):
                         raise ValueError('active prefix measured reuse/work differs from frozen preflight')
+                    if adaptive_prefill and not _same(_schedule_signature(run['parsed']),accepted['expected_schedules'][name][cap]):
+                        raise ValueError('adaptive measured schedule differs from frozen preflight')
             if sha(native)!=cell['native_trace_sha256']:
                 raise ValueError('prefix native input changed after cell')
         if (profile.verify_build(directory)!=build or sha(trace_path)!=record['trace_sha256']
@@ -977,7 +1202,7 @@ def collect(directory,trace_path,output,qualification_path,active_prefill=False)
         raise
     raw=json.dumps(record,separators=(',',':'),allow_nan=False).encode()
     compressed=gzip.compress(raw,mtime=0)
-    stem='engine-prefix-active' if active_prefill else 'engine-prefix'
+    stem='engine-prefix-adaptive' if adaptive_prefill else 'engine-prefix-active' if active else 'engine-prefix'
     (output/(stem+'.json.gz')).write_bytes(compressed)
     write(output/(stem+'.json'),dict(kind=record['kind'],bytes=len(compressed),
         sha256=hashlib.sha256(compressed).hexdigest(),uncompressed_sha256=hashlib.sha256(raw).hexdigest()))

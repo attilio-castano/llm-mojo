@@ -957,3 +957,39 @@ original declaration and replay behavior. Defaults remain unchanged.
 The completed cap study's [results and sealed CPU restoration](../../../studies/model_generation/engine-prefix-evidence/active-prefill/README.md)
 support cap 32 in the primary full-reuse/40-block cell. Broader cost guards do
 not all pass; cap 16 remains exploratory and the default remains zero.
+
+### Adaptive short-tail prefill campaign
+
+The [frozen adaptive contract](../../../studies/model_generation/engine-core.md#adaptive-prefill-frozen-comparison-contract)
+compares current, self-current, fixed32 and adaptive admission in twelve cells.
+The opt-in rule caps only an eligible newly admitted short prompt tail under
+KV reservation pressure. Held prefills use current scheduling; the rule is not
+a global mixed-step ceiling or the older fitted execution-cost policy.
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-specification \
+  --adaptive-prefill-study --output /private/tmp/adaptive-prefill-campaign.json
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build \
+  --adaptive-prefill-study --prepared VERIFIED_PREPARED_PATH --output /private/tmp/adaptive-prefill-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-qualify \
+  --adaptive-prefill-study --build /private/tmp/adaptive-prefill-build \
+  --trace /private/tmp/adaptive-prefill-campaign.json --output /private/tmp/adaptive-prefill-qualification
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect \
+  --adaptive-prefill-study --build /private/tmp/adaptive-prefill-build \
+  --trace /private/tmp/adaptive-prefill-campaign.json \
+  --qualification /private/tmp/adaptive-prefill-qualification/qualification.json \
+  --output /private/tmp/adaptive-prefill-measurements
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay \
+  --output /private/tmp/adaptive-prefill-measurements/engine-prefix-adaptive.json.gz
+```
+
+Use fresh external paths, clean committed source and verified existing assets.
+The exact-build reference-27/Metal checkpoint and all 36 unique-policy preflights
+precede the single 192-call campaign. Native call and campaign limits remain
+180 seconds and two hours. All arms observe the same decision/batch telemetry;
+CPU replay checks literal policy decisions and ordered request/past/query/head
+selections, full natural histories, per-request reuse/work and cleanup. Seed
+and ten warmup steps use current scheduling. Static32 timing comparisons are
+descriptive; formal guards use current/self-current controls. Identical fallback
+schedules do not establish zero time overhead. Retain failures and inconclusive
+noise-buffered outcomes without resampling, retuning or default promotion.
