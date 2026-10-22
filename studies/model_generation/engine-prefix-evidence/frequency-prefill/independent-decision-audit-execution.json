@@ -1,0 +1,16 @@
+{
+  "command": [
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python",
+    "-B",
+    "/private/tmp/llm-mojo-frequency-prefill-20261022-independent-decision-audit.py",
+    "/private/tmp/llm-mojo-frequency-prefill-20261022-results.json",
+    "--output",
+    "/private/tmp/llm-mojo-frequency-prefill-20261022-independent-decision-audit.json"
+  ],
+  "exit_code": 0,
+  "wall_elapsed_ns": 89612000,
+  "timeout_seconds": 600,
+  "timed_out": false,
+  "script_sha256": "d24e3fc874b6a101b3c03ca8b69135fdc706fc9b7b576994727fafb661bed96f",
+  "log_sha256": "85d0634d1e17a5d9f0697513f732713adaaf2b043d9a4868b56121f66841fd0f"
+}

@@ -1,0 +1,20 @@
+{
+  "command": [
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python",
+    "-B",
+    "/private/tmp/llm_mojo_frequency_independent_raw_audit.py",
+    "/private/tmp/llm-mojo-frequency-prefill-20261022-measurements/engine-prefix-frequency.json.gz",
+    "--source-root",
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo",
+    "--native-binary",
+    "/private/tmp/llm-mojo-frequency-prefill-20261022-build/engine",
+    "--checkpoint-binary",
+    "/private/tmp/llm-mojo-frequency-prefill-20261022-qualification/checkpoint-driver"
+  ],
+  "exit_code": 0,
+  "wall_elapsed_ns": 22644975708,
+  "timeout_seconds": 600,
+  "timed_out": false,
+  "script_sha256": "204ae0ead0bf531838139a1d494e6735f6d576bc036ad2fcf25c6603f32f47a2",
+  "log_sha256": "f2fb289934ed1d85eefdba715d898db8e8aefe16d51750e1964f61f953700fee"
+}

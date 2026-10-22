@@ -1042,3 +1042,10 @@ Use the original archived source for earlier prefix, cap or adaptive campaigns.
 The forecast is a bounded heuristic; actual natural EOS, cache state and gap
 counts remain evidence rather than inputs taken from future execution. A
 negative or inconclusive result remains in the completed matrix.
+
+The completed [frequency evidence guide](../../../studies/model_generation/engine-prefix-evidence/frequency-prefill/README.md)
+records the 320-call result: the primary aggregate p95 hypothesis passed, while
+overall acceptance remains inconclusive (19/20 cost/worst-gap sets and 18/20
+p95-no-harm guards pass). Noise leaves the other guards open; none FAIL. The
+report preserves per-request tradeoffs and both guarded archived-source replays.
+Defaults remain current; no samples or acceptance thresholds were replaced.

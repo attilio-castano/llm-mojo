@@ -2025,3 +2025,27 @@ support, online capacity, goodput, client SLO, universal p95 improvement or
 arbitrary-input backend proof follows. Custody remains local unless separately
 authorized. Any policy revision after seeing this campaign needs a new contract
 and study identity.
+
+## Frequency-aware prefill: executed result (2026-10-22)
+
+Source `df042c2` implements the frozen cohort gate with defaults still current.
+Full documented validation passed (455 Python, 280 native tests/32 suites and
+smoke checks); exact-build Metal qualification and all 60 preflights passed.
+The single 320-call campaign and independent raw/decision audits completed.
+Two fresh archived-source CPU restorations reproduced the retained results.
+
+Primary full-reuse/40 aggregate p95 gaps fell 41.89% (54.239 to 31.556 ms per-run
+medians), with paired completion +2.36% and p95 TTFT +2.67%. The exact adaptive
+69-step/14-mixed-step schedule is preserved. Half-reuse/40 restores current's
+113 steps/3 mixed steps; paired p95 changed +0.43%, but its new no-harm guard is
+inconclusive under 13.25% self-control noise. Half-reuse/384 also has unresolved
+cost and p95 guards. Cost/worst-gap sets pass 19/20 and p95-no-harm 18/20; the
+remaining statuses are inconclusive, none FAIL. Both broad flags and
+`study_success` are false. No resampling or policy retuning followed the result.
+
+Aggregate and per-request quantiles are different claim layers: full reuse's
+largest per-request p95 rose from 25.882 to 31.678 ms while its maximum gap fell.
+The policy remains experimental and off by default. The
+[complete frequency evidence guide](engine-prefix-evidence/frequency-prefill/README.md)
+contains all twenty cells, noise vectors, per-request/group tradeoffs, source
+and actual exits, immutable raw data, independent audits and restoration commands.

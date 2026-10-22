@@ -1,0 +1,22 @@
+{
+  "kind": "engine-prefix-frequency-retention-inventory-v1",
+  "source_commit": "df042c20d0bdd4fe51f5fc32f9bbad663a1769c3",
+  "files": {
+    "engine-prefix-frequency-validation.json.gz": {
+      "bytes": 1975251,
+      "sha256": "8215d5719703ad936049d2c0b44a70192f6be8cc2c392e100d8f60ed012f8c5f"
+    },
+    "engine-prefix-frequency-validation.json": {
+      "bytes": 424,
+      "sha256": "ebc0580d1299f6a368de0b0f2961c8c7c4fba1b1a73ddaeafdc476da966f4c55"
+    },
+    "measurements/engine-prefix-frequency.json.gz": {
+      "bytes": 15987536,
+      "sha256": "19a57868535d5682a0a9adafcd2da32d3592df0380cf9f7bd7cdc4c0b630bb77"
+    },
+    "measurements/engine-prefix-frequency.json": {
+      "bytes": 242,
+      "sha256": "80f8f4dbcca37753cf088d51f3bfca6d7a8db41a3aa3d938bd00aef29fcf6af5"
+    }
+  }
+}
