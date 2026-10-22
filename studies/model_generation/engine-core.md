@@ -1844,3 +1844,184 @@ synchronous Metal, reference 27/projection 8, BF16/FP32, 32-slot slot-major KV,
 Instrumentation is included in engine-availability timings; no online capacity,
 goodput, client SLO, async support, universal improvement or default promotion
 is established. Custody is local, without a remote backup or fresh GPU rerun.
+
+## Frequency-aware prefill: frozen comparison contract
+
+Frozen on 2026-10-22 before implementation, from clean `4cc7a47`. This is the
+approved bounded cohort-frequency experiment, with separate identity
+`engine-prefix-frequency-v1` and record kind `qwen-engine-prefix-frequency-v1`.
+The existing prefix, fixed-cap and adaptive-v1 records remain immutable.
+Defaults stay current. Scope is synchronous reference 27/projection 8 on
+Apple M4 Pro/Metal, BF16 storage/FP32 accumulation, 32-slot slot-major KV,
+prefix caching, lifetime reservation, mixed prefill, zero watermark and fixed
+256-row/eight-sequence workspaces. Frequency mode is separate from old
+adaptive mode; conflicting fixed-cap, fitted-cost and async paths reject
+before mutation. This is a forecast for a finite cohort, not an online p95
+controller or an arbitrary-input performance guarantee.
+
+At the first successful new admission of a new busy period, after ordinary
+cache matching and admission-fit calculation but BEFORE its first model step,
+freeze the already-submitted positive-output WAITING requests, including the
+successful FIFO head before its state changes, by immutable ticket/FIFO order.
+Exclude finished seed/warmup requests, zero-output requests
+and aborts already processed at the boundary. Only requests actually submitted
+to EngineCore as arrived may be inspected, never future trace descriptors.
+The cohort remains fixed until the busy period drains; no shrinking or rolling
+reset when requests finish. Newly submitted requests cannot join or change its
+denominator. Reusing a finished array slot does not reuse its old ticket.
+
+Let N_hat = sum(max(declared maximum outputs - 1, 0)) over the entire cohort.
+Starting at its FIFO head, inspect the leading compatible short-tail run. Its
+members have the same exact resident matched prefix/namespace/salt, matched
+length H, remaining prompt length R, declared output limit G and private
+reservation K. Require 33 <= R <= 64, G >= 3, enough row budget for R plus one
+decode, at least three sequence slots, and the two-reader geometry
+H_blocks + 2*K <= pool_blocks < H_blocks + 3*K, with K > 0. Stop at the first
+incompatible FIFO member; do not count matches behind a cold barrier. Duplicate
+first private full-block keys can create future extra sharing and make the
+forecast ambiguous: select baseline rather than counting them as independent.
+Ambiguous geometry, incompatible initial state, arithmetic overflow or zero
+N_hat selects baseline. One bounded read-only inspection is permitted; it may
+not touch LRU, emit cache events, pin blocks, reserve storage or change KV.
+
+For leading run length L, estimate M_hat = max(L - 1, 0) unsplit mixed
+interruptions under homogeneous declared-limit/two-reader execution. Define
+T = N_hat - floor(19*(N_hat - 1)/20), using checked integer arithmetic.
+Permit the existing adaptive-v1 cap only if M_hat >= T. Apply it only to
+members of that counted leading run, and only when ALL ordinary adaptive-v1
+conditions hold: admission fits with 0 < K <= A, exactly one selected decode,
+its declared remaining output budget >= 2, 33 <= R <= 64, another sequence
+slot remains and A - K < K. Choose min(baseline chunk, 32); otherwise choose
+baseline. Held prefills retain baseline behavior and need no new chunk latch.
+For N_hat=120, M_hat=7 permits the cap and M_hat=3 rejects it. For seven
+all-matching G=16 requests, N_hat=105/M_hat=6 is rejected by the exact finite
+quantile cutoff, despite an interruption fraction above five percent.
+
+Any newly submitted request during the busy period, cancellation/early
+termination, or unexpected matched-prefix/reservation geometry for a counted
+member disables further frequency caps until drain. Delivered output below a
+member's declared limit invalidates the forecast; already-issued work cannot
+be undone. Expected publication of distinct private suffix blocks does not
+invalidate the resident common-prefix identity. An existing held short tail
+still completes normally. Normal limit completion does not shrink the frozen
+cohort, counts or decision. Forecast failure is not permission to reorder FIFO,
+delay delivery, change declared work or replace the current admission policy.
+
+This estimate assumes declared-limit generation, stable overlap/cache identity
+and that mixed gaps form the slower population. Neither N_hat nor M_hat is a
+confidence bound on actual density. Natural EOS and invalidation remain
+possible; count mismatch alone is a forecasting limitation, while incorrect
+recorded inputs/predicate/lifecycle or model-history divergence fails correctness.
+Half reuse is expected to regain baseline p95 by accepting its rarer baseline
+worst stalls (roughly 54 ms rather than adaptive-v1's 31 ms). No claim that
+this policy dominates both previous policies on every latency metric follows.
+
+All forecast enrollment, comparisons, allocations and logging occur INSIDE
+measured scheduling/continuation time. Current and old-adaptive controls do
+NOT execute the frequency forecast just to match instrumentation; disabled
+sentinels are permitted. Warmup (ten steps) and unrestricted seed use current
+scheduling identically in every invocation; only measured continuation enables
+the selected policy. Record cohort membership/tickets/declared limits, anchor
+identity and geometry, leading run, N_hat/M_hat/T, dense/valid state, reasons,
+invalidation transitions, scan counts/cost, ordinary admission inputs and every
+ordered batch selection. Post-run replay compares estimated counts with actual
+per-policy gaps; observed unsplit interruptions come from the current control,
+never from information supplied to the candidate scheduler.
+
+The first twelve cells repeat the adaptive-v1 development matrix. Eight new
+prospective cases test the frequency claim; none may be replaced after seeing
+outputs or performance. Prefix length is 1,024; all arrivals are zero. Matching
+requests are first in FIFO except the existing even-ID cell. Suffixes differ
+within their first private block; nonmatching prompts differ within the first
+block. Freeze literal tokenizer-authored IDs and source/tokenizer identities.
+
+| Role | Matching | Requests | Blocks | Suffix | Output limit | Order |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| known | 4 | 8 | 384 | 64 | 16 | first |
+| known | 8 | 8 | 384 | 64 | 16 | first |
+| secondary | 4 | 8 | 40 | 64 | 16 | first |
+| primary | 8 | 8 | 40 | 64 | 16 | first |
+| known | 0 | 8 | 384 | 64 | 16 | first |
+| known | 8 | 8 | 41 | 64 | 16 | first |
+| known | 8 | 8 | 56 | 64 | 16 | first |
+| known | 8 | 8 | 36 | 33 | 16 | first |
+| known | 8 | 8 | 40 | 63 | 16 | first |
+| known | 8 | 8 | 40 | 65 | 16 | first |
+| known | 8 | 8 | 40 | 64 | 2 | first |
+| known | 4 | 8 | 40 | 64 | 16 | even |
+| prospective | 5 | 8 | 40 | 64 | 16 | first |
+| prospective | 6 | 8 | 40 | 64 | 16 | first |
+| prospective | 7 | 8 | 40 | 64 | 16 | first |
+| prospective | 7 | 7 | 40 | 64 | 16 | first |
+| prospective | 9 | 9 | 40 | 64 | 16 | first |
+| prospective | 4 | 8 | 40 | 64 | 3 | first |
+| prospective | 8 | 8 | 40 | 64 | 8 | first |
+| prospective | 8 | 8 | 40 | 64 | 32 | first |
+
+Frequency cell IDs include all dimensions, including queued request count:
+`prefix-1024-reuse-R-blocks-B-suffix-S-out-G-requests-Q-ORDER`.
+Campaign kind is `engine-prefix-frequency-campaign-v1`; qualification kind is
+`engine-prefix-frequency-qualification-v1`. Native policy values are current,
+adaptive and frequency. Four arms are current, self-current, old adaptive and
+frequency. Four Williams orders by arm indices 0/1/2/3 are [0,1,3,2],
+[1,2,0,3], [2,3,1,0], [3,0,2,1]. Thus 60 unique-policy untimed preflights must
+pass before ONE 320-call timed campaign. Per-native timeout remains 180 seconds;
+collection has a two-hour hard bound. Failure/invalid evidence stops dependent
+collection and retains every attempt and actual exit. Negative performance
+results do not authorize resampling, omitted cells or threshold changes.
+
+Correctness first requires host tests for exact integer quantiles and N/M
+boundaries (including N=120,M=5/6/7 and other cohort sizes), first-step snapshot,
+frozen denominator through completion, seed exclusion, FIFO barriers/salts,
+duplicate-private keys, arithmetic bounds, no forecast execution in controls,
+cache/LRU/ref/KV purity, late arrivals, early EOS, abort, ticket/slot reuse,
+drain/reset/fault cleanup and unsupported configuration rejection. Staged
+arrivals are functional/numerical tests outside this initial timing grid.
+Actual EngineCore frequency-enabled and disabled decisions must run through
+Metal KV/logit/greedy cold-reference checks with terminal and invalidation
+coverage. A bounded actual-engine numerical seam may use a 32-token matched
+prefix and the same two-reader geometry with all eight requests; the 1,024-
+token/pool-40 cases additionally require full preflight histories/work and exact
+logical schedules. These claim layers stay distinct. Full documented validation
+precedes clean source commit and the
+exact-build checkpoint/preflights. No toolchain upgrade is included.
+
+Independent CPU replay must reconstruct snapshots, literal forecasts,
+invalidations, selections, cache admissions/evictions, per-request actual hits,
+natural histories/finish reasons, necessary rows/causal attention, drain and
+clear. Every measured policy must match its own frozen preflight and the other
+policies' actual histories/reuse/work. Primary full-reuse/40 frequency must
+match old adaptive's full logical schedule (69 steps, 14 mixed steps).
+Secondary half-reuse/40 frequency must match current (113 steps, 3 mixed).
+The three 384-block cases must match current (23/39/55 steps for full/half/none).
+Equality excludes timestamps/diagnostics and is not timing-equivalence proof.
+
+Completion, TTFT and gaps retain prior definitions and separate seed/episode/
+clear boundaries. Retain per-request TTFT, p95/max gaps, complete histories,
+per-run p50/p95/p99/max, >20/50 ms counts, decode/mixed attribution, work,
+step phase times and forecasts versus observed counts. Do not pool repetitions;
+report matched/unmatched groups so an aggregate p95 cannot hide rare stalls.
+For each metric n=max(0.05,max(abs(self-current/current-1))) over four blocks.
+Primary frequency/current p95 requires all four ratios <1, median <=0.75 and
+reduction >n. All twenty completion and p95-TTFT guards retain pass m+n<=1.10,
+fail m-n>1.10, else inconclusive. Worst-gap guards retain pass m<=1+n, fail
+all ratios>1 and m>1+n, else inconclusive. Missing denominators are inconclusive.
+
+NEW p95_no_harm is separate from the 25% improvement hypothesis: PASS requires
+BOTH m<=1.05 AND m+n<=1.10. If not passing, FAIL requires all four ratios>1
+and m-1>n; otherwise INCONCLUSIVE. Thus the prior half-reuse p95 regression
+cannot pass by preserving only completion/TTFT/worst-gap guards. Overall success
+requires the primary hypothesis, all twenty cost/worst-gap guards AND all twenty
+p95_no_harm guards. Report broad_guard_pass and broad_p95_guard_pass separately,
+and study_success as their conjunction with the primary result. Old adaptive
+comparisons are descriptive; no adaptive-self control or formal frequency/old-
+adaptive timing-equivalence claim is included. The buffer is an engineering
+rule, not a confidence interval. Unresolved noise remains inconclusive.
+
+Retain immutable measured source, actual validation/qualification exits, compact
+raw records, independent audits and guarded archived-source CPU restoration.
+Old archives must remain byte-for-byte unchanged. No default promotion, async
+support, online capacity, goodput, client SLO, universal p95 improvement or
+arbitrary-input backend proof follows. Custody remains local unless separately
+authorized. Any policy revision after seeing this campaign needs a new contract
+and study identity.
