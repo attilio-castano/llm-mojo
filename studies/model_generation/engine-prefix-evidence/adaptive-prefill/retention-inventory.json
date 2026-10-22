@@ -1,0 +1,22 @@
+{
+  "kind": "engine-prefix-adaptive-retention-inventory-v1",
+  "source_commit": "7dd3864dcd34e04170215876d304a54808abb856",
+  "files": {
+    "engine-prefix-adaptive-validation.json.gz": {
+      "bytes": 1716068,
+      "sha256": "f7bce811055054a4dc7c9b9759a985b9b16f8b65f4d3103083b462b3970ee882"
+    },
+    "engine-prefix-adaptive-validation.json": {
+      "bytes": 423,
+      "sha256": "67c9addf8d9821ae1b81ea88cf4a3d451494b49c82a38765809c5911b29b6744"
+    },
+    "measurements/engine-prefix-adaptive.json.gz": {
+      "bytes": 9313681,
+      "sha256": "22092f6bc69297df4538ca6bbff0ba33f23b1dbfadf0d0760c50693750744fcc"
+    },
+    "measurements/engine-prefix-adaptive.json": {
+      "bytes": 240,
+      "sha256": "6d6d3718f64c394dca884bbddcd70c61f5a800c702843e29ceaa9cbbc49a355b"
+    }
+  }
+}

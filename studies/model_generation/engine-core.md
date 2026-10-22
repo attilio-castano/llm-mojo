@@ -1780,3 +1780,67 @@ a new contract and study identity. Retain compact raw records, exact source,
 actual validation/qualification exits and guarded source/CPU replay separately
 from native correctness. No default promotion, async support, online capacity,
 goodput, client SLO or arbitrary-input backend proof follows.
+
+
+## Adaptive prefill: measured results
+
+The frozen adaptive study passed its primary gate and all twelve workload
+completion, p95-TTFT and worst-gap guards. Collection completed on 2026-10-22
+from clean `7dd3864dcd34e04170215876d304a54808abb856`, after full documented
+validation and exact-build numerical qualification. `adaptive_prefill=False`
+remains the default; no promotion follows from this offline grid.
+
+At full 1,024-token prefix reuse and 40 blocks, current / fixed32 / adaptive
+medians of four per-run measurements were:
+
+| Policy | Completion, ms | TTFT p95, ms | Token gap p95, ms | Worst gap, ms | Steps |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Current | 954.86 | 798.71 | 53.51 | 53.83 | 65 |
+| Fixed32 | 982.83 | 824.09 | 30.94 | 31.23 | 69 |
+| Adaptive | 973.04 | 817.99 | 30.91 | 31.12 | 69 |
+
+The adaptive/current median paired p95-gap ratio is 0.577458 (42.3% reduction),
+with all four ratios below one and effect above the 5% noise buffer. Completion
+and p95-TTFT paired ratios are 1.017585 and 1.020965; buffer upper bounds
+1.067585 and 1.070965 pass 1.10. Worst-gap ratio 0.577810 also passes.
+Descriptive medians and paired-ratio estimates are distinct; small cost changes
+within noise do not establish completion/TTFT improvements or exact overhead.
+
+The causal prediction held: adaptive matches fixed32's exact ordered schedule
+at 40 blocks (69/115 steps for full/half reuse), while matching current at 384
+blocks (23/39/55 for full/half/zero reuse). The primary computes 632 rows and
+672,448 causal attended positions under every policy, reuses 8,192 tokens and
+delivers the same 128 tokens. Seven long mixed interruptions become fourteen
+shorter ones; gaps over 50 ms fall from seven to zero. The rule preserves large
+chunks when admission pressure and the short-tail conditions do not apply.
+
+All twelve cost/worst-gap guards pass with their observed self-control noise.
+The closest adaptive upper bound is 1.087985 for 63-tail completion; 33-tail
+p95-TTFT is 1.085393. The 33-tail gap effect is below noise. At half reuse/40
+blocks, p95 gaps worsen 13.47 to 14.78 ms even while worst gap improves 53.79
+to 31.19 ms: three long gaps become six shorter gaps out of 120, shifting mass
+into p95. The broader guard result is not a universal streaming improvement.
+The output-limit-two cell has only eight gaps per run. Alternating reuse order
+actually reuses only 1,024 tokens; every policy agrees on that eviction outcome.
+No holdout outcome was used to retune the frozen predicate.
+
+Full validation passed 444 Python tests, 270 native tests across 32 TestSuites,
+38 native invocations and benchmark smoke routes. The unchanged 271-file source
+map binds validation to the clean measured commit. The Apple M4 Pro/Metal
+checkpoint passed 189,770,889 checks with zero mismatches/nonfinite values,
+including actual adaptive-engine KV/logit/greedy comparisons and terminal
+cleanup. Broader predicate boundaries are host-tested, not an arbitrary-input
+backend proof. All 36 untimed preflights preceded one 192-call campaign; every
+native exit was zero and histories, hits, work and schedules matched.
+
+The [complete evidence guide](engine-prefix-evidence/adaptive-prefill/README.md)
+retains the full matrix, samples, decisions, original logs, measured source,
+validation/qualification receipts and two independent audits. Both fresh
+archived-source guarded CPU restores passed without native/GPU, model assets
+or network access; the compact report regenerated from the canonical archive.
+Earlier prefix-v1 and active-prefill artifacts are unchanged. The route remains
+synchronous Metal, reference 27/projection 8, BF16/FP32, 32-slot slot-major KV,
+256-row/eight-sequence workspace, zero watermark and lifetime reservation.
+Instrumentation is included in engine-availability timings; no online capacity,
+goodput, client SLO, async support, universal improvement or default promotion
+is established. Custody is local, without a remote backup or fresh GPU rerun.

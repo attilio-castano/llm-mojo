@@ -1,0 +1,15 @@
+{
+  "kind": "engine-prefix-adaptive-final-checks-v1",
+  "source_commit": "7dd3864dcd34e04170215876d304a54808abb856",
+  "source_files_unchanged": 271,
+  "historical_evidence_base": "019419f",
+  "historical_files_unchanged": 37,
+  "frozen_contract_commit": "e16f175",
+  "frozen_contract_preserved": true,
+  "measured_retention_helpers_unchanged": true,
+  "readme_links_checked": 23,
+  "runtime_edits_after_measurement": false,
+  "post_measurement_changes": "Retained evidence, independent audit helpers, results documentation and integrity receipts only.",
+  "full_validation_rerun_required": false,
+  "explanation": "All measured source bytes remain identical; source validation and exact-build qualification already passed. Final checks cover artifact copies, report regeneration and restoration."
+}

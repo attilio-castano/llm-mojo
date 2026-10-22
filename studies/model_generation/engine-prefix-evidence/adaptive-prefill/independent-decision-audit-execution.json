@@ -1,0 +1,27 @@
+{
+  "command": [
+    "/Users/attiliocastano/.local/share/uv/python/cpython-3.12.14-macos-aarch64-none/bin/python3.12",
+    "-B",
+    "/private/tmp/llm-mojo-adaptive-prefill-20261022-independent-decision-audit.py",
+    "/private/tmp/llm-mojo-adaptive-prefill-20261022-results.json",
+    "--output",
+    "/private/tmp/llm-mojo-adaptive-prefill-20261022-independent-decision-audit.json"
+  ],
+  "exit_code": 0,
+  "timeout_seconds": 60,
+  "wall_elapsed_ns": 27905167,
+  "script": {
+    "path": "/private/tmp/llm-mojo-adaptive-prefill-20261022-independent-decision-audit.py",
+    "sha256": "8cd955ba9864f3e1d3321363118d269fee1af3e4e1bccd8a738a07a53dc17f3e"
+  },
+  "input": {
+    "path": "/private/tmp/llm-mojo-adaptive-prefill-20261022-results.json",
+    "sha256": "3ba6c17919bee962748b65db268476b270e2fb947356fcdbaec1d1d82249c59d"
+  },
+  "stdout": "PASS: 192 runs, 120 metric comparisons, 24 decisions; all 12 adaptive cost/worst-gap guards pass.\nPrimary adaptive/current:\n  duration_ns: median=1.017585288131, noise=0.050000000000, ratios=[1.0151943387850986, 1.0627465955595286, 0.9778999186228292, 1.0199762374777008]\n  episode_ns: median=1.010602675119, noise=0.050000000000, ratios=[1.0091807755851565, 1.0387021467140254, 0.9858244520012672, 1.0120245746524237]\n  p95_ttft_ns: median=1.020965344816, noise=0.050000000000, ratios=[1.0226747338889695, 1.0624648323306218, 0.9676520295412138, 1.0192559557426784]\n  p95_gap_ns: median=0.577458025041, noise=0.050000000000, ratios=[0.577369876736799, 0.5782054898246608, 0.57754617334618, 0.5771159789400367]\n  maximum_gap_ns: median=0.577810424011, noise=0.050000000000, ratios=[0.5769106903310574, 0.5787147330039062, 0.5776101425666217, 0.5780107054549748]\nClosest adaptive cost guards:\n{'cell_id': 'prefix-1024-reuse-8-blocks-40-suffix-63-out-16-first', 'guard': 'completion', 'median_ratio': 1.0379849685620286, 'noise': 0.05, 'upper': 1.0879849685620286, 'slack_to_1_10': 0.012015031437971488}\n{'cell_id': 'prefix-1024-reuse-8-blocks-36-suffix-33-out-16-first', 'guard': 'p95_ttft', 'median_ratio': 1.0353926440924617, 'noise': 0.05, 'upper': 1.0853926440924617, 'slack_to_1_10': 0.014607355907538408}\n{'cell_id': 'prefix-1024-reuse-8-blocks-40-suffix-63-out-16-first', 'guard': 'p95_ttft', 'median_ratio': 1.0314455235813105, 'noise': 0.05, 'upper': 1.0814455235813105, 'slack_to_1_10': 0.01855447641868961}\n",
+  "stdout_sha256": "4bdf44b18bf1f5d3dac1303cd0249a440dc4515b8790450535cdea20f32606fc",
+  "result": {
+    "path": "/private/tmp/llm-mojo-adaptive-prefill-20261022-independent-decision-audit.json",
+    "sha256": "b6202a1e4eba195714bf91cd6070121dfe9b6a7b14021e3f0c69f07c6ff9c541"
+  }
+}

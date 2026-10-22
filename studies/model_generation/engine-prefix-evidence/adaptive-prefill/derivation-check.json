@@ -1,0 +1,20 @@
+{
+  "kind": "engine-prefix-adaptive-derivation-check-v1",
+  "status": "passed",
+  "same_derived_results_except_input_paths": true,
+  "actual_execution": {
+    "command": [
+      "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python3",
+      "-B",
+      "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/adaptive-prefill/retention/extract_results.py",
+      "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/adaptive-prefill/measurements/engine-prefix-adaptive.json.gz",
+      "/private/tmp/llm-mojo-adaptive-prefill-20261022-canonical-derived.json"
+    ],
+    "timeout_seconds": 300,
+    "exit_code": 0,
+    "wall_elapsed_ns": 2605915792
+  },
+  "source_commit": "7dd3864dcd34e04170215876d304a54808abb856",
+  "archive_sha256": "22092f6bc69297df4538ca6bbff0ba33f23b1dbfadf0d0760c50693750744fcc",
+  "results_sha256": "3ba6c17919bee962748b65db268476b270e2fb947356fcdbaec1d1d82249c59d"
+}

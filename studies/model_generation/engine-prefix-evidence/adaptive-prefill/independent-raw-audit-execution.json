@@ -1,0 +1,27 @@
+{
+  "command": [
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python",
+    "-B",
+    "/private/tmp/llm_mojo_adaptive_independent_raw_audit.py",
+    "/private/tmp/llm-mojo-adaptive-prefill-20261022-measurements/engine-prefix-adaptive.json.gz",
+    "--source-root",
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo",
+    "--native-binary",
+    "/private/tmp/llm-mojo-adaptive-prefill-20261022-build/engine",
+    "--checkpoint-binary",
+    "/private/tmp/llm-mojo-adaptive-prefill-20261022-qualification/checkpoint-driver"
+  ],
+  "timeout_seconds": 600,
+  "native_execution": false,
+  "started_unix_ns": 1792693364272765000,
+  "auditor_sha256": "d5ee7f824a05ff858295ee2ca61c93e9c6a7e37c86a84b7470ca2680799fda9a",
+  "stdout": "/private/tmp/llm-mojo-adaptive-prefill-20261022-independent-raw-audit.attempt-1.stdout.json",
+  "stderr": "/private/tmp/llm-mojo-adaptive-prefill-20261022-independent-raw-audit.attempt-1.stderr.log",
+  "exit_code": 0,
+  "wall_elapsed_ns": 11485736459,
+  "stdout_sha256": "819fc4d6796e5c8cfec346aa51c83457ea1f76f7e76fb64ecd42bb90e3b880c6",
+  "stdout_bytes": 83049,
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_bytes": 0,
+  "published_result_copy": "/private/tmp/llm-mojo-adaptive-prefill-20261022-independent-raw-audit.json"
+}

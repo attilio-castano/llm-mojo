@@ -993,3 +993,10 @@ and ten warmup steps use current scheduling. Static32 timing comparisons are
 descriptive; formal guards use current/self-current controls. Identical fallback
 schedules do not establish zero time overhead. Retain failures and inconclusive
 noise-buffered outcomes without resampling, retuning or default promotion.
+
+
+The completed [adaptive evidence guide](../../../studies/model_generation/engine-prefix-evidence/adaptive-prefill/README.md)
+records the 192-call result: the primary p95-gap gate and all twelve adaptive
+cost/worst-gap guards passed. The default remains current. The guide includes
+the full matrix, the half-reuse p95 regression, exact measured source,
+qualification, independent audits and guarded archived-source replay commands.
