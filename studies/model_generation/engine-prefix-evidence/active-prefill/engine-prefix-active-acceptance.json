@@ -1,0 +1,31 @@
+{
+  "kind": "active-prefill-validation-source-binding-v1",
+  "source_commit": "75dbfdebf1aba467d3d3eeba516f740d7eb8641c",
+  "validated_repository": {
+    "commit": "7007f7b4851480f2a2891b6c1039e14b1f4b3701",
+    "branch": "codex/prefix-cache",
+    "dirty": true
+  },
+  "measured_repository": {
+    "commit": "75dbfdebf1aba467d3d3eeba516f740d7eb8641c",
+    "branch": "codex/prefix-cache",
+    "dirty": false
+  },
+  "same_source_bytes": true,
+  "source_files": 271,
+  "validation_sha256": "325c760d00f652b7bd1aefd86f583957a7f7c127a271e7a1b1b7a2305cba2469",
+  "build_sha256": "6f83449a20c93487ebaddabaac816bf50feda5f7a8b741b785d15d1ede464953",
+  "python_tests": 434,
+  "native_tests": 261,
+  "native_suites": 32,
+  "native_invocations": 38,
+  "qualification_checks": 127138680,
+  "qualification_mismatches": 0,
+  "untimed_preflights": 15,
+  "timed_calls": 80,
+  "all_native_call_exits_zero": true,
+  "same_delivered_histories": true,
+  "same_reuse_work": true,
+  "promotion": false,
+  "custody": "local-only"
+}

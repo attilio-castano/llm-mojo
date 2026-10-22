@@ -1,0 +1,81 @@
+{
+  "kind": "engine-prefix-active-guarded-cpu-replay-v1",
+  "source_commit": "75dbfdebf1aba467d3d3eeba516f740d7eb8641c",
+  "measurement_sha256": "a2829701c982681d1b12118b704685abd0faba3e680dfef5b4ba62e2006b3c12",
+  "measured_runs": 80,
+  "untimed_preflights": 15,
+  "same_delivered_histories": true,
+  "same_reuse_work": true,
+  "usefulness": {
+    "primary_cell": "prefix-1024-reuse-8-blocks-40",
+    "primary_cap": 32,
+    "primary": {
+      "p95_gap": {
+        "status": "pass",
+        "ratio_limit": 0.75
+      },
+      "guards": {
+        "completion": {
+          "status": "pass",
+          "buffer": [
+            0.9256221002850271,
+            1.0256221002850272
+          ],
+          "limit": 1.1
+        },
+        "p95_ttft": {
+          "status": "pass",
+          "buffer": [
+            0.9413281106487088,
+            1.041328110648709
+          ],
+          "limit": 1.1
+        },
+        "worst_gap": {
+          "status": "pass"
+        }
+      },
+      "guards_pass": true,
+      "hypothesis": "supported"
+    },
+    "broad_guard_pass": false,
+    "exploratory_cap16": {
+      "primary": {
+        "p95_gap": {
+          "status": "pass",
+          "ratio_limit": 0.75
+        },
+        "guards": {
+          "completion": {
+            "status": "inconclusive",
+            "buffer": [
+              1.0009613222118836,
+              1.1009613222118837
+            ],
+            "limit": 1.1
+          },
+          "p95_ttft": {
+            "status": "inconclusive",
+            "buffer": [
+              1.00900425351951,
+              1.1090042535195102
+            ],
+            "limit": 1.1
+          },
+          "worst_gap": {
+            "status": "pass"
+          }
+        },
+        "guards_pass": false,
+        "hypothesis": "inconclusive"
+      },
+      "broad_guard_pass": false
+    },
+    "uncertainty": "Engineering median-ratio plus/minus self-control noise buffer; not a confidence interval."
+  },
+  "native_execution": false,
+  "asset_access": false,
+  "network_access": false,
+  "prohibited_attempts": [],
+  "preliminary_acceptance": null
+}

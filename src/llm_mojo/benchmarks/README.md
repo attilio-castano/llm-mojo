@@ -953,3 +953,7 @@ maximum and per-request worst gaps, fixed 20/50-ms exceedance counts, mixed-step
 attribution, paired noise and usefulness gates. Failed attempts remain recorded;
 there is no selective resampling. Existing prefix-v1 archives keep their
 original declaration and replay behavior. Defaults remain unchanged.
+
+The completed cap study's [results and sealed CPU restoration](../../../studies/model_generation/engine-prefix-evidence/active-prefill/README.md)
+support cap 32 in the primary full-reuse/40-block cell. Broader cost guards do
+not all pass; cap 16 remains exploratory and the default remains zero.

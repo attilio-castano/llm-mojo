@@ -1,0 +1,17 @@
+{
+  "status": "passed",
+  "source_commit": "75dbfdebf1aba467d3d3eeba516f740d7eb8641c",
+  "measurement_sha256": "a2829701c982681d1b12118b704685abd0faba3e680dfef5b4ba62e2006b3c12",
+  "runs": 80,
+  "histories": 80,
+  "snapshots": 6564,
+  "hits": 384,
+  "events": {
+    "stored": 12032,
+    "removed": 12032,
+    "cleared": 80
+  },
+  "source_hashes": 271,
+  "native_binary": "matched",
+  "native_execution": false
+}

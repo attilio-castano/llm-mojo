@@ -1607,3 +1607,62 @@ stay fixed when noise grows. All primary guards must pass for primary success.
 The same cost/worst-gap guards are reported for the other cells and cap 16;
 broader use requires considering their regressions. No default promotion,
 online-arrival, sustainable-capacity, client-SLO or goodput claim follows.
+
+
+## Active-stream prefill caps: retained results
+
+The single 80-call campaign from clean `75dbfdebf1aba467d3d3eeba516f740d7eb8641c`
+completed on 2026-10-22. Exact-build numerical qualification passed 127,138,680
+checks with zero mismatches or unexpected nonfinite values; all fifteen
+preflights and all timed calls passed with identical natural histories and
+logical work. Full repository validation passed 434 Python tests, 261 native
+tests across 32 TestSuites and all benchmark smoke routes. The validated and
+measured 271-file source maps are identical.
+
+For the primary full-reuse/40-block cell, these milliseconds are medians of
+four per-run measurements:
+
+| Active cap | Completion | TTFT p95 | Token gap p95 | Worst gap | Steps |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 (current) | 985.49 | 825.36 | 54.42 | 55.18 | 65 |
+| 32 | 974.63 | 821.44 | 31.60 | 32.07 | 69 |
+| 16 | 1035.03 | 877.17 | 19.99 | 20.56 | 77 |
+
+Cap 32 passes the frozen primary gate. Its paired p95-gap ratio is 0.580916,
+a 41.9% reduction exceeding its 5.106% noise buffer, with all four ratios below
+one. Completion and p95-TTFT paired ratios 0.975622/0.991328 pass their 10%
+regression guards, and worst gap passes. The completion/TTFT differences are
+within noise; a speedup is not established. Cap 16's cost guards are
+inconclusive, with upper bounds 1.100961/1.109004 beyond 1.10.
+
+The mechanism follows the schedule: identical 632 computed rows, 8,192 reused
+prefix rows and 128 emitted tokens are split into 7 / 14 / 28 mixed steps for
+current / 32 / 16. In the 40-block pool, these produce 7 / 14 / 28 mixed gaps;
+gaps above 50 ms fall from seven to zero with either cap. Shorter chunks
+reduce each interruption but create more interruptions and more step
+executions. At 384 blocks, mixed gaps increase from 28 to 56 to 84 as more
+streams overlap a step, and total steps increase from 23 to 30 to 44. More
+step overhead and altered decode concurrency can therefore consume completion
+and TTFT benefits even while individual stalls shrink; GPU traffic/occupancy
+were not directly profiled in this study.
+
+Broader cap-32 cost/worst-gap guards do not all pass. Half reuse at 384 blocks
+and zero reuse show roughly 11% paired completion overhead with inconclusive
+10% cost guards; full reuse at 384 blocks also has inconclusive guards and
+higher self-control noise. Half reuse at 40 blocks passes those guards but
+does not establish a p95-gap improvement. At half reuse/40 blocks, cap 16
+reduces worst gap from 55.41 to 21.45 ms while worsening p95 from 12.79 to
+20.16 ms: mixed gaps increase from 3/120 (2.5%, beyond the p95 tail) to
+12/120 (10%, inside it). Shorter interruptions can be frequent enough to raise
+a quantile. This supports the specified primary use case without selecting a
+universal cap. Defaults stay unchanged.
+
+The [evidence guide](engine-prefix-evidence/active-prefill/README.md) retains
+all five cells, exact decisions, original samples, source/validation receipts
+and commands. Fresh-directory source restoration and guarded CPU replay passed
+both before and after canonical copying, without GPU/native execution, asset
+access or networking. The measured route remains Apple M4 Pro/Metal,
+synchronous reference 27/projection 8, BF16/FP32, fixed 256-row/eight-sequence
+workspaces, 32-slot slot-major KV and lifetime reservation. Timings include
+trace serialization; engine availability and finite offline gaps establish no
+client SLO, online capacity, goodput, async support or default promotion.
