@@ -18,7 +18,7 @@ from llm_mojo.models.qwen2.runner import QwenRunner
 from llm_mojo.models.qwen2.tokenizer import TableReader
 from llm_mojo.models.qwen2.plan import MAX_CONTEXT, DECODE_PROJECTION, configured_plan
 from llm_mojo.serving.batch import StepBatch
-from llm_mojo.serving.engine import EngineCore, PREFILL, DECODE, WAITING, FINISHED, TOKEN_EVENT, FINISH_EVENT
+from llm_mojo.serving.engine import EngineCore, EngineStep, PREFILL, DECODE, WAITING, FINISHED, TOKEN_EVENT, FINISH_EVENT
 from llm_mojo.serving.kv_pool import KVPool
 
 
@@ -1674,6 +1674,455 @@ def prefix_adaptive_qualification(path: String) raises:
     terminals.emit("prefix-adaptive-engine-terminal-fault-cache-clear")
 
 
+def _prefix_frequency_prompt(member: Int, matching: Bool = True) -> List[Int]:
+    # The common full block is resident before the measured busy period. Every
+    # suffix differs inside its FIRST private full block, so new publication
+    # cannot silently turn another member into a longer cache match.
+    var prompt = _prefix_ids(0 if matching else 1000+member*37,32,VOCABULARY)
+    var suffix = _prefix_ids(200+member*67,64,VOCABULARY)
+    for token in suffix:
+        prompt.append(token)
+    return prompt^
+
+
+def _prefix_frequency_enqueue(mut engine: EngineCore, requests: Int, matching: Int,
+                              maximum: Int, duplicate: Bool = False) raises -> List[Int]:
+    var slots = List[Int]()
+    for i in range(requests):
+        slots.append(engine.add(i+1,_prefix_frequency_prompt(0 if duplicate and i == 1 else i,
+                                i < matching),maximum,List[Int]()))
+    return slots^
+
+
+def _prefix_frequency_abort_all(mut engine: EngineCore, mut runner: QwenRunner,
+                                mut pool: KVPool, mut check: FastChecks) raises:
+    var ids = List[Int]()
+    for i in range(len(engine.requests)):
+        if engine.requests[i].state != FINISHED:
+            ids.append(engine.requests[i].request_id)
+    for id in ids:
+        engine.abort(id)
+    var final = engine.step(runner,pool)
+    check.equal(final.total_tokens,0,"frequency cancellation submits no extra model rows")
+    _prefix_engine_drained(engine,pool,check)
+    _ = engine.clear_cache(pool)
+    _qualification_drained(engine,pool,check)
+
+
+def _prefix_frequency_numeric(mut runner: QwenRunner, mut cold: QwenRunner,
+                              requests: Int, matching: Int, maximum: Int,
+                              expected_run: Int, expected_threshold: Int, dense: Bool,
+                              policy: String, duplicate: Bool,
+                              mut check: FastChecks) raises:
+    """Actual EngineCore decision/Metal parity at a bounded, scaled H=32 seam.
+
+    Pool seven, H_blocks one and private K three preserve the measured pool40
+    two-reader geometry. The eight-request/G16 cases retain N=120 and M=7/3.
+    Long H=1024 histories are a separate exact-preflight/trace evidence layer.
+    """
+    runner.model.reset(runner.ctx)
+    var pool = KVPool(runner.ctx,7,32,runner.model.kv_geometry())
+    pool.storage.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+    var engine = EngineCore(7,32,QUAL_CONTEXT,VOCABULARY,token_budget=256,
+        max_sequences=8,max_requests=16,reserve_lifetime=True,prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity(),observe_prefill_policy=True,
+        observe_frequency_policy=True)
+    _ = engine.add(0,_prefix_ids(0,33,VOCABULARY),1,List[Int]())
+    _ = _prefix_engine_drain(engine,runner,pool,check)
+    check.equal(engine.cached_blocks(),1,"frequency current seed registers only common prefix")
+    engine.adaptive_prefill = policy == "adaptive"
+    engine.frequency_prefill = policy == "frequency"
+    var slots = _prefix_frequency_enqueue(engine,requests,matching,maximum,duplicate)
+    var before_clock = engine.prefix_cache.clock
+    var before_events = engine.prefix_cache.event_id
+    var common = _prefix_frozen(pool,[engine.prefix_cache.entries[0].block],1)
+    runner.model.logits.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+    runner.model.normalized.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+    var first = engine.step(runner,pool)
+    check.equal(first.total_tokens,64,"frequency idle first reader remains unrestricted")
+    check.equal(first.prefill_tokens,64,"frequency idle first reader consumes complete tail")
+    check.equal(first.cache_hit_tokens,32,"frequency first reader has actual common-prefix hit")
+    check.equal(len(first.selections),1,"frequency first reader ordered selection count")
+    check.equal(first.selections[0].request_id,1,"frequency FIFO head selection")
+    check.equal(first.selections[0].past,32,"frequency first reader exact past")
+    check.equal(first.selections[0].selected_head,63,"frequency first reader absolute sample row")
+    check.equal(engine.prefix_cache.clock,before_clock+3,"frequency inspection adds no LRU ticks")
+    check.equal(engine.prefix_cache.event_id,before_events+2,"frequency inspection emits no cache events")
+    check.equal(len(first.cache_events),2,"frequency only actual private publication changes index")
+    check.equal(engine.blocks.free_blocks(),3,"frequency forecast makes no private reservations")
+    check.equal(engine.cache_references(),4,"frequency only first reader owns a lifetime table")
+    check.equal(engine.cached_blocks(),3,"frequency only common and first-reader full blocks are stored")
+    var after = _prefix_frozen(pool,[engine.prefix_cache.entries[0].block],1)
+    for i in range(len(common)):
+        check.equal(Int(after[i]),Int(common[i]),"frequency forecast preserves resident shared-prefix bytes")
+    if policy == "frequency":
+        check.equal(len(first.frequency_snapshots),1,"frequency initializes exactly one first-admission forecast")
+        var snapshot = first.frequency_snapshots[0].copy()
+        check.equal(snapshot.anchor_request_id,1,"frequency snapshot excludes finished seed")
+        check.equal(snapshot.anchor_ticket,1,"frequency first measured immutable ticket")
+        check.equal(snapshot.last_ticket,requests,"frequency last frozen immutable ticket")
+        check.equal(snapshot.request_count,requests,"frequency snapshots complete already-arrived cohort")
+        check.equal(snapshot.gap_budget,requests*(maximum-1),"frequency declared frozen denominator")
+        check.equal(snapshot.run_count,expected_run,"frequency literal compatible FIFO run")
+        check.equal(snapshot.predicted_interruptions,max(expected_run-1,0),"frequency literal interruption estimate")
+        check.equal(snapshot.threshold,expected_threshold,"frequency exact finite-quantile threshold")
+        check.equal(snapshot.matched_tokens,32,"frequency anchor exact resident matched prefix")
+        check.equal(snapshot.remaining_prompt_tokens,64,"frequency anchor tail length")
+        check.equal(snapshot.anchor_maximum_outputs,maximum,"frequency anchor declared output limit")
+        check.equal(snapshot.required_blocks,3,"frequency anchor private peak reservation")
+        check.equal(snapshot.available_blocks,6,"frequency anchor protects its resident prefix")
+        check.equal(snapshot.lookup_count,requests-1 if matching == requests else matching,
+                    "frequency counts additional readonly lookups through first cold barrier")
+        check.truth(snapshot.valid,"frequency numerical cohort is unambiguous")
+        check.truth(snapshot.dense == dense,"frequency forecast density gate")
+        check.truth(snapshot.enabled == dense,"frequency initial permission is valid and dense")
+        check.reason(snapshot.reason,"dense" if dense else "sparse")
+        check.equal(len(snapshot.request_ids),requests,"frequency frozen request membership census")
+        check.equal(len(snapshot.tickets),requests,"frequency frozen ticket membership census")
+        for i in range(requests):
+            check.equal(snapshot.request_ids[i],i+1,"frequency frozen FIFO request order")
+            check.equal(snapshot.tickets[i],i+1,"frequency frozen ticket order")
+            check.equal(snapshot.prompt_lengths[i],96,"frequency frozen prompt length")
+            check.equal(snapshot.maximum_outputs[i],maximum,"frequency frozen output declaration")
+        check.truth(first.frequency_forecast_ns >= 0,"frequency forecast time is included in scheduler accounting")
+    else:
+        check.equal(len(first.frequency_snapshots),0,"frequency control does not inspect a cohort")
+        check.equal(len(first.frequency_events),0,"frequency control emits no forecast lifecycle")
+        check.equal(first.frequency_forecast_ns,0,"frequency control performs no forecast work")
+    _prefix_adaptive_compare(runner,cold,engine,pool,slots[0],96,0,check)
+    _prefix_head_guards(runner.model,1,check)
+    var apply = policy == "adaptive" or (policy == "frequency" and dense)
+    var a_length = 96
+    var b_length = 32
+    var iterations = 0
+    while engine.requests[slots[1]].generated == 0:
+        check.truth(iterations < 2,"frequency scaled numerical tail has at most two chunks")
+        runner.model.logits.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+        runner.model.normalized.enqueue_fill(bitcast[DType.bfloat16](PREFIX_POISON))
+        var submitted = runner.model.submitted_rows
+        var record = engine.step(runner,pool)
+        var count = 32 if apply else 64
+        a_length += 1
+        b_length += count
+        check.equal(record.decode_seqs,1,"frequency actual sole selected decoder")
+        check.equal(record.prefill_tokens,count,"frequency actual chosen tail rows")
+        check.equal(record.total_tokens,1+count,"frequency actual ordered mixed query rows")
+        check.equal(record.preempted,0,"frequency reserved numerical probe has no replay")
+        check.equal(runner.model.last_route.configuration,DECODER_MIXED,"frequency actual reference27 dispatch")
+        check.equal(runner.model.submitted_rows-submitted,(1+count)*LAYERS,"frequency all checkpoint layers submit exact work")
+        check.equal(len(record.frequency_snapshots),0,"frequency held busy period never refreezes")
+        check.truth(record.frequency_forecast_ns >= 0,"frequency admission-gate cost remains inside measured scheduler")
+        check.equal(len(record.selections),2,"frequency two ordered mixed selections")
+        check.equal(record.selections[0].request_id,1,"frequency decoder remains FIFO first")
+        check.equal(record.selections[0].past,a_length-1,"frequency decoder submitted history past")
+        check.equal(record.selections[0].query_tokens,1,"frequency decoder singleton query")
+        check.equal(record.selections[0].selected_head,0,"frequency decoder absolute head")
+        check.equal(record.selections[1].request_id,2,"frequency admitted/held second reader")
+        check.equal(record.selections[1].past,b_length-count,"frequency second reader exact past")
+        check.equal(record.selections[1].query_tokens,count,"frequency second reader exact query rows")
+        var complete = b_length == 96
+        check.equal(record.selections[1].selected_head,count if complete else -1,"frequency partial tail absolute head")
+        check.equal(runner.model.sampled_rows,2 if complete else 1,"frequency partial tail has no output head")
+        if iterations == 0:
+            check.equal(len(record.prefill_decisions),1,"frequency new reader has ordinary decision")
+            check.truth(record.prefill_decisions[0].eligible,"frequency probe ordinary adaptive predicate is eligible")
+            check.truth(record.prefill_decisions[0].applied == apply,"frequency cohort gate changes actual cap application")
+            check.equal(len(record.frequency_decisions),1,"frequency new admission has one cohort receipt")
+            var point = record.frequency_decisions[0].copy()
+            check.equal(point.request_id,2,"frequency admission receipt exact request")
+            check.equal(point.ticket,2,"frequency admission receipt immutable ticket")
+            if policy == "frequency":
+                check.equal(point.gap_budget,requests*(maximum-1),"frequency completion has not changed frozen denominator")
+                check.equal(point.predicted_interruptions,max(expected_run-1,0),"frequency frozen interruption estimate")
+                check.equal(point.threshold,expected_threshold,"frequency frozen threshold")
+                check.truth(point.member and point.in_run,"frequency second reader is an enrolled leading member")
+                check.truth(point.dense == dense,"frequency admission density receipt")
+                check.truth(point.allowed == dense,"frequency actual cohort permission")
+            else:
+                check.equal(point.cohort_id,-1,"frequency control cohort sentinel")
+                check.equal(point.gap_budget,-1,"frequency control denominator sentinel")
+                check.equal(point.predicted_interruptions,-1,"frequency control estimate sentinel")
+                check.equal(point.threshold,-1,"frequency control threshold sentinel")
+                check.truth(not point.member and not point.in_run and not point.active
+                            and not point.dense and not point.allowed,"frequency control boolean sentinels")
+                check.reason(point.reason,"not_executed")
+        else:
+            check.equal(len(record.prefill_decisions),0,"frequency held tail uses baseline without a new latch")
+            check.equal(len(record.frequency_decisions),0,"frequency held tail is not a new admission")
+            check.equal(record.frequency_forecast_ns,0,"frequency held tail performs no forecast or new-admission check")
+        _prefix_adaptive_compare(runner,cold,engine,pool,slots[0],a_length,0,check)
+        _prefix_adaptive_compare(runner,cold,engine,pool,slots[1],b_length,1 if complete else -1,check)
+        _prefix_head_guards(runner.model,2 if complete else 1,check)
+        engine.check(pool)
+        iterations += 1
+    check.equal(iterations,2 if apply else 1,"frequency gate changes at most one tail submission")
+    _prefix_frequency_abort_all(engine,runner,pool,check)
+
+
+def _prefix_frequency_event(record: EngineStep, kind: String, phase: String,
+                            reason: String, mut check: FastChecks) raises -> Int:
+    var count = 0
+    for event in record.frequency_events:
+        if event.kind == kind:
+            count += 1
+            check.reason(event.phase,phase)
+            check.reason(event.reason,reason)
+    return count
+
+
+def _prefix_frequency_limits(mut runner: QwenRunner, mut cold: QwenRunner,
+                             maximum: Int, mut check: FastChecks) raises:
+    runner.model.reset(runner.ctx)
+    var pool = KVPool(runner.ctx,7,32,runner.model.kv_geometry())
+    var engine = EngineCore(7,32,QUAL_CONTEXT,VOCABULARY,token_budget=256,
+        max_sequences=8,max_requests=16,reserve_lifetime=True,prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity(),observe_prefill_policy=True,
+        observe_frequency_policy=True)
+    _ = engine.add(0,_prefix_ids(0,33,VOCABULARY),1,List[Int]())
+    _ = _prefix_engine_drain(engine,runner,pool,check)
+    engine.frequency_prefill = True
+    var slots = _prefix_frequency_enqueue(engine,8,8,maximum)
+    var snapshots = 0
+    var closed = 0
+    var steps = 0
+    var sampled = List[Int](length=8,fill=0)
+    while engine.live() > 0:
+        check.truth(steps < 512,"frequency declared-limit lifecycle makes bounded progress")
+        var record = engine.step(runner,pool)
+        snapshots += len(record.frequency_snapshots)
+        closed += _prefix_frequency_event(record,"closed","close","drained",check)
+        check.equal(_prefix_frequency_event(record,"invalidated","postprocess","early_termination",check),0,
+                    "frequency normal limit completion never invalidates cohort")
+        for point in record.frequency_decisions:
+            check.equal(point.gap_budget,8*(maximum-1),"frequency denominator stays frozen through normal completion")
+            check.equal(point.predicted_interruptions,7,"frequency run estimate stays frozen through completion")
+            check.equal(point.threshold,2 if maximum == 3 else 14,"frequency G3/G32 exact finite threshold")
+            check.truth(point.member and point.in_run and point.active,"frequency completed members do not shrink cohort")
+            check.truth(point.allowed == (maximum == 3),"frequency G3 enables and G32 disables ordinary adaptive gate")
+        for event in record.events:
+            if event.kind == TOKEN_EVENT:
+                sampled[event.request_id-1] += 1
+            else:
+                check.reason(event.reason,"length")
+                check.equal(event.generated_tokens,maximum,"frequency normal member delivers declared output limit")
+        engine.check(pool)
+        steps += 1
+    check.equal(snapshots,1,"frequency busy period retains exactly one frozen forecast")
+    check.equal(closed,1,"frequency busy period closes exactly once")
+    for i in range(8):
+        check.equal(sampled[i],maximum,"frequency each member delivers all declared outputs")
+        # Independent natural generation checks complete histories for both
+        # the dense short limit and sparse long limit, including final token.
+        var expected = _prefix_cold_tokens(cold,_prefix_frequency_prompt(i),maximum,check)
+        for j in range(maximum):
+            check.equal(engine.requests[slots[i]].tokens[96+j],expected[j],"frequency complete declared-limit cold history")
+    _prefix_engine_drained(engine,pool,check)
+    _ = engine.clear_cache(pool)
+    _qualification_drained(engine,pool,check)
+
+
+def _prefix_frequency_invalidations(mut runner: QwenRunner, mut cold: QwenRunner,
+                                    kind: String, mut check: FastChecks) raises:
+    runner.model.reset(runner.ctx)
+    var pool = KVPool(runner.ctx,7,32,runner.model.kv_geometry())
+    var engine = EngineCore(7,32,QUAL_CONTEXT,VOCABULARY,token_budget=256,
+        max_sequences=8,max_requests=16,reserve_lifetime=True,prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity(),observe_prefill_policy=True,
+        observe_frequency_policy=True)
+    _ = engine.add(0,_prefix_ids(0,33,VOCABULARY),1,List[Int]())
+    _ = _prefix_engine_drain(engine,runner,pool,check)
+    engine.frequency_prefill = True
+    var stops = List[Int]()
+    if kind == "stop":
+        stops = _prefix_cold_tokens(cold,_prefix_frequency_prompt(0),1,check)
+    var slots = List[Int]()
+    for i in range(8):
+        slots.append(engine.add(i+1,_prefix_frequency_prompt(i),16,stops.copy() if i == 0 else List[Int]()))
+    var first = engine.step(runner,pool)
+    check.equal(len(first.frequency_snapshots),1,"frequency invalidation starts from a real frozen cohort")
+    check.truth(first.frequency_snapshots[0].enabled,"frequency invalidation starts from a dense valid cohort")
+    check.equal(first.frequency_snapshots[0].gap_budget,120,"frequency invalidation preserves original denominator")
+    check.equal(_prefix_frequency_event(first,"frozen","admission","dense",check),1,
+                "frequency first successful admission freezes once")
+    if kind == "stop":
+        check.equal(engine.requests[slots[0]].generated,1,"frequency natural early stop delivers exactly one output")
+        check.reason(engine.requests[slots[0]].reason,"stop")
+        check.equal(engine.requests[slots[0]].tokens[96],stops[0],"frequency actual natural stop token")
+        check.equal(_prefix_frequency_event(first,"invalidated","postprocess","early_termination",check),1,
+                    "frequency actual early termination invalidates after its output")
+    elif kind == "arrival":
+        var added = engine.add(99,_prefix_frequency_prompt(8),16,List[Int](),arrival_ns=1)
+        check.equal(engine.requests[added].ticket,9,"frequency staged arrival receives a fresh ticket")
+    elif kind == "abort":
+        # Exercise invalidation while a previously capped tail is already held.
+        var partial = engine.step(runner,pool)
+        check.equal(partial.prefill_tokens,32,"frequency abort fixture first performs a real cap")
+        check.equal(engine.requests[slots[1]].generated,0,"frequency held short tail has no speculative output")
+        engine.abort(1)
+    var record = engine.step(runner,pool)
+    check.equal(len(record.frequency_snapshots),0,"frequency invalidation does not rebuild or shrink snapshot")
+    check.truth(record.frequency_forecast_ns >= 0,"frequency invalidation preserves explicit scheduler accounting")
+    if kind == "arrival":
+        check.equal(_prefix_frequency_event(record,"invalidated","ingress","new_arrival",check),1,
+                    "frequency staged arrival invalidates before next admission")
+        check.equal(record.prefill_tokens,64,"frequency late arrival makes later new admission baseline")
+        check.equal(record.total_tokens,65,"frequency invalidated mixed step retains ordinary work")
+        check.equal(len(record.frequency_decisions),1,"frequency late-arrival fallback is explicitly observed")
+        var point = record.frequency_decisions[0].copy()
+        check.equal(point.gap_budget,120,"frequency late arrival never joins frozen denominator")
+        check.truth(not point.active and point.dense and not point.allowed,"frequency invalidation retains dense forecast but disables permission")
+        check.reason(point.reason,"new_arrival")
+        _prefix_adaptive_compare(runner,cold,engine,pool,slots[0],97,0,check)
+        _prefix_adaptive_compare(runner,cold,engine,pool,slots[1],96,1,check)
+    elif kind == "abort":
+        check.equal(_prefix_frequency_event(record,"invalidated","boundary","abort",check),1,
+                    "frequency boundary cancellation invalidates once")
+        check.equal(record.aborted,1,"frequency cancelled incumbent terminates once")
+        check.equal(record.prefill_tokens,32,"frequency already-held short tail completes normally")
+        check.equal(len(record.frequency_decisions),0,"frequency held tail is not re-admitted after cancellation")
+        check.equal(engine.requests[slots[1]].generated,1,"frequency held tail delivers only its completed output")
+        _prefix_adaptive_compare(runner,cold,engine,pool,slots[1],96,0,check)
+        var reused = engine.add(1,_prefix_frequency_prompt(8),1,List[Int](),arrival_ns=2)
+        check.equal(reused,slots[0],"frequency finished slot is reused by actual add")
+        check.equal(engine.requests[reused].ticket,9,"frequency reused request ID receives a different immutable ticket")
+        # Drain the old members at the boundary so the reused slot is the next
+        # actual admission while the old, invalid busy period is still live.
+        for i in range(1,8):
+            engine.abort(i+1)
+        var reused_step = engine.step(runner,pool)
+        check.equal(len(reused_step.frequency_snapshots),0,"frequency slot reuse does not refreeze before drain")
+        check.equal(len(reused_step.frequency_decisions),1,"frequency reused ticket has an actual admission receipt")
+        var point = reused_step.frequency_decisions[0].copy()
+        check.equal(point.ticket,9,"frequency reused slot receipt uses new ticket")
+        check.truth(not point.member and not point.in_run and not point.allowed,"frequency reused slot never inherits cohort membership")
+        check.equal(point.gap_budget,120,"frequency slot reuse cannot alter original denominator")
+        check.equal(engine.requests[reused].generated,1,"frequency reused one-output request completes")
+        _prefix_engine_drained(engine,pool,check)
+        _ = engine.clear_cache(pool)
+        _qualification_drained(engine,pool,check)
+        # A genuinely new busy period may enroll new immutable tickets again.
+        _ = _prefix_frequency_enqueue(engine,8,8,16)
+        var next = engine.step(runner,pool)
+        check.equal(len(next.frequency_snapshots),1,"frequency drain allows a fresh cohort")
+        check.equal(next.frequency_snapshots[0].cohort_id,1,"frequency cohort identities remain monotonic after drain")
+        check.equal(next.frequency_snapshots[0].anchor_ticket,10,"frequency fresh cohort excludes all historical tickets")
+    else:
+        check.equal(record.prefill_tokens,64,"frequency early stop leaves next idle reader unrestricted")
+        check.equal(len(record.frequency_decisions),1,"frequency post-stop admission is observed")
+        check.truth(not record.frequency_decisions[0].allowed,"frequency early stop disables later caps")
+        check.reason(record.frequency_decisions[0].reason,"early_termination")
+        _prefix_adaptive_compare(runner,cold,engine,pool,slots[1],96,0,check)
+    _prefix_frequency_abort_all(engine,runner,pool,check)
+
+
+def _prefix_frequency_duplicate(mut runner: QwenRunner, mut check: FastChecks) raises:
+    runner.model.reset(runner.ctx)
+    var pool = KVPool(runner.ctx,7,32,runner.model.kv_geometry())
+    var engine = EngineCore(7,32,QUAL_CONTEXT,VOCABULARY,token_budget=256,
+        max_sequences=8,max_requests=16,reserve_lifetime=True,prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity(),observe_prefill_policy=True,
+        observe_frequency_policy=True)
+    _ = engine.add(0,_prefix_ids(0,33,VOCABULARY),1,List[Int]())
+    _ = _prefix_engine_drain(engine,runner,pool,check)
+    engine.frequency_prefill = True
+    _ = _prefix_frequency_enqueue(engine,8,8,16,True)
+    var first = engine.step(runner,pool)
+    check.equal(len(first.frequency_snapshots),1,"frequency duplicate-private ambiguity is recorded")
+    check.truth(not first.frequency_snapshots[0].valid and not first.frequency_snapshots[0].enabled,
+                "frequency duplicate-private ambiguity never permits a forecast")
+    check.reason(first.frequency_snapshots[0].reason,"duplicate_private_key")
+    var second = engine.step(runner,pool)
+    check.equal(len(second.frequency_decisions),1,"frequency duplicate-key fallback reaches actual admission")
+    check.truth(not second.frequency_decisions[0].allowed,"frequency duplicate-key fallback cannot cap")
+    check.reason(second.frequency_decisions[0].reason,"duplicate_private_key")
+    check.equal(second.cache_hit_tokens,64,"frequency ordinary longer exact hit remains enabled")
+    _prefix_frequency_abort_all(engine,runner,pool,check)
+
+
+def _prefix_frequency_fault(mut runner: QwenRunner, mut check: FastChecks) raises:
+    runner.model.reset(runner.ctx)
+    var pool = KVPool(runner.ctx,7,32,runner.model.kv_geometry())
+    var engine = EngineCore(7,32,QUAL_CONTEXT,VOCABULARY,token_budget=256,
+        max_sequences=8,max_requests=16,reserve_lifetime=True,prefix_caching=True,
+        prefix_namespace=runner.prefix_cache_identity(),observe_prefill_policy=True,
+        observe_frequency_policy=True)
+    _ = engine.add(0,_prefix_ids(0,33,VOCABULARY),1,List[Int]())
+    _ = _prefix_engine_drain(engine,runner,pool,check)
+    engine.frequency_prefill = True
+    var slots = _prefix_frequency_enqueue(engine,8,8,16)
+    var first = engine.step(runner,pool)
+    check.truth(first.frequency_snapshots[0].enabled,"frequency fault begins with qualified actual cohort")
+    var history = engine.requests[slots[0]].tokens.copy()
+    var prompt = _prefix_frequency_prompt(1)
+    var poisoned = 0 if history[len(history)-1] != 0 else 15
+    for i in range(32,64):
+        check.truth(poisoned != prompt[i],"frequency deliberate tied-head fault row is absent from pending prompt")
+    var saved: UInt16
+    with runner.model.embedding.map_to_host() as mapped:
+        saved = bitcast[DType.uint16](mapped.unsafe_ptr()[unsafe_offset=poisoned*HIDDEN])
+        mapped.unsafe_ptr()[unsafe_offset=poisoned*HIDDEN] = bitcast[DType.bfloat16](UInt16(0x7FC0))
+    var submitted = runner.model.submitted_rows
+    with assert_raises(contains="nonfinite"):
+        _ = engine.step(runner,pool)
+    check.checked += 1
+    check.equal(runner.model.submitted_rows-submitted,33*LAYERS,"frequency fault uses actually capped mixed query rows")
+    check.equal(runner.model.sampled_rows,1,"frequency fault never samples incomplete prompt")
+    check.truth(engine.failed and not runner.model.valid,"frequency numerical fault invalidates engine and model")
+    check.equal(engine.cached_blocks(),0,"frequency numerical fault invalidates resident cache")
+    check.equal(len(engine.failure_events),8,"frequency numerical fault terminates every frozen member once")
+    check.equal(len(engine.failure_frequency_events),2,"frequency fault preserves invalidation then busy-period closure")
+    check.reason(engine.failure_frequency_events[0].kind,"invalidated")
+    check.reason(engine.failure_frequency_events[0].phase,"postprocess")
+    check.reason(engine.failure_frequency_events[0].reason,"early_termination")
+    check.reason(engine.failure_frequency_events[1].kind,"closed")
+    check.reason(engine.failure_frequency_events[1].phase,"close")
+    check.reason(engine.failure_frequency_events[1].reason,"drained")
+    check.equal(engine.frequency_cohort.cohort_id,-1,"frequency failed busy period drops all cohort membership")
+    for event in engine.failure_events:
+        check.reason(event.reason,"error")
+        check.equal(event.generated_tokens,1 if event.request_id == 1 else 0,"frequency fault preserves already-delivered output counts")
+    for i in range(len(history)):
+        check.equal(engine.requests[slots[0]].tokens[i],history[i],"frequency fault retains already-delivered history")
+    _qualification_drained(engine,pool,check)
+    _ = engine.clear_cache(pool)
+    with assert_raises():
+        _ = engine.step(runner,pool)
+    check.checked += 1
+    check.equal(runner.model.submitted_rows,submitted+33*LAYERS,"frequency failed engine submits no more model work")
+    with runner.model.embedding.map_to_host() as mapped:
+        mapped.unsafe_ptr()[unsafe_offset=poisoned*HIDDEN] = bitcast[DType.bfloat16](saved)
+
+
+def prefix_frequency_qualification(path: String) raises:
+    var runner = QwenRunner(path,MAX_CONTEXT,QUAL_ROWS,QUAL_SEQUENCES)
+    var cold = QwenRunner(path,MAX_CONTEXT,QUAL_ROWS,QUAL_SEQUENCES)
+    assert_equal(runner.ctx.name(),"Apple M4 Pro")
+    assert_equal(runner.ctx.api(),"metal")
+    assert_equal(cold.ctx.name(),runner.ctx.name())
+    assert_equal(cold.ctx.api(),runner.ctx.api())
+    assert_equal(runner.model.kv_geometry().layers,LAYERS)
+    print("device",runner.ctx.name()+"/"+runner.ctx.api())
+    print("qualification","engine-prefix-frequency-reference27-v1")
+    print("configuration",DECODER_MIXED,"projection",DECODE_PROJECTION,"dtype","BF16/FP32","block-size",32)
+    print("numerical-scope","scaled-prefix-32","pool",7,"context",QUAL_CONTEXT)
+    var numerical = FastChecks()
+    _prefix_frequency_numeric(runner,cold,8,8,16,8,7,True,"frequency",False,numerical)
+    _prefix_frequency_numeric(runner,cold,8,4,16,4,7,False,"frequency",False,numerical)
+    _prefix_frequency_numeric(runner,cold,7,7,16,7,7,False,"frequency",False,numerical)
+    _prefix_frequency_numeric(runner,cold,9,9,16,9,8,True,"frequency",False,numerical)
+    for policy in ["current","adaptive"]:
+        _prefix_frequency_numeric(runner,cold,8,8,16,8,7,True,policy,False,numerical)
+    numerical.emit("prefix-frequency-engine-cohort-kv-logits-greedy")
+    var lifecycle = FastChecks()
+    for maximum in [3,32]:
+        _prefix_frequency_limits(runner,cold,maximum,lifecycle)
+    for kind in ["arrival","stop","abort"]:
+        _prefix_frequency_invalidations(runner,cold,kind,lifecycle)
+    _prefix_frequency_duplicate(runner,lifecycle)
+    _prefix_frequency_fault(runner,lifecycle)
+    lifecycle.emit("prefix-frequency-engine-invalidation-terminal-cache-clear")
+
+
 def prefix_history_qualification(path: String, fixture_path: String) raises:
     """Replay frozen independently supplied natural histories through the cache.
 
@@ -1802,6 +2251,8 @@ def main() raises:
         prefix_active_qualification(args[1])
     elif len(args) == 3 and args[2] == "prefix-adaptive-qualification":
         prefix_adaptive_qualification(args[1])
+    elif len(args) == 3 and args[2] == "prefix-frequency-qualification":
+        prefix_frequency_qualification(args[1])
     elif len(args) == 4 and args[2] == "prefix-history-qualification":
         prefix_history_qualification(args[1],args[3])
     elif len(args) == 4 and args[2] == "fast-qualification":

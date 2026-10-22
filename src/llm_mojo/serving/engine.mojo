@@ -231,6 +231,101 @@ struct EngineSelectedRequest(Copyable, Movable):
     var selected_head: Int
 
 
+def _frequency_threshold(gaps: Int) -> Int:
+    """Exact finite linear-p95 cutoff, without overflowing 19*(N-1)."""
+    if gaps < 1:
+        return 0
+    var previous = gaps - 1
+    return gaps - (previous // 20 * 19 + previous % 20 * 19 // 20)
+
+
+struct EngineFrequencySnapshot(Copyable, Movable):
+    """One arrived FIFO cohort, frozen before its first ownership transition."""
+    var cohort_id: Int
+    var anchor_request_id: Int
+    var anchor_ticket: Int
+    var last_ticket: Int
+    var request_count: Int
+    var gap_budget: Int
+    var run_count: Int
+    var predicted_interruptions: Int
+    var threshold: Int
+    var matched_tokens: Int
+    var remaining_prompt_tokens: Int
+    var anchor_maximum_outputs: Int
+    var required_blocks: Int
+    var available_blocks: Int
+    var lookup_count: Int
+    var valid: Bool
+    var dense: Bool
+    var enabled: Bool
+    var reason: String
+    var namespace: String
+    var cache_salt: String
+    var request_ids: List[Int]
+    var tickets: List[Int]
+    var prompt_lengths: List[Int]
+    var maximum_outputs: List[Int]
+    var run_request_ids: List[Int]
+    var run_tickets: List[Int]
+
+    def __init__(out self):
+        self.cohort_id = -1
+        self.anchor_request_id = -1
+        self.anchor_ticket = -1
+        self.last_ticket = -1
+        self.request_count = 0
+        self.gap_budget = 0
+        self.run_count = 0
+        self.predicted_interruptions = 0
+        self.threshold = 0
+        self.matched_tokens = 0
+        self.remaining_prompt_tokens = 0
+        self.anchor_maximum_outputs = 0
+        self.required_blocks = 0
+        self.available_blocks = 0
+        self.lookup_count = 0
+        self.valid = False
+        self.dense = False
+        self.enabled = False
+        self.reason = ""
+        self.namespace = ""
+        self.cache_salt = ""
+        self.request_ids = List[Int]()
+        self.tickets = List[Int]()
+        self.prompt_lengths = List[Int]()
+        self.maximum_outputs = List[Int]()
+        self.run_request_ids = List[Int]()
+        self.run_tickets = List[Int]()
+
+
+@fieldwise_init
+struct EngineFrequencyEvent(Copyable, Movable):
+    var event_id: Int
+    var cohort_id: Int
+    var request_id: Int
+    var ticket: Int
+    var kind: String
+    var phase: String
+    var reason: String
+
+
+@fieldwise_init
+struct EngineFrequencyDecision(Copyable, Movable):
+    var request_id: Int
+    var ticket: Int
+    var cohort_id: Int
+    var gap_budget: Int
+    var predicted_interruptions: Int
+    var threshold: Int
+    var member: Bool
+    var in_run: Bool
+    var active: Bool
+    var dense: Bool
+    var allowed: Bool
+    var reason: String
+
+
 struct EngineStep(Copyable, Movable):
     var step_id: Int
     var decode_seqs: Int
@@ -278,6 +373,10 @@ struct EngineStep(Copyable, Movable):
     var cache_admission_ns: Int
     var prefill_decisions: List[EnginePrefillDecision]
     var selections: List[EngineSelectedRequest]
+    var frequency_forecast_ns: Int
+    var frequency_snapshots: List[EngineFrequencySnapshot]
+    var frequency_events: List[EngineFrequencyEvent]
+    var frequency_decisions: List[EngineFrequencyDecision]
 
     def __init__(out self, step_id: Int, capacity: Int, observe_kv: Bool = False,
                  async_step: Bool = False):
@@ -327,6 +426,10 @@ struct EngineStep(Copyable, Movable):
         self.cache_admission_ns = 0
         self.prefill_decisions = List[EnginePrefillDecision]()
         self.selections = List[EngineSelectedRequest]()
+        self.frequency_forecast_ns = 0
+        self.frequency_snapshots = List[EngineFrequencySnapshot]()
+        self.frequency_events = List[EngineFrequencyEvent]()
+        self.frequency_decisions = List[EngineFrequencyDecision]()
 
 
 @fieldwise_init
@@ -367,6 +470,14 @@ struct EngineCore(Movable):
     var active_prefill_cap: Int
     var adaptive_prefill: Bool
     var observe_prefill_policy: Bool
+    var frequency_prefill: Bool
+    var observe_frequency_policy: Bool
+    var frequency_cohort: EngineFrequencySnapshot
+    var frequency_prefix: List[Int]
+    var frequency_blocks: List[Int]
+    var frequency_pending_events: List[EngineFrequencyEvent]
+    var next_frequency_cohort: Int
+    var next_frequency_event: Int
     var reserve_lifetime: Bool
     var observe_kv: Bool
     var cost_policy: StepCost
@@ -376,6 +487,7 @@ struct EngineCore(Movable):
     var failed: Bool
     var failure_events: List[EngineEvent]
     var failure_cache_events: List[PrefixCacheEvent]
+    var failure_frequency_events: List[EngineFrequencyEvent]
     var async_pending: List[EngineAsyncPending]
     var async_enabled: Bool
     var async_last_ticket: Int
@@ -389,14 +501,17 @@ struct EngineCore(Movable):
                  reserve_lifetime: Bool = False, observe_kv: Bool = False,
                  prefix_caching: Bool = False, prefix_namespace: String = "",
                  active_prefill_cap: Int = 0, adaptive_prefill: Bool = False,
-                 observe_prefill_policy: Bool = False) raises:
+                 observe_prefill_policy: Bool = False, frequency_prefill: Bool = False,
+                 observe_frequency_policy: Bool = False) raises:
         if (blocks < 1 or block_size < 1 or max_context < 1 or max_context > 4096 or vocabulary < 1
                 or token_budget < 1 or token_budget > 4096 or max_sequences < 1 or max_sequences > 64
                 or max_requests < 1 or watermark_blocks < 0 or watermark_blocks > blocks
                 or active_prefill_cap < 0 or active_prefill_cap > 4096
                 or (prefix_caching and (block_size != 32 or prefix_namespace.byte_length() == 0))
                 or (adaptive_prefill and (not prefix_caching or not mixed_prefill
-                    or not reserve_lifetime or active_prefill_cap != 0))):
+                    or not reserve_lifetime or active_prefill_cap != 0))
+                or (frequency_prefill and (not prefix_caching or not mixed_prefill
+                    or not reserve_lifetime or active_prefill_cap != 0 or adaptive_prefill))):
             raise Error("invalid bounded engine configuration")
         self.blocks = BlockManager(blocks, block_size, max_context)
         self.requests = List[EngineRequest](capacity=max_requests)
@@ -410,6 +525,14 @@ struct EngineCore(Movable):
         self.active_prefill_cap = active_prefill_cap
         self.adaptive_prefill = adaptive_prefill
         self.observe_prefill_policy = observe_prefill_policy
+        self.frequency_prefill = frequency_prefill
+        self.observe_frequency_policy = observe_frequency_policy
+        self.frequency_cohort = EngineFrequencySnapshot()
+        self.frequency_prefix = List[Int]()
+        self.frequency_blocks = List[Int]()
+        self.frequency_pending_events = List[EngineFrequencyEvent]()
+        self.next_frequency_cohort = 0
+        self.next_frequency_event = 0
         self.reserve_lifetime = reserve_lifetime
         self.observe_kv = observe_kv
         self.cost_policy = StepCost(0, 0, 0, 0, 0)
@@ -419,6 +542,7 @@ struct EngineCore(Movable):
         self.failed = False
         self.failure_events = List[EngineEvent](capacity=max_requests)
         self.failure_cache_events = List[PrefixCacheEvent]()
+        self.failure_frequency_events = List[EngineFrequencyEvent]()
         self.async_pending = List[EngineAsyncPending](capacity=2)
         self.async_enabled = False
         self.async_last_ticket = -1
@@ -458,6 +582,8 @@ struct EngineCore(Movable):
 
     def set_cost_policy(mut self, policy: StepCost) raises:
         """Enable a frozen cost model only after validating all its fields."""
+        if self.frequency_prefill:
+            raise Error("frequency prefill requires fixed row budgeting")
         if self.adaptive_prefill:
             raise Error("adaptive prefill requires fixed row budgeting")
         policy.validate()
@@ -504,6 +630,8 @@ struct EngineCore(Movable):
         else:
             self.requests[slot] = request^
         self.next_ticket += 1
+        if self.frequency_prefill and self.frequency_cohort.cohort_id >= 0:
+            self._invalidate_frequency(request_id, self.requests[slot].ticket, "ingress", "new_arrival")
         return slot
 
     def abort(mut self, request_id: Int):
@@ -542,6 +670,10 @@ struct EngineCore(Movable):
             self._release(index, kv)
             self.requests[index].state = FINISHED
         self.requests[index].reason = reason
+        if self.frequency_prefill and self.frequency_cohort.cohort_id >= 0:
+            if reason == "abort" or reason == "error" or self.requests[index].generated < self.requests[index].maximum:
+                self._invalidate_frequency(self.requests[index].request_id, self.requests[index].ticket,
+                    "boundary" if reason == "abort" else "postprocess", "abort" if reason == "abort" else "early_termination")
         record.events.append(EngineEvent(FINISH_EVENT, self.requests[index].request_id, -1, reason,
                                         self.requests[index].prompt_length, self.requests[index].generated,
                                         self.requests[index].arrival_ns, at_ns))
@@ -646,10 +778,195 @@ struct EngineCore(Movable):
         # progress even when fixed cost alone exceeds the research target.
         return max(best, 1) if decodes == 0 else best
 
+    def _frequency_event(mut self, request_id: Int, ticket: Int, kind: String, phase: String, reason: String):
+        if self.observe_frequency_policy:
+            self.frequency_pending_events.append(EngineFrequencyEvent(self.next_frequency_event,
+                self.frequency_cohort.cohort_id, request_id, ticket, kind, phase, reason))
+        self.next_frequency_event += 1
+
+    def _take_frequency_events(mut self, mut record: EngineStep):
+        for event in self.frequency_pending_events:
+            record.frequency_events.append(event.copy())
+        self.frequency_pending_events.clear()
+
+    def _close_frequency(mut self, mut record: EngineStep):
+        if self.frequency_cohort.cohort_id >= 0 and self.live() == 0:
+            self._frequency_event(-1, -1, "closed", "close", "drained")
+            self.frequency_cohort = EngineFrequencySnapshot()
+            self.frequency_prefix.clear()
+            self.frequency_blocks.clear()
+        self._take_frequency_events(record)
+
+    def _invalidate_frequency(mut self, request_id: Int, ticket: Int, phase: String, reason: String):
+        if self.frequency_cohort.cohort_id >= 0 and self.frequency_cohort.valid:
+            self.frequency_cohort.valid = False
+            self.frequency_cohort.enabled = False
+            self.frequency_cohort.reason = reason
+            self._frequency_event(request_id, ticket, "invalidated", phase, reason)
+
+    def _frequency_member(self, ticket: Int, run: Bool = False) -> Bool:
+        if run:
+            for enrolled in self.frequency_cohort.run_tickets:
+                if enrolled == ticket:
+                    return True
+        else:
+            for enrolled in self.frequency_cohort.tickets:
+                if enrolled == ticket:
+                    return True
+        return False
+
+    def _freeze_frequency(mut self, index: Int, cached: List[Int], available: Int,
+                          required: Int, mut record: EngineStep) raises:
+        """Inspect only the arrived queue; matching never touches LRU or ownership."""
+        var frozen = EngineFrequencySnapshot()
+        frozen.cohort_id = self.next_frequency_cohort
+        self.next_frequency_cohort += 1
+        frozen.anchor_request_id = self.requests[index].request_id
+        frozen.anchor_ticket = self.requests[index].ticket
+        frozen.namespace = self.prefix_namespace
+        frozen.cache_salt = self.requests[index].cache_salt
+        frozen.matched_tokens = len(cached) * self.blocks.block_size
+        frozen.remaining_prompt_tokens = self.requests[index].prompt_length - frozen.matched_tokens
+        frozen.anchor_maximum_outputs = self.requests[index].maximum
+        frozen.required_blocks = required
+        frozen.available_blocks = available
+        frozen.reason = "dense"
+        var indices = List[Int]()
+        var next = self._oldest(WAITING, indices)
+        var overflow = False
+        while next >= 0:
+            indices.append(next)
+            frozen.request_ids.append(self.requests[next].request_id)
+            frozen.tickets.append(self.requests[next].ticket)
+            frozen.prompt_lengths.append(self.requests[next].prompt_length)
+            frozen.maximum_outputs.append(self.requests[next].maximum)
+            frozen.last_ticket = self.requests[next].ticket
+            var gaps = max(self.requests[next].maximum - 1, 0)
+            if frozen.gap_budget > Int.MAX - gaps:
+                overflow = True
+            else:
+                frozen.gap_budget += gaps
+            next = self._oldest(WAITING, indices)
+        frozen.request_count = len(indices)
+        if self._has_resident() or len(indices) == 0 or indices[0] != index:
+            frozen.reason = "incompatible_initial_state"
+        elif self.watermark_blocks != 0:
+            frozen.reason = "watermark"
+        elif frozen.remaining_prompt_tokens < 33 or frozen.remaining_prompt_tokens > 64:
+            frozen.reason = "tail_length"
+        elif frozen.anchor_maximum_outputs < 3:
+            frozen.reason = "output_limit"
+        elif self.token_budget < frozen.remaining_prompt_tokens + 1:
+            frozen.reason = "row_budget"
+        elif self.max_sequences < 3:
+            frozen.reason = "sequence_slots"
+        elif required <= 0 or (self.blocks.blocks - len(cached)) // max(required, 1) != 2:
+            frozen.reason = "geometry"
+        elif overflow:
+            frozen.reason = "gap_overflow"
+        elif frozen.gap_budget == 0:
+            frozen.reason = "zero_gap_budget"
+        frozen.valid = frozen.reason == "dense"
+        self.frequency_prefix.clear()
+        self.frequency_blocks = cached.copy()
+        for p in range(frozen.matched_tokens):
+            self.frequency_prefix.append(self.requests[index].tokens[p])
+        if frozen.valid:
+            for candidate in indices:
+                if (self.requests[candidate].cache_salt != frozen.cache_salt
+                        or self.requests[candidate].prompt_length != self.requests[index].prompt_length
+                        or self.requests[candidate].maximum != frozen.anchor_maximum_outputs):
+                    break
+                var candidate_blocks = cached.copy()
+                if candidate != index:
+                    candidate_blocks = self.prefix_cache.match(self.blocks, self.requests[candidate].tokens,
+                        self.prefix_namespace, self.requests[candidate].cache_salt)
+                    frozen.lookup_count += 1
+                var same = len(candidate_blocks) == len(cached)
+                if same:
+                    for b in range(len(cached)):
+                        if candidate_blocks[b] != cached[b]:
+                            same = False
+                if not same:
+                    break
+                # Equal full-prefix keys after one private block could create
+                # additional sharing, invalidating the two-reader forecast.
+                var duplicate = False
+                for previous in indices:
+                    if self.requests[previous].ticket >= self.requests[candidate].ticket:
+                        break
+                    var equal_key = True
+                    for p in range(frozen.matched_tokens, frozen.matched_tokens + self.blocks.block_size):
+                        if self.requests[previous].tokens[p] != self.requests[candidate].tokens[p]:
+                            equal_key = False
+                    if equal_key:
+                        duplicate = True
+                if duplicate:
+                    frozen.valid = False
+                    frozen.reason = "duplicate_private_key"
+                    break
+                frozen.run_request_ids.append(self.requests[candidate].request_id)
+                frozen.run_tickets.append(self.requests[candidate].ticket)
+        frozen.run_count = len(frozen.run_tickets)
+        frozen.predicted_interruptions = max(frozen.run_count - 1, 0)
+        frozen.threshold = _frequency_threshold(frozen.gap_budget)
+        frozen.dense = frozen.valid and frozen.predicted_interruptions >= frozen.threshold
+        frozen.enabled = frozen.valid and frozen.dense
+        if frozen.valid and not frozen.dense:
+            frozen.reason = "sparse"
+        self.frequency_cohort = frozen^
+        if self.observe_frequency_policy:
+            record.frequency_snapshots.append(self.frequency_cohort.copy())
+        var frozen_reason = self.frequency_cohort.reason.copy()
+        self._frequency_event(self.requests[index].request_id, self.requests[index].ticket,
+            "frozen", "admission", frozen_reason)
+
+    def _frequency_admission(mut self, index: Int, cached: List[Int], required: Int,
+                             mut record: EngineStep) -> Bool:
+        var ticket = self.requests[index].ticket
+        var member = self._frequency_member(ticket)
+        var in_run = self._frequency_member(ticket, True)
+        if in_run and self.frequency_cohort.valid:
+            var same = (len(cached) * self.blocks.block_size == self.frequency_cohort.matched_tokens
+                and self.requests[index].prompt_length - self.frequency_cohort.matched_tokens == self.frequency_cohort.remaining_prompt_tokens
+                and self.requests[index].maximum == self.frequency_cohort.anchor_maximum_outputs
+                and required == self.frequency_cohort.required_blocks
+                and self.prefix_namespace == self.frequency_cohort.namespace
+                and self.requests[index].cache_salt == self.frequency_cohort.cache_salt
+                and len(cached) == len(self.frequency_blocks))
+            if same:
+                for b in range(len(cached)):
+                    if cached[b] != self.frequency_blocks[b]:
+                        same = False
+                for p in range(len(self.frequency_prefix)):
+                    if self.requests[index].tokens[p] != self.frequency_prefix[p]:
+                        same = False
+            if not same:
+                self._invalidate_frequency(self.requests[index].request_id, ticket, "admission", "geometry_changed")
+        var active = self.frequency_cohort.valid
+        var allowed = active and self.frequency_cohort.dense and in_run
+        var reason = String("allowed")
+        if self.frequency_cohort.cohort_id < 0:
+            reason = "unfrozen"
+        elif not active:
+            reason = self.frequency_cohort.reason
+        elif not member:
+            reason = "not_member"
+        elif not in_run:
+            reason = "outside_run"
+        elif not self.frequency_cohort.dense:
+            reason = "sparse"
+        if self.observe_frequency_policy:
+            record.frequency_decisions.append(EngineFrequencyDecision(self.requests[index].request_id,
+                ticket, self.frequency_cohort.cohort_id, self.frequency_cohort.gap_budget,
+                self.frequency_cohort.predicted_interruptions, self.frequency_cohort.threshold,
+                member, in_run, active, self.frequency_cohort.dense, allowed, reason))
+        return allowed
+
     def _admission_prefill_count(self, index: Int, budget: Int, selected: List[Int],
                                 past: Int, free: Int, reclaimable: Int, watermark: Int,
                                 available: Int, required: Int, count: Int,
-                                mut record: EngineStep) -> Int:
+                                mut record: EngineStep, frequency_allowed: Bool = False) -> Int:
         """Choose only a new admission's first chunk; held work needs no latch."""
         var remaining = self.requests[index].prompt_length - past
         var baseline = min(budget, remaining)
@@ -677,8 +994,8 @@ struct EngineCore(Movable):
         var chosen = 0 if required > available else count
         var applied = False
         if eligible:
-            if not self.adaptive_prefill:
-                reason = "adaptive_disabled"
+            if not self.adaptive_prefill and not frequency_allowed:
+                reason = "frequency_fallback" if self.frequency_prefill else "adaptive_disabled"
             elif baseline <= 32:
                 reason = "baseline_at_most_32"
             else:
@@ -728,9 +1045,20 @@ struct EngineCore(Movable):
                     var extent = self._peak_extent(index) if self.reserve_lifetime else past + count
                     if self.reserve_lifetime:
                         var required = ceildiv(extent, self.blocks.block_size) - len(cached)
-                        if self.adaptive_prefill or self.observe_prefill_policy:
+                        var frequency_allowed = False
+                        if self.frequency_prefill:
+                            var forecast_begin = runner.now_ns()
+                            if self.frequency_cohort.cohort_id < 0 and required <= available and count > 0:
+                                self._freeze_frequency(index, cached, available, required, record)
+                            frequency_allowed = self._frequency_admission(index, cached, required, record)
+                            record.frequency_forecast_ns += runner.now_ns() - forecast_begin
+                        elif self.observe_frequency_policy:
+                            record.frequency_decisions.append(EngineFrequencyDecision(
+                                self.requests[index].request_id, self.requests[index].ticket,
+                                -1, -1, -1, -1, False, False, False, False, False, "not_executed"))
+                        if self.adaptive_prefill or self.frequency_prefill or self.observe_prefill_policy:
                             count = self._admission_prefill_count(index, budget, selected, past,
-                                free, reclaimable, watermark, available, required, count, record)
+                                free, reclaimable, watermark, available, required, count, record, frequency_allowed)
                         if required > available:
                             return False
                     else:
@@ -1134,7 +1462,7 @@ struct EngineCore(Movable):
         ticket, then a later call can safely preempt/replay through the common
         scheduler. Lifetime reservations keep the normal pipeline resident.
         """
-        if self.active_prefill_cap != 0 or self.adaptive_prefill:
+        if self.active_prefill_cap != 0 or self.adaptive_prefill or self.frequency_prefill:
             raise Error("active prefill caps require synchronous stepping")
         if (self.failed or self.prefix_caching or self.cached_blocks() > 0
                 or kv.blocks != self.blocks.blocks or kv.block_size != self.blocks.block_size):
@@ -1232,6 +1560,10 @@ struct EngineCore(Movable):
             reserved_tokens, waiting, residents))
 
     def step[Runner: ModelRunner](mut self, mut runner: Runner, mut kv: KVPool) raises -> EngineStep:
+        if self.frequency_prefill and (not self.prefix_caching or not self.mixed_prefill
+                or not self.reserve_lifetime or self.active_prefill_cap != 0
+                or self.cost_policy_enabled or self.adaptive_prefill):
+            raise Error("frequency prefill requires exclusive synchronous mixed prefix lifetime fixed row budgeting")
         if self.adaptive_prefill and (not self.prefix_caching or not self.mixed_prefill
                 or not self.reserve_lifetime or self.active_prefill_cap != 0 or self.cost_policy_enabled):
             raise Error("adaptive prefill requires prefix caching, mixed lifetime reservations and fixed row budgeting")
@@ -1247,6 +1579,7 @@ struct EngineCore(Movable):
         self.check(kv)
         var record = EngineStep(self.step_id, self.max_requests + 2 * self.max_sequences, self.observe_kv)
         record.begin_ns = runner.now_ns()
+        self._take_frequency_events(record)
         self._observe_kv(kv, record, 0, record.begin_ns)
         self.step_id += 1
         for i in range(len(self.requests)):
@@ -1310,6 +1643,9 @@ struct EngineCore(Movable):
                 if self.prefix_caching:
                     record.cache_events = self.clear_cache(kv)
                     self.failure_cache_events = record.cache_events.copy()
+                if self.frequency_prefill:
+                    self._close_frequency(record)
+                    self.failure_frequency_events = record.frequency_events.copy()
                 self.failure_events = record.events.copy()
                 raise error
             postprocess_begin = runner.now_ns()
@@ -1355,6 +1691,8 @@ struct EngineCore(Movable):
             if self.requests[i].state == WAITING:
                 record.waiting += 1
         self.check(kv)
+        if self.frequency_prefill:
+            self._close_frequency(record)
         if self.prefix_caching:
             record.cache_events = self.prefix_cache.take_events()
         record.end_ns = runner.now_ns()

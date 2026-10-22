@@ -133,7 +133,40 @@ def adaptive_trace(values):
     return trace
 
 
-def adaptive_native_fixture(trace,mode='adaptive'):
+def frequency_trace(values):
+    reuse,blocks,suffix,maximum,order,count=values
+    trace=adaptive_trace([min(reuse,8),blocks,suffix,maximum,order]); trace['prefix'].update(reuse_requests=reuse,cohort_requests=count)
+    trace['requests']=trace['requests'][:count]
+    if count==9: trace['requests'].append(prefix._request(8,list(range(1024))+[6008]*suffix,maximum))
+    return trace
+
+
+def fixture_forecast(req,index,waiting,h,k,available,pool,sid,namespace):
+    """Synthetic producer, independently expressed from public replay helpers."""
+    anchor=req[waiting]; ids=[i for i in req if i not in index]; g=anchor['max_new_tokens']; tail=len(anchor['prompt_ids'])-h
+    gaps=sum(max(req[i]['max_new_tokens']-1,0) for i in ids)
+    reason='tail_length' if not 33<=tail<=64 else 'output_limit' if g<3 else 'geometry' if not 2*k<=pool-h//32<3*k else None
+    run=[]; lookups=0
+    if reason is None:
+        common=anchor['prompt_ids'][:h]
+        for i in ids:
+            r=req[i]
+            if len(r['prompt_ids'])!=len(anchor['prompt_ids']) or r['max_new_tokens']!=g: break
+            if i!=waiting: lookups+=1
+            if r['prompt_ids'][:h]!=common or any(tuple(r['prompt_ids'][:n]) not in fixture_forecast.cache for n in range(32,h+1,32)): break
+            run.append(i)
+    m=max(len(run)-1,0); t=gaps-(19*(gaps-1)//20) if gaps else 0
+    dense=reason is None and m>=t
+    return dict(step_id=sid,cohort_id=0,anchor_request_id=waiting,anchor_ticket=waiting+1,last_ticket=ids[-1]+1,
+        request_count=len(ids),gap_budget=gaps,run_count=len(run),predicted_interruptions=m,threshold=t,
+        matched_tokens=h,remaining_prompt_tokens=tail,anchor_maximum_outputs=g,required_blocks=k,available_blocks=available,
+        lookup_count=lookups,valid=reason is None,dense=dense,enabled=dense,reason=reason or ('dense' if dense else 'sparse'),
+        namespace=namespace,cache_salt=prefix.SALT,request_ids=ids,tickets=[i+1 for i in ids],
+        prompt_lengths=[len(req[i]['prompt_ids']) for i in ids],maximum_outputs=[req[i]['max_new_tokens'] for i in ids],
+        run_request_ids=run,run_tickets=[i+1 for i in run])
+
+
+def adaptive_native_fixture(trace,mode='adaptive',frequency=False,stop_after=None):
     """Bounded synthetic receipts with explicit blocks and deterministic non-stop heads.
 
     This tests receipt replay, not model arithmetic. Physical numerical qualification
@@ -143,7 +176,9 @@ def adaptive_native_fixture(trace,mode='adaptive'):
     lines=['device Apple M4 Pro/metal','mode greedy',f'config chunked {pool} 256 8',
            'admission reserved','study engine-prefix-adaptive-v1','work_capacity 256 8','cache enabled',
            f'namespace {namespace}',f'salt {prefix.SALT}',f'prefill_policy {mode}']
+    if frequency: lines[4]='study engine-prefix-frequency-v1'
     index={}; private={}; tick=0; eid=0; sid=0; absolute=1000
+    cohort=None; feid=0
     def free(): return pool-len(index)-sum(private.values())
     def event(kind,key=()):
         nonlocal eid
@@ -160,6 +195,10 @@ def adaptive_native_fixture(trace,mode='adaptive'):
             for i in req: lines.append(f'arrival {i} 0 0')
             while len(done)<len(req):
                 changes=[]; hits=[]; decisions=[]; selected=[]
+                fwork=0; fsnap=[]; fdecision=[]; fevents=[]
+                def fevent(i,kind,stage,reason):
+                    nonlocal feid
+                    fevents.append(f'frequency_event {sid} {feid} 0 {i} {i+1 if i>=0 else -1} {kind} {stage} {reason}'); feid+=1
                 dec=[i for i in req if i in past and generated[i] and i not in done][:8]
                 selected.extend((i,1) for i in dec); budget=256-len(dec)
                 held=next((i for i in req if i in past and not generated[i] and i not in done),None)
@@ -184,9 +223,30 @@ def adaptive_native_fixture(trace,mode='adaptive'):
                             (not 33<=remaining<=64,'tail_length'),(len(dec)+1>=8,'last_sequence_slot'),
                             (a-k>=k,'capacity_headroom')) if failed),None)
                         eligible=reason is None
-                        n=0 if k>a else min(baseline,32) if (current=='fixed32' and dec) or (current=='adaptive' and eligible) else baseline
-                        applied=current=='adaptive' and eligible and n<baseline
-                        reason=reason or ('adaptive_disabled' if current!='adaptive' else 'adaptive_short_tail' if applied else 'baseline_at_most_32')
+                        allowed=False
+                        if frequency:
+                            ticket=0 if phase=='seed' else waiting+1
+                            if current!='frequency': fdecision.append(f'frequency_decision {sid} {waiting} {ticket} -1 -1 -1 -1 0 0 0 0 0 not_executed')
+                            else:
+                                fwork=1
+                                if cohort is None and k<=a:
+                                    fixture_forecast.cache=index
+                                    cohort=fixture_forecast(req,past,waiting,h,k,a,pool,sid,namespace)
+                                    def integers(values): return ','.join(map(str,values)) if values else '-'
+                                    fsnap.append('frequency_snapshot '+str(sid)+' '+' '.join(str(cohort[key]) for key in prefix.FREQUENCY_SNAPSHOT_INTS)+' '+
+                                        ' '.join(str(int(cohort[key])) for key in ('valid','dense','enabled'))+' '+cohort['reason']+' '+namespace+' '+prefix.SALT+' '+
+                                        ' '.join(integers(cohort[key]) for key in prefix.FREQUENCY_SNAPSHOT_LISTS))
+                                    fevent(waiting,'frozen','admission',cohort['reason'])
+                                member=cohort is not None and waiting in cohort['request_ids']; in_run=cohort is not None and waiting in cohort['run_request_ids']
+                                active=cohort is not None and cohort['valid']; dense=cohort is not None and cohort['dense']; allowed=active and dense and in_run
+                                why='unfrozen' if cohort is None else cohort['reason'] if not active else 'not_member' if not member else 'outside_run' if not in_run else 'sparse' if not dense else 'allowed'
+                                fdecision.append(f'frequency_decision {sid} {waiting} {ticket} '+
+                                    ' '.join(str(cohort[key] if cohort else (-1 if key=='cohort_id' else 0)) for key in ('cohort_id','gap_budget','predicted_interruptions','threshold'))+' '+
+                                    ' '.join(str(int(v)) for v in (member,in_run,active,dense,allowed))+' '+why)
+                        cap=(current=='adaptive' or current=='frequency' and allowed)
+                        n=0 if k>a else min(baseline,32) if (current=='fixed32' and dec) or (cap and eligible) else baseline
+                        applied=cap and eligible and n<baseline
+                        reason=reason or ('frequency_fallback' if current=='frequency' and not allowed else 'adaptive_disabled' if not cap else 'adaptive_short_tail' if applied else 'baseline_at_most_32')
                         fields=[waiting,len(prompt),r['max_new_tokens'],h,free(),reclaim,0,a,k,len(dec),incumbent,rest,remaining,budget,8,baseline,n]
                         decisions.append(f'prefill_decision {sid} '+' '.join(map(str,fields))+f' {int(eligible)} {int(applied)} {reason}')
                         if n:
@@ -208,11 +268,15 @@ def adaptive_native_fixture(trace,mode='adaptive'):
                         if key not in index:
                             private[i]-=1; tick+=1; index[key]=[{i},tick]; changes.append(event('stored',key))
                     if head>=0:
-                        generated[i]+=1; events.append(f'token {i} 11 {len(req[i]["prompt_ids"])} {generated[i]} 0 {local+10}')
-                        if generated[i]==req[i]['max_new_tokens']:
+                        generated[i]+=1; stopped=(stop_after or {}).get(i)==generated[i]
+                        events.append(f'token {i} {151643 if stopped else 11} {len(req[i]["prompt_ids"])} {generated[i]} 0 {local+10}')
+                        if stopped or generated[i]==req[i]['max_new_tokens']:
+                            if current=='frequency' and cohort and cohort['valid'] and generated[i]<req[i]['max_new_tokens']:
+                                cohort['valid']=False; cohort['enabled']=False; cohort['reason']='early_termination'; fevent(i,'invalidated','postprocess','early_termination')
                             done.add(i); finished+=1; del private[i]
                             for owners,_ in index.values(): owners.discard(i)
-                            events.append(f'finish {i} length {len(req[i]["prompt_ids"])} {generated[i]} 0 {local+10}')
+                            events.append(f'finish {i} {"stop" if stopped else "length"} {len(req[i]["prompt_ids"])} {generated[i]} 0 {local+10}')
+                if current=='frequency' and cohort is not None and len(done)==len(req): fevent(-1,'closed','close','drained'); cohort=None
                 values=dict.fromkeys(contract.ENGINE_STEP_FIELDS,0)
                 values.update(step_id=sid,decode_seqs=len(dec),prefill_seqs=int(len(selected)>len(dec)),
                     prefill_tokens=sum(n for _,n in selected[len(dec):]),total_tokens=offset,attended_positions=positions,
@@ -223,6 +287,7 @@ def adaptive_native_fixture(trace,mode='adaptive'):
                 lines.extend(events); lines.append(f'prefix_step {sid} {sum(h for _,h in hits)} 1 1 0')
                 lines.extend(f'cache_hit {sid} {i} {h}' for i,h in hits)
                 lines.extend(decisions); lines.extend(selections); lines.extend(changes)
+                if frequency: lines.append(f'frequency_work {sid} {fwork}'); lines.extend(fsnap); lines.extend(fevents); lines.extend(fdecision)
                 lines.append(f'cache_state {sid} {free()} {len(index)} {sum(private.values())+sum(len(v[0]) for v in index.values())} {sum(private.values())}')
                 local+=12; sid+=1; countsteps+=1
             lines.append(f'prefix_drained {len(req)} {countsteps} {free()} {len(index)} 0 0 0 {local+1}')
@@ -234,17 +299,19 @@ def adaptive_native_fixture(trace,mode='adaptive'):
     return '\n'.join(lines)
 
 
-def campaign_fixture(active_prefill=False,adaptive_prefill=False):
-    return dict(kind='engine-prefix-adaptive-campaign-v1' if adaptive_prefill else 'engine-prefix-active-campaign-v1' if active_prefill else 'engine-prefix-campaign-v1',schema_version=1,source_text=prefix.SOURCE_TEXT,
+def campaign_fixture(active_prefill=False,adaptive_prefill=False,frequency_prefill=False):
+    adaptive_prefill=adaptive_prefill or frequency_prefill
+    return dict(kind='engine-prefix-frequency-campaign-v1' if frequency_prefill else 'engine-prefix-adaptive-campaign-v1' if adaptive_prefill else 'engine-prefix-active-campaign-v1' if active_prefill else 'engine-prefix-campaign-v1',schema_version=1,source_text=prefix.SOURCE_TEXT,
         source_text_sha256=prefix._hash(prefix.SOURCE_TEXT),
         text_provenance='repository-authored engineering text; no external corpus',
         tokenizer=dict(tables_sha256='a'*64,binary_sha256='b'*64,generator_source_sha256='c'*64),
-        traces=[adaptive_trace(values) for values in contract.ENGINE_PREFIX_ADAPTIVE_CELLS] if adaptive_prefill else [trace_fixture(*values) for values in (prefix.ACTIVE_CELL_CONFIGS if active_prefill else prefix.CELL_CONFIGS)])
+        traces=[frequency_trace(values) for values in contract.ENGINE_PREFIX_FREQUENCY_CELLS] if frequency_prefill else [adaptive_trace(values) for values in contract.ENGINE_PREFIX_ADAPTIVE_CELLS] if adaptive_prefill else [trace_fixture(*values) for values in (prefix.ACTIVE_CELL_CONFIGS if active_prefill else prefix.CELL_CONFIGS)])
 
 
-def record_fixture(active_prefill=False,adaptive_prefill=False):
+def record_fixture(active_prefill=False,adaptive_prefill=False,frequency_prefill=False):
+    adaptive_prefill=adaptive_prefill or frequency_prefill
     active=active_prefill or adaptive_prefill
-    declaration=prefix._declaration(active,adaptive_prefill)
+    declaration=prefix._declaration(active,adaptive_prefill,frequency_prefill)
     build=dict(source=dict(repository=dict(commit='a'*40,dirty=False),sources={'uv.lock':'b'*64,
         'src/llm_mojo/benchmarks/engine_prefix.py':'c'*64,'tests/engine_metal_driver.mojo':'d'*64}),
         assets=dict(prepared='/prepared',prepared_sha256='c'*64,tables_sha256='a'*64),
@@ -255,16 +322,17 @@ def record_fixture(active_prefill=False,adaptive_prefill=False):
     numerical=dict(source=build['source'],assets=build['assets'],environment=build['environment'],
         command=['/mojo','build','-I','src','-I','tests','tests/engine_metal_driver.mojo','-o','/checkpoint-driver'],
         binaries={'checkpoint-driver':dict(sha256='f'*64,bytes=1)})
-    output='\n'.join(['device Apple M4 Pro/metal','qualification '+(prefix.ADAPTIVE_CHECKPOINT_IDENTITY if adaptive_prefill else prefix.ACTIVE_CHECKPOINT_IDENTITY if active else prefix.CHECKPOINT_IDENTITY),
+    output='\n'.join(['device Apple M4 Pro/metal','qualification '+(prefix.FREQUENCY_CHECKPOINT_IDENTITY if frequency_prefill else prefix.ADAPTIVE_CHECKPOINT_IDENTITY if adaptive_prefill else prefix.ACTIVE_CHECKPOINT_IDENTITY if active else prefix.CHECKPOINT_IDENTITY),
         'configuration 27 projection 8 dtype BF16/FP32 block-size 32',
-        *[f'check {name} checked 4 mismatches 0 unexpected-nonfinite 0' for name in (prefix.ADAPTIVE_CHECKPOINT_GROUPS if adaptive_prefill else prefix.ACTIVE_CHECKPOINT_GROUPS if active else prefix.CHECKPOINT_GROUPS)]])
+        *(['numerical-scope scaled-prefix-32 pool 7 context 128'] if frequency_prefill else []),
+        *[f'check {name} checked 4 mismatches 0 unexpected-nonfinite 0' for name in (prefix.FREQUENCY_CHECKPOINT_GROUPS if frequency_prefill else prefix.ADAPTIVE_CHECKPOINT_GROUPS if adaptive_prefill else prefix.ACTIVE_CHECKPOINT_GROUPS if active else prefix.CHECKPOINT_GROUPS)]])
     def receipt(command,timeout):
         return dict(command=list(map(str,command)),exit_code=0,timeout_seconds=timeout,wall_elapsed_ns=10000000)
-    qualification=dict(kind='engine-prefix-adaptive-qualification-v1' if adaptive_prefill else 'engine-prefix-active-qualification-v1' if active else 'engine-prefix-qualification-v1',schema_version=1,build=build,
+    qualification=dict(kind='engine-prefix-frequency-qualification-v1' if frequency_prefill else 'engine-prefix-adaptive-qualification-v1' if adaptive_prefill else 'engine-prefix-active-qualification-v1' if active else 'engine-prefix-qualification-v1',schema_version=1,build=build,
         checkpoint_receipt=dict(build=numerical,build_execution=receipt(numerical['command'],600),
             stdout=output,stdout_sha256=prefix._hash(output),
-            execution=receipt(['/checkpoint-driver','/prepared','prefix-adaptive-qualification' if adaptive_prefill else 'prefix-active-qualification' if active else 'prefix-cache-qualification'],180)))
-    campaign=campaign_fixture(active_prefill,adaptive_prefill); document=json.dumps(campaign)
+            execution=receipt(['/checkpoint-driver','/prepared','prefix-frequency-qualification' if frequency_prefill else 'prefix-adaptive-qualification' if adaptive_prefill else 'prefix-active-qualification' if active else 'prefix-cache-qualification'],180)))
+    campaign=campaign_fixture(active_prefill,adaptive_prefill,frequency_prefill); document=json.dumps(campaign)
     qualification.update(campaign=campaign,campaign_document=document,campaign_sha256=prefix._hash(document),preflight_cells=[])
     record=dict(kind=declaration['kind'],declaration=declaration,
         build=build,trace=campaign,trace_document=document,trace_sha256=prefix._hash(document),
@@ -272,17 +340,17 @@ def record_fixture(active_prefill=False,adaptive_prefill=False):
     conditions=dict(battery={'power_source':'AC Power'},power_mode_raw='0',
         thermal=['No thermal warning level has been recorded','No performance warning level has been recorded'])
     for trace in campaign['traces']:
-        params=trace['prefix']; name=prefix._cell_name(trace,adaptive_prefill)
+        params=trace['prefix']; name=prefix._cell_name(trace,adaptive_prefill,frequency_prefill)
         cell=dict(cell_id=name,trace=trace,native_trace_path=f'/records/{name}/trace.tsv',
-                  native_trace_sha256=prefix._hash(prefix.trace_tsv(trace,adaptive_prefill)),runs=[])
+                  native_trace_sha256=prefix._hash(prefix.trace_tsv(trace,adaptive_prefill,frequency_prefill)),runs=[])
         preflight=dict(cell_id=name,trace=trace,native_trace_path=f'/qualification/{name}/trace.tsv',
-                       native_trace_sha256=prefix._hash(prefix.trace_tsv(trace,adaptive_prefill)),runs=[])
-        policies=[('enabled',mode) for mode in prefix.ADAPTIVE_MODES] if adaptive_prefill else [('enabled',cap) for cap in prefix.ACTIVE_CAPS] if active else [(cache,None) for cache in ('disabled','enabled')]
+                       native_trace_sha256=prefix._hash(prefix.trace_tsv(trace,adaptive_prefill,frequency_prefill)),runs=[])
+        policies=[('enabled',mode) for mode in (prefix.FREQUENCY_MODES if frequency_prefill else prefix.ADAPTIVE_MODES)] if adaptive_prefill else [('enabled',cap) for cap in prefix.ACTIVE_CAPS] if active else [(cache,None) for cache in ('disabled','enabled')]
         for cache,cap in policies:
-            stdout=adaptive_native_fixture(trace,cap) if adaptive_prefill else native_fixture(trace,cache,cap)
+            stdout=adaptive_native_fixture(trace,cap,frequency=frequency_prefill) if adaptive_prefill else native_fixture(trace,cache,cap)
             run=dict(cache=cache,stdout=stdout)
             if active: run['prefill_policy' if adaptive_prefill else 'active_prefill_cap']=cap
-            run['parsed']=prefix._parse_policy(stdout,trace,run,active,adaptive_prefill)
+            run['parsed']=prefix._parse_policy(stdout,trace,run,active,adaptive_prefill,frequency_prefill)
             run['native_execution']=receipt(prefix._command(record,preflight,run),180)
             preflight['runs'].append(run)
         preflight['expected_histories']=prefix._histories(preflight['runs'][0]['parsed'],trace)
@@ -290,7 +358,7 @@ def record_fixture(active_prefill=False,adaptive_prefill=False):
         if adaptive_prefill: preflight['expected_schedules']={r['prefill_policy']:prefix._schedule_signature(r['parsed']) for r in preflight['runs']}
         qualification['preflight_cells'].append(preflight)
         for block in range(4):
-            policies=[('enabled',mode,calibration) for mode,calibration in prefix.adaptive_cells(block)] if adaptive_prefill else [('enabled',cap,calibration) for cap,calibration in prefix.active_cells(block)] if active else [(cache,None,calibration) for cache,calibration in prefix.cells(block)]
+            policies=[('enabled',mode,calibration) for mode,calibration in (prefix.frequency_cells(block) if frequency_prefill else prefix.adaptive_cells(block))] if adaptive_prefill else [('enabled',cap,calibration) for cap,calibration in prefix.active_cells(block)] if active else [(cache,None,calibration) for cache,calibration in prefix.cells(block)]
             for cache,cap,calibration in policies:
                 original=next(r for r in preflight['runs'] if r['cache']==cache and (not active or r['prefill_policy' if adaptive_prefill else 'active_prefill_cap']==cap))
                 run=dict(original) if adaptive_prefill else copy.deepcopy(original)
@@ -796,6 +864,136 @@ class AdaptivePrefixTests(unittest.TestCase):
             self.assertEqual(len(failed),1); self.assertEqual(failed[0]['prefill_policy'],'current')
             self.assertEqual(failed[0]['stdout'],'actual adaptive failure\n')
             self.assertEqual(failed[0]['native_execution']['exit_code'],9)
+
+
+class FrequencyPrefixTests(unittest.TestCase):
+    def test_integer_cutoff_and_frozen_forecast_geometry_boundaries(self):
+        from fractions import Fraction
+        for count in range(1,401):
+            rank=Fraction(19,20)*(count-1)
+            first_slow=rank.numerator//rank.denominator
+            self.assertEqual(prefix.frequency_threshold(count),count-first_slow)
+        maximum=(1<<63)-1
+        self.assertEqual(prefix.frequency_threshold(maximum),maximum-(Fraction(19,20)*(maximum-1)).__floor__())
+        for invalid in (-1,True,maximum+1):
+            with self.subTest(invalid=invalid),self.assertRaises(ValueError): prefix.frequency_threshold(invalid)
+        dense=[]
+        for n,values in enumerate(contract.ENGINE_PREFIX_FREQUENCY_CELLS):
+            trace=frequency_trace(values); requests={r['request_id']:r for r in trace['requests']}
+            entries={tuple(range(size)):dict(owners=set(),stamp=0) for size in range(32,1025,32)}
+            anchor=requests[0]; keys=prefix._prefix_match(anchor['prompt_ids'],entries); h=len(keys)*32
+            required=(len(anchor['prompt_ids'])+anchor['max_new_tokens']+30)//32-len(keys)
+            inputs=dict(request_id=0,matched_tokens=h,required_blocks=required,available_blocks=values[1]-len(keys))
+            before=copy.deepcopy(entries)
+            snapshot=prefix.frequency_snapshot(requests,{i:i+1 for i in requests},list(requests),entries,inputs,'namespace',values[1],0,0)
+            self.assertEqual(entries,before); self.assertEqual(snapshot['gap_budget'],sum(r['max_new_tokens']-1 for r in requests.values()))
+            if snapshot['enabled']: dense.append(n)
+        self.assertEqual(dense,[3,7,8,16,17,18])
+        for values in contract.ENGINE_PREFIX_FREQUENCY_CELLS[12:]:
+            self.assertEqual(prefix._schedule_matches(frequency_trace(values),{},True),dict(required=False))
+        for count,gaps,m,threshold in [(7,105,6,7),(9,135,8,8)]:
+            trace=frequency_trace([count,40,64,16,'first',count])
+            parsed=prefix.parse_run(adaptive_native_fixture(trace,'frequency',True),trace,'enabled',40,frequency_prefill_mode='frequency')
+            snapshot=parsed['phases']['measure']['frequency_snapshots'][0]
+            self.assertEqual((snapshot['gap_budget'],snapshot['predicted_interruptions'],snapshot['threshold']),(gaps,m,threshold))
+
+    def test_forecast_barriers_duplicates_salts_and_checked_bounds(self):
+        trace=frequency_trace([4,40,64,16,'first',8]); requests={r['request_id']:r for r in trace['requests']}
+        entries={tuple(range(size)) for size in range(32,1025,32)}
+        inputs=dict(request_id=0,matched_tokens=1024,required_blocks=3,available_blocks=8)
+        def forecast(rs=requests,**options):
+            return prefix.frequency_snapshot(rs,{i:i+1 for i in rs},list(rs),entries,inputs,'namespace',40,0,0,**options)
+        snapshot=forecast(); self.assertEqual((snapshot['run_count'],snapshot['lookup_count'],snapshot['reason']),(4,4,'sparse'))
+        changed=copy.deepcopy(requests); changed[2]['cache_salt']='different'
+        self.assertEqual((forecast(changed)['run_count'],forecast(changed)['lookup_count']),(2,1))
+        changed=copy.deepcopy(requests); changed[1]['prompt_ids'][1024:1056]=changed[0]['prompt_ids'][1024:1056]
+        self.assertEqual(forecast(changed)['reason'],'duplicate_private_key'); self.assertFalse(forecast(changed)['valid'])
+        changed=copy.deepcopy(requests); changed[1]['max_new_tokens']=(1<<63)-1
+        self.assertEqual(forecast(changed)['reason'],'gap_overflow')
+        for options,reason in [({'resident':True},'incompatible_initial_state'),({'watermark':1},'watermark'),
+                ({'budget':64},'row_budget'),({'maximum_sequences':2},'sequence_slots')]:
+            with self.subTest(options=options): self.assertEqual(forecast(**options)['reason'],reason)
+
+    def test_early_eos_invalidates_once_without_shrinking_or_restarting_cohort(self):
+        trace=frequency_trace([8,40,64,16,'first',8]); raw=adaptive_native_fixture(trace,'frequency',True,{0:2})
+        parsed=prefix.parse_run(raw,trace,'enabled',40,frequency_prefill_mode='frequency')
+        phase=parsed['phases']['measure']; snapshot=phase['frequency_snapshots'][0]
+        self.assertEqual(len(phase['frequency_snapshots']),1)
+        self.assertEqual((snapshot['gap_budget'],snapshot['predicted_interruptions'],snapshot['valid']),(120,7,True))
+        self.assertEqual([e['kind'] for e in phase['frequency_events']],['frozen','invalidated','closed'])
+        invalid=phase['frequency_events'][1]
+        self.assertEqual(invalid['reason'],'early_termination')
+        self.assertTrue(all(not d['allowed'] for d in phase['frequency_decisions'] if d['step_id']>invalid['step_id']))
+        self.assertEqual(prefix.run_summary(parsed,trace)['gap_tail']['count'],106)
+
+    def test_snapshot_decision_lifecycle_and_control_work_mutations_are_rejected(self):
+        trace=frequency_trace([8,40,64,16,'first',8]); raw=adaptive_native_fixture(trace,'frequency',True); lines=raw.splitlines()
+        snapshot=next(i for i,line in enumerate(lines) if line.startswith('frequency_snapshot ')); changes=[]
+        for index in (2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19):
+            changed=lines.copy(); fields=changed[snapshot].split(); fields[index]=str(int(fields[index])+1 if index<17 else 1-int(fields[index])); changed[snapshot]=' '.join(fields); changes.append(changed)
+        changed=lines.copy(); fields=changed[snapshot].split(); fields[23]='0,1'; changed[snapshot]=' '.join(fields); changes.append(changed)
+        decision=next(i for i,line in enumerate(lines) if line.startswith('frequency_decision ') and line.endswith('allowed'))
+        for index in (2,3,4,5,6,7,8,9,10,11,12):
+            changed=lines.copy(); fields=changed[decision].split(); fields[index]=str(int(fields[index])+1 if index<8 else 1-int(fields[index])); changed[decision]=' '.join(fields); changes.append(changed)
+        closed=next(i for i,line in enumerate(lines) if line.startswith('frequency_event ') and ' closed ' in line)
+        changed=lines.copy(); del changed[closed]; changes.append(changed)
+        changed=lines.copy(); arrival=next(i for i,line in enumerate(changed) if line=='arrival 7 0 0')
+        changed[arrival]='arrival 7 0 2'; changes.append(changed)
+        for changed in changes:
+            with self.subTest(row=changed[snapshot][:80]),self.assertRaises(ValueError):
+                prefix.parse_run('\n'.join(changed),trace,'enabled',40,frequency_prefill_mode='frequency')
+        control=adaptive_native_fixture(trace,'current',True)
+        parsed=prefix.parse_run(control,trace,'enabled',40,frequency_prefill_mode='current')
+        self.assertFalse(parsed['phases']['measure']['frequency_snapshots'])
+        changed=control.replace('frequency_work 0 0','frequency_work 0 1',1)
+        with self.assertRaisesRegex(ValueError,'executed in control'): prefix.parse_run(changed,trace,'enabled',40,frequency_prefill_mode='current')
+
+    def test_p95_no_harm_requires_both_limits_and_retains_uncertainty(self):
+        def comparison(m,n): return dict(available=True,median_ratio=m,noise_floor=n,block_ratios=[m]*4)
+        for m,n,status in [(1.05,.05,'pass'),(1.0501,.05,'fail'),(1.04,.07,'inconclusive'),(1.06,.10,'inconclusive'),(.70,.05,'pass')]:
+            with self.subTest(m=m,n=n): self.assertEqual(prefix._p95_no_harm(comparison(m,n))['status'],status)
+        self.assertEqual(prefix._p95_no_harm(dict(available=False))['status'],'inconclusive')
+
+    def test_actual_control_gap_groups_and_request_tails_use_run_local_samples(self):
+        path=Path(__file__).resolve().parents[1]/'studies/model_generation/engine-prefix-evidence/adaptive-prefill/measurements/engine-prefix-adaptive.json.gz'
+        recorded=json.loads(gzip.decompress(path.read_bytes()))
+        cell=next(c for c in recorded['cells'] if c['cell_id']=='prefix-1024-reuse-4-blocks-40-suffix-64-out-16-first')
+        run=next(r for r in cell['runs'] if r['block']==0 and r['prefill_policy']=='current' and not r['calibration'])
+        trace=copy.deepcopy(cell['trace']); trace['prefix']['cohort_requests']=8
+        lines=[]
+        for line in run['stdout'].splitlines():
+            lines.append(line.replace('study engine-prefix-adaptive-v1','study engine-prefix-frequency-v1'))
+            fields=line.split()
+            if fields and fields[0]=='step': lines.append(f'frequency_work {fields[1]} 0')
+            if fields and fields[0]=='prefill_decision':
+                i=int(fields[2]); lines.append(f'frequency_decision {fields[1]} {i} {0 if i==128 else i+1} -1 -1 -1 -1 0 0 0 0 0 not_executed')
+        parsed=prefix.parse_run('\n'.join(lines),trace,'enabled',40,frequency_prefill_mode='current')
+        summary=prefix.run_summary(parsed,trace)
+        self.assertEqual(summary['groups']['actual_hit']['request_ids'],[0,1,2,3])
+        self.assertEqual(summary['groups']['actual_miss']['request_ids'],[4,5,6,7])
+        self.assertEqual(summary['groups']['actual_hit']['gap_count'],60)
+        self.assertEqual(summary['groups']['actual_miss']['gap_count'],60)
+        self.assertEqual(sum(r['gaps_above_50ms'] for r in summary['requests']),3)
+        self.assertEqual(summary['frequency_summary']['forecast_ns'],0)
+        self.assertGreater(max(r['gap_maximum_ns'] for r in summary['requests']),50_000_000)
+
+    def test_complete_320_record_census_and_preflight_schedule_bindings(self):
+        record=record_fixture(frequency_prefill=True); summary=record['summary']
+        self.assertEqual((summary['measured_runs'],summary['untimed_preflights'],len(summary['cells'])),(320,60,20))
+        self.assertEqual(sum(len(c['runs']) for c in record['qualification']['preflight_cells']),60)
+        primary=summary['cells'][3]; secondary=summary['cells'][2]
+        self.assertEqual(primary['logical_schedule_matches'],dict(required=True,reference='adaptive',matched=True,measured_steps=69,mixed_steps=14))
+        self.assertEqual(secondary['logical_schedule_matches'],dict(required=True,reference='current',matched=True,measured_steps=113,mixed_steps=3))
+        self.assertEqual(primary['forecast_vs_current'][0]['actual_current_run_interruptions'],7)
+        self.assertEqual(secondary['forecast_vs_current'][0]['actual_current_run_interruptions'],3)
+        self.assertEqual(set(primary['comparisons']),{'adaptive','frequency'})
+        self.assertEqual(summary['usefulness']['study_success'],summary['usefulness']['primary']['hypothesis']=='supported' and
+            summary['usefulness']['broad_guard_pass'] and summary['usefulness']['broad_p95_guard_pass'])
+        broken=dict(record,cells=[dict(record['cells'][0],runs=record['cells'][0]['runs'][:-1]),*record['cells'][1:]])
+        with self.assertRaisesRegex(ValueError,'paired grid'): prefix.summary(broken)
+        q=dict(record['qualification'],preflight_cells=[dict(record['qualification']['preflight_cells'][0],runs=record['qualification']['preflight_cells'][0]['runs'][:-1]),*record['qualification']['preflight_cells'][1:]])
+        document=json.dumps(q); broken=dict(record,qualification=q,qualification_document=document,qualification_sha256=prefix._hash(document))
+        with self.assertRaisesRegex(ValueError,'census changed'): prefix.summary(broken)
 
 
 if __name__=='__main__':

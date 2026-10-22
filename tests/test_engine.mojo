@@ -7,7 +7,7 @@ from std.testing import TestSuite, assert_equal, assert_raises, assert_true
 from max.gpu.host import DeviceContext
 from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.blocks import PARTIAL, REGISTERED
-from llm_mojo.serving.engine import EngineCore, EngineStep, StepCost, WAITING, PREFILL, DECODE, FINISHED, TOKEN_EVENT, FINISH_EVENT
+from llm_mojo.serving.engine import _frequency_threshold, EngineCore, EngineStep, StepCost, WAITING, PREFILL, DECODE, FINISHED, TOKEN_EVENT, FINISH_EVENT
 from llm_mojo.serving.kv_pool import KVGeometry, KVPool
 from llm_mojo.serving.runner import AsyncModelRunner, ModelRunner, SimulatedRunner
 
@@ -1901,6 +1901,406 @@ def test_adaptive_prefill_three_arms_preserve_histories_work_and_idle_256() rais
     assert_equal(idle_engine.live(), 0)
     _ = idle_engine.clear_cache(pool)
     idle_engine.check(pool)
+
+
+def _frequency_prompt(request_id: Int, matching: Bool = True, remaining: Int = 64) -> List[Int]:
+    var prompt = _prefix_prompt(32 + remaining)
+    for p in range(32, len(prompt)):
+        prompt[p] = (p + (request_id + 1) * 13) % 100
+    if not matching:
+        prompt[0] = (prompt[0] + request_id + 1) % 100
+    return prompt^
+
+
+def test_frequency_quantile_is_exact_at_finite_population_boundaries() raises:
+    assert_equal(_frequency_threshold(0), 0)
+    for gaps in range(1, 401):
+        assert_equal(_frequency_threshold(gaps), gaps - 19 * (gaps - 1) // 20)
+    assert_equal(_frequency_threshold(120), 7)
+    assert_equal(_frequency_threshold(105), 7)
+    assert_equal(_frequency_threshold(135), 8)
+    assert_equal(_frequency_threshold(16), 2)
+    assert_equal(_frequency_threshold(56), 4)
+    assert_equal(_frequency_threshold(248), 14)
+    var previous = Int.MAX - 1
+    assert_equal(_frequency_threshold(Int.MAX), Int.MAX - (previous // 20 * 19 + previous % 20 * 19 // 20))
+
+
+def _frequency_cohort_case(mut ctx: DeviceContext, matching: Int, queued: Int,
+                           maximum: Int, expected_dense: Bool, expected_threshold: Int,
+                           blocks: Int = 7) raises:
+    var runner = SimulatedRunner([10, 11, 12], 100)
+    var pool = KVPool(ctx, blocks, 32, KVGeometry(1, 1, 1))
+    var engine = EngineCore(blocks, 32, 256, 100, max_sequences=8,
+        reserve_lifetime=True, prefix_caching=True, prefix_namespace=runner.prefix_cache_identity(),
+        observe_prefill_policy=True, observe_frequency_policy=True)
+    _ = engine.add(100, _prefix_prompt(33), 1, List[Int]())
+    _ = _prefix_drain(engine, runner, pool)
+    engine.frequency_prefill = True
+    for i in range(queued):
+        _ = engine.add(i, _frequency_prompt(i, i < matching), maximum, List[Int]())
+    var first = engine.step(runner, pool)
+    assert_equal(len(first.frequency_snapshots), 1)
+    var snapshot = first.frequency_snapshots[0].copy()
+    assert_equal(snapshot.cohort_id, 0)
+    assert_equal(snapshot.anchor_request_id, 0)
+    assert_equal(snapshot.anchor_ticket, 1)
+    assert_equal(snapshot.last_ticket, queued)
+    assert_equal(snapshot.request_count, queued)
+    assert_equal(snapshot.gap_budget, queued * (maximum - 1))
+    assert_equal(snapshot.run_count, matching)
+    assert_equal(snapshot.predicted_interruptions, matching - 1)
+    assert_equal(snapshot.threshold, expected_threshold)
+    assert_true(snapshot.valid)
+    assert_equal(snapshot.dense, expected_dense)
+    assert_equal(snapshot.enabled, expected_dense)
+    assert_equal(snapshot.lookup_count, min(matching, queued - 1))
+    assert_equal(snapshot.matched_tokens, 32)
+    assert_equal(snapshot.remaining_prompt_tokens, 64)
+    assert_equal(snapshot.anchor_maximum_outputs, maximum)
+    assert_equal(snapshot.available_blocks, blocks - 1)
+    assert_equal(snapshot.required_blocks, (64 + maximum - 1 + 31) // 32)
+    assert_equal(first.prefill_tokens, 64)
+    assert_equal(first.prefill_decisions[0].reason, "decode_count")
+    assert_equal(first.frequency_decisions[0].allowed, expected_dense)
+    assert_equal(first.frequency_events[0].kind, "frozen")
+    for i in range(queued):
+        assert_equal(snapshot.request_ids[i], i)
+        assert_equal(snapshot.tickets[i], i + 1)
+        assert_equal(snapshot.maximum_outputs[i], maximum)
+        assert_equal(snapshot.prompt_lengths[i], 96)
+    var steps = 1
+    var applications = 0
+    var closed = False
+    while engine.live() > 0 and steps < 400:
+        var record = engine.step(runner, pool)
+        assert_equal(len(record.frequency_snapshots), 0)
+        for decision in record.frequency_decisions:
+            assert_equal(decision.gap_budget, snapshot.gap_budget)
+            assert_equal(decision.predicted_interruptions, snapshot.predicted_interruptions)
+            assert_equal(decision.threshold, snapshot.threshold)
+            assert_equal(decision.allowed, expected_dense and decision.in_run)
+        for decision in record.prefill_decisions:
+            applications += 1 if decision.applied else 0
+        for event in record.frequency_events:
+            assert_true(event.kind != "invalidated")
+            closed = closed or event.kind == "closed"
+        steps += 1
+        engine.check(pool)
+    assert_equal(engine.live(), 0)
+    assert_true(closed)
+    assert_equal(engine.frequency_cohort.cohort_id, -1)
+    assert_equal(applications > 0, expected_dense)
+    if matching == 8 and queued == 8 and maximum == 16:
+        assert_equal(steps, 69)
+        assert_equal(applications, 7)
+    _ = engine.clear_cache(pool)
+    engine.check(pool)
+
+
+def test_frequency_snapshot_density_and_frozen_denominator() raises:
+    var ctx = DeviceContext()
+    _frequency_cohort_case(ctx, 8, 8, 16, True, 7)
+    _frequency_cohort_case(ctx, 4, 8, 16, False, 7)
+    _frequency_cohort_case(ctx, 7, 7, 16, False, 7)
+    _frequency_cohort_case(ctx, 9, 9, 16, True, 8)
+    _frequency_cohort_case(ctx, 4, 8, 3, True, 2)
+    _frequency_cohort_case(ctx, 8, 8, 8, True, 4)
+    _frequency_cohort_case(ctx, 8, 8, 32, False, 14)
+
+
+def test_frequency_forecast_peeks_preserve_cache_lru_refs_and_kv() raises:
+    var ctx = DeviceContext()
+    var runner = SimulatedRunner([10], 100)
+    var pool = KVPool(ctx, 7, 32, KVGeometry(1, 1, 1))
+    var engine = EngineCore(7, 32, 256, 100, max_sequences=8, reserve_lifetime=True,
+        prefix_caching=True, prefix_namespace=runner.prefix_cache_identity(), frequency_prefill=True,
+        observe_frequency_policy=True)
+    _ = engine.add(100, _prefix_prompt(33), 1, List[Int]())
+    _ = _prefix_drain(engine, runner, pool)
+    for i in range(8):
+        _ = engine.add(i, _frequency_prompt(i), 16, List[Int]())
+    var cached = engine.prefix_cache.match(engine.blocks, engine.requests[0].tokens,
+        engine.prefix_namespace, "")
+    var clock = engine.prefix_cache.clock
+    var refs = engine.blocks.refs.copy()
+    var states = engine.blocks.states.copy()
+    var written = pool.written.copy()
+    var free = engine.blocks.free_blocks()
+    var entries = engine.cached_blocks()
+    var record = EngineStep(0, 32)
+    engine._freeze_frequency(0, cached, 6, 3, record)
+    assert_equal(engine.prefix_cache.clock, clock)
+    assert_equal(engine.cached_blocks(), entries)
+    assert_equal(len(engine.prefix_cache.events), 0)
+    assert_equal(engine.blocks.free_blocks(), free)
+    _assert_list(engine.blocks.refs, refs)
+    _assert_list(engine.blocks.states, states)
+    _assert_list(pool.written, written)
+    assert_equal(record.frequency_snapshots[0].lookup_count, 7)
+    assert_equal(record.frequency_snapshots[0].run_count, 8)
+    _ = _prefix_drain(engine, runner, pool)
+    _ = engine.clear_cache(pool)
+
+
+def test_frequency_fifo_barrier_salt_duplicate_and_unsupported_geometry() raises:
+    var ctx = DeviceContext()
+    for scenario in range(7):
+        var runner = SimulatedRunner([10], 100)
+        var blocks = 10 if scenario == 3 else 7
+        var pool = KVPool(ctx, blocks, 32, KVGeometry(1, 1, 1))
+        var engine = EngineCore(blocks, 32, 256, 100, token_budget=64 if scenario == 4 else 256,
+            max_sequences=2 if scenario == 5 else 8, watermark_blocks=1 if scenario == 6 else 0,
+            reserve_lifetime=True, prefix_caching=True, prefix_namespace=runner.prefix_cache_identity(),
+            observe_prefill_policy=True, observe_frequency_policy=True)
+        _ = engine.add(100, _prefix_prompt(33), 1, List[Int]())
+        _ = _prefix_drain(engine, runner, pool)
+        engine.frequency_prefill = True
+        for i in range(8):
+            var prompt = _frequency_prompt(0 if scenario == 2 and i == 1 else i, scenario != 0 or i != 1)
+            _ = engine.add(i, prompt, 16, List[Int](), cache_salt="isolated" if scenario == 1 and i == 1 else "")
+        var first = engine.step(runner, pool)
+        var snapshot = first.frequency_snapshots[0].copy()
+        assert_equal(snapshot.enabled, False)
+        if scenario < 2:
+            assert_equal(snapshot.run_count, 1)
+            assert_equal(snapshot.reason, "sparse")
+            assert_true(snapshot.valid)
+        elif scenario == 2:
+            assert_equal(snapshot.reason, "duplicate_private_key")
+        elif scenario == 3:
+            assert_equal(snapshot.reason, "geometry")
+        elif scenario == 4:
+            assert_equal(snapshot.reason, "row_budget")
+        elif scenario == 5:
+            assert_equal(snapshot.reason, "sequence_slots")
+        else:
+            assert_equal(snapshot.reason, "watermark")
+        _ = _prefix_drain(engine, runner, pool)
+        _ = engine.clear_cache(pool)
+
+
+def test_frequency_late_arrival_abort_eos_and_ticket_reuse_disable_until_idle() raises:
+    var ctx = DeviceContext()
+    for scenario in range(3):
+        var runner = SimulatedRunner([10], 100)
+        var pool = KVPool(ctx, 7, 32, KVGeometry(1, 1, 1))
+        var engine = EngineCore(7, 32, 256, 100, max_sequences=8, reserve_lifetime=True,
+            prefix_caching=True, prefix_namespace=runner.prefix_cache_identity(),
+            observe_prefill_policy=True, observe_frequency_policy=True)
+        _ = engine.add(100, _prefix_prompt(33), 1, List[Int]())
+        _ = _prefix_drain(engine, runner, pool)
+        engine.frequency_prefill = True
+        for i in range(8):
+            _ = engine.add(i, _frequency_prompt(i), 16, [10] if scenario == 2 and i == 0 else List[Int]())
+        var first = engine.step(runner, pool)
+        assert_true(first.frequency_snapshots[0].enabled)
+        if scenario == 0:
+            var late = engine.add(90, _frequency_prompt(90), 3, List[Int]())
+            assert_equal(engine.requests[late].ticket, 9)
+        elif scenario == 1:
+            engine.abort(7)
+        var invalidated = scenario == 2
+        if scenario == 2:
+            assert_equal(first.frequency_events[1].kind, "invalidated")
+            assert_equal(first.frequency_events[1].reason, "early_termination")
+        var steps = 0
+        while engine.live() > 0 and steps < 400:
+            var record = engine.step(runner, pool)
+            for event in record.frequency_events:
+                if event.kind == "invalidated":
+                    invalidated = True
+                    assert_equal(event.reason, "new_arrival" if scenario == 0 else "abort")
+            for decision in record.frequency_decisions:
+                assert_equal(decision.allowed, False)
+                assert_equal(decision.gap_budget, 120)
+            for decision in record.prefill_decisions:
+                assert_equal(decision.applied, False)
+            steps += 1
+        assert_true(invalidated)
+        assert_equal(engine.live(), 0)
+        assert_equal(engine.frequency_cohort.cohort_id, -1)
+        var reused = engine.add(99, _frequency_prompt(99), 3, List[Int]())
+        assert_true(engine.requests[reused].ticket >= 9)
+        var renewed = engine.step(runner, pool)
+        assert_equal(renewed.frequency_snapshots[0].cohort_id, 1)
+        assert_equal(renewed.frequency_snapshots[0].request_count, 1)
+        assert_equal(renewed.frequency_snapshots[0].gap_budget, 2)
+        _ = _prefix_drain(engine, runner, pool)
+        _ = engine.clear_cache(pool)
+
+
+def test_frequency_controls_have_sentinels_and_execute_no_forecast() raises:
+    var ctx = DeviceContext()
+    for adaptive in [False, True]:
+        var runner = SimulatedRunner([10], 100)
+        var pool = KVPool(ctx, 7, 32, KVGeometry(1, 1, 1))
+        var engine = EngineCore(7, 32, 256, 100, reserve_lifetime=True,
+            prefix_caching=True, prefix_namespace=runner.prefix_cache_identity(), adaptive_prefill=adaptive,
+            observe_prefill_policy=True, observe_frequency_policy=True)
+        _ = engine.add(0, _frequency_prompt(0), 3, List[Int]())
+        var record = engine.step(runner, pool)
+        assert_equal(record.frequency_forecast_ns, 0)
+        assert_equal(len(record.frequency_snapshots), 0)
+        assert_equal(len(record.frequency_events), 0)
+        assert_equal(engine.next_frequency_cohort, 0)
+        assert_equal(len(record.frequency_decisions), 1)
+        var decision = record.frequency_decisions[0].copy()
+        assert_equal(decision.cohort_id, -1)
+        assert_equal(decision.gap_budget, -1)
+        assert_equal(decision.allowed, False)
+        assert_equal(decision.reason, "not_executed")
+        _ = _prefix_drain(engine, runner, pool)
+        _ = engine.clear_cache(pool)
+
+
+def test_frequency_configuration_rejects_before_mutation_and_fault_drains() raises:
+    var ctx = DeviceContext()
+    var runner = SimulatedRunner([10], 100)
+    for scenario in range(4):
+        with assert_raises(contains="configuration"):
+            _ = EngineCore(7, 32, 256, 100, prefix_caching=scenario != 0,
+                prefix_namespace=runner.prefix_cache_identity(), reserve_lifetime=scenario != 1,
+                mixed_prefill=scenario != 2, adaptive_prefill=scenario == 3, frequency_prefill=True)
+    var pool = KVPool(ctx, 7, 32, KVGeometry(1, 1, 1))
+    var engine = EngineCore(7, 32, 256, 100, prefix_caching=True, reserve_lifetime=True,
+        prefix_namespace=runner.prefix_cache_identity(), frequency_prefill=True, observe_frequency_policy=True)
+    _ = engine.add(0, _frequency_prompt(0), 16, List[Int]())
+    engine.abort(0)
+    with assert_raises(contains="frequency prefill"):
+        engine.set_cost_policy(StepCost(0, 0, 0, 0, 0))
+    var asynchronous = ActiveCapAsyncProbe()
+    with assert_raises(contains="synchronous"):
+        _ = engine.step_async(asynchronous, pool)
+    assert_equal(asynchronous.calls, 0)
+    assert_equal(engine.step_id, 0)
+    assert_equal(engine.async_enabled, False)
+    engine.active_prefill_cap = 32
+    with assert_raises(contains="frequency prefill"):
+        _ = engine.step(runner, pool)
+    assert_equal(engine.step_id, 0)
+    assert_equal(engine.requests[0].state, WAITING)
+    engine.active_prefill_cap = 0
+    _ = engine.step(runner, pool)
+    assert_equal(engine.live(), 0)
+    var faulty = PrefixFaultRunner()
+    engine.frequency_prefill = False
+    _ = engine.add(100, _prefix_prompt(33), 1, List[Int]())
+    _ = engine.step(faulty, pool)
+    engine.frequency_prefill = True
+    for i in range(8):
+        _ = engine.add(i, _frequency_prompt(i), 16, List[Int]())
+    _ = engine.step(faulty, pool)
+    faulty.fail = True
+    with assert_raises(contains="injected prefix-cache"):
+        _ = engine.step(faulty, pool)
+    assert_true(engine.failed)
+    assert_equal(engine.live(), 0)
+    assert_equal(engine.frequency_cohort.cohort_id, -1)
+    assert_equal(len(engine.frequency_pending_events), 0)
+    assert_equal(len(engine.failure_frequency_events), 2)
+    assert_equal(engine.failure_frequency_events[0].kind, "invalidated")
+    assert_equal(engine.failure_frequency_events[1].kind, "closed")
+    assert_equal(engine.cached_blocks(), 0)
+    assert_equal(engine.cache_references(), 0)
+    assert_equal(engine.blocks.free_blocks(), 7)
+    engine.check(pool)
+
+
+def test_frequency_first_snapshot_excludes_seed_zero_output_and_processed_abort() raises:
+    var ctx = DeviceContext()
+    var runner = SimulatedRunner([10], 100)
+    var pool = KVPool(ctx, 7, 32, KVGeometry(1, 1, 1))
+    var engine = EngineCore(7, 32, 256, 100, max_sequences=8, reserve_lifetime=True,
+        prefix_caching=True, prefix_namespace=runner.prefix_cache_identity(),
+        observe_frequency_policy=True)
+    _ = engine.add(100, _prefix_prompt(33), 1, List[Int]())
+    _ = _prefix_drain(engine, runner, pool)
+    engine.frequency_prefill = True
+    _ = engine.add(90, _prefix_prompt(33), 0, List[Int]())
+    _ = engine.add(91, _prefix_prompt(33), 5, List[Int]())
+    engine.abort(91)
+    for i in range(8):
+        _ = engine.add(i, _frequency_prompt(i), 16, List[Int]())
+    var first = engine.step(runner, pool)
+    assert_equal(first.finished, 2)
+    assert_equal(first.aborted, 1)
+    var snapshot = first.frequency_snapshots[0].copy()
+    assert_equal(snapshot.anchor_ticket, 3)
+    assert_equal(snapshot.request_count, 8)
+    assert_equal(snapshot.gap_budget, 120)
+    for i in range(8):
+        assert_equal(snapshot.request_ids[i], i)
+        assert_equal(snapshot.tickets[i], i + 3)
+    _ = _prefix_drain(engine, runner, pool)
+    _ = engine.clear_cache(pool)
+
+
+def test_frequency_held_tail_finishes_after_new_arrival_and_geometry_change_invalidates() raises:
+    var ctx = DeviceContext()
+    for geometry_change in [False, True]:
+        var runner = SimulatedRunner([10], 100)
+        var pool = KVPool(ctx, 7, 32, KVGeometry(1, 1, 1))
+        var engine = EngineCore(7, 32, 256, 100, max_sequences=8, reserve_lifetime=True,
+            prefix_caching=True, prefix_namespace=runner.prefix_cache_identity(),
+            observe_prefill_policy=True, observe_frequency_policy=True)
+        _ = engine.add(100, _prefix_prompt(33), 1, List[Int]())
+        _ = _prefix_drain(engine, runner, pool)
+        engine.frequency_prefill = True
+        for i in range(8):
+            _ = engine.add(i, _frequency_prompt(i), 16, List[Int]())
+        _ = engine.step(runner, pool)
+        if geometry_change:
+            engine.requests[1].cache_salt = "changed"
+            var changed = engine.step(runner, pool)
+            assert_equal(changed.frequency_events[0].kind, "invalidated")
+            assert_equal(changed.frequency_events[0].reason, "geometry_changed")
+            assert_equal(changed.frequency_decisions[0].allowed, False)
+        else:
+            var mixed = engine.step(runner, pool)
+            assert_equal(mixed.prefill_tokens, 32)
+            assert_true(mixed.prefill_decisions[0].applied)
+            assert_equal(engine.requests[1].generated, 0)
+            _ = engine.add(90, _frequency_prompt(90), 3, List[Int]())
+            var held = engine.step(runner, pool)
+            assert_equal(held.prefill_tokens, 32)
+            assert_equal(len(held.frequency_decisions), 0)
+            assert_equal(len(held.prefill_decisions), 0)
+            assert_equal(held.frequency_forecast_ns, 0)
+            assert_equal(engine.requests[1].generated, 1)
+            assert_equal(held.frequency_events[0].reason, "new_arrival")
+        _ = _prefix_drain(engine, runner, pool)
+        _ = engine.clear_cache(pool)
+        engine.check(pool)
+
+
+def test_frequency_checked_denominator_overflow_selects_baseline() raises:
+    var ctx = DeviceContext()
+    var runner = SimulatedRunner([10], 100)
+    var pool = KVPool(ctx, 7, 32, KVGeometry(1, 1, 1))
+    var engine = EngineCore(7, 32, 256, 100, max_sequences=8, reserve_lifetime=True,
+        prefix_caching=True, prefix_namespace=runner.prefix_cache_identity(),
+        observe_frequency_policy=True)
+    _ = engine.add(100, _prefix_prompt(33), 1, List[Int]())
+    _ = _prefix_drain(engine, runner, pool)
+    engine.frequency_prefill = True
+    for i in range(2):
+        _ = engine.add(i, _frequency_prompt(i), 16, List[Int]())
+    # Defensive helper test: public add/context bounds prevent this sum today.
+    engine.requests[0].maximum = Int.MAX
+    engine.requests[1].maximum = Int.MAX
+    var cached = engine.prefix_cache.match(engine.blocks, engine.requests[0].tokens,
+        engine.prefix_namespace, "")
+    var record = EngineStep(0, 16)
+    engine._freeze_frequency(0, cached, 6, 3, record)
+    assert_equal(record.frequency_snapshots[0].reason, "gap_overflow")
+    assert_equal(record.frequency_snapshots[0].valid, False)
+    assert_equal(record.frequency_snapshots[0].enabled, False)
+    assert_true(record.frequency_snapshots[0].gap_budget >= 0)
+    engine.requests[0].maximum = 16
+    engine.requests[1].maximum = 16
+    _ = _prefix_drain(engine, runner, pool)
+    _ = engine.clear_cache(pool)
 
 
 def main() raises:

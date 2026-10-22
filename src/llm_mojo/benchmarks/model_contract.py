@@ -465,6 +465,26 @@ ENGINE_PREFIX_ADAPTIVE_DECLARATION = dict(
         primary_policy='adaptive',fixed32_comparison='descriptive; no static32 self-control or timing-equivalence gate',
         decision='Primary uses its adaptive/current gap and guards; broad success additionally requires cost/worst-gap guards for all twelve cells. Exact fallback scheduling is independent of elapsed overhead. Promotion remains false.'),
 )
+ENGINE_PREFIX_FREQUENCY_STUDY = 'engine-prefix-frequency-v1'
+ENGINE_PREFIX_FREQUENCY_CELLS = [list(values)+[8] for values in ENGINE_PREFIX_ADAPTIVE_CELLS] + [
+    [5,40,64,16,'first',8], [6,40,64,16,'first',8], [7,40,64,16,'first',8],
+    [7,40,64,16,'first',7], [9,40,64,16,'first',9], [4,40,64,3,'first',8],
+    [8,40,64,8,'first',8], [8,40,64,32,'first',8],
+]
+ENGINE_PREFIX_FREQUENCY_DECLARATION = dict(
+    {k:v for k,v in ENGINE_PREFIX_ADAPTIVE_DECLARATION.items() if k!='active_prefill_caps'},kind='qwen-engine-prefix-frequency-v1',study=ENGINE_PREFIX_FREQUENCY_STUDY,
+    grid=['current','self-current','adaptive','frequency'],measured_runs=320,untimed_preflights=60,
+    cells=ENGINE_PREFIX_FREQUENCY_CELLS,requests_per_trace=[7,8,9],max_new_tokens=[2,3,8,16,32],
+    cap_boundary='Frequency mode alone freezes the submitted positive-output cohort at its first successful admission, before the model step. Permit adaptive-v1 only in its counted leading run when the frozen density forecast permits it; held prefill remains baseline.',
+    policy='Freeze N=sum(max(declared G-1,0)); homogeneous leading resident-prefix run L with distinct private keys, G>=3 and two-reader geometry H_blocks+2K<=pool<H_blocks+3K gives M=max(L-1,0). Permit adaptive-v1 only if M>=N-floor(19*(N-1)/20). Never read future arrivals/EOS. New add, early termination or counted-member geometry mismatch disables caps until drain.',
+    observation='Candidate-only forecast work inside measured scheduling; snapshot membership/tickets/declared work, exact prefix geometry, density, lifecycle and cost; controls emit not-executed sentinels. Preserve ordered admission/selection/cache receipts.',
+    usefulness=dict({k:v for k,v in ENGINE_PREFIX_ADAPTIVE_DECLARATION['usefulness'].items() if k!='fixed32_comparison'},
+        primary_cell='prefix-1024-reuse-8-blocks-40-suffix-64-out-16-requests-8-first',primary_policy='frequency',
+        p95_no_harm_ratio_max=1.05,p95_no_harm_buffer_max=1.10,
+        p95_no_harm_rule='Pass median<=1.05 AND median+noise<=1.10. Otherwise fail only if all four ratios>1 and median-1>noise; else inconclusive.',
+        adaptive_comparison='descriptive; no adaptive self-control or timing-equivalence gate',
+        decision='Study success requires primary frequency/current hypothesis, all twenty cost/worst-gap guards and all twenty p95_no_harm guards. Report both broad guards separately. Promotion remains false.'),
+)
 ENGINE_STEP_FIELDS = (
     'step_id', 'decode_seqs', 'prefill_seqs', 'prefill_tokens', 'total_tokens',
     'attended_positions', 'admitted', 'preempted', 'finished', 'aborted',

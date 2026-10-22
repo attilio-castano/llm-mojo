@@ -1000,3 +1000,45 @@ records the 192-call result: the primary p95-gap gate and all twelve adaptive
 cost/worst-gap guards passed. The default remains current. The guide includes
 the full matrix, the half-reuse p95 regression, exact measured source,
 qualification, independent audits and guarded archived-source replay commands.
+
+### Frequency-aware cohort prefill campaign
+
+The [frozen cohort-frequency contract](../../../studies/model_generation/engine-core.md#frequency-aware-prefill-frozen-comparison-contract)
+adds a once-per-busy-period forecast to the existing admission rule. It uses
+only an already-submitted FIFO cohort, exact resident-prefix identity and
+declared output limits. The cohort and quantile denominator remain frozen;
+late arrivals and early termination disable further frequency caps. Current
+and old-adaptive controls do not execute the candidate forecast. Enrollment,
+lookups, invalidation and observation cost remain inside measured scheduling.
+
+This is a separate opt-in synchronous reference-27/projection-8 study. It
+compares current, self-current, old adaptive and frequency mode in four balanced
+blocks across twenty frozen cells. All sixty unique-policy preflights and
+exact-build numerical qualification must pass before the single 320-call
+campaign. Full-reuse/40 must preserve the old adaptive logical schedule;
+half-reuse/40 must preserve current scheduling. All cells add the new p95
+acceptance guard to the existing cost/worst-gap guards. Defaults stay current.
+
+With an already verified prepared model and fresh output locations:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-specification \
+  --frequency-prefill-study --output /private/tmp/frequency-prefill-campaign.json
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build \
+  --frequency-prefill-study --prepared VERIFIED_PREPARED_PATH --output /private/tmp/frequency-prefill-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-qualify \
+  --frequency-prefill-study --build /private/tmp/frequency-prefill-build \
+  --trace /private/tmp/frequency-prefill-campaign.json --output /private/tmp/frequency-prefill-qualification
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect \
+  --frequency-prefill-study --build /private/tmp/frequency-prefill-build \
+  --trace /private/tmp/frequency-prefill-campaign.json \
+  --qualification /private/tmp/frequency-prefill-qualification/qualification.json \
+  --output /private/tmp/frequency-prefill-measurements
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay \
+  --output /private/tmp/frequency-prefill-measurements/engine-prefix-frequency.json.gz
+```
+
+Use the original archived source for earlier prefix, cap or adaptive campaigns.
+The forecast is a bounded heuristic; actual natural EOS, cache state and gap
+counts remain evidence rather than inputs taken from future execution. A
+negative or inconclusive result remains in the completed matrix.
