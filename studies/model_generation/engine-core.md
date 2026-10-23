@@ -1521,7 +1521,8 @@ six-faster/two-inconclusive pattern without creating a new promotion rule.
 
 ### Evidence and claim boundary
 
-The [compact results](engine-prefix-evidence/engine-prefix-results.json) retain
+The [packaged results](engine-prefix-evidence/supplementary.tar.gz)
+(`engine-prefix-results.json` after the evidence guide's layout restoration) retain
 paired ratios, calibration ratios, noise floors, work, TTFT, TPOT, token-gap
 quantiles, observed maxima, cache costs, evictions and cleanup. The
 [complete measurement archive](engine-prefix-evidence/measurements/engine-prefix.json.gz)

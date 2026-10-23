@@ -148,7 +148,17 @@ assets, tokenizer, binary, dtype, layout and device identities are retained.
 
 ## Retained evidence and restoration
 
-- [Compact results](engine-prefix-adaptive-results.json) retain every arm's
+The expanded results and two independent audit reports are preserved
+byte-for-byte in the [supplementary package](supplementary.tar.gz), together
+with the original campaign README. The [packaging manifest](../packaging-manifest.json)
+describes the current layout. The retained inventories below remain receipts
+for the original layout, which the
+[layout restore command](../README.md#verify-and-restore-the-evidence-layout)
+recreates with all original filenames and READMEs. This packaging cleanup adds
+no fresh GPU or performance claim.
+
+- [Packaged results](supplementary.tar.gz) (`engine-prefix-adaptive-results.json`
+  after restoration) retain every arm's
   four samples, paired/calibration ratios, noise floors, decisions and logical
   schedule matches. [The extractor](retention/extract_results.py) checks the
   measurement manifest. [The derivation receipt](derivation-check.json) confirms
@@ -172,19 +182,32 @@ assets, tokenizer, binary, dtype, layout and device identities are retained.
   [CPU replay result](cpu-replay.json), [actual exit](cpu-replay-execution.json)
   and [log](cpu-replay.log) confirm archived-source imports, exact recomputed
   summary, no native/GPU/model-asset/network access and no prohibited attempts.
-- [Independent raw audit](independent-raw-audit.json) and
+- [Packaged independent raw audit](supplementary.tar.gz)
+  (`independent-raw-audit.json` after restoration) and
   [actual exit](independent-raw-audit-execution.json) check 230 embedded zero
   exits, 13,416 timed ownership snapshots, 26,160 ordered selections, 1,168 hit
   receipts, 20,864 stored/removed key pairs and 192 clears, plus all preflights.
   Its [standalone helper](retention/independent_raw_audit.py) imports no
   production parser. Optional live checks matched all 271 source hashes and
-  both original binaries. [Independent decision audit](independent-decision-audit.json)
+  both original binaries. [Packaged independent decision audit](supplementary.tar.gz)
+  (`independent-decision-audit.json` after restoration)
   and [actual exit](independent-decision-audit-execution.json) recompute all
   ratios, buffers, decisions, medians and arm census from compact samples using
   [a separate standard-library helper](retention/independent_decision_audit.py).
 
 Custody is local, without a remote backup or fresh GPU rerun. Earlier prefix-v1
-and active-prefill artifacts remain byte-for-byte unchanged. Restore from the
+and active-prefill evidence bytes are preserved by the current packaging.
+Generate new derived reports under ignored `build/`:
+
+```sh
+mkdir -p build/engine-prefix-reports
+uv run --locked python -B \
+  studies/model_generation/engine-prefix-evidence/adaptive-prefill/retention/extract_results.py \
+  studies/model_generation/engine-prefix-evidence/adaptive-prefill/measurements/engine-prefix-adaptive.json.gz \
+  build/engine-prefix-reports/engine-prefix-adaptive-results.json
+```
+
+For guarded archived-source replay, restore from the
 repository root with locked Python and a fresh `/private/tmp` directory:
 
 ```sh

@@ -17,6 +17,38 @@ These are instrumented host timings for finite reserved traces. The episode
 includes seed and handoff and excludes final clear; cleanup is reported
 separately. There is no default-promotion, online capacity or SLO conclusion.
 
+## Verify and restore the evidence layout
+
+The expanded derived report and raw audit are preserved byte-for-byte in the
+[supplementary package](supplementary.tar.gz), together with this campaign's
+original README. The [packaging manifest](packaging-manifest.json) records the
+current file layout and every packaged member. Existing acceptance, inventory
+and canonical-copy receipts describe the original layout; they are historical
+receipts, not inventories of the repackaged checkout.
+
+From the repository root, verify the package or restore the complete original
+evidence tree to a fresh destination:
+
+```sh
+.venv/bin/python -B studies/model_generation/engine-prefix-evidence/retention/packaging.py verify
+.venv/bin/python -B studies/model_generation/engine-prefix-evidence/retention/packaging.py restore \
+  --directory /private/tmp/engine-prefix-evidence-layout
+```
+
+The destination contains `README.md`, `measurements/`, `active-prefill/`,
+`adaptive-prefill/` and `frequency-prefill/` directly. All four original READMEs
+and ten expanded JSON reports/audits return to their original paths. Verification
+is read-only. Before integrating later source changes, the additional
+`verify --check-live-sources` check compares the pre-cleanup source bytes;
+default verification remains usable after integration. Packaging changes no
+measurement or numerical claim and does not constitute a fresh GPU run.
+
+Restoration recovers all 96 files tracked at the pre-cleanup commit. The old
+active-prefill artifact inventory also listed one ignored Python bytecode file
+that was absent from that Git tree. The manifest pins that sole historical
+exception by path, size and hash; restoration does not substitute current
+bytecode. The other three checked inventories are fully restorable.
+
 ## Retained files
 
 - [Acceptance](engine-prefix-acceptance.json) binds the measured commit,
@@ -25,7 +57,8 @@ separately. There is no default-promotion, online capacity or SLO conclusion.
   test files, covered by targeted tests, the final 424-test Python run and
   exact-build qualification. Production engine/model/cache sources stayed
   identical to the complete native validation.
-- [Compact results](engine-prefix-results.json) retain all eight cells, exact
+- [Packaged results](supplementary.tar.gz) (`engine-prefix-results.json` after
+  layout restoration) retain all eight cells, exact
   paired/self-control ratios, individual noise floors and the latency/work/cache
   statistics. [Extraction code](retention/extract_prefix_results.py) computes
   these from raw records. Its recorded input path is provenance; regenerating
@@ -49,7 +82,8 @@ separately. There is no default-promotion, online capacity or SLO conclusion.
   a second fresh-directory restore from these canonical files: actual exit 0,
   96 measurements, 16 preflights and the seven-case/123-token preliminary chat
   acceptance, with no prohibited execution, asset or network attempts.
-- [Independent raw audit](independent-audit/audit.json) checks all work formulas,
+- [Packaged independent raw audit](supplementary.tar.gz)
+  (`independent-audit/audit.json` after restoration) checks all work formulas,
   6,500 ownership snapshots, 144 hits and logical cache events. Its
   [helper](independent-audit/reproduce.py) also checked the original live source
   bytes and native binary hash at audit time. Repeating that particular check
@@ -89,8 +123,22 @@ establish per-request completed-step publication.
 For a quick measurement-only check with the current source:
 
 ```sh
+mkdir -p build/engine-prefix-replay
+cp studies/model_generation/engine-prefix-evidence/measurements/engine-prefix.json \
+  studies/model_generation/engine-prefix-evidence/measurements/engine-prefix.json.gz \
+  build/engine-prefix-replay/
 uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay \
-  --output studies/model_generation/engine-prefix-evidence/measurements/engine-prefix.json.gz
+  --output build/engine-prefix-replay/engine-prefix.json.gz
+```
+
+This writes a new summary under ignored `build/`. To regenerate the derived
+report there as well:
+
+```sh
+uv run --locked python -B \
+  studies/model_generation/engine-prefix-evidence/retention/extract_prefix_results.py \
+  --measurements studies/model_generation/engine-prefix-evidence/measurements/engine-prefix.json.gz \
+  --output build/engine-prefix-replay/engine-prefix-results.json
 ```
 
 Native regeneration requires the qualified hardware and recorded assets.

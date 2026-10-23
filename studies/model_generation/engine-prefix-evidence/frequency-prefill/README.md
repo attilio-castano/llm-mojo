@@ -168,17 +168,35 @@ Independent raw replay checked all 382 embedded zero-exit receipts, raw first-ar
 
 Development failures remain inside the validation archive: compile attempts, an observed-event fixture setting, zero-based ticket expectations, a known-schedule tooling scope error, uv sandbox access and the independent raw auditor’s omitted fourth header literal. The last repair added the already-declared numerical-scope identity to that auditor’s expectation. No runtime policy, acceptance rule or measured bytes changed after timing; no timed call was replaced. Intermediate native compile source hashes/raw diagnostics were not captured per attempt; the retained index labels its command/exit summaries honestly.
 
+The expanded results and two independent audit reports are preserved
+byte-for-byte in the [supplementary package](supplementary.tar.gz), together
+with the original campaign README. The [packaging manifest](../packaging-manifest.json)
+describes the current layout; the final inventory below remains an
+original-layout receipt. [Restore that layout](../README.md#verify-and-restore-the-evidence-layout)
+to recover every original filename and README. Packaging does not rerun Metal
+or change the inconclusive overall performance verdict.
+
 | Artifact | Purpose |
 | --- | --- |
 | [Raw measurement archive](measurements/engine-prefix-frequency.json.gz) and [manifest](measurements/engine-prefix-frequency.json) | All timed records and embedded preflights/qualification, original stdout and exits |
-| [Derived results](engine-prefix-frequency-results.json) | Full matrix, paired ratios, per-request/group observations and forecasts |
+| [Packaged derived results](supplementary.tar.gz), member `engine-prefix-frequency-results.json` | Full matrix, paired ratios, per-request/group observations and forecasts |
 | [Validation/source archive](engine-prefix-frequency-validation.json.gz) and [manifest](engine-prefix-frequency-validation.json) | 406 retained source/document/acceptance files, plus 22 hash-only generated source fixtures unused by CPU replay |
 | [Source binding](source-binding.json) | Validated source bytes equal clean measured source |
-| [Raw audit](independent-raw-audit.json) and [decision audit](independent-decision-audit.json) | Independent logical and arithmetic checks |
+| [Packaged audits](supplementary.tar.gz), members `independent-raw-audit.json` and `independent-decision-audit.json` | Independent logical and arithmetic checks |
 | [First CPU replay](first-cpu-replay.json) and [canonical CPU replay](cpu-replay.json) | Two fresh guarded restorations |
 | [Acceptance](engine-prefix-frequency-acceptance.json), [final checks](final-checks.json), [inventory](final-inventory.json) | Exact execution/verdict/custody bindings |
 
 Measurement SHA-256: `19a57868535d5682a0a9adafcd2da32d3592df0380cf9f7bd7cdc4c0b630bb77` (15,987,536 bytes). Validation archive SHA-256: `8215d5719703ad936049d2c0b44a70192f6be8cc2c392e100d8f60ed012f8c5f` (1,975,251 bytes). Source identity is the measured commit above; the frozen contract precedes it. Old prefix/cap/adaptive archives remain byte-for-byte unchanged.
+
+Generate a new derived report under ignored `build/`, with a fresh output path:
+
+```sh
+mkdir -p build/engine-prefix-reports
+uv run --locked python -B \
+  studies/model_generation/engine-prefix-evidence/frequency-prefill/retention/extract_results.py \
+  studies/model_generation/engine-prefix-evidence/frequency-prefill/measurements/engine-prefix-frequency.json.gz \
+  build/engine-prefix-reports/engine-prefix-frequency-results.json
+```
 
 From the repository root with its existing locked environment, choose a fresh restoration directory:
 

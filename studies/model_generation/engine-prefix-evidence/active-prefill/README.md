@@ -95,7 +95,16 @@ software is macOS 26.6.2 / 25G83, Xcode 27.0 / 27A266a, Mojo 1.1.0 and MAX
 
 ## Retained evidence
 
-- [Compact results](engine-prefix-active-results.json) include every arm's four
+The expanded results and raw audit are preserved byte-for-byte in the
+[supplementary package](supplementary.tar.gz), together with the original
+campaign README. The [packaging manifest](../packaging-manifest.json) describes
+the current layout; the retained inventories below remain original-layout
+receipts. [Restore the complete evidence layout](../README.md#verify-and-restore-the-evidence-layout)
+to recover the original filenames and README. This packaging cleanup adds no
+fresh GPU or performance claim.
+
+- [Packaged results](supplementary.tar.gz) (`engine-prefix-active-results.json`
+  after restoration) include every arm's four
   samples, paired/calibration ratios, noise floors and exact decisions.
   [Extraction code](retention/extract_results.py) verifies the archive manifest
   before deriving the table. Original input paths record provenance; a new
@@ -122,7 +131,8 @@ software is macOS 26.6.2 / 25G83, Xcode 27.0 / 27A266a, Mojo 1.1.0 and MAX
   canonical archives, exit 0, with no prohibited attempts. It imported the
   archived parser and recomputed the full summary without native execution,
   GPU frameworks, prepared/tensor assets or network access.
-- [Independent raw audit](independent-raw-audit.json) checks all 80 measured
+- [Packaged independent raw audit](supplementary.tar.gz)
+  (`independent-raw-audit.json` after restoration) checks all 80 measured
   histories/work formulas, 6,564 physical ownership snapshots, 384 hits,
   12,032 stored/removed exact-key pairs and 80 clear events. Its
   [helper](retention/independent_raw_audit.py) also matched all 271 live source
@@ -130,7 +140,17 @@ software is macOS 26.6.2 / 25G83, Xcode 27.0 / 27A266a, Mojo 1.1.0 and MAX
   checks require those files; the raw-record audit alone is portable.
 
 Custody is local; this is not a remote backup or a fresh GPU run. Earlier
-prefix-v1 archives and the 104-file historical catalog are unchanged.
+prefix-v1 archive bytes and the 104-file historical catalog are unchanged.
+
+To regenerate the derived results, use a fresh output under ignored `build/`:
+
+```sh
+mkdir -p build/engine-prefix-reports
+uv run --locked python -B \
+  studies/model_generation/engine-prefix-evidence/active-prefill/retention/extract_results.py \
+  studies/model_generation/engine-prefix-evidence/active-prefill/measurements/engine-prefix-active.json.gz \
+  build/engine-prefix-reports/engine-prefix-active-results.json
+```
 
 ## Reproduce from the archived source
 
