@@ -4,6 +4,12 @@ An educational project on LLM inference: how much of a modern inference engine
 can I build, understand and measure on a MacBook, from first principles, in
 Mojo?
 
+**Open the [interactive inference explorer](https://attilio-castano.github.io/llm-mojo/).** Follow a
+prompt, inspect the serving core, compare accepted and rejected optimizations,
+and explore compile-time token-selection checks. After cloning, open
+[the standalone HTML](docs/explorer/index.html) offline with no setup.
+[Evidence and refresh instructions](docs/explorer/README.md).
+
 I am a mathematician using this project to learn three things by building them
 myself:
 

@@ -29,6 +29,9 @@ Each fact has one home; other pages give a sentence and a link. Start with the
 | [Runtime and workload policy](generation.md) | Model ownership, the Fast/baseline/consistent routes and how a call picks its kernels |
 | [Tokenizer](tokenizer.md) | The native byte-level BPE and its exactness against the reference |
 | [BF16 selection checks](token-selection-contract.md) | Compile-time BF16 checks, symbolic reduction composition, and remaining assumptions |
+| [Finishing execution](finishing-executor.md) | Complete logical traces, canonical join proofs, native provenance replay and device refinement boundaries |
+| [Derived finishing join](finishing-join-algebra.md) | A checked total Nat score/Boolean join, its derived laws and the remaining native word bridge |
+| [Correlated record execution](finishing-record-execution.md) | Derived rank/token/invalidity algebra, one whole-record execution, independent input fold and explicit word/source/backend obligations |
 | [Attention sublayer](attention-sublayer.md) | Attention arithmetic, reference authority, mappings and reproduction |
 | [MLP sublayer](mlp-sublayer.md) | SwiGLU rounding, fixtures, acceptance budgets and reproduction |
 | [Decoder layer](decoder-layer.md) | Composition, fixtures, acceptance, configurations and execution policies |

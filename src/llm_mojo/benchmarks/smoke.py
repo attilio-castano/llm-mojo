@@ -6,6 +6,42 @@ import subprocess
 
 from .._repository import environment_tool, repository_root
 from .attention_prefill_contract import VARIANTS as PREFILL_VARIANTS
+from .study import REPETITIONS, STUDIES, parse_output
+
+
+def operations_smoke(target, env):
+    for operation, variants in [('linear', range(7)), ('rms_norm', range(2)), ('rope', range(1)),
+                                ('token_selection', STUDIES['token_selection']['candidates'])]:
+        token_selection = operation == 'token_selection'
+        for variant in variants:
+            cases = ([(r, l) for r in STUDIES['token_selection']['rows']
+                      for l in STUDIES['token_selection']['layers']] if token_selection else
+                     [(1, 1), (16 if variant not in (0, 2) else 1, 24)])
+            for rows, layers in cases:
+                control = 1 if operation == 'linear' and rows > 1 else 0
+                for first in ((0, 1) if token_selection else (1,)):
+                    repetitions = REPETITIONS if token_selection else 1
+                    command = list(map(str, [target, operation, rows, layers, variant, control,
+                                             first, 53, 'bench', repetitions, 0]))
+                    result = subprocess.run(command, text=True, capture_output=True, env=env)
+                    if result.returncode:
+                        raise RuntimeError(result.stdout + result.stderr)
+                    if ('correctness: passed' not in result.stdout
+                            or not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE')):
+                        raise RuntimeError(result.stdout + result.stderr)
+                    if token_selection:
+                        parse_output(result.stdout, control, variant, first,
+                                     rows=rows, layers=layers, seed=53, operation=operation)
+        for candidate, control in ([(99, 0), (0, 99)] if token_selection else [(99, 0)]):
+            invalid = subprocess.run(list(map(str, [target, operation, 1, 1, candidate,
+                                                   control, 0, 53, 'bench', 1, 0])),
+                                     text=True, capture_output=True, env=env)
+            if invalid.returncode == 0:
+                raise RuntimeError('invalid route accepted')
+            if token_selection and 'unknown token selection route' not in invalid.stdout + invalid.stderr:
+                raise RuntimeError('invalid token selection route failed without expected diagnostic:\n'
+                                   + invalid.stdout + invalid.stderr)
+        print(operation, 'all measurement routes passed', flush=True)
 
 
 def main():
@@ -14,21 +50,7 @@ def main():
     subprocess.run([environment_tool('mojo'), 'build', '-I', 'src',
                     'src/llm_mojo/benchmarks/operations.mojo', '-o', str(target)], cwd=repository_root(), check=True)
     env = {**os.environ, 'MODULAR_DEBUG': 'device-sync-mode'}
-    for operation, variants in [('linear', range(7)), ('rms_norm', range(2)), ('rope', range(1))]:
-        for variant in variants:
-            for rows, layers in [(1, 1), (16 if variant not in (0, 2) else 1, 24)]:
-                control = 1 if operation == 'linear' and rows > 1 else 0
-                command = list(map(str, [target, operation, rows, layers, variant, control, 1, 53, 'bench', 1, 0]))
-                result = subprocess.run(command, text=True, capture_output=True, env=env)
-                if result.returncode:
-                    raise RuntimeError(result.stdout + result.stderr)
-                if 'correctness: passed' not in result.stdout or not result.stdout.rstrip().endswith('BENCHMARK_COMPLETE'):
-                    raise RuntimeError(result.stdout + result.stderr)
-        invalid = subprocess.run(list(map(str, [target, operation, 1, 1, 99, 0, 0, 53, 'bench', 1, 0])),
-                                 capture_output=True, env=env)
-        if invalid.returncode == 0:
-            raise RuntimeError('invalid route accepted')
-        print(operation, 'all measurement routes passed', flush=True)
+    operations_smoke(target, env)
     target = repository_root() / 'build/prefill-smoke'
     subprocess.run([environment_tool('mojo'),'build','-I','src',
                     'src/llm_mojo/benchmarks/attention_prefill.mojo','-o',str(target)],
@@ -127,7 +149,6 @@ def main():
             raise RuntimeError('MLP benchmark route or output check failed')
     # Exercise the reader itself on a non-self pair in both orders. The old
     # candidate/control header reversal escaped substring-only route checks.
-    from .study import parse_output, REPETITIONS
     for candidate,control,mode,measurement in [(1,0,'stage1','mlp_stage_1'),(7,2,'bench','whole_mlp'),(10,8,'bench','whole_mlp')]:
         for first in (0,1):
             result = subprocess.run(list(map(str,[target,1,1,candidate,control,first,1601,mode,REPETITIONS,0])),
