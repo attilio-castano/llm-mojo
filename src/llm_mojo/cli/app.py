@@ -54,14 +54,15 @@ def setup(offline: Annotated[bool, typer.Option('--offline', help='Never downloa
 
 @app.command()
 def chat(preset: Preset = 'interactive', model: Model = None, mode: Mode = None,
-         engine: Annotated[bool, typer.Option('--engine', help='Use the reference EngineCore adapter; recompute history each turn.')] = False,
+         engine: Annotated[bool, typer.Option('--engine', help='Use the reference request engine.')] = False,
          async_steps: Annotated[bool, typer.Option('--async-stepping', help='Pipeline GPU steps in the optional request engine. Requires --engine.')] = False,
+         prefix_cache: Annotated[bool, typer.Option('--prefix-cache', help='Reuse full prompt KV blocks between turns. Requires synchronous --engine.')] = False,
          prepared: Path | None = None, max_new_tokens: int | None = None,
          chunk_rows: int | None = None, system_file: Path | None = None,
          report: Path | None = None, show_config: Inspect = False):
     """Start a native conversation; optionally use the reference request engine."""
     cfg = configuration('chat', preset=preset, model=model, mode=mode, engine=engine,
-                        async_steps=async_steps,
+                        async_steps=async_steps, prefix_cache=prefix_cache,
                         prepared=prepared, max_new_tokens=max_new_tokens,
                         chunk_rows=chunk_rows, system_file=system_file, report=report)
     if show_config:

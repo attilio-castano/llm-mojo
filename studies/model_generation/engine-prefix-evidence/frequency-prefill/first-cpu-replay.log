@@ -1,0 +1,61 @@
+{
+  "kind": "engine-prefix-frequency-guarded-cpu-replay-v1",
+  "source_commit": "df042c20d0bdd4fe51f5fc32f9bbad663a1769c3",
+  "measurement_sha256": "19a57868535d5682a0a9adafcd2da32d3592df0380cf9f7bd7cdc4c0b630bb77",
+  "measured_runs": 320,
+  "untimed_preflights": 60,
+  "same_delivered_histories": true,
+  "same_reuse_work": true,
+  "usefulness": {
+    "primary_cell": "prefix-1024-reuse-8-blocks-40-suffix-64-out-16-requests-8-first",
+    "primary_policy": "frequency",
+    "primary": {
+      "p95_gap": {
+        "status": "pass",
+        "ratio_limit": 0.75
+      },
+      "guards": {
+        "completion": {
+          "status": "pass",
+          "buffer": [
+            0.9735893473112585,
+            1.0735893473112585
+          ],
+          "limit": 1.1
+        },
+        "p95_ttft": {
+          "status": "pass",
+          "buffer": [
+            0.9766589676380495,
+            1.0766589676380496
+          ],
+          "limit": 1.1
+        },
+        "worst_gap": {
+          "status": "pass"
+        }
+      },
+      "guards_pass": true,
+      "hypothesis": "supported",
+      "p95_no_harm": {
+        "status": "pass",
+        "median_limit": 1.05,
+        "buffer_limit": 1.1,
+        "buffer": [
+          0.531116930809377,
+          0.6311169308093771
+        ]
+      }
+    },
+    "broad_guard_pass": false,
+    "broad_p95_guard_pass": false,
+    "study_success": false,
+    "adaptive_comparison": "Descriptive paired ratios only; no equivalence claim.",
+    "uncertainty": "Engineering median-ratio plus/minus self-control noise buffer; not a confidence interval."
+  },
+  "native_execution": false,
+  "asset_access": false,
+  "network_access": false,
+  "prohibited_attempts": [],
+  "preliminary_acceptance": null
+}

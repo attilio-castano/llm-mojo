@@ -1,0 +1,27 @@
+{
+  "kind": "engine-prefix-canonical-copy-v1",
+  "source_directory": "/private/tmp/llm-mojo-prefix-20261018-v3-sealed",
+  "files": {
+    "engine-prefix-validation.json": {
+      "sha256": "43103284994e363d630df06fddf7f23aaf2b8d508dc9b3af2e7a094b81e4aa3b",
+      "bytes": 414
+    },
+    "engine-prefix-validation.json.gz": {
+      "sha256": "73c10a73c0c84422177db8e9cea4a523b1e557baf90c9c11be5e95c4c464bd3f",
+      "bytes": 2441207
+    },
+    "measurements/engine-prefix.json": {
+      "sha256": "cb0dc49c78f288b4548323ee683bc7dba5591053dd9140dc2ee68e3d6a278262",
+      "bytes": 231
+    },
+    "measurements/engine-prefix.json.gz": {
+      "sha256": "1cb0dc9a848adefccb25d46d0816fa9db771f751221b2925a0f03c0b462032f4",
+      "bytes": 2408797
+    },
+    "retention-inventory.json": {
+      "sha256": "889818b7a89a7ee5f475b6812c53da7b580f947895917e33c93b549147e2cef7",
+      "bytes": 747
+    }
+  },
+  "byte_exact": true
+}

@@ -26,7 +26,15 @@ def async_turn_report[Runner: EngineChatRunner](mut events: String, turn: Int,
     events += "async_discarded_rows"+prefix+String(session.turn_discarded_rows)+"\t0\n"
 
 
-def _run[Runner: EngineChatRunner, ASYNC: Bool](args: List[String]) raises:
+def prefix_turn_report[Runner: EngineChatRunner](mut events: String, turn: Int,
+                                                session: EngineChatSession[Runner]):
+    var prefix = "\t"+String(turn)+"\t0\t"
+    events += "prefix_cache_hit_tokens"+prefix+String(session.turn_cache_hit_tokens)+"\t0\n"
+    events += "kv_cached"+prefix+String(session.engine.cached_blocks())+"\t0\n"
+    events += "kv_private"+prefix+String(session.engine.private_blocks())+"\t0\n"
+
+
+def _run[Runner: EngineChatRunner, ASYNC: Bool, PREFIX: Bool = False](args: List[String]) raises:
     comptime Session = EngineChatSession[Runner]
     var maximum = Int(args[3])
     var chunk = Int(args[4])
@@ -42,15 +50,15 @@ def _run[Runner: EngineChatRunner, ASYNC: Bool](args: List[String]) raises:
     var system = String(DEFAULT_SYSTEM)
     if args[5].byte_length()>0:
         system = String(from_utf8=open(args[5],"r").read_bytes())
-    var session = Session(args[1],tokenizer,work,system,chunk)
+    var session = Session(args[1],tokenizer,work,system,chunk,prefix_caching=PREFIX)
     print("Ready — engine reference", "async" if ASYNC else "sync", "on",
           session.runner.chat_device_name(),"/",session.runner.chat_device_api(),flush=True)
     print("/reset: new conversation · /exit: quit · Ctrl-C: stop reply or clear input",flush=True)
     if observed:
         events += "load\t0\t0\t"+session.runner.chat_device_name()+"/"+session.runner.chat_device_api()+"\t"+String(now()-started)+"\n"
     if observed:
-        events += "engine_mode\t0\t0\t" + ("reference-27/async-two-context/recompute-history"
-            if ASYNC else "reference-27/recompute-history") + "\t0\n"
+        events += "engine_mode\t0\t0\t" + ("reference-27/prefix-cache-v1" if PREFIX else
+            "reference-27/async-two-context/recompute-history" if ASYNC else "reference-27/recompute-history") + "\t0\n"
     var turn = 0
     var bytes = List[UInt8]()
     while True:
@@ -133,11 +141,13 @@ def _run[Runner: EngineChatRunner, ASYNC: Bool](args: List[String]) raises:
                     written += count
                 events += "kv_free\t"+String(turn)+"\t0\t"+String(session.engine.blocks.free_blocks())+"\t0\n"
                 events += "kv_total\t"+String(turn)+"\t0\t"+String(session.kv.blocks)+"\t0\n"
-                events += "kv_owned\t"+String(turn)+"\t0\t"+String(session.kv.blocks-session.engine.blocks.free_blocks())+"\t0\n"
+                events += "kv_owned\t"+String(turn)+"\t0\t"+String(session.engine.cache_references())+"\t0\n"
                 events += "kv_written\t"+String(turn)+"\t0\t"+String(written)+"\t0\n"
                 events += "engine_live\t"+String(turn)+"\t0\t"+String(session.engine.live())+"\t0\n"
                 comptime if ASYNC:
                     async_turn_report(events,turn,session)
+                comptime if PREFIX:
+                    prefix_turn_report(events,turn,session)
                 for i in range(len(session.history.tokens)):
                     events += "history\t"+String(turn)+"\t"+String(i)+"\t"+String(session.history.tokens[i])+"\t0\n"
                 var report = open(args[6],"w")
@@ -159,18 +169,22 @@ def _run[Runner: EngineChatRunner, ASYNC: Bool](args: List[String]) raises:
             events += "engine_steps\t"+String(turn)+"\t0\t"+String(session.turn_steps)+"\t0\n"
             events += "kv_free\t"+String(turn)+"\t0\t"+String(session.engine.blocks.free_blocks())+"\t0\n"
             events += "kv_total\t"+String(turn)+"\t0\t"+String(session.kv.blocks)+"\t0\n"
-            events += "kv_owned\t"+String(turn)+"\t0\t"+String(session.kv.blocks-session.engine.blocks.free_blocks())+"\t0\n"
+            events += "kv_owned\t"+String(turn)+"\t0\t"+String(session.engine.cache_references())+"\t0\n"
             events += "kv_written\t"+String(turn)+"\t0\t"+String(written)+"\t0\n"
             events += "engine_live\t"+String(turn)+"\t0\t"+String(session.engine.live())+"\t0\n"
             comptime if ASYNC:
                 async_turn_report(events,turn,session)
+            comptime if PREFIX:
+                prefix_turn_report(events,turn,session)
             for i in range(len(session.history.tokens)):
                 events += "history\t"+String(turn)+"\t"+String(i)+"\t"+String(session.history.tokens[i])+"\t0\n"
         if observed:
             var report = open(args[6],"w")
             report.write(events)
-    session.check_drained()
-    session.runner.chat_synchronize()
+    session.close()
+    comptime if PREFIX:
+        if observed:
+            events += "prefix_cache_closed\t0\t0\t"+String(session.engine.cached_blocks())+"\t0\n"
     print("Goodbye.",flush=True)
     if observed:
         var report = open(args[6],"w")
@@ -182,10 +196,13 @@ def main() raises:
     for arg in argv():
         args.append(String(arg))
     if len(args) != 7 and len(args) != 8:
-        raise Error("chat prepared tokenizer maximum chunk-rows system-file report-file [async]")
+        raise Error("chat prepared tokenizer maximum chunk-rows system-file report-file [async|prefix-cache]")
     if len(args) == 8:
-        if args[7] != "async":
-            raise Error("the optional stepping mode is async")
-        _run[QwenAsyncRunner,True](args)
+        if args[7] == "async":
+            _run[QwenAsyncRunner,True](args)
+        elif args[7] == "prefix-cache":
+            _run[QwenRunner,False,True](args)
+        else:
+            raise Error("the optional engine mode is async or prefix-cache")
     else:
         _run[QwenRunner,False](args)

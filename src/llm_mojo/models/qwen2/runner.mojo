@@ -2,7 +2,7 @@
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from llm_mojo.layers.decoder_layer import DECODER_FUSED_DECODE, DECODER_MIXED
 from llm_mojo.models.qwen2.model import ForwardRoute, QwenModel, VOCABULARY
-from llm_mojo.models.qwen2.plan import KV_BLOCK_SIZE, configured_plan
+from llm_mojo.models.qwen2.plan import KV_BLOCK_SIZE, DECODE_PROJECTION, MEASURED_DEVICE, configured_plan
 from llm_mojo.runtime.clock import now
 from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.kv_pool import KVPool
@@ -63,13 +63,22 @@ struct QwenRunner(EngineChatRunner):
     var model: QwenModel
     var origin_ns: Int
     var fast_decode: Bool
+    var prefix_source: String
 
     def __init__(out self, path: String, capacity: Int, max_rows: Int, max_sequences: Int,
                  fast_decode: Bool = False) raises:
         self.ctx = DeviceContext()
         self.model = QwenModel(self.ctx,path,capacity,max_rows,max_sequences)
         self.fast_decode = fast_decode
+        self.prefix_source = path
         self.origin_ns = Int(now())
+
+    def prefix_cache_identity(self) -> String:
+        # Prefix entries never cross a resident checkpoint or numerical route.
+        if (self.fast_decode or DECODE_PROJECTION != 8 or self.ctx.api() != "metal"
+                or self.ctx.name() != MEASURED_DEVICE):
+            return ""
+        return String("qwen-reference27-projection8/") + self.prefix_source
 
     @staticmethod
     def create_chat_runner(prepared: String, capacity: Int, chunk_rows: Int) raises -> Self:

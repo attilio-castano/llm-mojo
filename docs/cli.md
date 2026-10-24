@@ -13,6 +13,7 @@ uv run llm-mojo setup --check
 uv run llm-mojo models list
 uv run llm-mojo chat
 uv run --locked llm-mojo chat --engine
+uv run --locked llm-mojo chat --engine --prefix-cache
 uv run --locked llm-mojo chat --engine --async-stepping
 uv run llm-mojo generate --prompt "The capital of France is" --preset short
 uv run llm-mojo generate --prompt-file prompt.txt --max-new-tokens 64
@@ -51,8 +52,13 @@ empty prompt is rejected.
 
 Chat defaults to the direct Fast session. Without `--async-stepping`, `chat --engine`
 selects the synchronous reference EngineCore adapter, using configuration 27 for
-every call. It keeps weights resident, retains exact conversation token IDs and recomputes the complete
-history each turn. `--mode fast` is rejected with `--engine`; see
+every call. It keeps weights resident, retains exact conversation token IDs and,
+by default, recomputes the complete history each turn. `--prefix-cache` retains
+immutable full 32-token KV blocks and reuses the matching prefix between turns.
+It requires synchronous `--engine`; combining it with `--async-stepping` is
+rejected before loading or compiling. Reset, close and failure clear its cached
+blocks. Reports record cache hits and cached capacity separately from owned
+request blocks. `--mode fast` is rejected with `--engine`; see
 [engine terminal chat](chat.md#optional-engine-terminal-chat).
 `--async-stepping` requires `--engine` and selects the bounded two-context
 reference runner. It queues a successor before collecting the older result,

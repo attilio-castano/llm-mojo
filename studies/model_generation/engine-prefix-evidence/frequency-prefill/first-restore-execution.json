@@ -1,0 +1,24 @@
+{
+  "command": [
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python",
+    "-B",
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/frequency-prefill/retention/prefix_retention.py",
+    "restore",
+    "--archive",
+    "/private/tmp/llm-mojo-frequency-prefill-20261022-sealed/engine-prefix-frequency-validation.json.gz",
+    "--manifest",
+    "/private/tmp/llm-mojo-frequency-prefill-20261022-sealed/engine-prefix-frequency-validation.json",
+    "--expected-sha256",
+    "8215d5719703ad936049d2c0b44a70192f6be8cc2c392e100d8f60ed012f8c5f",
+    "--directory",
+    "/private/tmp/llm-mojo-frequency-prefill-20261022-restored-first",
+    "--python",
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python"
+  ],
+  "exit_code": 0,
+  "wall_elapsed_ns": 47515899959,
+  "timeout_seconds": 900,
+  "timed_out": false,
+  "script_sha256": "9897b4d720a6cba9327710a834493f0db918d894c83ab6a5445765c2dc8755d7",
+  "log_sha256": "b694824833ffe80639ef9b504f39b4820377e578ff8682afe58c5dd0609802c2"
+}

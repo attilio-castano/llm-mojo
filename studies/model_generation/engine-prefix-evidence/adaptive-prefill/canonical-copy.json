@@ -1,0 +1,110 @@
+{
+  "kind": "engine-prefix-adaptive-canonical-copy-v1",
+  "source_commit": "7dd3864dcd34e04170215876d304a54808abb856",
+  "copies": {
+    "retention-inventory.json": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-sealed/retention-inventory.json",
+      "bytes": 792,
+      "sha256": "3616d410bbe922e6138d76ba06de769a7f1cce250506a92726a77dc3e5d4890a"
+    },
+    "engine-prefix-adaptive-validation.json": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-sealed/engine-prefix-adaptive-validation.json",
+      "bytes": 423,
+      "sha256": "67c9addf8d9821ae1b81ea88cf4a3d451494b49c82a38765809c5911b29b6744"
+    },
+    "engine-prefix-adaptive-validation.json.gz": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-sealed/engine-prefix-adaptive-validation.json.gz",
+      "bytes": 1716068,
+      "sha256": "f7bce811055054a4dc7c9b9759a985b9b16f8b65f4d3103083b462b3970ee882"
+    },
+    "measurements/engine-prefix-adaptive.json.gz": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-sealed/measurements/engine-prefix-adaptive.json.gz",
+      "bytes": 9313681,
+      "sha256": "22092f6bc69297df4538ca6bbff0ba33f23b1dbfadf0d0760c50693750744fcc"
+    },
+    "measurements/engine-prefix-adaptive.json": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-sealed/measurements/engine-prefix-adaptive.json",
+      "bytes": 240,
+      "sha256": "6d6d3718f64c394dca884bbddcd70c61f5a800c702843e29ceaa9cbbc49a355b"
+    },
+    "engine-prefix-adaptive-results.json": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-results.json",
+      "bytes": 309546,
+      "sha256": "3ba6c17919bee962748b65db268476b270e2fb947356fcdbaec1d1d82249c59d"
+    },
+    "engine-prefix-adaptive-acceptance.json": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-acceptance.json",
+      "bytes": 2447,
+      "sha256": "4c2e3f3cf143b3cdb2c8fa6ba3489a6d2afd1efe9dfba28d2da05277fabf865e"
+    },
+    "source-binding.json": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-source-binding.json",
+      "bytes": 915,
+      "sha256": "1e67716be08e10291b98bfc581ec89bdb0dc8d448d336ce239e1a1fa84a20f54"
+    },
+    "independent-raw-audit.json": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-independent-raw-audit.json",
+      "bytes": 83049,
+      "sha256": "819fc4d6796e5c8cfec346aa51c83457ea1f76f7e76fb64ecd42bb90e3b880c6"
+    },
+    "independent-raw-audit-execution.json": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-independent-raw-audit.execution.json",
+      "bytes": 1332,
+      "sha256": "ea01089af130be4b31062f7f8a8cd7cd8d4fe9d886414187e65b9fa2865e7e12"
+    },
+    "independent-decision-audit.json": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-independent-decision-audit.json",
+      "bytes": 123250,
+      "sha256": "b6202a1e4eba195714bf91cd6070121dfe9b6a7b14021e3f0c69f07c6ff9c541"
+    },
+    "independent-decision-audit-execution.json": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-independent-decision-audit.execution.json",
+      "bytes": 2658,
+      "sha256": "d7da9fe5d44f1155f33a22aa2d381c86728a212ab880e6a1ddeb387c7e5bac30"
+    },
+    "retention/independent_raw_audit.py": {
+      "source": "/private/tmp/llm_mojo_adaptive_independent_raw_audit.py",
+      "bytes": 35929,
+      "sha256": "d5ee7f824a05ff858295ee2ca61c93e9c6a7e37c86a84b7470ca2680799fda9a"
+    },
+    "retention/independent_decision_audit.py": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-independent-decision-audit.py",
+      "bytes": 8988,
+      "sha256": "8cd955ba9864f3e1d3321363118d269fee1af3e4e1bccd8a738a07a53dc17f3e"
+    },
+    "first-cpu-replay.json": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-sealed-restored/cpu-replay-result.json",
+      "bytes": 1450,
+      "sha256": "96cce0d2494d5f0ae4fb6f773b5e424b01f6463c7cd509c5f10c564f76f5abae"
+    },
+    "first-cpu-replay-execution.json": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-sealed-restored/cpu-replay-execution.json",
+      "bytes": 685,
+      "sha256": "7f0ebfa3564c33146776214cb0df918a163d6935ecb309861cbd4122aa425bf5"
+    },
+    "first-cpu-replay.log": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-sealed-restored/cpu-replay.log",
+      "bytes": 1450,
+      "sha256": "96cce0d2494d5f0ae4fb6f773b5e424b01f6463c7cd509c5f10c564f76f5abae"
+    },
+    "cpu-replay.json": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-canonical-restored/cpu-replay-result.json",
+      "bytes": 1450,
+      "sha256": "96cce0d2494d5f0ae4fb6f773b5e424b01f6463c7cd509c5f10c564f76f5abae"
+    },
+    "cpu-replay-execution.json": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-canonical-restored/cpu-replay-execution.json",
+      "bytes": 691,
+      "sha256": "f9d68437da3627151ecf4bb2ec9cd8aa976385c3cbf69fec32ef1236bb126a08"
+    },
+    "cpu-replay.log": {
+      "source": "/private/tmp/llm-mojo-adaptive-prefill-20261022-canonical-restored/cpu-replay.log",
+      "bytes": 1450,
+      "sha256": "96cce0d2494d5f0ae4fb6f773b5e424b01f6463c7cd509c5f10c564f76f5abae"
+    }
+  },
+  "archive_expected_sha256": "f7bce811055054a4dc7c9b9759a985b9b16f8b65f4d3103083b462b3970ee882",
+  "first_restore_exit": 0,
+  "canonical_restore_exit": 0,
+  "custody": "local-only; no remote backup or fresh GPU rerun"
+}

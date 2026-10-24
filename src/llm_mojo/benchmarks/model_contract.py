@@ -411,6 +411,80 @@ def batch_configuration(data):
 
 # Phase 3 keeps the token-trace declaration beside the existing model matrices.
 ENGINE_ARMS = ('serial', 'static', 'continuous', 'chunked')
+ENGINE_PREFIX_STUDY = 'engine-prefix-v1'
+ENGINE_PREFIX_DECLARATION = dict(
+    kind='qwen-engine-prefix-v1', schema_version=1, study=ENGINE_PREFIX_STUDY,
+    model='Qwen2.5-0.5B-Instruct', policy='reference configuration 27; BF16 storage, FP32 reductions',
+    max_context=4096, block_size=32, order='slot-major', paired_blocks=4,
+    token_budget=256, max_sequences=8, warmup_steps=10, admission='reserved',
+    prefix_lengths=[256, 1024], reuse_requests=[0, 4, 8], primary_blocks=384,
+    pressure_cells=[dict(prefix_tokens=1024, reuse_requests=4, blocks=40),
+                    dict(prefix_tokens=1024, reuse_requests=8, blocks=40)],
+    requests_per_trace=8, suffix_tokens=64, max_new_tokens=16,
+    grid=['disabled', 'self-disabled', 'enabled'], measured_runs=96, untimed_preflights=16,
+    identity='bounded exact namespace, salt and full token-prefix equality; no digest surrogate',
+    timing_boundary='resident weights and ten warmup steps outside episode; retain seed, '
+        'handoff, measured trace and final cache clear as separate host intervals',
+    target=None, goodput=None, asynchronous=False, default_promotion=False,
+    execution_timeout_seconds=180, campaign_timeout_seconds=7200,
+)
+ENGINE_PREFIX_ACTIVE_STUDY = 'engine-prefix-active-v1'
+ENGINE_PREFIX_ACTIVE_DECLARATION = dict(
+    ENGINE_PREFIX_DECLARATION, kind='qwen-engine-prefix-active-v1', study=ENGINE_PREFIX_ACTIVE_STUDY,
+    prefix_lengths=[1024], reuse_requests=[4, 8, 0],
+    grid=['current', 'self-current', 'cap32', 'cap16'], measured_runs=80, untimed_preflights=15,
+    active_prefill_caps=[0, 32, 16], seed_active_prefill_cap=0,
+    cap_boundary='Measured continuation only; cap prefill rows when decodes are selected; idle prefill keeps the 256-row budget.',
+    balanced_orders=[[0, 1, 3, 2], [1, 2, 0, 3], [2, 3, 1, 0], [3, 0, 2, 1]],
+    usefulness=dict(primary_cell='prefix-1024-reuse-8-blocks-40', primary_cap=32, exploratory_caps=[16],
+        p95_gap_ratio_max=.75, completion_ratio_max=1.10, p95_ttft_ratio_max=1.10,
+        noise='max(0.05, maximum absolute self/current ratio deviation), independently for each metric',
+        gap_rule='All four candidate/current ratios below one, median at most 0.75, effect larger than metric noise.',
+        cost_rule='Median ratio plus/minus noise is an engineering buffer, not a confidence interval; pass upper<=1.10, fail lower>1.10, else inconclusive.',
+        worst_gap_rule='Pass median<=1+noise; fail only if all four ratios>1 and median>1+noise; else inconclusive.',
+        decision='Primary hypothesis uses the primary cell only; broad_guard_pass additionally requires cost/worst-gap guards in all five cells. Promotion remains false.'),
+    gap_thresholds_ns=[20_000_000, 50_000_000],
+)
+ENGINE_PREFIX_ADAPTIVE_STUDY = 'engine-prefix-adaptive-v1'
+ENGINE_PREFIX_ADAPTIVE_CELLS = [
+    [4,384,64,16,'first'], [8,384,64,16,'first'], [4,40,64,16,'first'],
+    [8,40,64,16,'first'], [0,384,64,16,'first'], [8,41,64,16,'first'],
+    [8,56,64,16,'first'], [8,36,33,16,'first'], [8,40,63,16,'first'],
+    [8,40,65,16,'first'], [8,40,64,2,'first'], [4,40,64,16,'even'],
+]
+ENGINE_PREFIX_ADAPTIVE_DECLARATION = dict(
+    {k:v for k,v in ENGINE_PREFIX_ACTIVE_DECLARATION.items() if k not in ('primary_blocks','pressure_cells')},
+    kind='qwen-engine-prefix-adaptive-v1',study=ENGINE_PREFIX_ADAPTIVE_STUDY,
+    grid=['current','self-current','fixed32','adaptive'],measured_runs=192,untimed_preflights=36,
+    cells=ENGINE_PREFIX_ADAPTIVE_CELLS,active_prefill_caps=[0,32],suffix_tokens=[33,63,64,65],max_new_tokens=[2,16],
+    cap_boundary='Measured continuation only; adaptive cap applies only to an eligible new FIFO admission after cache match. Held prefill remains baseline. Fixed32 is the separate static mixed-prefill arm.',
+    policy='New FIFO admission only after ordinary cache match; 0<K<=A, D==1, incumbent declared remaining outputs>=2, 33<=R<=64, D+1<max_sequences, A-K<K. Choose min(baseline,32), otherwise baseline. Held prefill remains baseline.',
+    observation='Ordered selections and every attempted new-admission decision, including blocked attempts; no fitted budget.',
+    usefulness=dict({k:v for k,v in ENGINE_PREFIX_ACTIVE_DECLARATION['usefulness'].items() if k not in ('primary_cap','exploratory_caps')},
+        primary_cell='prefix-1024-reuse-8-blocks-40-suffix-64-out-16-first',
+        primary_policy='adaptive',fixed32_comparison='descriptive; no static32 self-control or timing-equivalence gate',
+        decision='Primary uses its adaptive/current gap and guards; broad success additionally requires cost/worst-gap guards for all twelve cells. Exact fallback scheduling is independent of elapsed overhead. Promotion remains false.'),
+)
+ENGINE_PREFIX_FREQUENCY_STUDY = 'engine-prefix-frequency-v1'
+ENGINE_PREFIX_FREQUENCY_CELLS = [list(values)+[8] for values in ENGINE_PREFIX_ADAPTIVE_CELLS] + [
+    [5,40,64,16,'first',8], [6,40,64,16,'first',8], [7,40,64,16,'first',8],
+    [7,40,64,16,'first',7], [9,40,64,16,'first',9], [4,40,64,3,'first',8],
+    [8,40,64,8,'first',8], [8,40,64,32,'first',8],
+]
+ENGINE_PREFIX_FREQUENCY_DECLARATION = dict(
+    {k:v for k,v in ENGINE_PREFIX_ADAPTIVE_DECLARATION.items() if k!='active_prefill_caps'},kind='qwen-engine-prefix-frequency-v1',study=ENGINE_PREFIX_FREQUENCY_STUDY,
+    grid=['current','self-current','adaptive','frequency'],measured_runs=320,untimed_preflights=60,
+    cells=ENGINE_PREFIX_FREQUENCY_CELLS,requests_per_trace=[7,8,9],max_new_tokens=[2,3,8,16,32],
+    cap_boundary='Frequency mode alone freezes the submitted positive-output cohort at its first successful admission, before the model step. Permit adaptive-v1 only in its counted leading run when the frozen density forecast permits it; held prefill remains baseline.',
+    policy='Freeze N=sum(max(declared G-1,0)); homogeneous leading resident-prefix run L with distinct private keys, G>=3 and two-reader geometry H_blocks+2K<=pool<H_blocks+3K gives M=max(L-1,0). Permit adaptive-v1 only if M>=N-floor(19*(N-1)/20). Never read future arrivals/EOS. New add, early termination or counted-member geometry mismatch disables caps until drain.',
+    observation='Candidate-only forecast work inside measured scheduling; snapshot membership/tickets/declared work, exact prefix geometry, density, lifecycle and cost; controls emit not-executed sentinels. Preserve ordered admission/selection/cache receipts.',
+    usefulness=dict({k:v for k,v in ENGINE_PREFIX_ADAPTIVE_DECLARATION['usefulness'].items() if k!='fixed32_comparison'},
+        primary_cell='prefix-1024-reuse-8-blocks-40-suffix-64-out-16-requests-8-first',primary_policy='frequency',
+        p95_no_harm_ratio_max=1.05,p95_no_harm_buffer_max=1.10,
+        p95_no_harm_rule='Pass median<=1.05 AND median+noise<=1.10. Otherwise fail only if all four ratios>1 and median-1>noise; else inconclusive.',
+        adaptive_comparison='descriptive; no adaptive self-control or timing-equivalence gate',
+        decision='Study success requires primary frequency/current hypothesis, all twenty cost/worst-gap guards and all twenty p95_no_harm guards. Report both broad guards separately. Promotion remains false.'),
+)
 ENGINE_STEP_FIELDS = (
     'step_id', 'decode_seqs', 'prefill_seqs', 'prefill_tokens', 'total_tokens',
     'attended_positions', 'admitted', 'preempted', 'finished', 'aborted',

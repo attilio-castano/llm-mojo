@@ -50,6 +50,7 @@ before reuse.
 
 ```sh
 uv run --locked llm-mojo chat --engine
+uv run --locked llm-mojo chat --engine --prefix-cache
 uv run --locked llm-mojo chat --engine --async-stepping
 uv run --locked llm-mojo chat --engine --preset short --report /private/tmp/engine-chat.tsv
 uv run --locked llm-mojo chat --engine --show-config
@@ -58,9 +59,15 @@ uv run --locked llm-mojo chat --engine --show-config
 Without `--async-stepping`, the synchronous EngineCore adapter uses reference
 configuration 27 and admits one request at a time with lifetime KV reservation.
 Weights stay resident and conversation history remains in exact token IDs.
-Each turn recomputes that whole
-history; completed or cancelled replies release request ownership and valid KV
-extents. This adapter has no conversation prefix cache. `--mode fast` is rejected.
+By default, each turn recomputes that whole history; completed or cancelled
+replies release request ownership and valid KV extents. `--mode fast` is rejected.
+
+`--prefix-cache` reuses full 32-token KV blocks from earlier turns. Blocks remain
+immutable and unreferenced after a reply; each new request attaches the matching
+prefix and computes its remaining prompt plus the final query needed for logits.
+Partial blocks stay private. `/reset`, normal process close and execution/output
+failure clear the cache. This option requires synchronous `--engine` and cannot
+be combined with `--async-stepping`.
 
 The existing streaming decoder displays tokens. `/reset` restores system-only
 history without reloading weights. Without `--async-stepping`, Ctrl-C takes effect
@@ -76,6 +83,13 @@ including an interrupted prefix. Its injected nonfinite failure preserves the
 delivered token and closed history and returns all logical KV ownership.
 See the [engine study](../studies/model_generation/engine-core.md#optional-engine-terminal-chat-accepted-lifecycle)
 for the retained execution and restore scope.
+
+Prefix-cache reports instead identify `reference-27/prefix-cache-v1`, and add
+`prefix_cache_hit_tokens`, `kv_cached` and `kv_private`. At a healthy terminal,
+no request owns blocks, free plus cached blocks equals the pool, and written KV
+contains exactly the full cached blocks. Executed rows exclude reused prompt
+tokens. `prefix_cache_closed` records that normal close emptied the cache. These
+records keep retained cached capacity separate from live request ownership.
 
 ### Optional asynchronous stepping
 

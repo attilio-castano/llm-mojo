@@ -1,0 +1,131 @@
+{
+  "kind": "engine-prefix-frequency-final-inventory-v1",
+  "source_commit": "df042c20d0bdd4fe51f5fc32f9bbad663a1769c3",
+  "scope": "All canonical files except this inventory itself.",
+  "files": {
+    "README.md": {
+      "bytes": 17759,
+      "sha256": "0029a318f781f4e45a96cc3a8d5f6d8e666698b0f808bb90419611e4e16303fb"
+    },
+    "canonical-copy.json": {
+      "bytes": 5063,
+      "sha256": "287f762d1d4246da516845fe55884eff5c79d1043e1b5937251fc144a85ba340"
+    },
+    "canonical-restore-execution.json": {
+      "bytes": 1205,
+      "sha256": "1010c94793e11f8e7639cd0f25bcfe55d4fcd7c8ead965ee88ae13edc2f80694"
+    },
+    "cpu-replay-execution.json": {
+      "bytes": 692,
+      "sha256": "71760b54bd274cd76011df03a63442382539696b3f19823cf2e16ad2203994c8"
+    },
+    "cpu-replay.json": {
+      "bytes": 1733,
+      "sha256": "4bd134a127ace72909f2cc96e7cb1e705b1c89793ae6b55c4031ff566129c219"
+    },
+    "cpu-replay.log": {
+      "bytes": 1733,
+      "sha256": "4bd134a127ace72909f2cc96e7cb1e705b1c89793ae6b55c4031ff566129c219"
+    },
+    "derivation-check.json": {
+      "bytes": 1138,
+      "sha256": "dc04dd3160751aa283b84a9664553d4413e417838fe6cec5b9b9d20f25430bc5"
+    },
+    "documentation-links-execution.json": {
+      "bytes": 463,
+      "sha256": "ae64b0a84bdeede56abb44ef36414a9d3a8ded93055d7f7157878dfde784a56e"
+    },
+    "documentation-links.log": {
+      "bytes": 103,
+      "sha256": "e8d021c957ecca775ac596971de127adbfe9fe224a16611030d006dbb7c12614"
+    },
+    "engine-prefix-frequency-acceptance.json": {
+      "bytes": 16610,
+      "sha256": "1b875f3b772c03ba0ecceac423b65a122ea6ec5e289e87f05877be8b685da9b6"
+    },
+    "engine-prefix-frequency-results.json": {
+      "bytes": 4712189,
+      "sha256": "5fd356e496f0f1a65738dbe316bbf2582255aa2dfc9c5d89c20f06597b4357b6"
+    },
+    "engine-prefix-frequency-validation.json": {
+      "bytes": 424,
+      "sha256": "ebc0580d1299f6a368de0b0f2961c8c7c4fba1b1a73ddaeafdc476da966f4c55"
+    },
+    "engine-prefix-frequency-validation.json.gz": {
+      "bytes": 1975251,
+      "sha256": "8215d5719703ad936049d2c0b44a70192f6be8cc2c392e100d8f60ed012f8c5f"
+    },
+    "final-checks.json": {
+      "bytes": 7100,
+      "sha256": "223ab942448712fc65a3ec21955761e9d97de242bc662fb0e49ffa69fd432235"
+    },
+    "first-cpu-replay-execution.json": {
+      "bytes": 684,
+      "sha256": "d525f2f5f03a74ed997f3661edd046479bd91eb4ae71927247507473ca6f051c"
+    },
+    "first-cpu-replay.json": {
+      "bytes": 1733,
+      "sha256": "4bd134a127ace72909f2cc96e7cb1e705b1c89793ae6b55c4031ff566129c219"
+    },
+    "first-cpu-replay.log": {
+      "bytes": 1733,
+      "sha256": "4bd134a127ace72909f2cc96e7cb1e705b1c89793ae6b55c4031ff566129c219"
+    },
+    "first-restore-execution.json": {
+      "bytes": 1075,
+      "sha256": "c73d755005f3240d629504b3acc1ca8064314c6fbf1944c48d464c6efc0ce6d4"
+    },
+    "independent-decision-audit-execution.json": {
+      "bytes": 636,
+      "sha256": "0fbf8b89fde93d78a3431e654b0b756f91ae3d45e34c7f192d206723d9674160"
+    },
+    "independent-decision-audit.json": {
+      "bytes": 211074,
+      "sha256": "778d8e9b68b44aa1034b740aa587fa81cdd35af735f693054f7a809d332daeb7"
+    },
+    "independent-raw-audit-execution.json": {
+      "bytes": 833,
+      "sha256": "e366401a0edf225d9bafde6a82bd28b7b33189492e1f22a094d04bdf59c83a14"
+    },
+    "independent-raw-audit.json": {
+      "bytes": 294046,
+      "sha256": "f2fb289934ed1d85eefdba715d898db8e8aefe16d51750e1964f61f953700fee"
+    },
+    "measurements/engine-prefix-frequency.json": {
+      "bytes": 242,
+      "sha256": "80f8f4dbcca37753cf088d51f3bfca6d7a8db41a3aa3d938bd00aef29fcf6af5"
+    },
+    "measurements/engine-prefix-frequency.json.gz": {
+      "bytes": 15987536,
+      "sha256": "19a57868535d5682a0a9adafcd2da32d3592df0380cf9f7bd7cdc4c0b630bb77"
+    },
+    "retention/extract_results.py": {
+      "bytes": 10107,
+      "sha256": "ec1e6a0fa71c5bc506d11e6d51962ca2d4bfc5dd01367ec0f66b611135d7f183"
+    },
+    "retention/independent_decision_audit.py": {
+      "bytes": 16413,
+      "sha256": "d24e3fc874b6a101b3c03ca8b69135fdc706fc9b7b576994727fafb661bed96f"
+    },
+    "retention/independent_raw_audit.py": {
+      "bytes": 47174,
+      "sha256": "204ae0ead0bf531838139a1d494e6735f6d576bc036ad2fcf25c6603f32f47a2"
+    },
+    "retention/prefix_retention.py": {
+      "bytes": 20416,
+      "sha256": "9897b4d720a6cba9327710a834493f0db918d894c83ab6a5445765c2dc8755d7"
+    },
+    "retention-inventory.json": {
+      "bytes": 798,
+      "sha256": "2b6b95a1e13b424a009480ed2d5073df2bfedc5a68a39424bae63f2c8f20aa68"
+    },
+    "retention-pack-execution.json": {
+      "bytes": 1038,
+      "sha256": "b2261502024293c0d33f3c24fc5e2875d2e70ac536774455e7fb6001c0432d4d"
+    },
+    "source-binding.json": {
+      "bytes": 1162,
+      "sha256": "b68e55085bba27773b97008952ac52a38737097399b55a304e0c6ba7b7c8c670"
+    }
+  }
+}

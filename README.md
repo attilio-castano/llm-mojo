@@ -50,8 +50,11 @@ pay off stay in the record alongside the ones that did, with the reason.
   work using two Metal contexts. Its [accepted evidence](studies/model_generation/engine-async-evidence/README.md)
   retains numerical/lifecycle qualification, full validation and 24 measured
   runs. The bounded offline speed comparison is inconclusive, so async remains opt-in.
-  Prefix caching and the multi-request frontend remain in the
-  [serving plan](docs/serving-plan.md).
+  Optional `chat --engine --prefix-cache` retains immutable full KV blocks for
+  later requests, with exact prefix identity and idle eviction. It uses the
+  synchronous reference runner; the [prefix study](studies/model_generation/engine-core.md#prefix-caching-retained-bounded-results)
+  separates numerical qualification from measured reuse. The multi-request
+  frontend remains in the [serving plan](docs/serving-plan.md).
 - **Open questions.** For one conversation, submitting GPU work limits speed
   more than arithmetic does. Long prompts are slow to start. And whether building
   the same cache in different chunk sizes can give identical results is not yet

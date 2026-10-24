@@ -1,8 +1,9 @@
 """Explicit mixed reference route: selection, paged isolation and operation parity.
 
 Comparisons use identical token histories and the same route/projection for
-mixed and separately submitted sequences. They do not require equality with
-the Fast prefill route or a different prompt-chunk schedule.
+mixed and separately submitted sequences. The prefix-reuse qualification also
+requires exact equality across prompt-chunk schedules and shared-prefix cold
+recomputation for reference 27. It does not compare with Fast prefill or HF.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
@@ -14,11 +15,12 @@ from llm_mojo.models.qwen2.runner import select_engine_configuration
 from llm_mojo.serving.batch import StepBatch
 from llm_mojo.serving.kv_pool import KVPool
 from decoder_layer_support import decoder_support, load_decoder
+from engine_metal_driver import FastChecks, prefix_reuse_model_qualification, prefix_active_model_qualification
 
 comptime CASE = "h896_i4864_nq14_nk2_d64_t65_s4001_base"
 comptime LAYERS = 3
 comptime CONTEXT = 65
-comptime MAX_ROWS = 40
+comptime MAX_ROWS = 65
 comptime POISON = UInt16(0x7FC1)
 
 
@@ -306,6 +308,34 @@ def test_engine_fast_transition_keeps_same_route_logits_and_kv_isolated() raises
     assert_equal(ctx.api(), "metal")
     _run_engine_fast_transition[False](ctx)
     _run_engine_fast_transition[True](ctx)
+
+
+def test_reference_prefix_reuse_matches_cold_recomputation() raises:
+    var support = decoder_support()
+    support.verify_case(CASE)
+    var ctx = DeviceContext()
+    assert_equal(ctx.api(), "metal")
+    var model = _model(ctx,2)
+    var cold = _model(ctx,1)
+    var schedules = FastChecks()
+    var sharing = FastChecks()
+    prefix_reuse_model_qualification(model,ctx,cold,ctx,CONTEXT,CONTEXT,schedules,sharing)
+    schedules.emit("fixture-prefix-chunk-schedule")
+    sharing.emit("fixture-prefix-readonly-sharing")
+
+
+def test_reference_active_prefill_schedules_match_cold_recomputation() raises:
+    var support = decoder_support()
+    support.verify_case(CASE)
+    var ctx = DeviceContext()
+    assert_equal(ctx.api(), "metal")
+    var model = _model(ctx,2)
+    var cold = _model(ctx,1)
+    var mixed = FastChecks()
+    var partial = FastChecks()
+    prefix_active_model_qualification(model,ctx,cold,ctx,CONTEXT,mixed,partial)
+    mixed.emit("fixture-prefix-active-mixed-kv-logits-greedy")
+    partial.emit("fixture-prefix-active-zero-head-partial")
 
 
 def main() raises:

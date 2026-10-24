@@ -76,16 +76,17 @@ def validate(rows, maximum):
 """Stage this function in existing tests/chat_terminal.py; separate contract."""
 
 
-def validate_engine(rows, maximum, async_steps=False):
+def validate_engine(rows, maximum, async_steps=False, prefix_cache=False):
     if type(maximum) is not int or not 1 <= maximum <= 4096:
         raise ValueError('invalid engine chat reply maximum')
-    if type(async_steps) is not bool:
+    if type(async_steps) is not bool or type(prefix_cache) is not bool or (prefix_cache and async_steps):
         raise ValueError('engine chat stepping declaration must be explicit')
     loads=[r for r in rows if r['event']=='load']
     modes=[r for r in rows if r['event']=='engine_mode']
     if len(loads)!=1 or loads[0]['value']!='Apple M4 Pro/metal':
         raise ValueError('missing single actual Metal resident engine load')
-    expected_mode='reference-27/async-two-context/recompute-history' if async_steps else 'reference-27/recompute-history'
+    expected_mode=('reference-27/prefix-cache-v1' if prefix_cache else
+                   'reference-27/async-two-context/recompute-history' if async_steps else 'reference-27/recompute-history')
     if len(modes)!=1 or modes[0]['value']!=expected_mode:
         raise ValueError('engine chat mode or KV lifecycle changed')
     begins=[r for r in rows if r['event']=='begin']
@@ -93,9 +94,11 @@ def validate_engine(rows, maximum, async_steps=False):
         raise ValueError('missing or duplicate engine chat turn')
     previous=None
     turns=[]
+    known_prefix_tokens=0
     for row in rows:
         if row['event']=='reset':
             previous=None
+            known_prefix_tokens=0
         if row['event']=='rejected' and previous is not None:
             if int(row['value'])!=len(previous['history']):
                 raise ValueError('engine context rejection changed exact history')
@@ -136,6 +139,16 @@ def validate_engine(rows, maximum, async_steps=False):
         if history!=prompt+generated+closure+[198]:
             raise ValueError('engine chat lost or duplicated raw generated tokens/closure')
         rows_count=value('engine_rows')
+        cache_hit=value('prefix_cache_hit_tokens') if prefix_cache else 0
+        if prefix_cache:
+            if not 0<=cache_hit<len(prompt) or cache_hit%32:
+                raise ValueError('engine prefix hit must preserve a final prompt query')
+            if previous is None and cache_hit:
+                raise ValueError('cold/reset engine turn claimed a prefix hit')
+            if cache_hit>known_prefix_tokens:
+                raise ValueError('engine prefix hit includes an uncomputed token')
+        elif any(r['event'] in ('prefix_cache_hit_tokens','kv_cached','kv_private') for r in group):
+            raise ValueError('recomputing engine mode unexpectedly claimed cached blocks')
         async_counters={}
         names=('submissions','completions','peak_pending','pending','submitted_rows','selected_heads',
                'delivered_tokens','chained_rows','discarded_tokens','discarded_rows')
@@ -169,14 +182,17 @@ def validate_engine(rows, maximum, async_steps=False):
             if any(r['event']=='async_'+name for r in group for name in names):
                 raise ValueError('synchronous engine chat unexpectedly claimed async work')
             if generated:
-                if rows_count!=len(prompt)+len(generated)-1:
+                if rows_count!=len(prompt)+len(generated)-1-cache_hit:
                     raise ValueError('engine chat normal/decoded turn rows differ from P+G-1')
-            elif reason!='interrupted' or not 0<=rows_count<len(prompt):
+            elif reason!='interrupted' or not 0<=rows_count<len(prompt)-cache_hit:
                 raise ValueError('engine chat prefill abort executed invalid rows')
         if value('submitted')!=24*rows_count or value('engine_steps')<1:
             raise ValueError('engine chat submitted model rows disagree with executed engine rows')
-        if (value('kv_free')!=value('kv_total') or value('kv_total')<1
-                or value('kv_owned')!=0 or value('kv_written')!=0 or value('engine_live')!=0):
+        cached_blocks=value('kv_cached') if prefix_cache else 0
+        if prefix_cache and (cached_blocks<0 or value('kv_private')!=0):
+            raise ValueError('engine prefix terminal retained private block ownership')
+        if (value('kv_free')+cached_blocks!=value('kv_total') or value('kv_total')<1
+                or value('kv_owned')!=0 or value('kv_written')!=32*cached_blocks or value('engine_live')!=0):
             raise ValueError('engine chat terminal retained valid KV or request ownership')
         token_events=[r for r in group if r['event']=='token']
         times=[int(r['nanoseconds']) for r in token_events]
@@ -188,25 +204,32 @@ def validate_engine(rows, maximum, async_steps=False):
         visible=[r for r in token_events if int(r['value']) not in (151643,151645)]
         span=int(visible[-1]['nanoseconds'])-int(visible[0]['nanoseconds']) if len(visible)>1 else 0
         rate=(len(visible)-1)*1e9/span if span>0 else None
-        turns.append(dict(turn=int(turn),cached_before=0,cached=0,prompt=prompt,history=history,
+        turns.append(dict(turn=int(turn),cached_before=cache_hit,cached=32*cached_blocks,prompt=prompt,history=history,
             generated=generated,reason=reason,executed_rows=rows_count,
-            valid_kv_at_terminal=0,engine_live_at_terminal=0,
+            valid_kv_at_terminal=32*cached_blocks,engine_live_at_terminal=0,
             first_visible_ms=int(texts[0]['nanoseconds'])/1e6 if texts else None,
             first_token_ms=times[0]/1e6 if times else None,
             request_ms=int(finish['nanoseconds'])/1e6,output_tokens_per_second=rate))
         if async_steps:
             turns[-1]['async']=async_counters
+        known_prefix_tokens=max(known_prefix_tokens,cache_hit+rows_count)//32*32
         previous=turns[-1]
+    if prefix_cache:
+        closed=[r for r in rows if r['event']=='prefix_cache_closed']
+        if len(closed)!=1 or int(closed[0]['value'])!=0:
+            raise ValueError('engine prefix cache did not clear on close')
     return turns
 
 
-def run(binary,prepared,tables,output,engine=False,async_steps=False):
-    if type(engine) is not bool or type(async_steps) is not bool or (async_steps and not engine):
+def run(binary,prepared,tables,output,engine=False,async_steps=False,prefix_cache=False):
+    if (type(engine) is not bool or type(async_steps) is not bool or type(prefix_cache) is not bool
+            or ((async_steps or prefix_cache) and not engine) or (async_steps and prefix_cache)):
         raise ValueError('async terminal validation requires explicit engine mode')
     output.mkdir(parents=True,exist_ok=False)
     basic=output/'basic.tsv'
     args=[str(binary),str(prepared),str(tables),'16','256','',str(basic)]
     if async_steps: args.append('async')
+    if prefix_cache: args.append('prefix-cache')
     message='My name is Ada. Reply in one short sentence.'
     input_bytes=(message+'\nWhat is my name?\n/reset\n'+message+'\n'+'a '*5000+'\nSay caffè ☕.\n').encode()+b'\xff\n/exit\n'
     start=time.monotonic()
@@ -215,7 +238,8 @@ def run(binary,prepared,tables,output,engine=False,async_steps=False):
     (output/'basic.txt').write_text(text)
     if result.returncode or 'Conversation full:' not in text or 'Input must be valid UTF-8.' not in text:
         raise ValueError('input rejection or execution failed: '+text)
-    checker=(lambda records,maximum:validate_engine(records,maximum,async_steps=async_steps)) if engine else validate
+    checker=(lambda records,maximum:validate_engine(records,maximum,async_steps=async_steps,
+                                                    prefix_cache=prefix_cache)) if engine else validate
     turns=checker(events(basic),16)
     if len(turns)!=4 or turns[0]['generated']!=turns[2]['generated']:
         raise ValueError('multi-turn/reset replay mismatch')
@@ -228,6 +252,7 @@ def run(binary,prepared,tables,output,engine=False,async_steps=False):
     pty_report=output/'interrupt.tsv'
     args=[str(binary),str(prepared),str(tables),'256','256','',str(pty_report)]
     if async_steps: args.append('async')
+    if prefix_cache: args.append('prefix-cache')
     pid,fd=pty.fork()
     if pid==0:
         os.execv(binary,args)
@@ -272,7 +297,7 @@ def run(binary,prepared,tables,output,engine=False,async_steps=False):
     interrupted=checker(events(pty_report),256)
     if len(interrupted)!=3 or interrupted[0]['reason']!='interrupted':
         raise ValueError('missing interrupted/resumed/reset conversation')
-    return dict(kind='native-engine-async-chat-terminal-v1' if async_steps else 'native-engine-chat-terminal-v1' if engine else 'native-chat-terminal-v1',binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
+    return dict(kind='native-engine-prefix-chat-terminal-v1' if prefix_cache else 'native-engine-async-chat-terminal-v1' if async_steps else 'native-engine-chat-terminal-v1' if engine else 'native-chat-terminal-v1',binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
                 basic_turns=turns,interrupt_turns=interrupted,basic_wall_seconds=elapsed,
                 report_free_output_exact=True,basic_output=text,pty_output=transcript.decode(),
                 basic_events=events(basic),interrupt_events=events(pty_report))
@@ -286,9 +311,13 @@ def main():
     parser.add_argument('--output',required=True,type=Path)
     parser.add_argument('--engine',action='store_true',help='Validate the separate EngineCore chat lifecycle')
     parser.add_argument('--async-stepping',action='store_true',help='Require the engine two-context async lifecycle')
+    parser.add_argument('--prefix-cache',action='store_true',help='Require synchronous engine full-block prefix reuse')
     a=parser.parse_args()
     if a.async_stepping and not a.engine: parser.error('--async-stepping requires --engine')
-    result=run(a.binary.resolve(),a.prepared.resolve(),a.tables.resolve(),a.output,engine=a.engine,async_steps=a.async_stepping)
+    if a.prefix_cache and (not a.engine or a.async_stepping):
+        parser.error('--prefix-cache requires synchronous --engine')
+    result=run(a.binary.resolve(),a.prepared.resolve(),a.tables.resolve(),a.output,engine=a.engine,
+               async_steps=a.async_stepping,prefix_cache=a.prefix_cache)
     (a.output/'result.json').write_text(json.dumps(result,indent=2,ensure_ascii=False)+'\n')
     print('Native terminal passed: four piped turns, three PTY turns, Ctrl-C, EOF, reset, Unicode, context rejection and report parity.')
 

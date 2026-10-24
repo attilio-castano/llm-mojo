@@ -1,0 +1,22 @@
+{
+  "kind": "engine-prefix-retention-inventory-v1",
+  "source_commit": "dcd09b5d57eb4cb20ed7f7bd806d6e6c5c23cd91",
+  "files": {
+    "engine-prefix-validation.json.gz": {
+      "bytes": 2441207,
+      "sha256": "73c10a73c0c84422177db8e9cea4a523b1e557baf90c9c11be5e95c4c464bd3f"
+    },
+    "engine-prefix-validation.json": {
+      "bytes": 414,
+      "sha256": "43103284994e363d630df06fddf7f23aaf2b8d508dc9b3af2e7a094b81e4aa3b"
+    },
+    "measurements/engine-prefix.json.gz": {
+      "bytes": 2408797,
+      "sha256": "1cb0dc9a848adefccb25d46d0816fa9db771f751221b2925a0f03c0b462032f4"
+    },
+    "measurements/engine-prefix.json": {
+      "bytes": 231,
+      "sha256": "cb0dc49c78f288b4548323ee683bc7dba5591053dd9140dc2ee68e3d6a278262"
+    }
+  }
+}

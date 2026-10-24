@@ -1,0 +1,419 @@
+{
+  "kind": "engine-prefix-frequency-acceptance-v1",
+  "source_commit": "df042c20d0bdd4fe51f5fc32f9bbad663a1769c3",
+  "frozen_contract_commit": "900bf1b3cf99736b96522705d2b01e26bf0c1291",
+  "qualification_and_campaign_status": "passed",
+  "performance_acceptance": "inconclusive",
+  "study_success": false,
+  "default_policy": "current",
+  "promotion": false,
+  "measured_runs": 320,
+  "untimed_preflights": 60,
+  "primary": {
+    "p95_gap": {
+      "status": "pass",
+      "ratio_limit": 0.75
+    },
+    "guards": {
+      "completion": {
+        "status": "pass",
+        "buffer": [
+          0.9735893473112585,
+          1.0735893473112585
+        ],
+        "limit": 1.1
+      },
+      "p95_ttft": {
+        "status": "pass",
+        "buffer": [
+          0.9766589676380495,
+          1.0766589676380496
+        ],
+        "limit": 1.1
+      },
+      "worst_gap": {
+        "status": "pass"
+      }
+    },
+    "guards_pass": true,
+    "hypothesis": "supported",
+    "p95_no_harm": {
+      "status": "pass",
+      "median_limit": 1.05,
+      "buffer_limit": 1.1,
+      "buffer": [
+        0.531116930809377,
+        0.6311169308093771
+      ]
+    }
+  },
+  "broad_guard_pass": false,
+  "broad_p95_guard_pass": false,
+  "frequency_cost_guard_cells": {
+    "pass_count": 19,
+    "inconclusive": 1,
+    "fail": 0
+  },
+  "frequency_p95_no_harm_cells": {
+    "pass_count": 18,
+    "inconclusive": 2,
+    "fail": 0
+  },
+  "source_files": 271,
+  "same_validated_and_measured_source_bytes": true,
+  "full_validation": {
+    "kind": "frequency-prefill-source-validation-binding-v1",
+    "status": "passed",
+    "source_commit": "df042c20d0bdd4fe51f5fc32f9bbad663a1769c3",
+    "source_files": 271,
+    "validation_repository": {
+      "commit": "900bf1b3cf99736b96522705d2b01e26bf0c1291",
+      "branch": "codex/prefix-cache",
+      "dirty": true
+    },
+    "measured_repository": {
+      "commit": "df042c20d0bdd4fe51f5fc32f9bbad663a1769c3",
+      "branch": "codex/prefix-cache",
+      "dirty": false
+    },
+    "same_source_bytes": true,
+    "actual_validation_exit": 0,
+    "validation_elapsed_ns": 2423186660833,
+    "validation_receipt_sha256": "243403ae439244e6fa664df515b95b91a09fc8ebf1eba2adb491ec04266f37ac",
+    "build_receipt_sha256": "48053af73c411385cac0248c429036136805fb5c5451d6d64d9b21e29ab2a8a3",
+    "python_tests": 455,
+    "native_suites": 32,
+    "native_tests": 280,
+    "native_passed": 280,
+    "native_failed": 0,
+    "native_skipped": 0,
+    "native_mojo_invocations": 38,
+    "log_sha256": "c62165badfc3164f202526328ec56761dc71017c0a6ec2c401866368f1780aa8",
+    "binaries": {
+      "engine": {
+        "sha256": "1b4d005dffe3bd4ba101df6f2ba1c070eb4a2bcf8bf51c21f23adba4f3aa26b0",
+        "bytes": 1586600
+      }
+    }
+  },
+  "independent_raw": {
+    "status": "passed",
+    "zero_exit_receipts": 382,
+    "receipt_sha256": "f2fb289934ed1d85eefdba715d898db8e8aefe16d51750e1964f61f953700fee"
+  },
+  "independent_decision": {
+    "passed": true,
+    "checked_comparisons": 200,
+    "checked_decisions": 40,
+    "checked_p95_no_harm": 40,
+    "recursive_checks": 34038,
+    "receipt_sha256": "778d8e9b68b44aa1034b740aa587fa81cdd35af735f693054f7a809d332daeb7"
+  },
+  "guarded_fresh_restores": 2,
+  "prohibited_restore_attempts": 0,
+  "derivation": {
+    "kind": "engine-prefix-frequency-canonical-derivation-check-v1",
+    "status": "passed",
+    "source_commit": "df042c20d0bdd4fe51f5fc32f9bbad663a1769c3",
+    "same_complete_report_except_input_paths": true,
+    "original_sha256": "5fd356e496f0f1a65738dbe316bbf2582255aa2dfc9c5d89c20f06597b4357b6",
+    "regenerated_sha256": "dd6136b09ea05349cecf021be04945f7807402c42460c8810aaafa8d47e6c088",
+    "execution": {
+      "command": [
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python",
+        "-B",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-restored-canonical/acceptance/evidence-0/derivation/extract_results.py",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-restored-canonical/measurements/engine-prefix-frequency.json.gz",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-results-regenerated.json"
+      ],
+      "exit_code": 0,
+      "wall_elapsed_ns": 4937411833,
+      "timeout_seconds": 600,
+      "timed_out": false,
+      "script_sha256": "ec1e6a0fa71c5bc506d11e6d51962ca2d4bfc5dd01367ec0f66b611135d7f183",
+      "log_sha256": "a1e8ee4b49b04a61e1a236b08e493043ef01226c8db1a0dedbff38eb18ec0201"
+    }
+  },
+  "measurement": {
+    "kind": "qwen-engine-prefix-frequency-v1",
+    "bytes": 15987536,
+    "sha256": "19a57868535d5682a0a9adafcd2da32d3592df0380cf9f7bd7cdc4c0b630bb77",
+    "uncompressed_sha256": "af5afc3f3d4d6907bc5db57fa24c5ce7dd92d627a68af644dec52ad389498038"
+  },
+  "validation_archive": {
+    "kind": "engine-prefix-frequency-validation-v1",
+    "schema_version": 1,
+    "source_commit": "df042c20d0bdd4fe51f5fc32f9bbad663a1769c3",
+    "bytes": 1975251,
+    "sha256": "8215d5719703ad936049d2c0b44a70192f6be8cc2c392e100d8f60ed012f8c5f",
+    "uncompressed_bytes": 24186789,
+    "uncompressed_sha256": "55ed40105338343e3673cab05e0a6e13e84a32ee49063b8eb2a72001c9746e4c",
+    "retained_files": 406,
+    "hash_only_source_files": 22
+  },
+  "actual_executions": {
+    "validation": {
+      "receipt_sha256": "941e7cd50ca8d43acb99cab83372718ae71f4be8f635e7c601d428b01eaa8467",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "llm-mojo",
+        "validate"
+      ],
+      "exit_code": 0,
+      "wall_elapsed_ns": 2423186660833,
+      "timeout_seconds": 7200,
+      "timed_out": false
+    },
+    "specification": {
+      "receipt_sha256": "3a55fe8d6eda6d29ec14dd8c6015b1d402df26452e474147b0f602781317c679",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "-B",
+        "-m",
+        "llm_mojo.benchmarks.model_profile",
+        "engine-specification",
+        "--frequency-prefill-study",
+        "--output",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-campaign.json"
+      ],
+      "exit_code": 0,
+      "wall_elapsed_ns": 781134875,
+      "timeout_seconds": 240,
+      "timed_out": false,
+      "started_utc": "2026-10-22T22:16:35.675854+00:00"
+    },
+    "build": {
+      "receipt_sha256": "8c86a0190eb84fa6d2be9b97b61e3b943d825c8b963d933672ff4e2082dd3a42",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "-B",
+        "-m",
+        "llm_mojo.benchmarks.model_profile",
+        "engine-build",
+        "--frequency-prefill-study",
+        "--prepared",
+        "/Users/attiliocastano/.cache/llm-mojo/qwen2.5-0.5b-instruct/7ae557604adf67be50417f59c2c2f167def9a775/model-prepared-v1",
+        "--output",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-build"
+      ],
+      "exit_code": 0,
+      "wall_elapsed_ns": 6188429334,
+      "timeout_seconds": 900,
+      "timed_out": false,
+      "started_utc": "2026-10-22T22:16:43.182171+00:00"
+    },
+    "qualification": {
+      "receipt_sha256": "8e846688ef79dae988c05268e2d330c1a2c6ca3294db4425578acde2bcc83a9b",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "-B",
+        "-m",
+        "llm_mojo.benchmarks.model_profile",
+        "engine-qualify",
+        "--frequency-prefill-study",
+        "--build",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-build",
+        "--trace",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-campaign.json",
+        "--output",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-qualification"
+      ],
+      "exit_code": 0,
+      "wall_elapsed_ns": 333341637709,
+      "timeout_seconds": 1800,
+      "timed_out": false,
+      "started_utc": "2026-10-22T22:17:07.223469+00:00"
+    },
+    "collection": {
+      "receipt_sha256": "43920f1048ca267a01e472d0aaf95c38532db668cfa9a256e8d609c52b7a02de",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "python",
+        "-B",
+        "-m",
+        "llm_mojo.benchmarks.model_profile",
+        "engine-collect",
+        "--frequency-prefill-study",
+        "--build",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-build",
+        "--trace",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-campaign.json",
+        "--qualification",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-qualification/qualification.json",
+        "--output",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-measurements"
+      ],
+      "exit_code": 0,
+      "wall_elapsed_ns": 1812256124833,
+      "timeout_seconds": 7500,
+      "timed_out": false,
+      "started_utc": "2026-10-22T22:23:26.122607+00:00"
+    },
+    "results-extraction": {
+      "receipt_sha256": "dd187a10f397d241a314622d85252e9d157115a5c759e187a4332ced628beaaa",
+      "command": [
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python",
+        "-B",
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/frequency-prefill/retention/extract_results.py",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-measurements/engine-prefix-frequency.json.gz",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-results.json"
+      ],
+      "exit_code": 0,
+      "wall_elapsed_ns": 5125455500,
+      "timeout_seconds": 600,
+      "timed_out": false,
+      "script_sha256": "ec1e6a0fa71c5bc506d11e6d51962ca2d4bfc5dd01367ec0f66b611135d7f183",
+      "log_sha256": "54c8e194f13a40483f4d261bbb8af5032ce8d0fc0cc10dd1532373d075339b17"
+    },
+    "independent-raw-audit-attempt2": {
+      "receipt_sha256": "e366401a0edf225d9bafde6a82bd28b7b33189492e1f22a094d04bdf59c83a14",
+      "command": [
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python",
+        "-B",
+        "/private/tmp/llm_mojo_frequency_independent_raw_audit.py",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-measurements/engine-prefix-frequency.json.gz",
+        "--source-root",
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo",
+        "--native-binary",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-build/engine",
+        "--checkpoint-binary",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-qualification/checkpoint-driver"
+      ],
+      "exit_code": 0,
+      "wall_elapsed_ns": 22644975708,
+      "timeout_seconds": 600,
+      "timed_out": false,
+      "script_sha256": "204ae0ead0bf531838139a1d494e6735f6d576bc036ad2fcf25c6603f32f47a2",
+      "log_sha256": "f2fb289934ed1d85eefdba715d898db8e8aefe16d51750e1964f61f953700fee"
+    },
+    "independent-decision-audit": {
+      "receipt_sha256": "0fbf8b89fde93d78a3431e654b0b756f91ae3d45e34c7f192d206723d9674160",
+      "command": [
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python",
+        "-B",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-independent-decision-audit.py",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-results.json",
+        "--output",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-independent-decision-audit.json"
+      ],
+      "exit_code": 0,
+      "wall_elapsed_ns": 89612000,
+      "timeout_seconds": 600,
+      "timed_out": false,
+      "script_sha256": "d24e3fc874b6a101b3c03ca8b69135fdc706fc9b7b576994727fafb661bed96f",
+      "log_sha256": "85d0634d1e17a5d9f0697513f732713adaaf2b043d9a4868b56121f66841fd0f"
+    },
+    "retention-pack": {
+      "receipt_sha256": "b2261502024293c0d33f3c24fc5e2875d2e70ac536774455e7fb6001c0432d4d",
+      "command": [
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python",
+        "-B",
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/frequency-prefill/retention/prefix_retention.py",
+        "pack",
+        "--root",
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo",
+        "--commit",
+        "df042c20d0bdd4fe51f5fc32f9bbad663a1769c3",
+        "--campaign-prefix",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022",
+        "--validation-receipt",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-validation.json",
+        "--evidence",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-acceptance-inputs",
+        "--output",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-sealed"
+      ],
+      "exit_code": 0,
+      "wall_elapsed_ns": 12804367042,
+      "timeout_seconds": 600,
+      "timed_out": false,
+      "script_sha256": "9897b4d720a6cba9327710a834493f0db918d894c83ab6a5445765c2dc8755d7",
+      "log_sha256": "6ae3943d8155b6dd366edf812e44ec43c243578def9bd0cf377ab4233a3d54d6"
+    },
+    "restore-first": {
+      "receipt_sha256": "c73d755005f3240d629504b3acc1ca8064314c6fbf1944c48d464c6efc0ce6d4",
+      "command": [
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python",
+        "-B",
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/frequency-prefill/retention/prefix_retention.py",
+        "restore",
+        "--archive",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-sealed/engine-prefix-frequency-validation.json.gz",
+        "--manifest",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-sealed/engine-prefix-frequency-validation.json",
+        "--expected-sha256",
+        "8215d5719703ad936049d2c0b44a70192f6be8cc2c392e100d8f60ed012f8c5f",
+        "--directory",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-restored-first",
+        "--python",
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python"
+      ],
+      "exit_code": 0,
+      "wall_elapsed_ns": 47515899959,
+      "timeout_seconds": 900,
+      "timed_out": false,
+      "script_sha256": "9897b4d720a6cba9327710a834493f0db918d894c83ab6a5445765c2dc8755d7",
+      "log_sha256": "b694824833ffe80639ef9b504f39b4820377e578ff8682afe58c5dd0609802c2"
+    },
+    "restore-canonical": {
+      "receipt_sha256": "1010c94793e11f8e7639cd0f25bcfe55d4fcd7c8ead965ee88ae13edc2f80694",
+      "command": [
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python",
+        "-B",
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/frequency-prefill/retention/prefix_retention.py",
+        "restore",
+        "--archive",
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/frequency-prefill/engine-prefix-frequency-validation.json.gz",
+        "--manifest",
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/frequency-prefill/engine-prefix-frequency-validation.json",
+        "--expected-sha256",
+        "8215d5719703ad936049d2c0b44a70192f6be8cc2c392e100d8f60ed012f8c5f",
+        "--directory",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-restored-canonical",
+        "--python",
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python"
+      ],
+      "exit_code": 0,
+      "wall_elapsed_ns": 48260571791,
+      "timeout_seconds": 900,
+      "timed_out": false,
+      "script_sha256": "9897b4d720a6cba9327710a834493f0db918d894c83ab6a5445765c2dc8755d7",
+      "log_sha256": "4b695b63e3031ad6cc2d328eecb08ae10c7b3531b610da468c27e3354581df0f"
+    },
+    "canonical-derivation": {
+      "receipt_sha256": "50b36a61c1a7392b102c1021a03965f985e92c36c69fcd33ae3f75abf3b75bad",
+      "command": [
+        "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python",
+        "-B",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-restored-canonical/acceptance/evidence-0/derivation/extract_results.py",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-restored-canonical/measurements/engine-prefix-frequency.json.gz",
+        "/private/tmp/llm-mojo-frequency-prefill-20261022-results-regenerated.json"
+      ],
+      "exit_code": 0,
+      "wall_elapsed_ns": 4937411833,
+      "timeout_seconds": 600,
+      "timed_out": false,
+      "script_sha256": "ec1e6a0fa71c5bc506d11e6d51962ca2d4bfc5dd01367ec0f66b611135d7f183",
+      "log_sha256": "a1e8ee4b49b04a61e1a236b08e493043ef01226c8db1a0dedbff38eb18ec0201"
+    }
+  },
+  "failed_raw_auditor_attempt": {
+    "actual_exit": 1,
+    "cause": "Independent auditor omitted predeclared numerical-scope fourth identity line; only auditor literal corrected; measured bytes/policy/gates unchanged.",
+    "retained_in_validation_archive": true
+  },
+  "custody": "Local only; no remote backup, publication, default promotion or fresh GPU rerun from archive."
+}

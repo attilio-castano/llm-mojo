@@ -859,3 +859,203 @@ retain each arm and full histories. A fresh canonical CPU restore and independen
 comparison of all 24 histories passed; the
 [retrieval receipt](../../../studies/model_generation/engine-async-evidence/canonical-retrieval.json)
 establishes local archive replay, without a new GPU run or remote backup.
+
+### Synchronous reference prefix-cache campaign
+
+The [frozen prefix contract](../../../studies/model_generation/engine-core.md#prefix-caching-frozen-implementation-and-evidence-contract)
+declares eight cells and 96 timed runs. Use fresh external output paths, a clean
+source checkout, the locked runtime and verified existing checkpoint/tokenizer
+assets. The fixture-level exact numerical gate precedes production ownership
+changes. The final exact-build qualification below then runs all four checkpoint
+groups and all sixteen untimed cache-disabled/cache-enabled preflights before
+any campaign timings. It freezes full seed and measured natural histories,
+finish reasons, native commands, actual exits and input/source/binary identities.
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-specification \
+  --prefix-study --output /private/tmp/prefix-campaign.json
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build \
+  --prefix-study --prepared VERIFIED_PREPARED_PATH --output /private/tmp/prefix-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-qualify \
+  --prefix-study --build /private/tmp/prefix-build --trace /private/tmp/prefix-campaign.json \
+  --output /private/tmp/prefix-qualification
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect \
+  --prefix-study --build /private/tmp/prefix-build --trace /private/tmp/prefix-campaign.json \
+  --qualification /private/tmp/prefix-qualification/qualification.json \
+  --output /private/tmp/prefix-measurements
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay \
+  --output /private/tmp/prefix-measurements/engine-prefix.json.gz
+```
+
+Specification tokenizes repository-authored engineering text with the pinned
+native tokenizer and retains literal IDs plus tokenizer/generator identities.
+It freezes 256/1,024-token shared prefixes, zero/four/eight intended matching
+requests, 64-token private suffixes and at most sixteen outputs. The six primary
+cells use 384 blocks; two 1,024-token pressure cells use forty. Fixed 256-row/eight-
+sequence workspaces, synchronous reference 27, BF16/FP32, 32-slot slot-major KV
+and lifetime reservation stay constant. Generic `--blocks`, arrival-rate and
+other workload overrides are rejected; the campaign document owns the matrix.
+
+Every invocation executes the same cache-enabled seed after ten untimed warmup
+steps. Disabled controls then clear and disable the cache; the candidate keeps
+the seed index. The record distinguishes seed, handoff, measured request drain
+and final clear. Results report warm request metrics and the complete seed-plus-
+continuation episode cost separately. Four balanced control/self-control/cache
+triples per cell use the existing offline paired noise rule. A failure stops
+the dependent campaign and retains incomplete records; no cell is resampled.
+
+CPU replay needs neither weights nor device access. It reconstructs exact
+namespace/salt/token-prefix index events, rejects changed or omitted ownership,
+phase, work and completion records, verifies the sixteen preflight receipts and
+all 96 timed calls, and compares every full history with the qualification's
+frozen literal oracle. Seed publication is additionally bounded by cumulative
+completed seed rows. For the mixed measured phase, CPU replay validates known
+input identities and total work; qualified native numerical/ownership tests
+establish per-request completed-step publication. Index equality is exact; no SHA-256 cache-key claim is
+made. Cache admission time includes attachment, reservation and eviction;
+removal events supply eviction counts without an isolated eviction-time claim.
+The completed campaign binds clean `dcd09b5d57eb4cb20ed7f7bd806d6e6c5c23cd91`:
+all sixteen preflights and all 96 timed calls passed with identical delivered
+histories. Six reuse cells are faster under the frozen paired rule; both
+zero-reuse cells are inconclusive. Full 1,024-token reuse at 384 blocks has
+continuation/seed-plus-continuation ratios 0.108679/0.191188. Pressure can improve
+completion while increasing inter-token gaps. The
+[results and limits](../../../studies/model_generation/engine-core.md#prefix-caching-retained-bounded-results)
+and [sealed CPU restoration](../../../studies/model_generation/engine-prefix-evidence/README.md)
+retain all costs, both earlier failed untimed harness attempts and exact source.
+Cache use stays opt-in; these finite instrumented offline traces establish no
+capacity, SLO or default-promotion result.
+
+### Conditional prefill caps during active streams
+
+The [active-stream contract](../../../studies/model_generation/engine-core.md#active-stream-prefill-caps-frozen-comparison-contract)
+keeps cache enabled and compares current behavior, repeated current behavior,
+cap 32 and cap 16. A cap limits prefill only when a decode is selected; idle
+prefill retains the 256-row budget. Five fixed cells and four balanced blocks
+produce 80 timed calls, after an exact-build numerical checkpoint and fifteen
+untimed preflights. The 40-block/full-reuse cap-32 cell is primary; cap 16 is
+exploratory. All arrivals and token IDs are frozen by specification.
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-specification \
+  --active-prefill-study --output /private/tmp/active-prefill-campaign.json
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build \
+  --active-prefill-study --prepared VERIFIED_PREPARED_PATH --output /private/tmp/active-prefill-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-qualify \
+  --active-prefill-study --build /private/tmp/active-prefill-build \
+  --trace /private/tmp/active-prefill-campaign.json --output /private/tmp/active-prefill-qualification
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect \
+  --active-prefill-study --build /private/tmp/active-prefill-build \
+  --trace /private/tmp/active-prefill-campaign.json \
+  --qualification /private/tmp/active-prefill-qualification/qualification.json \
+  --output /private/tmp/active-prefill-measurements
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay \
+  --output /private/tmp/active-prefill-measurements/engine-prefix-active.json.gz
+```
+
+Collection requires clean committed sources and qualified Apple M4 Pro/Metal
+reference 27/projection 8, BF16/FP32, slot-major 32-token KV, lifetime reservation,
+256-row/eight-sequence workspaces and nominal power/thermal conditions. Every arm
+uses unrestricted identical warmup/seed work; the cap applies to continuation.
+The archive binds source, binary, assets, commands, actual exits, complete token
+histories, ownership and work. CPU replay recomputes completion/TTFT/gap metrics,
+maximum and per-request worst gaps, fixed 20/50-ms exceedance counts, mixed-step
+attribution, paired noise and usefulness gates. Failed attempts remain recorded;
+there is no selective resampling. Existing prefix-v1 archives keep their
+original declaration and replay behavior. Defaults remain unchanged.
+
+The completed cap study's [results and sealed CPU restoration](../../../studies/model_generation/engine-prefix-evidence/active-prefill/README.md)
+support cap 32 in the primary full-reuse/40-block cell. Broader cost guards do
+not all pass; cap 16 remains exploratory and the default remains zero.
+
+### Adaptive short-tail prefill campaign
+
+The [frozen adaptive contract](../../../studies/model_generation/engine-core.md#adaptive-prefill-frozen-comparison-contract)
+compares current, self-current, fixed32 and adaptive admission in twelve cells.
+The opt-in rule caps only an eligible newly admitted short prompt tail under
+KV reservation pressure. Held prefills use current scheduling; the rule is not
+a global mixed-step ceiling or the older fitted execution-cost policy.
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-specification \
+  --adaptive-prefill-study --output /private/tmp/adaptive-prefill-campaign.json
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build \
+  --adaptive-prefill-study --prepared VERIFIED_PREPARED_PATH --output /private/tmp/adaptive-prefill-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-qualify \
+  --adaptive-prefill-study --build /private/tmp/adaptive-prefill-build \
+  --trace /private/tmp/adaptive-prefill-campaign.json --output /private/tmp/adaptive-prefill-qualification
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect \
+  --adaptive-prefill-study --build /private/tmp/adaptive-prefill-build \
+  --trace /private/tmp/adaptive-prefill-campaign.json \
+  --qualification /private/tmp/adaptive-prefill-qualification/qualification.json \
+  --output /private/tmp/adaptive-prefill-measurements
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay \
+  --output /private/tmp/adaptive-prefill-measurements/engine-prefix-adaptive.json.gz
+```
+
+Use fresh external paths, clean committed source and verified existing assets.
+The exact-build reference-27/Metal checkpoint and all 36 unique-policy preflights
+precede the single 192-call campaign. Native call and campaign limits remain
+180 seconds and two hours. All arms observe the same decision/batch telemetry;
+CPU replay checks literal policy decisions and ordered request/past/query/head
+selections, full natural histories, per-request reuse/work and cleanup. Seed
+and ten warmup steps use current scheduling. Static32 timing comparisons are
+descriptive; formal guards use current/self-current controls. Identical fallback
+schedules do not establish zero time overhead. Retain failures and inconclusive
+noise-buffered outcomes without resampling, retuning or default promotion.
+
+
+The completed [adaptive evidence guide](../../../studies/model_generation/engine-prefix-evidence/adaptive-prefill/README.md)
+records the 192-call result: the primary p95-gap gate and all twelve adaptive
+cost/worst-gap guards passed. The default remains current. The guide includes
+the full matrix, the half-reuse p95 regression, exact measured source,
+qualification, independent audits and guarded archived-source replay commands.
+
+### Frequency-aware cohort prefill campaign
+
+The [frozen cohort-frequency contract](../../../studies/model_generation/engine-core.md#frequency-aware-prefill-frozen-comparison-contract)
+adds a once-per-busy-period forecast to the existing admission rule. It uses
+only an already-submitted FIFO cohort, exact resident-prefix identity and
+declared output limits. The cohort and quantile denominator remain frozen;
+late arrivals and early termination disable further frequency caps. Current
+and old-adaptive controls do not execute the candidate forecast. Enrollment,
+lookups, invalidation and observation cost remain inside measured scheduling.
+
+This is a separate opt-in synchronous reference-27/projection-8 study. It
+compares current, self-current, old adaptive and frequency mode in four balanced
+blocks across twenty frozen cells. All sixty unique-policy preflights and
+exact-build numerical qualification must pass before the single 320-call
+campaign. Full-reuse/40 must preserve the old adaptive logical schedule;
+half-reuse/40 must preserve current scheduling. All cells add the new p95
+acceptance guard to the existing cost/worst-gap guards. Defaults stay current.
+
+With an already verified prepared model and fresh output locations:
+
+```sh
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-specification \
+  --frequency-prefill-study --output /private/tmp/frequency-prefill-campaign.json
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-build \
+  --frequency-prefill-study --prepared VERIFIED_PREPARED_PATH --output /private/tmp/frequency-prefill-build
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-qualify \
+  --frequency-prefill-study --build /private/tmp/frequency-prefill-build \
+  --trace /private/tmp/frequency-prefill-campaign.json --output /private/tmp/frequency-prefill-qualification
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-collect \
+  --frequency-prefill-study --build /private/tmp/frequency-prefill-build \
+  --trace /private/tmp/frequency-prefill-campaign.json \
+  --qualification /private/tmp/frequency-prefill-qualification/qualification.json \
+  --output /private/tmp/frequency-prefill-measurements
+uv run --locked python -m llm_mojo.benchmarks.model_profile engine-replay \
+  --output /private/tmp/frequency-prefill-measurements/engine-prefix-frequency.json.gz
+```
+
+Use the original archived source for earlier prefix, cap or adaptive campaigns.
+The forecast is a bounded heuristic; actual natural EOS, cache state and gap
+counts remain evidence rather than inputs taken from future execution. A
+negative or inconclusive result remains in the completed matrix.
+
+The completed [frequency evidence guide](../../../studies/model_generation/engine-prefix-evidence/frequency-prefill/README.md)
+records the 320-call result: the primary aggregate p95 hypothesis passed, while
+overall acceptance remains inconclusive (19/20 cost/worst-gap sets and 18/20
+p95-no-harm guards pass). Noise leaves the other guards open; none FAIL. The
+report preserves per-request tradeoffs and both guarded archived-source replays.
+Defaults remain current; no samples or acceptance thresholds were replaced.

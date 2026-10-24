@@ -1,0 +1,18 @@
+{
+  "command": [
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python",
+    "-B",
+    "/private/tmp/llm-mojo-frequency-prefill-20261022-restored-first/retention/prefix_retention.py",
+    "cpu-check",
+    "--directory",
+    "/private/tmp/llm-mojo-frequency-prefill-20261022-restored-first"
+  ],
+  "exit_code": 0,
+  "timeout_seconds": 600,
+  "wall_elapsed_ns": 42027551375,
+  "log_sha256": "4bd134a127ace72909f2cc96e7cb1e705b1c89793ae6b55c4031ff566129c219",
+  "archive_sha256": "8215d5719703ad936049d2c0b44a70192f6be8cc2c392e100d8f60ed012f8c5f",
+  "source_commit": "df042c20d0bdd4fe51f5fc32f9bbad663a1769c3",
+  "native_execution": false,
+  "asset_access": false
+}

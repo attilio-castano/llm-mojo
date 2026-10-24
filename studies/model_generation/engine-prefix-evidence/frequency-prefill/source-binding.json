@@ -1,0 +1,35 @@
+{
+  "kind": "frequency-prefill-source-validation-binding-v1",
+  "status": "passed",
+  "source_commit": "df042c20d0bdd4fe51f5fc32f9bbad663a1769c3",
+  "source_files": 271,
+  "validation_repository": {
+    "commit": "900bf1b3cf99736b96522705d2b01e26bf0c1291",
+    "branch": "codex/prefix-cache",
+    "dirty": true
+  },
+  "measured_repository": {
+    "commit": "df042c20d0bdd4fe51f5fc32f9bbad663a1769c3",
+    "branch": "codex/prefix-cache",
+    "dirty": false
+  },
+  "same_source_bytes": true,
+  "actual_validation_exit": 0,
+  "validation_elapsed_ns": 2423186660833,
+  "validation_receipt_sha256": "243403ae439244e6fa664df515b95b91a09fc8ebf1eba2adb491ec04266f37ac",
+  "build_receipt_sha256": "48053af73c411385cac0248c429036136805fb5c5451d6d64d9b21e29ab2a8a3",
+  "python_tests": 455,
+  "native_suites": 32,
+  "native_tests": 280,
+  "native_passed": 280,
+  "native_failed": 0,
+  "native_skipped": 0,
+  "native_mojo_invocations": 38,
+  "log_sha256": "c62165badfc3164f202526328ec56761dc71017c0a6ec2c401866368f1780aa8",
+  "binaries": {
+    "engine": {
+      "sha256": "1b4d005dffe3bd4ba101df6f2ba1c070eb4a2bcf8bf51c21f23adba4f3aa26b0",
+      "bytes": 1586600
+    }
+  }
+}
