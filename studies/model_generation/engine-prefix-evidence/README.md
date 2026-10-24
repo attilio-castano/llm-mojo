@@ -49,6 +49,32 @@ that was absent from that Git tree. The manifest pins that sole historical
 exception by path, size and hash; restoration does not substitute current
 bytecode. The other three checked inventories are fully restorable.
 
+## Later PR integration qualification
+
+The [PR validation receipt](pr-validation.json) and its
+[lossless archive](pr-validation.json.gz) record scoped checks of clean
+integration commit `6e009fb463acbf54179a396c21815cdeedd85b3a` on 2026-10-24.
+All eight native commands passed: 123 TestSuite cases plus ordinary-chat
+framing acceptance. Four Apple M4 Pro / Metal qualification modes completed
+479,635,042 checked comparisons/observations with zero mismatches or unexpected
+nonfinite results, and all 127 untimed preflights passed. Terminal acceptance
+passed with prefix caching disabled and enabled, including interruption,
+reset, EOF, Unicode, context rejection and report-free output parity.
+
+The complete repository validation attempt remains **failed**: 526 Python
+tests, four 180-second tiled-fold compiler timeouts and one skipped test.
+Those proof fixtures and timeout settings match the merged main revision and
+are unchanged here. The original failed receipt, log and progress are retained
+byte-for-byte. The scoped runner's initial output-location rejection is also
+retained; its corrected continuation reused the eight successful native runs.
+
+These are later functional integration checks, with no new performance
+campaign or default promotion. Historical campaign identities and verdicts
+remain unchanged. The archive contains 126 receipt/log/tool members, compressed
+to 10,948,484 bytes (1,013,333,794 bytes expanded), without weights, binaries or
+generated numerical arrays. The packaging verifier above checks the historical
+projection; the new receipt separately binds this validation archive.
+
 ## Retained files
 
 - [Acceptance](engine-prefix-acceptance.json) binds the measured commit,
