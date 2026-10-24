@@ -5,7 +5,7 @@ reuse at 40 blocks. It reduced p95 engine token gaps while completion and p95
 TTFT stayed within the declared 10% regression budget. Broader workload guards
 did not all pass. The cap remains disabled by default (`active_prefill_cap=0`);
 16 tokens remains exploratory. Collection completed on 2026-10-22 from clean
-source `75dbfdebf1aba467d3d3eeba516f740d7eb8641c`.
+source `75dbfdebf1aba467d3d3eeba516f740d7eb8641c` ([PR #41](https://github.com/attilio-castano/llm-mojo/pull/41)).
 
 ## Results
 

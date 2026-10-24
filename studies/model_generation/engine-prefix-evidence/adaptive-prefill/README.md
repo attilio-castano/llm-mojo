@@ -7,7 +7,7 @@ the current policy's exact logical schedules. This is a bounded offline result;
 the engine option remains disabled by default (`adaptive_prefill=False`).
 
 The contract was frozen before implementation in `e16f175`. Collection completed
-on 2026-10-22 from clean source `7dd3864dcd34e04170215876d304a54808abb856`,
+on 2026-10-22 from clean source `7dd3864dcd34e04170215876d304a54808abb856` ([PR #41](https://github.com/attilio-castano/llm-mojo/pull/41)),
 using one complete 192-call campaign after all 36 untimed preflights. No policy,
 workload, threshold or sample was changed in response to timing results.
 

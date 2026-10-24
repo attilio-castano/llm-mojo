@@ -1,6 +1,6 @@
 # Frequency-aware prefill: qualified, measured, acceptance inconclusive
 
-Executed 2026-10-22 from clean source `df042c20d0bdd4fe51f5fc32f9bbad663a1769c3`, after the contract was frozen in `900bf1b`. The policy is implemented and qualified. The single 320-call campaign completed; its overall performance acceptance remains **inconclusive**. Defaults remain current.
+Executed 2026-10-22 from clean source `df042c20d0bdd4fe51f5fc32f9bbad663a1769c3` ([PR #41](https://github.com/attilio-castano/llm-mojo/pull/41)), after the contract was frozen in `900bf1b`. The policy is implemented and qualified. The single 320-call campaign completed; its overall performance acceptance remains **inconclusive**. Defaults remain current.
 
 The primary full-reuse/40 aggregate p95-gap hypothesis passed: **-41.89%**, with completion **+2.36%** and p95 TTFT **+2.67%**. All four gap ratios were below one, with a paired median of 0.581116930809 and a 5% noise floor.
 

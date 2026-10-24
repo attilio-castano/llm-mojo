@@ -3,7 +3,7 @@
 The [study](../engine-core.md#prefix-caching-retained-bounded-results) records
 the first opt-in synchronous cache and its finite offline comparison. Collection
 completed on 2026-10-19 UTC (October 18 locally) from clean source commit
-`dcd09b5d57eb4cb20ed7f7bd806d6e6c5c23cd91`, on Apple M4 Pro / Metal with Mojo
+`dcd09b5d57eb4cb20ed7f7bd806d6e6c5c23cd91` ([PR #41](https://github.com/attilio-castano/llm-mojo/pull/41)), on Apple M4 Pro / Metal with Mojo
 1.1.0, MAX 26.6.0 and the pinned Qwen2.5-0.5B-Instruct assets. Numerical policy is
 reference 27, projection 8, BF16 storage / FP32 accumulation and 32-slot
 slot-major KV. The cache remains disabled by default.
@@ -53,7 +53,8 @@ bytecode. The other three checked inventories are fully restorable.
 
 The [PR validation receipt](pr-validation.json) and its
 [lossless archive](pr-validation.json.gz) record scoped checks of clean
-integration commit `6e009fb463acbf54179a396c21815cdeedd85b3a` on 2026-10-24.
+integration commit `6e009fb463acbf54179a396c21815cdeedd85b3a`
+([PR #41](https://github.com/attilio-castano/llm-mojo/pull/41)) on 2026-10-24.
 All eight native commands passed: 123 TestSuite cases plus ordinary-chat
 framing acceptance. Four Apple M4 Pro / Metal qualification modes completed
 479,635,042 checked comparisons/observations with zero mismatches or unexpected
