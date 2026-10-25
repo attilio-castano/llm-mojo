@@ -6,7 +6,7 @@ in-order free lists. Every kind of rejection leaves the manager unchanged.
 """
 from std.math import ceildiv
 from std.testing import TestSuite, assert_equal, assert_raises, assert_true
-from llm_mojo.serving.blocks import BlockManager, COMPLETE, PARTIAL, RESET
+from llm_mojo.serving.blocks import BlockManager, COMPLETE, PARTIAL, REGISTERED, RESET
 
 
 def _assert_list(actual: List[Int], expected: List[Int]) raises:
@@ -23,6 +23,9 @@ def _state(manager: BlockManager) -> String:
     text += " | states"
     for state in manager.states:
         text += " " + String(state)
+    text += " | refs"
+    for count in manager.refs:
+        text += " " + String(count)
     for s in range(len(manager.active)):
         text += " | " + String(s) + (" live " if manager.active[s] else " released ")
         text += String(manager.lengths[s]) + "/" + String(manager.reserved[s]) + ":"
@@ -244,6 +247,98 @@ def test_rejections_leave_the_manager_unchanged() raises:
         manager.commit(a, 0)
     with assert_raises():
         manager.release(a)
+    manager.check()
+
+
+def test_registered_blocks_survive_shared_owners_and_private_suffixes() raises:
+    var manager = BlockManager(5, 4, 20)
+    var original = manager.add()
+    manager.reserve(original, 12)
+    manager.commit(original, 10)
+    manager.register(original, 0)
+    manager.register(original, 1)
+    var reader = manager.attach([0, 1])
+    assert_equal(manager.length(reader), 8)
+    assert_equal(manager.reserved[reader], 8)
+    assert_equal(manager.refs[0], 2)
+    assert_equal(manager.refs[1], 2)
+    manager.reserve(reader, 9)
+    manager.commit(reader, 9)
+    assert_equal(manager.states[0], REGISTERED)
+    assert_equal(manager.states[1], REGISTERED)
+    manager.check()
+    _assert_list(manager.detach(original), [2])
+    assert_equal(manager.refs[0], 1)
+    assert_equal(manager.refs[1], 1)
+    manager.check()
+    _assert_list(manager.detach(reader), [3])
+    assert_equal(manager.refs[0], 0)
+    assert_equal(manager.refs[1], 0)
+    assert_equal(manager.free_blocks(), 3)
+    manager.check()
+    manager.evict_registered(0)
+    manager.evict_registered(1)
+    assert_equal(manager.free_blocks(), 5)
+    manager.check()
+
+
+def test_shared_truncation_detaches_whole_blocks_and_preserves_registration() raises:
+    var manager = BlockManager(3, 4, 12)
+    var first = manager.add()
+    manager.reserve(first, 12)
+    manager.commit(first, 12)
+    manager.register(first, 0)
+    manager.register(first, 1)
+    var reader = manager.attach([0, 1])
+    manager.truncate(first, 4)
+    _assert_list(manager.table(first), [0])
+    assert_equal(manager.refs[0], 2)
+    assert_equal(manager.refs[1], 1)
+    assert_equal(manager.states[1], REGISTERED)
+    assert_equal(manager.states[2], RESET)
+    manager.check()
+    var before = _state(manager)
+    with assert_raises():
+        manager.truncate(first, 1)
+    assert_equal(_state(manager), before)
+    manager.release(first)
+    manager.release(reader)
+    assert_equal(manager.free_blocks(), 1)
+    manager.check()
+
+
+def test_shared_rejections_preserve_refs_free_order_and_sequence_slots() raises:
+    var manager = BlockManager(3, 4, 12)
+    var sequence = manager.add()
+    manager.reserve(sequence, 8)
+    manager.commit(sequence, 5)
+    manager.register(sequence, 0)
+    var before = _state(manager)
+    with assert_raises():
+        manager.register(sequence, 1)
+    with assert_raises():
+        manager.register(sequence, -1)
+    with assert_raises():
+        manager.register(sequence, 2)
+    with assert_raises():
+        _ = manager.attach([0, 0])
+    with assert_raises():
+        _ = manager.attach([1])
+    with assert_raises():
+        _ = manager.attach([3])
+    with assert_raises():
+        manager.evict_registered(0)
+    with assert_raises():
+        manager.evict_registered(1)
+    with assert_raises():
+        _ = manager.detach(-1)
+    assert_equal(_state(manager), before)
+    manager.register(sequence, 0)
+    assert_equal(_state(manager), before)
+    manager.refs[0] += 1
+    with assert_raises():
+        manager.check()
+    manager.refs[0] -= 1
     manager.check()
 
 

@@ -12,10 +12,11 @@ The sections below keep each study's original source/runtime and claim scope.
 | Which token budget and runner should be used? | [Fixed-workspace budget](#fixed-workspace-budget-retained-bounded-results), [Fast](#optional-fast-engine-retained-bounded-results) |
 | How does chat use the engine? | [Terminal lifecycle](#optional-engine-terminal-chat-accepted-lifecycle) |
 | How does GPU submission overlap host work? | [Async ownership contract](#asynchronous-stepping-implementation-and-acceptance-contract), [qualification and results](#asynchronous-stepping-retained-bounded-results) |
+| How can repeated prompts reuse completed KV? | [Frozen contract](#prefix-caching-frozen-implementation-and-evidence-contract), [qualified results](#prefix-caching-retained-bounded-results) |
 
 Implementation authorized on 2026-10-08 from baseline
 `cb2416abf3c9fbb19c460fa99709d93eeabba97e` on `codex/engine-core`.
-**Status: synchronous core and optional asynchronous stepping validated.** Mixed execution,
+**Status: synchronous core, optional asynchronous stepping and optional prefix caching validated within their recorded scopes.** Mixed execution,
 request lifecycle, KV-pressure replay, optional fitted budgeting and optional
 lifetime-reservation admission are implemented. Optional asynchronous LLM
 stepping has separate [retained acceptance and paired results](#asynchronous-stepping-retained-bounded-results).
@@ -41,7 +42,9 @@ the async runner retains submitted ownership until each ticket is collected.
 The trace driver exercises both backends with fixed arrivals. Terminal chat
 defaults to its direct Fast session; `chat --engine` uses the synchronous
 reference core, and `--async-stepping` opts into the async adapter. Both engine
-chat modes use one request at a time and complete-history recomputation.
+chat modes use one request at a time. With `--prefix-cache`, synchronous chat
+attaches completed full prefix blocks and computes the remaining history.
+Without caching, the engine recomputes the complete history.
 Prefix caching and multi-request frontend transport remain separate work.
 
 ```mermaid
@@ -1172,3 +1175,878 @@ gives regeneration and replay commands. This is retained native evidence with
 independent CPU replay and local custody; it does not claim a fresh GPU rerun,
 remote backup or production serving. Async remains opt-in and the synchronous
 engine remains the default.
+
+## Prefix caching: frozen implementation and evidence contract
+
+Implementation was authorized on 2026-10-17 after review of the retained engine
+results. This section freezes the next milestone; it is a declaration, not a
+completion receipt or a new measurement. Historical core, admission, budget,
+Fast and async records retain their original bytes, source identities and
+conclusions.
+
+The first cache is an explicit option for the synchronous reference-27 engine,
+with 32-slot slot-major KV, the current locked model/runtime and fixed 256-row
+budget. Both incremental and lifetime-reservation admission must work with it.
+Direct Fast chat/generation and cache-disabled engine behavior keep their
+existing contracts. A cache request combined with Fast or asynchronous stepping
+must fail before request, allocator, cache or GPU state changes. Supporting either
+combination requires a separately declared numerical and ownership gate.
+This milestone changes host KV ownership, admission and reuse; it does not add
+new kernels, a model/runtime upgrade, SSD storage, HTTP transport or restart
+recovery.
+
+### Exact numerical gate comes first
+
+Before editing production cache ownership, prove with the existing model and
+explicit test block tables that synchronous reference-27 execution with a reused
+prefix equals its uncached recomputation byte for byte in final active
+logits and every valid KV element, with identical natural greedy histories and
+terminal reasons. Reuse must preserve the stored shared bytes exactly. Poisoned
+inactive slots, spare blocks and other requests' private blocks must remain
+unchanged. Check boundary prompts of 31, 32, 33, 63, 64 and 65 tokens, a private
+suffix crossing a block boundary, two consumers with different suffixes and a
+mixed step containing a cache-hit remainder and another request's decode.
+
+Use the existing small model/decoder fixtures for this first gate, before adding
+the production prefix index, shared ownership or collector integration. Missing
+compiler/Metal capability leaves that gate pending; it does not authorize bypassing
+it. After the gate passes and the implementation is complete, qualify the exact
+clean build with the complete Qwen checkpoint on Apple M4 Pro/Metal before
+performance collection. Retain actual device/backend identity,
+source/binary/asset hashes, commands, numeric exits and check counts. A numerical
+or ownership failure stops the dependent implementation or timing work; do not
+replace exact equality with a fitted tolerance or change arithmetic to pass this
+gate. Host simulations establish lifecycle invariants, not numerical or GPU
+performance claims.
+
+### Bounded exact index and namespace
+
+The initial in-memory index is bounded by the physical pool. Each reusable
+record identifies a full block and stores the exact token prefix ending at that
+block, the exact cache salt and the resident engine namespace. Lookup compares
+those values, then follows the longest matching complete chain. The namespace
+binds the resident model/checkpoint, reference-27 numerical policy and KV layout;
+reuse cannot cross namespaces or salts. No persisted entry survives the process.
+
+This is a deliberate simplification of the serving plan's chained SHA-256
+index. Full-prefix equality establishes identity directly; a digest is not needed
+to decide correctness in this bounded first implementation. A later SHA-256
+index may accelerate candidate lookup, but must retain exact token, ancestry,
+namespace and salt verification. Logical event replay for this milestone uses
+the exact prefix identity. It must not label a noncryptographic identifier as
+SHA-256 or claim compatibility with the planned digest event format. Keep this
+version distinct from every retained earlier event/declaration format.
+
+Only whole healthy blocks become Registered and reusable. A partial block is
+private and is never shared or copied on write. For a positive-output prompt of
+length `P`, the reused token count is at most
+`32 * floor((P - 1) / 32)`: at least the final prompt token must execute to produce
+its logits. When the prompt ends at a block boundary, recompute its final block
+privately. Zero-output requests perform no cache lookup, allocation or model
+execution. A cache hit changes the computed suffix and capacity needed; it does
+not change absolute positions or the authoritative request token history.
+
+Publication occurs only after a synchronous step has completed successfully and
+its result has passed the existing health checks. A merely submitted or reserved
+block cannot become a hit. A fatal runner fault publishes nothing from that
+step, invalidates the runner, releases requests and clears reusable cache state
+before any possible subsequent process-level reuse. No device-loss recovery
+claim follows.
+
+### Ownership, release and lifecycle gates
+
+Reference counts count sequence-table references, separately from index
+ownership. Free, private and Registered physical blocks partition the pool;
+referenced and unreferenced Registered blocks are counted once. Registered bytes
+are immutable while indexed or referenced. Shared blocks retain their valid
+written count when one consumer releases its reference. Only private blocks may
+receive writes. Admission credits shared physical blocks once and reserves only
+the additional private capacity; the declared token/row budget remains unchanged.
+
+Evict least recently used unreferenced Registered entries. Referenced blocks
+cannot be reused as private storage. Releasing a request works
+tail-first and leaves no request references; private tails return to the free
+pool while reusable full blocks may remain indexed. Idle chat reuse comes from
+that index, with reset/close clearing the session cache after request drain.
+There is no separate pin mechanism in this milestone; bounded pinning is a later
+option if measurements justify it. Rejection leaves state unchanged. Abort, stop, limit, zero output,
+preemption/replay, request-slot reuse and execution/output failure each finish a
+request exactly once and preserve the already delivered token prefix.
+
+Cache-enabled request drain means zero live requests, zero pending GPU tickets
+and zero private request ownership; full indexed Registered blocks may remain
+valid. Explicit cache clear, after all dependent work has completed, returns the
+whole pool and makes every written-valid count zero. Cache-disabled drain keeps
+the existing all-free/zero-valid-KV contract. Extend chat and collector checks
+with the new versioned distinction rather than weakening historical assertions.
+
+Deterministic and seeded host tests must cover exact prefix/salt/namespace
+matching, different ancestors, partial misses, forced candidate collisions,
+shared release, finite progress under both admission policies, FIFO pressure,
+LRU eviction, invalid-operation atomicity and all terminal
+paths. An independent replay of versioned store/remove/clear events must
+reconstruct the exact logical index; missing, duplicate or reordered IDs and
+changed identity data are rejected. Metal tests additionally compare all shared
+and inactive bytes before and after suffix work, eviction and physical block
+reuse. Chat repeats the existing cancellation/reset/Unicode/context-rejection
+and injected-fault acceptance against an independent direct reference history.
+
+### Frozen bounded comparison
+
+The confirmatory campaign has eight cells and exactly 96 measured native runs:
+
+| Shared-prefix tokens | Intended reusable-request fraction | KV blocks | Cells |
+| --- | --- | --- | ---: |
+| 256 and 1,024 | 0%, 50% and 100% for each length | 384 | 6 |
+| 1,024 | 50% and 100% | 40 | 2 |
+
+Each measured trace has eight requests, a 64-token private suffix per prompt and
+at most 16 new tokens per request. Use owned system/instruction/document text,
+tokenize once with the pinned tokenizer, and freeze the exact token arrays,
+request order, stop IDs and arrival offsets before qualification or timings.
+The 0/50/100% labels specify zero/four/eight prompts matching the declared seed
+prefix; they are not measured hit-rate promises under eviction. Nonmatching
+prefixes must differ within their first full block, and private suffixes must
+differ so accidental suffix reuse cannot alter the declared work. Every request
+fits the 40-block pool alone. The 384-block primary pool also holds eight longest
+uncached requests and the seed prefix without imposed capacity pressure.
+
+Hold reference 27, synchronous stepping, BF16 storage/FP32 reductions, fixed
+256-row/eight-sequence workspaces, token budget 256, zero watermark and explicit
+lifetime-reservation admission constant throughout timing. Incremental admission
+has correctness gates but is not another timing axis in this campaign. Four
+balanced blocks contain cache-disabled control, repeated disabled control and
+cache-enabled candidate, with forward/reverse/reverse/forward order. There are
+three runs per block, twelve per cell. No Fast/adaptive/async arm is included.
+
+Each invocation performs ten representative warmup steps outside timing, clears
+all warmup cache/request state, then executes the same declared seed phase. The
+seed prompt contains the shared prefix plus one private query token and has an
+output limit of one, so the full shared prefix has actually executed before it
+can be reused. Retain seed time and rows separately. Disabled controls discard
+the seed's cache; the enabled arm keeps it. Measured request arrivals use the
+same frozen offsets and a clock origin after the seed phase; do not shift later
+arrivals in response to the arm's measured completion times. Fix the request
+order with matching-prefix consumers before nonmatching requests in the 50%
+pressure case, and retain that order even if it leads to eviction or queueing.
+
+Report both the measured warm-cache trace and the complete seed-plus-continuation
+episode cost, including cache handling between phases, so seed work cannot
+disappear from the amortization claim. Seed time, warmup time and request latency
+are distinct boundaries. This comparison does not require duplicate-prefill
+coalescing; an all-at-once cold trace can admit duplicates before any block is
+Registered and must not be presented as an equivalent warm-cache workload.
+
+Every run must preserve the frozen complete natural histories and finish reasons,
+have zero unexpected nonfinite values, finish all requests, return all request
+references and successfully clear the final cache. Account for actually hit
+tokens and computed rows; absent replay, a positive-output request computes
+`prompt_length + delivered_tokens - 1 - cache_hit_tokens` rows. No result is
+relabelled to hide eviction, misses, replay or extra work. The exact token arrays
+and seed phase must be identical across all three arms in each paired cell.
+
+Report TTFT, TPOT, full inter-token/end-to-end distributions, makespan, delivered
+throughput, hit tokens, computed/recomputed rows, admissions/waiting, evictions,
+references and free/private/cached capacity. Separate host lookup, cache admission
+and registration cost where recorded. Cache admission includes attachment,
+reservation and eviction; report eviction counts from removal events without
+claiming an isolated eviction time. Synchronous execute still includes
+upload, submission, wait and readback. A capacity count is not OS memory pressure
+or measured memory bandwidth. The existing paired rule and self-control noise
+floor apply to offline makespan; latency distributions and any online extension
+remain descriptive, with no client SLO or sustainable-capacity claim.
+
+Bound each native invocation, including initialization and warmup, to 180 seconds
+and the full collection campaign to two hours. Preserve incomplete or failed
+logs and actual exits; a failed qualification/cell stops the campaign rather
+than changing a workload, replacing a timing cell or resampling a noisy block.
+Retain the complete raw records, provenance, frozen declaration and compact
+lossless evidence in this existing study topic. Extend the existing engine
+trace/build/collect/replay tooling, with independent CPU reconstruction of
+identity, event/index state, work accounting and derived metrics. No new
+experiment hierarchy or independent inference implementation is part of this
+milestone.
+
+### Initial implementation readiness, 2026-10-17
+
+The numerical gate is prepared in `test_mixed_model.mojo` and the existing
+`engine_metal_driver.mojo` checkpoint driver. It has not executed or passed.
+The locked environment and pinned assets are prepared, and all regenerated
+oracles match their frozen anchors. The unchanged block-manager suite passes
+all four tests. The Python suite runs 405 tests: 403 pass, while the two
+positive/negative compilation suites fail at executable linking because Xcode
+27 requires its license to be accepted. `xcrun -f metal` also exits 69 for that
+prerequisite; the GPU gate build fails during Metal compilation. Metal component
+readiness is consequently unresolved. Production cache ownership, indexing,
+chat integration and timing collection have not started. These are readiness
+observations, not numerical qualification or performance results.
+
+## Prefix caching: retained bounded results
+
+The approved synchronous prefix-cache milestone completed on 2026-10-19 UTC
+(October 18 locally). The measured clean commit is
+`dcd09b5d57eb4cb20ed7f7bd806d6e6c5c23cd91`. Use
+`uv run --locked llm-mojo chat --engine --prefix-cache` to opt in.
+Default engine behavior stays cache-disabled.
+
+The causal mechanism is reuse of already completed causal-transformer work:
+identical token IDs, positions, resident weights and numerical policy produce
+the same prefix KV. The bounded index compares the entire prefix, namespace
+and request salt. Only full 32-token blocks become immutable Registered entries;
+request tables hold references while private tails receive new writes. Lookup
+always leaves the final prompt query to execute. Healthy synchronous completion
+precedes publication. Idle LRU eviction precedes live preemption; reset, close
+and numeric failure clear retained ownership according to their contracts.
+SHA digests, radix indexing, persistence and asynchronous pins remain future
+choices.
+
+### Qualification and acceptance
+
+The [acceptance card](engine-prefix-evidence/engine-prefix-acceptance.json) and
+[source/validation archive](engine-prefix-evidence/engine-prefix-validation.json.gz)
+retain the evidence layers separately:
+
+- Fixture-level exact KV/logit/greedy and divergent-consumer qualification
+  passed before production cache changes. The checkpoint gate then passed
+  64,252,482 schedule comparisons, 25,926,962 sharing comparisons, 354 engine
+  checks and 103 fault checks, with zero mismatches or unexpected nonfinite
+  values on the final build.
+- Complete repository validation passed on implementation commit `c959179`:
+  38 Mojo invocations, including 252 tests reported by 32 native suites, the
+  custom parity checks and every benchmark smoke route. The final complete
+  Python rerun passed 424 tests. Three benchmark/parser/test files changed
+  after the broad native run; production engine/model/cache bytes stayed
+  identical. Targeted regressions and the final exact-build qualification
+  cover those changes.
+- Seven historical chat histories matched all 123 natural tokens: 359 computed
+  plus 96 reused rows, versus 455 cold rows. Terminal reset, EOF, Unicode and
+  Ctrl-C acceptance passed. An intentional nonfinite CLI failure preserved
+  delivered history and cleared cache, private ownership and written counts;
+  its native exit 1 is an expected fault result.
+- All 16 untimed disabled/enabled preflights passed before the first timed
+  call. They froze seed and measured literal histories and finish reasons.
+  All 96 timed calls reproduced those histories. Each measured request actually
+  delivered 16 tokens and finished by length.
+
+Two earlier untimed qualification attempts remain failed in the archive. One
+exposed an omitted seed arrival timestamp in the native trace; the other
+exposed a parser assumption that an enabled no-op handoff must take positive
+time. The repairs pass the declared seed timestamp and accept equal clock
+endpoints only for an enabled handoff containing no cache events. No recorded
+timestamp was changed, and no timed cell was replaced or resampled.
+
+### Work and paired time
+
+The recorded target is Apple M4 Pro / Metal (`metal:4-metal4`), 24 GiB memory,
+macOS 26.6.2, Xcode 27.0 / 27A266a, Mojo 1.1.0 and MAX 26.6.0. The pinned
+Qwen2.5-0.5B-Instruct checkpoint uses 24 layers, width 896, fourteen query heads,
+two KV heads and head dimension 64, with BF16 storage / FP32 accumulation,
+reference configuration 27, projection 8 and 32-slot slot-major KV.
+All runs recorded AC power, normal power mode and no thermal warnings.
+
+The frozen campaign contains eight offline cells, each with four balanced
+disabled/self-disabled/enabled triples: 96 calls once. Eight requests arrive
+at zero, with a 256- or 1,024-token prefix, distinct 64-token suffixes and a
+16-token output limit. Fixed 256-row/eight-sequence workspaces and lifetime
+reservation stay constant. Both arms load the model, perform ten untimed warmup
+steps and execute the same cache-enabled seed; controls then clear and disable
+the cache. The seed processes 257 or 1,025 rows and emits one token.
+
+For a request with prompt length P, G delivered tokens and H reused rows, the
+necessary computed rows are P + G - 1 - H. The last emitted token has no KV row
+yet. Independent replay verified this identity and the corresponding sum of
+causal attention positions in every run.
+
+Ratios below are medians of four within-block enabled/disabled ratios. A smaller
+ratio means less time. The continuation interval excludes seed and handoff;
+the resident episode includes both, ending at request drain before final clear.
+The declared self-control rule uses at least a 5% noise floor. The largest
+observed continuation floors are 7.86% for 1,024/8/384 and 7.26% for
+1,024/4/40. Both time metrics classify all six reuse cells as faster and both
+zero-reuse cells as inconclusive.
+
+| Prefix | Matching requests | Blocks | Computed rows, off → on | Reused rows | Continuation ratio | Episode ratio | Verdict |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 256 | 0/8 | 384 | 2680 → 2680 | 0 | 1.0031 | 1.0045 | inconclusive |
+| 256 | 4/8 | 384 | 2680 → 1656 | 1024 | 0.6702 | 0.6968 | faster |
+| 256 | 8/8 | 384 | 2680 → 632 | 2048 | 0.3394 | 0.3933 | faster |
+| 1024 | 0/8 | 384 | 8824 → 8824 | 0 | 1.0052 | 1.0046 | inconclusive |
+| 1024 | 4/8 | 384 | 8824 → 4728 | 4096 | 0.5413 | 0.5821 | faster |
+| 1024 | 8/8 | 384 | 8824 → 632 | 8192 | 0.1087 | 0.1912 | faster |
+| 1024 | 4/8 | 40 | 8824 → 4728 | 4096 | 0.5879 | 0.6238 | faster |
+| 1024 | 8/8 | 40 | 8824 → 632 | 8192 | 0.1596 | 0.2320 | faster |
+
+Full 1,024-token reuse avoids 8,192 of 8,824 continuation rows, with about
+9.2× faster continuation and 5.2× faster seed-plus-continuation episodes in
+the 384-block cell. The zero-reuse median ratios are close to one, but the
+declared rule does not establish either zero overhead or a slowdown.
+
+### Latency, pressure and cleanup
+
+These milliseconds are medians of four per-run quantiles, using linear
+interpolation. Each entry shows cache off → on. They describe these finite
+traces; paired makespan is the confirmatory time comparison.
+
+| Prefix | Matching requests | Blocks | TTFT p50, ms | TTFT p95, ms | Inter-token gap p95, ms |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 256 | 0/8 | 384 | 710.36 → 711.15 | 1227.32 → 1229.06 | 120.86 → 120.90 |
+| 256 | 4/8 | 384 | 710.14 → 232.76 | 1227.63 → 751.37 | 120.78 → 121.07 |
+| 256 | 8/8 | 384 | 709.79 → 171.84 | 1226.38 → 301.80 | 120.59 → 41.69 |
+| 1024 | 0/8 | 384 | 2948.48 → 2955.41 | 5037.85 → 5053.72 | 178.75 → 179.27 |
+| 1024 | 4/8 | 384 | 3241.28 → 559.21 | 5718.02 → 2882.29 | 211.03 → 203.13 |
+| 1024 | 8/8 | 384 | 3088.80 → 243.91 | 5470.57 → 428.24 | 204.51 → 59.26 |
+| 1024 | 4/8 | 40 | 3427.53 → 763.20 | 5935.39 → 3290.19 | 12.81 → 13.70 |
+| 1024 | 8/8 | 40 | 3434.10 → 464.33 | 5953.85 → 850.82 | 13.16 → 53.58 |
+
+The full-reuse 40-block cell improves completion and TTFT while worsening p95
+stream gaps. Lifetime reservation admits fewer simultaneous cold requests;
+sharing admits more readers, whose decode steps share time with suffix prefill.
+Each cold request reserves 35 blocks. A hit reuses 32 shared blocks and needs
+three private blocks, so two readers fit in 38 blocks while two cold requests
+would need 70. This changes which work overlaps in the 40-block pool.
+Faster total completion therefore does not guarantee smaller gaps for every
+request. The two enabled pressure cells evict 137 and 10 idle entries per run,
+respectively. All requests complete without preemption. This demonstrates
+bounded ownership and progress under this pool constraint.
+
+Independent raw replay checked 6,500 physical-capacity snapshots, 144 hit
+receipts, 5,152 stored/removed event pairs and 160 clear events. Registered
+blocks include both referenced and idle entries and count once in the physical
+partition. Every drain has zero request references, private blocks and pending
+work; every final clear restores all blocks to Free with zero written counts.
+Seed-phase arm medians range from 129 to 603 ms. Enabled final clear ranges
+from 0.181 to 4.565 ms across primary runs. The retained results also show the
+descriptive seed-through-final-clear costs; including cleanup preserves the
+six-faster/two-inconclusive pattern without creating a new promotion rule.
+
+### Evidence and claim boundary
+
+The [packaged results](engine-prefix-evidence/supplementary.tar.gz)
+(`engine-prefix-results.json` after the evidence guide's layout restoration) retain
+paired ratios, calibration ratios, noise floors, work, TTFT, TPOT, token-gap
+quantiles, observed maxima, cache costs, evictions and cleanup. The
+[complete measurement archive](engine-prefix-evidence/measurements/engine-prefix.json.gz)
+retains all 96 calls and embeds the final qualification and all 16 preflights.
+The [evidence guide](engine-prefix-evidence/README.md) provides source restoration,
+commands, checksums and the independent CPU audit. The existing Phase 3
+104-file historical catalog is unchanged.
+
+Timing includes retained stdout/cache-event serialization between steps, so
+these are instrumented host-to-drain measurements. Model loading and warmup
+precede the resident episode. CPU replay verifies prefix identities, event/index
+state and total work; the native ownership and numerical tests establish
+per-request completed-step publication. Neither layer alone is a universal
+proof of backend behavior for arbitrary inputs.
+
+Acceptance is limited to the qualified synchronous reference route, fixed
+resident assets and recorded workloads. Async/Fast cache combinations are
+rejected. No online arrival study, sustainable capacity, client SLO, goodput,
+device-loss recovery or default promotion follows from this campaign.
+
+## Active-stream prefill caps: frozen comparison contract
+
+This successor asks whether smaller prefill chunks during mixed steps reduce
+streaming gaps while retaining the completion and first-token benefits of prefix
+reuse. The primary candidate is 32 tokens; 16 is exploratory. The scheduler
+applies the cap only after at least one decode has been selected. Without a
+selected decode, prefill keeps the 256-row budget. With decodes, prefill receives
+`min(remaining prompt rows, remaining total row budget, active cap)`. A cap of
+zero preserves the existing behavior. Lifetime reservations, FIFO order, zero
+watermark, eight sequence slots, immutable 32-token cache blocks, model kernels
+and physical workspaces remain fixed. Partial 16-token blocks stay private.
+
+The `engine-prefix-active-v1` study uses the same literal 1,024-token prefixes,
+64-token private suffixes, eight simultaneous requests and 16-token output
+limits as the earlier campaign. Its five cells are four/eight matching requests
+at 40/384 blocks, plus zero matching requests at 384 blocks. Cache is enabled in
+all arms. Each invocation runs the same ten warmup steps and unrestricted seed;
+the selected cap applies only to measured continuation. Reference configuration
+27, projection 8, BF16 storage/FP32 reductions, slot-major KV, synchronous
+execution and lifetime reservation remain required. Fitted cost budgeting is
+disabled. These caps are row-count limits, without a promised execution duration.
+
+Before timing, an exact-build numerical checkpoint checks actual mixed 16/32-row
+schedules against reference KV/logits/greedy results, including partial prefill,
+shared-reader isolation and cleanup. Fifteen untimed preflights (five cells,
+three distinct policies) freeze complete natural seed/continuation histories and
+finish reasons. Across policies, per-request cache hits, necessary computed rows
+and causal attention-position totals must agree; execution step sequences may
+differ. Timed runs must reproduce the frozen histories without replay or
+preemption, drain all active ownership, and restore an empty pool after clear.
+
+Four balanced blocks each contain current policy, repeated current policy,
+cap 32 and cap 16: 80 timed calls. Orders balance arm positions and immediate
+predecessors. The native-call timeout is 180 seconds and the campaign timeout is
+two hours. A failure stops dependent collection and retains the attempted
+records. Cells are not selectively resampled. New records have their own
+declaration and archive identity; retained prefix-v1 evidence is unchanged.
+
+Completion time runs from earliest scheduled arrival through complete trace
+drain. Each request also retains arrival-to-terminal time. TTFT runs from
+scheduled arrival to first engine token availability, including waiting and
+prefill. Streaming gaps are differences between consecutive token-availability
+events for the same request and exclude TTFT. Retain every request's TTFT,
+maximum gap and history; per-run p50/p95/p99 and maximum gaps; counts above 20
+and 50 ms; and gap attribution to mixed versus decode-only steps. Step records
+retain row counts, attention positions and schedule/build/execute/postprocess
+durations. Engine availability timestamps do not measure client rendering.
+Report paired within-block ratios and medians of per-run quantiles, without
+pooling repetitions. A 16-output/eight-request trace contains only 120 gaps, so
+quantiles, maxima and exceedance counts are complementary finite observations.
+Retain seed-to-drain episode and final-clear costs separately.
+
+For each metric, noise is `n = max(0.05, max(abs(self/current - 1)))` over four
+blocks. The primary cap-32/40-block/full-reuse usefulness gate requires every
+p95-gap ratio below one, median ratio at most 0.75, and reduction larger than
+`n`. Completion and p95-TTFT use a 10% regression budget: a median ratio plus
+`n` at most 1.10 passes; median minus `n` above 1.10 fails; otherwise the result
+is inconclusive. This buffer is an engineering selection rule, not a statistical
+confidence interval. Worst gap passes when its median ratio is at most `1+n`;
+it fails when all four ratios exceed one and the median exceeds `1+n`, otherwise
+it is inconclusive. Missing denominators make a gate inconclusive. Thresholds
+stay fixed when noise grows. All primary guards must pass for primary success.
+The same cost/worst-gap guards are reported for the other cells and cap 16;
+broader use requires considering their regressions. No default promotion,
+online-arrival, sustainable-capacity, client-SLO or goodput claim follows.
+
+
+## Active-stream prefill caps: retained results
+
+The single 80-call campaign from clean `75dbfdebf1aba467d3d3eeba516f740d7eb8641c`
+completed on 2026-10-22. Exact-build numerical qualification passed 127,138,680
+checks with zero mismatches or unexpected nonfinite values; all fifteen
+preflights and all timed calls passed with identical natural histories and
+logical work. Full repository validation passed 434 Python tests, 261 native
+tests across 32 TestSuites and all benchmark smoke routes. The validated and
+measured 271-file source maps are identical.
+
+For the primary full-reuse/40-block cell, these milliseconds are medians of
+four per-run measurements:
+
+| Active cap | Completion | TTFT p95 | Token gap p95 | Worst gap | Steps |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 (current) | 985.49 | 825.36 | 54.42 | 55.18 | 65 |
+| 32 | 974.63 | 821.44 | 31.60 | 32.07 | 69 |
+| 16 | 1035.03 | 877.17 | 19.99 | 20.56 | 77 |
+
+Cap 32 passes the frozen primary gate. Its paired p95-gap ratio is 0.580916,
+a 41.9% reduction exceeding its 5.106% noise buffer, with all four ratios below
+one. Completion and p95-TTFT paired ratios 0.975622/0.991328 pass their 10%
+regression guards, and worst gap passes. The completion/TTFT differences are
+within noise; a speedup is not established. Cap 16's cost guards are
+inconclusive, with upper bounds 1.100961/1.109004 beyond 1.10.
+
+The mechanism follows the schedule: identical 632 computed rows, 8,192 reused
+prefix rows and 128 emitted tokens are split into 7 / 14 / 28 mixed steps for
+current / 32 / 16. In the 40-block pool, these produce 7 / 14 / 28 mixed gaps;
+gaps above 50 ms fall from seven to zero with either cap. Shorter chunks
+reduce each interruption but create more interruptions and more step
+executions. At 384 blocks, mixed gaps increase from 28 to 56 to 84 as more
+streams overlap a step, and total steps increase from 23 to 30 to 44. More
+step overhead and altered decode concurrency can therefore consume completion
+and TTFT benefits even while individual stalls shrink; GPU traffic/occupancy
+were not directly profiled in this study.
+
+Broader cap-32 cost/worst-gap guards do not all pass. Half reuse at 384 blocks
+and zero reuse show roughly 11% paired completion overhead with inconclusive
+10% cost guards; full reuse at 384 blocks also has inconclusive guards and
+higher self-control noise. Half reuse at 40 blocks passes those guards but
+does not establish a p95-gap improvement. At half reuse/40 blocks, cap 16
+reduces worst gap from 55.41 to 21.45 ms while worsening p95 from 12.79 to
+20.16 ms: mixed gaps increase from 3/120 (2.5%, beyond the p95 tail) to
+12/120 (10%, inside it). Shorter interruptions can be frequent enough to raise
+a quantile. This supports the specified primary use case without selecting a
+universal cap. Defaults stay unchanged.
+
+The [evidence guide](engine-prefix-evidence/active-prefill/README.md) retains
+all five cells, exact decisions, original samples, source/validation receipts
+and commands. Fresh-directory source restoration and guarded CPU replay passed
+both before and after canonical copying, without GPU/native execution, asset
+access or networking. The measured route remains Apple M4 Pro/Metal,
+synchronous reference 27/projection 8, BF16/FP32, fixed 256-row/eight-sequence
+workspaces, 32-slot slot-major KV and lifetime reservation. Timings include
+trace serialization; engine availability and finite offline gaps establish no
+client SLO, online capacity, goodput, async support or default promotion.
+
+## Adaptive prefill: frozen comparison contract
+
+Frozen on 2026-10-22 before implementation, from clean `019419f`. This study
+implements the approved deterministic short-tail admission rule; the current
+five cells are development workloads, not held-out generalization evidence.
+The policy is opt-in, synchronous, prefix-cache enabled, lifetime-reserved and
+mixed-prefill, with fixed 256-row/eight-sequence workspace, zero watermark,
+reference 27/projection 8, BF16 storage/FP32 accumulation and 32-slot slot-major
+KV. Fixed-cap and fitted-cost combinations are rejected. Defaults stay current.
+
+After the ordinary FIFO cache match, let R be prompt length minus matched
+rows, K = ceil((prompt length + declared output limit - 1)/block size) minus
+matched blocks, and A = max(free blocks + reclaimable idle blocks - ordinary
+watermark, 0), protecting the matched blocks. Begin with the current chunk.
+Only for a new admission which already fits (0 < K <= A), choose
+min(current chunk, 32) when exactly one decode is selected, its remaining
+declared output budget before execution is at least two, 33 <= R <= 64,
+a sequence slot would remain after admission (D + 1 < maximum sequences),
+and A - K < K. Otherwise use current scheduling. No positive-hit requirement
+is added. Declared budget is not knowledge of future EOS. Held prefills use
+current scheduling; a reduced first chunk leaves at most 32 rows, needing
+no latch. Capacity for a comparable next request is a heuristic, not a claim
+about the actual next request or optimal scheduling.
+
+The implementation must use the existing admission capacity calculation,
+without speculative evictions, extra cache lookups or mutations of ownership.
+The rule adds at most one prefill submission per affected admission in this
+configuration. Its own mode and trace identity are `engine-prefix-adaptive-v1`;
+it is not the fixed active cap's global mixed-step ceiling.
+
+All twelve cells have a 1,024-token prefix and eight requests arriving at zero.
+Seed and tokenizer-authored text follow the existing literal prefix generator.
+Positive-match requests share the seed's prefix; every private suffix differs
+within its first block, and every nonmatch differs within its first block.
+The generator freezes exact literal IDs and source/tokenizer hashes before
+qualification. Seed, ten warmup steps and cache state are identical for every
+arm; warmup/seed use current scheduling. Only continuation uses the selected
+mode. Natural outputs stop at EOS or the declared limit.
+
+| Role | Matching requests | Blocks | Suffix rows | Output limit | Match order |
+| --- | ---: | ---: | ---: | ---: | --- |
+| known | 4 | 384 | 64 | 16 | first four |
+| known | 8 | 384 | 64 | 16 | all |
+| known | 4 | 40 | 64 | 16 | first four |
+| primary | 8 | 40 | 64 | 16 | all |
+| known | 0 | 384 | 64 | 16 | none |
+| holdout | 8 | 41 | 64 | 16 | all |
+| holdout | 8 | 56 | 64 | 16 | all |
+| holdout | 8 | 36 | 33 | 16 | all |
+| holdout | 8 | 40 | 63 | 16 | all |
+| holdout | 8 | 40 | 65 | 16 | all |
+| holdout | 8 | 40 | 64 | 2 | all |
+| holdout | 4 | 40 | 64 | 16 | even request IDs |
+
+There are four balanced blocks per cell with current, self-current, fixed32
+and adaptive arms. Orders, by arm indices 0/1/2/3, are [0,1,3,2], [1,2,0,3],
+[2,3,1,0], [3,0,2,1]. This is 192 timed calls and 36 unique-policy untimed
+preflights. All preflights and the exact-build numerical checkpoint precede
+any timing. Each native call has a 180-second timeout and collection has a
+two-hour limit. Native failure or invalid evidence stops dependent collection;
+retain attempted records and actual exits. Negative performance results do
+not authorize omitted cells, resampling or threshold changes.
+
+Correctness first requires host boundaries R=32/33/64/65, A=K-1/K/2K-1/2K,
+K=0, no/multiple selected decodes, remaining output budgets one/two, last slot,
+watermarks, protected versus reclaimable idle entries, partial publication,
+stop/abort/fault cleanup and rejected configuration before mutation. Actual
+EngineCore adaptive decisions must run through KV/logit/greedy comparison
+against cold reference execution. Full documented validation precedes clean
+source commit and exact-build numerical qualification.
+
+All arms record new-admission decision inputs, baseline/chosen rows, eligibility,
+application and reason; every step records ordered request IDs, past positions,
+query counts and selected heads. CPU replay verifies the literal predicate,
+full ordered batch inputs/selections, cache admissions/evictions, per-request
+hits, histories, finish reasons, necessary rows/attention and complete drain/
+clear. Known 40-block cells must match fixed32 logically (69 and 115 steps for
+full and half reuse); the three 384-block cells must match current logically
+(23,39,55 steps for full,half,zero reuse), excluding timestamps and diagnostics.
+These are predictions to test, not timing evidence. New holdouts may reveal
+changes in reuse; any across-policy hit/work divergence blocks a like-for-like
+performance claim and is retained as failed qualification evidence.
+
+Completion is earliest scheduled arrival to trace drain. TTFT is scheduled
+arrival to first engine token availability. Gaps are consecutive availability
+events within each request, excluding TTFT. Retain individual histories,
+TTFT, maximum gap, per-run p50/p95/p99/max, counts above 20/50 ms, mixed/decode
+attribution, all step work and schedule/build/execute/postprocess durations,
+seed-to-drain episode and final clear separately. Do not pool repetitions.
+Output-limit-two traces have fewer gaps; retain their actual sample counts.
+Engine availability is not network/client rendering or isolated GPU kernel time.
+
+For each current-relative metric n=max(0.05,max(abs(self-current/current-1)))
+over the four blocks. The primary adaptive/current p95-gap gate requires all
+four ratios below one, median <=0.75 and reduction >n. Every cell's completion
+and p95-TTFT guard passes if median ratio+n<=1.10, fails if median ratio-n>1.10,
+otherwise is inconclusive. Worst gap passes if median<=1+n; fails only when
+all four ratios>1 and median>1+n; otherwise is inconclusive. Missing denominators
+are inconclusive. The buffer is an engineering rule, not a confidence interval.
+Primary success requires its gap and all cost/worst-gap guards; broad study
+success additionally requires all twelve cells' cost/worst-gap guards. Fixed32
+ratios are descriptive: no static32 self-control or formal adaptive/static32
+timing-equivalence claim is present. Other cells' gap outcomes are reported,
+without a universal p95-improvement claim.
+
+Identical fallback schedules do not establish zero elapsed overhead. Large
+self-control noise stays visible and can prevent a guard from passing even
+near ratio one; additional samples do not automatically shrink a maximum-based
+buffer. Do not retune the rule from these holdout results. Any revision needs
+a new contract and study identity. Retain compact raw records, exact source,
+actual validation/qualification exits and guarded source/CPU replay separately
+from native correctness. No default promotion, async support, online capacity,
+goodput, client SLO or arbitrary-input backend proof follows.
+
+
+## Adaptive prefill: measured results
+
+The frozen adaptive study passed its primary gate and all twelve workload
+completion, p95-TTFT and worst-gap guards. Collection completed on 2026-10-22
+from clean `7dd3864dcd34e04170215876d304a54808abb856`, after full documented
+validation and exact-build numerical qualification. `adaptive_prefill=False`
+remains the default; no promotion follows from this offline grid.
+
+At full 1,024-token prefix reuse and 40 blocks, current / fixed32 / adaptive
+medians of four per-run measurements were:
+
+| Policy | Completion, ms | TTFT p95, ms | Token gap p95, ms | Worst gap, ms | Steps |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Current | 954.86 | 798.71 | 53.51 | 53.83 | 65 |
+| Fixed32 | 982.83 | 824.09 | 30.94 | 31.23 | 69 |
+| Adaptive | 973.04 | 817.99 | 30.91 | 31.12 | 69 |
+
+The adaptive/current median paired p95-gap ratio is 0.577458 (42.3% reduction),
+with all four ratios below one and effect above the 5% noise buffer. Completion
+and p95-TTFT paired ratios are 1.017585 and 1.020965; buffer upper bounds
+1.067585 and 1.070965 pass 1.10. Worst-gap ratio 0.577810 also passes.
+Descriptive medians and paired-ratio estimates are distinct; small cost changes
+within noise do not establish completion/TTFT improvements or exact overhead.
+
+The causal prediction held: adaptive matches fixed32's exact ordered schedule
+at 40 blocks (69/115 steps for full/half reuse), while matching current at 384
+blocks (23/39/55 for full/half/zero reuse). The primary computes 632 rows and
+672,448 causal attended positions under every policy, reuses 8,192 tokens and
+delivers the same 128 tokens. Seven long mixed interruptions become fourteen
+shorter ones; gaps over 50 ms fall from seven to zero. The rule preserves large
+chunks when admission pressure and the short-tail conditions do not apply.
+
+All twelve cost/worst-gap guards pass with their observed self-control noise.
+The closest adaptive upper bound is 1.087985 for 63-tail completion; 33-tail
+p95-TTFT is 1.085393. The 33-tail gap effect is below noise. At half reuse/40
+blocks, p95 gaps worsen 13.47 to 14.78 ms even while worst gap improves 53.79
+to 31.19 ms: three long gaps become six shorter gaps out of 120, shifting mass
+into p95. The broader guard result is not a universal streaming improvement.
+The output-limit-two cell has only eight gaps per run. Alternating reuse order
+actually reuses only 1,024 tokens; every policy agrees on that eviction outcome.
+No holdout outcome was used to retune the frozen predicate.
+
+Full validation passed 444 Python tests, 270 native tests across 32 TestSuites,
+38 native invocations and benchmark smoke routes. The unchanged 271-file source
+map binds validation to the clean measured commit. The Apple M4 Pro/Metal
+checkpoint passed 189,770,889 checks with zero mismatches/nonfinite values,
+including actual adaptive-engine KV/logit/greedy comparisons and terminal
+cleanup. Broader predicate boundaries are host-tested, not an arbitrary-input
+backend proof. All 36 untimed preflights preceded one 192-call campaign; every
+native exit was zero and histories, hits, work and schedules matched.
+
+The [complete evidence guide](engine-prefix-evidence/adaptive-prefill/README.md)
+retains the full matrix, samples, decisions, original logs, measured source,
+validation/qualification receipts and two independent audits. Both fresh
+archived-source guarded CPU restores passed without native/GPU, model assets
+or network access; the compact report regenerated from the canonical archive.
+Earlier prefix-v1 and active-prefill artifacts are unchanged. The route remains
+synchronous Metal, reference 27/projection 8, BF16/FP32, 32-slot slot-major KV,
+256-row/eight-sequence workspace, zero watermark and lifetime reservation.
+Instrumentation is included in engine-availability timings; no online capacity,
+goodput, client SLO, async support, universal improvement or default promotion
+is established. Custody is local, without a remote backup or fresh GPU rerun.
+
+## Frequency-aware prefill: frozen comparison contract
+
+Frozen on 2026-10-22 before implementation, from clean `4cc7a47`. This is the
+approved bounded cohort-frequency experiment, with separate identity
+`engine-prefix-frequency-v1` and record kind `qwen-engine-prefix-frequency-v1`.
+The existing prefix, fixed-cap and adaptive-v1 records remain immutable.
+Defaults stay current. Scope is synchronous reference 27/projection 8 on
+Apple M4 Pro/Metal, BF16 storage/FP32 accumulation, 32-slot slot-major KV,
+prefix caching, lifetime reservation, mixed prefill, zero watermark and fixed
+256-row/eight-sequence workspaces. Frequency mode is separate from old
+adaptive mode; conflicting fixed-cap, fitted-cost and async paths reject
+before mutation. This is a forecast for a finite cohort, not an online p95
+controller or an arbitrary-input performance guarantee.
+
+At the first successful new admission of a new busy period, after ordinary
+cache matching and admission-fit calculation but BEFORE its first model step,
+freeze the already-submitted positive-output WAITING requests, including the
+successful FIFO head before its state changes, by immutable ticket/FIFO order.
+Exclude finished seed/warmup requests, zero-output requests
+and aborts already processed at the boundary. Only requests actually submitted
+to EngineCore as arrived may be inspected, never future trace descriptors.
+The cohort remains fixed until the busy period drains; no shrinking or rolling
+reset when requests finish. Newly submitted requests cannot join or change its
+denominator. Reusing a finished array slot does not reuse its old ticket.
+
+Let N_hat = sum(max(declared maximum outputs - 1, 0)) over the entire cohort.
+Starting at its FIFO head, inspect the leading compatible short-tail run. Its
+members have the same exact resident matched prefix/namespace/salt, matched
+length H, remaining prompt length R, declared output limit G and private
+reservation K. Require 33 <= R <= 64, G >= 3, enough row budget for R plus one
+decode, at least three sequence slots, and the two-reader geometry
+H_blocks + 2*K <= pool_blocks < H_blocks + 3*K, with K > 0. Stop at the first
+incompatible FIFO member; do not count matches behind a cold barrier. Duplicate
+first private full-block keys can create future extra sharing and make the
+forecast ambiguous: select baseline rather than counting them as independent.
+Ambiguous geometry, incompatible initial state, arithmetic overflow or zero
+N_hat selects baseline. One bounded read-only inspection is permitted; it may
+not touch LRU, emit cache events, pin blocks, reserve storage or change KV.
+
+For leading run length L, estimate M_hat = max(L - 1, 0) unsplit mixed
+interruptions under homogeneous declared-limit/two-reader execution. Define
+T = N_hat - floor(19*(N_hat - 1)/20), using checked integer arithmetic.
+Permit the existing adaptive-v1 cap only if M_hat >= T. Apply it only to
+members of that counted leading run, and only when ALL ordinary adaptive-v1
+conditions hold: admission fits with 0 < K <= A, exactly one selected decode,
+its declared remaining output budget >= 2, 33 <= R <= 64, another sequence
+slot remains and A - K < K. Choose min(baseline chunk, 32); otherwise choose
+baseline. Held prefills retain baseline behavior and need no new chunk latch.
+For N_hat=120, M_hat=7 permits the cap and M_hat=3 rejects it. For seven
+all-matching G=16 requests, N_hat=105/M_hat=6 is rejected by the exact finite
+quantile cutoff, despite an interruption fraction above five percent.
+
+Any newly submitted request during the busy period, cancellation/early
+termination, or unexpected matched-prefix/reservation geometry for a counted
+member disables further frequency caps until drain. Delivered output below a
+member's declared limit invalidates the forecast; already-issued work cannot
+be undone. Expected publication of distinct private suffix blocks does not
+invalidate the resident common-prefix identity. An existing held short tail
+still completes normally. Normal limit completion does not shrink the frozen
+cohort, counts or decision. Forecast failure is not permission to reorder FIFO,
+delay delivery, change declared work or replace the current admission policy.
+
+This estimate assumes declared-limit generation, stable overlap/cache identity
+and that mixed gaps form the slower population. Neither N_hat nor M_hat is a
+confidence bound on actual density. Natural EOS and invalidation remain
+possible; count mismatch alone is a forecasting limitation, while incorrect
+recorded inputs/predicate/lifecycle or model-history divergence fails correctness.
+Half reuse is expected to regain baseline p95 by accepting its rarer baseline
+worst stalls (roughly 54 ms rather than adaptive-v1's 31 ms). No claim that
+this policy dominates both previous policies on every latency metric follows.
+
+All forecast enrollment, comparisons, allocations and logging occur INSIDE
+measured scheduling/continuation time. Current and old-adaptive controls do
+NOT execute the frequency forecast just to match instrumentation; disabled
+sentinels are permitted. Warmup (ten steps) and unrestricted seed use current
+scheduling identically in every invocation; only measured continuation enables
+the selected policy. Record cohort membership/tickets/declared limits, anchor
+identity and geometry, leading run, N_hat/M_hat/T, dense/valid state, reasons,
+invalidation transitions, scan counts/cost, ordinary admission inputs and every
+ordered batch selection. Post-run replay compares estimated counts with actual
+per-policy gaps; observed unsplit interruptions come from the current control,
+never from information supplied to the candidate scheduler.
+
+The first twelve cells repeat the adaptive-v1 development matrix. Eight new
+prospective cases test the frequency claim; none may be replaced after seeing
+outputs or performance. Prefix length is 1,024; all arrivals are zero. Matching
+requests are first in FIFO except the existing even-ID cell. Suffixes differ
+within their first private block; nonmatching prompts differ within the first
+block. Freeze literal tokenizer-authored IDs and source/tokenizer identities.
+
+| Role | Matching | Requests | Blocks | Suffix | Output limit | Order |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| known | 4 | 8 | 384 | 64 | 16 | first |
+| known | 8 | 8 | 384 | 64 | 16 | first |
+| secondary | 4 | 8 | 40 | 64 | 16 | first |
+| primary | 8 | 8 | 40 | 64 | 16 | first |
+| known | 0 | 8 | 384 | 64 | 16 | first |
+| known | 8 | 8 | 41 | 64 | 16 | first |
+| known | 8 | 8 | 56 | 64 | 16 | first |
+| known | 8 | 8 | 36 | 33 | 16 | first |
+| known | 8 | 8 | 40 | 63 | 16 | first |
+| known | 8 | 8 | 40 | 65 | 16 | first |
+| known | 8 | 8 | 40 | 64 | 2 | first |
+| known | 4 | 8 | 40 | 64 | 16 | even |
+| prospective | 5 | 8 | 40 | 64 | 16 | first |
+| prospective | 6 | 8 | 40 | 64 | 16 | first |
+| prospective | 7 | 8 | 40 | 64 | 16 | first |
+| prospective | 7 | 7 | 40 | 64 | 16 | first |
+| prospective | 9 | 9 | 40 | 64 | 16 | first |
+| prospective | 4 | 8 | 40 | 64 | 3 | first |
+| prospective | 8 | 8 | 40 | 64 | 8 | first |
+| prospective | 8 | 8 | 40 | 64 | 32 | first |
+
+Frequency cell IDs include all dimensions, including queued request count:
+`prefix-1024-reuse-R-blocks-B-suffix-S-out-G-requests-Q-ORDER`.
+Campaign kind is `engine-prefix-frequency-campaign-v1`; qualification kind is
+`engine-prefix-frequency-qualification-v1`. Native policy values are current,
+adaptive and frequency. Four arms are current, self-current, old adaptive and
+frequency. Four Williams orders by arm indices 0/1/2/3 are [0,1,3,2],
+[1,2,0,3], [2,3,1,0], [3,0,2,1]. Thus 60 unique-policy untimed preflights must
+pass before ONE 320-call timed campaign. Per-native timeout remains 180 seconds;
+collection has a two-hour hard bound. Failure/invalid evidence stops dependent
+collection and retains every attempt and actual exit. Negative performance
+results do not authorize resampling, omitted cells or threshold changes.
+
+Correctness first requires host tests for exact integer quantiles and N/M
+boundaries (including N=120,M=5/6/7 and other cohort sizes), first-step snapshot,
+frozen denominator through completion, seed exclusion, FIFO barriers/salts,
+duplicate-private keys, arithmetic bounds, no forecast execution in controls,
+cache/LRU/ref/KV purity, late arrivals, early EOS, abort, ticket/slot reuse,
+drain/reset/fault cleanup and unsupported configuration rejection. Staged
+arrivals are functional/numerical tests outside this initial timing grid.
+Actual EngineCore frequency-enabled and disabled decisions must run through
+Metal KV/logit/greedy cold-reference checks with terminal and invalidation
+coverage. A bounded actual-engine numerical seam may use a 32-token matched
+prefix and the same two-reader geometry with all eight requests; the 1,024-
+token/pool-40 cases additionally require full preflight histories/work and exact
+logical schedules. These claim layers stay distinct. Full documented validation
+precedes clean source commit and the
+exact-build checkpoint/preflights. No toolchain upgrade is included.
+
+Independent CPU replay must reconstruct snapshots, literal forecasts,
+invalidations, selections, cache admissions/evictions, per-request actual hits,
+natural histories/finish reasons, necessary rows/causal attention, drain and
+clear. Every measured policy must match its own frozen preflight and the other
+policies' actual histories/reuse/work. Primary full-reuse/40 frequency must
+match old adaptive's full logical schedule (69 steps, 14 mixed steps).
+Secondary half-reuse/40 frequency must match current (113 steps, 3 mixed).
+The three 384-block cases must match current (23/39/55 steps for full/half/none).
+Equality excludes timestamps/diagnostics and is not timing-equivalence proof.
+
+Completion, TTFT and gaps retain prior definitions and separate seed/episode/
+clear boundaries. Retain per-request TTFT, p95/max gaps, complete histories,
+per-run p50/p95/p99/max, >20/50 ms counts, decode/mixed attribution, work,
+step phase times and forecasts versus observed counts. Do not pool repetitions;
+report matched/unmatched groups so an aggregate p95 cannot hide rare stalls.
+For each metric n=max(0.05,max(abs(self-current/current-1))) over four blocks.
+Primary frequency/current p95 requires all four ratios <1, median <=0.75 and
+reduction >n. All twenty completion and p95-TTFT guards retain pass m+n<=1.10,
+fail m-n>1.10, else inconclusive. Worst-gap guards retain pass m<=1+n, fail
+all ratios>1 and m>1+n, else inconclusive. Missing denominators are inconclusive.
+
+NEW p95_no_harm is separate from the 25% improvement hypothesis: PASS requires
+BOTH m<=1.05 AND m+n<=1.10. If not passing, FAIL requires all four ratios>1
+and m-1>n; otherwise INCONCLUSIVE. Thus the prior half-reuse p95 regression
+cannot pass by preserving only completion/TTFT/worst-gap guards. Overall success
+requires the primary hypothesis, all twenty cost/worst-gap guards AND all twenty
+p95_no_harm guards. Report broad_guard_pass and broad_p95_guard_pass separately,
+and study_success as their conjunction with the primary result. Old adaptive
+comparisons are descriptive; no adaptive-self control or formal frequency/old-
+adaptive timing-equivalence claim is included. The buffer is an engineering
+rule, not a confidence interval. Unresolved noise remains inconclusive.
+
+Retain immutable measured source, actual validation/qualification exits, compact
+raw records, independent audits and guarded archived-source CPU restoration.
+Old archives must remain byte-for-byte unchanged. No default promotion, async
+support, online capacity, goodput, client SLO, universal p95 improvement or
+arbitrary-input backend proof follows. Custody remains local unless separately
+authorized. Any policy revision after seeing this campaign needs a new contract
+and study identity.
+
+## Frequency-aware prefill: executed result (2026-10-22)
+
+Source `df042c2` implements the frozen cohort gate with defaults still current.
+Full documented validation passed (455 Python, 280 native tests/32 suites and
+smoke checks); exact-build Metal qualification and all 60 preflights passed.
+The single 320-call campaign and independent raw/decision audits completed.
+Two fresh archived-source CPU restorations reproduced the retained results.
+
+Primary full-reuse/40 aggregate p95 gaps fell 41.89% (54.239 to 31.556 ms per-run
+medians), with paired completion +2.36% and p95 TTFT +2.67%. The exact adaptive
+69-step/14-mixed-step schedule is preserved. Half-reuse/40 restores current's
+113 steps/3 mixed steps; paired p95 changed +0.43%, but its new no-harm guard is
+inconclusive under 13.25% self-control noise. Half-reuse/384 also has unresolved
+cost and p95 guards. Cost/worst-gap sets pass 19/20 and p95-no-harm 18/20; the
+remaining statuses are inconclusive, none FAIL. Both broad flags and
+`study_success` are false. No resampling or policy retuning followed the result.
+
+Aggregate and per-request quantiles are different claim layers: full reuse's
+largest per-request p95 rose from 25.882 to 31.678 ms while its maximum gap fell.
+The policy remains experimental and off by default. The
+[complete frequency evidence guide](engine-prefix-evidence/frequency-prefill/README.md)
+contains all twenty cells, noise vectors, per-request/group tradeoffs, source
+and actual exits, immutable raw data, independent audits and restoration commands.

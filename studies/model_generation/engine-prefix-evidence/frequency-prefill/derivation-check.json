@@ -1,0 +1,23 @@
+{
+  "kind": "engine-prefix-frequency-canonical-derivation-check-v1",
+  "status": "passed",
+  "source_commit": "df042c20d0bdd4fe51f5fc32f9bbad663a1769c3",
+  "same_complete_report_except_input_paths": true,
+  "original_sha256": "5fd356e496f0f1a65738dbe316bbf2582255aa2dfc9c5d89c20f06597b4357b6",
+  "regenerated_sha256": "dd6136b09ea05349cecf021be04945f7807402c42460c8810aaafa8d47e6c088",
+  "execution": {
+    "command": [
+      "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python",
+      "-B",
+      "/private/tmp/llm-mojo-frequency-prefill-20261022-restored-canonical/acceptance/evidence-0/derivation/extract_results.py",
+      "/private/tmp/llm-mojo-frequency-prefill-20261022-restored-canonical/measurements/engine-prefix-frequency.json.gz",
+      "/private/tmp/llm-mojo-frequency-prefill-20261022-results-regenerated.json"
+    ],
+    "exit_code": 0,
+    "wall_elapsed_ns": 4937411833,
+    "timeout_seconds": 600,
+    "timed_out": false,
+    "script_sha256": "ec1e6a0fa71c5bc506d11e6d51962ca2d4bfc5dd01367ec0f66b611135d7f183",
+    "log_sha256": "a1e8ee4b49b04a61e1a236b08e493043ef01226c8db1a0dedbff38eb18ec0201"
+  }
+}

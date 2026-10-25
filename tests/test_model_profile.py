@@ -1359,5 +1359,201 @@ PROFILE_REGION_END
             self.assertEqual(identity['workload']['dispatches_per_iteration'],410)
 
 
+class ActivePrefillCommandContractTests(unittest.TestCase):
+    def test_active_campaign_dispatch_preserves_explicit_identity(self):
+        from unittest import mock
+        from llm_mojo.benchmarks import model_profile as profile, engine_prefix
+        cases = (
+            ('engine-specification', [], 'specification', (Path('/output'),)),
+            ('engine-qualify', ['--build', '/build', '--trace', '/campaign'], 'qualify',
+             (Path('/build'), Path('/output'), Path('/campaign'))),
+            ('engine-collect', ['--build', '/build', '--trace', '/campaign', '--qualification', '/qualification'],
+             'collect', (Path('/build'), Path('/campaign'), Path('/output'), Path('/qualification'))),
+        )
+        for command, options, method, expected in cases:
+            with self.subTest(command=command), mock.patch('sys.argv',
+                    ['model_profile', command, '--active-prefill-study', '--output', '/output', *options]), \
+                    mock.patch.object(engine_prefix, method) as called:
+                profile.main()
+                called.assert_called_once_with(*expected, active_prefill=True)
+
+    def test_active_campaign_rejects_workload_and_route_overrides(self):
+        import contextlib
+        import io
+        from unittest import mock
+        from llm_mojo.benchmarks import model_profile as profile
+        for options in (['--blocks', '40'], ['--arrival-rate', '8'], ['--seed', '9'],
+                        ['--warmup-steps', '0'], ['--max-sequences', '4'],
+                        ['--token-budget', '32'], ['--engine-mode', 'scripted'], ['--prefix-study']):
+            with self.subTest(options=options), mock.patch('sys.argv', ['model_profile', 'engine-collect',
+                    '--active-prefill-study', '--build', '/build', '--trace', '/campaign',
+                    '--qualification', '/qualification', '--output', '/output', *options]), \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                profile.main()
+            self.assertEqual(error.exception.code, 2)
+
+    def test_active_build_has_separate_declaration(self):
+        from unittest import mock
+        from llm_mojo.benchmarks import model_profile as profile
+        with mock.patch('sys.argv', ['model_profile', 'engine-build', '--active-prefill-study',
+                '--prepared', '/prepared', '--output', '/output']), mock.patch.object(profile, 'engine_build') as called:
+            profile.main()
+            called.assert_called_once_with(Path('/output'), Path('/prepared'), active_prefill_study=True)
+        self.assertEqual(profile._engine_collection_declaration(False, False, active_prefill_study=True),
+                         contract.ENGINE_PREFIX_ACTIVE_DECLARATION)
+
+
+class AdaptivePrefillCommandContractTests(unittest.TestCase):
+    def test_adaptive_campaign_dispatch_preserves_explicit_identity(self):
+        from unittest import mock
+        from llm_mojo.benchmarks import model_profile as profile, engine_prefix
+        cases = (
+            ('engine-specification', [], 'specification', (Path('/output'),)),
+            ('engine-qualify', ['--build', '/build', '--trace', '/campaign'], 'qualify',
+             (Path('/build'), Path('/output'), Path('/campaign'))),
+            ('engine-collect', ['--build', '/build', '--trace', '/campaign', '--qualification', '/qualification'],
+             'collect', (Path('/build'), Path('/campaign'), Path('/output'), Path('/qualification'))),
+        )
+        for command, options, method, expected in cases:
+            with self.subTest(command=command), mock.patch('sys.argv',
+                    ['model_profile', command, '--adaptive-prefill-study', '--output', '/output', *options]), \
+                    mock.patch.object(engine_prefix, method) as called:
+                profile.main()
+                called.assert_called_once_with(*expected, adaptive_prefill=True)
+
+    def test_adaptive_campaign_rejects_workload_route_and_study_overrides(self):
+        import contextlib
+        import io
+        from unittest import mock
+        from llm_mojo.benchmarks import model_profile as profile
+        options = (['--blocks', '40'], ['--arrival-rate', '8'], ['--seed', '9'],
+                   ['--warmup-steps', '0'], ['--max-sequences', '4'],
+                   ['--token-budget', '32'], ['--engine-mode', 'scripted'],
+                   ['--admission-policy', 'incremental'], ['--policy', '/policy'],
+                   ['--budget-stage', 'evaluation'],
+                   *([flag] for flag in ('--prefix-study', '--active-prefill-study', '--async-study',
+                                        '--fast-study', '--budget-study', '--admission-pair', '--admission-range')))
+        for extra in options:
+            with self.subTest(options=extra), mock.patch('sys.argv', ['model_profile', 'engine-collect',
+                    '--adaptive-prefill-study', '--build', '/build', '--trace', '/campaign',
+                    '--qualification', '/qualification', '--output', '/output', *extra]), \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                profile.main()
+            self.assertEqual(error.exception.code, 2)
+
+    def test_adaptive_build_has_separate_mutually_exclusive_declaration(self):
+        from unittest import mock
+        from llm_mojo.benchmarks import model_profile as profile
+        with mock.patch('sys.argv', ['model_profile', 'engine-build', '--adaptive-prefill-study',
+                '--prepared', '/prepared', '--output', '/output']), mock.patch.object(profile, 'engine_build') as called:
+            profile.main()
+            called.assert_called_once_with(Path('/output'), Path('/prepared'), adaptive_prefill_study=True)
+        self.assertEqual(profile._engine_collection_declaration(False, False, adaptive_prefill_study=True),
+                         contract.ENGINE_PREFIX_ADAPTIVE_DECLARATION)
+        for selector in ('prefix_study', 'active_prefill_study', 'async_study', 'fast_study', 'budget_study'):
+            with self.subTest(selector=selector), self.assertRaises(ValueError):
+                profile._engine_collection_declaration(False, False, adaptive_prefill_study=True, **{selector: True})
+        with self.assertRaises(ValueError):
+            profile._engine_collection_declaration(False, False, adaptive_prefill_study=1)
+
+    def test_adaptive_archive_replay_dispatches_to_prefix_checker(self):
+        from unittest import mock
+        from llm_mojo.benchmarks import model_profile as profile, engine_prefix
+        summary = dict(derived='adaptive-only-summary')
+        document = '{}'
+        record = dict(kind=contract.ENGINE_PREFIX_ADAPTIVE_DECLARATION['kind'], trace={},
+                      trace_document=document, trace_sha256=hashlib.sha256(document.encode()).hexdigest(),
+                      summary=summary)
+        raw = json.dumps(record).encode()
+        compressed = gzip.compress(raw, mtime=0)
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            archive = directory/'engine-prefix-adaptive.json.gz'
+            archive.write_bytes(compressed)
+            archive.with_suffix('').write_text(json.dumps(dict(kind=record['kind'], bytes=len(compressed),
+                sha256=hashlib.sha256(compressed).hexdigest(), uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+            with mock.patch.object(profile, 'validate_engine_record_build'), \
+                    mock.patch.object(engine_prefix, 'summary', return_value=summary) as checker:
+                self.assertEqual(profile.engine_replay(directory), summary)
+                checker.assert_called_once_with(record)
+            self.assertEqual(json.loads((directory/'engine-prefix-adaptive-summary.json').read_text()), summary)
+
+
+class FrequencyPrefillCommandContractTests(unittest.TestCase):
+    def test_frequency_campaign_dispatch_preserves_explicit_identity(self):
+        from unittest import mock
+        from llm_mojo.benchmarks import model_profile as profile, engine_prefix
+        cases = (
+            ('engine-specification', [], 'specification', (Path('/output'),)),
+            ('engine-qualify', ['--build', '/build', '--trace', '/campaign'], 'qualify',
+             (Path('/build'), Path('/output'), Path('/campaign'))),
+            ('engine-collect', ['--build', '/build', '--trace', '/campaign', '--qualification', '/qualification'],
+             'collect', (Path('/build'), Path('/campaign'), Path('/output'), Path('/qualification'))),
+        )
+        for command, options, method, expected in cases:
+            with self.subTest(command=command), mock.patch('sys.argv',
+                    ['model_profile', command, '--frequency-prefill-study', '--output', '/output', *options]), \
+                    mock.patch.object(engine_prefix, method) as called:
+                profile.main()
+                called.assert_called_once_with(*expected, frequency_prefill=True)
+
+    def test_frequency_campaign_rejects_workload_route_and_study_overrides(self):
+        import contextlib
+        import io
+        from unittest import mock
+        from llm_mojo.benchmarks import model_profile as profile
+        options = (['--blocks', '40'], ['--arrival-rate', '8'], ['--seed', '9'],
+                   ['--warmup-steps', '0'], ['--max-sequences', '4'],
+                   ['--token-budget', '32'], ['--engine-mode', 'scripted'],
+                   ['--admission-policy', 'incremental'], ['--policy', '/policy'],
+                   ['--budget-stage', 'evaluation'],
+                   *([flag] for flag in ('--prefix-study', '--active-prefill-study', '--adaptive-prefill-study', '--async-study',
+                                        '--fast-study', '--budget-study', '--admission-pair', '--admission-range')))
+        for extra in options:
+            with self.subTest(options=extra), mock.patch('sys.argv', ['model_profile', 'engine-collect',
+                    '--frequency-prefill-study', '--build', '/build', '--trace', '/campaign',
+                    '--qualification', '/qualification', '--output', '/output', *extra]), \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                profile.main()
+            self.assertEqual(error.exception.code, 2)
+
+    def test_frequency_build_has_separate_mutually_exclusive_declaration(self):
+        from unittest import mock
+        from llm_mojo.benchmarks import model_profile as profile
+        with mock.patch('sys.argv', ['model_profile', 'engine-build', '--frequency-prefill-study',
+                '--prepared', '/prepared', '--output', '/output']), mock.patch.object(profile, 'engine_build') as called:
+            profile.main()
+            called.assert_called_once_with(Path('/output'), Path('/prepared'), frequency_prefill_study=True)
+        self.assertEqual(profile._engine_collection_declaration(False, False, frequency_prefill_study=True),
+                         contract.ENGINE_PREFIX_FREQUENCY_DECLARATION)
+        for selector in ('prefix_study', 'active_prefill_study', 'adaptive_prefill_study', 'async_study', 'fast_study', 'budget_study'):
+            with self.subTest(selector=selector), self.assertRaises(ValueError):
+                profile._engine_collection_declaration(False, False, frequency_prefill_study=True, **{selector: True})
+        with self.assertRaises(ValueError):
+            profile._engine_collection_declaration(False, False, frequency_prefill_study=1)
+
+    def test_frequency_archive_replay_dispatches_to_prefix_checker(self):
+        from unittest import mock
+        from llm_mojo.benchmarks import model_profile as profile, engine_prefix
+        summary = dict(derived='frequency-only-summary')
+        document = '{}'
+        record = dict(kind=contract.ENGINE_PREFIX_FREQUENCY_DECLARATION['kind'], trace={},
+                      trace_document=document, trace_sha256=hashlib.sha256(document.encode()).hexdigest(),
+                      summary=summary)
+        raw = json.dumps(record).encode()
+        compressed = gzip.compress(raw, mtime=0)
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            archive = directory/'engine-prefix-frequency.json.gz'
+            archive.write_bytes(compressed)
+            archive.with_suffix('').write_text(json.dumps(dict(kind=record['kind'], bytes=len(compressed),
+                sha256=hashlib.sha256(compressed).hexdigest(), uncompressed_sha256=hashlib.sha256(raw).hexdigest())))
+            with mock.patch.object(profile, 'validate_engine_record_build'), \
+                    mock.patch.object(engine_prefix, 'summary', return_value=summary) as checker:
+                self.assertEqual(profile.engine_replay(directory), summary)
+                checker.assert_called_once_with(record)
+            self.assertEqual(json.loads((directory/'engine-prefix-frequency-summary.json').read_text()), summary)
+
+
 if __name__ == '__main__':
     unittest.main()

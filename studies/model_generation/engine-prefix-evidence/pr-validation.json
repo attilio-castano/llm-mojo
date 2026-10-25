@@ -1,0 +1,502 @@
+{
+  "archive": {
+    "bytes": 10948484,
+    "every_member_roundtrip_verified": true,
+    "members": 126,
+    "path": "pr-validation.json.gz",
+    "sha256": "5ffbd692a33a4a4476856b5896dfbc9a66a6477fce86a1f36d34437915de80c4",
+    "uncompressed_bytes": 1013333794,
+    "uncompressed_sha256": "19f43bd3ea7565264e33e7f53103afc41b9756fec19a206e32482de2b6742853"
+  },
+  "checks": {
+    "archived_source_CPU_restores": 4,
+    "child_CPU_guard_exits": 4,
+    "derivation_equivalences": 4,
+    "expected_negative_checks": 29,
+    "independent_decision_audits": 2,
+    "independent_packaging_checks": 31,
+    "original_tree_roundtrip_files": 96,
+    "portable_raw_audits": 3
+  },
+  "frozen_command_helpers": {
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/active-prefill/retention/extract_results.py": {
+      "bytes": 8351,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/active-prefill/retention/extract_results.py",
+      "sha256": "b3bfc6f621e4c7415fcb7f05585f013a9d37f0de28c0973bc3bf07f30bacc9b8"
+    },
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/active-prefill/retention/independent_raw_audit.py": {
+      "bytes": 6410,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/active-prefill/retention/independent_raw_audit.py",
+      "sha256": "13de2bd514109fe03fc1d81a0ea9486c1459bd06d60012b795f178c556f29c0d"
+    },
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/active-prefill/retention/prefix_retention.py": {
+      "bytes": 20281,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/active-prefill/retention/prefix_retention.py",
+      "sha256": "a9873bbcd6cfe16c984616a8087bb2d869d380f8e3c1ed8318a3793dcad5690d"
+    },
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/adaptive-prefill/retention/extract_results.py": {
+      "bytes": 8978,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/adaptive-prefill/retention/extract_results.py",
+      "sha256": "31eb441b5be63f3962b9befc1e749ec6cb37adeaf6feba01b148cba601568c58"
+    },
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/adaptive-prefill/retention/independent_decision_audit.py": {
+      "bytes": 8988,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/adaptive-prefill/retention/independent_decision_audit.py",
+      "sha256": "8cd955ba9864f3e1d3321363118d269fee1af3e4e1bccd8a738a07a53dc17f3e"
+    },
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/adaptive-prefill/retention/independent_raw_audit.py": {
+      "bytes": 35929,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/adaptive-prefill/retention/independent_raw_audit.py",
+      "sha256": "d5ee7f824a05ff858295ee2ca61c93e9c6a7e37c86a84b7470ca2680799fda9a"
+    },
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/adaptive-prefill/retention/prefix_retention.py": {
+      "bytes": 20325,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/adaptive-prefill/retention/prefix_retention.py",
+      "sha256": "cc04a705d9333e26fde3b299b0b4c498cb0eb30d9488ff78fa20ca92587da039"
+    },
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/frequency-prefill/retention/extract_results.py": {
+      "bytes": 10107,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/frequency-prefill/retention/extract_results.py",
+      "sha256": "ec1e6a0fa71c5bc506d11e6d51962ca2d4bfc5dd01367ec0f66b611135d7f183"
+    },
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/frequency-prefill/retention/independent_decision_audit.py": {
+      "bytes": 16413,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/frequency-prefill/retention/independent_decision_audit.py",
+      "sha256": "d24e3fc874b6a101b3c03ca8b69135fdc706fc9b7b576994727fafb661bed96f"
+    },
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/frequency-prefill/retention/independent_raw_audit.py": {
+      "bytes": 47174,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/frequency-prefill/retention/independent_raw_audit.py",
+      "sha256": "204ae0ead0bf531838139a1d494e6735f6d576bc036ad2fcf25c6603f32f47a2"
+    },
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/frequency-prefill/retention/prefix_retention.py": {
+      "bytes": 20416,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/frequency-prefill/retention/prefix_retention.py",
+      "sha256": "9897b4d720a6cba9327710a834493f0db918d894c83ab6a5445765c2dc8755d7"
+    },
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/retention/extract_prefix_results.py": {
+      "bytes": 7143,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/retention/extract_prefix_results.py",
+      "sha256": "3669d2f23198a7981df039b3bad0f08d58bf01a0bc9e08fd245d0936050f0508"
+    },
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/retention/packaging.py": {
+      "bytes": 15808,
+      "frozen_anchor": "independent-packaging-review helper SHA",
+      "sha256": "b02ca8c4d9ffd25aa15bb29fdb3d4d8bcaf24cd329ed9b813fd6c1bde312f227"
+    },
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/studies/model_generation/engine-prefix-evidence/retention/prefix_retention.py": {
+      "bytes": 19272,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/retention/prefix_retention.py",
+      "sha256": "b049778c81c72278fa95f9e7061d1a4f1688b934cdb36d4dba929776c7304150"
+    },
+    "/private/tmp/llm-mojo-packaging-fa2e13288b43/active/retention/prefix_retention.py": {
+      "bytes": 20281,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/active-prefill/retention/prefix_retention.py",
+      "sha256": "a9873bbcd6cfe16c984616a8087bb2d869d380f8e3c1ed8318a3793dcad5690d"
+    },
+    "/private/tmp/llm-mojo-packaging-fa2e13288b43/adaptive/retention/prefix_retention.py": {
+      "bytes": 20325,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/adaptive-prefill/retention/prefix_retention.py",
+      "sha256": "cc04a705d9333e26fde3b299b0b4c498cb0eb30d9488ff78fa20ca92587da039"
+    },
+    "/private/tmp/llm-mojo-packaging-fa2e13288b43/frequency/retention/prefix_retention.py": {
+      "bytes": 20416,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/frequency-prefill/retention/prefix_retention.py",
+      "sha256": "9897b4d720a6cba9327710a834493f0db918d894c83ab6a5445765c2dc8755d7"
+    },
+    "/private/tmp/llm-mojo-packaging-fa2e13288b43/prefix/retention/prefix_retention.py": {
+      "bytes": 19272,
+      "frozen_anchor": "studies/model_generation/engine-prefix-evidence/retention/prefix_retention.py",
+      "sha256": "b049778c81c72278fa95f9e7061d1a4f1688b934cdb36d4dba929776c7304150"
+    }
+  },
+  "full_repository_validation": {
+    "actual_exit_code": 1,
+    "command": [
+      "uv",
+      "run",
+      "--locked",
+      "llm-mojo",
+      "validate"
+    ],
+    "elapsed_seconds": 48911.055,
+    "errors": 4,
+    "full_result_preserved": true,
+    "later_native_and_smoke_stages_not_reached": true,
+    "python_tests": 526,
+    "skipped": 1,
+    "source_files_unchanged": true,
+    "status": "failed",
+    "timeout_fixtures": [
+      "argmax_fold_zero_stride",
+      "argmax_fold_backward_stride",
+      "argmax_fold_overlap_stride",
+      "argmax_fold_gap_stride"
+    ],
+    "tracked_tree_unchanged": true
+  },
+  "integrated_main_commit": "20703475b009a1f9c6373fe993e496c1269fd000",
+  "integration_review": {
+    "feature_code_files": 25,
+    "local_documentation_links": 354,
+    "result": "PASS"
+  },
+  "kind": "prefix-pr-validation-v1",
+  "original_studies": {
+    "active": {
+      "measured_runs": 80,
+      "original_usefulness": {
+        "broad_guard_pass": false,
+        "exploratory_cap16": {
+          "broad_guard_pass": false,
+          "primary": {
+            "guards": {
+              "completion": {
+                "buffer": [
+                  1.0009613222118836,
+                  1.1009613222118837
+                ],
+                "limit": 1.1,
+                "status": "inconclusive"
+              },
+              "p95_ttft": {
+                "buffer": [
+                  1.00900425351951,
+                  1.1090042535195102
+                ],
+                "limit": 1.1,
+                "status": "inconclusive"
+              },
+              "worst_gap": {
+                "status": "pass"
+              }
+            },
+            "guards_pass": false,
+            "hypothesis": "inconclusive",
+            "p95_gap": {
+              "ratio_limit": 0.75,
+              "status": "pass"
+            }
+          }
+        },
+        "primary": {
+          "guards": {
+            "completion": {
+              "buffer": [
+                0.9256221002850271,
+                1.0256221002850272
+              ],
+              "limit": 1.1,
+              "status": "pass"
+            },
+            "p95_ttft": {
+              "buffer": [
+                0.9413281106487088,
+                1.041328110648709
+              ],
+              "limit": 1.1,
+              "status": "pass"
+            },
+            "worst_gap": {
+              "status": "pass"
+            }
+          },
+          "guards_pass": true,
+          "hypothesis": "supported",
+          "p95_gap": {
+            "ratio_limit": 0.75,
+            "status": "pass"
+          }
+        },
+        "primary_cap": 32,
+        "primary_cell": "prefix-1024-reuse-8-blocks-40",
+        "uncertainty": "Engineering median-ratio plus/minus self-control noise buffer; not a confidence interval."
+      },
+      "source_commit": "75dbfdebf1aba467d3d3eeba516f740d7eb8641c",
+      "unchanged": true,
+      "untimed_preflights": 15
+    },
+    "adaptive": {
+      "measured_runs": 192,
+      "original_usefulness": {
+        "broad_guard_pass": true,
+        "fixed32_comparison": "Descriptive paired ratios only; no equivalence claim.",
+        "primary": {
+          "guards": {
+            "completion": {
+              "buffer": [
+                0.9675852881313998,
+                1.0675852881313999
+              ],
+              "limit": 1.1,
+              "status": "pass"
+            },
+            "p95_ttft": {
+              "buffer": [
+                0.9709653448158237,
+                1.0709653448158238
+              ],
+              "limit": 1.1,
+              "status": "pass"
+            },
+            "worst_gap": {
+              "status": "pass"
+            }
+          },
+          "guards_pass": true,
+          "hypothesis": "supported",
+          "p95_gap": {
+            "ratio_limit": 0.75,
+            "status": "pass"
+          }
+        },
+        "primary_cell": "prefix-1024-reuse-8-blocks-40-suffix-64-out-16-first",
+        "primary_policy": "adaptive",
+        "uncertainty": "Engineering median-ratio plus/minus self-control noise buffer; not a confidence interval."
+      },
+      "source_commit": "7dd3864dcd34e04170215876d304a54808abb856",
+      "unchanged": true,
+      "untimed_preflights": 36
+    },
+    "frequency": {
+      "measured_runs": 320,
+      "original_usefulness": {
+        "adaptive_comparison": "Descriptive paired ratios only; no equivalence claim.",
+        "broad_guard_pass": false,
+        "broad_p95_guard_pass": false,
+        "primary": {
+          "guards": {
+            "completion": {
+              "buffer": [
+                0.9735893473112585,
+                1.0735893473112585
+              ],
+              "limit": 1.1,
+              "status": "pass"
+            },
+            "p95_ttft": {
+              "buffer": [
+                0.9766589676380495,
+                1.0766589676380496
+              ],
+              "limit": 1.1,
+              "status": "pass"
+            },
+            "worst_gap": {
+              "status": "pass"
+            }
+          },
+          "guards_pass": true,
+          "hypothesis": "supported",
+          "p95_gap": {
+            "ratio_limit": 0.75,
+            "status": "pass"
+          },
+          "p95_no_harm": {
+            "buffer": [
+              0.531116930809377,
+              0.6311169308093771
+            ],
+            "buffer_limit": 1.1,
+            "median_limit": 1.05,
+            "status": "pass"
+          }
+        },
+        "primary_cell": "prefix-1024-reuse-8-blocks-40-suffix-64-out-16-requests-8-first",
+        "primary_policy": "frequency",
+        "study_success": false,
+        "uncertainty": "Engineering median-ratio plus/minus self-control noise buffer; not a confidence interval."
+      },
+      "source_commit": "df042c20d0bdd4fe51f5fc32f9bbad663a1769c3",
+      "unchanged": true,
+      "untimed_preflights": 60
+    },
+    "prefix": {
+      "measured_runs": 96,
+      "original_usefulness": null,
+      "source_commit": "dcd09b5d57eb4cb20ed7f7bd806d6e6c5c23cd91",
+      "unchanged": true,
+      "untimed_preflights": 16
+    }
+  },
+  "original_study_verdicts_unchanged": true,
+  "packaging": {
+    "helper": {
+      "bytes": 15808,
+      "path": "retention/packaging.py",
+      "sha256": "b02ca8c4d9ffd25aa15bb29fdb3d4d8bcaf24cd329ed9b813fd6c1bde312f227"
+    },
+    "manifest": {
+      "bytes": 64374,
+      "path": "packaging-manifest.json",
+      "sha256": "12414ad952e416c8b6d48eac54776582bf543c9ec3b510843d824ff894237044"
+    },
+    "packages": {
+      "active": {
+        "bytes": 19559,
+        "path": "active-prefill/supplementary.tar.gz",
+        "sha256": "c9d9e69ff85922733483cab24cbf0521889de7024c1c2cc90c7094ad64fd4a72"
+      },
+      "adaptive": {
+        "bytes": 54049,
+        "path": "adaptive-prefill/supplementary.tar.gz",
+        "sha256": "b9d26d81ab837b748d00fc5ff1673740dc9a5246005aecd68d26e9fdfc86d453"
+      },
+      "frequency": {
+        "bytes": 317500,
+        "path": "frequency-prefill/supplementary.tar.gz",
+        "sha256": "b8710fe25dd5ba4ab4a59910f390416338d5557bfbc7d6a9b53428b1be03c73f"
+      },
+      "prefix": {
+        "bytes": 15667,
+        "path": "supplementary.tar.gz",
+        "sha256": "60caa1223bea3660fa78f1666adfc06fa34efcbe785f84234982bcf23a94f33c"
+      }
+    }
+  },
+  "pre_cleanup_commit": "17ad71ea7f4e4de2553a60a71a4fc2940bc714a5",
+  "preservation": {
+    "baseline_scope": "The271-file pre-cleanup map remains recorded; integrated live code is checked against full validation separately.",
+    "historical_inventory_exception": [
+      {
+        "bytes": 33984,
+        "inventory": "active-prefill/artifact-inventory.json",
+        "member": "retention/__pycache__/prefix_retention.cpython-312.pyc",
+        "reason": "Ignored generated bytecode was listed by the historical inventory but absent from the pre-cleanup Git tree; not restored or silently substituted.",
+        "sha256": "b9d9e1d22ca8e2c2ac770645dc3e11ed85fa7f9775a5d3b6dfb1f552ac3863af"
+      }
+    ],
+    "original_inventory_bindings": 92,
+    "original_tracked_evidence_files": 96,
+    "recorded_packaging_baseline_source_files": 271,
+    "supplementary_members": 14,
+    "supplementary_packages": 4,
+    "unchanged_original_archives": 8
+  },
+  "recorded_packaging_commands": 24,
+  "schema_version": 1,
+  "scope": "PR-scoped validation passed; full repository validation remains failed. No proof/timeout/default changes or new performance campaign; historical study identities and verdicts remain unchanged.",
+  "scoped_validation": {
+    "actual_outer_commands": 24,
+    "chat_binary": {
+      "bytes": 1606792,
+      "sha256": "474dccd2b81996243d365f2c050298ed823aedb2722b079e39bf0b3246980970"
+    },
+    "environment": {
+      "model_profile_nested": "existing validation.model.environment strips MODULAR_DEBUG; unchanged",
+      "outer": "MODULAR_DEBUG=device-sync-mode"
+    },
+    "finished_utc": "2026-10-24T15:06:57.968671+00:00",
+    "native_invocations": 8,
+    "native_test_suites": 7,
+    "native_tests_from_suite_summaries": 123,
+    "numerical_checks": 479635042,
+    "preserved_orchestration_failure": {
+      "actual_exit_code": 1,
+      "native_repeats": 0,
+      "reason": "initial recorded output location rejected; corrected continuation retained"
+    },
+    "protected_failed_evidence_unchanged": true,
+    "qualification": {
+      "active": {
+        "build_binaries": {
+          "engine": {
+            "bytes": 1573848,
+            "sha256": "911c51c89d8bd72cfdfc5e57fdf9d2265b4664d038365f63417f9e8da103dc44"
+          }
+        },
+        "checkpoint_binary": {
+          "bytes": 1863488,
+          "sha256": "1de5e6faedfc870587bc1d501d31cf9d3386e11e06f0270b14d78442ea5ebe4b"
+        },
+        "checks": 127138680,
+        "groups": 4,
+        "mismatches": 0,
+        "numerical_passed": true,
+        "unexpected_nonfinite": 0,
+        "untimed_preflights": 15
+      },
+      "adaptive": {
+        "build_binaries": {
+          "engine": {
+            "bytes": 1573848,
+            "sha256": "911c51c89d8bd72cfdfc5e57fdf9d2265b4664d038365f63417f9e8da103dc44"
+          }
+        },
+        "checkpoint_binary": {
+          "bytes": 1863488,
+          "sha256": "1de5e6faedfc870587bc1d501d31cf9d3386e11e06f0270b14d78442ea5ebe4b"
+        },
+        "checks": 189770889,
+        "groups": 4,
+        "mismatches": 0,
+        "numerical_passed": true,
+        "unexpected_nonfinite": 0,
+        "untimed_preflights": 36
+      },
+      "frequency": {
+        "build_binaries": {
+          "engine": {
+            "bytes": 1573848,
+            "sha256": "911c51c89d8bd72cfdfc5e57fdf9d2265b4664d038365f63417f9e8da103dc44"
+          }
+        },
+        "checkpoint_binary": {
+          "bytes": 1863488,
+          "sha256": "1de5e6faedfc870587bc1d501d31cf9d3386e11e06f0270b14d78442ea5ebe4b"
+        },
+        "checks": 72545572,
+        "groups": 2,
+        "mismatches": 0,
+        "numerical_passed": true,
+        "unexpected_nonfinite": 0,
+        "untimed_preflights": 60
+      },
+      "prefix": {
+        "build_binaries": {
+          "engine": {
+            "bytes": 1573848,
+            "sha256": "911c51c89d8bd72cfdfc5e57fdf9d2265b4664d038365f63417f9e8da103dc44"
+          }
+        },
+        "checkpoint_binary": {
+          "bytes": 1863488,
+          "sha256": "1de5e6faedfc870587bc1d501d31cf9d3386e11e06f0270b14d78442ea5ebe4b"
+        },
+        "checks": 90179901,
+        "groups": 4,
+        "mismatches": 0,
+        "numerical_passed": true,
+        "unexpected_nonfinite": 0,
+        "untimed_preflights": 16
+      }
+    },
+    "scope": "Fresh scoped engine integration, not whole-repository validation or a timing study",
+    "source_files_unchanged": true,
+    "standalone_native_invocations_without_test_counts": 1,
+    "started_utc": "2026-10-24T14:28:10.067474+00:00",
+    "static_runtime_review": "clear; static only",
+    "status": "passed",
+    "successful_scoped_commands": 23,
+    "terminal": {
+      "chat-disabled": {
+        "basic_turns": 4,
+        "passed": true,
+        "pty_turns": 3,
+        "report_free_output_exact": true
+      },
+      "chat-enabled": {
+        "basic_turns": 4,
+        "passed": true,
+        "pty_turns": 3,
+        "report_free_output_exact": true
+      }
+    },
+    "tracked_tree_unchanged": true,
+    "untimed_preflights": 127
+  },
+  "source_commit": "6e009fb463acbf54179a396c21815cdeedd85b3a",
+  "source_map_sha256": "292dfcfd6f1a27155ac123f4770dee0d98b5081caa98cd26bc8900e06a145863",
+  "status": "scoped-passed",
+  "validated_source_files": 705
+}

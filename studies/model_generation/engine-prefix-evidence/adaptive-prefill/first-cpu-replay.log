@@ -1,0 +1,50 @@
+{
+  "kind": "engine-prefix-adaptive-guarded-cpu-replay-v1",
+  "source_commit": "7dd3864dcd34e04170215876d304a54808abb856",
+  "measurement_sha256": "22092f6bc69297df4538ca6bbff0ba33f23b1dbfadf0d0760c50693750744fcc",
+  "measured_runs": 192,
+  "untimed_preflights": 36,
+  "same_delivered_histories": true,
+  "same_reuse_work": true,
+  "usefulness": {
+    "primary_cell": "prefix-1024-reuse-8-blocks-40-suffix-64-out-16-first",
+    "primary_policy": "adaptive",
+    "primary": {
+      "p95_gap": {
+        "status": "pass",
+        "ratio_limit": 0.75
+      },
+      "guards": {
+        "completion": {
+          "status": "pass",
+          "buffer": [
+            0.9675852881313998,
+            1.0675852881313999
+          ],
+          "limit": 1.1
+        },
+        "p95_ttft": {
+          "status": "pass",
+          "buffer": [
+            0.9709653448158237,
+            1.0709653448158238
+          ],
+          "limit": 1.1
+        },
+        "worst_gap": {
+          "status": "pass"
+        }
+      },
+      "guards_pass": true,
+      "hypothesis": "supported"
+    },
+    "broad_guard_pass": true,
+    "fixed32_comparison": "Descriptive paired ratios only; no equivalence claim.",
+    "uncertainty": "Engineering median-ratio plus/minus self-control noise buffer; not a confidence interval."
+  },
+  "native_execution": false,
+  "asset_access": false,
+  "network_access": false,
+  "prohibited_attempts": [],
+  "preliminary_acceptance": null
+}

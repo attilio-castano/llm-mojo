@@ -1,0 +1,10 @@
+test_every_page_is_reachable_from_the_readme (test_docs_links.DocumentationLinkTests.test_every_page_is_reachable_from_the_readme) ... ok
+test_history_pages_are_labelled (test_docs_links.DocumentationLinkTests.test_history_pages_are_labelled) ... ok
+test_relative_links_and_anchors_resolve (test_docs_links.DocumentationLinkTests.test_relative_links_and_anchors_resolve) ... ok
+test_slugs_follow_github_rules (test_docs_links.DocumentationLinkTests.test_slugs_follow_github_rules) ... ok
+test_walkthrough_code_links_name_defined_symbols (test_docs_links.DocumentationLinkTests.test_walkthrough_code_links_name_defined_symbols) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.174s
+
+OK

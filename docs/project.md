@@ -166,8 +166,12 @@ research questions, not prerequisites for calling the current milestone complete
    qualified two-context runner. The current lock resolves Mojo 1.1.0 /
    MAX 26.6.0; earlier measurements retain their original runtime. The
    [review and measured-commit map](serving-plan.md#phase-3-review-map) links
-   each implementation responsibility to its checks and evidence. Prefix
-   caching and HTTP/restart recovery remain phases 4 and 5.
+   each implementation responsibility to its checks and evidence. The initial
+   phase 4 prefix cache adds opt-in synchronous reference-27 reuse of immutable
+   full blocks, exact prefix/namespace/salt identity and idle eviction. The
+   [prefix contract](../studies/model_generation/engine-core.md#prefix-caching-frozen-implementation-and-evidence-contract)
+   declares its numerical gates and bounded comparison. HTTP/restart recovery
+   remains phase 5.
 
 Sampling, quantization, longer contexts, tool-oriented templates and additional
 model families can follow when they answer a concrete need. They are not current

@@ -1,0 +1,25 @@
+{
+  "kind": "engine-prefix-active-canonical-copy-v1",
+  "source_commit": "75dbfdebf1aba467d3d3eeba516f740d7eb8641c",
+  "sealed_directory": "/private/tmp/llm-mojo-active-prefill-20261022-sealed",
+  "all_copies_byte_equal": true,
+  "guarded_canonical_restore_exit_code": 0,
+  "files": {
+    "engine-prefix-active-validation.json.gz": {
+      "bytes": 2700882,
+      "sha256": "b20d2a061eed81328b59796323e5fef31941acde8b0efae821b1dd85178cf261"
+    },
+    "engine-prefix-active-validation.json": {
+      "bytes": 422,
+      "sha256": "ab38655f84f5ccba21ea4633a2184fbe2394026988f28f9d942e363a82f9fb3e"
+    },
+    "measurements/engine-prefix-active.json.gz": {
+      "bytes": 3737519,
+      "sha256": "a2829701c982681d1b12118b704685abd0faba3e680dfef5b4ba62e2006b3c12"
+    },
+    "measurements/engine-prefix-active.json": {
+      "bytes": 238,
+      "sha256": "41b351bebab0c674609172ae7ac00a039568faee2ad8f3e17df51ef73feb54c6"
+    }
+  }
+}

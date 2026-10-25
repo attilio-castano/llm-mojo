@@ -502,5 +502,22 @@ def test_synchronous_path_cannot_consume_async_pending_state() raises:
     _ = _drain(engine, asynchronous, pool)
 
 
+def test_prefix_cache_rejects_async_before_mutation_or_submission() raises:
+    var ctx = DeviceContext()
+    var pool = KVPool(ctx, 4, 32, KVGeometry(1, 1, 1))
+    var runner = ScriptedAsyncRunner([10])
+    var engine = EngineCore(4, 32, 128, 100, prefix_caching=True,
+        prefix_namespace=runner.reference.prefix_cache_identity())
+    _ = engine.add(0, [1, 2], 2, List[Int]())
+    with assert_raises():
+        _ = engine.step_async(runner, pool)
+    assert_equal(engine.step_id, 0)
+    assert_equal(engine.async_enabled, False)
+    assert_equal(engine.requests[0].state, WAITING)
+    assert_equal(engine.requests[0].sequence, -1)
+    assert_equal(runner.next_ticket, 0)
+    assert_equal(engine.blocks.free_blocks(), pool.blocks)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

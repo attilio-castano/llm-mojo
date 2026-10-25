@@ -1,0 +1,9 @@
+{
+  "kind": "engine-prefix-active-derived-check-v1",
+  "status": "passed",
+  "script_sha256": "b3bfc6f621e4c7415fcb7f05585f013a9d37f0de28c0973bc3bf07f30bacc9b8",
+  "compared": "entire derived report excluding only provenance input archive/manifest paths",
+  "source_commit": "75dbfdebf1aba467d3d3eeba516f740d7eb8641c",
+  "measured_runs": 80,
+  "untimed_preflights": 15
+}

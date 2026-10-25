@@ -1,0 +1,23 @@
+{
+  "kind": "engine-prefix-guarded-cpu-replay-v1",
+  "source_commit": "dcd09b5d57eb4cb20ed7f7bd806d6e6c5c23cd91",
+  "measurement_sha256": "1cb0dc9a848adefccb25d46d0816fa9db771f751221b2925a0f03c0b462032f4",
+  "measured_runs": 96,
+  "untimed_preflights": 16,
+  "same_delivered_histories": true,
+  "native_execution": false,
+  "asset_access": false,
+  "network_access": false,
+  "prohibited_attempts": [],
+  "preliminary_acceptance": {
+    "status": "passed-cpu-replay",
+    "embedded_files": 42,
+    "cases": 7,
+    "tokens": 123,
+    "computed_rows": 359,
+    "reused_rows": 96,
+    "cold_rows": 455,
+    "expected_native_fault_exit": 1,
+    "new_gpu_execution": false
+  }
+}

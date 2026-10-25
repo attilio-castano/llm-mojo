@@ -1,0 +1,70 @@
+{
+  "kind": "engine-prefix-artifact-inventory-v1",
+  "measured_source_commit": "dcd09b5d57eb4cb20ed7f7bd806d6e6c5c23cd91",
+  "files": {
+    "README.md": {
+      "bytes": 5937,
+      "sha256": "9240a717e49d35e848ebd3a56d7a3eb4f8a197ad57bc7deb5de0bac5c34cbd92"
+    },
+    "canonical-copy.json": {
+      "bytes": 918,
+      "sha256": "320526523531f01f87cf1ad2c264fc87bde717889d27cec2f77542cf1299c84c"
+    },
+    "cpu-replay-execution.json": {
+      "bytes": 676,
+      "sha256": "d8e25fc3042a2b4567b8b55b182b2f43470c1833185aa30a5eede8eade5c4b56"
+    },
+    "cpu-replay.json": {
+      "bytes": 674,
+      "sha256": "9919b98dd971811a939f58402e92fd919ec786f17397915f6c344cff82f2cd1d"
+    },
+    "cpu-replay.log": {
+      "bytes": 674,
+      "sha256": "9919b98dd971811a939f58402e92fd919ec786f17397915f6c344cff82f2cd1d"
+    },
+    "engine-prefix-acceptance.json": {
+      "bytes": 1598,
+      "sha256": "47bee2a8a4aa43dfbda29b3ae0160f7c530a864f5308f6836e2ec1ab84db20ae"
+    },
+    "engine-prefix-results.json": {
+      "bytes": 53119,
+      "sha256": "b82aa936332a6f783fa30671a4ff2c6eaa7823d37524a918be1ad072a238bf7d"
+    },
+    "engine-prefix-validation.json": {
+      "bytes": 414,
+      "sha256": "43103284994e363d630df06fddf7f23aaf2b8d508dc9b3af2e7a094b81e4aa3b"
+    },
+    "engine-prefix-validation.json.gz": {
+      "bytes": 2441207,
+      "sha256": "73c10a73c0c84422177db8e9cea4a523b1e557baf90c9c11be5e95c4c464bd3f"
+    },
+    "independent-audit/audit.json": {
+      "bytes": 21001,
+      "sha256": "55ebeaca8db9119274048d42135b139560d05ba359765ddfeeb1117a47d39b83"
+    },
+    "independent-audit/reproduce.py": {
+      "bytes": 18503,
+      "sha256": "c393e19f16bc751a71578a610eac8c22f92211db6348f6569b22e54af5f9673d"
+    },
+    "measurements/engine-prefix.json": {
+      "bytes": 231,
+      "sha256": "cb0dc49c78f288b4548323ee683bc7dba5591053dd9140dc2ee68e3d6a278262"
+    },
+    "measurements/engine-prefix.json.gz": {
+      "bytes": 2408797,
+      "sha256": "1cb0dc9a848adefccb25d46d0816fa9db771f751221b2925a0f03c0b462032f4"
+    },
+    "retention/extract_prefix_results.py": {
+      "bytes": 7143,
+      "sha256": "3669d2f23198a7981df039b3bad0f08d58bf01a0bc9e08fd245d0936050f0508"
+    },
+    "retention/prefix_retention.py": {
+      "bytes": 19272,
+      "sha256": "b049778c81c72278fa95f9e7061d1a4f1688b934cdb36d4dba929776c7304150"
+    },
+    "retention-inventory.json": {
+      "bytes": 747,
+      "sha256": "889818b7a89a7ee5f475b6812c53da7b580f947895917e33c93b549147e2cef7"
+    }
+  }
+}

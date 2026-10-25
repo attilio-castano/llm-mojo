@@ -1,0 +1,11 @@
+{
+  "kind": "engine-prefix-validation-v1",
+  "schema_version": 1,
+  "source_commit": "dcd09b5d57eb4cb20ed7f7bd806d6e6c5c23cd91",
+  "bytes": 2441207,
+  "sha256": "73c10a73c0c84422177db8e9cea4a523b1e557baf90c9c11be5e95c4c464bd3f",
+  "uncompressed_bytes": 61619925,
+  "uncompressed_sha256": "b5932b16d83d097be282f02921bf88149183d006e052bdb1316979a2bb87faa5",
+  "retained_files": 368,
+  "hash_only_source_files": 22
+}

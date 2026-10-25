@@ -1,0 +1,13 @@
+{
+  "command": [
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/.venv/bin/python",
+    "-B",
+    "/Users/attiliocastano/.codex/worktrees/d8f3/llm-mojo/tests/test_docs_links.py"
+  ],
+  "exit_code": 0,
+  "wall_elapsed_ns": 313774792,
+  "timeout_seconds": 120,
+  "timed_out": false,
+  "script_sha256": "f8d3235534bee4586be28684ac9198a721f26a27a5139a79c715752d101daa1b",
+  "log_sha256": "e8d021c957ecca775ac596971de127adbfe9fe224a16611030d006dbb7c12614"
+}
